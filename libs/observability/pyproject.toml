@@ -1,0 +1,23 @@
+[project]
+name = "observability"
+version = "0.1.0"
+description = "Shared Observability stack: Tracing, Metrics, and Logging for all EDI AS2 services"
+authors = [
+    {name = "EDI AS2 Team", email = "team@edi.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    # OpenTelemetry — Traces
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.24.0",
+    "opentelemetry-instrumentation-fastapi>=0.45b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.45b0",
+    # Metrics
+    "prometheus-client>=0.20.0",
+    # Logging
+    "structlog>=24.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

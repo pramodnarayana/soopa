@@ -1,0 +1,16 @@
+[project]
+name = "identity"
+version = "0.1.0"
+description = "Hybrid Tenancy logic, External Auth, RLS contexts"
+authors = [
+    {name = "EDI AS2 Team", email = "team@edi.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "passlib>=1.7.4",
+    "PyJWT>=2.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

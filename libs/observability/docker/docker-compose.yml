@@ -1,0 +1,98 @@
+version: "3.9"
+
+# =============================================================================
+# EDI AS2 Local Observability Stack
+# Runs the full three-pillar observability infrastructure locally.
+# Grafana UI: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+# Jaeger UI:  http://localhost:16686
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector
+  # Receives OTLP traces/metrics/logs from all EDI AS2 services,
+  # then fans them out to the appropriate backends.
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver (services send traces here)
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8889:8889"   # Prometheus metrics exporter (scraped by Prometheus)
+    depends_on:
+      - tempo
+      - loki
+
+  # ---------------------------------------------------------------------------
+  # Tempo — Distributed Tracing Backend
+  # ---------------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./tempo-config.yml:/etc/tempo.yml
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "9095:9095"   # Tempo gRPC
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — Metrics Backend
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  # ---------------------------------------------------------------------------
+  # Loki — Log Aggregation Backend
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  # ---------------------------------------------------------------------------
+  # Grafana — Unified Observability Dashboard
+  # Pre-configured with Tempo, Prometheus, and Loki data sources.
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+volumes:
+  tempo_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
