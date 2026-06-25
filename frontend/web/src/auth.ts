@@ -1,0 +1,23 @@
+import type { AuthProviderProps } from "react-oidc-context"
+
+const authority = import.meta.env.VITE_AUTH_AUTHORITY
+const clientId = import.meta.env.VITE_AUTH_CLIENT_ID
+const redirectUri = import.meta.env.VITE_AUTH_REDIRECT_URI
+
+if (!authority || !clientId || !redirectUri) {
+  throw new Error("CRITICAL: Missing required VITE_AUTH environment variables. Check your .env.local file!")
+}
+
+export const oidcConfig: AuthProviderProps = {
+  authority,
+  client_id: clientId,
+  redirect_uri: redirectUri,
+  response_type: "code",
+  scope: "openid profile email",
+  post_logout_redirect_uri: window.location.origin,
+  onSigninCallback: (_user: any) => {
+    // After successful login, redirect directly to the dashboard
+    // This prevents the 404 error on the /callback route
+    window.location.replace('/dashboard')
+  }
+}

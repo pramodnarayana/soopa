@@ -15,10 +15,7 @@ members = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = [
-    "libs/as2_core/tests",
-    "services/as2_server/tests",
-]
+
 pythonpath = [
     "libs/as2_core/src",
     "libs/database/src",
@@ -28,6 +25,9 @@ pythonpath = [
     "services/as2_server/src",
 ]
 addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
+]
 
 [dependency-groups]
 dev = [
@@ -42,7 +42,7 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*"]
 plugins = ["pydantic.mypy"]
 
 [tool.ruff]
@@ -53,6 +53,12 @@ exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
 ignore = ["E501"] # Handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI dependencies use default arguments
+"services/api/src/api/main.py" = ["B008"]
+"services/as2_server/src/as2_server/main.py" = ["B008"]
+"libs/identity/src/identity/dependencies.py" = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"

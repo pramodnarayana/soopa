@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,7 +13,7 @@ pytestmark = pytest.mark.asyncio
 
 
 @patch("database.repository.get_tenant_id", return_value=123)
-async def test_trading_partner_repository_find_by_as2_id(mock_get_tenant_id):
+async def test_trading_partner_repository_find_by_as2_id(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
     mock_result = MagicMock()
     mock_partner = TradingPartner(as2_id="TEST-ID", public_cert_pem="cert")
@@ -27,7 +28,7 @@ async def test_trading_partner_repository_find_by_as2_id(mock_get_tenant_id):
 
 
 @patch("database.repository.get_tenant_id", return_value=123)
-async def test_trading_partner_repository_get_public_certificate(mock_get_tenant_id):
+async def test_trading_partner_repository_get_public_certificate(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
     mock_result = MagicMock()
     mock_partner = TradingPartner(as2_id="TEST-ID", public_cert_pem="cert_data")
@@ -41,29 +42,62 @@ async def test_trading_partner_repository_get_public_certificate(mock_get_tenant
 
 
 @patch("database.repository.get_tenant_id", return_value=None)
-async def test_repository_raises_error_when_no_tenant(mock_get_tenant_id):
+async def test_repository_raises_error_when_no_tenant(mock_get_tenant_id: Any) -> None:
     repo = TradingPartnerRepository(AsyncMock())
     with pytest.raises(RuntimeError, match="Database queries require an active tenant context."):
         await repo.find_by_as2_id("TEST")
 
 
 @patch("database.repository.get_tenant_id", return_value=123)
-async def test_host_identity_repository_get_host_private_key(mock_get_tenant_id):
+async def test_host_identity_repository_get_host_private_key_kms(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
     mock_result = MagicMock()
-    mock_host = TradingPartner(is_host_identity=True, private_key_pem="private_key_data")
+    mock_host = TradingPartner(
+        is_host_identity=True, kms_key_id="alias/edi-key", private_key_ciphertext="private_key_data"
+    )
     mock_result.scalar_one_or_none.return_value = mock_host
     session.execute.return_value = mock_result
 
     repo = HostIdentityRepository(session)
-    key = await repo.get_host_private_key()
-
-    assert key == b"private_key_data"
+    with pytest.raises(NotImplementedError, match="KMS decryption strategy not yet implemented"):
+        await repo.get_host_private_key()
 
 
 @patch("database.repository.get_tenant_id", return_value=123)
-async def test_as2_payload_repository_save_payload(mock_get_tenant_id):
+async def test_host_identity_repository_get_host_private_key_vault(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
+    mock_result = MagicMock()
+    mock_host = TradingPartner(is_host_identity=True, private_key_secret_id="vault/edi/key")
+    mock_result.scalar_one_or_none.return_value = mock_host
+    session.execute.return_value = mock_result
+
+    repo = HostIdentityRepository(session)
+    with pytest.raises(NotImplementedError, match="External secret strategy not yet implemented"):
+        await repo.get_host_private_key()
+
+
+@patch("database.repository.get_tenant_id", return_value=123)
+async def test_host_identity_repository_get_host_private_key_missing_strategy(
+    mock_get_tenant_id: Any,
+) -> None:
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_host = TradingPartner(is_host_identity=True, private_key_ciphertext="only_ciphertext")
+    mock_result.scalar_one_or_none.return_value = mock_host
+    session.execute.return_value = mock_result
+
+    repo = HostIdentityRepository(session)
+    with pytest.raises(
+        RuntimeError,
+        match="No supported host private key retrieval strategy configured for tenant.",
+    ):
+        await repo.get_host_private_key()
+
+
+@patch("database.repository.get_tenant_id", return_value=123)
+async def test_as2_payload_repository_save_payload(mock_get_tenant_id: Any) -> None:
+    session = AsyncMock()
+    session.add = MagicMock()
     repo = AS2PayloadRepository(session)
 
     result = await repo.save_payload(

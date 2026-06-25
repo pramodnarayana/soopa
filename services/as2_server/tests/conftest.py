@@ -12,7 +12,8 @@ import datetime
 import os
 import subprocess
 import tempfile
-from typing import NamedTuple
+from collections.abc import AsyncGenerator
+from typing import Any, NamedTuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -172,7 +173,9 @@ def encrypted_as2_payload(receiver_keypair: KeyPair, edi_payload: bytes) -> byte
 
 
 @pytest_asyncio.fixture
-async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair):
+async def as2_client(
+    sender_keypair: KeyPair, receiver_keypair: KeyPair
+) -> AsyncGenerator[AsyncClient, None]:
     """
     FastAPI AsyncClient pre-configured with:
     - NoOp observability (no infra required)
@@ -200,14 +203,13 @@ async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair):
     mock_partner.as2_id = sender_keypair.as2_id
 
     with (
-        patch("as2_server.main.get_session"),
         patch("as2_server.main.TradingPartnerRepository") as mock_partner_repo_cls,
         patch("as2_server.main.HostIdentityRepository") as mock_identity_repo_cls,
         patch("as2_server.main.AS2PayloadRepository") as mock_payload_repo_cls,
     ):
         mock_partner_repo = AsyncMock()
 
-        def mock_find(as2_id: str):
+        def mock_find(as2_id: str) -> Any:
             if as2_id == sender_keypair.as2_id:
                 return mock_partner
             return None
@@ -223,10 +225,18 @@ async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair):
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
 
-        # Override the FastAPI S3 dependency
+        # Override the FastAPI S3 dependency and Session dependency
         from as2_server.main import app, get_s3_storage
+        from database.session import get_session
+
+        async def override_get_session() -> AsyncGenerator[AsyncMock, None]:
+            yield AsyncMock()
 
         app.dependency_overrides[get_s3_storage] = lambda: MockS3Storage()
+        app.dependency_overrides[get_session] = override_get_session
+
+        # Mock the db_router on app state for the /ready probe
+        app.state.db_router = AsyncMock()
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield client

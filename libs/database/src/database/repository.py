@@ -37,7 +37,7 @@ class TradingPartnerRepository:
     async def get_public_certificate(self, as2_id: str) -> bytes | None:
         partner = await self.find_by_as2_id(as2_id)
         if partner and partner.public_cert_pem:
-            return partner.public_cert_pem.encode("utf-8")
+            return str(partner.public_cert_pem).encode("utf-8")
         return None
 
 
@@ -64,8 +64,17 @@ class HostIdentityRepository:
             )
         )
         host = result.scalar_one_or_none()
-        if host and host.private_key_pem:
-            return host.private_key_pem.encode("utf-8")
+        if host:
+            if host.kms_key_id and host.private_key_ciphertext:
+                # TODO: Integrate AWS KMS / Envelope Decryption here
+                raise NotImplementedError("KMS decryption strategy not yet implemented")
+            elif host.private_key_secret_id:
+                # TODO: Integrate Vault / External Secret Strategy here
+                raise NotImplementedError("External secret strategy not yet implemented")
+            else:
+                raise RuntimeError(
+                    "No supported host private key retrieval strategy configured for tenant."
+                )
         return None
 
 
@@ -87,8 +96,8 @@ class AS2PayloadRepository:
         as2_to: str,
         status: str,
         payload_storage_uri: str,
-        raw_headers: str = None,
-        mic: str = None,
+        raw_headers: str | None = None,
+        mic: str | None = None,
     ) -> AS2Payload:
         """
         Persists AS2 payload metadata to PostgreSQL.

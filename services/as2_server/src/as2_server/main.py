@@ -3,8 +3,9 @@ Production-ready FastAPI application for the EDI AS2 Server.
 """
 
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 from as2_core import (
     decrypt_payload,
@@ -35,11 +36,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 settings = get_settings()
 
 # S3 Singleton
-s3_storage: IPayloadStorage = None
+s3_storage: IPayloadStorage | None = None
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global s3_storage
 
     ObservabilityProvider.configure(
@@ -60,15 +61,24 @@ async def lifespan(app: FastAPI):
     )
 
     logger = ObservabilityProvider.logger(__name__)
-    from database.connection import engine
-    from database.models import Base
+    from database.connection import DatabaseRouter
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        # Initialize the global DatabaseRouter and mount it to app state
+        db_router = DatabaseRouter(
+            settings.database.global_url,
+            pool_size=settings.database.pool_size,
+            max_overflow=settings.database.max_overflow,
+        )
+        app.state.db_router = db_router
+        print("LIFESPAN: DB Router initialized")
+    except Exception as e:
+        print(f"LIFESPAN DB ROUTER ERROR: {e}")
 
     logger.info("edi_as2_server_started", env=settings.env)
     yield
     logger.info("edi_as2_server_stopped")
+    await db_router.close_all()
 
 
 app = FastAPI(title="AS2 Server", version="1.0.0", lifespan=lifespan)
@@ -77,6 +87,8 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 # Provide S3 as a FastAPI dependency for easy mocking in tests
 def get_s3_storage() -> IPayloadStorage:
+    if s3_storage is None:
+        raise RuntimeError("S3 Storage not initialized")
     return s3_storage
 
 
@@ -84,22 +96,24 @@ S3Dep = Annotated[IPayloadStorage, Depends(get_s3_storage)]
 
 
 @app.get("/health", tags=["ops"])
-async def health():
+async def health() -> Any:
     return {"status": "ok"}
 
 
 @app.get("/ready", tags=["ops"])
-async def ready():
+async def ready(request: Request, s3: S3Dep) -> Any:
+    if getattr(request.app.state, "db_router", None) is None:
+        raise HTTPException(status_code=503, detail="Database router not initialized")
     return {"status": "ready"}
 
 
 @app.get("/metrics", tags=["ops"])
-async def metrics():
+async def metrics() -> Any:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/as2", tags=["as2"])
-async def receive_as2(request: Request, session: SessionDep, s3: S3Dep):
+async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
     tracer = ObservabilityProvider.tracer()
     metrics = ObservabilityProvider.metrics()
     logger = ObservabilityProvider.logger(__name__)

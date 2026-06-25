@@ -6,7 +6,7 @@ from database.s3 import Aioboto3PayloadStorage
 pytestmark = pytest.mark.asyncio
 
 
-async def test_aioboto3_payload_storage_upload():
+async def test_aioboto3_payload_storage_upload() -> None:
     with patch("database.s3.aioboto3.Session") as mock_session_cls:
         mock_session = MagicMock()
         mock_client = AsyncMock()
@@ -31,7 +31,7 @@ async def test_aioboto3_payload_storage_upload():
         )
 
 
-async def test_aioboto3_payload_storage_download():
+async def test_aioboto3_payload_storage_download() -> None:
     with patch("database.s3.aioboto3.Session") as mock_session_cls:
         mock_session = MagicMock()
         mock_client = AsyncMock()
@@ -56,7 +56,7 @@ async def test_aioboto3_payload_storage_download():
         )
 
 
-async def test_aioboto3_payload_storage_download_invalid_uri():
+async def test_aioboto3_payload_storage_download_invalid_uri() -> None:
     storage = Aioboto3PayloadStorage(bucket="test-bucket", region="us-east-1")
     data = await storage.download("s3://other-bucket/test")
     assert data is None

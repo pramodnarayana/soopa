@@ -14,7 +14,7 @@ from opentelemetry import trace
 from ..ports.logger import ILogger
 
 
-def _inject_trace_context(logger, method, event_dict):
+def _inject_trace_context(logger: Any, method: Any, event_dict: dict[str, Any]) -> dict[str, Any]:
     """structlog processor: injects OTel trace_id/span_id for log-trace correlation."""
     span = trace.get_current_span()
     if span and span.is_recording():
@@ -31,7 +31,7 @@ def _configure_structlog(log_level: str) -> None:
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
-            _inject_trace_context,
+            _inject_trace_context,  # type: ignore
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
@@ -48,7 +48,7 @@ class StructlogLogger(ILogger):
     structlog implementation of ILogger.
     """
 
-    def __init__(self, name: str, log_level: str = "INFO", _bound_logger=None):
+    def __init__(self, name: str, log_level: str = "INFO", _bound_logger: Any = None) -> None:
         if _bound_logger is None:
             _configure_structlog(log_level)
         self._logger = _bound_logger or structlog.get_logger(name)

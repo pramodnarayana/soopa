@@ -12,7 +12,36 @@ on:
 
 jobs:
   build-and-test:
+    name: Build, Lint, and Test
     runs-on: ubuntu-latest
+    services:
+      postgres_global:
+        image: postgres:15
+        env:
+          POSTGRES_USER: edi
+          POSTGRES_PASSWORD: edi_password
+          POSTGRES_DB: edi_global
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres_shard_1:
+        image: postgres:15
+        env:
+          POSTGRES_USER: edi
+          POSTGRES_PASSWORD: edi_password
+          POSTGRES_DB: edi_shard_1
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Code
@@ -29,6 +58,26 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --all-packages
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend/web/pnpm-lock.yaml
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend/web
+        run: pnpm install
+
+      - name: Run Frontend Lint
+        working-directory: frontend/web
+        run: pnpm lint
+
       - name: Run Formatter Check
         run: uv run ruff format --check libs/ services/
 
@@ -38,8 +87,14 @@ jobs:
       - name: Run Typechecker
         run: uv run mypy libs/ services/
 
-      - name: Run Tests
-        run: uv run pytest libs/ services/ --cov=. --cov-report=xml
+      - name: Initialize Database
+        run: make db-init
+
+      - name: Run Unit Tests
+        run: uv run pytest libs/ services/ -m "not integration" --cov=. --cov-report=xml
+
+      - name: Run Integration Tests
+        run: uv run pytest libs/ services/ -m "integration"
 
       - name: Upload Coverage
         uses: codecov/codecov-action@v4
