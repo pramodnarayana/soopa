@@ -53,9 +53,9 @@ function MarketingLayout() {
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between text-sm text-slate-500">
           <p>&copy; {new Date().getFullYear()} Soopa Platform.</p>
           <div className="flex gap-6 mt-4 md:mt-0">
-            <a href="#" className="hover:text-slate-900">Documentation</a>
-            <a href="#" className="hover:text-slate-900">Status</a>
-            <a href="#" className="hover:text-slate-900">Terms</a>
+            <span className="text-slate-400">Documentation</span>
+            <span className="text-slate-400">Status</span>
+            <span className="text-slate-400">Terms</span>
           </div>
         </div>
       </footer>

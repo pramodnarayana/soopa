@@ -18,12 +18,29 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
-    # The AS2 server currently hardcodes tenant_id 0 (Host Company) or 1 for legacy compatibility
-    # until we implement dynamic AS2 routing.
-    # For now, we connect to shard_1.
-    shard_url = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    # Resolve Host Company (Tenant 0) dynamically from the Global DB
+    from sqlalchemy import select
 
-    async_gen = db_router.get_tenant_session(tenant_id=0, shard_key="shard_1", shard_url=shard_url)
+    from database.models import DatabaseShard, Tenant
+
+    global_gen = db_router.get_global_session()
+    global_session = await global_gen.__anext__()
+    try:
+        stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == 0)
+        result = await global_session.execute(stmt)
+        row = result.first()
+        if not row:
+            raise RuntimeError("Host tenant (Tenant 0) not found in Global DB")
+        tenant_obj, shard_obj = row
+    finally:
+        with contextlib.suppress(StopAsyncIteration):
+            await global_gen.__anext__()
+
+    async_gen = db_router.get_tenant_session(
+        tenant_id=int(tenant_obj.id),
+        shard_key=str(shard_obj.name),
+        shard_url=str(shard_obj.dsn),
+    )
 
     session = await async_gen.__anext__()
     try:

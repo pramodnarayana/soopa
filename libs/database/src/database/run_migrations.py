@@ -24,7 +24,8 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
             result = await conn.execute(text("SELECT dsn FROM database_shards"))
             urls = [row[0] for row in result.fetchall()]
     except Exception as e:
-        logger.warning(f"Could not read database_shards from global DB: {e}")
+        logger.error(f"Failed to query database_shards from global DB: {e}")
+        raise
     finally:
         await engine.dispose()
 
@@ -57,7 +58,18 @@ def run_migrations():
 
     # 3. Run Tenant Migrations per shard
     for url in shard_urls:
-        logger.info(f"--- Applying TENANT Migrations to Shard: {url} ---")
+        # Simple string masking to hide password if URL matches postgresql+...://user:pass@...
+        masked_url = url
+        if "@" in url and ":" in url:
+            try:
+                protocol, rest = url.split("://", 1)
+                credentials, host_info = rest.split("@", 1)
+                user = credentials.split(":", 1)[0]
+                masked_url = f"{protocol}://{user}:***@{host_info}"
+            except Exception:
+                masked_url = "***redacted***"
+
+        logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
         tenant_cfg = Config("libs/database/alembic.tenant.ini")
         tenant_cfg.set_main_option(
             "script_location", "libs/database/src/database/migrations/tenant"

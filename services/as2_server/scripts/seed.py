@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
@@ -48,22 +49,31 @@ async def seed_database() -> None:
             logger.info("Created Tenant 0 (Host Company).")
 
         # 3. Seed Default User
-        logger.info("Seeding Default User...")
-        user_result = await session.execute(
-            select(User).filter_by(email="pramod.narayana@gmail.com")
-        )
-        user = user_result.scalar_one_or_none()
+        admin_email = os.getenv("ADMIN_EMAIL")
+        admin_name = os.getenv("ADMIN_NAME", "Admin User")
 
-        if not user or not user.id:
-            user = User(email="pramod.narayana@gmail.com", name="Pramod Narayana")
-            session.add(user)
-            await session.flush()
-            logger.info("Created Admin User.")
+        if admin_email:
+            logger.info("Seeding Default Admin User...")
+            user_result = await session.execute(select(User).filter_by(email=admin_email))
+            user = user_result.scalar_one_or_none()
 
-            # Map user to Tenant 0
-            tenant_user = TenantUser(tenant_id=tenant_obj.id, user_id=user.id, role="admin")
-            session.add(tenant_user)
-            logger.info("Mapped Admin User to Tenant 0.")
+            if not user or not user.id:
+                user = User(email=admin_email, name=admin_name)
+                session.add(user)
+                await session.flush()
+                logger.info("Created Admin User.")
+
+            # Map user to Tenant 0 idempotently
+            mapping_result = await session.execute(
+                select(TenantUser).filter_by(tenant_id=tenant_obj.id, user_id=user.id)
+            )
+            tenant_user = mapping_result.scalar_one_or_none()
+            if not tenant_user:
+                tenant_user = TenantUser(tenant_id=tenant_obj.id, user_id=user.id, role="admin")
+                session.add(tenant_user)
+                logger.info("Mapped Admin User to Tenant 0.")
+        else:
+            logger.info("ADMIN_EMAIL not provided. Skipping default admin creation.")
 
         await session.commit()
         logger.info("Database seed completed successfully.")
@@ -71,6 +81,7 @@ async def seed_database() -> None:
     except Exception as e:
         logger.error(f"Seed failed: {e}")
         await session.rollback()
+        raise
     finally:
         with contextlib.suppress(StopAsyncIteration):
             await async_gen.__anext__()

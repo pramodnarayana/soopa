@@ -1,5 +1,5 @@
-from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from collections.abc import AsyncGenerator, Iterator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 import pytest
@@ -11,12 +11,27 @@ from identity.dependencies import (
 )
 
 
-@pytest.mark.asyncio
-async def test_get_raw_jwt_valid() -> None:
-    payload = {"sub": "user123", "email": "pramod.narayana@gmail.com", "org_id": "org-123"}
-    token = jwt.encode(payload, "secret", algorithm="HS256")
+@pytest.fixture(autouse=True)
+def mock_jwks_client() -> Iterator[MagicMock]:
+    with patch("identity.dependencies.jwks_client.get_signing_key_from_jwt") as mock:
+        mock_key = MagicMock()
+        mock_key.key = "mock_secret_key"
+        mock.return_value = mock_key
+        yield mock
 
-    decoded = await get_raw_jwt(token)
+
+@pytest.fixture(autouse=True)
+def mock_jwt_decode() -> Iterator[MagicMock]:
+    with patch("identity.dependencies.jwt.decode") as mock:
+        yield mock
+
+
+@pytest.mark.asyncio
+async def test_get_raw_jwt_valid(mock_jwt_decode: MagicMock) -> None:
+    payload = {"sub": "user123", "email": "pramod.narayana@gmail.com", "org_id": "org-123"}
+    mock_jwt_decode.return_value = payload
+
+    decoded = await get_raw_jwt("fake.jwt.token")
     assert decoded["email"] == "pramod.narayana@gmail.com"
     assert decoded["sub"] == "user123"
 
@@ -29,7 +44,8 @@ async def test_get_raw_jwt_missing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_raw_jwt_invalid() -> None:
+async def test_get_raw_jwt_invalid(mock_jwt_decode: MagicMock) -> None:
+    mock_jwt_decode.side_effect = jwt.PyJWTError("Invalid signature")
     with pytest.raises(HTTPException) as exc_info:
         await get_raw_jwt("invalid.token.structure")
     assert exc_info.value.status_code == 401
@@ -89,9 +105,11 @@ async def test_get_tenant_session() -> None:
     # Mock Global Session fetch
     mock_global_session = AsyncMock()
     mock_tenant = MagicMock()
-    mock_tenant.shard_id = 1
+    mock_shard = MagicMock()
+    mock_shard.name = "shard_1"
+    mock_shard.dsn = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
     mock_result = MagicMock()
-    mock_result.scalar_one.return_value = mock_tenant
+    mock_result.one.return_value = (mock_tenant, mock_shard)
     mock_global_session.execute.return_value = mock_result
 
     async def mock_global_session_gen() -> AsyncGenerator[AsyncMock, None]:

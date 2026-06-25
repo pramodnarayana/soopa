@@ -8,7 +8,7 @@ export function IdentityDetailsCard() {
     <Card>
       <CardHeader>
         <CardTitle>Identity Details</CardTitle>
-        <CardDescription>Pulled directly from Authentik SSO</CardDescription>
+        <CardDescription>Pulled directly from Zitadel SSO</CardDescription>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -2,6 +2,7 @@ import { Outlet, createRoute } from '@tanstack/react-router'
 import { Route as rootRoute } from './__root'
 import { useAuth } from 'react-oidc-context'
 import { Button } from '@/components/ui/button'
+import { useEffect, useRef } from 'react'
 
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
@@ -11,12 +12,17 @@ export const Route = createRoute({
 
 function AppLayout() {
   const auth = useAuth()
+  const redirectTriggered = useRef(false)
 
   // Strict Authentication Guard
+  useEffect(() => {
+    if (!auth.isAuthenticated && !auth.isLoading && !redirectTriggered.current) {
+      redirectTriggered.current = true
+      void auth.signinRedirect()
+    }
+  }, [auth.isAuthenticated, auth.isLoading, auth])
+
   if (!auth.isAuthenticated && !auth.isLoading) {
-    // We cannot use standard router redirect here easily because auth state lives in React context
-    // We can just trigger a sign-in or render a forbidden message.
-    void auth.signinRedirect()
     return null
   }
 

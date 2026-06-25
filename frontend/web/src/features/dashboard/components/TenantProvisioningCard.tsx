@@ -4,8 +4,9 @@ interface TenantProvisioningCardProps {
   isLoading: boolean;
   error: Error | null;
   userProfile?: {
-    user: { id: number };
-    tenant: { id: number; name: string; shard_id: number };
+    status: string;
+    tenant_id: number;
+    rls_enforced_tenant: string | null;
   };
 }
 
@@ -22,20 +23,18 @@ export function TenantProvisioningCard({ isLoading, error, userProfile }: Tenant
         {userProfile && (
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <dt className="text-sm font-medium text-slate-500">Internal User ID</dt>
-              <dd className="mt-1 text-sm text-slate-900">{userProfile.user.id}</dd>
+              <dt className="text-sm font-medium text-slate-500">API Status</dt>
+              <dd className="mt-1 text-sm text-slate-900">{userProfile.status}</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-slate-500">Internal Tenant ID</dt>
-              <dd className="mt-1 text-sm text-slate-900">{userProfile.tenant.id}</dd>
+              <dt className="text-sm font-medium text-slate-500">Resolved Tenant ID</dt>
+              <dd className="mt-1 text-sm text-slate-900">{userProfile.tenant_id}</dd>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-slate-500">Tenant Name</dt>
-              <dd className="mt-1 text-sm font-bold text-slate-900">{userProfile.tenant.name}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-slate-500">Database Shard</dt>
-              <dd className="mt-1 text-sm text-slate-900">{userProfile.tenant.shard_id}</dd>
+            <div className="sm:col-span-2">
+              <dt className="text-sm font-medium text-slate-500">PostgreSQL RLS Variable (app.current_tenant)</dt>
+              <dd className="mt-1 text-sm font-bold text-slate-900">
+                {userProfile.rls_enforced_tenant || 'NOT SET (Bypass or Global Admin)'}
+              </dd>
             </div>
           </dl>
         )}

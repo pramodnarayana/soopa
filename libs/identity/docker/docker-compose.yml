@@ -4,9 +4,9 @@ services:
     container_name: zitadel-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: zitadel
-      POSTGRES_PASSWORD: zitadel
-      POSTGRES_DB: zitadel
+      POSTGRES_USER: ${POSTGRES_USER:-zitadel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-zitadel}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d zitadel -U zitadel"]
       interval: 10s
@@ -20,7 +20,7 @@ services:
     image: ghcr.io/zitadel/zitadel:v3.4.12
     container_name: zitadel-server
     restart: unless-stopped
-    command: start-from-init --masterkey "a-32-byte-long-secret-key-change" --tlsMode disabled
+    command: start-from-init --masterkey "${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY must be set (32 bytes)}" --tlsMode disabled
     environment:
       ZITADEL_PORT: 8080
       ZITADEL_EXTERNALDOMAIN: localhost
@@ -28,19 +28,19 @@ services:
       ZITADEL_EXTERNALSECURE: false
       ZITADEL_DATABASE_POSTGRES_HOST: zitadel-postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
-      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
-      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
-      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel
-      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: zitadel
-      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: zitadel
+      ZITADEL_DATABASE_POSTGRES_DATABASE: ${POSTGRES_DB:-zitadel}
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${POSTGRES_USER:-zitadel}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_USER:-zitadel}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-      ZITADEL_MACHINEKEY: "a-32-byte-long-secret-key-change"
+      ZITADEL_MACHINEKEY: "${ZITADEL_MACHINEKEY:?ZITADEL_MACHINEKEY must be set (32 bytes)}"
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: setupmachine
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: zitadel-admin
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: Password1!
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD:?ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD must be set}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       zitadel-postgres:
         condition: service_healthy

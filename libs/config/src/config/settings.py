@@ -15,6 +15,8 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
 
     global_url: str = Field(
+        validation_alias="DB_URL",
+        serialization_alias="DB_GLOBAL_URL",
         default="postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global",
         description="Async PostgreSQL connection string for the Global Control Plane.",
     )
@@ -52,6 +54,26 @@ class IdentitySettings(BaseSettings):
     oauth_client_id: str = Field(
         default="api-gateway",
         description="The ZITADEL Client ID for the API Gateway Swagger UI",
+    )
+    authorization_url: str = Field(
+        default="http://localhost:8080/oauth/v2/authorize",
+        description="The OAuth2 authorization endpoint URL",
+    )
+    token_url: str = Field(
+        default="http://localhost:8080/oauth/v2/token",
+        description="The OAuth2 token endpoint URL",
+    )
+    issuer: str = Field(
+        default="http://localhost:8080",
+        description="The OIDC Issuer URL",
+    )
+    jwks_url: str = Field(
+        default="http://localhost:8080/oauth/v2/keys",
+        description="The OIDC JWKS URL for verifying signatures",
+    )
+    audience: str = Field(
+        default="api-gateway",
+        description="The expected audience for the JWT",
     )
 
 

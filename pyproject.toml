@@ -52,7 +52,13 @@ exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
-ignore = ["E501", "B008"] # Handled by formatter, B008 for FastAPI Depends
+ignore = ["E501"] # Handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI dependencies use default arguments
+"services/api/src/api/main.py" = ["B008"]
+"services/as2_server/src/as2_server/main.py" = ["B008"]
+"libs/identity/src/identity/dependencies.py" = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"

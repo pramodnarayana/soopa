@@ -12,6 +12,7 @@ on:
 
 jobs:
   build-and-test:
+    name: Build, Lint, and Test
     runs-on: ubuntu-latest
 
     steps:

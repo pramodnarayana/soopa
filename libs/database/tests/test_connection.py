@@ -1,4 +1,5 @@
 import contextlib
+import os
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -6,9 +7,13 @@ from database.connection import DatabaseRouter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# We use the local test databases spun up by docker-compose
-GLOBAL_DB_URL = "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"
-SHARD_1_URL = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+# We use the local test databases spun up by docker-compose, but allow overrides
+GLOBAL_DB_URL = os.getenv(
+    "DB_GLOBAL_URL", "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"
+)
+SHARD_1_URL = os.getenv(
+    "DB_SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+)
 
 
 @pytest.fixture
@@ -21,6 +26,7 @@ async def router() -> AsyncGenerator[DatabaseRouter, None]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_global_session_connection(router: DatabaseRouter) -> None:
     """
     Test that the DatabaseRouter can successfully yield a session
@@ -38,6 +44,7 @@ async def test_global_session_connection(router: DatabaseRouter) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     """
     Test that yielding a tenant session dynamically connects to the correct shard

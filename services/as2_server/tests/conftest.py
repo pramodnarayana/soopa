@@ -235,6 +235,9 @@ async def as2_client(
         app.dependency_overrides[get_s3_storage] = lambda: MockS3Storage()
         app.dependency_overrides[get_session] = override_get_session
 
+        # Mock the db_router on app state for the /ready probe
+        app.state.db_router = AsyncMock()
+
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield client
 

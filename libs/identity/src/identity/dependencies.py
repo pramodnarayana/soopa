@@ -10,7 +10,7 @@ from typing import Any
 
 import jwt
 from config.settings import get_settings
-from database.models import Tenant
+from database.models import DatabaseShard, Tenant
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from sqlalchemy import select
@@ -22,12 +22,15 @@ from identity.infrastructure.repositories import SQLAlchemyIdentityRepository
 logger = logging.getLogger(__name__)
 
 # Use Authorization Code flow for proper ZITADEL SSO integration via Swagger UI
+_settings = get_settings()
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
-    authorizationUrl="http://localhost:8080/oauth/v2/authorize",
-    tokenUrl="http://localhost:8080/oauth/v2/token",
+    authorizationUrl=_settings.identity.authorization_url,
+    tokenUrl=_settings.identity.token_url,
     scopes={"openid": "OpenID Connect", "profile": "Profile information", "email": "Email address"},
     auto_error=False,
 )
+
+jwks_client = jwt.PyJWKClient(_settings.identity.jwks_url)
 
 
 async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, Any]:
@@ -43,11 +46,18 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    get_settings()
+    settings = get_settings()
 
     try:
-        # Decoding without verification for structural placeholder.
-        payload = jwt.decode(token, options={"verify_signature": False})
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token,
+            key=signing_key.key,
+            algorithms=["RS256"],
+            audience=settings.identity.audience,
+            issuer=settings.identity.issuer,
+            options={"require": ["iss", "aud", "exp"]},
+        )
         return payload
     except jwt.PyJWTError as e:
         logger.error(f"JWT Validation failed: {e}")
@@ -128,14 +138,15 @@ async def get_tenant_session(
     try:
         # We need the DatabaseShard info
         # This could be heavily cached in memory to avoid a query on every request!
-        stmt = select(Tenant).where(Tenant.id == tenant_id)
+        stmt = (
+            select(Tenant, DatabaseShard)
+            .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
+            .where(Tenant.id == tenant_id)
+        )
         result = await global_session.execute(stmt)
-        tenant = result.scalar_one()
-        # For simplicity, assuming shard info is accessible or cached
-        shard_key = f"shard_{tenant.shard_id}"
-        # In a real implementation, we'd join DatabaseShard to get the DSN
-        # DSN = tenant.shard.dsn
-        shard_url = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+        tenant, shard = result.one()
+        shard_key = shard.name
+        shard_url = shard.dsn
     finally:
         with contextlib.suppress(StopAsyncIteration):
             await async_gen_global.__anext__()

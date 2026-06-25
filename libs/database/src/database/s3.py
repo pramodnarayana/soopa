@@ -87,18 +87,22 @@ class Aioboto3PayloadStorage(IPayloadStorage):
         expiry_seconds: int = 3600,
         response_headers: dict[str, str] | None = None,
     ) -> str:
+        if not storage_uri.startswith(f"s3://{self.bucket}/"):
+            raise ValueError(f"storage_uri {storage_uri} does not belong to bucket {self.bucket}")
+
         key = storage_uri.replace(f"s3://{self.bucket}/", "")
         async with self.session.client("s3", **self._client_kwargs()) as s3:
+            params = {
+                "Bucket": self.bucket,
+                "Key": key,
+            }
+            if response_headers and "Content-Disposition" in response_headers:
+                params["ResponseContentDisposition"] = response_headers["Content-Disposition"]
+
             return str(
                 await s3.generate_presigned_url(
                     "get_object",
-                    Params={
-                        "Bucket": self.bucket,
-                        "Key": key,
-                        "ResponseContentDisposition": response_headers.get("Content-Disposition")
-                        if response_headers
-                        else None,
-                    },
+                    Params=params,
                     ExpiresIn=expiry_seconds,
                 )
             )

@@ -63,17 +63,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = ObservabilityProvider.logger(__name__)
     from database.connection import DatabaseRouter
 
-    # Initialize the global DatabaseRouter and mount it to app state
-    db_router = DatabaseRouter(
-        settings.database.global_url,
-        pool_size=settings.database.pool_size,
-        max_overflow=settings.database.max_overflow,
-    )
-    app.state.db_router = db_router
+    try:
+        # Initialize the global DatabaseRouter and mount it to app state
+        db_router = DatabaseRouter(
+            settings.database.global_url,
+            pool_size=settings.database.pool_size,
+            max_overflow=settings.database.max_overflow,
+        )
+        app.state.db_router = db_router
+        print("LIFESPAN: DB Router initialized")
+    except Exception as e:
+        print(f"LIFESPAN DB ROUTER ERROR: {e}")
 
     logger.info("edi_as2_server_started", env=settings.env)
     yield
     logger.info("edi_as2_server_stopped")
+    await db_router.close_all()
 
 
 app = FastAPI(title="AS2 Server", version="1.0.0", lifespan=lifespan)
@@ -96,7 +101,9 @@ async def health() -> Any:
 
 
 @app.get("/ready", tags=["ops"])
-async def ready() -> Any:
+async def ready(request: Request, s3: S3Dep) -> Any:
+    if getattr(request.app.state, "db_router", None) is None:
+        raise HTTPException(status_code=503, detail="Database router not initialized")
     return {"status": "ready"}
 
 

@@ -6,6 +6,7 @@ manages the connection pools (engines) efficiently, and enforces
 Row-Level Security (RLS).
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 
@@ -34,6 +35,7 @@ class DatabaseRouter:
 
         # Cache for tenant engines to avoid recreation
         self._engines: dict[str, AsyncEngine] = {}
+        self._engine_lock = asyncio.Lock()
 
         # Initialize the global control plane engine
         self._engines["global"] = self._create_engine(self._global_db_url)
@@ -48,23 +50,26 @@ class DatabaseRouter:
             max_overflow=self._max_overflow,
         )
 
-    def get_engine(self, db_key: str, url: str | None = None) -> AsyncEngine:
+    async def get_engine(self, db_key: str, url: str | None = None) -> AsyncEngine:
         """
         Retrieves or creates an AsyncEngine for a specific database shard.
         """
         if db_key not in self._engines:
-            if not url:
-                raise ValueError(f"Engine for {db_key} not found and no URL provided.")
-            self._engines[db_key] = self._create_engine(url)
-            logger.info(f"Created new connection pool for database shard: {db_key}")
+            async with self._engine_lock:
+                if db_key not in self._engines:
+                    if not url:
+                        raise ValueError(f"Engine for {db_key} not found and no URL provided.")
+                    self._engines[db_key] = self._create_engine(url)
+                    logger.info(f"Created new connection pool for database shard: {db_key}")
         return self._engines[db_key]
 
     async def get_global_session(self) -> AsyncGenerator[AsyncSession, None]:
         """
         Yields a session connected to the Global Control Plane DB.
         """
+        engine = await self.get_engine("global")
         factory = async_sessionmaker(
-            self.get_engine("global"),
+            engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )
@@ -79,7 +84,7 @@ class DatabaseRouter:
         Crucially, it sets the PostgreSQL Row-Level Security (RLS) variable
         for the transaction context.
         """
-        engine = self.get_engine(shard_key, shard_url)
+        engine = await self.get_engine(shard_key, shard_url)
         factory = async_sessionmaker(
             engine,
             class_=AsyncSession,

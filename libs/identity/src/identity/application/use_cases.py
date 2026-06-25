@@ -18,12 +18,12 @@ class ResolveTenantUseCase:
         """
         user_id = await self.repository.get_user_id_by_email(email)
 
-        if not user_id:
+        if user_id is None:
             # JIT Provisioning
             return await self.repository.provision_tenant_for_user(email, name)
 
         tenant_id = await self.repository.get_tenant_id_for_user(user_id)
-        if not tenant_id:
+        if tenant_id is None:
             raise ValueError(f"User {email} exists but is not mapped to any tenant.")
 
         return tenant_id

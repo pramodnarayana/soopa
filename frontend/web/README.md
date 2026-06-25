@@ -1,32 +1,50 @@
-# React + TypeScript + Vite
+# EDI AS2 Console
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The EDI AS2 Console is the React-based frontend for the enterprise EDI AS2 platform. It provides a control plane for administrators to configure trading partners, monitor AS2 payloads, and manage tenants.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Authentication & Single Sign-On (SSO)**: Powered by Zitadel OIDC integration (`react-oidc-context`).
+- **Dashboard**: High-level overview of incoming and outgoing AS2 payloads.
+- **Tenant Provisioning**: Real-time verification of Just-In-Time (JIT) tenant provisioning and PostgreSQL Row-Level Security (RLS) enforcement.
+- **Identity Insights**: Tools to introspect SSO claims and external identity profiles.
 
-## React Compiler
+## Architecture & Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 18** with Strict Mode enabled
+- **Vite** for fast HMR and optimized builds
+- **Tailwind CSS** + **Radix UI** + **shadcn/ui** for accessible, headless components
+- **TanStack Router** for fully typed client-side routing
 
-## Expanding the Oxlint configuration
+## Setup & Development
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+### Prerequisites
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+You must have the backend API gateway and Zitadel SSO running locally. See the root workspace for `docker-compose` instructions.
+
+### Local Development
+
+1. Create your local environment configuration by copying the example:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Update `.env` with your actual Zitadel Client ID and endpoint URLs.
+
+3. Install dependencies and start the Vite dev server:
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+### Linting & Formatting
+
+The project uses a combination of Biome, ESLint, and Stylelint.
+
+```bash
+# Run linters
+npm run lint
+
+# Format code
+npm run format
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
