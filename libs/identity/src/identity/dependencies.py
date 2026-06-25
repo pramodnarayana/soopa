@@ -15,6 +15,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from identity.application.use_cases import ResolveTenantUseCase
 from identity.infrastructure.repositories import SQLAlchemyIdentityRepository
@@ -49,7 +50,7 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
     settings = get_settings()
 
     try:
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        signing_key = await run_in_threadpool(jwks_client.get_signing_key_from_jwt, token)
         payload = jwt.decode(
             token,
             key=signing_key.key,

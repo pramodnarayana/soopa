@@ -28,6 +28,9 @@ pythonpath = [
     "services/as2_server/src",
 ]
 addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
+]
 
 [dependency-groups]
 dev = [

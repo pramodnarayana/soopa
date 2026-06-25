@@ -55,9 +55,11 @@ def upgrade() -> None:
 
     # Enable Row-Level Security
     op.execute("ALTER TABLE as2_payloads ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE as2_payloads FORCE ROW LEVEL SECURITY;")
     op.execute("CREATE POLICY tenant_isolation_policy ON as2_payloads USING (tenant_id = current_setting('app.current_tenant')::integer);")
 
     op.execute("ALTER TABLE trading_partners ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE trading_partners FORCE ROW LEVEL SECURITY;")
     op.execute("CREATE POLICY tenant_isolation_policy ON trading_partners USING (tenant_id = current_setting('app.current_tenant')::integer);")
     # ### end Alembic commands ###
 

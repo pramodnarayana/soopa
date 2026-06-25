@@ -24,6 +24,8 @@ async def router() -> AsyncGenerator[DatabaseRouter, None]:
 async def test_sqlalchemy_identity_repository_jit_provision(router: DatabaseRouter) -> None:
     async_gen = router.get_global_session()
     session = await async_gen.__anext__()
+    created_user = None
+    created_tenant = None
     try:
         import uuid
 
@@ -35,18 +37,38 @@ async def test_sqlalchemy_identity_repository_jit_provision(router: DatabaseRout
         assert tenant_id is not None
 
         user_stmt = select(User).where(User.email == test_email)
-        user = (await session.execute(user_stmt)).scalar_one()
-        assert user.name == "JIT User"
+        created_user = (await session.execute(user_stmt)).scalar_one()
+        assert created_user.name == "JIT User"
 
         tenant_stmt = select(Tenant).where(Tenant.id == tenant_id)
-        tenant = (await session.execute(tenant_stmt)).scalar_one()
-        assert "JIT User's Organization" in tenant.name
+        created_tenant = (await session.execute(tenant_stmt)).scalar_one()
+        assert "JIT User's Organization" in created_tenant.name
 
-        # Cleanup
-        await session.rollback()
     finally:
-        await session.rollback()
-        import contextlib
+        # Cleanup: explicitly delete created records since provision_tenant_for_user() commits
+        try:
+            if created_user is not None:
+                # Delete TenantUser mapping first (foreign key constraint)
+                from database.models import TenantUser
+                tenant_user_stmt = select(TenantUser).where(TenantUser.user_id == created_user.id)
+                tenant_user = (await session.execute(tenant_user_stmt)).scalar_one_or_none()
+                if tenant_user:
+                    await session.delete(tenant_user)
 
-        with contextlib.suppress(StopAsyncIteration):
-            await async_gen.__anext__()
+                # Delete Tenant
+                if created_tenant is not None:
+                    await session.delete(created_tenant)
+
+                # Delete User
+                await session.delete(created_user)
+
+                await session.commit()
+        except Exception:
+            # If cleanup fails, rollback as fallback
+            await session.rollback()
+        finally:
+            await session.rollback()
+            import contextlib
+
+            with contextlib.suppress(StopAsyncIteration):
+                await async_gen.__anext__()
