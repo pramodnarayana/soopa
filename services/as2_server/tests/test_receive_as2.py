@@ -5,6 +5,8 @@ Tests use real X.509 certificates and real S/MIME signed/encrypted payloads.
 All observability is wired with NoOp adapters — no infrastructure required.
 """
 
+from typing import Any
+
 import pytest
 from httpx import AsyncClient
 
@@ -16,7 +18,7 @@ def _build_as2_headers(
     as2_to: str,
     message_id: str,
     content_type: str,
-) -> dict:
+) -> dict[str, str]:
     return {
         "as2-from": f'"{as2_from}"',
         "as2-to": f'"{as2_to}"',
@@ -55,8 +57,8 @@ class TestAS2MessageReceiving:
     """
 
     async def test_plain_as2_message_returns_processed_mdn(
-        self, as2_client: AsyncClient, sender_keypair, edi_payload: bytes
-    ):
+        self, as2_client: AsyncClient, sender_keypair: Any, edi_payload: bytes
+    ) -> None:
         """
         A plain (unsigned, unencrypted) AS2 message should return HTTP 200
         with a synchronous MDN containing disposition: processed.
@@ -75,8 +77,8 @@ class TestAS2MessageReceiving:
         assert b"test-plain-001" in response.content
 
     async def test_signed_as2_message_with_valid_cert_returns_processed_mdn(
-        self, as2_client: AsyncClient, sender_keypair, signed_as2_payload: bytes
-    ):
+        self, as2_client: AsyncClient, sender_keypair: Any, signed_as2_payload: bytes
+    ) -> None:
         """
         A real multipart/signed payload from a known Trading Partner
         should be verified successfully and return disposition: processed.
@@ -94,7 +96,7 @@ class TestAS2MessageReceiving:
 
     async def test_as2_message_from_unknown_partner_returns_security_failed_mdn(
         self, as2_client: AsyncClient, edi_payload: bytes
-    ):
+    ) -> None:
         """
         A signed message from an AS2-ID not in our Trading Partner database
         should return HTTP 200 but with disposition: failed/insufficient-message-security.
@@ -114,7 +116,7 @@ class TestAS2MessageReceiving:
 
     async def test_missing_mandatory_as2_headers_returns_400(
         self, as2_client: AsyncClient, edi_payload: bytes
-    ):
+    ) -> None:
         """
         A request missing AS2-From, AS2-To, or Message-ID headers
         must be rejected with HTTP 400 (not a valid AS2 message at all).
@@ -127,8 +129,8 @@ class TestAS2MessageReceiving:
         assert response.status_code == 400
 
     async def test_mic_is_included_in_mdn_response(
-        self, as2_client: AsyncClient, sender_keypair, edi_payload: bytes
-    ):
+        self, as2_client: AsyncClient, sender_keypair: Any, edi_payload: bytes
+    ) -> None:
         """
         The synchronous MDN must include a Received-content-MIC header
         so the sender can verify the payload was received intact.

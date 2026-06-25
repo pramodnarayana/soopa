@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from typing import Any
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Any:
     settings = get_settings()
 
     logger.info("Initializing DatabaseRouter for API Service")
@@ -49,7 +50,7 @@ app = FastAPI(
 async def get_me(
     tenant_id: int = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_tenant_session),
-):
+) -> Any:
     """
     Returns the current user's resolved tenant_id and verifies database access.
     """

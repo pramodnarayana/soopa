@@ -1,4 +1,5 @@
 import contextlib
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,7 +15,7 @@ async def test_get_session_success() -> None:
 
     mock_session = AsyncMock()
 
-    async def mock_session_gen():
+    async def mock_session_gen() -> AsyncGenerator[AsyncMock, None]:
         yield mock_session
 
     mock_db_router.get_tenant_session = MagicMock(return_value=mock_session_gen())
@@ -44,7 +45,7 @@ async def test_get_session_rollback_on_exception() -> None:
 
     mock_session = AsyncMock()
 
-    async def mock_session_gen():
+    async def mock_session_gen() -> AsyncGenerator[AsyncMock, None]:
         yield mock_session
 
     mock_db_router.get_tenant_session = MagicMock(return_value=mock_session_gen())

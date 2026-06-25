@@ -19,13 +19,13 @@ function Dashboard() {
         <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
         <p className="text-slate-500">Welcome to your enterprise EDI platform.</p>
       </div>
-      
+
       <div className="grid gap-6 md:grid-cols-2">
         <IdentityDetailsCard />
-        <TenantProvisioningCard 
-          isLoading={isLoading} 
-          error={error as Error | null} 
-          userProfile={userProfile} 
+        <TenantProvisioningCard
+          isLoading={isLoading}
+          error={error as Error | null}
+          userProfile={userProfile}
         />
       </div>
     </div>

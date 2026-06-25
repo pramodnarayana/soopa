@@ -20,7 +20,7 @@ class PrometheusMetrics(IMetrics):
         self._counters: dict[str, Counter] = {}
         self._histograms: dict[str, Histogram] = {}
 
-    def _get_or_create_counter(self, name: str, labels: dict | None) -> Counter:
+    def _get_or_create_counter(self, name: str, labels: dict[str, str] | None) -> Counter:
         label_names = sorted(labels.keys()) if labels else []
         key = f"{name}:{','.join(label_names)}"
         if key not in self._counters:
@@ -31,7 +31,7 @@ class PrometheusMetrics(IMetrics):
             )
         return self._counters[key]
 
-    def _get_or_create_histogram(self, name: str, labels: dict | None) -> Histogram:
+    def _get_or_create_histogram(self, name: str, labels: dict[str, str] | None) -> Histogram:
         label_names = sorted(labels.keys()) if labels else []
         key = f"{name}:{','.join(label_names)}"
         if key not in self._histograms:
@@ -43,14 +43,16 @@ class PrometheusMetrics(IMetrics):
             )
         return self._histograms[key]
 
-    def increment(self, name: str, value: float = 1.0, labels: dict | None = None) -> None:
+    def increment(
+        self, name: str, value: float = 1.0, labels: dict[str, str] | None = None
+    ) -> None:
         counter = self._get_or_create_counter(name, labels or {})
         if labels:
             counter.labels(**labels).inc(value)
         else:
             counter.inc(value)
 
-    def observe(self, name: str, value: float, labels: dict | None = None) -> None:
+    def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         histogram = self._get_or_create_histogram(name, labels or {})
         if labels:
             histogram.labels(**labels).observe(value)

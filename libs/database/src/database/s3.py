@@ -5,7 +5,7 @@ Business logic (FastAPI) depends only on the IPayloadStorage interface.
 
 from abc import ABC, abstractmethod
 
-import aioboto3
+import aioboto3  # type: ignore[import-untyped]
 
 
 class IPayloadStorage(ABC):
@@ -49,7 +49,7 @@ class Aioboto3PayloadStorage(IPayloadStorage):
 
         self.session = aioboto3.Session()
 
-    def _client_kwargs(self) -> dict:
+    def _client_kwargs(self) -> dict[str, str]:
         kwargs = {"region_name": self.region}
         if self.endpoint_url:
             kwargs["endpoint_url"] = self.endpoint_url
@@ -79,4 +79,26 @@ class Aioboto3PayloadStorage(IPayloadStorage):
         async with self.session.client("s3", **self._client_kwargs()) as s3:
             response = await s3.get_object(Bucket=self.bucket, Key=key)
             async with response["Body"] as stream:
-                return await stream.read()
+                return bytes(await stream.read())
+
+    async def generate_presigned_url(
+        self,
+        storage_uri: str,
+        expiry_seconds: int = 3600,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
+        key = storage_uri.replace(f"s3://{self.bucket}/", "")
+        async with self.session.client("s3", **self._client_kwargs()) as s3:
+            return str(
+                await s3.generate_presigned_url(
+                    "get_object",
+                    Params={
+                        "Bucket": self.bucket,
+                        "Key": key,
+                        "ResponseContentDisposition": response_headers.get("Content-Disposition")
+                        if response_headers
+                        else None,
+                    },
+                    ExpiresIn=expiry_seconds,
+                )
+            )

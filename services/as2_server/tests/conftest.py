@@ -12,7 +12,8 @@ import datetime
 import os
 import subprocess
 import tempfile
-from typing import NamedTuple
+from collections.abc import AsyncGenerator
+from typing import Any, NamedTuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -172,7 +173,9 @@ def encrypted_as2_payload(receiver_keypair: KeyPair, edi_payload: bytes) -> byte
 
 
 @pytest_asyncio.fixture
-async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair) -> None:
+async def as2_client(
+    sender_keypair: KeyPair, receiver_keypair: KeyPair
+) -> AsyncGenerator[AsyncClient, None]:
     """
     FastAPI AsyncClient pre-configured with:
     - NoOp observability (no infra required)
@@ -206,7 +209,7 @@ async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair) -> None
     ):
         mock_partner_repo = AsyncMock()
 
-        def mock_find(as2_id: str) -> None:
+        def mock_find(as2_id: str) -> Any:
             if as2_id == sender_keypair.as2_id:
                 return mock_partner
             return None
@@ -223,9 +226,10 @@ async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair) -> None
         mock_payload_repo_cls.return_value = mock_payload_repo
 
         # Override the FastAPI S3 dependency and Session dependency
-        from as2_server.main import app, get_s3_storage, get_session
+        from as2_server.main import app, get_s3_storage
+        from database.session import get_session
 
-        async def override_get_session() -> None:
+        async def override_get_session() -> AsyncGenerator[AsyncMock, None]:
             yield AsyncMock()
 
         app.dependency_overrides[get_s3_storage] = lambda: MockS3Storage()

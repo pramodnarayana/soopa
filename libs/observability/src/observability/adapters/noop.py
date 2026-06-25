@@ -36,10 +36,12 @@ class NoOpTracer(ITracer):
 
 
 class NoOpMetrics(IMetrics):
-    def increment(self, name: str, value: float = 1.0, labels: dict | None = None) -> None:
+    def increment(
+        self, name: str, value: float = 1.0, labels: dict[str, str] | None = None
+    ) -> None:
         pass
 
-    def observe(self, name: str, value: float, labels: dict | None = None) -> None:
+    def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         pass
 
 

@@ -1,4 +1,5 @@
 import contextlib
+from collections.abc import AsyncGenerator
 
 import pytest
 from database.connection import DatabaseRouter
@@ -11,7 +12,7 @@ SHARD_1_URL = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
 
 
 @pytest.fixture
-async def router():
+async def router() -> AsyncGenerator[DatabaseRouter, None]:
     # Setup
     db_router = DatabaseRouter(GLOBAL_DB_URL, pool_size=2, max_overflow=2)
     yield db_router

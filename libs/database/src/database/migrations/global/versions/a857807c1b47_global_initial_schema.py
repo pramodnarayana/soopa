@@ -1,7 +1,7 @@
 """global_initial_schema
 
 Revision ID: a857807c1b47
-Revises: 
+Revises:
 Create Date: 2026-06-25 09:43:15.682659
 
 """

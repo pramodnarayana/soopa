@@ -14,15 +14,13 @@ repos:
         args: [ --fix ]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.9.0
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - pydantic
-          - sqlalchemy
-        args: [--strict]
-        exclude: migrations/
+        name: mypy
+        entry: uv run mypy libs/ services/
+        language: system
+        pass_filenames: false
 
   - repo: local
     hooks:

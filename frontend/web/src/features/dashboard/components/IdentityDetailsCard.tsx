@@ -3,7 +3,7 @@ import { useAuth } from 'react-oidc-context'
 
 export function IdentityDetailsCard() {
   const auth = useAuth()
-  
+
   return (
     <Card>
       <CardHeader>

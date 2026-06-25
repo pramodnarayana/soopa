@@ -14,7 +14,9 @@ class IMetrics(ABC):
     """
 
     @abstractmethod
-    def increment(self, name: str, value: float = 1.0, labels: dict | None = None) -> None:
+    def increment(
+        self, name: str, value: float = 1.0, labels: dict[str, str] | None = None
+    ) -> None:
         """
         Increment a counter metric.
 
@@ -24,7 +26,7 @@ class IMetrics(ABC):
         ...
 
     @abstractmethod
-    def observe(self, name: str, value: float, labels: dict | None = None) -> None:
+    def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """
         Record a histogram/distribution observation (e.g. request duration in seconds).
 

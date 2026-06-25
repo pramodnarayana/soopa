@@ -15,12 +15,14 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import declarative_base, declared_attr
+from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr
+
 
 # ---------------------------------------------------------------------------
 # Global Control Plane Models
 # ---------------------------------------------------------------------------
-GlobalBase = declarative_base()
+class GlobalBase(DeclarativeBase):
+    __allow_unmapped__ = True
 
 
 class DatabaseShard(GlobalBase):
@@ -89,7 +91,8 @@ class TenantUser(GlobalBase):
 # ---------------------------------------------------------------------------
 # Tenant Data Models (Reside in Shards/Enterprise DBs)
 # ---------------------------------------------------------------------------
-TenantBase = declarative_base()
+class TenantBase(DeclarativeBase):
+    __allow_unmapped__ = True
 
 
 class TenantAwareMixin:
@@ -99,11 +102,13 @@ class TenantAwareMixin:
     """
 
     @declared_attr
-    def tenant_id(cls):
+    def tenant_id(cls) -> Mapped[int]:
+        from sqlalchemy.orm import mapped_column
+
         # We don't enforce a ForeignKey here because the tenants table
         # is mastered in the Global DB. While logical replication might sync it down,
         # relying purely on the application routing and RLS is safer and more decoupled.
-        return Column(Integer, nullable=False, index=True)
+        return mapped_column(Integer, nullable=False, index=True)
 
 
 class TradingPartner(TenantBase, TenantAwareMixin):

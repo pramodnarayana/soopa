@@ -1,7 +1,7 @@
 """tenant_initial_schema
 
 Revision ID: 534f8e33d17d
-Revises: 
+Revises:
 Create Date: 2026-06-25 09:43:48.632423
 
 """

@@ -40,7 +40,7 @@ function AppLayout() {
             </div>
           <h1 className="text-lg font-bold">EDI AS2 <span className="font-normal text-slate-500 ml-2">Console</span></h1>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <div className="text-sm text-slate-600 font-medium bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
             {auth.user?.profile.email}
@@ -50,7 +50,7 @@ function AppLayout() {
           </Button>
         </div>
       </header>
-      
+
       <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full">
         <Outlet />
       </main>

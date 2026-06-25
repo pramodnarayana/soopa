@@ -4,7 +4,7 @@ import axios from 'axios'
 
 export function useDashboardData() {
   const auth = useAuth()
-  
+
   return useQuery({
     queryKey: ['me'],
     queryFn: async () => {
