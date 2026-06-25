@@ -55,6 +55,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('tenant_id', 'as2_id', name='uq_tenant_as2_id')
     )
     op.create_index(op.f('ix_trading_partners_tenant_id'), 'trading_partners', ['tenant_id'], unique=False)
+    op.create_index('ix_tenant_active_host_identity', 'trading_partners', ['tenant_id'], unique=True, postgresql_where=sa.text('is_host_identity IS true AND is_active IS true'))
 
     # Enable Row-Level Security
     op.execute("ALTER TABLE as2_payloads ENABLE ROW LEVEL SECURITY;")
@@ -75,6 +76,7 @@ def downgrade() -> None:
     op.execute("DROP POLICY IF EXISTS tenant_isolation_policy ON as2_payloads;")
     op.execute("ALTER TABLE as2_payloads DISABLE ROW LEVEL SECURITY;")
 
+    op.drop_index('ix_tenant_active_host_identity', table_name='trading_partners', postgresql_where=sa.text('is_host_identity IS true AND is_active IS true'))
     op.drop_index(op.f('ix_trading_partners_tenant_id'), table_name='trading_partners')
     op.drop_table('trading_partners')
     op.drop_index(op.f('ix_as2_payloads_tenant_id'), table_name='as2_payloads')
