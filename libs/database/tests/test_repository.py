@@ -65,6 +65,7 @@ async def test_host_identity_repository_get_host_private_key(mock_get_tenant_id:
 @patch("database.repository.get_tenant_id", return_value=123)
 async def test_as2_payload_repository_save_payload(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
+    session.add = MagicMock()
     repo = AS2PayloadRepository(session)
 
     result = await repo.save_payload(

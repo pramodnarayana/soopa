@@ -27,8 +27,10 @@ typecheck:
 	cd frontend/web && pnpm tsc --noEmit
 
 test:
-	@echo "=== Testing Backend ==="
-	uv run pytest libs/ services/ --cov=. --cov-report=term-missing
+	@echo "=== Testing Backend (Unit) ==="
+	uv run pytest libs/ services/ -m "not integration" --cov=. --cov-report=term-missing
+	@echo "=== Testing Backend (Integration) ==="
+	uv run pytest libs/ services/ -m "integration"
 	@echo "=== Testing Frontend ==="
 	# cd frontend/web && pnpm test (enable when Vitest is scaffolded)
 

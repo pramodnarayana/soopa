@@ -45,7 +45,7 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*"]
 plugins = ["pydantic.mypy"]
 
 [tool.ruff]
