@@ -60,11 +60,15 @@ async def lifespan(app: FastAPI):
     )
 
     logger = ObservabilityProvider.logger(__name__)
-    from database.connection import engine
-    from database.models import Base
+    from database.connection import DatabaseRouter
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Initialize the global DatabaseRouter and mount it to app state
+    db_router = DatabaseRouter(
+        settings.database.global_url,
+        pool_size=settings.database.pool_size,
+        max_overflow=settings.database.max_overflow,
+    )
+    app.state.db_router = db_router
 
     logger.info("edi_as2_server_started", env=settings.env)
     yield

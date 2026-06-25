@@ -14,9 +14,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
 
-    url: str = Field(
-        default="postgresql+asyncpg://edi:edi_password@localhost/edi",
-        description="Async PostgreSQL connection string.",
+    global_url: str = Field(
+        default="postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global",
+        description="Async PostgreSQL connection string for the Global Control Plane.",
     )
     pool_size: int = Field(default=10)
     max_overflow: int = Field(default=20)
@@ -46,6 +46,15 @@ class OtelSettings(BaseSettings):
     enabled: bool = Field(default=True)
 
 
+class IdentitySettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="IDENTITY_", env_file=".env", extra="ignore")
+
+    oauth_client_id: str = Field(
+        default="api-gateway",
+        description="The ZITADEL Client ID for the API Gateway Swagger UI",
+    )
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -55,6 +64,7 @@ class AppSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     s3: S3Settings = Field(default_factory=S3Settings)
     otel: OtelSettings = Field(default_factory=OtelSettings)
+    identity: IdentitySettings = Field(default_factory=IdentitySettings)
 
 
 @lru_cache

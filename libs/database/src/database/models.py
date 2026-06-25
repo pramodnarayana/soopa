@@ -1,5 +1,6 @@
 """
-SQLAlchemy Models for EDI AS2 Core and Trading Partners.
+SQLAlchemy Models for Hybrid Multi-Tenancy Architecture.
+Follows Hexagonal Architecture: These are pure persistence models (Adapters).
 """
 
 from datetime import datetime
@@ -14,43 +15,110 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, declared_attr
 
-Base = declarative_base()
+# ---------------------------------------------------------------------------
+# Global Control Plane Models
+# ---------------------------------------------------------------------------
+GlobalBase = declarative_base()
 
 
-class Tenant(Base):
+class DatabaseShard(GlobalBase):
     """
-    Represents an isolated tenant in the Hybrid Tenancy model.
+    Represents a physical database instance (Shard or Dedicated Enterprise DB).
     """
 
-    __tablename__ = "tenants"
+    __tablename__ = "database_shards"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
+    dsn = Column(String(1024), nullable=False)  # SQLAlchemy connection string
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class TradingPartner(Base):
+class Tenant(GlobalBase):
+    """
+    Represents a tenant (Organization) in the Control Plane.
+    """
+
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    idp_tenant_id = Column(String(255), nullable=True, unique=True)  # Links to generic external IdP
+    name = Column(String(255), nullable=False, unique=True)
+
+    # Routing info
+    shard_id = Column(Integer, ForeignKey("database_shards.id"), nullable=False)
+
+    # Tier: 'standard' (pooled in a shard), 'enterprise' (dedicated shard)
+    tier = Column(String(50), nullable=False, default="standard")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class User(GlobalBase):
+    """
+    Represents a user profile in the application.
+    Authentication is handled by Authentik, this maps the IDP user to our app.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    idp_user_id = Column(String(255), nullable=True, unique=True)  # Links to Authentik user
+    email = Column(String(255), nullable=False, unique=True)
+    name = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TenantUser(GlobalBase):
+    """
+    Maps users to tenants with specific roles (RBAC).
+    """
+
+    __tablename__ = "tenant_users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(50), nullable=False, default="member")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_tenant_user"),)
+
+
+# ---------------------------------------------------------------------------
+# Tenant Data Models (Reside in Shards/Enterprise DBs)
+# ---------------------------------------------------------------------------
+TenantBase = declarative_base()
+
+
+class TenantAwareMixin:
+    """
+    Mixin that adds a `tenant_id` to all tenant-scoped tables.
+    Essential for Row-Level Security (RLS) enforcement.
+    """
+
+    @declared_attr
+    def tenant_id(cls):
+        # We don't enforce a ForeignKey here because the tenants table
+        # is mastered in the Global DB. While logical replication might sync it down,
+        # relying purely on the application routing and RLS is safer and more decoupled.
+        return Column(Integer, nullable=False, index=True)
+
+
+class TradingPartner(TenantBase, TenantAwareMixin):
     """
     Represents an AS2 Trading Partner profile.
     """
 
     __tablename__ = "trading_partners"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
 
     as2_id = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
     url = Column(String(1024), nullable=True)  # Destination URL for outgoing messages
 
-    # Public certificate for encrypting payloads sent TO this partner,
-    # and verifying signatures received FROM this partner.
-    # Public certificate for encrypting payloads sent TO this partner,
-    # and verifying signatures received FROM this partner.
     public_cert_pem = Column(Text, nullable=True)
-
-    # For the Server's own identity (Host), we store the private key securely.
-    # Regular trading partners will NOT have this field populated.
     is_host_identity = Column(Boolean, default=False, nullable=False)
     private_key_pem = Column(Text, nullable=True)
 
@@ -60,14 +128,13 @@ class TradingPartner(Base):
     __table_args__ = (UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),)
 
 
-class AS2Payload(Base):
+class AS2Payload(TenantBase, TenantAwareMixin):
     """
     Storage for incoming and outgoing AS2 Messages and their payloads.
     """
 
     __tablename__ = "as2_payloads"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
 
     message_id = Column(String(255), nullable=False, index=True)
     direction = Column(String(10), nullable=False)  # 'INBOUND' or 'OUTBOUND'
@@ -76,8 +143,6 @@ class AS2Payload(Base):
     as2_to = Column(String(255), nullable=False)
 
     raw_headers = Column(Text, nullable=True)
-
-    # S3/MinIO/LocalStack URI where the massive binary payload is stored.
     payload_storage_uri = Column(String(2048), nullable=True)
 
     mic = Column(String(255), nullable=True)

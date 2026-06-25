@@ -52,7 +52,7 @@ exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
-ignore = ["E501"] # Handled by formatter
+ignore = ["E501", "B008"] # Handled by formatter, B008 for FastAPI Depends
 
 [tool.ruff.format]
 quote-style = "double"

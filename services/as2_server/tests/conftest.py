@@ -172,7 +172,7 @@ def encrypted_as2_payload(receiver_keypair: KeyPair, edi_payload: bytes) -> byte
 
 
 @pytest_asyncio.fixture
-async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair):
+async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair) -> None:
     """
     FastAPI AsyncClient pre-configured with:
     - NoOp observability (no infra required)
@@ -200,14 +200,13 @@ async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair):
     mock_partner.as2_id = sender_keypair.as2_id
 
     with (
-        patch("as2_server.main.get_session"),
         patch("as2_server.main.TradingPartnerRepository") as mock_partner_repo_cls,
         patch("as2_server.main.HostIdentityRepository") as mock_identity_repo_cls,
         patch("as2_server.main.AS2PayloadRepository") as mock_payload_repo_cls,
     ):
         mock_partner_repo = AsyncMock()
 
-        def mock_find(as2_id: str):
+        def mock_find(as2_id: str) -> None:
             if as2_id == sender_keypair.as2_id:
                 return mock_partner
             return None
@@ -223,10 +222,14 @@ async def as2_client(sender_keypair: KeyPair, receiver_keypair: KeyPair):
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
 
-        # Override the FastAPI S3 dependency
-        from as2_server.main import app, get_s3_storage
+        # Override the FastAPI S3 dependency and Session dependency
+        from as2_server.main import app, get_s3_storage, get_session
+
+        async def override_get_session() -> None:
+            yield AsyncMock()
 
         app.dependency_overrides[get_s3_storage] = lambda: MockS3Storage()
+        app.dependency_overrides[get_session] = override_get_session
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield client

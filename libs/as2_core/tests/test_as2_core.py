@@ -19,7 +19,7 @@ EDI_PAYLOAD = b"ISA*00*TEST...\nGS*PO*...\nST*850*0001\nSE*1*0001\nGE*1*1\nIEA*1
 class TestAS2Parser:
     """Unit tests for the pure AS2 HTTP request parser."""
 
-    def test_parses_minimal_valid_as2_headers(self):
+    def test_parses_minimal_valid_as2_headers(self) -> None:
         headers = {
             "as2-from": '"PARTNER"',
             "as2-to": '"SOOPAEDI"',
@@ -33,7 +33,7 @@ class TestAS2Parser:
         assert msg.message_id == "msg-001@test"
         assert msg.payload == EDI_PAYLOAD
 
-    def test_detects_encrypted_content_type(self):
+    def test_detects_encrypted_content_type(self) -> None:
         headers = {
             "as2-from": '"PARTNER"',
             "as2-to": '"SOOPAEDI"',
@@ -45,7 +45,7 @@ class TestAS2Parser:
         assert msg.is_encrypted is True
         assert msg.is_signed is False
 
-    def test_detects_signed_content_type(self):
+    def test_detects_signed_content_type(self) -> None:
         headers = {
             "as2-from": '"PARTNER"',
             "as2-to": '"SOOPAEDI"',
@@ -57,7 +57,7 @@ class TestAS2Parser:
         assert msg.is_signed is True
         assert msg.is_encrypted is False
 
-    def test_raises_on_missing_as2_from(self):
+    def test_raises_on_missing_as2_from(self) -> None:
         headers = {
             "as2-to": '"SOOPAEDI"',
             "message-id": "<msg-001>",
@@ -66,7 +66,7 @@ class TestAS2Parser:
         with pytest.raises(ValueError, match="Missing mandatory AS2 headers"):
             parse_as2_request(headers, EDI_PAYLOAD)
 
-    def test_raises_on_missing_message_id(self):
+    def test_raises_on_missing_message_id(self) -> None:
         headers = {
             "as2-from": '"PARTNER"',
             "as2-to": '"SOOPAEDI"',
@@ -75,7 +75,7 @@ class TestAS2Parser:
         with pytest.raises(ValueError, match="Missing mandatory AS2 headers"):
             parse_as2_request(headers, EDI_PAYLOAD)
 
-    def test_strips_quotes_from_as2_ids(self):
+    def test_strips_quotes_from_as2_ids(self) -> None:
         """AS2 IDs in HTTP headers are quoted — the parser must strip them."""
         headers = {
             "as2-from": '"  PARTNER-ID  "',
@@ -90,7 +90,7 @@ class TestAS2Parser:
 class TestMICCalculation:
     """Unit tests for MIC (Message Integrity Check) calculation."""
 
-    def test_sha256_mic_is_base64_encoded_sha256(self):
+    def test_sha256_mic_is_base64_encoded_sha256(self) -> None:
         import base64
         import hashlib
 
@@ -100,7 +100,7 @@ class TestMICCalculation:
         assert mic.startswith(expected_b64)
         assert "sha256" in mic
 
-    def test_sha1_mic_uses_correct_algorithm(self):
+    def test_sha1_mic_uses_correct_algorithm(self) -> None:
         import base64
         import hashlib
 
@@ -110,11 +110,11 @@ class TestMICCalculation:
         assert mic.startswith(expected_b64)
         assert "sha1" in mic
 
-    def test_unsupported_algorithm_raises(self):
+    def test_unsupported_algorithm_raises(self) -> None:
         with pytest.raises(ValueError, match="Unsupported MIC algorithm"):
             calculate_mic(b"data", mic_alg="md4")
 
-    def test_mic_format_contains_comma_separator(self):
+    def test_mic_format_contains_comma_separator(self) -> None:
         """MIC must be in the format: <base64>, <algorithm> per RFC 4130."""
         mic = calculate_mic(b"payload", mic_alg="sha256")
         parts = mic.split(", ")
@@ -133,25 +133,25 @@ class TestMDNGeneration:
             payload=EDI_PAYLOAD,
         )
 
-    def test_mdn_swaps_from_and_to(self):
+    def test_mdn_swaps_from_and_to(self) -> None:
         """The MDN must swap AS2-From and AS2-To (we reply to the sender)."""
         msg = self._make_message()
         mdn = generate_mdn(msg, disposition="automatic-action/MDN-sent-automatically; processed")
         assert mdn.headers["AS2-From"] == "SOOPAEDI"
         assert mdn.headers["AS2-To"] == "PARTNER"
 
-    def test_mdn_includes_original_message_id(self):
+    def test_mdn_includes_original_message_id(self) -> None:
         msg = self._make_message()
         mdn = generate_mdn(msg, disposition="processed")
         assert mdn.original_message_id == "original-msg-001"
 
-    def test_mdn_calculates_mic_when_payload_present(self):
+    def test_mdn_calculates_mic_when_payload_present(self) -> None:
         msg = self._make_message()
         mdn = generate_mdn(msg, disposition="processed")
         assert mdn.mic is not None
         assert len(mdn.mic) > 0
 
-    def test_mdn_mic_is_none_when_payload_empty(self):
+    def test_mdn_mic_is_none_when_payload_empty(self) -> None:
         msg = AS2Message(
             message_id="empty-001",
             as2_from="PARTNER",
@@ -161,7 +161,7 @@ class TestMDNGeneration:
         mdn = generate_mdn(msg, disposition="processed")
         assert mdn.mic is None
 
-    def test_render_mdn_report_contains_required_fields(self):
+    def test_render_mdn_report_contains_required_fields(self) -> None:
         msg = self._make_message()
         mdn = generate_mdn(msg, disposition="automatic-action/MDN-sent-automatically; processed")
         report = render_mdn_report(mdn)
@@ -170,7 +170,7 @@ class TestMDNGeneration:
         assert b"original-msg-001" in report
         assert b"Received-content-MIC" in report
 
-    def test_render_mdn_report_for_failure_contains_disposition(self):
+    def test_render_mdn_report_for_failure_contains_disposition(self) -> None:
         msg = self._make_message()
         mdn = generate_mdn(
             msg, disposition="automatic-action/MDN-sent-automatically; failed/authentication-failed"

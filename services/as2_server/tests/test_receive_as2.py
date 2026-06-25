@@ -30,17 +30,19 @@ def _build_as2_headers(
 class TestAS2ServerHealthProbes:
     """Verify the Kubernetes health probes respond correctly."""
 
-    async def test_liveness_probe(self, as2_client: AsyncClient):
+    async def test_liveness_probe(self, as2_client: AsyncClient) -> None:
         response = await as2_client.get("/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
-    async def test_readiness_probe(self, as2_client: AsyncClient):
+    async def test_readiness_probe(self, as2_client: AsyncClient) -> None:
         response = await as2_client.get("/ready")
         assert response.status_code == 200
         assert response.json() == {"status": "ready"}
 
-    async def test_metrics_endpoint_returns_prometheus_format(self, as2_client: AsyncClient):
+    async def test_metrics_endpoint_returns_prometheus_format(
+        self, as2_client: AsyncClient
+    ) -> None:
         response = await as2_client.get("/metrics")
         assert response.status_code == 200
         assert "text/plain" in response.headers["content-type"]
