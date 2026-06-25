@@ -49,17 +49,49 @@ async def test_repository_raises_error_when_no_tenant(mock_get_tenant_id: Any) -
 
 
 @patch("database.repository.get_tenant_id", return_value=123)
-async def test_host_identity_repository_get_host_private_key(mock_get_tenant_id: Any) -> None:
+async def test_host_identity_repository_get_host_private_key_kms(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
     mock_result = MagicMock()
-    mock_host = TradingPartner(is_host_identity=True, private_key_ciphertext="private_key_data")
+    mock_host = TradingPartner(
+        is_host_identity=True, kms_key_id="alias/edi-key", private_key_ciphertext="private_key_data"
+    )
     mock_result.scalar_one_or_none.return_value = mock_host
     session.execute.return_value = mock_result
 
     repo = HostIdentityRepository(session)
-    key = await repo.get_host_private_key()
+    with pytest.raises(NotImplementedError, match="KMS decryption strategy not yet implemented"):
+        await repo.get_host_private_key()
 
-    assert key == b"private_key_data"
+
+@patch("database.repository.get_tenant_id", return_value=123)
+async def test_host_identity_repository_get_host_private_key_vault(mock_get_tenant_id: Any) -> None:
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_host = TradingPartner(is_host_identity=True, private_key_secret_id="vault/edi/key")
+    mock_result.scalar_one_or_none.return_value = mock_host
+    session.execute.return_value = mock_result
+
+    repo = HostIdentityRepository(session)
+    with pytest.raises(NotImplementedError, match="External secret strategy not yet implemented"):
+        await repo.get_host_private_key()
+
+
+@patch("database.repository.get_tenant_id", return_value=123)
+async def test_host_identity_repository_get_host_private_key_missing_strategy(
+    mock_get_tenant_id: Any,
+) -> None:
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_host = TradingPartner(is_host_identity=True, private_key_ciphertext="only_ciphertext")
+    mock_result.scalar_one_or_none.return_value = mock_host
+    session.execute.return_value = mock_result
+
+    repo = HostIdentityRepository(session)
+    with pytest.raises(
+        RuntimeError,
+        match="No supported host private key retrieval strategy configured for tenant.",
+    ):
+        await repo.get_host_private_key()
 
 
 @patch("database.repository.get_tenant_id", return_value=123)

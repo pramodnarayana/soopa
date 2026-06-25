@@ -15,10 +15,7 @@ members = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = [
-    "libs/as2_core/tests",
-    "services/as2_server/tests",
-]
+
 pythonpath = [
     "libs/as2_core/src",
     "libs/database/src",

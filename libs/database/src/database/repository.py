@@ -64,10 +64,17 @@ class HostIdentityRepository:
             )
         )
         host = result.scalar_one_or_none()
-        if host and host.private_key_ciphertext:
-            # TODO: Integrate AWS KMS / Envelope Decryption here
-            # For now, we simulate returning the decrypted key (the ciphertext is the PEM in test environments)
-            return str(host.private_key_ciphertext).encode("utf-8")
+        if host:
+            if host.kms_key_id and host.private_key_ciphertext:
+                # TODO: Integrate AWS KMS / Envelope Decryption here
+                raise NotImplementedError("KMS decryption strategy not yet implemented")
+            elif host.private_key_secret_id:
+                # TODO: Integrate Vault / External Secret Strategy here
+                raise NotImplementedError("External secret strategy not yet implemented")
+            else:
+                raise RuntimeError(
+                    "No supported host private key retrieval strategy configured for tenant."
+                )
         return None
 
 

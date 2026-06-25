@@ -8,7 +8,8 @@ from database.connection import DatabaseRouter
 @pytest.fixture
 def mock_create_engine() -> Any:
     with patch("database.connection.create_async_engine") as mock:
-        mock.return_value = AsyncMock()
+        # Use a lambda as side_effect to return a fresh AsyncMock each time it's called
+        mock.side_effect = lambda *args, **kwargs: AsyncMock()
         yield mock
 
 
@@ -98,7 +99,11 @@ async def test_close_all_disposes_engines(router: DatabaseRouter) -> None:
     # Pre-condition
     assert len(router._engines) == 2
 
+    # Get a reference to the global engine which was created implicitly on init
+    global_engine = router._engines["global"]
+
     await router.close_all()
 
     assert len(router._engines) == 0
-    assert engine1.dispose.call_count == 2
+    assert engine1.dispose.call_count == 1
+    assert global_engine.dispose.call_count == 1

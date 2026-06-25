@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -139,7 +140,15 @@ class TradingPartner(TenantBase, TenantAwareMixin):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),
+        Index(
+            "ix_tenant_active_host_identity",
+            "tenant_id",
+            unique=True,
+            postgresql_where=(is_host_identity.is_(True) & is_active.is_(True)),
+        ),
+    )
 
 
 class AS2Payload(TenantBase, TenantAwareMixin):

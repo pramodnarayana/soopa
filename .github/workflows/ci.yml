@@ -58,6 +58,26 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --all-packages
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend/web/pnpm-lock.yaml
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend/web
+        run: pnpm install
+
+      - name: Run Frontend Lint
+        working-directory: frontend/web
+        run: pnpm lint
+
       - name: Run Formatter Check
         run: uv run ruff format --check libs/ services/
 
