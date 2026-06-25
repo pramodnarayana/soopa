@@ -50,6 +50,7 @@ async def test_sqlalchemy_identity_repository_jit_provision(router: DatabaseRout
             if created_user is not None:
                 # Delete TenantUser mapping first (foreign key constraint)
                 from database.models import TenantUser
+
                 tenant_user_stmt = select(TenantUser).where(TenantUser.user_id == created_user.id)
                 tenant_user = (await session.execute(tenant_user_stmt)).scalar_one_or_none()
                 if tenant_user:

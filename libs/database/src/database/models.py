@@ -125,7 +125,16 @@ class TradingPartner(TenantBase, TenantAwareMixin):
 
     public_cert_pem = Column(Text, nullable=True)
     is_host_identity = Column(Boolean, default=False, nullable=False)
-    private_key_pem = Column(Text, nullable=True)
+
+    # KMS / Envelope Encryption Strategy
+    private_key_ciphertext = Column(Text, nullable=True)
+    kms_key_id = Column(String(255), nullable=True)
+
+    # Vault / External Secret Strategy (alternative)
+    private_key_secret_id = Column(String(255), nullable=True)
+
+    # Key rotation metadata
+    key_version = Column(Integer, default=1, nullable=False)
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

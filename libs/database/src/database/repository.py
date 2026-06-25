@@ -64,8 +64,10 @@ class HostIdentityRepository:
             )
         )
         host = result.scalar_one_or_none()
-        if host and host.private_key_pem:
-            return str(host.private_key_pem).encode("utf-8")
+        if host and host.private_key_ciphertext:
+            # TODO: Integrate AWS KMS / Envelope Decryption here
+            # For now, we simulate returning the decrypted key (the ciphertext is the PEM in test environments)
+            return str(host.private_key_ciphertext).encode("utf-8")
         return None
 
 

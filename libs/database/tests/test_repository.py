@@ -52,7 +52,7 @@ async def test_repository_raises_error_when_no_tenant(mock_get_tenant_id: Any) -
 async def test_host_identity_repository_get_host_private_key(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
     mock_result = MagicMock()
-    mock_host = TradingPartner(is_host_identity=True, private_key_pem="private_key_data")
+    mock_host = TradingPartner(is_host_identity=True, private_key_ciphertext="private_key_data")
     mock_result.scalar_one_or_none.return_value = mock_host
     session.execute.return_value = mock_result
 
