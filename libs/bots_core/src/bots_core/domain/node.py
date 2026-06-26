@@ -548,7 +548,7 @@ class Node:
                 raise MappingFormatError(_("Must be dicts in tuple: put(%(mpath)s)"), {"mpath": mpaths})
             if "BOTSID" not in part:
                 raise MappingFormatError(_('Section without "BOTSID": put(%(mpath)s)'), {"mpath": mpaths})
-            for key, value in part.iteritems():
+            for key, value in part.items():
                 if value is None:
                     botsglobal.logmap.debug('"None" in put %(mpaths)s.', {"mpaths": str(mpaths)})
                     return False

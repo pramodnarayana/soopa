@@ -81,6 +81,13 @@ def generalinit(configdir=None):
     # For now, we stub out the config initialization here so the rest of the engine can assume it's set.
     botsglobal.ini = BotsConfig()
 
+    # Add required sections before setting any values
+    botsglobal.ini.add_section('directories')
+    botsglobal.ini.add_section('dirmonitor')
+    botsglobal.ini.add_section('settings')
+    botsglobal.ini.add_section('webserver')
+    botsglobal.ini.add_section('charsets')
+
     # 'directories','botspath': absolute path for bots directory
     botsglobal.ini.set('directories', 'botspath', os.path.abspath(os.path.dirname(__file__)))
     # 'directories','config': absolute path for config directory

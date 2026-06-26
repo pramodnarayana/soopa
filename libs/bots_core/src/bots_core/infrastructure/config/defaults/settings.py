@@ -4,11 +4,12 @@
 import os
 import platform
 
-import bots
-from bots.botsinit import BotsConfig
+from bots_core.infrastructure.config import botsinit
 
-
-BOTS_PATH = bots.__path__[0]
+# Note: settings.py in defaults/ is a legacy reference file
+# In bots_core refactor, Django settings would typically be managed externally
+# This file is kept for compatibility but references have been updated
+BOTS_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # BOTSENV
 BOTSENV = os.environ.get("BOTSENV") or "default"
@@ -16,7 +17,7 @@ BOTS_CONFIG_DIR = os.path.dirname(__file__)
 BOTSENV_PATH = os.path.dirname(BOTS_CONFIG_DIR)
 
 # BOTSSYS
-config = BotsConfig()
+config = botsinit.BotsConfig()
 config.read(os.path.join(BOTS_CONFIG_DIR, 'bots.ini'))
 BOTSSYS = config.get('directories', 'botssys', 'botssys')
 if os.path.sep not in BOTSSYS:
@@ -110,12 +111,12 @@ USE_I18N = True
 # *********path settings*************************
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BOTSSYS, 'static')
-ROOT_URLCONF = 'bots.urls'
+# ROOT_URLCONF removed - would be 'bots_core.urls' in refactored package but Django integration is external
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/bots/home'
 LOGOUT_URL = '/logout/'
 # LOGOUT_REDIRECT_URL = # not such parameter; is set in urls.py
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
 
 # *********sessions, cookies, log out time*************************
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True    # True: always log in when browser is closed
@@ -129,7 +130,12 @@ CSRF_COOKIE_NAME = f"bots_csrftoken_{BOTSENV}"
 # TEMPLATE_DEBUG = DEBUG
 SITE_ID = 1
 # Make this unique, and don't share it with anybody.
-SECRET_KEY = 'm@-u37qiujmeqfbu$daaaaz)sp^7an4u@h=wfx9dd$$$zl2i*x9#awojdc'
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    # Allow missing SECRET_KEY only in development (when DEBUG is True)
+    DEBUG = os.environ.get('DEBUG', '').lower() in ('true', '1', 'yes')
+    if not DEBUG:
+        raise ValueError('SECRET_KEY environment variable must be set in production')
 
 # *******includes for django*************************************************************************
 LOCALE_PATHS = (
@@ -149,7 +155,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'bots',
+    # 'bots',  # Removed legacy reference - Django app would be configured externally in bots_core
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -174,7 +180,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'bots.bots_context.set_context',
+                # 'bots.bots_context.set_context',  # Removed legacy reference
             ],
         },
     },

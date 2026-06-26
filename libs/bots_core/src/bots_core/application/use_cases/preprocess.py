@@ -494,7 +494,7 @@ def extractpdf(ta_from, endstatus, **kwargs):  # pylint: disable=unused-argument
                     yv.append(y)
 
                     line = lines[int(-y)]
-                    line[x] = item.get_text().encode('utf-8')
+                    line[x] = item.get_text()
 
             lines = defaultdict(lambda: {})
 
@@ -542,7 +542,7 @@ def extractpdf(ta_from, endstatus, **kwargs):  # pylint: disable=unused-argument
         pdf_stream = botslib.opendata_bin(ta_from.filename, 'rb')
         ta_to = ta_from.copyta(status=endstatus)
         tofilename = str(ta_to.idta)
-        csv_stream = botslib.opendata_bin(tofilename, 'wb')
+        csv_stream = botslib.opendata(tofilename, 'w', charset=charset)
         csvout = csv.writer(
             csv_stream,
             quotechar=quotechar,

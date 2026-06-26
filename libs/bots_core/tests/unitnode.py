@@ -6,7 +6,9 @@ import shutil
 import sys
 import unittest
 
-from bots import botsinit, botsglobal, botslib, inmessage, node, outmessage
+from bots_core.infrastructure.config import botsinit, botsglobal
+from bots_core.utils import botslib
+from bots_core.domain import inmessage, node, outmessage
 
 if sys.version_info[0] > 2:
     basestring = unicode = str

@@ -219,6 +219,8 @@ def read_incoming(run):
     outputdir = botslib.join(run.inpath, run.infilename)
     filelist = sorted(filename for filename in glob.iglob(outputdir) if os.path.isfile(filename))
     for infilename in filelist:
+        filename = None
+        txt = ''
         try:
             filename = transform.unique('bots_file_name')
             abs_filename = botslib.abspathdata(filename)
@@ -228,7 +230,7 @@ def read_incoming(run):
             txt = txtexc()
         else:
             txt = ''  # no errors
-        finally:
+        if filename and not txt:
             run.incoming.append(
                 {
                     'infilename': infilename,
@@ -332,14 +334,16 @@ def translate(run):
                         # check the value received from the mappingscript to determine
                         # what to do in this while-loop.
                         # Handling of chained trasnlations.
+                        # Build translated_dict early for use in chained translation branches
+                        translated_dict = inn_splitup.ta_info.copy()
+                        translated_dict.update(messagedict)
+                        translated_dict.update(out_translated.ta_info)
+
                         if doalttranslation is None:
                             # translation(s) are done; handle out-message
                             # write result of translation.
                             out_translated.writeall()
                             # make translated record (if all is OK)
-                            translated_dict = inn_splitup.ta_info.copy()
-                            translated_dict.update(messagedict)
-                            translated_dict.update(out_translated.ta_info)
                             run.translated.append(translated_dict)
                             del out_translated
                             # break out of while loop
@@ -381,7 +385,6 @@ def translate(run):
                                 # do chained translation: allow many loops wit hsame alt-value.
                                 # mapping script will have to handle this correctly.
                                 number_of_loops_with_same_alt = 0
-                                # to fix legacy broken var ta_translated was replaced with translated_dict
                                 handle_out_message(out_translated, translated_dict)
                                 del out_translated
                                 # get the alt-value for the next chained translation
