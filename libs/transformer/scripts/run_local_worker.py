@@ -32,7 +32,8 @@ async def main() -> None:
     logger.info("Initializing Hexagonal Components...")
 
     # 1. Instantiate the Anti-Corruption Layer adapter
-    translator = BotsEDIAdapter()
+    from unittest.mock import MagicMock
+    translator = BotsEDIAdapter(config_dir="config", session=MagicMock())
 
     # 2. Instantiate the Mock Ports
     storage = MockStoragePort()
