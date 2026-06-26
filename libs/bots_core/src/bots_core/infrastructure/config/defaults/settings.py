@@ -130,12 +130,10 @@ CSRF_COOKIE_NAME = f"bots_csrftoken_{BOTSENV}"
 # TEMPLATE_DEBUG = DEBUG
 SITE_ID = 1
 # Make this unique, and don't share it with anybody.
+DEBUG = os.environ.get('DEBUG', '').lower() in ('true', '1', 'yes')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
-    # Allow missing SECRET_KEY only in development (when DEBUG is True)
-    DEBUG = os.environ.get('DEBUG', '').lower() in ('true', '1', 'yes')
-    if not DEBUG:
-        raise ValueError('SECRET_KEY environment variable must be set in production')
+    raise ValueError('SECRET_KEY environment variable must be set')
 
 # *******includes for django*************************************************************************
 LOCALE_PATHS = (

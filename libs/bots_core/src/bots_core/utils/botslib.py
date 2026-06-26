@@ -928,8 +928,10 @@ def botsinfo():
         (_('botssys path'), botsglobal.ini.get('directories', 'botssys')),
         (_('usersys path'), botsglobal.ini.get('directories', 'usersysabs')),
     ]
-    infos.append(("DATABASE_ENGINE", db_settings["ENGINE"]))
-    infos.append(("DATABASE_NAME", db_settings["NAME"]))
+    if db_settings.get("ENGINE"):
+        infos.append(("DATABASE_ENGINE", db_settings["ENGINE"]))
+    if db_settings.get("NAME"):
+        infos.append(("DATABASE_NAME", db_settings["NAME"]))
     if db_settings.get("USER"):
         infos.append(("DATABASE_USER", db_settings["USER"]))
     if db_settings.get("HOST"):

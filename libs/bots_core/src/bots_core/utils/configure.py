@@ -16,11 +16,11 @@ def bots_info(configdir=None, **kwargs):
     if not configdir:
         configdir = kwargs.get('configdir')
 
+    botsinit.generalinit(configdir)
+    infos = f"{os.linesep}---------- [Bots Environment] ----------{os.linesep}"
+    infos += os.linesep.join([f"    {key:22}: {value}" for key, value in botslib.botsinfo()])
+    infos += os.linesep + "-" * 40
     if configdir:
-        botsinit.generalinit(configdir)
-        infos = f"{os.linesep}---------- [Bots Environment] ----------{os.linesep}"
-        infos += os.linesep.join([f"    {key:22}: {value}" for key, value in botslib.botsinfo()])
-        infos += os.linesep + "-" * 40
         return infos
     return f"Bots env not configured for config dir: {configdir}"
 
