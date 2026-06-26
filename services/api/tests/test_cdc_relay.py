@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 from api.main import app
 from fastapi.testclient import TestClient
 
@@ -13,9 +15,16 @@ def test_cdc_relay_successful_routing():
         "s3_uri": "s3://edi-bucket/raw.x12",
     }
 
-    # Should return 202 Accepted and log internally
-    response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 202
+    with patch("api.cdc_relay.queue_service.send", new_callable=AsyncMock) as mock_send:
+        # Should return 202 Accepted and log internally
+        response = client.post("/internal/cdc/relay", json=payload)
+        assert response.status_code == 202
+
+        # Verify SQS send was called correctly
+        mock_send.assert_called_once_with(
+            queue_name="EdiTransformerQueue",
+            payload={"trace_id": "req-123", "s3_uri": "s3://edi-bucket/raw.x12"},
+        )
 
 
 def test_cdc_relay_ignores_updates_and_deletes():

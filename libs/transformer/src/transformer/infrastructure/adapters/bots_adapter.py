@@ -32,7 +32,7 @@ class BotsEDIAdapter(EDITranslatorPort):
         # Native BOTS Integration - import only after validation passes
         try:
             import bots  # type: ignore # Native import from our vendored workspace library!
-        except ModuleNotFoundError as e:
+        except ImportError as e:
             raise TranslationError(
                 f"Bots EDI engine backend is not available or failed to load: {e}"
             ) from e

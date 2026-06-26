@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import typing
 
 import aioboto3  # type: ignore[import-untyped]
 
@@ -60,7 +61,9 @@ class SQSTransformerWorker:
         logger.info("Stopping SQS worker...")
         self._running = False
 
-    async def _process_message(self, sqs_message: dict[str, object], sqs_client: object) -> None:
+    async def _process_message(
+        self, sqs_message: dict[str, object], sqs_client: typing.Any
+    ) -> None:
         """Parses the SQS payload and invokes the pure Domain logic."""
         try:
             # Parse and validate JSON body

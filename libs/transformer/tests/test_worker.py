@@ -25,8 +25,14 @@ class FakeProcessInboundEdiUseCase:
 
 class FakeSQSClient:
     """Fake SQS client with delete_message capability."""
+
+    def __init__(self):
+        self.deleted_queue_url = None
+        self.deleted_receipt_handle = None
+
     async def delete_message(self, QueueUrl: str, ReceiptHandle: str) -> None:
-        pass
+        self.deleted_queue_url = QueueUrl
+        self.deleted_receipt_handle = ReceiptHandle
 
 
 @pytest.mark.asyncio
@@ -40,13 +46,16 @@ async def test_worker_process_message_success():
 
     sqs_message = {
         "Body": json.dumps({"trace_id": "trace-123", "s3_uri": "s3://edi/123.x12"}),
-        "ReceiptHandle": "fake-receipt-handle"
+        "ReceiptHandle": "fake-receipt-handle",
     }
 
     await worker._process_message(sqs_message, fake_sqs)
 
     assert fake_use_case.called_trace_id == "trace-123"
     assert fake_use_case.called_s3_uri == "s3://edi/123.x12"
+
+    assert fake_sqs.deleted_queue_url == "http://fake-queue"
+    assert fake_sqs.deleted_receipt_handle == "fake-receipt-handle"
 
 
 @pytest.mark.asyncio
