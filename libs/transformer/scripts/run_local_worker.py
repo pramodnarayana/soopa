@@ -32,8 +32,13 @@ async def main() -> None:
     logger.info("Initializing Hexagonal Components...")
 
     # 1. Instantiate the Anti-Corruption Layer adapter
-    from unittest.mock import MagicMock
-    translator = BotsEDIAdapter(config_dir="config", session=MagicMock())
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine("sqlite:///:memory:")
+    SessionLocal = sessionmaker(bind=engine)
+
+    translator = BotsEDIAdapter(config_dir="config", session=SessionLocal())
 
     # 2. Instantiate the Mock Ports
     storage = MockStoragePort()

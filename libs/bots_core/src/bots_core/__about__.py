@@ -1,16 +1,21 @@
-# -*- coding: utf-8 -*-
 """
 Bots EDI Translator __about__.py
 """
+
 from importlib import metadata
 
 __all__ = [
-    '__version__', '__version_info__',
-    '__title__', '__summary__', '__url__',
-    '__author__', '__email__', '__license__',
+    "__version__",
+    "__version_info__",
+    "__title__",
+    "__summary__",
+    "__url__",
+    "__author__",
+    "__email__",
+    "__license__",
 ]
 
-__title__ = 'bots-core'
+__title__ = "bots-core"
 
 __version__ = metadata.version(__title__)
 __version_info__ = __version__.split(".")

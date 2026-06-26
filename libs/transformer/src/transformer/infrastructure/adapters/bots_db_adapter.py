@@ -20,18 +20,14 @@ class SqlAlchemyBotsDatabaseAdapter(IBotsDatabasePort):
         Converts the %s or %(name)s format used by DBAPI to SQLAlchemy text parameters,
         but since the engine passes args, we execute raw text.
         """
-        # SQLAlchemy connection.execute handles raw strings and args differently depending on the driver.
-        # But text() with bound params is safer.
-        # For a naive DBAPI-like execute, we can use the underlying connection cursor.
         connection = self.session.connection()
         cursor = connection.connection.cursor()
-        cursor.execute(querystring, *args)
-
-        # dictfetchall logic
-        columns = [col[0] for col in cursor.description]
-        results = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-        cursor.close()
-        return results
+        try:
+            cursor.execute(querystring, *args)
+            columns = [col[0] for col in cursor.description]
+            return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
 
     def changeq(self, querystring: str, *args: Any) -> int:
         """
@@ -39,11 +35,16 @@ class SqlAlchemyBotsDatabaseAdapter(IBotsDatabasePort):
         """
         connection = self.session.connection()
         cursor = connection.connection.cursor()
-        cursor.execute(querystring, *args)
-        rowcount = cursor.rowcount
-        self.session.commit()
-        cursor.close()
-        return rowcount
+        try:
+            cursor.execute(querystring, *args)
+            rowcount = cursor.rowcount
+            self.session.commit()
+            return rowcount
+        except Exception:
+            self.session.rollback()
+            raise
+        finally:
+            cursor.close()
 
     def insertta(self, querystring: str, *args: Any) -> int:
         """
@@ -51,52 +52,65 @@ class SqlAlchemyBotsDatabaseAdapter(IBotsDatabasePort):
         """
         connection = self.session.connection()
         cursor = connection.connection.cursor()
-        cursor.execute(querystring, *args)
-        newidta = cursor.lastrowid if hasattr(cursor, "lastrowid") else 0
-        if not newidta:
-            # PostgreSQL fallback if lastrowid is missing
-            cursor.execute("SELECT lastval() as idta")
-            row = cursor.fetchone()
-            if not row:
-                raise TypeError("No results")
-            columns = [col[0] for col in cursor.description]
-            row_dict = dict(zip(columns, row, strict=False))
-            newidta = int(row_dict["idta"])
+        try:
+            cursor.execute(querystring, *args)
+            newidta = cursor.lastrowid if hasattr(cursor, "lastrowid") else 0
+            if not newidta:
+                # PostgreSQL fallback if lastrowid is missing
+                cursor.execute("SELECT lastval() as idta")
+                row = cursor.fetchone()
+                if not row:
+                    raise TypeError("No results")
+                columns = [col[0] for col in cursor.description]
+                row_dict = dict(zip(columns, row, strict=False))
+                newidta = int(row_dict["idta"])
 
-        self.session.commit()
-        cursor.close()
-        return int(newidta)
+            self.session.commit()
+            return int(newidta)
+        except Exception:
+            self.session.rollback()
+            raise
+        finally:
+            cursor.close()
 
     def unique(self, domain: str, updatewith: int | None = None) -> int:
         """
         Generate or update unique sequence number for domain.
+        Uses SELECT ... FOR UPDATE to prevent race conditions across workers.
         """
         connection = self.session.connection()
         cursor = connection.connection.cursor()
         try:
-            cursor.execute("SELECT nummer FROM uniek WHERE domein=%(domein)s", {"domein": domain})
+            cursor.execute(
+                "SELECT nummer FROM uniek WHERE domein=%(domein)s FOR UPDATE", {"domein": domain}
+            )
             row = cursor.fetchone()
+
             if not row:
-                raise TypeError("No results")
-            columns = [col[0] for col in cursor.description]
-            row_dict = dict(zip(columns, row, strict=False))
-            nummer = row_dict["nummer"]
+                nummer = 1 if updatewith is None else updatewith
+                cursor.execute(
+                    "INSERT INTO uniek (domein,nummer) VALUES (%(domein)s,%(nummer)s)",
+                    {"domein": domain, "nummer": nummer},
+                )
+            else:
+                columns = [col[0] for col in cursor.description]
+                row_dict = dict(zip(columns, row, strict=False))
+                nummer = int(row_dict["nummer"])
 
-            if updatewith is None:
-                nummer += 1
-                updatewith = nummer
+                if updatewith is None:
+                    nummer += 1
+                else:
+                    nummer = updatewith
 
-            cursor.execute(
-                "UPDATE uniek SET nummer=%(nummer)s WHERE domein=%(domein)s",
-                {"domein": domain, "nummer": updatewith},
-            )
-        except TypeError:
-            # Insert if it does not exist
-            cursor.execute(
-                "INSERT INTO uniek (domein,nummer) VALUES (%(domein)s,1)", {"domein": domain}
-            )
-            nummer = 1
+                cursor.execute(
+                    "UPDATE uniek SET nummer=%(nummer)s WHERE domein=%(domein)s",
+                    {"domein": domain, "nummer": nummer},
+                )
 
-        self.session.commit()
-        cursor.close()
-        return nummer
+            self.session.commit()
+            return nummer
+        except Exception:
+            self.session.rollback()
+            raise
+        finally:
+            cursor.close()

@@ -6,8 +6,6 @@ Bots Exception classes
 import collections
 import traceback
 
-from bots_core.infrastructure.config import botsglobal
-
 
 def safe_unicode(value):
     """For errors: return best possible unicode...should never lead to errors."""
@@ -44,8 +42,7 @@ def txtexc(limit=0):
     Errortext should be valid unicode.
     """
     terug = safe_unicode(traceback.format_exc(limit=None))
-    botsglobal.logger.error(terug)
-    if limit is None or botsglobal.ini and botsglobal.ini.getboolean("settings", "debug", False):
+    if limit is None:
         return terug
     terug = safe_unicode(traceback.format_exc(limit=limit))
     terug = terug.replace("Traceback (most recent call last):\n", "")
@@ -71,10 +68,7 @@ class BotsError(Exception):
         self.exc = safe_unicode(exc)
         if args:
             # expect args[0] to be a dict
-            if isinstance(args[0], dict):
-                xxx = args[0]
-            else:
-                xxx = {}
+            xxx = args[0] if isinstance(args[0], dict) else {}
         else:
             xxx = kwargs
         self.xxx = collections.defaultdict(str)

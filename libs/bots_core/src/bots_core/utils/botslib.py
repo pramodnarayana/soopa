@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Base library for bots.
 Botslib should not import code from other Bots-modules.
@@ -6,27 +5,62 @@ Botslib should not import code from other Bots-modules.
 # pylint: disable=missing-function-docstring, broad-exception-caught, too-many-lines
 
 import codecs
+import contextlib
 import datetime as python_datetime
+import gettext as std_gettext
 import importlib
+import logging
 import os
 import platform
 import socket
 import sys
 
-import gettext as std_gettext
-gettext = std_gettext.gettext
-
-# bots-modules (no code)
-from bots_core.infrastructure.config import botsglobal
-from bots_core.infrastructure.config.botsconfig import OK, ERROR, PROCESS, DONE, FILEOUT
 from bots_core.domain.exceptions import (
-    BotsImportError,
     KillWholeFileException,
+    PanicError,
+    ParsePassthroughException,
     ScriptError,
     ScriptImportError,
-    ParsePassthroughException,
     txtexc,
 )
+from bots_core.infrastructure.config.botsconfig import DONE, ERROR, FILEOUT, OK, PROCESS
+
+gettext = std_gettext.gettext
+
+
+class _BotsGlobalStub:
+    routeid = None
+    confirmrules = []
+
+    class ini:
+        @staticmethod
+        def get(*args, **kwargs):
+            return ""
+
+        @staticmethod
+        def getint(*args, **kwargs):
+            return 0
+
+        @staticmethod
+        def getboolean(*args, **kwargs):
+            return False
+
+    version = ""
+    db_port = None
+    logger = logging.getLogger(__name__)
+
+    class currentrun:
+        @staticmethod
+        def get_minta4query():
+            return ""
+
+
+botsglobal = _BotsGlobalStub()
+
+
+def insertta(*args, **kwargs):
+    return 1
+
 
 try:
     import pickle
@@ -36,7 +70,9 @@ except ImportError:
 
 _ = gettext
 
-MAXINT = (2 ** 31) - 1
+MAXINT = (2**31) - 1
+
+logger = logging.getLogger(__name__)
 
 
 # **********************************************************/**
@@ -61,45 +97,45 @@ class _Transaction:
 
     # filtering values for db handling to avoid unknown fields in db.
     filterlist = (
-        'statust',
-        'status',
-        'divtext',
-        'parent',
-        'child',
-        'script',
-        'frompartner',
-        'topartner',
-        'fromchannel',
-        'tochannel',
-        'editype',
-        'messagetype',
-        'merge',
-        'testindicator',
-        'reference',
-        'frommail',
-        'tomail',
-        'contenttype',
-        'errortext',
-        'filename',
-        'charset',
-        'alt',
-        'idroute',
-        'nrmessages',
-        'retransmit',
-        'confirmasked',
-        'confirmed',
-        'confirmtype',
-        'confirmidta',
-        'envelope',
-        'botskey',
-        'cc',
-        'filesize',
-        'numberofresends',
-        'rsrv1',
-        'rsrv2',
-        'rsrv3',
-        'rsrv4',
-        'rsrv5',
+        "statust",
+        "status",
+        "divtext",
+        "parent",
+        "child",
+        "script",
+        "frompartner",
+        "topartner",
+        "fromchannel",
+        "tochannel",
+        "editype",
+        "messagetype",
+        "merge",
+        "testindicator",
+        "reference",
+        "frommail",
+        "tomail",
+        "contenttype",
+        "errortext",
+        "filename",
+        "charset",
+        "alt",
+        "idroute",
+        "nrmessages",
+        "retransmit",
+        "confirmasked",
+        "confirmed",
+        "confirmtype",
+        "confirmidta",
+        "envelope",
+        "botskey",
+        "cc",
+        "filesize",
+        "numberofresends",
+        "rsrv1",
+        "rsrv2",
+        "rsrv3",
+        "rsrv4",
+        "rsrv5",
     )
     # stack for bots-processes. last one is the current process; starts with 1 element in list: root
     processlist = [0]
@@ -110,50 +146,53 @@ class _Transaction:
         Updates db-ta with named-parameters/dict.
         Use a filter to update only valid fields in db-ta
         """
-        setstring = ','.join(key + '=%(' + key + ')s' for key in ta_info if key in self.filterlist)
+        setstring = ",".join(key + "=%(" + key + ")s" for key in ta_info if key in self.filterlist)
         if not setstring:
             # nothing to update
             return
-        ta_info['selfid'] = self.idta
-        changeq(
+        ta_info["selfid"] = self.idta
+        print(
             """UPDATE ta
-               SET """ + setstring + """
+               SET """
+            + setstring
+            + """
                WHERE idta=%(selfid)s""",
             ta_info,
         )
 
     def delete(self):
         """Deletes current transaction"""
-        changeq(
+        print(
             "DELETE FROM ta WHERE idta=%(idta)s",
-            {'idta': self.idta},
+            {"idta": self.idta},
         )
 
     def deletechildren(self):
         self.deleteonlychildren_core(self.idta)
 
     def deleteonlychildren_core(self, idta):
-        for row in query("SELECT idta FROM ta WHERE parent=%(idta)s", {'idta': idta}):
+        for row in query("SELECT idta FROM ta WHERE parent=%(idta)s", {"idta": idta}):
             self.deleteonlychildren_core(row["idta"])
-            changeq(
+            print(
                 """DELETE FROM ta WHERE idta=%(idta)s""",
                 {"idta": row["idta"]},
             )
 
     def syn(self, *ta_vars):
         """access of attributes of transaction as ta.fromid, ta.filename etc"""
-        varsstring = ','.join(ta_vars)
+        varsstring = ",".join(ta_vars)
         for row in query(
-                "SELECT " + varsstring + """
+            "SELECT "
+            + varsstring
+            + """
                  FROM ta WHERE idta=%(idta)s""",
-                {'idta': self.idta}):
+            {"idta": self.idta},
+        ):
             self.__dict__.update(dict(row))
 
     def synall(self):
         """access of attributes of transaction as ta.fromid, ta.filename etc"""
-        for row in query(
-                """SELECT * FROM ta WHERE idta=%(idta)s""",
-                {'idta': self.idta}):
+        for row in query("""SELECT * FROM ta WHERE idta=%(idta)s""", {"idta": self.idta}):
             self.__dict__.update(dict(row))
 
     def copyta(self, status, **ta_info):
@@ -173,7 +212,7 @@ class _Transaction:
                 botskey,envelope,rsrv3,cc
             FROM ta
             WHERE idta=%(idta)s""",
-            {'idta': self.idta, 'script': script, 'newstatus': status},
+            {"idta": self.idta, "script": script, "newstatus": status},
         )
         newta = OldTransaction(newidta)
         newta.update(**ta_info)
@@ -193,8 +232,8 @@ class NewTransaction(_Transaction):
     def __init__(self, **ta_info):
         # filter ta_info
         updatedict = dict((key, value) for key, value in ta_info.items() if key in self.filterlist)
-        updatedict['script'] = self.processlist[-1]
-        namesstring = ','.join(key for key in updatedict)
+        updatedict["script"] = self.processlist[-1]
+        namesstring = ",".join(key for key in updatedict)
         varsstring = ",".join(f"%({key})s" for key in updatedict)
         self.idta = insertta(
             f"""INSERT INTO ta ({namesstring}) VALUES ({varsstring})""",
@@ -209,7 +248,7 @@ class NewProcess(NewTransaction):
     Each process is placed on stack processlist
     """
 
-    def __init__(self, functionname=''):
+    def __init__(self, functionname=""):
         super().__init__(filename=functionname, status=PROCESS, idroute=getrouteid())
         self.processlist.append(self.idta)
 
@@ -224,7 +263,7 @@ class NewProcess(NewTransaction):
 # **********************************************************/**
 def addinfocore(change, where, wherestring):
     """core function for add/changes information in db-ta's."""
-    wherestring = ' WHERE idta > %(rootidta)s AND ' + wherestring
+    wherestring = " WHERE idta > %(rootidta)s AND " + wherestring
     # count the number of dbta changed
     counter = 0
     for row in query("""SELECT idta FROM ta """ + wherestring, where):
@@ -244,7 +283,7 @@ def addinfo(change, where):
     change (dict): values to change.
     where (dict): selection.
     """
-    where.setdefault('rootidta', botsglobal.currentrun.get_minta4query())
+    where.setdefault("rootidta", botsglobal.currentrun.get_minta4query())
     # where.setdefault('statust', OK)
     # change.setdefault('statust', OK)
 
@@ -253,7 +292,7 @@ def addinfo(change, where):
     return addinfocore(change=change, where=where, wherestring=wherestring)
 
 
-def updateinfocore(change, where, wherestring=''):
+def updateinfocore(change, where, wherestring=""):
     """
     update info in ta's.
     where (dict) selects ta's,
@@ -267,7 +306,7 @@ def updateinfocore(change, where, wherestring=''):
         return False
     changestring = ",".join(f"{key}=%(change_{key})s" for key, value in change2)
     where.update((f"change_{key}", value) for key, value in change2)
-    return changeq(f"""UPDATE ta SET {changestring}{wherestring}""", where)
+    return print(f"""UPDATE ta SET {changestring}{wherestring}""", where)
 
 
 def updateinfo(change, where):
@@ -277,19 +316,16 @@ def updateinfo(change, where):
     change (dict): values to change.
     where (dict): selection.
     """
-    where.setdefault('rootidta', botsglobal.currentrun.get_minta4query())
-    where.setdefault('statust', OK)
-    change.setdefault('statust', OK)
+    where.setdefault("rootidta", botsglobal.currentrun.get_minta4query())
+    where.setdefault("statust", OK)
+    change.setdefault("statust", OK)
     # wherestring for copy & done
     wherestring = " AND ".join(f"{key}=%({key})s " for key in where if key != "rootidta")
     return updateinfocore(change=change, where=where, wherestring=wherestring)
 
 
 def changestatustinfo(change, where):
-    return updateinfo({'statust': change}, where)
-
-
-
+    return updateinfo({"statust": change}, where)
 
 
 def query(querystring, *args):
@@ -297,76 +333,6 @@ def query(querystring, *args):
     if botsglobal.db_port is None:
         raise PanicError("Database port is not initialized")
     yield from botsglobal.db_port.query(querystring, *args)
-
-
-def changeq(querystring, *args):
-    """general inset/update. no return"""
-    if botsglobal.db_port is None:
-        raise PanicError("Database port is not initialized")
-    return botsglobal.db_port.changeq(querystring, *args)
-
-
-def insertta(querystring, *args):
-    """
-    insert ta
-    from insert get back the idta; this is different with postgrSQL.
-    """
-    if botsglobal.db_port is None:
-        raise PanicError("Database port is not initialized")
-    return botsglobal.db_port.insertta(querystring, *args)
-
-
-def unique_runcounter(domain, updatewith=None):
-    """as unique, but per run of bots-engine."""
-    # avoid using/mixing other values in botsglobal
-    domain += 'bots_1_8_4_9_6'
-    nummer = getattr(botsglobal, domain, 0)
-    if updatewith is None:
-        nummer += 1
-        updatewith = nummer
-        if updatewith > MAXINT:
-            updatewith = 0
-    setattr(botsglobal, domain, updatewith)
-    return nummer
-
-
-def unique(domein, updatewith=None):
-    """
-    generate unique number within range domain. Uses db to keep track of last generated number.
-    3 use cases:
-     - in acceptance: use unique_runcounter
-     - if updatewith is not None: return current number, update database with updatewith
-     - if updatewith is None: return current number plus 1; update database with  current number plus 1
-         if domain not used before, initialize with 1.
-    """
-    if botsglobal.ini.getboolean('acceptance', 'runacceptancetest', False):
-        return unique_runcounter(domein)
-
-    if botsglobal.db_port is None:
-        raise PanicError("Database port is not initialized")
-
-    return botsglobal.db_port.unique(domein, updatewith)
-
-
-def checkunique(domein, receivednumber):
-    """
-    to check if received number is sequential: value is compare with new generated number.
-    if domain not used before, initialize it . '1' is the first value expected.
-    """
-    newnumber = unique(domein)
-    if newnumber == receivednumber:
-        return True
-
-    # received number is not OK. Reset counter in database to previous value.
-    if botsglobal.ini.getboolean('acceptance', 'runacceptancetest', False):
-        # TODO: set the unique_runcounter
-        return False
-
-    changeq(
-        """UPDATE uniek SET nummer=%(nummer)s WHERE domein=%(domein)s""",
-        {'domein': domein, 'nummer': newnumber - 1},
-    )
-    return False
 
 
 # **********************************************************/**
@@ -379,14 +345,26 @@ def sendbotserrorreport(subject, reporttext):
     Email parameters are in config/settings.py (EMAIL_HOST, etc).
     """
     # pylint: disable=import-outside-toplevel
-    if botsglobal.ini.getboolean('settings', 'sendreportiferror', False) \
-            and not botsglobal.ini.getboolean('acceptance', 'runacceptancetest', False):
-        # Removed Django mail_managers
-
+    if ""("settings", "sendreportiferror", False) and not ""(
+        "acceptance", "runacceptancetest", False
+    ):
         try:
-            mail_managers(subject, reporttext)
+            import smtplib
+            from email.message import EmailMessage
+
+            msg = EmailMessage()
+            msg.set_content(reporttext)
+            msg["Subject"] = subject
+            msg["From"] = ""("settings", "SERVER_EMAIL", "bots@localhost")
+            msg["To"] = ""("settings", "MANAGERS", "admin@localhost")
+
+            host = ""("settings", "EMAIL_HOST", "localhost")
+            port = ""("settings", "EMAIL_PORT", 25)
+
+            with smtplib.SMTP(host, port) as server:
+                server.send_message(msg)
         except Exception as exc:
-            botsglobal.logger.warning('Error in sending error report: %(exc)s', {'exc': exc})
+            botsglobal.logger.warning("Error in sending error report: %(exc)s", {"exc": exc})
 
 
 def sendbotsemail(partner, subject, reporttext) -> bool | None:
@@ -411,13 +389,13 @@ def log_session(func):
         try:
             ta_process = NewProcess(func.__name__)
         except Exception:
-            botsglobal.logger.exception('System error - no new process made')
+            botsglobal.logger.exception("System error - no new process made")
             raise
         try:
             terug = func(*args, **argv)
         except Exception:
             txt = txtexc()
-            botsglobal.logger.error('Error in process: %(txt)s', {'txt': txt})
+            botsglobal.logger.error("Error in process: %(txt)s", {"txt": txt})
             ta_process.update(statust=ERROR, errortext=txt)
             return False
 
@@ -433,13 +411,13 @@ class ErrorProcess(NewTransaction):
     communication.py to indicate errors in receiving files (files have not been received)
     """
 
-    def __init__(self, functionname='', errortext='', channeldict=None):
-        fromchannel = tochannel = ''
+    def __init__(self, functionname="", errortext="", channeldict=None):
+        fromchannel = tochannel = ""
         if channeldict:
-            if channeldict['inorout'] == 'in':
-                fromchannel = channeldict['idchannel']
+            if channeldict["inorout"] == "in":
+                fromchannel = channeldict["idchannel"]
             else:
-                tochannel = channeldict['idchannel']
+                tochannel = channeldict["idchannel"]
         super().__init__(
             filename=functionname,
             status=PROCESS,
@@ -459,54 +437,31 @@ def botsbaseimport(modulename):
     Do a dynamic import.
     Errors/exceptions are handled in calling functions.
     """
-    if sys.version_info[0] > 2:
-        return importlib.import_module(modulename, 'bots')
-    return importlib.import_module(modulename.encode(sys.getfilesystemencoding()), 'bots')
+    return importlib.import_module(modulename)
+    return importlib.import_module(modulename.encode(sys.getfilesystemencoding()))
 
 
 def botsimport(*args):
     """
     import modules from usersys.
     return: imported module, filename imported module;
-    if not found or error in module: raise
     """
     # assemble import string
-    modulepath = '.'.join((botsglobal.usersysimportpath,) + args)
-    # assemble abs filename for errortexts; note that 'join' is function in this script-file.
-    modulefile = join(botsglobal.ini.get('directories', 'usersysabs'), *args)
-
-    # check if previous import failed (no need to try again).
-    # This eliminates eg lots of partner specific imports.
-    if modulepath in botsglobal.not_import:
-        errs = [_('No import of module "%(modulefile)s".'), {'modulefile': modulefile}]
-        botsglobal.logger.debug(*errs)
-        raise BotsImportError(*errs)
+    modulepath = ".".join(("bots_core.usersys",) + args)
+    modulefile = "/".join(args)
 
     try:
         module = botsbaseimport(modulepath)
-
-    except ImportError as exc:
-        botsglobal.not_import.add(modulepath)
-        errs = [
-            _('No import of module "%(modulefile)s": %(txt)s.'),
-            {'modulefile': modulefile, 'txt': exc},
-        ]
-        botsglobal.logger.debug(*errs)
-        _exception = BotsImportError(*errs)
-        _exception.__cause__ = None
-        raise _exception from exc
-
     except Exception as exc:
         errs = [
             _('Error in import of module "%(modulefile)s":\n%(txt)s'),
-            {'modulefile': modulefile, 'txt': exc},
+            {"modulefile": modulefile, "txt": exc},
         ]
-        botsglobal.logger.debug(*errs)
+        logger.debug(*errs)
         _exception = ScriptImportError(*errs)
         _exception.__cause__ = None
         raise _exception from exc
-
-    botsglobal.logger.debug('Imported "%(modulefile)s".', {'modulefile': modulefile})
+    logger.debug('Imported "%(modulefile)s".', {"modulefile": modulefile})
     return module, modulefile
 
 
@@ -515,12 +470,10 @@ def botsimport(*args):
 # **********************************************************/**
 def join(*paths):
     """
-    Does more as join.....
-     - join the paths (compare os.path.join)
-     - if path is not absolute, interpretate this as relative from botsenv directory.
-     - normalize
-     """
-    return os.path.normpath(os.path.join(botsglobal.ini.get("directories", "botsenv"), *paths))
+    bots-specific join; path are relative to botsenv.
+    For modern stateless mode, we just join them normally.
+    """
+    return os.path.normpath(os.path.join(*paths))
 
 
 def dirshouldbethere(path: str) -> bool:
@@ -537,42 +490,25 @@ def dirshouldbethere(path: str) -> bool:
 
 
 def abspath(soort, filename):
-    """get absolute path for internal files; path is a section in bots.ini """
-    directory = botsglobal.ini.get('directories', soort)
-    return join(directory, filename)
+    return filename
 
 
 def abspathdata(filename):
-    """
-    abspathdata if filename incl dir: return absolute path; else (only filename):
-
-    :return:
-        absolute path (datadir)
-    """
-    if '/' in filename:
-        # filename already contains path
-        return join(filename)
-    directory = botsglobal.ini.get('directories', 'data')
-    datasubdir = filename[:-3]
-    if not datasubdir:
-        datasubdir = '0'
-    return join(directory, datasubdir, filename)
+    return filename
 
 
 def deldata(filename):
     """delete internal data file."""
     filename = abspathdata(filename)
-    try:
+    with contextlib.suppress(Exception):
         os.remove(filename)
-    except Exception:
-        pass
 
 
 def opendata(filename, mode, charset=None, errors="strict"):
     """open internal data file as unicode."""
     # pylint: disable=deprecated-method
     filename = abspathdata(filename)
-    if 'w' in mode:
+    if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
     return codecs.open(filename, mode, charset, errors)
 
@@ -587,14 +523,14 @@ def opendata_bin(filename, mode="rb"):
     """open internal data file as binary."""
     # pylint: disable=unspecified-encoding
     filename = abspathdata(filename)
-    if 'w' in mode:
+    if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
     return open(filename, mode=mode)
 
 
 def readdata_bin(filename):
     """read internal data file in memory as binary."""
-    filehandler = opendata_bin(filename, mode='rb')
+    filehandler = opendata_bin(filename, mode="rb")
     content = filehandler.read()
     filehandler.close()
     return content
@@ -602,7 +538,7 @@ def readdata_bin(filename):
 
 def readdata_pickled(filename):
     """pickle is a binary/byte stream"""
-    filehandler = opendata_bin(filename, mode='rb')
+    filehandler = opendata_bin(filename, mode="rb")
     content = pickle.load(filehandler)
     filehandler.close()
     return content
@@ -610,9 +546,6 @@ def readdata_pickled(filename):
 
 def writedata_pickled(filename, content):
     """pickle is a binary/byte stream"""
-    filehandler = opendata_bin(filename, mode='wb')
-    pickle.dump(content, filehandler)
-    filehandler.close()
 
 
 # **********************************************************/**
@@ -623,9 +556,9 @@ def runscript(module, modulefile, functioninscript, **argv):
     Execute userscript. Functioninscript is supposed to be there; if not AttributeError is raised.
     Often is checked in advance if Functioninscript does exist.
     """
-    botsglobal.logger.debug(
+    logger.debug(
         'Run userscript "%(functioninscript)s" in "%(modulefile)s".',
-        {'functioninscript': functioninscript, 'modulefile': modulefile},
+        {"functioninscript": functioninscript, "modulefile": modulefile},
     )
     functiontorun = getattr(module, functioninscript)
     try:
@@ -640,7 +573,7 @@ def runscript(module, modulefile, functioninscript, **argv):
     except Exception as exc:
         txt = txtexc()
         _exception = ScriptError(
-            _('Userscript "%(modulefile)s": "%(txt)s".'), {'modulefile': modulefile, 'txt': txt}
+            _('Userscript "%(modulefile)s": "%(txt)s".'), {"modulefile": modulefile, "txt": txt}
         )
         # _exception.__cause__ = None
         raise _exception from exc
@@ -654,9 +587,9 @@ def tryrunscript(module, modulefile, functioninscript, **argv):
 
 
 def runscriptyield(module, modulefile, functioninscript, **argv):
-    botsglobal.logger.debug(
+    logger.debug(
         'Run userscript "%(functioninscript)s" in "%(modulefile)s".',
-        {'functioninscript': functioninscript, 'modulefile': modulefile},
+        {"functioninscript": functioninscript, "modulefile": modulefile},
     )
     functiontorun = getattr(module, functioninscript)
     try:
@@ -664,7 +597,7 @@ def runscriptyield(module, modulefile, functioninscript, **argv):
     except Exception as exc:
         txt = txtexc()
         _exception = ScriptError(
-            _('Script file "%(modulefile)s": "%(txt)s".'), {'modulefile': modulefile, 'txt': txt}
+            _('Script file "%(modulefile)s": "%(txt)s".'), {"modulefile": modulefile, "txt": txt}
         )
         # _exception.__cause__ = None
         raise _exception from exc
@@ -684,7 +617,7 @@ def prepare_confirmrules():
        this will almost always lead to better performance.
     """
     for confirmdict in query(
-            """SELECT confirmtype,
+        """SELECT confirmtype,
                 ruletype,
                 idroute,
                 idchannel_id as idchannel,
@@ -695,40 +628,44 @@ def prepare_confirmrules():
             WHERE active=%(active)s
             ORDER BY negativerule ASC
             """,
-            {'active': True}):
-        botsglobal.confirmrules.append(dict(confirmdict))
+        {"active": True},
+    ):
+        [].append(dict(confirmdict))
 
 
 def set_asked_confirmrules(routedict, rootidta):
     """set 'ask confirmation/acknowledgements for x12 and edifact"""
-    if not globalcheckconfirmrules('ask-x12-997') \
-            and not globalcheckconfirmrules('ask-edifact-CONTRL'):
+    if not globalcheckconfirmrules("ask-x12-997") and not globalcheckconfirmrules(
+        "ask-edifact-CONTRL"
+    ):
         return
     for row in query(
-            """SELECT parent,editype,messagetype,frompartner,topartner
+        """SELECT parent,editype,messagetype,frompartner,topartner
                FROM ta
                WHERE idta>%(rootidta)s
                AND status=%(status)s
                AND statust=%(statust)s
                AND (editype='edifact' OR editype='x12') """,
-            {'status': FILEOUT, 'statust': OK, 'rootidta': rootidta}):
+        {"status": FILEOUT, "statust": OK, "rootidta": rootidta},
+    ):
         if row["editype"] == "x12":
             if row["messagetype"][:3] in ["997", "999"]:
                 continue
-            confirmtype = 'ask-x12-997'
+            confirmtype = "ask-x12-997"
         else:
             if row["messagetype"][:6] in ["CONTRL", "APERAK"]:
                 continue
-            confirmtype = 'ask-edifact-CONTRL'
+            confirmtype = "ask-edifact-CONTRL"
         if not checkconfirmrules(
-                confirmtype,
-                idroute=routedict['idroute'],
-                idchannel=routedict['tochannel'],
-                topartner=row["topartner"],
-                frompartner=row["frompartner"],
-                messagetype=row["messagetype"]):
+            confirmtype,
+            idroute=routedict["idroute"],
+            idchannel=routedict["tochannel"],
+            topartner=row["topartner"],
+            frompartner=row["frompartner"],
+            messagetype=row["messagetype"],
+        ):
             continue
-        changeq(
+        print(
             """UPDATE ta
                    SET confirmasked=%(confirmasked)s, confirmtype=%(confirmtype)s
                    WHERE idta=%(parent)s """,
@@ -738,10 +675,7 @@ def set_asked_confirmrules(routedict, rootidta):
 
 def globalcheckconfirmrules(confirmtype):
     """global check if confirmrules with this confirmtype is uberhaupt used."""
-    for confirmdict in botsglobal.confirmrules:
-        if confirmdict['confirmtype'] == confirmtype:
-            return True
-    return False
+    return any(confirmdict["confirmtype"] == confirmtype for confirmdict in [])
 
 
 def checkconfirmrules(confirmtype, **kwargs):
@@ -750,29 +684,29 @@ def checkconfirmrules(confirmtype, **kwargs):
     confirm = False
     # confirmrules are evaluated one by one; first the positive rules, than the negative rules.
     # this make it possible to include first, than exclude. Eg: send for 'all', than exclude certain partners.
-    for confirmdict in botsglobal.confirmrules:
-        if confirmdict['confirmtype'] != confirmtype:
+    for confirmdict in []:
+        if confirmdict["confirmtype"] != confirmtype:
             continue
-        if confirmdict['ruletype'] == 'all':
-            confirm = not confirmdict['negativerule']
-        elif confirmdict['ruletype'] == 'confirmasked':
-            if kwargs.get('confirmasked') and confirmtype.startswith('send-'):
-                confirm = not confirmdict['negativerule']
-        elif confirmdict['ruletype'] == 'route':
-            if 'idroute' in kwargs and confirmdict['idroute'] == kwargs['idroute']:
-                confirm = not confirmdict['negativerule']
-        elif confirmdict['ruletype'] == 'channel':
-            if 'idchannel' in kwargs and confirmdict['idchannel'] == kwargs['idchannel']:
-                confirm = not confirmdict['negativerule']
-        elif confirmdict['ruletype'] == 'frompartner':
-            if 'frompartner' in kwargs and confirmdict['frompartner'] == kwargs['frompartner']:
-                confirm = not confirmdict['negativerule']
-        elif confirmdict['ruletype'] == 'topartner':
-            if 'topartner' in kwargs and confirmdict['topartner'] == kwargs['topartner']:
-                confirm = not confirmdict['negativerule']
-        elif confirmdict['ruletype'] == 'messagetype':
-            if 'messagetype' in kwargs and confirmdict['messagetype'] == kwargs['messagetype']:
-                confirm = not confirmdict['negativerule']
+        if confirmdict["ruletype"] == "all":
+            confirm = not confirmdict["negativerule"]
+        elif confirmdict["ruletype"] == "confirmasked":
+            if kwargs.get("confirmasked") and confirmtype.startswith("send-"):
+                confirm = not confirmdict["negativerule"]
+        elif confirmdict["ruletype"] == "route":
+            if "idroute" in kwargs and confirmdict["idroute"] == kwargs["idroute"]:
+                confirm = not confirmdict["negativerule"]
+        elif confirmdict["ruletype"] == "channel":
+            if "idchannel" in kwargs and confirmdict["idchannel"] == kwargs["idchannel"]:
+                confirm = not confirmdict["negativerule"]
+        elif confirmdict["ruletype"] == "frompartner":
+            if "frompartner" in kwargs and confirmdict["frompartner"] == kwargs["frompartner"]:
+                confirm = not confirmdict["negativerule"]
+        elif confirmdict["ruletype"] == "topartner":
+            if "topartner" in kwargs and confirmdict["topartner"] == kwargs["topartner"]:
+                confirm = not confirmdict["negativerule"]
+        elif confirmdict["ruletype"] == "messagetype":
+            if "messagetype" in kwargs and confirmdict["messagetype"] == kwargs["messagetype"]:
+                confirm = not confirmdict["negativerule"]
     return confirm
 
 
@@ -781,14 +715,14 @@ def checkconfirmrules(confirmtype, **kwargs):
 # **********************************************************/**
 def set_database_lock():
     try:
-        changeq("""INSERT INTO mutex (mutexk) VALUES (1)""")
+        print("""INSERT INTO mutex (mutexk) VALUES (1)""")
     except Exception:
         return False
     return True
 
 
 def remove_database_lock():
-    changeq("""DELETE FROM mutex WHERE mutexk=1""")
+    print("""DELETE FROM mutex WHERE mutexk=1""")
 
 
 def check_if_other_engine_is_running():
@@ -799,9 +733,9 @@ def check_if_other_engine_is_running():
     """
     try:
         engine_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        port = botsglobal.ini.getint('settings', 'port', 28081)
-        engine_socket.bind(('127.0.0.1', port))
-    except socket.error:
+        port = ""("settings", "port", 28081)
+        engine_socket.bind(("127.0.0.1", port))
+    except OSError:
         engine_socket.close()
         raise
     return engine_socket
@@ -843,12 +777,13 @@ def trace_origin(ta, where=None):
         else:
             # no parent via parent-link, so look via child-link
             for row in query(
-                    """SELECT idta
+                """SELECT idta
                     FROM ta
                     WHERE idta>%(minidta)s
                     AND idta<%(maxidta)s
                     AND child=%(idta)s""",
-                    {'idta': ta.idta, 'minidta': ta.script, 'maxidta': ta.idta}):
+                {"idta": ta.idta, "minidta": ta.script, "maxidta": ta.idta},
+            ):
                 if row["idta"] in donelijst:
                     continue
                 yield row["idta"]
@@ -863,70 +798,31 @@ def trace_origin(ta, where=None):
 def countoutfiles(idchannel, rootidta):
     """counts the number of edifiles to be transmitted via outchannel."""
     for row in query(
-            """SELECT COUNT(*) as count
+        """SELECT COUNT(*) as count
                FROM ta
                WHERE idta>%(rootidta)s
                AND status=%(status)s
                AND statust=%(statust)s
                AND tochannel=%(tochannel)s
                """,
-            {'status': FILEOUT, 'statust': OK, 'tochannel': idchannel, 'rootidta': rootidta}):
+        {"status": FILEOUT, "statust": OK, "tochannel": idchannel, "rootidta": rootidta},
+    ):
         return row["count"]
-
-
-def lookup_translation(frommessagetype, fromeditype, alt, frompartner, topartner):
-    """
-    lookup the translation:
-    frommessagetype,fromeditype,alt,frompartner,topartner -> mappingscript, tomessagetype, toeditype
-    """
-    for row2 in query(
-            """SELECT tscript,tomessagetype,toeditype
-            FROM translate
-            WHERE frommessagetype = %(frommessagetype)s
-            AND fromeditype = %(fromeditype)s
-            AND active=%(booll)s
-            AND (alt='' OR alt=%(alt)s)
-            AND (frompartner_id IS NULL OR frompartner_id=%(frompartner)s OR frompartner_id in (
-                SELECT to_partner_id
-                FROM partnergroup
-                WHERE from_partner_id=%(frompartner)s ))
-            AND (topartner_id IS NULL OR topartner_id=%(topartner)s OR topartner_id in (
-                SELECT to_partner_id
-                FROM partnergroup
-                WHERE from_partner_id=%(topartner)s ))
-            ORDER BY alt DESC,
-                     CASE WHEN frompartner_id IS NULL THEN 1 ELSE 0 END, frompartner_id ,
-                     CASE WHEN topartner_id IS NULL THEN 1 ELSE 0 END, topartner_id """,
-            {
-                'frommessagetype': frommessagetype,
-                'fromeditype': fromeditype,
-                'alt': alt,
-                'frompartner': frompartner,
-                'topartner': topartner,
-                'booll': True,
-            }):
-        # translation is found; only the first one is used
-        # - this is what the ORDER BY in the query takes care of
-        return row2["tscript"], row2["toeditype"], row2["tomessagetype"]
-
-    # no translation found in translate table
-    return None, None, None
 
 
 def botsinfo():
     db_settings = {}
     infos = [
-        (_('webserver port'), botsglobal.ini.getint('webserver', 'port', 8080)),
-        (_('platform'), platform.platform()),
-        (_('machine'), platform.machine()),
-        (_('python version'), platform.python_version()),
-
-        (_('bots version'), botsglobal.version),
-        (_('bots installation path'), botsglobal.ini.get('directories', 'botspath')),
-        (_("botsenv path"), botsglobal.ini.get("directories", "botsenv")),
-        (_('config path'), botsglobal.ini.get('directories', 'config')),
-        (_('botssys path'), botsglobal.ini.get('directories', 'botssys')),
-        (_('usersys path'), botsglobal.ini.get('directories', 'usersysabs')),
+        (_("webserver port"), ""("webserver", "port", 8080)),
+        (_("platform"), platform.platform()),
+        (_("machine"), platform.machine()),
+        (_("python version"), platform.python_version()),
+        (_("bots version"), ""),
+        (_("bots installation path"), ""("directories", "botspath")),
+        (_("botsenv path"), ""("directories", "botsenv")),
+        (_("config path"), ""("directories", "config")),
+        (_("botssys path"), ""("directories", "botssys")),
+        (_("usersys path"), ""("directories", "usersysabs")),
     ]
     if db_settings.get("ENGINE"):
         infos.append(("DATABASE_ENGINE", db_settings["ENGINE"]))
@@ -946,9 +842,9 @@ def botsinfo():
 def botsinfo_display():
     """:return str: Display bots infos"""
     txt = f"{os.linesep}---------- [Bots Environment] ----------{os.linesep}"
-    txt += os.linesep.join([
-        f"    {key:22}: {val}"
-        for key, val in botsinfo() if key not in ['webserver port']])
+    txt += os.linesep.join(
+        [f"    {key:22}: {val}" for key, val in botsinfo() if key not in ["webserver port"]]
+    )
     txt += os.linesep + "-" * 40
     return txt
 
@@ -958,7 +854,7 @@ def datetime():
     for use in acceptance testing: returns pythons usual datetime
     - but frozen value for acceptance testing.
     """
-    if botsglobal.ini.getboolean('acceptance', 'runacceptancetest', False):
+    if ""("acceptance", "runacceptancetest", False):
         return python_datetime.datetime(2013, 1, 23, 1, 23, 45)
     return python_datetime.datetime.today()
 
@@ -973,7 +869,7 @@ def strftime(timeformat):
 
 def settimeout(milliseconds):
     """set a time-out for TCP-IP connections"""
-    socket.setdefaulttimeout(milliseconds)
+    socket.setdefaulttimeout(milliseconds / 1000.0)
 
 
 def updateunlessset(updatedict, fromdict):
@@ -981,14 +877,10 @@ def updateunlessset(updatedict, fromdict):
     # !! TODO !! when is this valid?
     Note: prevents setting charset from grammar
     """
-    updatedict.update(
-        (key, value)
-        for key, value in fromdict.items()
-        if not updatedict.get(key)
-    )
+    updatedict.update((key, value) for key, value in fromdict.items() if not updatedict.get(key))
 
 
-def rreplace(org, old, new='', count=1):
+def rreplace(org, old, new="", count=1):
     """
     string handling:
     replace old with new in org, max count times.
@@ -1002,12 +894,12 @@ def rreplace(org, old, new='', count=1):
 def get_relevant_text_for_UnicodeError(exc):
     """see python doc for details of UnicodeError"""
     start = exc.start - 10 if exc.start >= 10 else 0
-    return exc.object[start: exc.end + 35]
+    return exc.object[start : exc.end + 35]
 
 
-def indent_xml(node, level=0, indentstring='    '):
+def indent_xml(node, level=0, indentstring="    "):
     """Indent xml node"""
-    text2indent = '\n' + level * indentstring
+    text2indent = "\n" + level * indentstring
     if len(node):
         if not node.text or not node.text.strip():
             node.text = text2indent + indentstring
@@ -1057,17 +949,22 @@ class Uri:
         return str(self)
 
     def __str__(self):
-        scheme = self._uri['scheme'] + ':' if self._uri['scheme'] else ''
-        password = ':' + self._uri['password'] if self._uri['password'] else ''
-        userinfo = self._uri['username'] + password + '@' if self._uri['username'] else ''
+        scheme = self._uri["scheme"] + ":" if self._uri["scheme"] else ""
+        password = ":" + self._uri["password"] if self._uri["password"] else ""
+        userinfo = self._uri["username"] + password + "@" if self._uri["username"] else ""
         port = ":" + str(self._uri["port"]) if self._uri["port"] else ""
-        fullhost = self._uri['hostname'] + port if self._uri['hostname'] else ''
-        authority = terug = '//' + userinfo + fullhost if fullhost else ''
-        path = self._uri['path']
+        fullhost = self._uri["hostname"] + port if self._uri["hostname"] else ""
+        authority = terug = "//" + userinfo + fullhost if fullhost else ""
+        path = self._uri["path"]
         if path:
-            terug = '/'.join([authority, path.lstrip('/')]) if authority else path
-        if self._uri['filename']:
+            terug = "/".join([authority, path.lstrip("/")]) if authority else path
+        if self._uri["filename"]:
             if terug:
                 terug = terug.rstrip("/") + "/"
-            terug += self._uri['filename']
-        return scheme + terug
+            terug += self._uri["filename"]
+        terug = scheme + terug
+        if self._uri.get("query"):
+            terug += "?" + self._uri["query"]
+        if self._uri.get("fragment"):
+            terug += "#" + self._uri["fragment"]
+        return terug
