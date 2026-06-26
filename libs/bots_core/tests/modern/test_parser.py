@@ -3,6 +3,19 @@ import os
 import tempfile
 
 from bots_core.facade import edi_to_json, json_to_edi
+from bots_core.utils.botslib import botsglobal
+
+
+def setup_mock_data_dir(tmp_path):
+    """Patch botsglobal.ini.get so that abspathdata resolves under tmp_path."""
+    data_dir = str(tmp_path)
+
+    def patched_get(section, key, fallback=""):
+        if section == "directories" and key == "data":
+            return data_dir
+        return fallback
+
+    botsglobal.ini.get = patched_get  # type: ignore[method-assign]
 
 
 def test_pure_parsing_integration(tmp_path):
@@ -24,6 +37,8 @@ def test_pure_parsing_integration(tmp_path):
 
     test_file = tmp_path / "test.edi"
     test_file.write_text(edi_content)
+
+    setup_mock_data_dir(tmp_path)
 
     # Run the pure parser
     # We pass the editype as the messagetype for enveloped formats like x12
@@ -85,6 +100,7 @@ def test_pure_generation_integration():
         temp_path = f.name
 
     try:
+        setup_mock_data_dir(os.path.dirname(temp_path))
         # 1. Parse EDI to JSON AST
         json_result = edi_to_json(temp_path, editype="x12", messagetype="x12")
 

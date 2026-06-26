@@ -31,23 +31,7 @@ class MockRepositoryPort:
 async def main() -> None:
     logger.info("Initializing Hexagonal Components...")
 
-    # 1. Instantiate the Anti-Corruption Layer adapter
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-
-    # Create in-memory SQLite with shared pool to persist across connections
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    # Note: BOTS engine is now fully stateless. No need to initialize its legacy database schema.
-
-    SessionLocal = sessionmaker(bind=engine)
-
-    translator = BotsEDIAdapter(config_dir="config", session=SessionLocal())
+    translator = BotsEDIAdapter()
 
     # 2. Instantiate the Mock Ports
     storage = MockStoragePort()

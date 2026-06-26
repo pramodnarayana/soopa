@@ -318,7 +318,11 @@ def updateinfocore(change, where, wherestring=""):
         return False
     changestring = ",".join(f"{key}=%(change_{key})s" for key, value in change2)
     where.update((f"change_{key}", value) for key, value in change2)
-    return print(f"""UPDATE ta SET {changestring}{wherestring}""", where)
+    if botsglobal.db_port is None:
+        from bots_core.domain.exceptions import PanicError
+
+        raise PanicError("Database port is not initialized")
+    return botsglobal.db_port.changeq(f"UPDATE ta SET {changestring}{wherestring}", where)
 
 
 def updateinfo(change, where):
@@ -508,10 +512,10 @@ def abspath(soort, filename):
 def abspathdata(filename):
     data_dir = botsglobal.ini.get("directories", "data", "")
     if not data_dir:
-        return filename
+        raise ValueError("Data directory is not configured in botsglobal.ini")
     base_dir = os.path.abspath(data_dir)
     filepath = os.path.abspath(os.path.join(base_dir, filename))
-    if not filepath.startswith(base_dir):
+    if os.path.commonpath([base_dir, filepath]) != base_dir:
         raise ValueError(f"Path escape detected: {filename}")
     return filepath
 
@@ -653,7 +657,7 @@ def prepare_confirmrules():
      - as confirmrules are used for incoming and outgoing (x12, edifact, email)
        this will almost always lead to better performance.
     """
-    _CONFIRMRULES.clear()
+    temp_rules = []
     for confirmdict in query(
         """SELECT confirmtype,
                 ruletype,
@@ -668,7 +672,10 @@ def prepare_confirmrules():
             """,
         {"active": True},
     ):
-        _CONFIRMRULES.append(dict(confirmdict))
+        temp_rules.append(dict(confirmdict))
+
+    _CONFIRMRULES.clear()
+    _CONFIRMRULES.extend(temp_rules)
 
 
 def set_asked_confirmrules(routedict, rootidta):

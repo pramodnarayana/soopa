@@ -1,13 +1,13 @@
+import json
 import logging
 import os
 import tempfile
 
 from bots_core.facade import edi_to_json
-from sqlalchemy.orm import Session
 
 from transformer.application.ports import EDITranslatorPort
 from transformer.domain.exceptions import TranslationError
-from transformer.domain.models import ParsedEdiPayload
+from transformer.domain.models import ParsedEdiPayload, TransactionSet
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,8 @@ class BotsEDIAdapter(EDITranslatorPort):
     No sub-processes, no external cron jobs.
     """
 
-    def __init__(self, config_dir: str, session: Session):
-        self.config_dir = config_dir
-        self.session = session
+    def __init__(self) -> None:
+        pass
 
     async def translate(self, raw_edi: bytes) -> ParsedEdiPayload:
         """
@@ -34,19 +33,34 @@ class BotsEDIAdapter(EDITranslatorPort):
         if not raw_edi:
             raise TranslationError("Payload is completely empty, Bots engine aborted.")
 
+        # We assume X12 for now. Extract actual messagetype from ST segment if possible.
+        messagetype = "x12"
+        try:
+            raw_text = raw_edi.decode("utf-8", errors="ignore")
+            if "ST*" in raw_text:
+                # Naive extract: 'ST*850*...'
+                messagetype = raw_text.split("ST*")[1].split("*")[0].strip("~\r\n")
+        except Exception:
+            pass
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".edi") as f:
             f.write(raw_edi)
             temp_path = f.name
 
         try:
-            # We assume X12 for now. The real orchestrator will sniff or get from AS2 headers
-            edi_to_json(temp_path, editype="x12", messagetype="x12")
+            json_result = edi_to_json(temp_path, editype="x12", messagetype=messagetype)
             # In a real implementation, we would extract sender, receiver, etc from json_result
             return ParsedEdiPayload(
                 sender_id="UNKNOWN",
                 receiver_id="UNKNOWN",
                 interchange_control_number="UNKNOWN",
-                transactions=[],
+                transactions=[
+                    TransactionSet(
+                        transaction_type=messagetype,
+                        control_number="UNKNOWN",
+                        data=json.loads(json_result),
+                    )
+                ],
             )
         except Exception as e:
             raise TranslationError(f"Translation failed: {e}") from e
