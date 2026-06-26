@@ -15,6 +15,7 @@ members = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+norecursedirs = ["libs/bots_core", "node_modules", "frontend"]
 
 pythonpath = [
     "libs/as2_core/src",
@@ -42,13 +43,13 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core"]
 plugins = ["pydantic.mypy"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
+exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations", "libs/bots_core"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
@@ -66,7 +67,7 @@ indent-style = "space"
 
 [tool.coverage.run]
 source = ["libs", "services"]
-omit = ["*/tests/*", "*/migrations/*"]
+omit = ["*/tests/*", "*/migrations/*", "libs/bots_core/*"]
 
 [tool.coverage.report]
 show_missing = true
