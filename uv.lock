@@ -5,7 +5,8 @@ resolution-markers = [
     "python_full_version >= '3.15'",
     "python_full_version == '3.14.*'",
     "python_full_version == '3.13.*'",
-    "python_full_version < '3.13'",
+    "python_full_version == '3.12.*'",
+    "python_full_version < '3.12'",
 ]
 
 [manifest]
@@ -265,6 +266,7 @@ name = "api"
 version = "0.1.0"
 source = { editable = "services/api" }
 dependencies = [
+    { name = "aioboto3" },
     { name = "fastapi" },
     { name = "gunicorn" },
     { name = "prometheus-client" },
@@ -276,6 +278,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aioboto3", specifier = ">=12.0.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "gunicorn", specifier = ">=22.0.0" },
     { name = "prometheus-client", specifier = ">=0.20.0" },
@@ -2370,6 +2373,12 @@ wheels = [
 name = "transformer"
 version = "0.1.0"
 source = { editable = "libs/transformer" }
+dependencies = [
+    { name = "aioboto3" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "aioboto3", specifier = ">=12.0.0" }]
 
 [[package]]
 name = "typing-extensions"

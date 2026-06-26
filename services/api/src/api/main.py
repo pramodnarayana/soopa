@@ -8,6 +8,8 @@ from fastapi import Depends, FastAPI
 from identity.dependencies import get_current_tenant_id, get_tenant_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api import cdc_relay
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +46,8 @@ app = FastAPI(
         "scopes": "openid profile email",
     },
 )
+
+app.include_router(cdc_relay.router)
 
 
 @app.get("/api/me", tags=["Identity"])
