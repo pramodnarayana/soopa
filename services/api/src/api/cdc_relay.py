@@ -30,7 +30,8 @@ class SQSQueueService:
         self.session = aioboto3.Session()
 
     async def send(self, queue_name: str, payload: dict[str, object]) -> None:
-        logger.info(f"Relaying event to SQS queue '{queue_name}': {payload}")
+        trace_id = payload.get("trace_id", "unknown")
+        logger.info(f"Relaying event to SQS queue '{queue_name}' for trace_id={trace_id}")
 
         client_kwargs = {"region_name": self.region}
         if self.endpoint_url:
@@ -47,9 +48,9 @@ class SQSQueueService:
             logger.info(f"Successfully sent message to SQS queue {queue_name}")
 
 
-# Initialize with LocalStack endpoint if running locally
-endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-queue_service = SQSQueueService(endpoint_url=endpoint_url if endpoint_url else None)
+# Initialize with LocalStack endpoint only if AWS_ENDPOINT_URL is explicitly set
+endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+queue_service = SQSQueueService(endpoint_url=endpoint_url)
 
 
 @router.post("/relay", status_code=202)

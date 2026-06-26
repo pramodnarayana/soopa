@@ -62,7 +62,6 @@ class SQSTransformerWorker:
 
     async def _process_message(self, sqs_message: dict[str, object], sqs_client: object) -> None:
         """Parses the SQS payload and invokes the pure Domain logic."""
-        trace_id = "unknown"
         try:
             # Parse and validate JSON body
             body = sqs_message.get("Body")
@@ -100,5 +99,5 @@ class SQSTransformerWorker:
                 logger.debug(f"Deleted message for trace {trace_id} from queue")
 
         except Exception as e:
-            logger.error(f"Failed to process EDI trace {trace_id}: {e}")
+            logger.error(f"Failed to process EDI message: {e}")
             # Message naturally returns to queue for Dead Letter Queue routing

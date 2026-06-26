@@ -23,17 +23,27 @@ class FakeProcessInboundEdiUseCase:
         )
 
 
+class FakeSQSClient:
+    """Fake SQS client with delete_message capability."""
+    async def delete_message(self, QueueUrl: str, ReceiptHandle: str) -> None:
+        pass
+
+
 @pytest.mark.asyncio
 async def test_worker_process_message_success():
     """Tests that the worker parses SQS payload and routes it to the use case."""
     fake_use_case = FakeProcessInboundEdiUseCase()
     worker = SQSTransformerWorker(use_case=fake_use_case, queue_url="http://fake-queue")
+    fake_sqs = FakeSQSClient()
 
     import json
 
-    sqs_message = {"Body": json.dumps({"trace_id": "trace-123", "s3_uri": "s3://edi/123.x12"})}
+    sqs_message = {
+        "Body": json.dumps({"trace_id": "trace-123", "s3_uri": "s3://edi/123.x12"}),
+        "ReceiptHandle": "fake-receipt-handle"
+    }
 
-    await worker._process_message(sqs_message)
+    await worker._process_message(sqs_message, fake_sqs)
 
     assert fake_use_case.called_trace_id == "trace-123"
     assert fake_use_case.called_s3_uri == "s3://edi/123.x12"
@@ -41,17 +51,19 @@ async def test_worker_process_message_success():
 
 @pytest.mark.asyncio
 async def test_worker_process_message_error_handling():
-    """Tests that the worker swallows exceptions during message processing to prevent crashing."""
+    """Tests that the worker rejects invalid message bodies without invoking the use case."""
     fake_use_case = FakeProcessInboundEdiUseCase()
     worker = SQSTransformerWorker(use_case=fake_use_case, queue_url="http://fake-queue")
+    fake_sqs = FakeSQSClient()
 
-    # missing trace_id will cause FakeProcessInboundEdiUseCase to raise ValueError
+    # missing trace_id should be rejected before the use case runs
     sqs_message = {"Body": json.dumps({"s3_uri": "s3://edi/123.x12"})}
 
-    # Should not raise exception
-    await worker._process_message(sqs_message)
+    # Should not raise exception (error is swallowed)
+    await worker._process_message(sqs_message, fake_sqs)
 
-    assert fake_use_case.called_trace_id == "unknown"
+    # Use case should not have been called with invalid data
+    assert fake_use_case.called_trace_id is None
 
 
 @pytest.mark.asyncio
