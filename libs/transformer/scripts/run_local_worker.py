@@ -31,7 +31,6 @@ class MockRepositoryPort:
 async def main() -> None:
     logger.info("Initializing Hexagonal Components...")
 
-    # 1. Instantiate the Anti-Corruption Layer adapter
     translator = BotsEDIAdapter()
 
     # 2. Instantiate the Mock Ports

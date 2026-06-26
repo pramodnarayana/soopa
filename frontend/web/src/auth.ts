@@ -8,6 +8,8 @@ if (!authority || !clientId || !redirectUri) {
   throw new Error("CRITICAL: Missing required VITE_AUTH environment variables. Check your .env.local file!")
 }
 
+import type { User } from "oidc-client-ts"
+
 export const oidcConfig: AuthProviderProps = {
   authority,
   client_id: clientId,
@@ -15,7 +17,7 @@ export const oidcConfig: AuthProviderProps = {
   response_type: "code",
   scope: "openid profile email",
   post_logout_redirect_uri: window.location.origin,
-  onSigninCallback: (_user: any) => {
+  onSigninCallback: (_user: User | void) => {
     // After successful login, redirect directly to the dashboard
     // This prevents the 404 error on the /callback route
     window.location.replace('/dashboard')
