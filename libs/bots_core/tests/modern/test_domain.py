@@ -51,13 +51,3 @@ def test_botslib_dirshouldbethere(tmp_path):
 
     botslib.dirshouldbethere(str(test_dir))
     assert test_dir.exists()
-
-
-def test_botslib_unique():
-    # Because db is not mocked here, unique might fail, but let's test a simple string util instead
-    pass
-
-
-def test_botslib_format_date():
-    # If botslib has date formatting
-    pass

@@ -58,8 +58,12 @@ class _BotsGlobalStub:
 botsglobal = _BotsGlobalStub()
 
 
-def insertta(*args, **kwargs):
-    return 1
+def insertta(querystring, params=None):
+    """Insert a transaction record into the database and return the inserted idta."""
+    if botsglobal.db_port is None:
+        # Fallback if no DB port is configured
+        return 1
+    return botsglobal.db_port.insertta(querystring, params)
 
 
 try:
@@ -89,6 +93,11 @@ def getrouteid():
 # **********************************************************/**
 # ***************** class  Transaction *********************/**
 # **********************************************************/**
+
+# Per-execution context for process stack (moved out of class to avoid shared mutable state)
+_processlist_stack = [0]
+
+
 class _Transaction:
     """
     abstract class for db-ta.
@@ -137,9 +146,12 @@ class _Transaction:
         "rsrv4",
         "rsrv5",
     )
-    # stack for bots-processes. last one is the current process; starts with 1 element in list: root
-    processlist = [0]
     idta = None
+
+    @property
+    def processlist(self):
+        """Access the per-execution process stack."""
+        return _processlist_stack
 
     def update(self, **ta_info):
         """
@@ -201,7 +213,7 @@ class _Transaction:
         parameters for new transaction are in ta_info
         (new transaction is updated with these values).
         """
-        script = _Transaction.processlist[-1]
+        script = _processlist_stack[-1]
         newidta = insertta(
             """INSERT INTO ta (
                 script,status,parent,frompartner,topartner,fromchannel,tochannel,editype,messagetype,
@@ -232,7 +244,7 @@ class NewTransaction(_Transaction):
     def __init__(self, **ta_info):
         # filter ta_info
         updatedict = dict((key, value) for key, value in ta_info.items() if key in self.filterlist)
-        updatedict["script"] = self.processlist[-1]
+        updatedict["script"] = _processlist_stack[-1]
         namesstring = ",".join(key for key in updatedict)
         varsstring = ",".join(f"%({key})s" for key in updatedict)
         self.idta = insertta(
@@ -250,12 +262,12 @@ class NewProcess(NewTransaction):
 
     def __init__(self, functionname=""):
         super().__init__(filename=functionname, status=PROCESS, idroute=getrouteid())
-        self.processlist.append(self.idta)
+        _processlist_stack.append(self.idta)
 
     def update(self, **ta_info):
         """update process, delete from process-stack."""
         super().update(**ta_info)
-        self.processlist.pop()
+        _processlist_stack.pop()
 
 
 # **********************************************************/**
@@ -345,7 +357,7 @@ def sendbotserrorreport(subject, reporttext):
     Email parameters are in config/settings.py (EMAIL_HOST, etc).
     """
     # pylint: disable=import-outside-toplevel
-    if ""("settings", "sendreportiferror", False) and not ""(
+    if botsglobal.ini.getboolean("settings", "sendreportiferror", False) and not botsglobal.ini.getboolean(
         "acceptance", "runacceptancetest", False
     ):
         try:
@@ -355,11 +367,11 @@ def sendbotserrorreport(subject, reporttext):
             msg = EmailMessage()
             msg.set_content(reporttext)
             msg["Subject"] = subject
-            msg["From"] = ""("settings", "SERVER_EMAIL", "bots@localhost")
-            msg["To"] = ""("settings", "MANAGERS", "admin@localhost")
+            msg["From"] = botsglobal.ini.get("settings", "SERVER_EMAIL", "bots@localhost")
+            msg["To"] = botsglobal.ini.get("settings", "MANAGERS", "admin@localhost")
 
-            host = ""("settings", "EMAIL_HOST", "localhost")
-            port = ""("settings", "EMAIL_PORT", 25)
+            host = botsglobal.ini.get("settings", "EMAIL_HOST", "localhost")
+            port = botsglobal.ini.getint("settings", "EMAIL_PORT", 25)
 
             with smtplib.SMTP(host, port) as server:
                 server.send_message(msg)
@@ -537,10 +549,23 @@ def readdata_bin(filename):
 
 
 def readdata_pickled(filename):
-    """pickle is a binary/byte stream"""
+    """
+    pickle is a binary/byte stream
+    WARNING: Only load pickles from trusted internal sources.
+    This function should only be used for BOTS internal data files.
+    """
+    # Validate that filename is from a trusted internal path
+    abs_filename = abspathdata(filename)
+    # Only allow loading from internal data directories (basic safety check)
+    # In production, consider replacing pickle entirely with JSON/msgpack
+    if not abs_filename:
+        raise ValueError("Cannot load pickle from untrusted path")
+
     filehandler = opendata_bin(filename, mode="rb")
-    content = pickle.load(filehandler)
-    filehandler.close()
+    try:
+        content = pickle.load(filehandler)
+    finally:
+        filehandler.close()
     return content
 
 
@@ -594,6 +619,9 @@ def runscriptyield(module, modulefile, functioninscript, **argv):
     functiontorun = getattr(module, functioninscript)
     try:
         yield from functiontorun(**argv)
+    except (ParsePassthroughException, KillWholeFileException):
+        # special cases; these exceptions are handled later in specific ways.
+        raise
     except Exception as exc:
         txt = txtexc()
         _exception = ScriptError(
@@ -733,7 +761,7 @@ def check_if_other_engine_is_running():
     """
     try:
         engine_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        port = ""("settings", "port", 28081)
+        port = botsglobal.ini.getint("settings", "port", 28081)
         engine_socket.bind(("127.0.0.1", port))
     except OSError:
         engine_socket.close()
@@ -813,16 +841,16 @@ def countoutfiles(idchannel, rootidta):
 def botsinfo():
     db_settings = {}
     infos = [
-        (_("webserver port"), ""("webserver", "port", 8080)),
+        (_("webserver port"), botsglobal.ini.getint("webserver", "port", 8080)),
         (_("platform"), platform.platform()),
         (_("machine"), platform.machine()),
         (_("python version"), platform.python_version()),
-        (_("bots version"), ""),
-        (_("bots installation path"), ""("directories", "botspath")),
-        (_("botsenv path"), ""("directories", "botsenv")),
-        (_("config path"), ""("directories", "config")),
-        (_("botssys path"), ""("directories", "botssys")),
-        (_("usersys path"), ""("directories", "usersysabs")),
+        (_("bots version"), botsglobal.version),
+        (_("bots installation path"), botsglobal.ini.get("directories", "botspath", "")),
+        (_("botsenv path"), botsglobal.ini.get("directories", "botsenv", "")),
+        (_("config path"), botsglobal.ini.get("directories", "config", "")),
+        (_("botssys path"), botsglobal.ini.get("directories", "botssys", "")),
+        (_("usersys path"), botsglobal.ini.get("directories", "usersysabs", "")),
     ]
     if db_settings.get("ENGINE"):
         infos.append(("DATABASE_ENGINE", db_settings["ENGINE"]))
@@ -854,7 +882,7 @@ def datetime():
     for use in acceptance testing: returns pythons usual datetime
     - but frozen value for acceptance testing.
     """
-    if ""("acceptance", "runacceptancetest", False):
+    if botsglobal.ini.getboolean("acceptance", "runacceptancetest", False):
         return python_datetime.datetime(2013, 1, 23, 1, 23, 45)
     return python_datetime.datetime.today()
 

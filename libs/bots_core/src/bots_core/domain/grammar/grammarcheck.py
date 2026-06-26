@@ -23,7 +23,6 @@ def startmulti(grammardir, editype):
     grammardir: directory with gramars (eg bots/usersys/grammars/edifact)
     editype: eg edifact
     """
-    configdir = None
     # find locating of bots, configfiles, init paths etc.
     # logger is set up at module level
     atexit.register(logging.shutdown)
@@ -59,31 +58,26 @@ def start():
     Checks a Bots grammar. Same checks are used as in translations with bots-engine. Searches for grammar in
     regular place: bots/usersys/grammars/<editype>/<messagetype>.py  (even if a path is passed).
 
-    Usage:  {name}  -c<directory> <editype> <messagetype>
-       or   {name}  -c<directory> <path to grammar>
-    Options:
-        -c<directory>   directory for configuration files (default: config).
+    Usage:  {name}  <editype> <messagetype>
+       or   {name}  <path to grammar>
     Examples:
-        {name} -cconfig  edifact  ORDERSD96AUNEAN008
-        {name} -cconfig  C:/python27/lib/site-packages/bots/usersys/grammars/edifact/ORDERSD96AUNEAN008.py
+        {name}  edifact  ORDERSD96AUNEAN008
+        {name}  C:/python27/lib/site-packages/bots/usersys/grammars/edifact/ORDERSD96AUNEAN008.py
 
     """.format(
         name=os.path.basename(sys.argv[0]),
         version="1.0",
     )
-    configdir = None
     editype = ""
     messagetype = ""
     for arg in sys.argv[1:]:
-        if arg.startswith("-c"):
-            configdir = arg[2:]
-            if not configdir:
-                print(usage)
-                print("Error: configuration directory indicated, but no directory name.")
-                sys.exit(1)
-        elif arg in ["?", "/?", "-h", "--help"] or arg.startswith("-"):
+        if arg in ["?", "/?", "-h", "--help"]:
             print(usage)
             sys.exit(0)
+        elif arg.startswith("-"):
+            print(usage)
+            print(f"Error: unknown option '{arg}'.")
+            sys.exit(1)
         else:
             if os.path.isfile(arg):
                 p1, p2 = os.path.split(arg)

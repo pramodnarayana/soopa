@@ -44,28 +44,45 @@ def generate_997_ast(in_node: Node, error_list: list = None) -> Node:
         except StopIteration:
             pass
 
+    if not gs_node:
+        raise ValueError("Cannot generate 997: no GS segment found in input X12 message")
+
     ak1 = Node({"BOTSID": "AK1", "AK101": "", "AK102": ""})
-    if gs_node:
-        ak1.record["AK101"] = gs_node.get({"BOTSID": "GS", "GS01": None}) or "PO"
-        ak1.record["AK102"] = gs_node.get({"BOTSID": "GS", "GS06": None}) or "1"
+    ak1.record["AK101"] = gs_node.get({"BOTSID": "GS", "GS01": None}) or "PO"
+    ak1.record["AK102"] = gs_node.get({"BOTSID": "GS", "GS06": None}) or "1"
 
     root_997.append(ak1)
 
     # Optional: AK2/AK3/AK4 for transaction level details.
     # For a basic 997, we just need AK1 and AK9.
 
+    # Count the actual number of ST transaction sets in the functional group
+    st_count = 0
+    try:
+        for _st in in_node.getloop({"BOTSID": "ISA"}, {"BOTSID": "GS"}, {"BOTSID": "ST"}):
+            st_count += 1
+    except StopIteration:
+        pass
+    # If no ISA/GS/ST path, try direct GS/ST
+    if st_count == 0:
+        try:
+            for _st in in_node.getloop({"BOTSID": "GS"}, {"BOTSID": "ST"}):
+                st_count += 1
+        except StopIteration:
+            pass
+    # Default to 1 if we couldn't find any
+    if st_count == 0:
+        st_count = 1
+
     ak9 = Node(
         {
             "BOTSID": "AK9",
             "AK901": ack_code,
-            "AK902": "1",  # Number of transaction sets included
-            "AK903": "1",  # Number of received transaction sets
-            "AK904": "1",  # Number of accepted transaction sets (if R, this would be 0, but for simplicity here we assume 1 or 0)
+            "AK902": str(st_count),  # Number of transaction sets included
+            "AK903": str(st_count),  # Number of received transaction sets
+            "AK904": str(st_count) if ack_code == "A" else "0",  # Number of accepted transaction sets
         }
     )
-
-    if ack_code == "R":
-        ak9.record["AK904"] = "0"
 
     root_997.append(ak9)
 

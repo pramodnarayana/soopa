@@ -34,8 +34,24 @@ async def main() -> None:
     # 1. Instantiate the Anti-Corruption Layer adapter
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
 
-    engine = create_engine("sqlite:///:memory:")
+    # Create in-memory SQLite with shared pool to persist across connections
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    # Initialize BOTS schema tables
+    # Import the Base metadata from bots_core models and create all tables
+    try:
+        from bots_core.infrastructure.database.models import Base as BotsBase
+        BotsBase.metadata.create_all(engine)
+        logger.info("Initialized BOTS database schema")
+    except ImportError:
+        logger.warning("Could not import BOTS models; schema not initialized")
+
     SessionLocal = sessionmaker(bind=engine)
 
     translator = BotsEDIAdapter(config_dir="config", session=SessionLocal())
