@@ -45,7 +45,9 @@ async def main() -> None:
 
     # 4. Start the SQS Worker Loop
     queue_url = "http://localhost:4566/000000000000/EdiTransformerQueue"
-    worker = SQSTransformerWorker(use_case=use_case, queue_url=queue_url)
+    worker = SQSTransformerWorker(
+        use_case=use_case, queue_url=queue_url, endpoint_url="http://localhost:4566"
+    )
 
     logger.info("✅ Transformer Worker is running! Press Ctrl+C to stop.")
     await worker.start()

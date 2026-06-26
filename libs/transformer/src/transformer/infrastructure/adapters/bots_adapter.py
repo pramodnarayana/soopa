@@ -25,24 +25,26 @@ class BotsEDIAdapter(EDITranslatorPort):
         """
         logger.info(f"Invoking Bots EDI adapter with {len(raw_edi)} bytes of payload")
 
-        # Native BOTS Integration:
-        import bots  # type: ignore # Native import from our vendored workspace library!
+        # Validate payload before attempting to load backend
+        if not raw_edi:
+            raise TranslationError("Payload is completely empty, Bots engine aborted.")
+
+        # Native BOTS Integration - import only after validation passes
+        try:
+            import bots  # type: ignore # Native import from our vendored workspace library!
+        except ModuleNotFoundError as e:
+            raise TranslationError(
+                f"Bots EDI engine backend is not available or failed to load: {e}"
+            ) from e
 
         logger.debug(f"Bots library loaded from: {bots.__file__}")
 
         # In a real implementation, we will pass the bytes directly to
         # bots.inmessage or bots.engine to bypass its filesystem overhead.
 
-        # Simulating an infrastructure failure if the payload is empty
-        if not raw_edi:
-            raise TranslationError("Payload is completely empty, Bots engine aborted.")
-
-        # To support our 'Red-Green-Refactor' cycle without actually having
-        # the legacy Bots library installed in this Python 3.11 environment,
-        # we return a structurally compliant stub payload for now.
-        return ParsedEdiPayload(
-            sender_id="BOTS-ADAPTER-STUB",
-            receiver_id="NEXIOM",
-            interchange_control_number="0001",
-            transactions=[],
+        # Fail fast: the Bots integration is not yet complete
+        # Do not return fabricated data that would persist to the database
+        raise TranslationError(
+            "Bots EDI translation is not yet fully implemented. "
+            "Refusing to return stub data that would corrupt the database."
         )

@@ -14,7 +14,13 @@ class StoragePort(Protocol):
 class ParsedEdiRepositoryPort(Protocol):
     """Outbound port for saving the parsed JSON result to the database."""
 
-    async def save_parsed_payload(self, trace_id: str, payload: ParsedEdiPayload) -> None: ...
+    async def save_parsed_payload(self, trace_id: str, payload: ParsedEdiPayload) -> None:
+        """
+        Save parsed payload idempotently by trace_id.
+        Implementation should upsert or ignore duplicates to handle SQS retries safely.
+        Repository implementation must enforce a uniqueness constraint on trace_id.
+        """
+        ...
 
 
 @dataclass
