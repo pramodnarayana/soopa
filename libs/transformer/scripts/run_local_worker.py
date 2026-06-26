@@ -43,14 +43,7 @@ async def main() -> None:
         poolclass=StaticPool,
     )
 
-    # Initialize BOTS schema tables
-    # Import the Base metadata from bots_core models and create all tables
-    try:
-        from bots_core.infrastructure.database.models import Base as BotsBase
-        BotsBase.metadata.create_all(engine)
-        logger.info("Initialized BOTS database schema")
-    except ImportError:
-        logger.warning("Could not import BOTS models; schema not initialized")
+    # Note: BOTS engine is now fully stateless. No need to initialize its legacy database schema.
 
     SessionLocal = sessionmaker(bind=engine)
 

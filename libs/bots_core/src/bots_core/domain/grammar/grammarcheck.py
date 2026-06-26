@@ -86,8 +86,12 @@ def start():
                 messagetype = str(messagetype)
             elif not editype:
                 editype = arg
-            else:
+            elif not messagetype:
                 messagetype = arg
+            else:
+                print(usage)
+                print(f"Error: unexpected extra argument '{arg}'.")
+                sys.exit(1)
     if not (editype and messagetype):
         print(usage)
         print("Error: both editype and messagetype, or a file path, are required.")

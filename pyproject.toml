@@ -19,6 +19,7 @@ norecursedirs = ["node_modules", "frontend"]
 
 pythonpath = [
     "libs/as2_core/src",
+    "libs/bots_core/src",
     "libs/database/src",
     "libs/config/src",
     "libs/identity/src",

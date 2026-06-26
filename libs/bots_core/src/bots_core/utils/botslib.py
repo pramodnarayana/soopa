@@ -313,7 +313,7 @@ def updateinfocore(change, where, wherestring=""):
     wherestring = f" WHERE idta > %(rootidta)s AND {wherestring}"
     # change-dict: discard empty values.
     # Change keys: this is needed because same keys can be in where-dict
-    change2 = [(key, value) for key, value in change.items() if value]
+    change2 = [(key, value) for key, value in change.items() if value is not None]
     if not change2:
         return False
     changestring = ",".join(f"{key}=%(change_{key})s" for key, value in change2)
@@ -357,9 +357,9 @@ def sendbotserrorreport(subject, reporttext):
     Email parameters are in config/settings.py (EMAIL_HOST, etc).
     """
     # pylint: disable=import-outside-toplevel
-    if botsglobal.ini.getboolean("settings", "sendreportiferror", False) and not botsglobal.ini.getboolean(
-        "acceptance", "runacceptancetest", False
-    ):
+    if botsglobal.ini.getboolean(
+        "settings", "sendreportiferror", False
+    ) and not botsglobal.ini.getboolean("acceptance", "runacceptancetest", False):
         try:
             import smtplib
             from email.message import EmailMessage
@@ -506,7 +506,14 @@ def abspath(soort, filename):
 
 
 def abspathdata(filename):
-    return filename
+    data_dir = botsglobal.ini.get("directories", "data", "")
+    if not data_dir:
+        return filename
+    base_dir = os.path.abspath(data_dir)
+    filepath = os.path.abspath(os.path.join(base_dir, filename))
+    if not filepath.startswith(base_dir):
+        raise ValueError(f"Path escape detected: {filename}")
+    return filepath
 
 
 def deldata(filename):
@@ -537,14 +544,13 @@ def opendata_bin(filename, mode="rb"):
     filename = abspathdata(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
-    return open(filename, mode=mode)
+    return open(filename, mode=mode)  # noqa: SIM115
 
 
 def readdata_bin(filename):
     """read internal data file in memory as binary."""
-    filehandler = opendata_bin(filename, mode="rb")
-    content = filehandler.read()
-    filehandler.close()
+    with open(abspathdata(filename), mode="rb") as filehandler:
+        content = filehandler.read()
     return content
 
 
@@ -634,6 +640,9 @@ def runscriptyield(module, modulefile, functioninscript, **argv):
 # **********************************************************/**
 # *************** confirmrules *****************************/**
 # **********************************************************/**
+_CONFIRMRULES = []
+
+
 def prepare_confirmrules():
     """
     as confirmrules are often used, read these into memory. Reason: performance.
@@ -644,6 +653,7 @@ def prepare_confirmrules():
      - as confirmrules are used for incoming and outgoing (x12, edifact, email)
        this will almost always lead to better performance.
     """
+    _CONFIRMRULES.clear()
     for confirmdict in query(
         """SELECT confirmtype,
                 ruletype,
@@ -658,7 +668,7 @@ def prepare_confirmrules():
             """,
         {"active": True},
     ):
-        [].append(dict(confirmdict))
+        _CONFIRMRULES.append(dict(confirmdict))
 
 
 def set_asked_confirmrules(routedict, rootidta):
@@ -703,7 +713,7 @@ def set_asked_confirmrules(routedict, rootidta):
 
 def globalcheckconfirmrules(confirmtype):
     """global check if confirmrules with this confirmtype is uberhaupt used."""
-    return any(confirmdict["confirmtype"] == confirmtype for confirmdict in [])
+    return any(confirmdict["confirmtype"] == confirmtype for confirmdict in _CONFIRMRULES)
 
 
 def checkconfirmrules(confirmtype, **kwargs):
@@ -712,7 +722,7 @@ def checkconfirmrules(confirmtype, **kwargs):
     confirm = False
     # confirmrules are evaluated one by one; first the positive rules, than the negative rules.
     # this make it possible to include first, than exclude. Eg: send for 'all', than exclude certain partners.
-    for confirmdict in []:
+    for confirmdict in _CONFIRMRULES:
         if confirmdict["confirmtype"] != confirmtype:
             continue
         if confirmdict["ruletype"] == "all":
@@ -770,6 +780,8 @@ def check_if_other_engine_is_running():
 
 
 def trace_origin(ta, where=None):
+    if where is None:
+        where = {}
     """
     bots traces back all from the current step/ta.
     where is a dict that is used to indicate a condition.
@@ -992,7 +1004,12 @@ class Uri:
             terug += self._uri["filename"]
         terug = scheme + terug
         if self._uri.get("query"):
-            terug += "?" + self._uri["query"]
+            query_val = self._uri["query"]
+            if isinstance(query_val, dict):
+                import urllib.parse
+
+                query_val = urllib.parse.urlencode(query_val)
+            terug += "?" + str(query_val)
         if self._uri.get("fragment"):
             terug += "#" + self._uri["fragment"]
         return terug

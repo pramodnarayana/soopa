@@ -80,7 +80,9 @@ def generate_997_ast(in_node: Node, error_list: list = None) -> Node:
             "AK901": ack_code,
             "AK902": str(st_count),  # Number of transaction sets included
             "AK903": str(st_count),  # Number of received transaction sets
-            "AK904": str(st_count) if ack_code == "A" else "0",  # Number of accepted transaction sets
+            "AK904": str(st_count)
+            if ack_code == "A"
+            else "0",  # Number of accepted transaction sets
         }
     )
 
