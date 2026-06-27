@@ -152,7 +152,24 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             logger.warning("as2_parse_failed", error=str(e))
             raise HTTPException(status_code=400, detail=str(e)) from e
 
-    tenant_id = 1
+    # Resolve tenant_id from AS2-To header by looking up in global trading_partners table
+    from database.models.control_plane import TradingPartner as GlobalTradingPartner
+    from sqlalchemy import select as sql_select
+
+    tenant_id = 1  # Default fallback
+    try:
+        result = await session.execute(
+            sql_select(GlobalTradingPartner.tenant_id)
+            .where(GlobalTradingPartner.as2_id == as2_msg.as2_to)
+            .where(GlobalTradingPartner.active.is_(True))
+            .limit(1)
+        )
+        resolved_tenant_id = result.scalar_one_or_none()
+        if resolved_tenant_id is not None:
+            tenant_id = resolved_tenant_id
+    except Exception as e:
+        logger.warning("tenant_resolution_failed", error=str(e), as2_to=as2_msg.as2_to)
+
     logger = logger.bind(message_id=as2_msg.message_id, tenant_id=tenant_id)
 
     with tenant_context(tenant_id):

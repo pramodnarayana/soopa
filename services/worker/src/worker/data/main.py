@@ -1,10 +1,12 @@
 import asyncio
 import contextlib
+import ipaddress
 import json
 import logging
 import os
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 import aioboto3  # type: ignore[import-untyped]
 from config.settings import get_settings
@@ -18,6 +20,44 @@ from pipeline.core.translate import TranslationService
 from worker.utils import TenantResolver
 
 logger = logging.getLogger(__name__)
+
+
+def validate_target_url(url: str) -> bool:
+    """
+    Validate target URL to prevent SSRF attacks.
+    Returns True if URL is safe, False otherwise.
+    """
+    try:
+        parsed = urlparse(url)
+
+        # Only allow http and https schemes
+        if parsed.scheme not in ("http", "https"):
+            logger.warning(f"SSRF check failed: invalid scheme {parsed.scheme}")
+            return False
+
+        # Reject URLs without a hostname
+        if not parsed.hostname:
+            logger.warning("SSRF check failed: missing hostname")
+            return False
+
+        # Block private IP ranges and localhost
+        try:
+            ip = ipaddress.ip_address(parsed.hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                logger.warning(f"SSRF check failed: private/internal IP {ip}")
+                return False
+        except ValueError:
+            # Not an IP address, check hostname patterns
+            hostname_lower = parsed.hostname.lower()
+            blocked_patterns = ["localhost", "127.", "169.254.", "::1", "0.0.0.0"]
+            if any(pattern in hostname_lower for pattern in blocked_patterns):
+                logger.warning(f"SSRF check failed: blocked hostname {parsed.hostname}")
+                return False
+
+        return True
+    except Exception as e:
+        logger.error(f"SSRF validation error: {e}")
+        return False
 
 
 async def process_translation(
@@ -162,6 +202,19 @@ async def poll_sqs_queue(
                                     )
                                     logger.warning(
                                         f"[{queue_name}] Deleted poison message without target"
+                                    )
+                                    continue
+                                # SSRF validation
+                                if not validate_target_url(target_url):
+                                    logger.error(
+                                        f"[{queue_name}] SSRF check failed for target_url={target_url}, "
+                                        f"trace_id={trace_id}"
+                                    )
+                                    await sqs.delete_message(
+                                        QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                                    )
+                                    logger.warning(
+                                        f"[{queue_name}] Deleted message with unsafe target URL"
                                     )
                                     continue
                                 kwargs["target_url"] = target_url

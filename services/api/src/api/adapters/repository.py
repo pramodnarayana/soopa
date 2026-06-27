@@ -42,10 +42,14 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
     ) -> UUID:
         conn_id = uuid.uuid4()
         directions = ["INBOUND", "OUTBOUND"] if request.direction == "BOTH" else [request.direction]
+        first_inserted_id = None
 
         for dir_val in directions:
+            current_id = conn_id if len(directions) == 1 else uuid.uuid4()
+            if first_inserted_id is None:
+                first_inserted_id = current_id
             record = GlobalConnection(
-                id=conn_id if len(directions) == 1 else uuid.uuid4(),
+                id=current_id,
                 trading_partner_id=trading_partner_id,
                 tenant_id=tenant_id,
                 connection_type=request.connection_type,
@@ -58,7 +62,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             self.session.add(record)
 
         await self.session.flush()
-        return conn_id
+        return first_inserted_id if first_inserted_id else conn_id
 
     async def create_outbox_event(
         self, tenant_id: int, event_type: str, payload: dict[str, Any]
