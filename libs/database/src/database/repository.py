@@ -1,13 +1,10 @@
-"""
-Async SQLAlchemy Repositories for EDI AS2.
-All queries automatically enforce tenant isolation via the Hybrid Tenancy context.
-"""
+from uuid import UUID
 
 from identity.tenant_context import get_tenant_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import AS2Payload, TradingPartner
+from .models import EdiMessage, TenantConnection, TenantTradingPartner
 
 
 class TradingPartnerRepository:
@@ -20,28 +17,18 @@ class TradingPartnerRepository:
             raise RuntimeError("Database queries require an active tenant context.")
         return tenant_id
 
-    async def find_by_as2_id(self, as2_id: str) -> TradingPartner | None:
-        """
-        Dynamically resolves a Trading Partner for the current tenant.
-        This hot-path lookup enables zero-restart Trading Partner CRUD.
-        """
+    async def find_by_as2_id(self, as2_id: str) -> TenantTradingPartner | None:
         result = await self.session.execute(
-            select(TradingPartner).where(
-                TradingPartner.tenant_id == self._tenant_id(),
-                TradingPartner.as2_id == as2_id,
-                TradingPartner.is_active.is_(True),
+            select(TenantTradingPartner).where(
+                TenantTradingPartner.tenant_id == self._tenant_id(),
+                TenantTradingPartner.as2_id == as2_id,
+                TenantTradingPartner.active.is_(True),
             )
         )
         return result.scalar_one_or_none()
 
-    async def get_public_certificate(self, as2_id: str) -> bytes | None:
-        partner = await self.find_by_as2_id(as2_id)
-        if partner and partner.public_cert_pem:
-            return str(partner.public_cert_pem).encode("utf-8")
-        return None
 
-
-class HostIdentityRepository:
+class ConnectionRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -51,34 +38,21 @@ class HostIdentityRepository:
             raise RuntimeError("Database queries require an active tenant context.")
         return tenant_id
 
-    async def get_host_private_key(self) -> bytes | None:
-        """
-        Fetches the server's own private key for the current tenant.
-        This is required to decrypt inbound messages.
-        """
+    async def find_by_partner_id(
+        self, partner_id: UUID, connection_type: str
+    ) -> TenantConnection | None:
         result = await self.session.execute(
-            select(TradingPartner).where(
-                TradingPartner.tenant_id == self._tenant_id(),
-                TradingPartner.is_host_identity.is_(True),
-                TradingPartner.is_active.is_(True),
+            select(TenantConnection).where(
+                TenantConnection.tenant_id == self._tenant_id(),
+                TenantConnection.trading_partner_id == partner_id,
+                TenantConnection.connection_type == connection_type,
+                TenantConnection.active.is_(True),
             )
         )
-        host = result.scalar_one_or_none()
-        if host:
-            if host.kms_key_id and host.private_key_ciphertext:
-                # TODO: Integrate AWS KMS / Envelope Decryption here
-                raise NotImplementedError("KMS decryption strategy not yet implemented")
-            elif host.private_key_secret_id:
-                # TODO: Integrate Vault / External Secret Strategy here
-                raise NotImplementedError("External secret strategy not yet implemented")
-            else:
-                raise RuntimeError(
-                    "No supported host private key retrieval strategy configured for tenant."
-                )
-        return None
+        return result.scalar_one_or_none()
 
 
-class AS2PayloadRepository:
+class EdiMessageRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -88,32 +62,26 @@ class AS2PayloadRepository:
             raise RuntimeError("Database queries require an active tenant context.")
         return tenant_id
 
-    async def save_payload(
+    async def save_message(
         self,
-        message_id: str,
+        trace_id: UUID,
         direction: str,
-        as2_from: str,
-        as2_to: str,
-        status: str,
-        payload_storage_uri: str,
-        raw_headers: str | None = None,
-        mic: str | None = None,
-    ) -> AS2Payload:
-        """
-        Persists AS2 payload metadata to PostgreSQL.
-        The actual binary payload is stored in S3 (via payload_storage_uri).
-        """
-        record = AS2Payload(
+        connection_type: str,
+        trading_partner_id: UUID,
+        s3_key: str,
+        status: str = "RECEIVED",
+        as2_message_id: str | None = None,
+    ) -> EdiMessage:
+        record = EdiMessage(
             tenant_id=self._tenant_id(),
-            message_id=message_id,
+            trace_id=trace_id,
             direction=direction,
-            as2_from=as2_from,
-            as2_to=as2_to,
-            raw_headers=raw_headers,
-            payload_storage_uri=payload_storage_uri,
+            connection_type=connection_type,
+            trading_partner_id=trading_partner_id,
+            s3_key=s3_key,
             status=status,
-            mic=mic,
+            as2_message_id=as2_message_id,
         )
         self.session.add(record)
-        await self.session.flush()  # Gets the DB-assigned ID without committing yet
+        await self.session.flush()
         return record

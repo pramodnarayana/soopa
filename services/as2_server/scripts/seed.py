@@ -43,10 +43,29 @@ async def seed_database() -> None:
         tenant_obj = tenant_result.scalar_one_or_none()
 
         if not tenant_obj:
-            tenant_obj = Tenant(id=0, name="Host Company", shard_id=shard.id, tier="standard")
+            # Tenant 0 is the host company; it uses a dedicated schema "tenant_host"
+            tenant_obj = Tenant(
+                id=0,
+                name="Host Company",
+                shard_id=shard.id,
+                tier="standard",
+                shard_schema="tenant_host",
+            )
             session.add(tenant_obj)
             await session.flush()
             logger.info("Created Tenant 0 (Host Company).")
+        else:
+            needs_repair = False
+            if tenant_obj.shard_schema != "tenant_host":
+                tenant_obj.shard_schema = "tenant_host"  # type: ignore[assignment]
+                needs_repair = True
+            if tenant_obj.shard_id != shard.id:
+                tenant_obj.shard_id = shard.id
+                needs_repair = True
+            if needs_repair:
+                session.add(tenant_obj)
+                await session.flush()
+                logger.info("Repaired Tenant 0 shard_id and shard_schema to shard_1/tenant_host.")
 
         # 3. Seed Default User
         admin_email = os.getenv("ADMIN_EMAIL")

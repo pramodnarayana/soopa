@@ -15,7 +15,17 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "sqlalchemy[asyncio]>=2.0.0",
     "aioboto3>=12.0.0",
+    "database",
+    "identity",
+    "config",
+    "observability",
 ]
+
+[tool.uv.sources]
+database = { workspace = true }
+identity = { workspace = true }
+config = { workspace = true }
+observability = { workspace = true }
 
 
 [build-system]

@@ -30,6 +30,19 @@ async def test_sqlalchemy_identity_repository_jit_provision(router: DatabaseRout
         import uuid
 
         test_email = f"jit_{uuid.uuid4().hex[:8]}@example.com"
+
+        # Ensure default shard exists
+        from database.models.control_plane import DatabaseShard
+        from sqlalchemy.dialects.postgresql import insert
+
+        stmt = insert(DatabaseShard).values(
+            name="shard_1",
+            dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+        )
+        stmt = stmt.on_conflict_do_update(index_elements=["name"], set_={"dsn": stmt.excluded.dsn})
+        await session.execute(stmt)
+        await session.flush()
+
         repo = SQLAlchemyIdentityRepository(session)
         tenant_id = await repo.provision_tenant_for_user(test_email, "JIT User")
 
@@ -43,6 +56,8 @@ async def test_sqlalchemy_identity_repository_jit_provision(router: DatabaseRout
         tenant_stmt = select(Tenant).where(Tenant.id == tenant_id)
         created_tenant = (await session.execute(tenant_stmt)).scalar_one()
         assert "JIT User's Organization" in created_tenant.name
+        assert created_tenant.shard_id is not None
+        assert created_tenant.shard_schema.startswith("tenant_")
 
     finally:
         # Cleanup: explicitly delete created records since provision_tenant_for_user() commits

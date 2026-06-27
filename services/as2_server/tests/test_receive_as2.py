@@ -145,3 +145,40 @@ class TestAS2MessageReceiving:
 
         assert response.status_code == 200
         assert b"Received-content-MIC" in response.content
+
+    async def test_encrypted_as2_message_fails_decryption(
+        self, as2_client: AsyncClient, sender_keypair: Any, encrypted_as2_payload: bytes
+    ) -> None:
+        """
+        An encrypted payload where we simulated a decryption failure (since mock returns empty key).
+        """
+        headers = _build_as2_headers(
+            as2_from=sender_keypair.as2_id,
+            as2_to="SOOPAEDI-AS2-ID",
+            message_id="test-enc-001",
+            content_type='application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"',
+        )
+        response = await as2_client.post("/as2", content=encrypted_as2_payload, headers=headers)
+
+        assert response.status_code == 200
+        assert b"decryption-failed" in response.content
+
+    async def test_invalid_signature_returns_auth_failed(
+        self, as2_client: AsyncClient, sender_keypair: Any, signed_as2_payload: bytes
+    ) -> None:
+        """
+        A payload that claims to be signed but content is altered.
+        """
+        headers = _build_as2_headers(
+            as2_from=sender_keypair.as2_id,
+            as2_to="SOOPAEDI-AS2-ID",
+            message_id="test-sig-fail-001",
+            content_type='multipart/signed; protocol="application/pkcs7-signature"; micalg=sha-256',
+        )
+        from unittest.mock import patch
+
+        with patch("as2_server.main.verify_signature", return_value=(False, b"")):
+            response = await as2_client.post("/as2", content=signed_as2_payload, headers=headers)
+
+        assert response.status_code == 200
+        assert b"authentication-failed" in response.content

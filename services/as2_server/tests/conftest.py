@@ -204,9 +204,10 @@ async def as2_client(
 
     with (
         patch("as2_server.main.TradingPartnerRepository") as mock_partner_repo_cls,
-        patch("as2_server.main.HostIdentityRepository") as mock_identity_repo_cls,
-        patch("as2_server.main.AS2PayloadRepository") as mock_payload_repo_cls,
+        patch("as2_server.main.EdiMessageRepository") as mock_payload_repo_cls,
+        patch("as2_server.main.get_host_private_key") as mock_get_host_private_key,
     ):
+        mock_get_host_private_key.return_value = receiver_keypair.private_key_pem
         mock_partner_repo = AsyncMock()
 
         def mock_find(as2_id: str) -> Any:
@@ -216,11 +217,6 @@ async def as2_client(
 
         mock_partner_repo.find_by_as2_id.side_effect = mock_find
         mock_partner_repo_cls.return_value = mock_partner_repo
-
-        mock_identity_repo = AsyncMock()
-        # Seed the host private key so the server can decrypt incoming test messages
-        mock_identity_repo.get_host_private_key.return_value = receiver_keypair.private_key_pem
-        mock_identity_repo_cls.return_value = mock_identity_repo
 
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo

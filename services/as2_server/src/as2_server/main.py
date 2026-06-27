@@ -3,6 +3,7 @@ Production-ready FastAPI application for the EDI AS2 Server.
 """
 
 import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -16,8 +17,7 @@ from as2_core import (
 )
 from config.settings import get_settings
 from database.repository import (
-    AS2PayloadRepository,
-    HostIdentityRepository,
+    EdiMessageRepository,
     TradingPartnerRepository,
 )
 from database.s3 import Aioboto3PayloadStorage, IPayloadStorage
@@ -92,6 +92,27 @@ def get_s3_storage() -> IPayloadStorage:
     return s3_storage
 
 
+def get_host_private_key() -> bytes:
+    """
+    Load the host AS2 private key PEM from an environment variable or mounted secret.
+    In production, this should be sourced from a secure vault (e.g. HashiCorp Vault / AWS Secrets Manager).
+    """
+    import os
+
+    key_pem = os.getenv("AS2_HOST_PRIVATE_KEY_PEM", "")
+    return key_pem.encode("utf-8") if key_pem else b""
+
+
+def get_host_certificate() -> bytes:
+    """
+    Load the host AS2 public certificate PEM from an environment variable or mounted secret.
+    """
+    import os
+
+    cert_pem = os.getenv("AS2_HOST_PUBLIC_CERT_PEM", "")
+    return cert_pem.encode("utf-8") if cert_pem else b""
+
+
 S3Dep = Annotated[IPayloadStorage, Depends(get_s3_storage)]
 
 
@@ -131,13 +152,56 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             logger.warning("as2_parse_failed", error=str(e))
             raise HTTPException(status_code=400, detail=str(e)) from e
 
-    tenant_id = 1
+    # Resolve tenant_id from AS2-To header by looking up in global trading_partners table
+    from database.models.control_plane import TradingPartner as GlobalTradingPartner
+    from sqlalchemy import select as sql_select
+
+    tenant_id = None
+    try:
+        result = await session.execute(
+            sql_select(GlobalTradingPartner.tenant_id)
+            .where(GlobalTradingPartner.as2_id == as2_msg.as2_to)
+            .where(GlobalTradingPartner.active.is_(True))
+            .limit(1)
+        )
+        tenant_id = result.scalar_one_or_none()
+    except Exception as e:
+        logger.warning("tenant_resolution_failed", error=str(e), as2_to=as2_msg.as2_to)
+
+    if tenant_id is None:
+        metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
+        logger.warning("as2_unknown_tenant", as2_to=as2_msg.as2_to)
+        disposition = (
+            "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
+        )
+        mdn = generate_mdn(original_message=as2_msg, disposition=disposition)
+        return Response(
+            content=render_mdn_report(mdn),
+            status_code=200,
+            media_type='multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"',
+            headers={"AS2-Version": "1.2", "EDIINT-Features": "multiple-attachments"},
+        )
+
     logger = logger.bind(message_id=as2_msg.message_id, tenant_id=tenant_id)
 
     with tenant_context(tenant_id):
         partner_repo = TradingPartnerRepository(session)
-        payload_repo = AS2PayloadRepository(session)
-        identity_repo = HostIdentityRepository(session)
+        payload_repo = EdiMessageRepository(session)
+
+        partner = await partner_repo.find_by_as2_id(as2_msg.as2_from)
+        if not partner:
+            metrics.increment("as2_verify_errors_total", labels={"tenant_id": str(tenant_id)})
+            logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
+            disposition = (
+                "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
+            )
+            mdn = generate_mdn(original_message=as2_msg, disposition=disposition)
+            return Response(
+                content=render_mdn_report(mdn),
+                status_code=200,
+                media_type='multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"',
+                headers={"AS2-Version": "1.2", "EDIINT-Features": "multiple-attachments"},
+            )
 
         metrics.increment(
             "as2_messages_received_total",
@@ -158,12 +222,14 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         if as2_msg.is_encrypted:
             with tracer.start_span("as2.decrypt") as span:
                 try:
-                    private_key_pem = await identity_repo.get_host_private_key()
+                    private_key_pem = get_host_private_key()
+                    host_cert_pem = get_host_certificate()
                     if not private_key_pem:
-                        raise ValueError("Host private key not found in database for decryption.")
+                        raise ValueError("Host private key not found for decryption.")
+                    if not host_cert_pem:
+                        raise ValueError("Host public certificate not found for decryption.")
 
-                    # Passing empty bytes for our cert since decrypt_payload expects it (legacy compat)
-                    processed_payload = decrypt_payload(raw_body, private_key_pem, b"")
+                    processed_payload = decrypt_payload(raw_body, private_key_pem, host_cert_pem)
                     logger.info("as2_decrypt_success")
                 except Exception as e:
                     span.record_exception(e)
@@ -179,18 +245,16 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         # --- Step 3: Verify Signature ---
         if as2_msg.is_signed and "failed" not in disposition:
             with tracer.start_span("as2.verify_signature") as span:
-                partner = await partner_repo.find_by_as2_id(as2_msg.as2_from)
-                if not partner or not partner.public_cert_pem:
-                    span.set_status_error("Unknown trading partner")
+                if not partner.public_cert_pem:
+                    span.set_status_error("Partner certificate missing")
                     metrics.increment(
                         "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
                     )
-                    logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
+                    logger.warning("as2_partner_cert_missing", as2_from=as2_msg.as2_from)
                     disposition = "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
                 else:
-                    is_valid, verified_payload = verify_signature(
-                        processed_payload, partner.public_cert_pem.encode()
-                    )
+                    partner_cert = partner.public_cert_pem.encode("utf-8")
+                    is_valid, verified_payload = verify_signature(processed_payload, partner_cert)
                     if not is_valid:
                         span.set_status_error("Signature invalid")
                         metrics.increment(
@@ -212,14 +276,15 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         # --- Step 5: Persist Metadata to DB ---
         with tracer.start_span("as2.db_persist"):
             status = "ERROR" if "failed" in disposition else "RECEIVED"
-            await payload_repo.save_payload(
-                message_id=as2_msg.message_id,
+            trace_id = uuid.uuid4()
+            await payload_repo.save_message(
+                trace_id=trace_id,
                 direction="INBOUND",
-                as2_from=as2_msg.as2_from,
-                as2_to=as2_msg.as2_to,
+                connection_type="AS2",
+                trading_partner_id=partner.id,  # type: ignore[arg-type]
+                s3_key=storage_uri,
                 status=status,
-                payload_storage_uri=storage_uri,
-                raw_headers=str(headers),
+                as2_message_id=as2_msg.message_id,
             )
 
         # --- Step 6: Generate MDN ---

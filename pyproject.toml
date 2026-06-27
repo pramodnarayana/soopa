@@ -59,11 +59,13 @@ ignore = ["E501"] # Handled by formatter
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments
 "services/api/src/api/main.py" = ["B008"]
+"services/api/src/api/cdc_relay.py" = ["B008"]
+"services/api/src/api/routers/partners.py" = ["B008"]
 "services/as2_server/src/as2_server/main.py" = ["B008"]
 "libs/identity/src/identity/dependencies.py" = ["B008"]
 # Legacy BOTS engine formatting ignores
-"libs/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821"]
-"libs/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841"]
+"libs/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038"]
+"libs/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038"]
 
 [tool.ruff.format]
 quote-style = "double"
