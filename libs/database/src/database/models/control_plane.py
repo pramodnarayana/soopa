@@ -104,7 +104,7 @@ class Route(GlobalBase, RouteMixin):
     __tablename__ = "routes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    tenant_id = Column(Integer, nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     source_partner_id = Column(UUID(as_uuid=True), nullable=True)
     target_partner_id = Column(UUID(as_uuid=True), nullable=True)
 

@@ -6,7 +6,7 @@ Create Date: 2026-06-25 09:43:15.682659
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
@@ -14,9 +14,9 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "a857807c1b47"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -83,7 +83,7 @@ def upgrade() -> None:
     # trading_partners (global control plane copy)
     op.create_table(
         "trading_partners",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("partner_name", sa.String(length=255), nullable=False),
         sa.Column("as2_id", sa.String(length=255), nullable=True),
@@ -102,7 +102,7 @@ def upgrade() -> None:
     # connections
     op.create_table(
         "connections",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("trading_partner_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("connection_type", sa.String(length=50), nullable=False),
@@ -126,7 +126,7 @@ def upgrade() -> None:
     # routes
     op.create_table(
         "routes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("source_partner_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("target_partner_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -135,6 +135,7 @@ def upgrade() -> None:
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["source_partner_id", "tenant_id"],
             ["trading_partners.id", "trading_partners.tenant_id"],
@@ -153,7 +154,7 @@ def upgrade() -> None:
     # field_mapping_rules
     op.create_table(
         "field_mapping_rules",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("route_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("source_path", sa.Text(), nullable=False),
         sa.Column("dest_path", sa.Text(), nullable=False),
@@ -166,7 +167,7 @@ def upgrade() -> None:
     # outbox
     op.create_table(
         "outbox",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("idempotency_key", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -186,7 +187,7 @@ def upgrade() -> None:
     # system_audit_log
     op.create_table(
         "system_audit_log",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("event", sa.String(length=100), nullable=False),

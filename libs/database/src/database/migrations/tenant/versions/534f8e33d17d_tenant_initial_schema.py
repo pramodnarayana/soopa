@@ -6,7 +6,7 @@ Create Date: 2026-06-25 09:43:48.632423
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
@@ -14,9 +14,9 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "534f8e33d17d"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -97,7 +97,7 @@ def upgrade() -> None:
 
     op.create_table(
         "edi_messages",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("direction", sa.String(length=50), nullable=False),
@@ -124,7 +124,7 @@ def upgrade() -> None:
 
     op.create_table(
         "api_payloads",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("direction", sa.String(length=50), nullable=False),
@@ -147,7 +147,7 @@ def upgrade() -> None:
 
     op.create_table(
         "jobs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("type", sa.String(length=50), nullable=False),
@@ -163,7 +163,7 @@ def upgrade() -> None:
 
     op.create_table(
         "outbox",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
         sa.Column("idempotency_key", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
@@ -197,7 +197,7 @@ def upgrade() -> None:
 
     op.create_table(
         "audit_log",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("step", sa.String(length=100), nullable=False),
@@ -213,7 +213,7 @@ def upgrade() -> None:
 
     op.create_table(
         "ack_receipts",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("type", sa.String(length=50), nullable=False),

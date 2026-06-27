@@ -2,12 +2,10 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from database.models import TenantBase
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from config.settings import get_settings
-from database.models import TenantBase
 
 config = context.config
 
