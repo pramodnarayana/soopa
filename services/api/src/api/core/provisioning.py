@@ -45,6 +45,7 @@ class ProvisioningService:
             "tenant_id": tenant_id,
         }
         await self.repo.create_outbox_event(
+            tenant_id=tenant_id,
             event_type="TRADING_PARTNER_PROVISION",
             payload=payload,
         )

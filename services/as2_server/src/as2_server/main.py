@@ -3,6 +3,7 @@ Production-ready FastAPI application for the EDI AS2 Server.
 """
 
 import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -102,6 +103,16 @@ def get_host_private_key() -> bytes:
     return key_pem.encode("utf-8") if key_pem else b""
 
 
+def get_host_certificate() -> bytes:
+    """
+    Load the host AS2 public certificate PEM from an environment variable or mounted secret.
+    """
+    import os
+
+    cert_pem = os.getenv("AS2_HOST_PUBLIC_CERT_PEM", "")
+    return cert_pem.encode("utf-8") if cert_pem else b""
+
+
 S3Dep = Annotated[IPayloadStorage, Depends(get_s3_storage)]
 
 
@@ -148,6 +159,21 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         partner_repo = TradingPartnerRepository(session)
         payload_repo = EdiMessageRepository(session)
 
+        partner = await partner_repo.find_by_as2_id(as2_msg.as2_from)
+        if not partner:
+            metrics.increment("as2_verify_errors_total", labels={"tenant_id": str(tenant_id)})
+            logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
+            disposition = (
+                "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
+            )
+            mdn = generate_mdn(original_message=as2_msg, disposition=disposition)
+            return Response(
+                content=render_mdn_report(mdn),
+                status_code=200,
+                media_type='multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"',
+                headers={"AS2-Version": "1.2", "EDIINT-Features": "multiple-attachments"},
+            )
+
         metrics.increment(
             "as2_messages_received_total",
             labels={
@@ -168,11 +194,13 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             with tracer.start_span("as2.decrypt") as span:
                 try:
                     private_key_pem = get_host_private_key()
+                    host_cert_pem = get_host_certificate()
                     if not private_key_pem:
                         raise ValueError("Host private key not found for decryption.")
+                    if not host_cert_pem:
+                        raise ValueError("Host public certificate not found for decryption.")
 
-                    # Passing empty bytes for our cert since decrypt_payload expects it (legacy compat)
-                    processed_payload = decrypt_payload(raw_body, private_key_pem, b"")
+                    processed_payload = decrypt_payload(raw_body, private_key_pem, host_cert_pem)
                     logger.info("as2_decrypt_success")
                 except Exception as e:
                     span.record_exception(e)
@@ -188,19 +216,15 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         # --- Step 3: Verify Signature ---
         if as2_msg.is_signed and "failed" not in disposition:
             with tracer.start_span("as2.verify_signature") as span:
-                partner = await partner_repo.find_by_as2_id(as2_msg.as2_from)
-                if not partner:
-                    span.set_status_error("Unknown trading partner")
+                if not partner.public_cert_pem:
+                    span.set_status_error("Partner certificate missing")
                     metrics.increment(
                         "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
                     )
-                    logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
+                    logger.warning("as2_partner_cert_missing", as2_from=as2_msg.as2_from)
                     disposition = "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
                 else:
-                    # Prefer the partner's stored cert; fall back to empty for test environments
-                    partner_cert = (
-                        partner.public_cert_pem.encode("utf-8") if partner.public_cert_pem else b""
-                    )
+                    partner_cert = partner.public_cert_pem.encode("utf-8")
                     is_valid, verified_payload = verify_signature(processed_payload, partner_cert)
                     if not is_valid:
                         span.set_status_error("Signature invalid")
@@ -223,13 +247,15 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         # --- Step 5: Persist Metadata to DB ---
         with tracer.start_span("as2.db_persist"):
             status = "ERROR" if "failed" in disposition else "RECEIVED"
+            trace_id = uuid.uuid4()
             await payload_repo.save_message(
-                trace_id=as2_msg.message_id,
+                trace_id=trace_id,
                 direction="INBOUND",
                 connection_type="AS2",
-                trading_partner_id=as2_msg.as2_from,
+                trading_partner_id=partner.id,  # type: ignore[arg-type]
                 s3_key=storage_uri,
                 status=status,
+                as2_message_id=as2_msg.message_id,
             )
 
         # --- Step 6: Generate MDN ---

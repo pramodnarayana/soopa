@@ -27,7 +27,7 @@ def upgrade() -> None:
     op.create_table(
         "trading_partners",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("partner_name", sa.String(length=255), nullable=False),
         sa.Column("as2_id", sa.String(length=255), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
@@ -44,7 +44,7 @@ def upgrade() -> None:
     op.create_table(
         "connections",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("trading_partner_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("connection_type", sa.String(length=50), nullable=False),
         sa.Column("host", sa.String(length=1024), nullable=True),
@@ -64,7 +64,7 @@ def upgrade() -> None:
     op.create_table(
         "routes",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("source_partner_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("target_partner_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("source_format", sa.String(length=50), nullable=False),
@@ -79,7 +79,7 @@ def upgrade() -> None:
     op.create_table(
         "field_mapping_rules",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("route_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("source_path", sa.Text(), nullable=False),
         sa.Column("dest_path", sa.Text(), nullable=False),
@@ -99,7 +99,7 @@ def upgrade() -> None:
     op.create_table(
         "edi_messages",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("connection_type", sa.String(length=50), nullable=False),
@@ -126,7 +126,7 @@ def upgrade() -> None:
     op.create_table(
         "api_payloads",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("route_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -149,7 +149,7 @@ def upgrade() -> None:
     op.create_table(
         "jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("type", sa.String(length=50), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
@@ -165,7 +165,7 @@ def upgrade() -> None:
     op.create_table(
         "outbox",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("idempotency_key", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -188,7 +188,7 @@ def upgrade() -> None:
     op.create_table(
         "processed_events",
         sa.Column("idempotency_key", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("processed_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("idempotency_key"),
     )
@@ -199,7 +199,7 @@ def upgrade() -> None:
     op.create_table(
         "audit_log",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("step", sa.String(length=100), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
@@ -215,7 +215,7 @@ def upgrade() -> None:
     op.create_table(
         "ack_receipts",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("tenant_id", sa.Integer(), nullable=False, index=True),
+        sa.Column(\"tenant_id\", sa.Integer(), nullable=False),
         sa.Column("trace_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("type", sa.String(length=50), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),

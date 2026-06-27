@@ -41,28 +41,32 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         self, trading_partner_id: UUID, tenant_id: int, request: CreateTradingPartnerRequest
     ) -> UUID:
         conn_id = uuid.uuid4()
-        # A connection row only supports INBOUND or OUTBOUND.
-        # When the partner direction is BOTH, default the connection to INBOUND.
-        connection_direction = "INBOUND" if request.direction == "BOTH" else request.direction
-        record = GlobalConnection(
-            id=conn_id,
-            trading_partner_id=trading_partner_id,
-            tenant_id=tenant_id,
-            connection_type=request.connection_type,
-            host=request.host,
-            port=request.port,
-            direction=connection_direction,
-            credentials_vault_ref=request.credentials_vault_ref,
-            active=True,
-        )
-        self.session.add(record)
+        directions = ["INBOUND", "OUTBOUND"] if request.direction == "BOTH" else [request.direction]
+
+        for dir_val in directions:
+            record = GlobalConnection(
+                id=conn_id if len(directions) == 1 else uuid.uuid4(),
+                trading_partner_id=trading_partner_id,
+                tenant_id=tenant_id,
+                connection_type=request.connection_type,
+                host=request.host,
+                port=request.port,
+                direction=dir_val,
+                credentials_vault_ref=request.credentials_vault_ref,
+                active=True,
+            )
+            self.session.add(record)
+
         await self.session.flush()
         return conn_id
 
-    async def create_outbox_event(self, event_type: str, payload: dict[str, Any]) -> UUID:
+    async def create_outbox_event(
+        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+    ) -> UUID:
         event_id = uuid.uuid4()
         record = GlobalOutbox(
             id=event_id,
+            tenant_id=tenant_id,
             idempotency_key=uuid.uuid4(),
             event_type=event_type,
             payload=payload,

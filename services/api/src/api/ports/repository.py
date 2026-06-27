@@ -22,6 +22,8 @@ class ControlPlaneRepositoryPort(Protocol):
         """Inserts a Connection for the Trading Partner."""
         ...
 
-    async def create_outbox_event(self, event_type: str, payload: dict[str, Any]) -> UUID:
+    async def create_outbox_event(
+        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+    ) -> UUID:
         """Inserts an Outbox event into the Global DB."""
         ...

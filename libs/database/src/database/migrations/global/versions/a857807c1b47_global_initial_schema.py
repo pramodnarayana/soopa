@@ -169,6 +169,7 @@ def upgrade() -> None:
     op.create_table(
         "outbox",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("idempotency_key", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),

@@ -152,9 +152,19 @@ async def poll_sqs_queue(
                                 "aws_endpoint": aws_endpoint,
                             }
                             if queue_name == "DeliverQueue":
-                                kwargs["target_url"] = payload.get(
-                                    "target", "https://example.com/webhook"
-                                )
+                                target_url = payload.get("target")
+                                if not target_url:
+                                    logger.error(
+                                        f"[{queue_name}] Missing target URL for trace_id={trace_id}"
+                                    )
+                                    await sqs.delete_message(
+                                        QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                                    )
+                                    logger.warning(
+                                        f"[{queue_name}] Deleted poison message without target"
+                                    )
+                                    continue
+                                kwargs["target_url"] = target_url
 
                             await processor_func(**kwargs)
 

@@ -135,6 +135,7 @@ class Outbox(GlobalBase, OutboxMixin):
     __tablename__ = "outbox"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id = Column(Integer, nullable=False)
 
     __table_args__ = (
         Index(

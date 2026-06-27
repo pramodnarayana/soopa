@@ -33,21 +33,29 @@ class InMemoryControlPlaneRepository(ControlPlaneRepositoryPort):
     async def create_connection(
         self, trading_partner_id: UUID, tenant_id: int, request: CreateTradingPartnerRequest
     ) -> UUID:
-        conn_id = uuid.uuid4()
-        self.connections[conn_id] = {
-            "trading_partner_id": trading_partner_id,
-            "tenant_id": tenant_id,
-            "connection_type": request.connection_type,
-            "host": request.host,
-            "port": request.port,
-            "direction": request.direction,
-            "credentials_vault_ref": request.credentials_vault_ref,
-        }
-        return conn_id
+        directions = ["INBOUND", "OUTBOUND"] if request.direction == "BOTH" else [request.direction]
+        first_conn_id = None
+        for dir_val in directions:
+            conn_id = uuid.uuid4()
+            if not first_conn_id:
+                first_conn_id = conn_id
+            self.connections[conn_id] = {
+                "trading_partner_id": trading_partner_id,
+                "tenant_id": tenant_id,
+                "connection_type": request.connection_type,
+                "host": request.host,
+                "port": request.port,
+                "direction": dir_val,
+                "credentials_vault_ref": request.credentials_vault_ref,
+            }
+        return first_conn_id
 
-    async def create_outbox_event(self, event_type: str, payload: dict[str, Any]) -> UUID:
+    async def create_outbox_event(
+        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+    ) -> UUID:
         event_id = uuid.uuid4()
         self.outbox[event_id] = {
+            "tenant_id": tenant_id,
             "event_type": event_type,
             "payload": payload,
         }
@@ -78,7 +86,7 @@ async def test_provisioning_service_zero_mocks():
 
     # Assert DB state
     assert len(repo.partners) == 1
-    assert len(repo.connections) == 1
+    assert len(repo.connections) == 2  # BOTH direction creates 2 connections
     assert len(repo.outbox) == 1
 
     partner_id = response.trading_partner_id

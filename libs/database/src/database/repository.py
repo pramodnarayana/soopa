@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from identity.tenant_context import get_tenant_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,10 +64,10 @@ class EdiMessageRepository:
 
     async def save_message(
         self,
-        trace_id: str,
+        trace_id: UUID,
         direction: str,
         connection_type: str,
-        trading_partner_id: str,
+        trading_partner_id: UUID,
         s3_key: str,
         status: str = "RECEIVED",
         as2_message_id: str | None = None,
