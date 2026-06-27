@@ -1,0 +1,125 @@
+version: "3.9"
+
+  # Include the observability and identity stacks
+include:
+  # - soopaedi/libs/observability/docker/docker-compose.yml
+  - soopaedi/libs/identity/docker/docker-compose.yml
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Postgres Databases (Hybrid Multi-Tenancy Architecture)
+  # ---------------------------------------------------------------------------
+
+  # 1. Global Control Plane DB
+  postgres_global:
+    image: postgres:15-alpine
+    container_name: edi_postgres_global
+    environment:
+      POSTGRES_USER: edi
+      POSTGRES_PASSWORD: edi_password
+      POSTGRES_DB: edi_global
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_global_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Standard Tier (Pooled Shard) DB
+  postgres_shard_1:
+    image: postgres:15-alpine
+    container_name: edi_postgres_shard_1
+    environment:
+      POSTGRES_USER: edi
+      POSTGRES_PASSWORD: edi_password
+      POSTGRES_DB: edi_shard_1
+    command: ["postgres", "-c", "wal_level=logical"]
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_shard_1_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # LocalStack (AWS Cloud Emulator for S3, SQS, SNS, KMS, etc.)
+  # ---------------------------------------------------------------------------
+  localstack:
+    image: localstack/localstack:3.8.0
+    container_name: edi_localstack
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # external services port range
+    environment:
+      - DEBUG=${DEBUG:-0}
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      # Auto-init scripts are executed when LocalStack boots
+      - ./docker/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+#  # ---------------------------------------------------------------------------
+#  # EDI AS2 Server (FastAPI)
+#  # ---------------------------------------------------------------------------
+#  as2-server:
+#    build:
+#      context: .
+#      dockerfile: soopaedi/services/as2_server/Dockerfile
+#    container_name: edi_as2_server
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      - APP_ENV=development
+#      - LOG_LEVEL=DEBUG
+#      - DB_URL=postgresql+asyncpg://edi:edi_password@postgres:5432/edi
+#      - S3_BUCKET=edi-as2-payloads
+#      - S3_ENDPOINT_URL=http://localstack:4566
+#      - S3_REGION=us-east-1
+#      - S3_ACCESS_KEY_ID=test
+#      - S3_SECRET_ACCESS_KEY=test
+#      - OTEL_SERVICE_NAME=edi-as2-server
+#      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+#    depends_on:
+#      postgres:
+#        condition: service_healthy
+#      localstack:
+#        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Debezium CDC Server
+  # ---------------------------------------------------------------------------
+  debezium:
+    image: debezium/server:2.7
+    container_name: edi_debezium
+    environment:
+      - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=postgres_shard_1
+      - DEBEZIUM_SOURCE_DATABASE_PORT=5432
+      - DEBEZIUM_SOURCE_DATABASE_USER=edi
+      - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
+      - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
+      - DEBEZIUM_SINK_URL=http://host.docker.internal:8001/internal/cdc/relay
+    volumes:
+      - ./docker/debezium:/debezium/conf
+      - debezium_data:/debezium/data
+    depends_on:
+      postgres_shard_1:
+        condition: service_healthy
+
+volumes:
+  postgres_global_data:
+  postgres_shard_1_data:
+  postgres_enterprise_1_data:
+  debezium_data:

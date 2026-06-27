@@ -64,8 +64,11 @@ class SQLAlchemyIdentityRepository(IIdentityRepository):
             return tenant_id
 
         # 2. Create Tenant
+        tenant_uuid = uuid.uuid4().hex[:8]
         tenant = Tenant(
-            name=f"{user.name}'s Organization ({uuid.uuid4().hex[:8]})", shard_id=int(shard.id)
+            name=f"{user.name}'s Organization ({tenant_uuid})",
+            shard_id=int(shard.id),
+            shard_schema=f"tenant_{tenant_uuid}",
         )
         self.session.add(tenant)
         await self.session.flush()

@@ -1,55 +1,112 @@
-from unittest.mock import AsyncMock, patch
+from typing import Any
 
+import pytest
+from api.dependencies import get_message_queue
 from api.main import app
+from api.ports.message_queue import MessageQueuePort
 from fastapi.testclient import TestClient
+
+
+class InMemoryQueueAdapter(MessageQueuePort):
+    def __init__(self) -> None:
+        self.sent_messages: list[tuple[str, dict[str, Any]]] = []
+
+    async def send(self, queue_name: str, payload: dict[str, Any]) -> None:
+        self.sent_messages.append((queue_name, payload))
+
+
+@pytest.fixture
+def memory_queue() -> InMemoryQueueAdapter:
+    queue = InMemoryQueueAdapter()
+    app.dependency_overrides[get_message_queue] = lambda: queue
+    return queue
+
 
 client = TestClient(app)
 
 
-def test_cdc_relay_successful_routing():
-    """Tests the CDC relay correctly handles an edi_transformer_outbox insert event."""
+def test_cdc_relay_successful_translate_routing(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests the CDC relay correctly handles an outbox TRANSLATE insert event."""
     payload = {
         "__op": "c",
-        "__table": "edi_transformer_outbox",
-        "trace_id": "req-123",
-        "s3_uri": "s3://edi-bucket/raw.x12",
+        "__table": "outbox",
+        "idempotency_key": "uuid-123",
+        "event_type": "TRANSLATE",
+        "payload": {"trace_id": "req-123"},
+        "status": "PENDING",
+        "tenant_id": 999,
     }
 
-    with patch("api.cdc_relay.queue_service.send", new_callable=AsyncMock) as mock_send:
-        # Should return 202 Accepted and log internally
-        response = client.post("/internal/cdc/relay", json=payload)
-        assert response.status_code == 202
-
-        # Verify SQS send was called correctly
-        mock_send.assert_called_once_with(
-            queue_name="EdiTransformerQueue",
-            payload={"trace_id": "req-123", "s3_uri": "s3://edi-bucket/raw.x12"},
-        )
-
-
-def test_cdc_relay_ignores_updates_and_deletes():
-    """Tests that updates/deletes to append-only outboxes are safely ignored."""
-    payload = {
-        "__op": "u",
-        "__table": "edi_transformer_outbox",
-        "trace_id": "req-123",
-        "s3_uri": "s3://edi-bucket/raw.x12",
-    }
-
-    # Should return 200/202 instantly without processing
     response = client.post("/internal/cdc/relay", json=payload)
     assert response.status_code == 202
 
+    assert len(memory_queue.sent_messages) == 1
+    queue_name, msg_payload = memory_queue.sent_messages[0]
+    assert queue_name == "TranslateQueue"
+    assert msg_payload == {
+        "idempotency_key": "uuid-123",
+        "event_type": "TRANSLATE",
+        "payload": {"trace_id": "req-123"},
+        "tenant_id": 999,
+    }
 
-def test_cdc_relay_rejects_unknown_table():
+
+def test_cdc_relay_successful_deliver_routing(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests the CDC relay correctly handles an outbox DELIVER insert event."""
+    payload = {
+        "__op": "c",
+        "__table": "outbox",
+        "idempotency_key": "uuid-456",
+        "event_type": "DELIVER",
+        "payload": {"trace_id": "req-123", "target": "webhook"},
+        "status": "PENDING",
+        "tenant_id": 999,
+    }
+
+    response = client.post("/internal/cdc/relay", json=payload)
+    assert response.status_code == 202
+
+    assert len(memory_queue.sent_messages) == 1
+    queue_name, msg_payload = memory_queue.sent_messages[0]
+    assert queue_name == "DeliverQueue"
+    assert msg_payload == {
+        "idempotency_key": "uuid-456",
+        "event_type": "DELIVER",
+        "payload": {"trace_id": "req-123", "target": "webhook"},
+        "tenant_id": 999,
+    }
+
+
+def test_cdc_relay_ignores_updates_and_deletes(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests that updates/deletes to append-only outboxes are safely ignored."""
+    payload = {
+        "__op": "u",
+        "__table": "outbox",
+        "idempotency_key": "uuid-123",
+        "event_type": "TRANSLATE",
+        "payload": {},
+        "status": "PENDING",
+        "tenant_id": 999,
+    }
+
+    response = client.post("/internal/cdc/relay", json=payload)
+    assert response.status_code == 202
+    assert len(memory_queue.sent_messages) == 0
+
+
+def test_cdc_relay_rejects_unknown_table(memory_queue: InMemoryQueueAdapter) -> None:
     """Tests the CDC relay fails explicitly on unknown table sources to prevent silent drops."""
     payload = {
         "__op": "c",
         "__table": "unknown_table",
-        "trace_id": "req-123",
-        "s3_uri": "s3://edi-bucket/raw.x12",
+        "idempotency_key": "uuid-123",
+        "event_type": "TRANSLATE",
+        "payload": {},
+        "status": "PENDING",
+        "tenant_id": 999,
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
     assert response.status_code == 400
     assert response.json()["detail"] == "Unknown table source"
+    assert len(memory_queue.sent_messages) == 0

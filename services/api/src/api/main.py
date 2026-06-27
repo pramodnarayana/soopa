@@ -9,6 +9,7 @@ from identity.dependencies import get_current_tenant_id, get_tenant_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
+from api.routers import partners
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ app = FastAPI(
 )
 
 app.include_router(cdc_relay.router)
+app.include_router(partners.router)
 
 
 @app.get("/api/me", tags=["Identity"])

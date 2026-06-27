@@ -45,11 +45,13 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('shard_id', sa.Integer(), nullable=False),
     sa.Column('tier', sa.String(length=50), nullable=False),
+    sa.Column('shard_schema', sa.String(length=255), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['shard_id'], ['database_shards.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('idp_tenant_id'),
-    sa.UniqueConstraint('name')
+    sa.UniqueConstraint('name'),
+    sa.UniqueConstraint('shard_schema')
     )
     op.create_table('tenant_users',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),

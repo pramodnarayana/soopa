@@ -79,13 +79,13 @@ seed: db-init
 
 infra-up:
 	@echo "Starting local infrastructure (Background DB, S3, OTel)..."
-	docker compose -f ../docker-compose.yml up -d
+	docker compose -f ./docker-compose.yml up -d
 	@echo "\n=> Infrastructure started! Run 'make db-init' to apply migrations and seed data."
 
 infra-down:
 	@echo "Stopping local infrastructure..."
-	docker compose -f ../docker-compose.yml down
+	docker compose -f ./docker-compose.yml down
 
 infra-logs:
 	@echo "Tailing infrastructure logs..."
-	docker compose -f ../docker-compose.yml logs -f
+	docker compose -f ./docker-compose.yml logs -f

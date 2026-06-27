@@ -16,8 +16,7 @@ from as2_core import (
 )
 from config.settings import get_settings
 from database.repository import (
-    AS2PayloadRepository,
-    HostIdentityRepository,
+    EdiMessageRepository,
     TradingPartnerRepository,
 )
 from database.s3 import Aioboto3PayloadStorage, IPayloadStorage
@@ -92,6 +91,11 @@ def get_s3_storage() -> IPayloadStorage:
     return s3_storage
 
 
+def get_host_private_key() -> bytes:
+    # Temporary fallback: in a real implementation this would come from a secure keystore/env
+    return b""
+
+
 S3Dep = Annotated[IPayloadStorage, Depends(get_s3_storage)]
 
 
@@ -136,8 +140,7 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
 
     with tenant_context(tenant_id):
         partner_repo = TradingPartnerRepository(session)
-        payload_repo = AS2PayloadRepository(session)
-        identity_repo = HostIdentityRepository(session)
+        payload_repo = EdiMessageRepository(session)
 
         metrics.increment(
             "as2_messages_received_total",
@@ -158,9 +161,9 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         if as2_msg.is_encrypted:
             with tracer.start_span("as2.decrypt") as span:
                 try:
-                    private_key_pem = await identity_repo.get_host_private_key()
+                    private_key_pem = get_host_private_key()
                     if not private_key_pem:
-                        raise ValueError("Host private key not found in database for decryption.")
+                        raise ValueError("Host private key not found for decryption.")
 
                     # Passing empty bytes for our cert since decrypt_payload expects it (legacy compat)
                     processed_payload = decrypt_payload(raw_body, private_key_pem, b"")
@@ -180,7 +183,7 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         if as2_msg.is_signed and "failed" not in disposition:
             with tracer.start_span("as2.verify_signature") as span:
                 partner = await partner_repo.find_by_as2_id(as2_msg.as2_from)
-                if not partner or not partner.public_cert_pem:
+                if not partner:
                     span.set_status_error("Unknown trading partner")
                     metrics.increment(
                         "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
@@ -188,9 +191,8 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
                     logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
                     disposition = "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
                 else:
-                    is_valid, verified_payload = verify_signature(
-                        processed_payload, partner.public_cert_pem.encode()
-                    )
+                    # In a real system, fetch cert from Vault using Connection.credentials_vault_ref
+                    is_valid, verified_payload = verify_signature(processed_payload, b"")
                     if not is_valid:
                         span.set_status_error("Signature invalid")
                         metrics.increment(
@@ -212,14 +214,13 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         # --- Step 5: Persist Metadata to DB ---
         with tracer.start_span("as2.db_persist"):
             status = "ERROR" if "failed" in disposition else "RECEIVED"
-            await payload_repo.save_payload(
-                message_id=as2_msg.message_id,
+            await payload_repo.save_message(
+                trace_id=as2_msg.message_id,
                 direction="INBOUND",
-                as2_from=as2_msg.as2_from,
-                as2_to=as2_msg.as2_to,
+                connection_type="AS2",
+                trading_partner_id=as2_msg.as2_from,
+                s3_key=storage_uri,
                 status=status,
-                payload_storage_uri=storage_uri,
-                raw_headers=str(headers),
             )
 
         # --- Step 6: Generate MDN ---
