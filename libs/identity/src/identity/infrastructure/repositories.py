@@ -66,8 +66,13 @@ class SQLAlchemyIdentityRepository(IIdentityRepository):
 
         # 2. Create Tenant
         tenant_uuid = uuid.uuid4().hex
+        # Cap base name to ensure total length stays within 255 chars
+        # Format: "<base_name>'s Organization (<uuid>)"
+        # Reserve: 17 chars for "'s Organization (" + 32 for hex UUID + 1 for ")" = 50 chars
+        max_base_name_len = 255 - 50
+        base_name = user.name[:max_base_name_len] if len(user.name) > max_base_name_len else user.name
         tenant = Tenant(
-            name=f"{user.name}'s Organization ({tenant_uuid})",
+            name=f"{base_name}'s Organization ({tenant_uuid})",
             shard_id=int(shard.id),
             shard_schema=f"tenant_{tenant_uuid}",
         )

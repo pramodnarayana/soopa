@@ -21,6 +21,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
     # ── Replicated Config (synced from Global Control Plane) ──────────────────
 
     op.create_table(
