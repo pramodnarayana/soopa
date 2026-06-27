@@ -40,18 +40,27 @@ def validate_target_url(url: str) -> bool:
             logger.warning("SSRF check failed: missing hostname")
             return False
 
-        # Block private IP ranges and localhost
+        # Resolve all A/AAAA records for the hostname
+        import socket
+
         try:
-            ip = ipaddress.ip_address(parsed.hostname)
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                logger.warning(f"SSRF check failed: private/internal IP {ip}")
-                return False
-        except ValueError:
-            # Not an IP address, check hostname patterns
-            hostname_lower = parsed.hostname.lower()
-            blocked_patterns = ["localhost", "127.", "169.254.", "::1", "0.0.0.0"]
-            if any(pattern in hostname_lower for pattern in blocked_patterns):
-                logger.warning(f"SSRF check failed: blocked hostname {parsed.hostname}")
+            # getaddrinfo returns a list of 5-tuples: (family, type, proto, canonname, sockaddr)
+            addr_info = socket.getaddrinfo(parsed.hostname, None)
+        except socket.gaierror:
+            logger.warning(f"SSRF check failed: could not resolve hostname {parsed.hostname}")
+            return False
+
+        for addr in addr_info:
+            ip_str = addr[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+            ):
+                logger.warning(f"SSRF check failed: resolved to private/internal IP {ip}")
                 return False
 
         return True
@@ -206,8 +215,10 @@ async def poll_sqs_queue(
                                     continue
                                 # SSRF validation
                                 if not validate_target_url(target_url):
+                                    safe_parsed = urlparse(target_url)
+                                    safe_url = f"{safe_parsed.scheme}://{safe_parsed.hostname}:{safe_parsed.port or ''}"
                                     logger.error(
-                                        f"[{queue_name}] SSRF check failed for target_url={target_url}, "
+                                        f"[{queue_name}] SSRF check failed for target_url={safe_url}, "
                                         f"trace_id={trace_id}"
                                     )
                                     await sqs.delete_message(

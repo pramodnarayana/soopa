@@ -92,9 +92,13 @@ async def test_provisioning_service_zero_mocks():
     partner_id = response.trading_partner_id
     assert repo.partners[partner_id]["partner_name"] == "Acme Corp"
 
-    conn = list(repo.connections.values())[0]
-    assert conn["trading_partner_id"] == partner_id
-    assert conn["host"] == "as2.acme.com"
+    connections = list(repo.connections.values())
+    directions = {c["direction"] for c in connections}
+    assert directions == {"INBOUND", "OUTBOUND"}
+
+    for conn in connections:
+        assert conn["trading_partner_id"] == partner_id
+        assert conn["host"] == "as2.acme.com"
 
     outbox_event = list(repo.outbox.values())[0]
     assert outbox_event["event_type"] == "TRADING_PARTNER_PROVISION"

@@ -102,7 +102,7 @@ services:
   # Debezium CDC Server
   # ---------------------------------------------------------------------------
   debezium:
-    image: debezium/server:2.7
+    image: quay.io/debezium/server:2.7.3.Final
     container_name: edi_debezium
     environment:
       - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=postgres_shard_1

@@ -48,3 +48,6 @@ htmlcov/
 .env
 .env.*
 !.env.example
+
+# LocalStack Data
+volume/

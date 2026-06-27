@@ -156,11 +156,13 @@ def upgrade() -> None:
     op.create_table(
         "field_mapping_rules",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False, server_default=sa.text("gen_random_uuid()")),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
         sa.Column("route_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("source_path", sa.Text(), nullable=False),
         sa.Column("dest_path", sa.Text(), nullable=False),
         sa.Column("required", sa.Boolean(), nullable=True),
         sa.Column("sort_order", sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["route_id"], ["routes.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

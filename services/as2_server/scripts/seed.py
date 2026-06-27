@@ -60,7 +60,7 @@ async def seed_database() -> None:
                 tenant_obj.shard_schema = "tenant_host"  # type: ignore[assignment]
                 needs_repair = True
             if tenant_obj.shard_id != shard.id:
-                tenant_obj.shard_id = shard.id  # type: ignore[assignment]
+                tenant_obj.shard_id = shard.id
                 needs_repair = True
             if needs_repair:
                 session.add(tenant_obj)

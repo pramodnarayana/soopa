@@ -11,7 +11,7 @@ class HttpxDeliveryAdapter(HttpDeliveryPort):
         self.timeout = timeout_secs
 
     async def deliver(self, url: str, payload: bytes) -> int:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
             response = await client.post(
                 url, content=payload, headers={"Content-Type": "application/json"}
             )

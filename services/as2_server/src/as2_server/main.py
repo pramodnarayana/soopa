@@ -156,7 +156,7 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
     from database.models.control_plane import TradingPartner as GlobalTradingPartner
     from sqlalchemy import select as sql_select
 
-    tenant_id = 1  # Default fallback
+    tenant_id = None
     try:
         result = await session.execute(
             sql_select(GlobalTradingPartner.tenant_id)
@@ -164,11 +164,23 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             .where(GlobalTradingPartner.active.is_(True))
             .limit(1)
         )
-        resolved_tenant_id = result.scalar_one_or_none()
-        if resolved_tenant_id is not None:
-            tenant_id = resolved_tenant_id
+        tenant_id = result.scalar_one_or_none()
     except Exception as e:
         logger.warning("tenant_resolution_failed", error=str(e), as2_to=as2_msg.as2_to)
+
+    if tenant_id is None:
+        metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
+        logger.warning("as2_unknown_tenant", as2_to=as2_msg.as2_to)
+        disposition = (
+            "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
+        )
+        mdn = generate_mdn(original_message=as2_msg, disposition=disposition)
+        return Response(
+            content=render_mdn_report(mdn),
+            status_code=200,
+            media_type='multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"',
+            headers={"AS2-Version": "1.2", "EDIINT-Features": "multiple-attachments"},
+        )
 
     logger = logger.bind(message_id=as2_msg.message_id, tenant_id=tenant_id)
 

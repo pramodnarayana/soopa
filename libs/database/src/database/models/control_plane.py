@@ -126,8 +126,17 @@ class FieldMappingRule(GlobalBase, FieldMappingRuleMixin):
     __tablename__ = "field_mapping_rules"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id = Column(Integer, nullable=False)
     route_id = Column(
         UUID(as_uuid=True), ForeignKey("routes.id", ondelete="CASCADE"), nullable=False
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            ondelete="CASCADE",
+        ),
     )
 
 

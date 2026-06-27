@@ -39,7 +39,7 @@ class ConnectionRepository:
         return tenant_id
 
     async def find_by_partner_id(
-        self, partner_id: str, connection_type: str
+        self, partner_id: UUID, connection_type: str
     ) -> TenantConnection | None:
         result = await self.session.execute(
             select(TenantConnection).where(
