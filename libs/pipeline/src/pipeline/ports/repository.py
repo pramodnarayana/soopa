@@ -33,3 +33,7 @@ class RepositoryPort(Protocol):
     async def update_api_payload_status(self, trace_id: str, status: str) -> None:
         """Updates the status of an API Payload."""
         ...
+
+    async def claim_api_payload(self, trace_id: str) -> bool:
+        """Atomically claims an API Payload for delivery."""
+        ...

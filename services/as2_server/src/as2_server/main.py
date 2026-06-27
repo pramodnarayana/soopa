@@ -92,8 +92,14 @@ def get_s3_storage() -> IPayloadStorage:
 
 
 def get_host_private_key() -> bytes:
-    # Temporary fallback: in a real implementation this would come from a secure keystore/env
-    return b""
+    """
+    Load the host AS2 private key PEM from an environment variable or mounted secret.
+    In production, this should be sourced from a secure vault (e.g. HashiCorp Vault / AWS Secrets Manager).
+    """
+    import os
+
+    key_pem = os.getenv("AS2_HOST_PRIVATE_KEY_PEM", "")
+    return key_pem.encode("utf-8") if key_pem else b""
 
 
 S3Dep = Annotated[IPayloadStorage, Depends(get_s3_storage)]
@@ -191,8 +197,11 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
                     logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
                     disposition = "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
                 else:
-                    # In a real system, fetch cert from Vault using Connection.credentials_vault_ref
-                    is_valid, verified_payload = verify_signature(processed_payload, b"")
+                    # Prefer the partner's stored cert; fall back to empty for test environments
+                    partner_cert = (
+                        partner.public_cert_pem.encode("utf-8") if partner.public_cert_pem else b""
+                    )
+                    is_valid, verified_payload = verify_signature(processed_payload, partner_cert)
                     if not is_valid:
                         span.set_status_error("Signature invalid")
                         metrics.increment(

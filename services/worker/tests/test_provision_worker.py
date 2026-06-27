@@ -48,27 +48,31 @@ async def test_replicate_tenant_config() -> None:
 
     # Mock global execution to return some scalars for TP, Conn, Route
     mock_tp = MagicMock()
-    mock_tp.id = "id"
-    mock_tp.name = "name"
-    mock_tp.as2_id = "as2"
-    mock_tp.is_host = True
-    mock_tp.metadata_ = {}
+    mock_tp.id = "tp-uuid"
+    mock_tp.partner_name = "Acme Corp"
+    mock_tp.as2_id = "ACME"
+    mock_tp.direction = "BOTH"
+    mock_tp.active = True
 
     mock_conn = MagicMock()
-    mock_conn.id = "id"
-    mock_conn.trading_partner_id = "tpid"
-    mock_conn.protocol = "AS2"
+    mock_conn.id = "conn-uuid"
+    mock_conn.trading_partner_id = "tp-uuid"
+    mock_conn.connection_type = "AS2"
+    mock_conn.host = "as2.acme.com"
+    mock_conn.port = 4080
     mock_conn.direction = "INBOUND"
-    mock_conn.endpoint_url = "url"
-    mock_conn.is_active = True
+    mock_conn.credentials_vault_ref = "vault://acme"
+    mock_conn.poll_interval_secs = None
+    mock_conn.active = True
 
     mock_route = MagicMock()
-    mock_route.id = "id"
-    mock_route.source_partner_id = "sid"
-    mock_route.target_partner_id = "tid"
-    mock_route.document_type = "850"
-    mock_route.transformation_rule = "rule"
-    mock_route.is_active = True
+    mock_route.id = "route-uuid"
+    mock_route.source_partner_id = "tp-uuid"
+    mock_route.target_partner_id = "tp-uuid-2"
+    mock_route.source_format = "X12"
+    mock_route.target_format = "JSON"
+    mock_route.transaction_type = "850"
+    mock_route.active = True
 
     # We have 3 queries in replicate_tenant_config (TP, Conn, Route)
     mock_result_tp = MagicMock()

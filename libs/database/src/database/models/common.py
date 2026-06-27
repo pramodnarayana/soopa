@@ -18,6 +18,7 @@ class TradingPartnerMixin:
     as2_id = Column(String(255), nullable=True)
     direction = Column(String(50), nullable=False)  # INBOUND, OUTBOUND, BOTH
     active = Column(Boolean, default=True)
+    public_cert_pem = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

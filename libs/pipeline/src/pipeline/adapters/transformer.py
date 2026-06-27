@@ -19,8 +19,10 @@ class BotsTransformerAdapter(TransformerPort):
         Translates EDI to JSON using the wrapped BOTS facade.
         """
         parsed_payload = await self._adapter.translate(payload)
-        # Assuming one transaction for now
-        return parsed_payload.transactions[0].data if parsed_payload.transactions else {}
+        for txn in parsed_payload.transactions:
+            if txn.transaction_type == transaction_type:
+                return txn.data
+        return {}
 
     async def translate_json_to_edi(
         self, payload: dict[str, Any], standard: str, transaction_type: str
@@ -28,5 +30,4 @@ class BotsTransformerAdapter(TransformerPort):
         """
         Translates JSON to EDI using the wrapped BOTS facade.
         """
-        # Not yet implemented in BotsEDIAdapter, but returning dummy for now to satisfy interface
-        return b"ST*850*0001~SE*2*0001~"
+        raise NotImplementedError("JSON to EDI translation is not yet supported via BOTS.")

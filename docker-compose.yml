@@ -2,8 +2,8 @@ version: "3.9"
 
   # Include the observability and identity stacks
 include:
-  # - soopaedi/libs/observability/docker/docker-compose.yml
-  - soopaedi/libs/identity/docker/docker-compose.yml
+  # - libs/observability/docker/docker-compose.yml
+  - libs/identity/docker/docker-compose.yml
 
 services:
 
@@ -111,6 +111,8 @@ services:
       - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
       - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
       - DEBEZIUM_SINK_URL=http://host.docker.internal:8001/internal/cdc/relay
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./docker/debezium:/debezium/conf
       - debezium_data:/debezium/data

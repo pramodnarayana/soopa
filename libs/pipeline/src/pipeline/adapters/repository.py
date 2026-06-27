@@ -91,3 +91,17 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             .values(status=status)
         )
         await self.session.flush()
+
+    async def claim_api_payload(self, trace_id: str) -> bool:
+        stmt = (
+            update(ApiPayload)
+            .where(
+                ApiPayload.trace_id == uuid.UUID(trace_id),
+                ApiPayload.status == "PENDING_DELIVERY",
+            )
+            .values(status="PROCESSING")
+            .returning(ApiPayload.id)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.scalar_one_or_none() is not None

@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -11,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 
 from .common import (
     ConnectionMixin,
@@ -52,9 +53,11 @@ class User(GlobalBase):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     idp_user_id = Column(String(255), nullable=True, unique=True)
-    email = Column(String(255), nullable=False, unique=True)
+    email = Column(String(255), nullable=False)
     name = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (Index("uq_users_email_lower", text("lower(email)"), unique=True),)
 
 
 class TenantUser(GlobalBase):
@@ -78,15 +81,23 @@ class TradingPartner(GlobalBase, TradingPartnerMixin):
     provision_status = Column(String(50), nullable=False, default="PROVISIONING")
     provisioned_at = Column(DateTime, nullable=True)
 
+    __table_args__ = (UniqueConstraint("id", "tenant_id", name="uq_tp_tenant"),)
+
 
 class Connection(GlobalBase, ConnectionMixin):
     __tablename__ = "connections"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    trading_partner_id = Column(
-        UUID(as_uuid=True), ForeignKey("trading_partners.id", ondelete="CASCADE"), nullable=False
-    )
+    trading_partner_id = Column(UUID(as_uuid=True), nullable=False)
     tenant_id = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["trading_partner_id", "tenant_id"],
+            ["trading_partners.id", "trading_partners.tenant_id"],
+            ondelete="CASCADE",
+        ),
+    )
 
 
 class Route(GlobalBase, RouteMixin):
@@ -94,11 +105,20 @@ class Route(GlobalBase, RouteMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     tenant_id = Column(Integer, nullable=False)
-    source_partner_id = Column(
-        UUID(as_uuid=True), ForeignKey("trading_partners.id", ondelete="CASCADE"), nullable=True
-    )
-    target_partner_id = Column(
-        UUID(as_uuid=True), ForeignKey("trading_partners.id", ondelete="CASCADE"), nullable=True
+    source_partner_id = Column(UUID(as_uuid=True), nullable=True)
+    target_partner_id = Column(UUID(as_uuid=True), nullable=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_partner_id", "tenant_id"],
+            ["trading_partners.id", "trading_partners.tenant_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["target_partner_id", "tenant_id"],
+            ["trading_partners.id", "trading_partners.tenant_id"],
+            ondelete="CASCADE",
+        ),
     )
 
 

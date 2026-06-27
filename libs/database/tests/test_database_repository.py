@@ -67,4 +67,4 @@ async def test_edi_message_repository_save_message(mock_get_tenant_id: Any) -> N
     assert result.direction == "INBOUND"
     assert result.status == "RECEIVED"
     session.add.assert_called_once()
-    session.flush.assert_called_once()
+    session.flush.assert_awaited_once()

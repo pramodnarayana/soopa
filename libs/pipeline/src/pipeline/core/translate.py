@@ -63,9 +63,10 @@ class TranslationService:
             status="PENDING_DELIVERY",
         )
 
-        # 5. Publish DELIVER event
+        # 5. Publish DELIVER event with a stable idempotency key derived from trace_id
+        deliver_idempotency_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:DELIVER"))
         await self.repository.publish_outbox_event(
-            idempotency_key=str(uuid.uuid4()),
+            idempotency_key=deliver_idempotency_key,
             event_type="DELIVER",
             payload={"trace_id": trace_id},
         )

@@ -16,10 +16,11 @@ class InMemoryQueueAdapter(MessageQueuePort):
 
 
 @pytest.fixture
-def memory_queue() -> InMemoryQueueAdapter:
+def memory_queue() -> InMemoryQueueAdapter:  # type: ignore[misc]
     queue = InMemoryQueueAdapter()
     app.dependency_overrides[get_message_queue] = lambda: queue
-    return queue
+    yield queue
+    app.dependency_overrides.pop(get_message_queue, None)
 
 
 client = TestClient(app)
@@ -109,4 +110,40 @@ def test_cdc_relay_rejects_unknown_table(memory_queue: InMemoryQueueAdapter) -> 
     response = client.post("/internal/cdc/relay", json=payload)
     assert response.status_code == 400
     assert response.json()["detail"] == "Unknown table source"
+    assert len(memory_queue.sent_messages) == 0
+
+
+def test_cdc_relay_rejects_unknown_event_type(memory_queue: InMemoryQueueAdapter) -> None:
+    """Unknown event types must fail-fast so they are not silently dropped."""
+    payload = {
+        "__op": "c",
+        "__table": "outbox",
+        "idempotency_key": "uuid-789",
+        "event_type": "MYSTERY_EVENT",
+        "payload": {"trace_id": "req-123"},
+        "status": "PENDING",
+        "tenant_id": 999,
+    }
+
+    response = client.post("/internal/cdc/relay", json=payload)
+    assert response.status_code == 400
+    assert "MYSTERY_EVENT" in response.json()["detail"]
+    assert len(memory_queue.sent_messages) == 0
+
+
+def test_cdc_relay_rejects_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
+    """Payloads without trace_id must be rejected to prevent poison messages in SQS."""
+    payload = {
+        "__op": "c",
+        "__table": "outbox",
+        "idempotency_key": "uuid-no-trace",
+        "event_type": "TRANSLATE",
+        "payload": {},  # Missing trace_id
+        "status": "PENDING",
+        "tenant_id": 999,
+    }
+
+    response = client.post("/internal/cdc/relay", json=payload)
+    assert response.status_code == 400
+    assert "trace_id" in response.json()["detail"]
     assert len(memory_queue.sent_messages) == 0

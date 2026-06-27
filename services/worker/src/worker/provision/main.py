@@ -177,11 +177,19 @@ async def poll_global_outbox(
                     # Mark outbox event as processed
                     outbox_event.status = "PROCESSED"  # type: ignore
                     await global_session.commit()
-                except Exception as e:
+                except (ValueError, KeyError) as e:
+                    # Permanent data errors: bad payload or missing key — mark FAILED
                     await tenant_session.rollback()
-                    logger.exception(f"Error provisioning tenant {tenant_id}: {e}")
+                    logger.error(f"Permanent provisioning failure for tenant {tenant_id}: {e}")
                     outbox_event.status = "FAILED"  # type: ignore
                     await global_session.commit()
+                except Exception as e:
+                    # Transient errors (network, DB): leave PENDING for retry
+                    await tenant_session.rollback()
+                    logger.exception(
+                        f"Transient error provisioning tenant {tenant_id}, will retry: {e}"
+                    )
+                    # Do NOT change status — let the poller pick it up again
                 finally:
                     with contextlib.suppress(StopAsyncIteration):
                         await tenant_gen.__anext__()

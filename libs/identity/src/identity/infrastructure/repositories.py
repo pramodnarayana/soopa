@@ -5,6 +5,7 @@ from identity.application.ports import IIdentityRepository
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import func
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class SQLAlchemyIdentityRepository(IIdentityRepository):
         self.session = session
 
     async def get_user_id_by_email(self, email: str) -> int | None:
-        stmt = select(User).where(User.email == email)
+        stmt = select(User).where(func.lower(User.email) == email.lower())
         user = (await self.session.execute(stmt)).scalar_one_or_none()
         return int(user.id) if user else None
 
@@ -42,7 +43,7 @@ class SQLAlchemyIdentityRepository(IIdentityRepository):
             raise RuntimeError("Default shard not found for provisioning")
 
         # 1. Create User
-        user = User(email=email, name=name or str(email).split("@")[0])
+        user = User(email=email.lower(), name=name or str(email).split("@")[0])
         self.session.add(user)
         try:
             await self.session.flush()
@@ -64,9 +65,9 @@ class SQLAlchemyIdentityRepository(IIdentityRepository):
             return tenant_id
 
         # 2. Create Tenant
-        tenant_uuid = uuid.uuid4().hex[:8]
+        tenant_uuid = uuid.uuid4().hex
         tenant = Tenant(
-            name=f"{user.name}'s Organization ({tenant_uuid})",
+            name=f"{user.name}'s Organization ({tenant_uuid[:8]})",
             shard_id=int(shard.id),
             shard_schema=f"tenant_{tenant_uuid}",
         )

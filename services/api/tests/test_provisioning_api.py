@@ -91,6 +91,7 @@ async def test_provisioning_service_zero_mocks():
     outbox_event = list(repo.outbox.values())[0]
     assert outbox_event["event_type"] == "TRADING_PARTNER_PROVISION"
     assert outbox_event["payload"]["trading_partner_id"] == str(partner_id)
+    assert outbox_event["payload"]["tenant_id"] == 99
 
 
 async def test_api_endpoint_create_trading_partner() -> None:
@@ -123,13 +124,14 @@ async def test_api_endpoint_create_trading_partner() -> None:
         "credentials_vault_ref": "vault://sftp",
     }
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/api/v1/trading-partners", json=payload)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post("/api/v1/trading-partners", json=payload)
 
-    assert response.status_code == 202
-    data = response.json()
-    assert data["status"] == "PROVISIONING"
-    assert data["tenant_id"] == 99
-    assert "trading_partner_id" in data
-
-    app.dependency_overrides.clear()
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "PROVISIONING"
+        assert data["tenant_id"] == 99
+        assert "trading_partner_id" in data
+    finally:
+        app.dependency_overrides.clear()

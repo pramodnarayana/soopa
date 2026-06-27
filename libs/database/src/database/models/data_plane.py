@@ -89,6 +89,7 @@ class EdiMessage(TenantBase, TenantAwareMixin):
 
     sender_id = Column(String(255), nullable=True)
     receiver_id = Column(String(255), nullable=True)
+    as2_message_id = Column(String(255), nullable=True)
     interchange_control_no = Column(String(255), nullable=True)
     transaction_type = Column(String(50), nullable=True)
     format_standard = Column(String(50), nullable=True)

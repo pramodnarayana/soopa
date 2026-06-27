@@ -42,16 +42,24 @@ async def relay_cdc_event(
         return
 
     if event.table == "outbox":
-        queue_name = None
-        if event.event_type == "TRANSLATE":
-            queue_name = "TranslateQueue"
-        elif event.event_type == "DELIVER":
-            queue_name = "DeliverQueue"
-        else:
-            logger.warning(
-                f"[CDC Relay] Ignored outbox event with unknown type: {event.event_type}"
+        if event.event_type not in ("TRANSLATE", "DELIVER"):
+            logger.warning(f"[CDC Relay] Unhandled outbox event type: {event.event_type}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown outbox event_type: {event.event_type}"
             )
-            return
+
+        queue_name = "TranslateQueue" if event.event_type == "TRANSLATE" else "DeliverQueue"
+
+        # Validate that the payload contains a trace_id required by workers
+        trace_id = event.payload.get("trace_id")
+        if not trace_id:
+            logger.error(
+                f"[CDC Relay] Outbox event missing trace_id in payload: {event.idempotency_key}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Outbox payload missing required trace_id field",
+            )
 
         # We package the original outbox payload and idempotency key for the worker
         message_body = {

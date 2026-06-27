@@ -43,7 +43,14 @@ async def seed_database() -> None:
         tenant_obj = tenant_result.scalar_one_or_none()
 
         if not tenant_obj:
-            tenant_obj = Tenant(id=0, name="Host Company", shard_id=shard.id, tier="standard")
+            # Tenant 0 is the host company; it uses a dedicated schema "public"
+            tenant_obj = Tenant(
+                id=0,
+                name="Host Company",
+                shard_id=shard.id,
+                tier="standard",
+                shard_schema="tenant_host",
+            )
             session.add(tenant_obj)
             await session.flush()
             logger.info("Created Tenant 0 (Host Company).")

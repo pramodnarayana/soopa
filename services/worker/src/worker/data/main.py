@@ -105,56 +105,82 @@ async def poll_sqs_queue(
     if aws_endpoint:
         client_kwargs["endpoint_url"] = aws_endpoint
 
-    async with session.client("sqs", **client_kwargs) as sqs:
-        queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
-        queue_url = queue_url_resp["QueueUrl"]
+    while True:
+        try:
+            async with session.client("sqs", **client_kwargs) as sqs:
+                queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
+                queue_url = queue_url_resp["QueueUrl"]
 
-        logger.info(f"Started polling {queue_name} ({queue_url})")
+                logger.info(f"Started polling {queue_name} ({queue_url})")
 
-        while True:
-            response = await sqs.receive_message(
-                QueueUrl=queue_url,
-                MaxNumberOfMessages=10,
-                WaitTimeSeconds=20,
-            )
-
-            messages = response.get("Messages", [])
-            for msg in messages:
-                receipt_handle = msg["ReceiptHandle"]
-                try:
-                    body = json.loads(msg["Body"])
-                    payload = body.get("payload", {})
-                    trace_id = payload.get("trace_id")
-                    tenant_id = body.get("tenant_id")
-
-                    if not trace_id or not tenant_id:
-                        logger.error(f"Missing trace_id or tenant_id in message: {body}")
-                        continue
-
-                    logger.info(f"[{queue_name}] Processing trace_id={trace_id}")
-
-                    # Determine target_url if DELIVER
-                    kwargs = {
-                        "trace_id": trace_id,
-                        "tenant_id": tenant_id,
-                        "resolver": resolver,
-                        "db_router": db_router,
-                        "s3_bucket": s3_bucket,
-                        "aws_endpoint": aws_endpoint,
-                    }
-                    if queue_name == "DeliverQueue":
-                        kwargs["target_url"] = payload.get("target", "https://example.com/webhook")
-
-                    await processor_func(**kwargs)
-
-                    # Delete message on success
-                    await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
-                    logger.info(
-                        f"[{queue_name}] Successfully processed and deleted trace_id={trace_id}"
+                while True:
+                    response = await sqs.receive_message(
+                        QueueUrl=queue_url,
+                        MaxNumberOfMessages=10,
+                        WaitTimeSeconds=20,
                     )
 
-                except Exception as e:
-                    logger.exception(f"[{queue_name}] Error processing message: {e}")
+                    messages = response.get("Messages", [])
+                    for msg in messages:
+                        receipt_handle = msg["ReceiptHandle"]
+                        try:
+                            body = json.loads(msg["Body"])
+                            payload = body.get("payload", {})
+                            trace_id = payload.get("trace_id")
+                            tenant_id = body.get("tenant_id")
+
+                            if not trace_id or not tenant_id:
+                                logger.error(f"Missing trace_id or tenant_id in message: {body}")
+                                # Permanently delete unrecoverable messages to prevent re-drive loops
+                                await sqs.delete_message(
+                                    QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                                )
+                                logger.warning(
+                                    f"[{queue_name}] Deleted poison message with missing ids"
+                                )
+                                continue
+
+                            logger.info(f"[{queue_name}] Processing trace_id={trace_id}")
+
+                            # Determine target_url if DELIVER
+                            kwargs: dict[str, Any] = {
+                                "trace_id": trace_id,
+                                "tenant_id": tenant_id,
+                                "resolver": resolver,
+                                "db_router": db_router,
+                                "s3_bucket": s3_bucket,
+                                "aws_endpoint": aws_endpoint,
+                            }
+                            if queue_name == "DeliverQueue":
+                                kwargs["target_url"] = payload.get(
+                                    "target", "https://example.com/webhook"
+                                )
+
+                            await processor_func(**kwargs)
+
+                            # Delete message on success
+                            await sqs.delete_message(
+                                QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                            )
+                            logger.info(
+                                f"[{queue_name}] Successfully processed trace_id={trace_id}"
+                            )
+
+                        except json.JSONDecodeError:
+                            # Permanently delete malformed (non-JSON) messages
+                            logger.error(
+                                f"[{queue_name}] Non-JSON message body, deleting permanently"
+                            )
+                            await sqs.delete_message(
+                                QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                            )
+                        except Exception as e:
+                            logger.exception(
+                                f"[{queue_name}] Transient error processing message: {e}"
+                            )
+        except Exception as e:
+            logger.exception(f"[{queue_name}] SQS client error, retrying in 10s: {e}")
+            await asyncio.sleep(10)
 
 
 async def main() -> None:

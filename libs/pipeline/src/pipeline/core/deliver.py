@@ -29,16 +29,25 @@ class DeliveryService:
         """
         logger.info(f"Starting delivery pipeline for trace_id={trace_id} to target={target_url}")
 
+        if not await self.repository.claim_api_payload(trace_id):
+            logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
+            return
+
         api_payload = await self.repository.get_api_payload(trace_id)
         if not api_payload:
             raise ValueError(f"No API Payload found for trace_id={trace_id}")
 
-        # 1. Download payload from S3
-        s3_uri = api_payload["s3_key"]
-        raw_payload = await self.storage.download(s3_uri)
+        try:
+            # 1. Download payload from S3
+            s3_uri = api_payload["s3_key"]
+            raw_payload = await self.storage.download(s3_uri)
 
-        # 2. Perform HTTP POST
-        status_code = await self.http_delivery.deliver(url=target_url, payload=raw_payload)
+            # 2. Perform HTTP POST
+            status_code = await self.http_delivery.deliver(url=target_url, payload=raw_payload)
+        except Exception as e:
+            await self.repository.update_api_payload_status(trace_id, "FAILED")
+            logger.exception(f"Delivery failed for trace_id={trace_id}")
+            raise RuntimeError(f"Delivery failed due to exception: {e}") from e
 
         if 200 <= status_code < 300:
             # 3. Update DB status to DELIVERED

@@ -16,7 +16,8 @@ class InMemoryStorageAdapter(StoragePort):
         return self.store[uri]
 
     async def upload(self, payload: bytes, key_prefix: str, file_name: str) -> str:
-        uri = f"s3://fake-bucket/{key_prefix}/{file_name}"
+        normalized_prefix = key_prefix.strip("/")
+        uri = f"s3://fake-bucket/{normalized_prefix}/{file_name}"
         self.store[uri] = payload
         self.upload_count += 1
         return uri
@@ -70,6 +71,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def publish_outbox_event(
         self, idempotency_key: str, event_type: str, payload: dict[str, Any]
     ) -> None:
+        # Idempotent: ignore duplicate events with the same key (mirrors production behavior)
+        for existing in self.outbox:
+            if existing["idempotency_key"] == idempotency_key:
+                return
         self.outbox.append(
             {
                 "idempotency_key": idempotency_key,
@@ -84,3 +89,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def update_api_payload_status(self, trace_id: str, status: str) -> None:
         if trace_id in self.api_payloads:
             self.api_payloads[trace_id]["status"] = status
+
+    async def claim_api_payload(self, trace_id: str) -> bool:
+        payload = self.api_payloads.get(trace_id)
+        if payload and payload["status"] == "PENDING_DELIVERY":
+            payload["status"] = "PROCESSING"
+            return True
+        return False

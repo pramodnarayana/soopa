@@ -68,6 +68,7 @@ class EdiMessageRepository:
         trading_partner_id: str,
         s3_key: str,
         status: str = "RECEIVED",
+        as2_message_id: str | None = None,
     ) -> EdiMessage:
         record = EdiMessage(
             tenant_id=self._tenant_id(),
@@ -77,6 +78,7 @@ class EdiMessageRepository:
             trading_partner_id=trading_partner_id,
             s3_key=s3_key,
             status=status,
+            as2_message_id=as2_message_id,
         )
         self.session.add(record)
         await self.session.flush()
