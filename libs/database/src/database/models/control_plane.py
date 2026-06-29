@@ -1,26 +1,21 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
-    ForeignKeyConstraint,
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import func, text
 
-from .common import (
-    ConnectionMixin,
-    FieldMappingRuleMixin,
-    OutboxMixin,
-    RouteMixin,
-    TradingPartnerMixin,
-)
+from .common import OutboxMixin
 
 
 class GlobalBase(DeclarativeBase):
@@ -44,6 +39,7 @@ class Tenant(GlobalBase):
     name = Column(String(255), nullable=False, unique=True)
     shard_id = Column(Integer, ForeignKey("database_shards.id"), nullable=False)
     tier = Column(String(50), nullable=False, default="standard")
+    allow_private_as2 = Column(Boolean, nullable=False, server_default="false")
     shard_schema = Column(String(255), nullable=False, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -71,72 +67,75 @@ class TenantUser(GlobalBase):
     __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_tenant_user"),)
 
 
-class TradingPartner(GlobalBase, TradingPartnerMixin):
-    __tablename__ = "trading_partners"
+class AS2Partner(GlobalBase):
+    """
+    Global AS2 Partners (both our local gateway config, and remote shared configs).
+    """
+
+    __tablename__ = "as2_partners"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-
-    # Global-specific fields (Provisioning metadata)
-    provision_status = Column(String(50), nullable=False, default="PROVISIONING")
-    provisioned_at = Column(DateTime, nullable=True)
-
-    __table_args__ = (UniqueConstraint("id", "tenant_id", name="uq_tp_tenant"),)
-
-
-class Connection(GlobalBase, ConnectionMixin):
-    __tablename__ = "connections"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    trading_partner_id = Column(UUID(as_uuid=True), nullable=False)
-    tenant_id = Column(Integer, nullable=False)
+    tenant_id = Column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    )  # Null if shared global
+    is_local = Column(Boolean, nullable=False, default=False)
+    name = Column(String(255), nullable=False)
+    as2_id = Column(String(255), nullable=False)
+    public_cert_pem = Column(
+        Text, nullable=True
+    )  # Retained for legacy/external, but vault preferred
+    public_cert_vault_ref = Column(String(255), nullable=True)
+    private_key_vault_ref = Column(String(255), nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["trading_partner_id", "tenant_id"],
-            ["trading_partners.id", "trading_partners.tenant_id"],
-            ondelete="CASCADE",
+        UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),
+        Index(
+            "uq_global_as2_id", "as2_id", unique=True, postgresql_where=text("tenant_id IS NULL")
         ),
     )
 
 
-class Route(GlobalBase, RouteMixin):
-    __tablename__ = "routes"
+class AS2Partnership(GlobalBase):
+    """
+    OpenAS2 style Partnership (links Local Partner to Remote Partner)
+    and stores all MDN and Encryption properties.
+    """
+
+    __tablename__ = "as2_partnerships"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    source_partner_id = Column(UUID(as_uuid=True), nullable=True)
-    target_partner_id = Column(UUID(as_uuid=True), nullable=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
 
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["source_partner_id", "tenant_id"],
-            ["trading_partners.id", "trading_partners.tenant_id"],
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(
-            ["target_partner_id", "tenant_id"],
-            ["trading_partners.id", "trading_partners.tenant_id"],
-            ondelete="CASCADE",
-        ),
+    local_partner_id = Column(
+        UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
+    )
+    remote_partner_id = Column(
+        UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
+    # Core AS2 Networking
+    local_url = Column(String(1024), nullable=True)
+    remote_url = Column(String(1024), nullable=True)
+    credentials_vault_ref = Column(String(255), nullable=True)
 
-class FieldMappingRule(GlobalBase, FieldMappingRuleMixin):
-    __tablename__ = "field_mapping_rules"
+    # Core AS2 Protocol Settings
+    mdn_type = Column(String(50), nullable=False, default="SYNC")
+    mdn_url = Column(String(1024), nullable=True)
+    encryption_algorithm = Column(String(50), nullable=False, default="AES256")
+    signature_algorithm = Column(String(50), nullable=False, default="SHA256")
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    tenant_id = Column(Integer, nullable=False)
-    route_id = Column(
-        UUID(as_uuid=True), ForeignKey("routes.id", ondelete="CASCADE"), nullable=False
-    )
+    # Advanced OpenAS2 settings
+    advanced_flags = Column(JSONB, nullable=True)
+
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["tenant_id"],
-            ["tenants.id"],
-            ondelete="CASCADE",
-        ),
+        UniqueConstraint("local_partner_id", "remote_partner_id", name="uq_as2_partnership"),
     )
 
 
@@ -151,7 +150,7 @@ class Outbox(GlobalBase, OutboxMixin):
             "ix_global_outbox_pending",
             "status",
             "created_at",
-            postgresql_where=(OutboxMixin.status == "PENDING"),
+            postgresql_where=text("status = 'PENDING'"),
         ),
     )
 

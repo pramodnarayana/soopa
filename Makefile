@@ -65,7 +65,7 @@ db-init:
 
 db-reset:
 	@echo "Wiping application databases (leaving Zitadel intact)..."
-	docker compose rm -s -f -v postgres_global postgres_shard_1
+	docker compose down -v postgres_global postgres_shard_1
 	@echo "Restarting application databases..."
 	docker compose up -d postgres_global postgres_shard_1
 	@echo "Waiting for databases to initialize..."

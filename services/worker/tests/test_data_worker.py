@@ -3,9 +3,25 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from worker.data.main import poll_sqs_queue, process_delivery, process_translation
+from worker.data.main import (
+    poll_sqs_queue,
+    process_delivery,
+    process_translation,
+    validate_target_url,
+)
 
 pytestmark = pytest.mark.asyncio
+
+
+def test_validate_target_url():
+    assert validate_target_url("http://example.com") is True
+    assert validate_target_url("https://example.com") is True
+    assert validate_target_url("ftp://example.com") is False
+    assert validate_target_url("http://localhost") is False
+    assert validate_target_url("http://127.0.0.1") is False
+    assert validate_target_url("http://10.0.0.1") is False
+    # Valid IP address
+    assert validate_target_url("http://8.8.8.8") is True
 
 
 @patch("worker.data.main.aioboto3.Session")
@@ -94,7 +110,6 @@ async def test_process_delivery(mock_service_cls: MagicMock) -> None:
 
     await process_delivery(
         "trace-123",
-        "https://target.com",
         99,
         mock_resolver,
         mock_db_router,
@@ -102,4 +117,4 @@ async def test_process_delivery(mock_service_cls: MagicMock) -> None:
         "http://localhost",
     )
 
-    mock_service.deliver.assert_awaited_once_with("trace-123", "https://target.com")
+    mock_service.deliver.assert_awaited_once_with("trace-123")

@@ -13,7 +13,10 @@ function MarketingLayout() {
   const auth = useAuth()
 
   if (auth.isAuthenticated) {
-    return <Navigate to="/dashboard" replace />
+    // If they have a token, we don't know their role yet without fetching it.
+    // The easiest way is to let the tenant dashboard (which acts as a router) handle it,
+    // or we redirect to /tenant/dashboard which redirects them to /platform/dashboard if they are an admin.
+    return <Navigate to="/tenant/dashboard" replace />
   }
 
   const handleSignUp = () => {

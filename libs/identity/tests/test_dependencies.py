@@ -1,7 +1,6 @@
 from collections.abc import AsyncGenerator, Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt
 import pytest
 from fastapi import HTTPException, Request
 from identity.dependencies import (
@@ -12,24 +11,19 @@ from identity.dependencies import (
 
 
 @pytest.fixture(autouse=True)
-def mock_jwks_client() -> Iterator[MagicMock]:
-    with patch("identity.dependencies.jwks_client.get_signing_key_from_jwt") as mock:
-        mock_key = MagicMock()
-        mock_key.key = "mock_secret_key"
-        mock.return_value = mock_key
-        yield mock
-
-
-@pytest.fixture(autouse=True)
-def mock_jwt_decode() -> Iterator[MagicMock]:
-    with patch("identity.dependencies.jwt.decode") as mock:
-        yield mock
+def mock_httpx_client() -> Iterator[MagicMock]:
+    with patch("identity.dependencies.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+        yield mock_client
 
 
 @pytest.mark.asyncio
-async def test_get_raw_jwt_valid(mock_jwt_decode: MagicMock) -> None:
+async def test_get_raw_jwt_valid(mock_httpx_client: AsyncMock) -> None:
     payload = {"sub": "user123", "email": "pramod.narayana@gmail.com", "org_id": "org-123"}
-    mock_jwt_decode.return_value = payload
+    mock_response = MagicMock()
+    mock_response.json.return_value = payload
+    mock_httpx_client.get.return_value = mock_response
 
     decoded = await get_raw_jwt("fake.jwt.token")
     assert decoded["email"] == "pramod.narayana@gmail.com"
@@ -44,8 +38,10 @@ async def test_get_raw_jwt_missing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_raw_jwt_invalid(mock_jwt_decode: MagicMock) -> None:
-    mock_jwt_decode.side_effect = jwt.PyJWTError("Invalid signature")
+async def test_get_raw_jwt_invalid(mock_httpx_client: AsyncMock) -> None:
+    import httpx
+
+    mock_httpx_client.get.side_effect = httpx.HTTPError("Invalid request")
     with pytest.raises(HTTPException) as exc_info:
         await get_raw_jwt("invalid.token.structure")
     assert exc_info.value.status_code == 401
@@ -125,7 +121,7 @@ async def test_get_tenant_session() -> None:
 
     mock_db_router.get_tenant_session = MagicMock(return_value=mock_tenant_session_gen())
 
-    gen = get_tenant_session(mock_request, tenant_id=99)
+    gen = get_tenant_session(mock_request, tenant_id=99, global_session=mock_global_session)
     session = await gen.__anext__()
 
     assert session == mock_tenant_session

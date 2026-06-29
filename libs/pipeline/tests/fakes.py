@@ -50,6 +50,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         self.edi_messages: dict[str, dict[str, Any]] = {}
         self.api_payloads: dict[str, dict[str, Any]] = {}
         self.outbox: list[dict[str, Any]] = []
+        self.routes: list[dict[str, Any]] = []
+        self.webhook_partners: dict[str, dict[str, Any]] = {}
+        self.sftp_partners: dict[str, dict[str, Any]] = {}
+        self.as2_partners: dict[str, dict[str, Any]] = {}
 
     async def get_edi_message(self, trace_id: str) -> dict[str, Any] | None:
         return self.edi_messages.get(trace_id)
@@ -96,3 +100,25 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             payload["status"] = "PROCESSING"
             return True
         return False
+
+    async def get_route(
+        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
+    ) -> dict[str, Any] | None:
+        for r in self.routes:
+            if (
+                r.get("direction") == direction
+                and r.get("isa_sender_id") == sender_id
+                and r.get("isa_receiver_id") == receiver_id
+                and r.get("transaction_type") in (transaction_type, "*")
+            ):
+                return r
+        return None
+
+    async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
+        return self.sftp_partners.get(partner_id)
+
+    async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
+        return self.webhook_partners.get(partner_id)
+
+    async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+        return self.as2_partners.get(partner_id)

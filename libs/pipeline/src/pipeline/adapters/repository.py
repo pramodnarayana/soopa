@@ -3,6 +3,13 @@ from typing import Any
 
 from database.models import ApiPayload, EdiMessage
 from database.models import TenantOutbox as Outbox
+from database.models.data_plane import (
+    AS2Partner,
+    InboundRoute,
+    OutboundRoute,
+    SFTPPartner,
+    WebhookPartner,
+)
 from pipeline.ports.repository import RepositoryPort
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -30,6 +37,9 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "s3_key": record.s3_key,
             "format_standard": record.format_standard,
             "transaction_type": record.transaction_type,
+            "sender_id": record.sender_id,
+            "receiver_id": record.receiver_id,
+            "direction": record.direction,
             "status": record.status,
         }
 
@@ -49,7 +59,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             direction=direction,
             s3_key=s3_uri,
             status=status,
-            # tenant_id is automatically injected by the Hybrid Tenancy Context session
         )
         self.session.add(record)
         await self.session.flush()
@@ -64,7 +73,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 event_type=event_type,
                 payload=payload,
                 status="PENDING",
-                # tenant_id is automatically injected by the Hybrid Tenancy Context session
             )
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
         )
@@ -82,6 +90,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "trace_id": str(record.trace_id),
             "s3_key": record.s3_key,
             "status": record.status,
+            "direction": record.direction,
         }
 
     async def update_api_payload_status(self, trace_id: str, status: str) -> None:
@@ -105,3 +114,78 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         result = await self.session.execute(stmt)
         await self.session.flush()
         return result.scalar_one_or_none() is not None
+
+    async def get_route(
+        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
+    ) -> dict[str, Any] | None:
+        model = InboundRoute if direction == "INBOUND" else OutboundRoute
+
+        # Exact match or wildcard transaction type
+        stmt = select(model).where(
+            model.isa_sender_id == sender_id,
+            model.isa_receiver_id == receiver_id,
+            model.transaction_type.in_([transaction_type, "*"]),
+            model.active.is_(True),
+        )
+
+        result = await self.session.execute(stmt)
+        # Fetch all matches, prefer exact transaction_type over wildcard
+        records = result.scalars().all()
+        if not records:
+            return None
+
+        # Sort so exact transaction_type comes first
+        records = sorted(records, key=lambda r: r.transaction_type == "*")
+        record = records[0]
+
+        return {
+            "route_id": str(record.id),
+            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
+            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            "webhook_partner_id": str(record.webhook_partner_id)
+            if hasattr(record, "webhook_partner_id") and record.webhook_partner_id
+            else None,
+        }
+
+    async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
+        result = await self.session.execute(
+            select(SFTPPartner).where(SFTPPartner.id == uuid.UUID(partner_id))
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "name": record.name,
+            "host": record.host,
+            "port": record.port,
+            "username": record.username,
+            "remote_path": record.remote_path,
+            "credentials_vault_ref": record.credentials_vault_ref,
+        }
+
+    async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
+        result = await self.session.execute(
+            select(WebhookPartner).where(WebhookPartner.id == uuid.UUID(partner_id))
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "name": record.name,
+            "url": record.url,
+            "auth_header_vault_ref": record.auth_header_vault_ref,
+        }
+
+    async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+        result = await self.session.execute(
+            select(AS2Partner).where(AS2Partner.id == uuid.UUID(partner_id))
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "name": record.name,
+            "as2_id": record.as2_id,
+            "host": record.host,
+            "port": record.port,
+        }

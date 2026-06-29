@@ -19,6 +19,7 @@ dependencies = [
     "identity",
     "config",
     "observability",
+    "hvac>=2.4.0",
 ]
 
 [tool.uv.sources]

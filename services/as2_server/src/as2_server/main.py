@@ -153,7 +153,7 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     # Resolve tenant_id from AS2-To header by looking up in global trading_partners table
-    from database.models.control_plane import TradingPartner as GlobalTradingPartner
+    from database.models.control_plane import AS2Partner as GlobalTradingPartner
     from sqlalchemy import select as sql_select
 
     tenant_id = None

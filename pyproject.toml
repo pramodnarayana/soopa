@@ -61,6 +61,9 @@ ignore = ["E501"] # Handled by formatter
 "services/api/src/api/main.py" = ["B008"]
 "services/api/src/api/cdc_relay.py" = ["B008"]
 "services/api/src/api/routers/partners.py" = ["B008"]
+"services/api/src/api/routers/platform_partners.py" = ["B008"]
+"services/api/src/api/routers/routes.py" = ["B008"]
+"services/api/src/api/dependencies.py" = ["B008"]
 "services/as2_server/src/as2_server/main.py" = ["B008"]
 "libs/identity/src/identity/dependencies.py" = ["B008"]
 # Legacy BOTS engine formatting ignores

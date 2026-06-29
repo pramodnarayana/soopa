@@ -37,3 +37,21 @@ class RepositoryPort(Protocol):
     async def claim_api_payload(self, trace_id: str) -> bool:
         """Atomically claims an API Payload for delivery."""
         ...
+
+    async def get_route(
+        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
+    ) -> dict[str, Any] | None:
+        """Finds the appropriate route based on ISA envelopes."""
+        ...
+
+    async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
+        """Fetches SFTP partner config."""
+        ...
+
+    async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
+        """Fetches Webhook partner config."""
+        ...
+
+    async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+        """Fetches AS2 partner config from global (or synced tenant) table."""
+        ...

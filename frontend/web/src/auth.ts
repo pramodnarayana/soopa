@@ -18,8 +18,9 @@ export const oidcConfig: AuthProviderProps = {
   scope: "openid profile email",
   post_logout_redirect_uri: window.location.origin,
   onSigninCallback: (_user: User | void) => {
-    // After successful login, redirect directly to the dashboard
-    // This prevents the 404 error on the /callback route
-    window.location.replace('/dashboard')
+    // After successful login, redirect directly to the root
+    // The marketing layout will pick this up and redirect to /tenant/dashboard
+    // which in turn redirects to /platform/dashboard if they are a platform admin.
+    window.location.replace('/')
   }
 }

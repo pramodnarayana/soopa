@@ -13,6 +13,7 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 from pipeline.adapters.http import HttpxDeliveryAdapter
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
+from pipeline.adapters.sftp import ParamikoSftpDeliveryAdapter
 from pipeline.adapters.storage import S3StorageAdapter
 from pipeline.adapters.transformer import BotsTransformerAdapter
 from pipeline.core.deliver import DeliveryService
@@ -106,7 +107,6 @@ async def process_translation(
 
 async def process_delivery(
     trace_id: str,
-    target_url: str,
     tenant_id: int,
     resolver: TenantResolver,
     db_router: DatabaseRouter,
@@ -123,12 +123,13 @@ async def process_delivery(
         repo_adapter = SqlAlchemyRepositoryAdapter(session)
         storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
         http_adapter = HttpxDeliveryAdapter()
+        sftp_adapter = ParamikoSftpDeliveryAdapter()
 
         # Instantiate Domain Service
-        service = DeliveryService(storage_adapter, repo_adapter, http_adapter)
+        service = DeliveryService(storage_adapter, repo_adapter, http_adapter, sftp_adapter)
 
         # Execute pure domain logic
-        await service.deliver(trace_id, target_url)
+        await service.deliver(trace_id)
 
         # Commit transaction
         await session.commit()
@@ -190,8 +191,6 @@ async def poll_sqs_queue(
                                 continue
 
                             logger.info(f"[{queue_name}] Processing trace_id={trace_id}")
-
-                            # Determine target_url if DELIVER
                             kwargs: dict[str, Any] = {
                                 "trace_id": trace_id,
                                 "tenant_id": tenant_id,
@@ -200,36 +199,6 @@ async def poll_sqs_queue(
                                 "s3_bucket": s3_bucket,
                                 "aws_endpoint": aws_endpoint,
                             }
-                            if queue_name == "DeliverQueue":
-                                target_url = payload.get("target")
-                                if not target_url:
-                                    logger.error(
-                                        f"[{queue_name}] Missing target URL for trace_id={trace_id}"
-                                    )
-                                    await sqs.delete_message(
-                                        QueueUrl=queue_url, ReceiptHandle=receipt_handle
-                                    )
-                                    logger.warning(
-                                        f"[{queue_name}] Deleted poison message without target"
-                                    )
-                                    continue
-                                # SSRF validation
-                                if not validate_target_url(target_url):
-                                    safe_parsed = urlparse(target_url)
-                                    safe_url = f"{safe_parsed.scheme}://{safe_parsed.hostname}:{safe_parsed.port or ''}"
-                                    logger.error(
-                                        f"[{queue_name}] SSRF check failed for target_url={safe_url}, "
-                                        f"trace_id={trace_id}"
-                                    )
-                                    await sqs.delete_message(
-                                        QueueUrl=queue_url, ReceiptHandle=receipt_handle
-                                    )
-                                    logger.warning(
-                                        f"[{queue_name}] Deleted message with unsafe target URL"
-                                    )
-                                    continue
-                                kwargs["target_url"] = target_url
-
                             await processor_func(**kwargs)
 
                             # Delete message on success
