@@ -2,6 +2,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from api.domain.models import (
+    CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
@@ -17,6 +18,10 @@ class ControlPlaneRepositoryPort(Protocol):
 
     async def create_as2_identity(self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd) -> UUID:
         """Inserts an AS2 Partner in the Global DB and returns its UUID."""
+        ...
+
+    async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
+        """Inserts an AS2 Partnership in the Global DB and returns its UUID."""
         ...
 
     async def get_as2_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:

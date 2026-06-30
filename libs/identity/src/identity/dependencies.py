@@ -7,7 +7,7 @@ import contextlib
 import logging
 import time
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from config.settings import get_settings
@@ -69,9 +69,10 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
             response.raise_for_status()
             payload = response.json()
 
+            payload_dict = cast(dict[str, Any], payload)
             # Save to cache
-            _userinfo_cache[token] = (payload, now + CACHE_TTL)
-            return payload
+            _userinfo_cache[token] = (payload_dict, now + CACHE_TTL)
+            return payload_dict
     except httpx.HTTPError as e:
         logger.error(f"UserInfo Validation failed: {e}")
         raise HTTPException(

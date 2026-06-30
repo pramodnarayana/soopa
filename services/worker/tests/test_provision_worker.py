@@ -58,13 +58,31 @@ async def test_replicate_tenant_config() -> None:
     mock_tp.credentials_vault_ref = "vault://acme"
     mock_tp.active = True
 
-    # We have 1 query in replicate_tenant_config (AS2Partner)
+    # We have 2 queries in replicate_tenant_config (AS2Partner and AS2Partnership)
     mock_result_tp = MagicMock()
     mock_result_tp.scalars.return_value = [mock_tp]
 
-    mock_global_session.execute.side_effect = [mock_result_tp]
+    mock_ps = MagicMock()
+    mock_ps.id = "ps-uuid"
+    mock_ps.tenant_id = 99
+    mock_ps.local_partner_id = "loc"
+    mock_ps.remote_partner_id = "rem"
+    mock_ps.local_url = "http://l"
+    mock_ps.remote_url = "http://r"
+    mock_ps.credentials_vault_ref = "ref"
+    mock_ps.mdn_type = "SYNC"
+    mock_ps.mdn_url = None
+    mock_ps.encryption_algorithm = "AES"
+    mock_ps.signature_algorithm = "SHA"
+    mock_ps.advanced_flags = None
+    mock_ps.active = True
+
+    mock_result_ps = MagicMock()
+    mock_result_ps.scalars.return_value = [mock_ps]
+
+    mock_global_session.execute.side_effect = [mock_result_tp, mock_result_ps]
 
     await replicate_tenant_config(99, mock_global_session, mock_tenant_session)
 
-    assert mock_global_session.execute.await_count == 1
+    assert mock_global_session.execute.await_count == 2
     mock_tenant_session.commit.assert_awaited_once()

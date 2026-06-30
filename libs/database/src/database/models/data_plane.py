@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -123,6 +124,22 @@ class InboundRoute(TenantBase, TenantAwareMixin):
     sftp_partner_id = Column(UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True)
     active = Column(Boolean, default=True)
 
+    __table_args__ = (
+        CheckConstraint(
+            "(webhook_partner_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            name="chk_inbound_routes_exactly_one_dest",
+        ),
+        Index(
+            "ix_inbound_routes_unique_active",
+            "tenant_id",
+            "isa_sender_id",
+            "isa_receiver_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text("active = true"),
+        ),
+    )
+
 
 class OutboundRoute(TenantBase, TenantAwareMixin):
     __tablename__ = "outbound_routes"
@@ -134,6 +151,22 @@ class OutboundRoute(TenantBase, TenantAwareMixin):
     as2_partner_id = Column(UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True)
     sftp_partner_id = Column(UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True)
     active = Column(Boolean, default=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            name="chk_outbound_routes_exactly_one_dest",
+        ),
+        Index(
+            "ix_outbound_routes_unique_active",
+            "tenant_id",
+            "isa_sender_id",
+            "isa_receiver_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text("active = true"),
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -173,8 +206,9 @@ class ApiPayload(TenantBase, TenantAwareMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     trace_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     direction = Column(String(50), nullable=False)  # INBOUND, OUTBOUND
-    inbound_route_id = Column(UUID(as_uuid=True), nullable=True)
-    outbound_route_id = Column(UUID(as_uuid=True), nullable=True)
+    transaction_type = Column(String(50), nullable=True)
+    inbound_route_id = Column(UUID(as_uuid=True), ForeignKey("inbound_routes.id"), nullable=True)
+    outbound_route_id = Column(UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True)
 
     webhook_url = Column(String(1024), nullable=True)
     http_status_code = Column(Integer, nullable=True)

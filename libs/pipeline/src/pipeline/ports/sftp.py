@@ -12,6 +12,7 @@ class SftpDeliveryPort(Protocol):
         port: int,
         username: str,
         password: str,
+        host_key: str | None,
         remote_path: str,
         filename: str,
         payload: bytes,

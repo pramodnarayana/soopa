@@ -122,7 +122,7 @@ async def process_delivery(
         # Instantiate Adapters
         repo_adapter = SqlAlchemyRepositoryAdapter(session)
         storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
-        http_adapter = HttpxDeliveryAdapter()
+        http_adapter = HttpxDeliveryAdapter(validator=validate_target_url)
         sftp_adapter = ParamikoSftpDeliveryAdapter()
 
         # Instantiate Domain Service

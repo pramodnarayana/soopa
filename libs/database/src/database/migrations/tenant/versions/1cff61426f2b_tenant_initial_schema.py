@@ -189,9 +189,22 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['as2_partner_id'], ['as2_partners.id'], ),
     sa.ForeignKeyConstraint(['sftp_partner_id'], ['sftp_partners.id'], ),
     sa.ForeignKeyConstraint(['webhook_partner_id'], ['webhook_partners.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.CheckConstraint(
+        '(webhook_partner_id IS NOT NULL)::integer + '
+        '(as2_partner_id IS NOT NULL)::integer + '
+        '(sftp_partner_id IS NOT NULL)::integer = 1',
+        name='chk_inbound_routes_exactly_one_dest'
+    )
     )
     op.create_index(op.f('ix_inbound_routes_tenant_id'), 'inbound_routes', ['tenant_id'], unique=False)
+    op.create_index(
+        'ix_inbound_routes_unique_active',
+        'inbound_routes',
+        ['tenant_id', 'isa_sender_id', 'isa_receiver_id', 'transaction_type'],
+        unique=True,
+        postgresql_where=sa.text("active = true")
+    )
     op.create_table('outbound_routes',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('isa_sender_id', sa.String(length=255), nullable=False),
@@ -203,9 +216,21 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['as2_partner_id'], ['as2_partners.id'], ),
     sa.ForeignKeyConstraint(['sftp_partner_id'], ['sftp_partners.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.CheckConstraint(
+        '(as2_partner_id IS NOT NULL)::integer + '
+        '(sftp_partner_id IS NOT NULL)::integer = 1',
+        name='chk_outbound_routes_exactly_one_dest'
+    )
     )
     op.create_index(op.f('ix_outbound_routes_tenant_id'), 'outbound_routes', ['tenant_id'], unique=False)
+    op.create_index(
+        'ix_outbound_routes_unique_active',
+        'outbound_routes',
+        ['tenant_id', 'isa_sender_id', 'isa_receiver_id', 'transaction_type'],
+        unique=True,
+        postgresql_where=sa.text("active = true")
+    )
     # ### end Alembic commands ###
 
 

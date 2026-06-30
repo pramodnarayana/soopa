@@ -29,7 +29,12 @@ async def list_routes(
     List all Active Routes for the current Tenant.
     """
     async with uow:
-        service = ProvisioningService(uow.control_plane, uow.data_plane)
+        from typing import cast
+
+        from api.ports.repository import DataPlaneRepositoryPort
+
+        data_plane = cast(DataPlaneRepositoryPort, uow.data_plane)
+        service = ProvisioningService(uow.control_plane, data_plane)
         routes = await service.list_routes()
 
         return [RouteItemResponse(**r) for r in routes]

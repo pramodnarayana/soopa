@@ -53,12 +53,12 @@ async def test_authorization_standard_user(service: AuthorizationService):
     assert profile["rls_enforced_tenant"] == 1
 
 
-@pytest.mark.asyncio
-async def test_authorization_platform_admin_by_tenant_id(service: AuthorizationService):
-    # Even without the role, tenant_id == 0 is platform admin
-    token_payload = {}
-    profile = await service.get_authorization_profile(
-        tenant_id=0, token_payload=token_payload, current_rls_tenant=0
-    )
-    assert profile["is_platform_admin"] is True
-    assert profile["role"] == "Owner"
+def test_authorization_platform_admin_by_tenant_id():
+    import asyncio
+
+    repo = FakeTenantRepository()
+    svc = AuthorizationService(repo)
+    profile = asyncio.run(svc.get_authorization_profile(0, {}, None))
+    # tenant_id == 0 no longer grants platform admin
+    assert profile["is_platform_admin"] is False
+    assert profile["role"] == "Standard"

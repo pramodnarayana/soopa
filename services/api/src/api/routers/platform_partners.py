@@ -79,13 +79,16 @@ async def create_platform_as2_partner(
                 as2_id=request.as2_id,
                 is_local=request.is_local,
             )
-    except Exception as e:
-        import traceback
+    except Exception:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Internal error creating platform AS2 partner")
 
         from fastapi.responses import JSONResponse
 
         return JSONResponse(
-            status_code=500, content={"detail": str(e), "traceback": traceback.format_exc()}
+            status_code=500, content={"detail": "An internal server error occurred."}
         )
 
 
@@ -123,15 +126,24 @@ async def create_platform_as2_partnership(
     """
     try:
         async with uow:
+            allow_insecure = (
+                request.advanced_flags.get("allow_insecure", False)
+                if request.advanced_flags
+                else False
+            )
+            scheme = "http" if allow_insecure else "https"
+
             cmd = CreateAS2PartnershipCmd(
                 local_partner_id=request.local_partner_id,
                 remote_partner_id=request.remote_partner_id,
                 local_url=None,
-                remote_url=f"http://{request.host}:{request.port}" if request.host else None,
+                remote_url=f"{scheme}://{request.host}:{request.port}" if request.host else None,
+                credentials_vault_ref=request.credentials_vault_ref,
                 mdn_type=request.mdn_type,
                 mdn_url=request.mdn_url,
                 encryption_algorithm=request.encryption_algorithm,
                 signature_algorithm=request.signature_algorithm,
+                advanced_flags=request.advanced_flags,
             )
 
             partnership_id = await uow.control_plane.create_as2_partnership(tenant_id=0, cmd=cmd)
@@ -149,10 +161,17 @@ async def create_platform_as2_partnership(
                 signature_algorithm=request.signature_algorithm,
                 status="active",
             )
-    except Exception as e:
+    except Exception:
+        import logging
+
         from fastapi.responses import JSONResponse
 
-        return JSONResponse(status_code=500, content={"detail": str(e)})
+        logger = logging.getLogger(__name__)
+        logger.exception("Internal error creating platform AS2 partner")
+
+        return JSONResponse(
+            status_code=500, content={"detail": "An internal server error occurred."}
+        )
 
 
 @router.get("/as2/partnerships", response_model=list[AS2PartnershipResponse])
@@ -179,7 +198,7 @@ async def list_platform_as2_partnerships(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                status="active",
+                status="active" if p.active else "inactive",
             )
             for p in partnerships
         ]

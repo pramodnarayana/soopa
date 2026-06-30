@@ -1,6 +1,7 @@
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -32,7 +33,7 @@ class CreateAS2PartnershipRequest(BaseModel):
     mdn_url: str | None = Field(None, max_length=1024, description="MDN URL for ASYNC")
     encryption_algorithm: str = Field("AES256", max_length=50, description="Encryption Algorithm")
     signature_algorithm: str = Field("SHA256", max_length=50, description="Signature Algorithm")
-    advanced_flags: dict | None = Field(None, description="Advanced OpenAS2 JSON flags")
+    advanced_flags: dict[str, Any] | None = Field(None, description="Advanced OpenAS2 JSON flags")
 
 
 class CreateSFTPPartnerRequest(BaseModel):
@@ -48,7 +49,7 @@ class CreateSFTPPartnerRequest(BaseModel):
 
 class CreateWebhookPartnerRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the Webhook partner")
-    url: str = Field(..., max_length=1024, description="Webhook endpoint URL")
+    url: HttpUrl = Field(..., description="Webhook endpoint URL")
     auth_header_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for auth header"
     )
@@ -71,6 +72,17 @@ class CreateInboundRouteRequest(BaseModel):
     as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
     sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
 
+    @model_validator(mode="after")
+    def check_exactly_one_destination(self) -> "CreateInboundRouteRequest":
+        targets = [
+            self.webhook_partner_id is not None,
+            self.as2_partner_id is not None,
+            self.sftp_partner_id is not None,
+        ]
+        if sum(targets) != 1:
+            raise ValueError("Exactly one destination partner must be specified")
+        return self
+
 
 class CreateOutboundRouteRequest(BaseModel):
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
@@ -80,6 +92,16 @@ class CreateOutboundRouteRequest(BaseModel):
     )
     as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
     sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
+
+    @model_validator(mode="after")
+    def check_exactly_one_destination(self) -> "CreateOutboundRouteRequest":
+        targets = [
+            self.as2_partner_id is not None,
+            self.sftp_partner_id is not None,
+        ]
+        if sum(targets) != 1:
+            raise ValueError("Exactly one destination partner must be specified")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +133,7 @@ class AS2PartnershipResponse(BaseModel):
     mdn_type: str
     encryption_algorithm: str
     signature_algorithm: str
+    status: str
 
 
 class RouteResponse(BaseModel):

@@ -13,10 +13,14 @@ class TradingPartnerRepository:
         self.session = session
 
     async def find_by_as2_id(self, as2_id: str) -> AS2Partner | None:
-        """Finds an AS2 partner globally across all tenants."""
+        tenant_id = get_tenant_id()
+        if tenant_id is None:
+            raise RuntimeError("Database queries require an active tenant context.")
+
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.as2_id == as2_id,
+                AS2Partner.tenant_id == tenant_id,
                 AS2Partner.active.is_(True),
             )
         )

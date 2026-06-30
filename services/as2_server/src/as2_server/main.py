@@ -281,7 +281,8 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
                 trace_id=trace_id,
                 direction="INBOUND",
                 connection_type="AS2",
-                trading_partner_id=partner.id,  # type: ignore[arg-type]
+                sender_id=as2_msg.as2_from,
+                receiver_id=as2_msg.as2_to,
                 s3_key=storage_uri,
                 status=status,
                 as2_message_id=as2_msg.message_id,

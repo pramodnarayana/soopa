@@ -1,20 +1,28 @@
+import pytest
 from api.dependencies import get_tenant_uow, get_uow, require_platform_admin
 from api.main import app
 from api_fakes import FakeUnitOfWork
 from fastapi.testclient import TestClient
 from identity.dependencies import get_current_tenant_id
 
-fake_uow = FakeUnitOfWork()
 
-app.dependency_overrides[get_uow] = lambda: fake_uow
-app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
-app.dependency_overrides[get_current_tenant_id] = lambda: 1
-app.dependency_overrides[require_platform_admin] = lambda: 0
-
-client = TestClient(app)
+@pytest.fixture
+def fake_uow():
+    return FakeUnitOfWork()
 
 
-def test_create_platform_as2_partner():
+@pytest.fixture
+def client(fake_uow):
+    app.dependency_overrides[get_uow] = lambda: fake_uow
+    app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
+    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    app.dependency_overrides[require_platform_admin] = lambda: 0
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+def test_create_platform_as2_partner(client, fake_uow):
     response = client.post(
         "/api/v1/platform/partners/as2/trading-partners",
         json={"name": "Test Global Partner", "as2_id": "GLOBAL_AS2"},
@@ -26,13 +34,18 @@ def test_create_platform_as2_partner():
     assert len(fake_uow.control_plane.partners) == 1
 
 
-def test_list_platform_as2_partners():
+def test_list_platform_as2_partners(client, fake_uow):
+    # Ensure there's a partner first
+    client.post(
+        "/api/v1/platform/partners/as2/trading-partners",
+        json={"name": "Test Global Partner", "as2_id": "GLOBAL_AS2"},
+    )
     response = client.get("/api/v1/platform/partners/as2/trading-partners")
     assert response.status_code == 200
     assert len(response.json()) == 1
 
 
-def test_create_platform_as2_partnership():
+def test_create_platform_as2_partnership(client, fake_uow):
     import uuid
 
     local_id = str(uuid.uuid4())
@@ -47,13 +60,13 @@ def test_create_platform_as2_partnership():
     assert len(fake_uow.control_plane.partnerships) == 1
 
 
-def test_list_platform_as2_partnerships():
+def test_list_platform_as2_partnerships(client):
     response = client.get("/api/v1/platform/partners/as2/partnerships")
     assert response.status_code == 200
     assert len(response.json()) == 1
 
 
-def test_create_tenant_sftp_partner():
+def test_create_tenant_sftp_partner(client, fake_uow):
     response = client.post(
         "/api/v1/partners/sftp",
         json={
@@ -68,7 +81,7 @@ def test_create_tenant_sftp_partner():
     assert data["type"] == "SFTP"
 
 
-def test_create_tenant_webhook_partner():
+def test_create_tenant_webhook_partner(client, fake_uow):
     response = client.post(
         "/api/v1/partners/webhook", json={"name": "My Webhook", "url": "http://hook.test"}
     )

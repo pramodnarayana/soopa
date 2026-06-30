@@ -145,6 +145,7 @@ class MockSession:
                     self.mdn_url = None
                     self.encryption_algorithm = "AES256"
                     self.signature_algorithm = "SHA256"
+                    self.active = True
 
             return MockResult([P()])
         else:

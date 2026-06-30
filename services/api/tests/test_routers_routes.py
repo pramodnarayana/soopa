@@ -1,18 +1,26 @@
+import pytest
 from api.dependencies import get_tenant_uow
 from api.main import app
 from api_fakes import FakeUnitOfWork
 from fastapi.testclient import TestClient
 from identity.dependencies import get_current_tenant_id
 
-fake_uow = FakeUnitOfWork()
 
-client = TestClient(app)
-
-app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
-app.dependency_overrides[get_current_tenant_id] = lambda: 1
+@pytest.fixture
+def fake_uow():
+    return FakeUnitOfWork()
 
 
-def test_create_inbound_route():
+@pytest.fixture
+def client(fake_uow):
+    app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
+    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+def test_create_inbound_route(client):
     import uuid
 
     response = client.post(
@@ -29,7 +37,7 @@ def test_create_inbound_route():
     assert data["direction"] == "INBOUND"
 
 
-def test_create_outbound_route():
+def test_create_outbound_route(client):
     import uuid
 
     response = client.post(
@@ -46,7 +54,7 @@ def test_create_outbound_route():
     assert data["direction"] == "OUTBOUND"
 
 
-def test_list_routes():
+def test_list_routes(client):
     response = client.get("/api/v1/routes")
     assert response.status_code == 200
     assert len(response.json()) >= 0

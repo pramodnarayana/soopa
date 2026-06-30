@@ -14,7 +14,7 @@ class AuthorizationService:
         Calculates the user's roles, permissions, and feature flags without touching HTTP or SQLAlchemy.
         """
         zitadel_roles = token_payload.get("urn:zitadel:iam:org:project:roles", {})
-        is_platform_admin = "Platform_Admin" in zitadel_roles or tenant_id == 0
+        is_platform_admin = "Platform_Admin" in zitadel_roles
 
         # Fetch Tenant feature flags using Port
         tenant_flags = await self.tenant_repo.get_tenant_flags(tenant_id)

@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
@@ -43,7 +44,7 @@ class ProvisioningService:
         }
         await self.global_repo.create_outbox_event(
             tenant_id=tenant_id,
-            event_type="AS2_PARTNER_PROVISION",
+            event_type="AS2_PARTNER_CREATED",
             payload=payload,
         )
 
@@ -104,7 +105,7 @@ class ProvisioningService:
             direction="OUTBOUND",
         )
 
-    async def list_routes(self) -> list[dict]:
+    async def list_routes(self) -> list[dict[str, Any]]:
         routes_data = await self.tenant_repo.get_all_routes()
         inbound = routes_data.get("inbound", [])
         outbound = routes_data.get("outbound", [])

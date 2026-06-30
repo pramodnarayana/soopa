@@ -1,10 +1,11 @@
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from database.models import ApiPayload, EdiMessage
 from database.models import TenantOutbox as Outbox
 from database.models.data_plane import (
     AS2Partner,
+    AS2Partnership,
     InboundRoute,
     OutboundRoute,
     SFTPPartner,
@@ -118,6 +119,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def get_route(
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
     ) -> dict[str, Any] | None:
+        if direction not in ("INBOUND", "OUTBOUND"):
+            raise ValueError(f"Invalid direction: {direction}")
         model = InboundRoute if direction == "INBOUND" else OutboundRoute
 
         # Exact match or wildcard transaction type
@@ -135,21 +138,24 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
 
         # Sort so exact transaction_type comes first
-        records = sorted(records, key=lambda r: r.transaction_type == "*")
+        records = sorted(records, key=lambda r: cast(Any, r).transaction_type == "*")
         record = records[0]
 
+        rec = cast(Any, record)
         return {
-            "route_id": str(record.id),
-            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
-            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
-            "webhook_partner_id": str(record.webhook_partner_id)
-            if hasattr(record, "webhook_partner_id") and record.webhook_partner_id
+            "route_id": str(rec.id),
+            "as2_partner_id": str(rec.as2_partner_id) if rec.as2_partner_id else None,
+            "sftp_partner_id": str(rec.sftp_partner_id) if rec.sftp_partner_id else None,
+            "webhook_partner_id": str(rec.webhook_partner_id)
+            if hasattr(rec, "webhook_partner_id") and rec.webhook_partner_id
             else None,
         }
 
     async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(SFTPPartner).where(SFTPPartner.id == uuid.UUID(partner_id))
+            select(SFTPPartner).where(
+                SFTPPartner.id == uuid.UUID(partner_id), SFTPPartner.active.is_(True)
+            )
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -165,7 +171,9 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
     async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(WebhookPartner).where(WebhookPartner.id == uuid.UUID(partner_id))
+            select(WebhookPartner).where(
+                WebhookPartner.id == uuid.UUID(partner_id), WebhookPartner.active.is_(True)
+            )
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -177,15 +185,24 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         }
 
     async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
-        result = await self.session.execute(
-            select(AS2Partner).where(AS2Partner.id == uuid.UUID(partner_id))
+        stmt = (
+            select(AS2Partner, AS2Partnership)
+            .join(AS2Partnership, AS2Partnership.remote_partner_id == AS2Partner.id)
+            .where(
+                AS2Partner.id == uuid.UUID(partner_id),
+                AS2Partner.active.is_(True),
+                AS2Partnership.active.is_(True),
+            )
         )
-        record = result.scalar_one_or_none()
+        result = await self.session.execute(stmt)
+        record = result.first()
         if not record:
             return None
+        partner, partnership = record
         return {
-            "name": record.name,
-            "as2_id": record.as2_id,
-            "host": record.host,
-            "port": record.port,
+            "name": partner.name,
+            "as2_id": partner.as2_id,
+            "host": partnership.host,
+            "port": partnership.port,
+            "credentials_vault_ref": partnership.credentials_vault_ref,
         }

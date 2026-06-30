@@ -10,8 +10,8 @@ class FakeHttpDeliveryAdapter:
         self.delivered: list[dict] = []
         self.status_code = status_code
 
-    async def deliver(self, url: str, payload: bytes) -> int:
-        self.delivered.append({"url": url, "payload": payload})
+    async def deliver(self, url: str, payload: bytes, auth_token: str | None = None) -> int:
+        self.delivered.append({"url": url, "payload": payload, "auth_token": auth_token})
         return self.status_code
 
 
@@ -28,6 +28,7 @@ class FakeSftpDeliveryAdapter:
         remote_path: str,
         filename: str,
         payload: bytes,
+        host_key: str | None = None,
     ) -> None:
         self.delivered.append(
             {
@@ -38,6 +39,7 @@ class FakeSftpDeliveryAdapter:
                 "remote_path": remote_path,
                 "filename": filename,
                 "payload": payload,
+                "host_key": host_key,
             }
         )
 
@@ -205,8 +207,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     }
 
     service = DeliveryService(storage, repo, http_adapter, FakeSftpDeliveryAdapter())
-    with pytest.raises(RuntimeError, match="Delivery failed with HTTP status 503"):
-        await service.deliver(trace_id)
+    await service.deliver(trace_id)
 
     assert repo.api_payloads[trace_id]["status"] == "FAILED"
     assert len(http_adapter.delivered) == 1

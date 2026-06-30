@@ -39,15 +39,21 @@ async def create_as2_partner(
     async with uow:
         service = ProvisioningService(uow.control_plane, None)  # type: ignore
 
+        if not request.public_cert_pem and not request.public_cert_vault_ref:
+            raise ValueError(
+                "Remote AS2 partners require a public certificate (PEM or Vault reference)."
+            )
+
         cmd = CreateAS2TradingPartnerCmd(
             name=request.name,
             as2_id=request.as2_id,
             is_local=False,  # Tenant partners are usually remote
             public_cert_pem=request.public_cert_pem,
             public_cert_vault_ref=request.public_cert_vault_ref,
+            private_key_vault_ref=None,  # Explicitly ignore
         )
 
-        entity = await service.create_as2_identity(tenant_id, cmd)
+        entity = await service.create_as2_partner(tenant_id, cmd)
         await uow.commit()
 
         return PartnerResponse(
@@ -104,7 +110,7 @@ async def create_webhook_partner(
 
         cmd = CreateWebhookPartnerCmd(
             name=request.name,
-            url=request.url,
+            url=str(request.url),
             auth_header_vault_ref=request.auth_header_vault_ref,
         )
 

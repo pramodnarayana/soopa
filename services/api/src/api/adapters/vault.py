@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 
 import hvac
@@ -8,9 +9,19 @@ logger = structlog.get_logger(__name__)
 
 
 class VaultAdapter:
-    def __init__(self):
+    def __init__(self) -> None:
         self.url = os.getenv("VAULT_ADDR", "http://localhost:8200")
-        self.token = os.getenv("VAULT_TOKEN", "root")
+        token = os.getenv("VAULT_TOKEN")
+        env = os.getenv("ENVIRONMENT", "production")
+        if not token:
+            if env in ("development", "dev", "test", "local") or "pytest" in sys.modules:
+                token = "root"
+            else:
+                raise ValueError(
+                    "VAULT_TOKEN environment variable is required in non-development environments."
+                )
+
+        self.token = token
         self.client = hvac.Client(url=self.url, token=self.token)
         self.mount_point = "secret"
 
@@ -48,7 +59,21 @@ class VaultAdapter:
         read_response = self.client.secrets.kv.v2.read_secret_version(
             path=vault_ref, mount_point=self.mount_point
         )
-        pem_str = read_response["data"]["data"]["private_key_pem"]
+        if not isinstance(read_response, dict):
+            raise TypeError("Expected Vault response to be a dictionary")
+
+        data = read_response.get("data", {})
+        if not isinstance(data, dict):
+            raise TypeError("Expected Vault 'data' to be a dictionary")
+
+        inner_data = data.get("data", {})
+        if not isinstance(inner_data, dict):
+            raise TypeError("Expected Vault inner 'data' to be a dictionary")
+
+        pem_str = inner_data.get("private_key_pem")
+        if not isinstance(pem_str, str):
+            raise TypeError("Expected private_key_pem to be a string")
+
         return pem_str.encode("utf-8")
 
 

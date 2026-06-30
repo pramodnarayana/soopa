@@ -12,7 +12,8 @@ from database.repository import (
 pytestmark = pytest.mark.asyncio
 
 
-async def test_trading_partner_repository_find_by_as2_id() -> None:
+@patch("database.repository.get_tenant_id", return_value=123)
+async def test_trading_partner_repository_find_by_as2_id(mock_get_tenant_id: Any) -> None:
     session = AsyncMock()
     mock_result = MagicMock()
     mock_partner = AS2Partner(as2_id="TEST-ID", name="Test", tenant_id=1)
@@ -43,5 +44,7 @@ async def test_edi_message_repository_save_message(mock_get_tenant_id: Any) -> N
 
     assert result.direction == "INBOUND"
     assert result.status == "RECEIVED"
+    assert result.sender_id == "SENDER1"
+    assert result.receiver_id == "RECEIVER1"
     session.add.assert_called_once()
     session.flush.assert_awaited_once()

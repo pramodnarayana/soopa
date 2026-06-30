@@ -24,6 +24,7 @@ async def test_paramiko_sftp_delivery_adapter(mock_from_transport, mock_transpor
         remote_path="/upload/",
         filename="test.txt",
         payload=b"test payload",
+        host_key=None,
     )
 
     # Assert connect was called with the right parameters

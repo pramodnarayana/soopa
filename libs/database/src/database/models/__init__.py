@@ -1,5 +1,6 @@
 from .control_plane import (
     AS2Partner,
+    AS2Partnership,
     DatabaseShard,
     GlobalBase,
     SystemAuditLog,
@@ -36,6 +37,7 @@ __all__ = [
     "User",
     "TenantUser",
     "AS2Partner",
+    "AS2Partnership",
     "GlobalOutbox",
     "SystemAuditLog",
     # Tenant

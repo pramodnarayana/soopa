@@ -5,6 +5,7 @@ from pipeline.ports.http import HttpDeliveryPort
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.sftp import SftpDeliveryPort
 from pipeline.ports.storage import StoragePort
+from pipeline.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,13 @@ class DeliveryService:
         repository: RepositoryPort,
         http_delivery: HttpDeliveryPort,
         sftp_delivery: SftpDeliveryPort,
+        vault: VaultPort | None = None,
     ) -> None:
         self.storage = storage
         self.repository = repository
         self.http_delivery = http_delivery
         self.sftp_delivery = sftp_delivery
+        self.vault = vault
 
     async def deliver(self, trace_id: str) -> None:
         """
@@ -80,11 +83,18 @@ class DeliveryService:
 
         try:
             raw_payload = await self.storage.download(api_payload["s3_key"])
-            status_code = await self.http_delivery.deliver(url=partner["url"], payload=raw_payload)
-        except Exception as e:
+
+            auth_token = None
+            if partner.get("auth_header_vault_ref") and self.vault:
+                auth_token = await self.vault.get_secret(partner["auth_header_vault_ref"])
+
+            status_code = await self.http_delivery.deliver(
+                url=partner["url"], payload=raw_payload, auth_token=auth_token
+            )
+        except Exception:
             await self.repository.update_api_payload_status(trace_id, "FAILED")
             logger.exception(f"Delivery failed for trace_id={trace_id}")
-            raise RuntimeError(f"Delivery failed due to exception: {e}") from e
+            return
 
         if 200 <= status_code < 300:
             await self.repository.update_api_payload_status(trace_id, "DELIVERED")
@@ -92,7 +102,7 @@ class DeliveryService:
         else:
             await self.repository.update_api_payload_status(trace_id, "FAILED")
             logger.error(f"Failed to deliver trace_id={trace_id}. HTTP Status: {status_code}")
-            raise RuntimeError(f"Delivery failed with HTTP status {status_code}")
+            return
 
     async def _deliver_sftp(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
         partner = await self.repository.get_sftp_partner(partner_id)
@@ -105,31 +115,31 @@ class DeliveryService:
             # Generate a filename
             filename = f"{trace_id}.edi"
 
-            # Use vault_ref as a mock password for now in development
             password = partner["credentials_vault_ref"]
+            if password and self.vault:
+                password = await self.vault.get_secret(password)
 
             await self.sftp_delivery.deliver(
                 host=partner["host"],
                 port=partner["port"],
                 username=partner["username"],
                 password=password,
+                host_key=None,
                 remote_path=partner["remote_path"],
                 filename=filename,
                 payload=raw_payload,
             )
             await self.repository.update_edi_message_status(trace_id, "DELIVERED")
             logger.info(f"Successfully delivered trace_id={trace_id} to SFTP {partner['host']}")
-        except Exception as e:
+        except Exception:
             await self.repository.update_edi_message_status(trace_id, "FAILED")
             logger.exception(f"SFTP delivery failed for trace_id={trace_id}")
-            raise RuntimeError(f"SFTP delivery failed: {e}") from e
+            return
 
     async def _deliver_as2(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
         partner = await self.repository.get_as2_partner(partner_id)
         if not partner:
             raise ValueError(f"AS2 partner {partner_id} not found.")
 
-        # TODO: integrate AS2 delivery using Mendelson/pyas2 etc.
-        # For now, just mark it delivered
-        await self.repository.update_edi_message_status(trace_id, "DELIVERED")
+        raise NotImplementedError("AS2 dispatch via pyas2/Mendelson is not yet implemented.")
         logger.info(f"Mock AS2 delivery successful for trace_id={trace_id} to {partner['as2_id']}")

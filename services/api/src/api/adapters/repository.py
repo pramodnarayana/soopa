@@ -18,6 +18,9 @@ from api.ports.repository import (
 from database.models.control_plane import AS2Partner, AS2Partnership, Tenant
 from database.models.control_plane import Outbox as GlobalOutbox
 from database.models.data_plane import (
+    AS2Partner as DataPlaneAS2Partner,
+)
+from database.models.data_plane import (
     InboundRoute,
     OutboundRoute,
     SFTPPartner,
@@ -155,10 +158,48 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         return partner_id
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> UUID:
+        tenant_id = self._tenant_id()
+
+        # Validate target UUIDs belong to this tenant
+        if cmd.webhook_partner_id:
+            result = await self.session.execute(
+                select(WebhookPartner.id).where(
+                    WebhookPartner.id == cmd.webhook_partner_id,
+                    WebhookPartner.tenant_id == tenant_id,
+                )
+            )
+            if not result.scalar_one_or_none():
+                raise ValueError(
+                    f"Webhook partner {cmd.webhook_partner_id} not found or does not belong to this tenant"
+                )
+
+        if cmd.as2_partner_id:
+            result = await self.session.execute(
+                select(DataPlaneAS2Partner.id).where(
+                    DataPlaneAS2Partner.id == cmd.as2_partner_id,
+                    DataPlaneAS2Partner.tenant_id == tenant_id,
+                )
+            )
+            if not result.scalar_one_or_none():
+                raise ValueError(
+                    f"AS2 partner {cmd.as2_partner_id} not found or does not belong to this tenant"
+                )
+
+        if cmd.sftp_partner_id:
+            result = await self.session.execute(
+                select(SFTPPartner.id).where(
+                    SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
+                )
+            )
+            if not result.scalar_one_or_none():
+                raise ValueError(
+                    f"SFTP partner {cmd.sftp_partner_id} not found or does not belong to this tenant"
+                )
+
         route_id = uuid.uuid4()
         record = InboundRoute(
             id=route_id,
-            tenant_id=self._tenant_id(),
+            tenant_id=tenant_id,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
             transaction_type=cmd.transaction_type,
@@ -171,10 +212,36 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         return route_id
 
     async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> UUID:
+        tenant_id = self._tenant_id()
+
+        # Validate target UUIDs belong to this tenant
+        if cmd.as2_partner_id:
+            result = await self.session.execute(
+                select(DataPlaneAS2Partner.id).where(
+                    DataPlaneAS2Partner.id == cmd.as2_partner_id,
+                    DataPlaneAS2Partner.tenant_id == tenant_id,
+                )
+            )
+            if not result.scalar_one_or_none():
+                raise ValueError(
+                    f"AS2 partner {cmd.as2_partner_id} not found or does not belong to this tenant"
+                )
+
+        if cmd.sftp_partner_id:
+            result = await self.session.execute(
+                select(SFTPPartner.id).where(
+                    SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
+                )
+            )
+            if not result.scalar_one_or_none():
+                raise ValueError(
+                    f"SFTP partner {cmd.sftp_partner_id} not found or does not belong to this tenant"
+                )
+
         route_id = uuid.uuid4()
         record = OutboundRoute(
             id=route_id,
-            tenant_id=self._tenant_id(),
+            tenant_id=tenant_id,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
             transaction_type=cmd.transaction_type,

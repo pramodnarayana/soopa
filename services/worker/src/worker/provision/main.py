@@ -5,8 +5,10 @@ import logging
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models.control_plane import AS2Partner as GlobalAS2Partner
+from database.models.control_plane import AS2Partnership as GlobalAS2Partnership
 from database.models.control_plane import Outbox as GlobalOutbox
 from database.models.data_plane import AS2Partner as TenantAS2Partner
+from database.models.data_plane import AS2Partnership as TenantAS2Partnership
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,29 +34,71 @@ async def replicate_tenant_config(
             insert(TenantAS2Partner)
             .values(
                 id=global_tp.id,
-                tenant_id=global_tp.tenant_id,
+                tenant_id=tenant_id,  # Use destination tenant_id for replicated partners
                 name=global_tp.name,
                 as2_id=global_tp.as2_id,
-                host=global_tp.host,
-                port=global_tp.port,
+                is_local=global_tp.is_local,
                 public_cert_pem=global_tp.public_cert_pem,
-                credentials_vault_ref=global_tp.credentials_vault_ref,
+                public_cert_vault_ref=global_tp.public_cert_vault_ref,
+                private_key_vault_ref=global_tp.private_key_vault_ref,
                 active=global_tp.active,
             )
             .on_conflict_do_update(
                 index_elements=["id"],
                 set_={
+                    "tenant_id": tenant_id,
                     "name": global_tp.name,
                     "as2_id": global_tp.as2_id,
-                    "host": global_tp.host,
-                    "port": global_tp.port,
+                    "is_local": global_tp.is_local,
                     "public_cert_pem": global_tp.public_cert_pem,
-                    "credentials_vault_ref": global_tp.credentials_vault_ref,
+                    "public_cert_vault_ref": global_tp.public_cert_vault_ref,
+                    "private_key_vault_ref": global_tp.private_key_vault_ref,
                     "active": global_tp.active,
                 },
             )
         )
         await tenant_session.execute(insert_stmt)
+
+    # Replicate AS2Partnerships
+    ps_stmt = select(GlobalAS2Partnership).where(GlobalAS2Partnership.tenant_id == tenant_id)
+    ps_result = await global_session.execute(ps_stmt)
+
+    for global_ps in ps_result.scalars():
+        insert_ps_stmt = (
+            insert(TenantAS2Partnership)
+            .values(
+                id=global_ps.id,
+                tenant_id=tenant_id,
+                local_partner_id=global_ps.local_partner_id,
+                remote_partner_id=global_ps.remote_partner_id,
+                local_url=global_ps.local_url,
+                remote_url=global_ps.remote_url,
+                credentials_vault_ref=global_ps.credentials_vault_ref,
+                mdn_type=global_ps.mdn_type,
+                mdn_url=global_ps.mdn_url,
+                encryption_algorithm=global_ps.encryption_algorithm,
+                signature_algorithm=global_ps.signature_algorithm,
+                advanced_flags=global_ps.advanced_flags,
+                active=global_ps.active,
+            )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={
+                    "local_partner_id": global_ps.local_partner_id,
+                    "remote_partner_id": global_ps.remote_partner_id,
+                    "local_url": global_ps.local_url,
+                    "remote_url": global_ps.remote_url,
+                    "credentials_vault_ref": global_ps.credentials_vault_ref,
+                    "mdn_type": global_ps.mdn_type,
+                    "mdn_url": global_ps.mdn_url,
+                    "encryption_algorithm": global_ps.encryption_algorithm,
+                    "signature_algorithm": global_ps.signature_algorithm,
+                    "advanced_flags": global_ps.advanced_flags,
+                    "active": global_ps.active,
+                },
+            )
+        )
+        await tenant_session.execute(insert_ps_stmt)
 
     await tenant_session.commit()
     logger.info(f"Successfully replicated AS2 configuration for tenant_id={tenant_id}")

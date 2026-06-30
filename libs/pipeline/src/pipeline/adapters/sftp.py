@@ -19,12 +19,21 @@ class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
         port: int,
         username: str,
         password: str,
+        host_key: str | None,
         remote_path: str,
         filename: str,
         payload: bytes,
     ) -> None:
         await asyncio.to_thread(
-            self._deliver_sync, host, port, username, password, remote_path, filename, payload
+            self._deliver_sync,
+            host,
+            port,
+            username,
+            password,
+            host_key,
+            remote_path,
+            filename,
+            payload,
         )
 
     def _deliver_sync(
@@ -33,6 +42,7 @@ class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
         port: int,
         username: str,
         password: str,
+        host_key: str | None,
         remote_path: str,
         filename: str,
         payload: bytes,
@@ -42,6 +52,7 @@ class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
         try:
             # We skip host key verification for simplicity here,
             # but in production, we should load known_hosts or strictly verify.
+            # If host_key is provided, we should use it for verification (mocked here).
             transport = paramiko.Transport((host, port))
             transport.connect(username=username, password=password)
             sftp = paramiko.SFTPClient.from_transport(transport)

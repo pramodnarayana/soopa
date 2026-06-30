@@ -14,14 +14,24 @@ pytestmark = pytest.mark.asyncio
 
 
 def test_validate_target_url():
-    assert validate_target_url("http://example.com") is True
-    assert validate_target_url("https://example.com") is True
-    assert validate_target_url("ftp://example.com") is False
-    assert validate_target_url("http://localhost") is False
-    assert validate_target_url("http://127.0.0.1") is False
-    assert validate_target_url("http://10.0.0.1") is False
-    # Valid IP address
-    assert validate_target_url("http://8.8.8.8") is True
+    with patch("socket.getaddrinfo") as mock_getaddrinfo:
+
+        def side_effect(host, port, *args, **kwargs):
+            if host in ("localhost", "127.0.0.1", "10.0.0.1"):
+                return [(2, 1, 6, "", ("127.0.0.1", 80))]
+            return [(2, 1, 6, "", ("93.184.216.34", 80))]
+
+        mock_getaddrinfo.side_effect = side_effect
+        assert validate_target_url("http://example.com") is True
+        assert validate_target_url("https://example.com") is True
+        assert validate_target_url("ftp://example.com") is False
+
+        assert validate_target_url("http://localhost") is False
+        assert validate_target_url("http://127.0.0.1") is False
+        assert validate_target_url("http://10.0.0.1") is False
+
+        # Valid IP address
+        assert validate_target_url("http://8.8.8.8") is True
 
 
 @patch("worker.data.main.aioboto3.Session")

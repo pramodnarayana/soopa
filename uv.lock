@@ -270,6 +270,7 @@ source = { editable = "services/api" }
 dependencies = [
     { name = "aioboto3" },
     { name = "config" },
+    { name = "cryptography" },
     { name = "database" },
     { name = "fastapi" },
     { name = "gunicorn" },
@@ -287,6 +288,7 @@ dependencies = [
 requires-dist = [
     { name = "aioboto3", specifier = ">=12.0.0" },
     { name = "config", editable = "libs/config" },
+    { name = "cryptography", specifier = ">=41.0.0" },
     { name = "database", editable = "libs/database" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "gunicorn", specifier = ">=22.0.0" },
@@ -319,6 +321,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "gunicorn" },
     { name = "prometheus-client" },
+    { name = "python-dotenv" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -327,6 +330,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "gunicorn", specifier = ">=22.0.0" },
     { name = "prometheus-client", specifier = ">=0.20.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.22.0" },
 ]
 
@@ -2098,6 +2102,7 @@ dependencies = [
     { name = "paramiko" },
     { name = "pydantic" },
     { name = "transformer" },
+    { name = "types-paramiko" },
 ]
 
 [package.metadata]
@@ -2110,6 +2115,7 @@ requires-dist = [
     { name = "paramiko", specifier = ">=5.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "transformer", editable = "libs/transformer" },
+    { name = "types-paramiko", specifier = ">=3.0.0" },
 ]
 
 [[package]]
@@ -2809,6 +2815,18 @@ dependencies = [
 requires-dist = [
     { name = "aioboto3", specifier = ">=12.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
+]
+
+[[package]]
+name = "types-paramiko"
+version = "5.0.0.20260617"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/de/89/902652d7b62bb7cd2b73c7f08c8fd03945c223c3814022f0ad305e1018b9/types_paramiko-5.0.0.20260617.tar.gz", hash = "sha256:50a5b0dc68b39d30097cb7d93b4915dbbc97ed740ea633bd492be25ca1f25df4", size = 28474, upload-time = "2026-06-17T06:56:52.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/4d/eab89decb4201dfff665a3b92088f384ff1e165bf6caa447509733bc1bc6/types_paramiko-5.0.0.20260617-py3-none-any.whl", hash = "sha256:83d87c396405666524441710ec59e693bca8b19021861456ac0a2401327812f8", size = 37123, upload-time = "2026-06-17T06:56:51.81Z" },
 ]
 
 [[package]]

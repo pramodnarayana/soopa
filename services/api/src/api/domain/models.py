@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 # ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ class CreateAS2PartnershipCmd:
     mdn_url: str | None = None
     encryption_algorithm: str = "AES256"
     signature_algorithm: str = "SHA256"
-    advanced_flags: dict | None = None
+    advanced_flags: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
