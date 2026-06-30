@@ -20,13 +20,14 @@ function Dashboard() {
       {/* Hero / Overview Section */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold tracking-wide uppercase mb-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            System Operational
-          </div>
+          {isLoading ? (
+            <div className="h-6 w-32 bg-slate-100 rounded animate-pulse mb-2"></div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-semibold tracking-wide uppercase mb-2">
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
+              Status Unknown
+            </div>
+          )}
           <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
             Platform Overview
           </h2>
@@ -37,9 +38,13 @@ function Dashboard() {
 
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-end">
-            <span className="text-3xl font-black tracking-tighter text-slate-900">24.8k</span>
-            <span className="text-sm font-medium text-slate-500 flex items-center gap-1">
-              <Activity className="w-4 h-4 text-emerald-500" /> Transactions today
+            {isLoading ? (
+              <div className="h-9 w-20 bg-slate-100 rounded animate-pulse"></div>
+            ) : (
+              <span className="text-3xl font-black tracking-tighter text-slate-300">--</span>
+            )}
+            <span className="text-sm font-medium text-slate-500 flex items-center gap-1 mt-1">
+              <Activity className="w-4 h-4 text-slate-400" /> Transactions today
             </span>
           </div>
         </div>

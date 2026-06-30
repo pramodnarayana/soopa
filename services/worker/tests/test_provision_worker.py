@@ -52,10 +52,10 @@ async def test_replicate_tenant_config() -> None:
     mock_tp.tenant_id = 99
     mock_tp.name = "Acme Corp AS2"
     mock_tp.as2_id = "ACME"
-    mock_tp.host = "as2.acme.com"
-    mock_tp.port = 4080
+    mock_tp.is_local = False
     mock_tp.public_cert_pem = "PEM"
-    mock_tp.credentials_vault_ref = "vault://acme"
+    mock_tp.public_cert_vault_ref = "vault://acme-pub"
+    mock_tp.private_key_vault_ref = None
     mock_tp.active = True
 
     # We have 2 queries in replicate_tenant_config (AS2Partner and AS2Partnership)

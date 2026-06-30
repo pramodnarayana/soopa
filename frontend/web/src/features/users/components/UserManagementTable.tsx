@@ -16,7 +16,21 @@ export interface UserRow {
   role: 'Owner' | 'Admin' | 'Standard'
 }
 
-export function UserManagementTable({ users, currentPermissions = [] }: { users: UserRow[], currentPermissions?: string[] }) {
+export interface UserManagementTableProps {
+  users: UserRow[]
+  currentPermissions?: string[]
+  onInvite?: () => void
+  onEdit?: (userId: string) => void
+  onDelete?: (userId: string) => void
+}
+
+export function UserManagementTable({
+  users,
+  currentPermissions = [],
+  onInvite,
+  onEdit,
+  onDelete
+}: UserManagementTableProps) {
   const canManage = currentPermissions.includes('users:write')
 
   return (
@@ -27,7 +41,11 @@ export function UserManagementTable({ users, currentPermissions = [] }: { users:
           <p className="text-sm text-slate-500 mt-1">Manage team access and roles.</p>
         </div>
         {canManage && (
-          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm shadow-indigo-600/20">
+          <Button
+            onClick={onInvite}
+            disabled={!onInvite}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm shadow-indigo-600/20 disabled:opacity-50"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Invite User
           </Button>
@@ -69,11 +87,23 @@ export function UserManagementTable({ users, currentPermissions = [] }: { users:
                 <TableCell className="text-right">
                   {canManage && (
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 h-8 w-8 rounded-lg">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEdit?.(user.id)}
+                        disabled={!onEdit}
+                        className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 h-8 w-8 rounded-lg disabled:opacity-50"
+                      >
                         <Edit2 className="w-4 h-4" />
                       </Button>
                       {user.role !== 'Owner' && (
-                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 rounded-lg">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDelete?.(user.id)}
+                          disabled={!onDelete}
+                          className="text-slate-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 rounded-lg disabled:opacity-50"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       )}

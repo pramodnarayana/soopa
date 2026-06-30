@@ -50,7 +50,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_api_payloads_tenant_id'), 'api_payloads', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_api_payloads_trace_id'), 'api_payloads', ['trace_id'], unique=False)
+    op.create_index(op.f('ix_api_payloads_trace_id'), 'api_payloads', ['trace_id'], unique=True)
     op.create_table('as2_partners',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -60,7 +60,7 @@ def upgrade() -> None:
     sa.Column('public_cert_pem', sa.Text(), nullable=True),
     sa.Column('public_cert_vault_ref', sa.String(length=255), nullable=True),
     sa.Column('private_key_vault_ref', sa.String(length=255), nullable=True),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('audit_log',
@@ -97,7 +97,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_edi_messages_tenant_id'), 'edi_messages', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_edi_messages_trace_id'), 'edi_messages', ['trace_id'], unique=False)
+    op.create_index(op.f('ix_edi_messages_trace_id'), 'edi_messages', ['trace_id'], unique=True)
     op.create_index('ix_edi_msgs_sender_recv', 'edi_messages', ['sender_id', 'receiver_id', 'created_at'], unique=False)
     op.create_table('jobs',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -143,7 +143,7 @@ def upgrade() -> None:
     sa.Column('username', sa.String(length=255), nullable=False),
     sa.Column('remote_path', sa.String(length=1024), nullable=True),
     sa.Column('credentials_vault_ref', sa.String(length=255), nullable=False),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
@@ -153,7 +153,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('url', sa.String(length=1024), nullable=False),
     sa.Column('auth_header_vault_ref', sa.String(length=255), nullable=True),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
@@ -171,7 +171,7 @@ def upgrade() -> None:
     sa.Column('encryption_algorithm', sa.String(length=50), nullable=False),
     sa.Column('signature_algorithm', sa.String(length=50), nullable=False),
     sa.Column('advanced_flags', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.ForeignKeyConstraint(['local_partner_id'], ['as2_partners.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['remote_partner_id'], ['as2_partners.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -184,7 +184,7 @@ def upgrade() -> None:
     sa.Column('webhook_partner_id', sa.UUID(), nullable=True),
     sa.Column('as2_partner_id', sa.UUID(), nullable=True),
     sa.Column('sftp_partner_id', sa.UUID(), nullable=True),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['as2_partner_id'], ['as2_partners.id'], ),
     sa.ForeignKeyConstraint(['sftp_partner_id'], ['sftp_partners.id'], ),
@@ -212,7 +212,7 @@ def upgrade() -> None:
     sa.Column('transaction_type', sa.String(length=50), nullable=False),
     sa.Column('as2_partner_id', sa.UUID(), nullable=True),
     sa.Column('sftp_partner_id', sa.UUID(), nullable=True),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['as2_partner_id'], ['as2_partners.id'], ),
     sa.ForeignKeyConstraint(['sftp_partner_id'], ['sftp_partners.id'], ),

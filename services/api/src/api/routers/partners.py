@@ -37,7 +37,9 @@ async def create_as2_partner(
     Emits a provisioning event for workers to replicate this config to the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(uow.control_plane, None)  # type: ignore
+        # We ignore types here because data_plane is technically required, but
+        # create_as2_partner only uses global_repo in its flow (with outbox pattern)
+        service = ProvisioningService(global_repo=uow.control_plane, tenant_repo=None)  # type: ignore[arg-type]
 
         if not request.public_cert_pem and not request.public_cert_vault_ref:
             raise HTTPException(
@@ -75,7 +77,7 @@ async def create_sftp_partner(
     Creates a new SFTP Partner directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(None, uow.data_plane)  # type: ignore
+        service = ProvisioningService(tenant_repo=uow.data_plane)  # type: ignore[arg-type]
 
         cmd = CreateSFTPPartnerCmd(
             name=request.name,
@@ -107,7 +109,7 @@ async def create_webhook_partner(
     Creates a new Webhook Partner directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(None, uow.data_plane)  # type: ignore
+        service = ProvisioningService(tenant_repo=uow.data_plane)  # type: ignore[arg-type]
 
         cmd = CreateWebhookPartnerCmd(
             name=request.name,

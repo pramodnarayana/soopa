@@ -14,7 +14,7 @@ async def test_authorization_platform_admin(service: AuthorizationService):
     tenant_repo: FakeTenantRepository = service.tenant_repo
     tenant_repo.flags[0] = {"allow_private_as2": True}
 
-    # Platform Admin is inferred from role in token OR tenant_id == 0
+    # Platform Admin status comes only from the trusted role claim in the token
     token_payload = {"urn:zitadel:iam:org:project:roles": {"Platform_Admin": {}}}
 
     profile = await service.get_authorization_profile(

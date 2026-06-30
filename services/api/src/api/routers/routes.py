@@ -34,7 +34,7 @@ async def list_routes(
         from api.ports.repository import DataPlaneRepositoryPort
 
         data_plane = cast(DataPlaneRepositoryPort, uow.data_plane)
-        service = ProvisioningService(uow.control_plane, data_plane)
+        service = ProvisioningService(tenant_repo=data_plane, global_repo=uow.control_plane)
         routes = await service.list_routes(tenant_id)
 
         return [RouteItemResponse(**r) for r in routes]
@@ -50,7 +50,7 @@ async def create_inbound_route(
     Creates a new Inbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(None, uow.data_plane)  # type: ignore
+        service = ProvisioningService(tenant_repo=uow.data_plane)  # type: ignore[arg-type]
 
         cmd = CreateInboundRouteCmd(
             isa_sender_id=request.isa_sender_id,
@@ -79,7 +79,7 @@ async def create_outbound_route(
     Creates a new Outbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(None, uow.data_plane)  # type: ignore
+        service = ProvisioningService(tenant_repo=uow.data_plane)  # type: ignore[arg-type]
 
         cmd = CreateOutboundRouteCmd(
             isa_sender_id=request.isa_sender_id,

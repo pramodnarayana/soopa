@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from api.domain.models import (
+    CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
@@ -23,15 +24,18 @@ class ProvisioningService:
 
     def __init__(
         self,
-        global_repo: ControlPlaneRepositoryPort,
         tenant_repo: DataPlaneRepositoryPort,
+        global_repo: ControlPlaneRepositoryPort | None = None,
     ) -> None:
-        self.global_repo = global_repo
         self.tenant_repo = tenant_repo
+        self.global_repo = global_repo
 
     async def create_as2_partner(
         self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
     ) -> PartnerEntity:
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required for AS2 partner creation")
+
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
         # 1. Create in Global DB
@@ -65,6 +69,24 @@ class ProvisioningService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             type="SFTP",
+            status="ACTIVE",
+        )
+
+    async def create_as2_partnership(
+        self, tenant_id: int, cmd: CreateAS2PartnershipCmd
+    ) -> PartnerEntity:
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required for AS2 partnership creation")
+
+        logger.info(
+            f"Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}"
+        )
+        partner_id = await self.global_repo.create_as2_partnership(tenant_id=tenant_id, cmd=cmd)
+
+        return PartnerEntity(
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+            type="AS2_PARTNERSHIP",
             status="ACTIVE",
         )
 
@@ -131,7 +153,11 @@ class ProvisioningService:
                 sftp_ids.add(r.sftp_partner_id)
 
         # Fetch names
-        as2_names = await self.global_repo.get_as2_partners_by_ids(list(as2_ids), tenant_id)
+        as2_names = (
+            await self.global_repo.get_as2_partners_by_ids(list(as2_ids), tenant_id)
+            if self.global_repo
+            else {}
+        )
         sftp_names = await self.tenant_repo.get_sftp_partners_by_ids(list(sftp_ids))
         webhook_names = await self.tenant_repo.get_webhook_partners_by_ids(list(webhook_ids))
 

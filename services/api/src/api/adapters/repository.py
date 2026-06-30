@@ -74,7 +74,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
 
         await self.create_outbox_event(
             tenant_id=tenant_id,
-            event_type="AS2_PARTNER_CREATED",
+            event_type="AS2_PARTNERSHIP_CREATED",
             payload={"partnership_id": str(partnership_id), "tenant_id": tenant_id},
         )
 

@@ -55,7 +55,7 @@ async def test_create_sftp_partner(service: ProvisioningService):
 @pytest.mark.asyncio
 async def test_create_webhook_partner(service: ProvisioningService):
     cmd = CreateWebhookPartnerCmd(
-        name="Webhook Partner", url="http://example.com/webhook", auth_header_vault_ref="vault-ref"
+        name="Webhook Partner", url="https://example.com/webhook", auth_header_vault_ref="vault-ref"
     )
     partner = await service.create_webhook_partner(tenant_id=1, cmd=cmd)
 

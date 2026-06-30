@@ -88,12 +88,11 @@ async def get_me(
     # Zitadel might encode the tenant in roles or metadata, let's assume it's in a custom claim for now
     # or rely on auth_service.
     if not profile["is_platform_admin"]:
-        # E.g. token_tenant = token_payload.get("tenant_id")
         token_tenant = token_payload.get("urn:soopa:tenant_id")
-        if token_tenant is not None and str(token_tenant) != str(tenant_id):
+        if token_tenant is None or str(token_tenant) != str(tenant_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Tenant ID mismatch.",
+                detail="Tenant ID mismatch or missing claim.",
             )
 
     return profile

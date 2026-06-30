@@ -226,7 +226,11 @@ async def as2_client(
         from database.session import get_session
 
         async def override_get_session() -> AsyncGenerator[AsyncMock, None]:
-            yield AsyncMock()
+            mock_session = AsyncMock()
+            mock_result = MagicMock()
+            mock_result.fetchall.return_value = [(0,)]
+            mock_session.execute.return_value = mock_result
+            yield mock_session
 
         app.dependency_overrides[get_s3_storage] = lambda: MockS3Storage()
         app.dependency_overrides[get_session] = override_get_session

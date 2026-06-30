@@ -47,10 +47,14 @@ export function PlatformPartnersProvider({ children }: { children: React.ReactNo
       if (partnersRes.ok) {
         const data = await partnersRes.json();
         setPartners(data);
+      } else {
+        setPartners([]);
       }
       if (partnershipsRes.ok) {
         const data = await partnershipsRes.json();
         setPartnerships(data);
+      } else {
+        setPartnerships([]);
       }
     } catch (e) {
       console.error("Failed to fetch platform partners", e);

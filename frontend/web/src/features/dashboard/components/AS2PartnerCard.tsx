@@ -60,6 +60,7 @@ export function AS2PartnerCard({ count, onSave }: AS2PartnerCardProps) {
     })
     setIsOpen(false)
     setCertPem("") // Reset after save
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   return (
@@ -83,6 +84,7 @@ export function AS2PartnerCard({ count, onSave }: AS2PartnerCardProps) {
           if (!open) {
             setIsLocal(false)
             setCertPem("")
+            if (fileInputRef.current) fileInputRef.current.value = ""
           }
         }}>
           <DialogTrigger asChild>

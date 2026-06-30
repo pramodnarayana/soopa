@@ -22,6 +22,10 @@ async def get_global_session(request: Request) -> AsyncGenerator[AsyncSession, N
     global_session: AsyncSession = await async_gen.__anext__()
     try:
         yield global_session
+        await global_session.commit()
+    except Exception:
+        await global_session.rollback()
+        raise
     finally:
         with contextlib.suppress(StopAsyncIteration):
             await async_gen.__anext__()

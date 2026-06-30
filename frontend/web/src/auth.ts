@@ -17,10 +17,9 @@ export const oidcConfig: AuthProviderProps = {
   response_type: "code",
   scope: "openid profile email",
   post_logout_redirect_uri: window.location.origin,
-  onSigninCallback: (_user: User | void) => {
-    // After successful login, redirect directly to the root
-    // The marketing layout will pick this up and redirect to /tenant/dashboard
-    // which in turn redirects to /platform/dashboard if they are a platform admin.
-    window.location.replace('/')
+  onSigninCallback: (user: User | void) => {
+    // Restore the saved return URL/state from the auth flow when it exists
+    const returnUrl = (user?.state as { returnUrl?: string })?.returnUrl || '/'
+    window.location.replace(returnUrl)
   }
 }

@@ -24,12 +24,14 @@ async def test_paramiko_sftp_delivery_adapter(mock_from_transport, mock_transpor
         remote_path="/upload/",
         filename="test.txt",
         payload=b"test payload",
-        host_key=None,
+        host_key="fake-host-key",
     )
 
     # Assert connect was called with the right parameters
     mock_transport_class.assert_called_once_with(("sftp.example.com", 22))
-    mock_transport.connect.assert_called_once_with(username="user", password="password")
+    mock_transport.connect.assert_called_once_with(
+        username="user", password="password", hostkey="fake-host-key"
+    )
 
     # Verify open and write were called via putfo
     assert mock_sftp.putfo.call_count == 1

@@ -219,6 +219,14 @@ class ApiPayload(TenantBase, TenantAwareMixin):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    __table_args__ = (
+        CheckConstraint(
+            "(inbound_route_id IS NOT NULL AND outbound_route_id IS NULL) OR "
+            "(inbound_route_id IS NULL AND outbound_route_id IS NOT NULL)",
+            name="chk_api_payload_single_route",
+        ),
+    )
+
 
 class Job(TenantBase, TenantAwareMixin):
     __tablename__ = "jobs"

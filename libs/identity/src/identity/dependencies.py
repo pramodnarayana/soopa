@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.application.use_cases import ResolveTenantUseCase
 from identity.infrastructure.repositories import SQLAlchemyIdentityRepository
-from identity.tenant_context import set_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -166,10 +165,13 @@ async def get_tenant_session(
     tenant_session: AsyncSession = await async_gen_tenant.__anext__()
 
     # 3. Set the tenant context variable for repositories that rely on it
-    set_tenant_id(tenant_id)
+    from identity.tenant_context import _tenant_id
+
+    token = _tenant_id.set(tenant_id)
 
     try:
         yield tenant_session
     finally:
+        _tenant_id.reset(token)
         with contextlib.suppress(StopAsyncIteration):
             await async_gen_tenant.__anext__()

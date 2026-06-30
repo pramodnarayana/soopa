@@ -216,7 +216,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return {
             "name": partner.name,
             "as2_id": partner.as2_id,
-            "host": partnership.host,
-            "port": partnership.port,
+            "local_url": partnership.local_url,
+            "remote_url": partnership.remote_url,
             "credentials_vault_ref": partnership.credentials_vault_ref,
         }

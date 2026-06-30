@@ -111,15 +111,24 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def get_route(
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
     ) -> dict[str, Any] | None:
-        for r in self.routes:
-            if (
-                r.get("direction") == direction
-                and r.get("isa_sender_id") == sender_id
-                and r.get("isa_receiver_id") == receiver_id
-                and r.get("transaction_type") in (transaction_type, "*")
-            ):
-                return r
-        return None
+        candidates = [
+            r
+            for r in self.routes
+            if r.get("direction") == direction
+            and r.get("isa_sender_id") == sender_id
+            and r.get("isa_receiver_id") == receiver_id
+            and r.get("transaction_type") in (transaction_type, "*")
+        ]
+
+        # Prefer exact match over wildcard
+        exact_match = next(
+            (r for r in candidates if r.get("transaction_type") == transaction_type), None
+        )
+        if exact_match:
+            return exact_match
+
+        wildcard_match = next((r for r in candidates if r.get("transaction_type") == "*"), None)
+        return wildcard_match
 
     async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
         return self.sftp_partners.get(partner_id)

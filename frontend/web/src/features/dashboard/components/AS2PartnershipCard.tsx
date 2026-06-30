@@ -39,7 +39,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
       local_url: formData.get('local_url') as string,
       remote_url: formData.get('remote_url') as string,
       mdn_type: mdnType,
-      mdn_url: formData.get('mdn_url') as string | undefined,
+      mdn_url: (formData.get('mdn_url') as string) || undefined,
       encryption_algorithm: encryptionAlgorithm,
       signature_algorithm: signatureAlgorithm,
     })

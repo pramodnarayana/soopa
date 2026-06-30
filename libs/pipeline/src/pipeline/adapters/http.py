@@ -15,7 +15,7 @@ class HttpxDeliveryAdapter(HttpDeliveryPort):
 
     async def deliver(self, url: str, payload: bytes, auth_token: str | None = None) -> int:
         if self.validator and not self.validator(url):
-            raise ValueError(f"URL validation failed for {url}")
+            raise ValueError("URL validation failed for provided destination.")
 
         headers = {"Content-Type": "application/json"}
         if auth_token:

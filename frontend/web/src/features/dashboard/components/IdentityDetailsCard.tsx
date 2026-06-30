@@ -3,8 +3,24 @@ import { ShieldCheck, Mail } from 'lucide-react'
 
 export function IdentityDetailsCard() {
   const auth = useAuth()
-  const email = auth.user?.profile.email || 'unknown@domain.com'
-  const name = auth.user?.profile.name || email.split('@')[0]
+  const email = auth.user?.profile.email
+  const name = auth.user?.profile.name
+
+  if (!email || !name) {
+    return (
+      <div className="group relative flex flex-col gap-4 rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm transition-all duration-200 h-[160px] animate-pulse">
+        <div className="flex items-start justify-between">
+           <div className="flex items-center gap-4">
+             <div className="h-14 w-14 rounded-xl bg-slate-100"></div>
+             <div className="flex flex-col gap-2">
+               <div className="h-5 w-32 bg-slate-100 rounded"></div>
+               <div className="h-4 w-40 bg-slate-100 rounded"></div>
+             </div>
+           </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="group relative flex flex-col gap-4 rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-indigo-500/30 hover:-translate-y-0.5">

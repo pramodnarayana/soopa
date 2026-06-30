@@ -25,13 +25,13 @@ def get_message_queue() -> MessageQueuePort:
 
 
 def get_control_plane_repo(
-    session: AsyncSession,
+    session: AsyncSession = Depends(get_global_session),
 ) -> ControlPlaneRepositoryPort:
     return SqlAlchemyControlPlaneRepository(session)
 
 
 def get_data_plane_repo(
-    session: AsyncSession,
+    session: AsyncSession = Depends(get_tenant_session),
 ) -> DataPlaneRepositoryPort:
     return SqlAlchemyDataPlaneRepository(session)
 

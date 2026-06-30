@@ -25,10 +25,10 @@ class FakeSftpDeliveryAdapter:
         port: int,
         username: str,
         password: str,
+        host_key: str | None,
         remote_path: str,
         filename: str,
         payload: bytes,
-        host_key: str | None = None,
     ) -> None:
         self.delivered.append(
             {

@@ -24,12 +24,12 @@ class CreateAS2TradingPartnerRequest(BaseModel):
 class CreateAS2PartnershipRequest(BaseModel):
     local_partner_id: UUID = Field(..., description="ID of the local identity")
     remote_partner_id: UUID = Field(..., description="ID of the remote identity")
-    remote_url: str | None = Field(None, max_length=1024, description="Remote AS2 URL")
+    remote_url: HttpUrl | None = Field(None, description="Remote AS2 URL")
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for basic auth"
     )
     mdn_type: str = Field("SYNC", max_length=50, description="MDN Type (SYNC, ASYNC, NONE)")
-    mdn_url: str | None = Field(None, max_length=1024, description="MDN URL for ASYNC")
+    mdn_url: HttpUrl | None = Field(None, description="MDN URL for ASYNC")
     encryption_algorithm: str = Field("AES256", max_length=50, description="Encryption Algorithm")
     signature_algorithm: str = Field("SHA256", max_length=50, description="Signature Algorithm")
     advanced_flags: dict[str, Any] | None = Field(None, description="Advanced OpenAS2 JSON flags")

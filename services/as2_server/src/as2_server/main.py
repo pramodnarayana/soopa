@@ -163,9 +163,12 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             .where(GlobalTradingPartner.as2_id == as2_msg.as2_to)
             .where(GlobalTradingPartner.is_local.is_(True))
             .where(GlobalTradingPartner.active.is_(True))
-            .limit(1)
         )
-        tenant_id = result.scalar_one_or_none()
+        tenant_rows = result.fetchall()
+        if len(tenant_rows) > 1:
+            raise ValueError(f"Ambiguous AS2-To match: multiple tenants claim {as2_msg.as2_to}")
+        if tenant_rows:
+            tenant_id = tenant_rows[0][0]
     except Exception as e:
         logger.warning("tenant_resolution_failed", error=str(e), as2_to=as2_msg.as2_to)
 
