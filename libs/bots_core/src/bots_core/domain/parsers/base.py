@@ -112,7 +112,7 @@ class var(Inmessage):
                                 "[A67]: Found space characters between segments."
                                 " Line %(countline)s, position %(pos)s, position %(countpos)s."
                             ),
-                            {"countline": countline, "countpos": countpos},
+                            {"countline": countline, "pos": valuepos, "countpos": countpos},
                         )
                     else:
                         # ignore whitespace character; continue for-loop with next character
@@ -159,7 +159,7 @@ class var(Inmessage):
                             "[A69]: Found double record seperator. Line %(countline)s,"
                             " position %(pos)s, position %(countpos)s."
                         ),
-                        {"countline": countline, "countpos": countpos},
+                        {"countline": countline, "pos": valuepos, "countpos": countpos},
                     )
                 # write current value to lex_record
                 lex_record.append({VALUE: value, SFIELD: sfield, LIN: valueline, POS: valuepos})
@@ -245,6 +245,8 @@ class var(Inmessage):
                     # definition says: not repeating
                     if field_definition.is_field:
                         # definition says: field       +E+
+                        list_of_subfields_in_record_definition = None
+                        tsubindex = 0
                         if value:
                             record2build[field_definition.id] = value
                     else:
@@ -262,6 +264,8 @@ class var(Inmessage):
                     # definition says: repeating
                     if field_definition.is_field:
                         # definition says: field      +E*R+
+                        list_of_subfields_in_record_definition = None
+                        tsubindex = 0
                         record2build[field_definition.id] = [value]
                     else:
                         # definition says: subfield   +E:S*R:S+

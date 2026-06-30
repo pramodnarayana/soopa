@@ -16,6 +16,7 @@ class test(Grammar):
         "preprocess_lex": False,
         "preprocess_nodes": False,
     }
+    formatconvert = {"A": "A", "AN": "A", "N": "R"}
 
 
 class edifact(Grammar):

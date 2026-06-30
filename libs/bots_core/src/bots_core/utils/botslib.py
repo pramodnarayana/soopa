@@ -175,9 +175,16 @@ def deldata(filename):
         os.remove(filename)
 
 
+def _validate_data_path(filename):
+    """Ensure that the file path does not contain unauthorized traversals."""
+    if ".." in filename or filename.startswith("/etc/") or filename.startswith("/root/"):
+        raise ValueError(f"Path traversal is not permitted: {filename}")
+
+
 def opendata(filename, mode, charset=None, errors="strict"):
     """open internal data file as unicode."""
     # pylint: disable=deprecated-method
+    _validate_data_path(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
     return codecs.open(filename, mode, charset, errors)
@@ -192,6 +199,7 @@ def readdata(filename, charset=None, errors="strict"):
 def opendata_bin(filename, mode="rb"):
     """open internal data file as binary."""
     # pylint: disable=unspecified-encoding
+    _validate_data_path(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
     return open(filename, mode=mode)  # noqa: SIM115
@@ -220,7 +228,11 @@ def readdata_pickled(filename):
 
 def writedata_pickled(filename, content):
     """pickle is a binary/byte stream"""
-    pass
+    filehandler = opendata_bin(filename, mode="wb")
+    try:
+        pickle.dump(content, filehandler)
+    finally:
+        filehandler.close()
 
 
 # **********************************************************/**

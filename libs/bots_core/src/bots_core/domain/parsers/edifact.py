@@ -152,9 +152,21 @@ class edifact(var):
 
         # decode the file (to unicode)
         self.ta_info["charset"] = found_charset
+
+        charset_map = {
+            "UNOA": "ascii",
+            "UNOB": "ascii",
+            "UNOC": "iso-8859-1",
+            "UNOD": "iso-8859-2",
+            "UNOE": "iso-8859-5",
+            "UNOF": "iso-8859-7",
+            "UNOY": "utf-8",
+        }
+        python_charset = charset_map.get(found_charset, found_charset)
+
         try:
             self.rawinput = self.rawinput[self.rawinput.find(b"UNB") :].decode(
-                found_charset, self.ta_info["checkcharsetin"]
+                python_charset, self.ta_info["checkcharsetin"]
             )
         except LookupError as exc:
             raise InMessageError(

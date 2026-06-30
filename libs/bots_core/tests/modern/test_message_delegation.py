@@ -178,10 +178,10 @@ def test_message_put_with_real_root_no_children():
     msg = MockMessage()
     msg.root.record = {"BOTSID": "MSG", "BOTSIDnr": "1"}
     try:
-        msg.put({"BOTSID": "MSG"}, "FLD", "val")
+        msg.put({"BOTSID": "MSG", "FLD": "val"})
     except MappingRootError:
         pytest.fail("put() raised MappingRootError unexpectedly")
-    except Exception:
+    except (KeyError, ValueError, AttributeError, TypeError):
         pass  # other errors from node.put are acceptable here
 
 
@@ -190,10 +190,10 @@ def test_message_putraw_with_real_root_no_children():
     msg = MockMessage()
     msg.root.record = {"BOTSID": "MSG", "BOTSIDnr": "1"}
     try:
-        msg.putraw({"BOTSID": "MSG"}, "FLD", "raw_val")
+        msg.putraw({"BOTSID": "MSG", "FLD": "raw_val"})
     except MappingRootError:
         pytest.fail("putraw() raised MappingRootError unexpectedly")
-    except Exception:
+    except (KeyError, ValueError, AttributeError, TypeError):
         pass
 
 

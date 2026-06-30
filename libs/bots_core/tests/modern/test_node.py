@@ -302,10 +302,9 @@ def test_stripnode_removes_empty_children():
     st = Node(record={"BOTSID": "ST", "BOTSIDnr": "1", "ST01": "850", "ST02": "0001"})
     beg = Node(record={"BOTSID": "BEG", "BOTSIDnr": "1", "BEG01": ""})
     st.append(beg)
-    # stripnode removes nodes with all-empty field values
+    # stripnode removes spaces from fields, it does not remove the node itself
     st.stripnode()
-    # BEG was added and should have been stripped (all values empty or BOTSID only)
-    # The exact behavior depends on implementation; just verify no crash
+    assert beg.record["BEG01"] == ""
     assert isinstance(st.children, list)
 
 
@@ -383,13 +382,12 @@ def test_put_strips_whitespace_by_default():
 
 def test_linpos_with_info():
     n = Node(record={"BOTSID": "X", "BOTSIDnr": "1"}, linpos_info=(5, 12))
-    assert "line" in n.linpos().lower() or "5" in n.linpos()
+    assert n.linpos() == " line 5 pos 12"
 
 
 def test_linpos_without_info():
     n = Node(record={"BOTSID": "X", "BOTSIDnr": "1"})
-    # Should not raise
-    assert isinstance(n.linpos(), str)
+    assert n.linpos() == ""
 
 
 # ---------------------------------------------------------------------------

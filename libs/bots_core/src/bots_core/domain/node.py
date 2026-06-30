@@ -53,6 +53,8 @@ class Node:
         result = {}
         if self.record:
             result["record"] = self.record.copy()
+        if self._queries:
+            result["queries"] = self._queries.copy()
         if self.children:
             result["children"] = [child.to_dict() for child in self.children]
         return result
@@ -61,6 +63,8 @@ class Node:
     def from_dict(cls, data: dict) -> "Node":
         """Deserialize a Node tree from a pure Python dictionary."""
         node = cls(record=data.get("record", {}).copy())
+        if "queries" in data:
+            node._queries = data["queries"].copy()
         for child_data in data.get("children", []):
             node.append(cls.from_dict(child_data))
         return node

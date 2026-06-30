@@ -61,6 +61,14 @@ const columns = [
       </div>
     ),
   }),
+  columnHelper.accessor('edi_version', {
+    header: 'EDI Version',
+    cell: (info) => (
+      <span className="text-sm text-slate-600 font-medium">
+        {info.getValue() || 'N/A'}
+      </span>
+    ),
+  }),
   columnHelper.display({
     id: 'actions',
     cell: () => (

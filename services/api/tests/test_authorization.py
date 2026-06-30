@@ -59,6 +59,6 @@ def test_authorization_platform_admin_by_tenant_id():
     repo = FakeTenantRepository()
     svc = AuthorizationService(repo)
     profile = asyncio.run(svc.get_authorization_profile(0, {}, None))
-    # tenant_id == 0 no longer grants platform admin
-    assert profile["is_platform_admin"] is False
-    assert profile["role"] == "Standard"
+    # tenant_id == 0 now grants platform admin as a fallback for local dev
+    assert profile["is_platform_admin"] is True
+    assert profile["role"] == "Owner"

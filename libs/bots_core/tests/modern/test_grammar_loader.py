@@ -214,15 +214,17 @@ def test_checkfield_numeric_float_length_invalid():
 
 
 class MockGrammarModule:
-    syntax = {"has_structure": False, "envelope": "mock_env"}
-    recorddefs = {}
-    structure = []
+    def __init__(self):
+        self.syntax = {"has_structure": False, "envelope": "mock_env"}
+        self.recorddefs = {}
+        self.structure = []
 
 
 class MockEnvModule:
-    syntax = {"has_structure": False}
-    recorddefs = {}
-    structure = []
+    def __init__(self):
+        self.syntax = {"has_structure": False}
+        self.recorddefs = {}
+        self.structure = []
 
 
 def mock_botsimport(typeofgrammarfile, editype, grammarname):

@@ -30,7 +30,7 @@ def grammarread(editype, grammarname, typeofgrammarfile) -> "Grammar":
 
     try:
         classtocall = getattr(formats, editype)
-    except KeyError as exc:
+    except AttributeError as exc:
         raise GrammarError(
             _(
                 'Read grammar for editype "%(editype)s" messagetype "%(messagetype)s",'

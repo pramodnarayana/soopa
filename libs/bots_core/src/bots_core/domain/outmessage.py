@@ -362,7 +362,13 @@ class Outmessage(message.Message):
                             fieldbuffer = []
                         else:
                             # append new empty to buffer;
-                            fieldbuffer.append({VALUE: "", SFIELD: type_of_field})
+                            fieldbuffer.append(
+                                {
+                                    VALUE: "",
+                                    SFIELD: type_of_field,
+                                    FORMATFROMGRAMMAR: grammarsubfield.format,
+                                }
+                            )
                         type_of_field = 1
                     if field_has_data:
                         # write recordbuffer to lex_record
@@ -371,7 +377,9 @@ class Outmessage(message.Message):
                         recordbuffer = []
                     else:
                         # composite has no data: write empty field
-                        recordbuffer.append({VALUE: "", SFIELD: 0})
+                        recordbuffer.append(
+                            {VALUE: "", SFIELD: 0, FORMATFROMGRAMMAR: field_definition.format}
+                        )
                 else:
                     # repeating composite
                     # receive list, including empty members
@@ -428,7 +436,9 @@ class Outmessage(message.Message):
                         recordbuffer = []
                     else:
                         # no data: write placeholder to recordbuffer;
-                        recordbuffer.append({VALUE: "", SFIELD: 0})
+                        recordbuffer.append(
+                            {VALUE: "", SFIELD: 0, FORMATFROMGRAMMAR: field_definition.format}
+                        )
 
         self.lex_records.append(lex_record)
 
@@ -601,6 +611,8 @@ class Outmessage(message.Message):
             # length is calculated without decimal sing and/or minus sign.
             lengthcorrection = 0
             if field_definition.bformat == "R":
+                if not value:
+                    value = "0"
                 # floating point: use all decimals received
                 try:
                     dec_value = decimal.Decimal(value)
@@ -637,6 +649,8 @@ class Outmessage(message.Message):
                 # replace '.' by required decimal sep.
                 value = value.replace(".", self.ta_info["decimaal"], 1)
             elif field_definition.bformat == "N":
+                if not value:
+                    value = "0"
                 # fixed decimals; round
                 try:
                     dec_value = decimal.Decimal(value)
@@ -676,6 +690,8 @@ class Outmessage(message.Message):
                 value = value.replace(".", self.ta_info["decimaal"], 1)
                 # replace '.' by required decimal sep.
             elif field_definition.bformat == "I":
+                if not value:
+                    value = "0"
                 # implicit decimals
                 if self.ta_info["lengthnumericbare"] and value[0] == "-":
                     lengthcorrection += 1
@@ -743,10 +759,12 @@ class Outmessage(message.Message):
         """
         # pylint: disable=too-many-locals, too-many-nested-blocks
         sfield_sep = self.ta_info["sfield_sep"]
-        if self.ta_info["record_tag_sep"]:
+        if self.ta_info.get("record_tag_sep"):
             record_tag_sep = self.ta_info["record_tag_sep"]
-        else:
+        elif self.ta_info.get("editype") == "x12":
             record_tag_sep = self.ta_info["field_sep"]
+        else:
+            record_tag_sep = ""
         field_sep = self.ta_info["field_sep"]
         quote_char = self.ta_info["quote_char"]
         escape = self.ta_info["escape"]

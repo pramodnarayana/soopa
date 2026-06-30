@@ -43,7 +43,9 @@ class TenantAwareMixin:
 class AS2Partner(TenantBase, TenantAwareMixin):
     __tablename__ = "as2_partners"
 
-    id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
     is_local: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     as2_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -56,7 +58,9 @@ class AS2Partner(TenantBase, TenantAwareMixin):
 class AS2Partnership(TenantBase, TenantAwareMixin):
     __tablename__ = "as2_partnerships"
 
-    id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
@@ -73,6 +77,7 @@ class AS2Partnership(TenantBase, TenantAwareMixin):
     mdn_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     encryption_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="AES256")
     signature_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="SHA256")
+    edi_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 

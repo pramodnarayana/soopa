@@ -17,6 +17,7 @@ export interface AS2PartnershipCardProps {
     mdn_type: string;
     encryption_algorithm: string;
     signature_algorithm: string;
+    edi_version?: string;
     mdn_url?: string;
   }) => Promise<void> | void;
 }
@@ -28,6 +29,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
   const [mdnType, setMdnType] = useState('SYNC')
   const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256_CBC')
   const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256')
+  const [ediVersion, setEdiVersion] = useState('X12-005010')
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -42,6 +44,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
       mdn_url: (formData.get('mdn_url') as string) || undefined,
       encryption_algorithm: encryptionAlgorithm,
       signature_algorithm: signatureAlgorithm,
+      edi_version: ediVersion === "NONE" ? undefined : ediVersion,
     })
     setIsOpen(false)
   }
@@ -127,29 +130,31 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
               </div>
 
               {/* Advanced Settings */}
-              <div className="grid grid-cols-3 gap-6 pt-2 border-t border-slate-100">
-                <div className="grid gap-2">
-                  <Label className="text-slate-600 font-medium">MDN Delivery Type</Label>
-                  <Select value={mdnType} onValueChange={setMdnType}>
-                    <SelectTrigger className="h-10 rounded-xl">
-                      <SelectValue placeholder="Select MDN type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SYNC">Synchronous (Recommended)</SelectItem>
-                      <SelectItem value="ASYNC">Asynchronous</SelectItem>
-                      <SelectItem value="NONE">None (Fire and Forget)</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="flex flex-col gap-6 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="grid gap-2">
+                    <Label className="text-slate-600 font-medium">MDN Delivery Type</Label>
+                    <Select value={mdnType} onValueChange={setMdnType}>
+                      <SelectTrigger className="h-10 rounded-xl">
+                        <SelectValue placeholder="Select MDN type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SYNC">Synchronous (Recommended)</SelectItem>
+                        <SelectItem value="ASYNC">Asynchronous</SelectItem>
+                        <SelectItem value="NONE">None (Fire and Forget)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {mdnType === 'ASYNC' && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="mdn_url" className="text-slate-600 font-medium">Async MDN Receipt URL</Label>
+                      <Input id="mdn_url" name="mdn_url" placeholder="https://my.as2.com/receipt" className="h-10 rounded-xl" />
+                    </div>
+                  )}
                 </div>
 
-                {mdnType === 'ASYNC' && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="mdn_url" className="text-slate-600 font-medium">Async MDN Receipt URL</Label>
-                    <Input id="mdn_url" name="mdn_url" placeholder="https://my.as2.com/receipt" className="h-10 rounded-xl" />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-6">
                   <div className="grid gap-2">
                     <Label className="text-slate-600 font-medium">Encryption</Label>
                     <Select value={encryptionAlgorithm} onValueChange={setEncryptionAlgorithm}>
@@ -174,6 +179,22 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
                         <SelectItem value="SHA256">SHA-256</SelectItem>
                         <SelectItem value="SHA1">SHA-1 (Legacy)</SelectItem>
                         <SelectItem value="MD5">MD5 (Insecure)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="text-slate-600 font-medium">EDI Version</Label>
+                    <Select value={ediVersion} onValueChange={setEdiVersion}>
+                      <SelectTrigger className="h-10 rounded-xl">
+                        <SelectValue placeholder="Version" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="X12-004010">X12 4010</SelectItem>
+                        <SelectItem value="X12-005010">X12 5010</SelectItem>
+                        <SelectItem value="EDIFACT-D96A">EDIFACT D96A</SelectItem>
+                        <SelectItem value="EDIFACT-D01B">EDIFACT D01B</SelectItem>
+                        <SelectItem value="NONE">Not Applicable</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

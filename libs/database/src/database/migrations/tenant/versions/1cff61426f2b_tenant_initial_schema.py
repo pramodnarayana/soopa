@@ -170,6 +170,7 @@ def upgrade() -> None:
     sa.Column('mdn_url', sa.String(length=1024), nullable=True),
     sa.Column('encryption_algorithm', sa.String(length=50), nullable=False),
     sa.Column('signature_algorithm', sa.String(length=50), nullable=False),
+    sa.Column('edi_version', sa.String(length=50), nullable=True),
     sa.Column('advanced_flags', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('active', sa.Boolean(), server_default=sa.text('true'), nullable=False),
     sa.ForeignKeyConstraint(['local_partner_id'], ['as2_partners.id'], ondelete='CASCADE'),

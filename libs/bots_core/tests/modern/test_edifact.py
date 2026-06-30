@@ -22,7 +22,7 @@ UNZ+1+1'
     # Verify JSON AST
     parsed = json.loads(json_ast)
     assert parsed["children"][0]["record"]["BOTSID"] == "UNB"
-    assert "UNH" in parsed["children"][0]["children"][0]["record"]["BOTSID"]
+    assert parsed["children"][0]["children"][0]["record"]["BOTSID"] == "UNH"
 
     # 2. Serialize JSON AST back to EDI
     output_edi = json_to_edi(json_ast, editype="edifact", messagetype="edifact")

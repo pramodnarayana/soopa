@@ -66,6 +66,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             mdn_url=cmd.mdn_url,
             encryption_algorithm=cmd.encryption_algorithm,
             signature_algorithm=cmd.signature_algorithm,
+            edi_version=cmd.edi_version,
             advanced_flags=cmd.advanced_flags,
             active=True,
         )

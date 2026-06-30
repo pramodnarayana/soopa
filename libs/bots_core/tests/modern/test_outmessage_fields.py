@@ -161,7 +161,7 @@ def test_outmessage_format_numeric_left():
     value = "1.2"
     from bots_core.domain.models import StructureNode
 
-    struct = StructureNode(id="", min_occ=1, max_occ=1, mpath=[])
+    struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
     formatted = msg._formatfield(value, field_def, struct, node_instance=Node())
 
@@ -176,7 +176,7 @@ def test_outmessage_format_numeric_right():
     value = "-1.2"
     from bots_core.domain.models import StructureNode
 
-    struct = StructureNode(id="", min_occ=1, max_occ=1, mpath=[])
+    struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
     # lengthnumericbare=True adds lengthcorrection for '-' and '.'
     formatted = msg._formatfield(value, field_def, struct, node_instance=Node())
@@ -197,7 +197,7 @@ def test_outmessage_format_numeric_zfill():
     value = "1.2"
     from bots_core.domain.models import StructureNode
 
-    struct = StructureNode(id="", min_occ=1, max_occ=1, mpath=[])
+    struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
     formatted = msg._formatfield(value, field_def, struct, node_instance=Node())
 
@@ -212,7 +212,7 @@ def test_outmessage_format_numeric_invalid():
     value = "abc"
     from bots_core.domain.models import StructureNode
 
-    struct = StructureNode(id="", min_occ=1, max_occ=1, mpath=[])
+    struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
     formatted = msg._formatfield(value, field_def, struct, node_instance=Node())
     assert "abc" in formatted

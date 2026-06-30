@@ -316,7 +316,7 @@ def test_x12_sniff_only_whitespace(tmp_path):
             charset="utf-8",
         )
         assert obj.errorfatal
-        assert any("A6" in e for e in obj.errorlist), obj.errorlist
+        assert any("A61" in e for e in obj.errorlist), obj.errorlist
     finally:
         botsglobal.ini.get = orig
 

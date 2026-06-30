@@ -22,8 +22,12 @@ class MockParser(var):
             "record_tag_sep": "+",
             "reserve": "*",
             "strict_syntax_check": False,
+            "strip_value": False,
         }
         self.lex_records = []
+        self.errorlist = []
+        self.errorfatal = True
+        self.messagetypetxt = "MockParser "
 
     def do_lex(self):
         self._lex()
@@ -88,5 +92,22 @@ def test_separatorcheck_alfanumeric():
 
 
 def test_parsefields_repeating_element_not_allowed():
-    # Adding a simple placeholder since parser logic is complex
-    assert True
+    p = MockParser("SEG+FLD1*FLD2'")
+    p.do_lex()
+
+    from bots_core.domain.models import create_field_definition, create_structure_node
+
+    struct = create_structure_node(
+        {
+            0: "SEG",
+            1: 1,
+            2: 1,
+            6: [
+                create_field_definition(["SEG", "M", 3, "AN", True, 0, 3, "AN", 1]),
+                create_field_definition(["FLD1", "M", 4, "AN", True, 0, 4, "AN", 1]),
+            ],
+        }
+    )
+
+    p._parsefields(p.lex_records[0], struct)
+    assert any("expect not-repeating element" in err for err in p.errorlist)

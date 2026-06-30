@@ -32,6 +32,7 @@ class CreateAS2PartnershipRequest(BaseModel):
     mdn_url: HttpUrl | None = Field(None, description="MDN URL for ASYNC")
     encryption_algorithm: str = Field("AES256", max_length=50, description="Encryption Algorithm")
     signature_algorithm: str = Field("SHA256", max_length=50, description="Signature Algorithm")
+    edi_version: str | None = Field(None, max_length=50, description="EDI Version (e.g. X12 5010)")
     advanced_flags: dict[str, Any] | None = Field(None, description="Advanced OpenAS2 JSON flags")
 
 
@@ -132,6 +133,7 @@ class AS2PartnershipResponse(BaseModel):
     mdn_type: str
     encryption_algorithm: str
     signature_algorithm: str
+    edi_version: str | None = None
     status: str
 
 

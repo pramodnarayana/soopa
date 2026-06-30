@@ -136,6 +136,7 @@ async def create_platform_as2_partnership(
                 mdn_url=str(request.mdn_url) if request.mdn_url else None,
                 encryption_algorithm=request.encryption_algorithm,
                 signature_algorithm=request.signature_algorithm,
+                edi_version=request.edi_version,
                 advanced_flags=request.advanced_flags,
             )
 
@@ -152,6 +153,7 @@ async def create_platform_as2_partnership(
                 mdn_url=request.mdn_url,
                 encryption_algorithm=request.encryption_algorithm,
                 signature_algorithm=request.signature_algorithm,
+                edi_version=request.edi_version,
                 status="active",
             )
     except Exception:
@@ -191,6 +193,7 @@ async def list_platform_as2_partnerships(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
+                edi_version=p.edi_version,
                 status="active" if p.active else "inactive",
             )
             for p in partnerships

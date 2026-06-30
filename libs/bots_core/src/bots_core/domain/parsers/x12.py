@@ -38,9 +38,11 @@ class x12(var):
         # x12 ISA is an exception: no strip()
         strip_value = self.ta_info["strip_value"]
         self.ta_info["strip_value"] = False
-        record2build = super()._parsefields(lex_record, record_definition)
-        self.ta_info["strip_value"] = strip_value
-        return record2build
+        try:
+            record2build = super()._parsefields(lex_record, record_definition)
+            return record2build
+        finally:
+            self.ta_info["strip_value"] = strip_value
 
     @staticmethod
     def _manipulatemessagetype(messagetype, inode):

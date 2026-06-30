@@ -42,12 +42,13 @@ def checkfield(grammar_obj, field, recordid):
     # ~ raise GrammarError(_('Grammar "%(grammar)s": error in grammar; error is already reported in this run.'),
     # ~ {'grammar':grammar_obj.grammarname})
     else:
+        safe_id = field[ID] if len_field > ID else "<unknown>"
         raise GrammarError(
             _(
                 'Grammar "%(grammar)s", in recorddefs, record "%(record)s",'
                 ' field "%(field)s": list has invalid number of arguments.'
             ),
-            {"grammar": grammar_obj.grammarname, "record": recordid, "field": field[ID]},
+            {"grammar": grammar_obj.grammarname, "record": recordid, "field": safe_id},
         )
     if not isinstance(field[ID], str) or not field[ID]:
         raise GrammarError(
@@ -68,6 +69,14 @@ def checkfield(grammar_obj, field, recordid):
             )
         field[MANDATORY] = 0 if field[MANDATORY] == "C" else 1
     elif isinstance(field[MANDATORY], tuple):
+        if len(field[MANDATORY]) < 1:
+            raise GrammarError(
+                _(
+                    'Grammar "%(grammar)s", in recorddefs, record "%(record)s",'
+                    ' field "%(field)s": mandatory/conditional tuple is empty.'
+                ),
+                {"grammar": grammar_obj.grammarname, "record": recordid, "field": field[ID]},
+            )
         if not isinstance(field[MANDATORY][0], str):
             raise GrammarError(
                 _(
@@ -84,7 +93,7 @@ def checkfield(grammar_obj, field, recordid):
                 ),
                 {"grammar": grammar_obj.grammarname, "record": recordid, "field": field[ID]},
             )
-        if not isinstance(field[MANDATORY][1], int):
+        if len(field[MANDATORY]) < 2 or not isinstance(field[MANDATORY][1], int):
             raise GrammarError(
                 _(
                     'Grammar "%(grammar)s", in recorddefs, record "%(record)s",'
@@ -220,6 +229,7 @@ def checkfield(grammar_obj, field, recordid):
                             "grammar": grammar_obj.grammarname,
                             "record": recordid,
                             "field": field[ID],
+                            "len": field[LENGTH],
                             "decimals": field[DECIMALS],
                         },
                     )

@@ -104,8 +104,12 @@ def test_datetime_and_strftime():
 
 def test_settimeout():
     # just smoke test it doesn't crash
-    botslib.settimeout(5000)
-    assert socket.getdefaulttimeout() == 5.0
+    old_timeout = socket.getdefaulttimeout()
+    try:
+        botslib.settimeout(5000)
+        assert socket.getdefaulttimeout() == 5.0
+    finally:
+        socket.setdefaulttimeout(old_timeout)
 
 
 # ---------------------------------------------------------------------------

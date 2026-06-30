@@ -215,9 +215,9 @@ class Message:
                                 messagetype,
                                 typeofgrammarfile="grammars",
                             )
-                            # Now we validate the subtranslation children against the subgrammar root
-                            childnode.queries = {"messagetype": messagetype}
+                            # Now we validate the subtranslation node against the outer grammar
                             self._checkifrecordsingrammar(childnode, record_definition, grammarname)
+                            childnode.queries = {"messagetype": messagetype}
 
                             # Validate the children of the subtranslation node
                             for subchild in childnode.children:
@@ -397,7 +397,7 @@ class Message:
                     value = noderecord.get(field_definition.id)
                     if not value and (value is None or isinstance(value, str)):
                         # Skip json raw values (not isinstance(value, (bool, int, float)))
-                        if field_definition.mandatory:
+                        if field_definition.is_mandatory:
                             self.add2errorlist(
                                 _(
                                     '[F02]%(linpos)s: Record "%(mpath)s" field "%(field)s"'
@@ -421,7 +421,7 @@ class Message:
                     valuelist = noderecord.get(field_definition.id)
                     if valuelist is None:
                         # empty lists are already catched in node.put()
-                        if field_definition.mandatory:
+                        if field_definition.is_mandatory:
                             self.add2errorlist(
                                 _(
                                     '[F41]%(linpos)s: Record "%(mpath)s" repeating field'
@@ -468,7 +468,7 @@ class Message:
                             )
                         )
                     if not repeating_field_has_data:
-                        if field_definition.mandatory:
+                        if field_definition.is_mandatory:
                             self.add2errorlist(
                                 _(
                                     '[F43]%(linpos)s: Record "%(mpath)s" repeating field'
@@ -494,7 +494,7 @@ class Message:
                             break
                     else:
                         # composite has no data
-                        if field_definition.mandatory:
+                        if field_definition.is_mandatory:
                             self.add2errorlist(
                                 _(
                                     '[F03]%(linpos)s: Record "%(mpath)s" composite "%(field)s"'
@@ -513,7 +513,7 @@ class Message:
                     for grammarsubfield in field_definition.subfields:
                         value = noderecord.get(grammarsubfield.id)
                         if not value:
-                            if grammarsubfield.mandatory:
+                            if grammarsubfield.is_mandatory:
                                 self.add2errorlist(
                                     _(
                                         '[F04]%(linpos)s: Record "%(mpath)s" subfield "%(field)s"'
@@ -533,7 +533,7 @@ class Message:
                     valuelist = noderecord.get(field_definition.id)
                     # empty lists are catched in node.put()
                     if valuelist is None:
-                        if field_definition.mandatory:
+                        if field_definition.is_mandatory:
                             self.add2errorlist(
                                 _(
                                     '[F44]%(linpos)s: Record "%(mpath)s" repeating composite'
@@ -605,7 +605,7 @@ class Message:
                             for grammarsubfield in field_definition.subfields:
                                 value = comp.get(grammarsubfield.id)
                                 if not value:
-                                    if grammarsubfield.mandatory:
+                                    if grammarsubfield.is_mandatory:
                                         self.add2errorlist(
                                             _(
                                                 '[F46]%(linpos)s: Record "%(mpath)s" subfield'
@@ -626,7 +626,7 @@ class Message:
                             comp = {}
                         newlist.append(comp)
                     if not repeating_composite_has_data:
-                        if field_definition.mandatory:
+                        if field_definition.is_mandatory:
                             self.add2errorlist(
                                 _(
                                     '[F47]%(linpos)s: Record "%(mpath)s" repeating composite'

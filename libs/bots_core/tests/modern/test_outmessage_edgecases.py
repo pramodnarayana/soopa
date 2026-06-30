@@ -98,7 +98,7 @@ def test_outmessage_record2string_forcequote():
     out.ta_info["sfield_sep"] = ":"
     out.ta_info["record_sep"] = "'"
     out.ta_info["escape"] = "\\"
-    out.ta_info["record_tag_sep"] = ""
+    out.ta_info["record_tag_sep"] = "+"
     out.ta_info["add_crlfafterrecord_sep"] = ""
 
     # lex_records is list of records. Each record is list of dicts.
@@ -121,7 +121,7 @@ def test_outmessage_record2string_quote_when_sep_present():
     out.ta_info["sfield_sep"] = ":"
     out.ta_info["record_sep"] = "'"
     out.ta_info["escape"] = "\\"
-    out.ta_info["record_tag_sep"] = ""
+    out.ta_info["record_tag_sep"] = "+"
     out.ta_info["add_crlfafterrecord_sep"] = ""
 
     lex_records = [
@@ -156,7 +156,7 @@ def test_outmessage_replacechar():
 
     lex_records = [[{VALUE: "REC+1", SFIELD: 0, FORMATFROMGRAMMAR: "AN"}]]
 
-    with pytest.raises(Exception, match="used as separator in this x12 file"):
+    with pytest.raises(OutMessageError, match="used as separator in this x12 file"):
         out.record2string(lex_records)
 
     out.ta_info["replacechar"] = "_"

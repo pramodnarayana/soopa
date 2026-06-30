@@ -45,7 +45,7 @@ dev = [
 [tool.mypy]
 strict = true
 exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core"]
-plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = "hvac.*"
