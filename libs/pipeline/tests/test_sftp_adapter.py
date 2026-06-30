@@ -16,22 +16,26 @@ async def test_paramiko_sftp_delivery_adapter(mock_from_transport, mock_transpor
 
     adapter = ParamikoSftpDeliveryAdapter()
 
-    await adapter.deliver(
-        host="sftp.example.com",
-        port=22,
-        username="user",
-        password="password",
-        remote_path="/upload/",
-        filename="test.txt",
-        payload=b"test payload",
-        host_key="fake-host-key",
-    )
+    with patch("paramiko.RSAKey") as mock_rsa_key:
+        mock_parsed_key = MagicMock()
+        mock_rsa_key.return_value = mock_parsed_key
 
-    # Assert connect was called with the right parameters
-    mock_transport_class.assert_called_once_with(("sftp.example.com", 22))
-    mock_transport.connect.assert_called_once_with(
-        username="user", password="password", hostkey="fake-host-key"
-    )
+        await adapter.deliver(
+            host="sftp.example.com",
+            port=22,
+            username="user",
+            password="password",
+            remote_path="/upload/",
+            filename="test.txt",
+            payload=b"test payload",
+            host_key="ssh-rsa MTIzNDU2Nzg5MA==",
+        )
+
+        # Assert connect was called with the right parameters
+        mock_transport_class.assert_called_once_with(("sftp.example.com", 22))
+        mock_transport.connect.assert_called_once_with(
+            username="user", password="password", hostkey=mock_parsed_key
+        )
 
     # Verify open and write were called via putfo
     assert mock_sftp.putfo.call_count == 1

@@ -19,7 +19,11 @@ export const oidcConfig: AuthProviderProps = {
   post_logout_redirect_uri: window.location.origin,
   onSigninCallback: (user: User | void) => {
     // Restore the saved return URL/state from the auth flow when it exists
-    const returnUrl = (user?.state as { returnUrl?: string })?.returnUrl || '/'
+    let returnUrl = (user?.state as { returnUrl?: string })?.returnUrl || '/'
+    // Validate the returnUrl to prevent open redirects
+    if (typeof returnUrl !== "string" || !returnUrl.startsWith("/") || returnUrl.startsWith("//")) {
+      returnUrl = "/"
+    }
     window.location.replace(returnUrl)
   }
 }

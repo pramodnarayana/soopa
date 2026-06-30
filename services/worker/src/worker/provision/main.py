@@ -120,7 +120,7 @@ async def poll_global_outbox(
                 select(GlobalOutbox)
                 .where(
                     GlobalOutbox.status == "PENDING",
-                    GlobalOutbox.event_type == "AS2_PARTNER_CREATED",
+                    GlobalOutbox.event_type.in_(["AS2_PARTNER_CREATED", "AS2_PARTNERSHIP_CREATED"]),
                 )
                 .limit(1)
                 .with_for_update(skip_locked=True)

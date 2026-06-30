@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 import logging
 
@@ -53,12 +54,19 @@ class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
             if not host_key:
                 raise ValueError("SFTP host_key is required for server verification")
 
-            # If host_key is provided, we should use it for verification.
-            # In a real implementation, we would parse the host_key string into a paramiko PKey object.
-            # For now, we pass it into connect.
+            # Parse the host_key string into a paramiko PKey object.
+            parts = host_key.split()
+            key_data = base64.b64decode(parts[-1])
+            parsed_key: paramiko.PKey
+            if "ed25519" in host_key.lower():
+                parsed_key = paramiko.Ed25519Key(data=key_data)
+            elif "ecdsa" in host_key.lower():
+                parsed_key = paramiko.ECDSAKey(data=key_data)
+            else:
+                parsed_key = paramiko.RSAKey(data=key_data)
+
             transport = paramiko.Transport((host, port))
-            # Note: connect expects a PKey object for hostkey, but this satisfies the contract check.
-            transport.connect(username=username, password=password, hostkey=host_key)  # type: ignore[arg-type]
+            transport.connect(username=username, password=password, hostkey=parsed_key)
             sftp = paramiko.SFTPClient.from_transport(transport)
 
             if not sftp:
