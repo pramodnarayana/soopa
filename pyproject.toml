@@ -45,7 +45,7 @@ dev = [
 [tool.mypy]
 strict = true
 exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core"]
-plugins = ["pydantic.mypy"]
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 
 [[tool.mypy.overrides]]
 module = "hvac.*"
@@ -83,7 +83,8 @@ source = ["libs", "services"]
 omit = [
     "*/tests/*",
     "*/migrations/*",
-    "libs/bots_core/*"
+    "libs/bots_core/src/bots_core/utils/xml2botsgrammar.py",
+    "libs/bots_core/src/bots_core/domain/grammar/grammarcheck.py"
 ]
 
 [tool.coverage.report]

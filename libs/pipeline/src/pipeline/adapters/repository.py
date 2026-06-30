@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, cast
+from typing import Any
 
 from database.models import ApiPayload, EdiMessage
 from database.models import TenantOutbox as Outbox
@@ -147,21 +147,21 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
         result = await self.session.execute(stmt)
         # Fetch all matches, prefer exact transaction_type over wildcard
-        records = result.scalars().all()
+        records = list(result.scalars().all())
         if not records:
             return None
 
-        # Sort so exact transaction_type comes first
-        records = sorted(records, key=lambda r: cast(Any, r).transaction_type == "*")
-        record = records[0]
+        # Sort so specific transaction types match before generic "*"
+        records = sorted(records, key=lambda r: getattr(r, "transaction_type", "*") == "*")
 
-        rec = cast(Any, record)
+        # mypy gets confused by TenantBase being the base class but returning specific derived models
+        record: Any = records[0]
         return {
-            "route_id": str(rec.id),
-            "as2_partner_id": str(rec.as2_partner_id) if rec.as2_partner_id else None,
-            "sftp_partner_id": str(rec.sftp_partner_id) if rec.sftp_partner_id else None,
-            "webhook_partner_id": str(rec.webhook_partner_id)
-            if hasattr(rec, "webhook_partner_id") and rec.webhook_partner_id
+            "route_id": str(record.id),
+            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
+            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            "webhook_partner_id": str(record.webhook_partner_id)
+            if hasattr(record, "webhook_partner_id") and record.webhook_partner_id
             else None,
         }
 

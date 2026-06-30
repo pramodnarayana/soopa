@@ -60,7 +60,7 @@ async def seed_database() -> None:
         else:
             needs_repair = False
             if tenant_obj.shard_schema != "tenant_host":
-                tenant_obj.shard_schema = "tenant_host"  # type: ignore[assignment]
+                tenant_obj.shard_schema = "tenant_host"
                 needs_repair = True
             if tenant_obj.shard_id != shard.id:
                 tenant_obj.shard_id = shard.id

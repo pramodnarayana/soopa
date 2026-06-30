@@ -11,8 +11,8 @@ import logging
 import os
 import sys
 
+from bots_core.domain import grammar
 from bots_core.domain.exceptions import txtexc
-from bots_core.domain.grammar import grammar
 
 logger = logging.getLogger(__name__)
 

@@ -135,7 +135,7 @@ async def poll_global_outbox(
 
                 if not tenant_id:
                     logger.error(f"Missing tenant_id in provision event: {outbox_event.id}")
-                    outbox_event.status = "FAILED"  # type: ignore
+                    outbox_event.status = "FAILED"
                     await global_session.commit()
                     continue
 
@@ -148,13 +148,13 @@ async def poll_global_outbox(
                     await replicate_tenant_config(tenant_id, global_session, tenant_session)
 
                     # Mark outbox event as processed
-                    outbox_event.status = "PROCESSED"  # type: ignore
+                    outbox_event.status = "PROCESSED"
                     await global_session.commit()
                 except (ValueError, KeyError) as e:
                     # Permanent data errors: bad payload or missing key — mark FAILED
                     await tenant_session.rollback()
                     logger.error(f"Permanent provisioning failure for tenant {tenant_id}: {e}")
-                    outbox_event.status = "FAILED"  # type: ignore
+                    outbox_event.status = "FAILED"
                     await global_session.commit()
                 except Exception as e:
                     # Transient errors (network, DB): leave PENDING for retry

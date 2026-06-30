@@ -41,6 +41,7 @@ def txtexc(limit=0):
     Process last exception, get an errortext.
     Errortext should be valid unicode.
     """
+    traceback.print_exc()
     terug = safe_unicode(traceback.format_exc(limit=None))
     if limit is None:
         return terug
