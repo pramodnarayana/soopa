@@ -45,11 +45,11 @@ dev:
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	uv run uvicorn as2_server.main:app --reload --port 8000
+	ENVIRONMENT=development uv run uvicorn as2_server.main:app --reload --port 8000
 
 dev-api:
 	@echo "Starting API Gateway with hot-reload for local development..."
-	uv run uvicorn api.main:app --reload --port 8001
+	ENVIRONMENT=development uv run uvicorn api.main:app --reload --port 8001
 
 dev-web:
 	@echo "Starting React Frontend with Vite..."
