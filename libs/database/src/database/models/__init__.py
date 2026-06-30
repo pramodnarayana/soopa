@@ -1,7 +1,6 @@
 from .control_plane import (
-    Connection as GlobalConnection,
-)
-from .control_plane import (
+    AS2Partner,
+    AS2Partnership,
     DatabaseShard,
     GlobalBase,
     SystemAuditLog,
@@ -10,41 +9,24 @@ from .control_plane import (
     User,
 )
 from .control_plane import (
-    FieldMappingRule as GlobalFieldMappingRule,
-)
-from .control_plane import (
     Outbox as GlobalOutbox,
-)
-from .control_plane import (
-    Route as GlobalRoute,
-)
-from .control_plane import (
-    TradingPartner as GlobalTradingPartner,
 )
 from .data_plane import (
     AckReceipt,
     ApiPayload,
     AuditLog,
     EdiMessage,
+    InboundRoute,
     Job,
+    OutboundRoute,
     ProcessedEvent,
+    SFTPPartner,
     TenantAwareMixin,
     TenantBase,
-)
-from .data_plane import (
-    Connection as TenantConnection,
-)
-from .data_plane import (
-    FieldMappingRule as TenantFieldMappingRule,
+    WebhookPartner,
 )
 from .data_plane import (
     Outbox as TenantOutbox,
-)
-from .data_plane import (
-    Route as TenantRoute,
-)
-from .data_plane import (
-    TradingPartner as TenantTradingPartner,
 )
 
 __all__ = [
@@ -54,19 +36,17 @@ __all__ = [
     "Tenant",
     "User",
     "TenantUser",
-    "GlobalTradingPartner",
-    "GlobalConnection",
-    "GlobalRoute",
-    "GlobalFieldMappingRule",
+    "AS2Partner",
+    "AS2Partnership",
     "GlobalOutbox",
     "SystemAuditLog",
     # Tenant
     "TenantBase",
     "TenantAwareMixin",
-    "TenantTradingPartner",
-    "TenantConnection",
-    "TenantRoute",
-    "TenantFieldMappingRule",
+    "SFTPPartner",
+    "WebhookPartner",
+    "InboundRoute",
+    "OutboundRoute",
     "EdiMessage",
     "ApiPayload",
     "Job",

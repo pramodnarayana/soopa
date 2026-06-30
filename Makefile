@@ -45,11 +45,11 @@ dev:
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	uv run uvicorn as2_server.main:app --reload --port 8000
+	ENVIRONMENT=development uv run uvicorn as2_server.main:app --reload --port 8000
 
 dev-api:
 	@echo "Starting API Gateway with hot-reload for local development..."
-	uv run uvicorn api.main:app --reload --port 8001
+	ENVIRONMENT=development uv run uvicorn api.main:app --reload --port 8001
 
 dev-web:
 	@echo "Starting React Frontend with Vite..."
@@ -65,7 +65,8 @@ db-init:
 
 db-reset:
 	@echo "Wiping application databases (leaving Zitadel intact)..."
-	docker compose rm -s -f -v postgres_global postgres_shard_1
+	docker compose stop postgres_global postgres_shard_1
+	docker compose rm -f -v postgres_global postgres_shard_1
 	@echo "Restarting application databases..."
 	docker compose up -d postgres_global postgres_shard_1
 	@echo "Waiting for databases to initialize..."

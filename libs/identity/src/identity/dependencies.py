@@ -4,18 +4,20 @@ Follows Hexagonal Architecture by adapting the HTTP layer to the Identity domain
 """
 
 import contextlib
+import hashlib
 import logging
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
-import jwt
+import httpx
 from config.settings import get_settings
 from database.models import DatabaseShard, Tenant
+from database.session import get_global_session
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
 from identity.application.use_cases import ResolveTenantUseCase
 from identity.infrastructure.repositories import SQLAlchemyIdentityRepository
@@ -31,14 +33,17 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
     auto_error=False,
 )
 
-jwks_client = jwt.PyJWKClient(_settings.identity.jwks_url)
+# Simple in-memory cache: { cache_key: (payload, expiry_time) }
+_userinfo_cache: dict[str, tuple[dict[str, Any], float]] = {}
+CACHE_TTL = 60.0  # seconds
+MAX_CACHE_SIZE = 1000
 
 
 async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, Any]:
     """
-    Extracts and validates the JWT issued by Authentik.
-    In a true enterprise environment, this fetches the JWKS from Authentik
-    to verify the RSA signature.
+    Extracts and validates the opaque Access Token by querying the Zitadel UserInfo endpoint.
+    Maintains a 60-second TTL cache to prevent network spam.
+    (Kept name get_raw_jwt to avoid breaking other files relying on this name)
     """
     if not token:
         raise HTTPException(
@@ -47,21 +52,40 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    now = time.time()
+    cache_key = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    if cache_key in _userinfo_cache:
+        payload, expiry = _userinfo_cache[cache_key]
+        if now < expiry:
+            return payload
+        else:
+            del _userinfo_cache[cache_key]
+
     settings = get_settings()
 
     try:
-        signing_key = await run_in_threadpool(jwks_client.get_signing_key_from_jwt, token)
-        payload = jwt.decode(
-            token,
-            key=signing_key.key,
-            algorithms=["RS256"],
-            audience=settings.identity.audience,
-            issuer=settings.identity.issuer,
-            options={"require": ["iss", "aud", "exp"]},
-        )
-        return payload
-    except jwt.PyJWTError as e:
-        logger.error(f"JWT Validation failed: {e}")
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                settings.identity.userinfo_url, headers={"Authorization": f"Bearer {token}"}
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+            if not isinstance(payload, dict) or "sub" not in payload:
+                raise ValueError("Payload missing expected structure")
+
+            payload_dict = payload
+
+            # Bounded eviction
+            if len(_userinfo_cache) >= MAX_CACHE_SIZE:
+                _userinfo_cache.pop(next(iter(_userinfo_cache)))
+
+            # Save to cache
+            _userinfo_cache[cache_key] = (payload_dict, now + CACHE_TTL)
+            return payload_dict
+    except httpx.HTTPError as e:
+        logger.error(f"UserInfo Validation failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -70,20 +94,10 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
 
 
 async def get_identity_repository(
-    request: Request,
+    global_session: AsyncSession = Depends(get_global_session),
 ) -> AsyncGenerator[SQLAlchemyIdentityRepository, None]:
     """Dependency that yields a repository bound to the Global database session."""
-    db_router = getattr(request.app.state, "db_router", None)
-    if not db_router:
-        raise RuntimeError("DatabaseRouter not initialized in app state")
-
-    async_gen = db_router.get_global_session()
-    global_session: AsyncSession = await async_gen.__anext__()
-    try:
-        yield SQLAlchemyIdentityRepository(global_session)
-    finally:
-        with contextlib.suppress(StopAsyncIteration):
-            await async_gen.__anext__()
+    yield SQLAlchemyIdentityRepository(global_session)
 
 
 async def get_resolve_tenant_use_case(
@@ -123,7 +137,9 @@ async def get_current_tenant_id(
 
 
 async def get_tenant_session(
-    request: Request, tenant_id: int = Depends(get_current_tenant_id)
+    request: Request,
+    tenant_id: int = Depends(get_current_tenant_id),
+    global_session: AsyncSession = Depends(get_global_session),
 ) -> AsyncGenerator[AsyncSession, None]:
     """
     Yields an AsyncSession dynamically bound to the correct database shard,
@@ -133,30 +149,29 @@ async def get_tenant_session(
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
-    # 1. Fetch routing info from Global DB
-    async_gen_global = db_router.get_global_session()
-    global_session: AsyncSession = await async_gen_global.__anext__()
-    try:
-        # We need the DatabaseShard info
-        # This could be heavily cached in memory to avoid a query on every request!
-        stmt = (
-            select(Tenant, DatabaseShard)
-            .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
-            .where(Tenant.id == tenant_id)
-        )
-        result = await global_session.execute(stmt)
-        tenant, shard = result.one()
-        shard_key = shard.name
-        shard_url = shard.dsn
-    finally:
-        with contextlib.suppress(StopAsyncIteration):
-            await async_gen_global.__anext__()
+    # 1. Fetch routing info from Global DB using the shared global_session
+    stmt = (
+        select(Tenant, DatabaseShard)
+        .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
+        .where(Tenant.id == tenant_id)
+    )
+    result = await global_session.execute(stmt)
+    tenant, shard = result.one()
+    shard_key = shard.name
+    shard_url = shard.dsn
 
     # 2. Yield the RLS-secured tenant session
     async_gen_tenant = db_router.get_tenant_session(tenant_id, shard_key, shard_url)
     tenant_session: AsyncSession = await async_gen_tenant.__anext__()
+
+    # 3. Set the tenant context variable for repositories that rely on it
+    from identity.tenant_context import _tenant_id
+
+    token = _tenant_id.set(tenant_id)
+
     try:
         yield tenant_session
     finally:
+        _tenant_id.reset(token)
         with contextlib.suppress(StopAsyncIteration):
             await async_gen_tenant.__anext__()

@@ -4,27 +4,11 @@ import logging
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models.control_plane import (
-    Connection as GlobalConn,
-)
-from database.models.control_plane import (
-    Outbox as GlobalOutbox,
-)
-from database.models.control_plane import (
-    Route as GlobalRoute,
-)
-from database.models.control_plane import (
-    TradingPartner as GlobalTP,
-)
-from database.models.data_plane import (
-    Connection as TenantConn,
-)
-from database.models.data_plane import (
-    Route as TenantRoute,
-)
-from database.models.data_plane import (
-    TradingPartner as TenantTP,
-)
+from database.models.control_plane import AS2Partner as GlobalAS2Partner
+from database.models.control_plane import AS2Partnership as GlobalAS2Partnership
+from database.models.control_plane import Outbox as GlobalOutbox
+from database.models.data_plane import AS2Partner as TenantAS2Partner
+from database.models.data_plane import AS2Partnership as TenantAS2Partnership
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,97 +22,86 @@ async def replicate_tenant_config(
 ) -> None:
     """Replicates configuration from Global DB to Tenant DB Shard."""
 
-    # 1. Replicate TradingPartners
-    tp_result = await global_session.execute(
-        select(GlobalTP).where(GlobalTP.tenant_id == tenant_id)
+    # Replicate AS2Partners
+    # We replicate all AS2Partners that belong to this tenant, plus any global ones (tenant_id IS NULL)
+    stmt = select(GlobalAS2Partner).where(
+        (GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id.is_(None))
     )
+    tp_result = await global_session.execute(stmt)
+
     for global_tp in tp_result.scalars():
-        stmt = (
-            insert(TenantTP)
+        insert_stmt = (
+            insert(TenantAS2Partner)
             .values(
                 id=global_tp.id,
-                partner_name=global_tp.partner_name,
+                tenant_id=tenant_id,  # Use destination tenant_id for replicated partners
+                name=global_tp.name,
                 as2_id=global_tp.as2_id,
-                direction=global_tp.direction,
+                is_local=global_tp.is_local,
+                public_cert_pem=global_tp.public_cert_pem,
+                public_cert_vault_ref=global_tp.public_cert_vault_ref,
+                private_key_vault_ref=global_tp.private_key_vault_ref,
                 active=global_tp.active,
             )
             .on_conflict_do_update(
                 index_elements=["id"],
                 set_={
-                    "partner_name": global_tp.partner_name,
+                    "tenant_id": tenant_id,
+                    "name": global_tp.name,
                     "as2_id": global_tp.as2_id,
-                    "direction": global_tp.direction,
+                    "is_local": global_tp.is_local,
+                    "public_cert_pem": global_tp.public_cert_pem,
+                    "public_cert_vault_ref": global_tp.public_cert_vault_ref,
+                    "private_key_vault_ref": global_tp.private_key_vault_ref,
                     "active": global_tp.active,
                 },
             )
         )
-        await tenant_session.execute(stmt)
+        await tenant_session.execute(insert_stmt)
 
-    # 2. Replicate Connections
-    conn_result = await global_session.execute(
-        select(GlobalConn).where(GlobalConn.tenant_id == tenant_id)
-    )
-    for global_conn in conn_result.scalars():
-        stmt = (
-            insert(TenantConn)
+    # Replicate AS2Partnerships
+    ps_stmt = select(GlobalAS2Partnership).where(GlobalAS2Partnership.tenant_id == tenant_id)
+    ps_result = await global_session.execute(ps_stmt)
+
+    for global_ps in ps_result.scalars():
+        insert_ps_stmt = (
+            insert(TenantAS2Partnership)
             .values(
-                id=global_conn.id,
-                trading_partner_id=global_conn.trading_partner_id,
-                connection_type=global_conn.connection_type,
-                host=global_conn.host,
-                port=global_conn.port,
-                direction=global_conn.direction,
-                credentials_vault_ref=global_conn.credentials_vault_ref,
-                poll_interval_secs=global_conn.poll_interval_secs,
-                active=global_conn.active,
+                id=global_ps.id,
+                tenant_id=tenant_id,
+                local_partner_id=global_ps.local_partner_id,
+                remote_partner_id=global_ps.remote_partner_id,
+                local_url=global_ps.local_url,
+                remote_url=global_ps.remote_url,
+                credentials_vault_ref=global_ps.credentials_vault_ref,
+                mdn_type=global_ps.mdn_type,
+                mdn_url=global_ps.mdn_url,
+                encryption_algorithm=global_ps.encryption_algorithm,
+                signature_algorithm=global_ps.signature_algorithm,
+                advanced_flags=global_ps.advanced_flags,
+                active=global_ps.active,
             )
             .on_conflict_do_update(
                 index_elements=["id"],
                 set_={
-                    "connection_type": global_conn.connection_type,
-                    "host": global_conn.host,
-                    "port": global_conn.port,
-                    "direction": global_conn.direction,
-                    "credentials_vault_ref": global_conn.credentials_vault_ref,
-                    "poll_interval_secs": global_conn.poll_interval_secs,
-                    "active": global_conn.active,
+                    "local_partner_id": global_ps.local_partner_id,
+                    "remote_partner_id": global_ps.remote_partner_id,
+                    "local_url": global_ps.local_url,
+                    "remote_url": global_ps.remote_url,
+                    "credentials_vault_ref": global_ps.credentials_vault_ref,
+                    "mdn_type": global_ps.mdn_type,
+                    "mdn_url": global_ps.mdn_url,
+                    "encryption_algorithm": global_ps.encryption_algorithm,
+                    "signature_algorithm": global_ps.signature_algorithm,
+                    "advanced_flags": global_ps.advanced_flags,
+                    "active": global_ps.active,
                 },
             )
         )
-        await tenant_session.execute(stmt)
-
-    # 3. Replicate Routes
-    route_result = await global_session.execute(
-        select(GlobalRoute).where(GlobalRoute.tenant_id == tenant_id)
-    )
-    for global_route in route_result.scalars():
-        stmt = (
-            insert(TenantRoute)
-            .values(
-                id=global_route.id,
-                source_partner_id=global_route.source_partner_id,
-                target_partner_id=global_route.target_partner_id,
-                source_format=global_route.source_format,
-                target_format=global_route.target_format,
-                transaction_type=global_route.transaction_type,
-                active=global_route.active,
-            )
-            .on_conflict_do_update(
-                index_elements=["id"],
-                set_={
-                    "source_partner_id": global_route.source_partner_id,
-                    "target_partner_id": global_route.target_partner_id,
-                    "source_format": global_route.source_format,
-                    "target_format": global_route.target_format,
-                    "transaction_type": global_route.transaction_type,
-                    "active": global_route.active,
-                },
-            )
-        )
-        await tenant_session.execute(stmt)
+        await tenant_session.execute(insert_ps_stmt)
 
     await tenant_session.commit()
-    logger.info(f"Successfully replicated configuration for tenant_id={tenant_id}")
+    logger.info(f"Successfully replicated AS2 configuration for tenant_id={tenant_id}")
 
 
 async def poll_global_outbox(
@@ -147,7 +120,7 @@ async def poll_global_outbox(
                 select(GlobalOutbox)
                 .where(
                     GlobalOutbox.status == "PENDING",
-                    GlobalOutbox.event_type == "TRADING_PARTNER_PROVISION",
+                    GlobalOutbox.event_type.in_(["AS2_PARTNER_CREATED", "AS2_PARTNERSHIP_CREATED"]),
                 )
                 .limit(1)
                 .with_for_update(skip_locked=True)

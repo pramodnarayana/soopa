@@ -1,28 +1,63 @@
 import os
-from collections.abc import AsyncGenerator
 from functools import lru_cache
 
-from fastapi import Request
+from database.session import get_global_session
+from fastapi import Depends, HTTPException
+
+# Import tenant_session from identity
+from identity.dependencies import get_current_tenant_id, get_tenant_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.adapters.repository import (
+    SqlAlchemyControlPlaneRepository,
+    SqlAlchemyDataPlaneRepository,
+)
 from api.adapters.sqs_queue import SQSMessageQueueAdapter
+from api.core.uow import UnitOfWork
 from api.ports.message_queue import MessageQueuePort
+from api.ports.repository import ControlPlaneRepositoryPort, DataPlaneRepositoryPort
 
 
 @lru_cache
 def get_message_queue() -> MessageQueuePort:
-    """
-    Dependency provider for the MessageQueuePort.
-    Returns the SQS implementation.
-    """
     endpoint_url = os.getenv("AWS_ENDPOINT_URL")
     return SQSMessageQueueAdapter(endpoint_url=endpoint_url)
 
 
-async def get_global_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
+def get_control_plane_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> ControlPlaneRepositoryPort:
+    return SqlAlchemyControlPlaneRepository(session)
+
+
+def get_data_plane_repo(
+    session: AsyncSession = Depends(get_tenant_session),
+) -> DataPlaneRepositoryPort:
+    return SqlAlchemyDataPlaneRepository(session)
+
+
+async def get_uow(
+    global_session: AsyncSession = Depends(get_global_session),
+    # Optional tenant_session for platform admin routes
+    # How to handle this? Best is to not inject tenant_session by default unless requested.
+) -> UnitOfWork:
+    return UnitOfWork(global_session=global_session)
+
+
+async def get_tenant_uow(
+    global_session: AsyncSession = Depends(get_global_session),
+    tenant_session: AsyncSession = Depends(get_tenant_session),
+) -> UnitOfWork:
+    return UnitOfWork(global_session=global_session, tenant_session=tenant_session)
+
+
+def require_platform_admin(tenant_id: int = Depends(get_current_tenant_id)) -> int:
     """
-    Dependency provider for a SQLAlchemy AsyncSession pointing to the Global DB.
+    Dependency that enforces the user belongs to Tenant 0 (Platform Admin).
     """
-    db_router = request.app.state.db_router
-    async for session in db_router.get_global_session():
-        yield session
+    if tenant_id != 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden. This action requires Platform Admin (Tenant 0) privileges.",
+        )
+    return tenant_id

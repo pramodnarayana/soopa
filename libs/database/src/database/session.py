@@ -9,6 +9,28 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+async def get_global_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Yields a shared Global database session for the entire HTTP request lifecycle.
+    This acts as the single source of truth for global DB connections across all bounded contexts.
+    """
+    db_router = getattr(request.app.state, "db_router", None)
+    if not db_router:
+        raise RuntimeError("DatabaseRouter not initialized in app state")
+
+    async_gen = db_router.get_global_session()
+    global_session: AsyncSession = await async_gen.__anext__()
+    try:
+        yield global_session
+        await global_session.commit()
+    except Exception:
+        await global_session.rollback()
+        raise
+    finally:
+        with contextlib.suppress(StopAsyncIteration):
+            await async_gen.__anext__()
+
+
 async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     """
     Yields a database session per request for AS2 Server (which currently defaults to tenant 0).

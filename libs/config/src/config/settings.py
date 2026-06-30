@@ -71,6 +71,10 @@ class IdentitySettings(BaseSettings):
         default="http://localhost:8080/oauth/v2/keys",
         description="The OIDC JWKS URL for verifying signatures",
     )
+    userinfo_url: str = Field(
+        default="http://localhost:8080/oidc/v1/userinfo",
+        description="The OIDC UserInfo endpoint for remote token introspection",
+    )
     audience: str = Field(
         default="api-gateway",
         description="The expected audience for the JWT",

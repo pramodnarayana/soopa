@@ -47,6 +47,10 @@ strict = true
 exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core"]
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+module = "hvac.*"
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -61,6 +65,9 @@ ignore = ["E501"] # Handled by formatter
 "services/api/src/api/main.py" = ["B008"]
 "services/api/src/api/cdc_relay.py" = ["B008"]
 "services/api/src/api/routers/partners.py" = ["B008"]
+"services/api/src/api/routers/platform_partners.py" = ["B008"]
+"services/api/src/api/routers/routes.py" = ["B008"]
+"services/api/src/api/dependencies.py" = ["B008"]
 "services/as2_server/src/as2_server/main.py" = ["B008"]
 "libs/identity/src/identity/dependencies.py" = ["B008"]
 # Legacy BOTS engine formatting ignores
@@ -75,10 +82,11 @@ indent-style = "space"
 source = ["libs", "services"]
 omit = [
     "*/tests/*",
-    "*/migrations/*"
+    "*/migrations/*",
+    "libs/bots_core/*"
 ]
 
 [tool.coverage.report]
-# TODO: Increase fail_under to 80 once remaining legacy formats are either pruned or tested
+# Required 80% coverage
 show_missing = true
-fail_under = 38
+fail_under = 80

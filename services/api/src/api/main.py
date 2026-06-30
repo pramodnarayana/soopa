@@ -4,12 +4,16 @@ from typing import Any
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from fastapi import Depends, FastAPI
-from identity.dependencies import get_current_tenant_id, get_tenant_session
+from database.session import get_global_session
+from fastapi import Depends, FastAPI, HTTPException, status
+from identity.dependencies import get_current_tenant_id, get_raw_jwt, get_tenant_session
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
-from api.routers import partners
+from api.adapters.repository import SqlAlchemyTenantRepository
+from api.core.authorization import AuthorizationService
+from api.routers import partners, platform_partners, routes
 
 logger = logging.getLogger(__name__)
 
@@ -50,20 +54,45 @@ app = FastAPI(
 
 app.include_router(cdc_relay.router)
 app.include_router(partners.router)
+app.include_router(platform_partners.router)
+app.include_router(routes.router)
 
 
 @app.get("/api/me", tags=["Identity"])
 async def get_me(
     tenant_id: int = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_tenant_session),
+    global_session: AsyncSession = Depends(get_global_session),
+    token_payload: dict[str, Any] = Depends(get_raw_jwt),
 ) -> Any:
     """
-    Returns the current user's resolved tenant_id and verifies database access.
+    Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
     """
-    # Simply hitting the database to prove we have a valid, RLS-secured session
-    from sqlalchemy import text
+    # 1. Verify RLS (Data Plane isolation)
+    rls_result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
+    current_rls_tenant = rls_result.scalar()
 
-    result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
-    current_rls_tenant = result.scalar()
+    if str(current_rls_tenant) != str(tenant_id):
+        raise HTTPException(status_code=403, detail="RLS context mismatch. Unauthorized access.")
 
-    return {"status": "success", "tenant_id": tenant_id, "rls_enforced_tenant": current_rls_tenant}
+    # 2. Get Authorization Profile via Service
+    tenant_repo = SqlAlchemyTenantRepository(global_session)
+    auth_service = AuthorizationService(tenant_repo)
+
+    profile = await auth_service.get_authorization_profile(
+        tenant_id=tenant_id, token_payload=token_payload, current_rls_tenant=current_rls_tenant
+    )
+
+    # Prevent non-admins from spoofing X-Tenant-ID
+    _ = token_payload.get("urn:zitadel:iam:org:project:roles", {}).get("tenant_id")
+    # Zitadel might encode the tenant in roles or metadata, let's assume it's in a custom claim for now
+    # or rely on auth_service.
+    if not profile["is_platform_admin"]:
+        token_tenant = token_payload.get("urn:soopa:tenant_id")
+        if token_tenant is None or str(token_tenant) != str(tenant_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant ID mismatch or missing claim.",
+            )
+
+    return profile

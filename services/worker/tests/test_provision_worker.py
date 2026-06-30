@@ -46,47 +46,43 @@ async def test_replicate_tenant_config() -> None:
     mock_global_session = AsyncMock()
     mock_tenant_session = AsyncMock()
 
-    # Mock global execution to return some scalars for TP, Conn, Route
+    # Mock global execution to return some scalars for AS2Partner
     mock_tp = MagicMock()
     mock_tp.id = "tp-uuid"
-    mock_tp.partner_name = "Acme Corp"
+    mock_tp.tenant_id = 99
+    mock_tp.name = "Acme Corp AS2"
     mock_tp.as2_id = "ACME"
-    mock_tp.direction = "BOTH"
+    mock_tp.is_local = False
+    mock_tp.public_cert_pem = "PEM"
+    mock_tp.public_cert_vault_ref = "vault://acme-pub"
+    mock_tp.private_key_vault_ref = None
     mock_tp.active = True
 
-    mock_conn = MagicMock()
-    mock_conn.id = "conn-uuid"
-    mock_conn.trading_partner_id = "tp-uuid"
-    mock_conn.connection_type = "AS2"
-    mock_conn.host = "as2.acme.com"
-    mock_conn.port = 4080
-    mock_conn.direction = "INBOUND"
-    mock_conn.credentials_vault_ref = "vault://acme"
-    mock_conn.poll_interval_secs = None
-    mock_conn.active = True
-
-    mock_route = MagicMock()
-    mock_route.id = "route-uuid"
-    mock_route.source_partner_id = "tp-uuid"
-    mock_route.target_partner_id = "tp-uuid-2"
-    mock_route.source_format = "X12"
-    mock_route.target_format = "JSON"
-    mock_route.transaction_type = "850"
-    mock_route.active = True
-
-    # We have 3 queries in replicate_tenant_config (TP, Conn, Route)
+    # We have 2 queries in replicate_tenant_config (AS2Partner and AS2Partnership)
     mock_result_tp = MagicMock()
     mock_result_tp.scalars.return_value = [mock_tp]
 
-    mock_result_conn = MagicMock()
-    mock_result_conn.scalars.return_value = [mock_conn]
+    mock_ps = MagicMock()
+    mock_ps.id = "ps-uuid"
+    mock_ps.tenant_id = 99
+    mock_ps.local_partner_id = "loc"
+    mock_ps.remote_partner_id = "rem"
+    mock_ps.local_url = "http://l"
+    mock_ps.remote_url = "http://r"
+    mock_ps.credentials_vault_ref = "ref"
+    mock_ps.mdn_type = "SYNC"
+    mock_ps.mdn_url = None
+    mock_ps.encryption_algorithm = "AES"
+    mock_ps.signature_algorithm = "SHA"
+    mock_ps.advanced_flags = None
+    mock_ps.active = True
 
-    mock_result_route = MagicMock()
-    mock_result_route.scalars.return_value = [mock_route]
+    mock_result_ps = MagicMock()
+    mock_result_ps.scalars.return_value = [mock_ps]
 
-    mock_global_session.execute.side_effect = [mock_result_tp, mock_result_conn, mock_result_route]
+    mock_global_session.execute.side_effect = [mock_result_tp, mock_result_ps]
 
     await replicate_tenant_config(99, mock_global_session, mock_tenant_session)
 
-    assert mock_global_session.execute.await_count == 3
+    assert mock_global_session.execute.await_count == 2
     mock_tenant_session.commit.assert_awaited_once()

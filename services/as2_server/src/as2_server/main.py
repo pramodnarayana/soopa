@@ -153,7 +153,7 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     # Resolve tenant_id from AS2-To header by looking up in global trading_partners table
-    from database.models.control_plane import TradingPartner as GlobalTradingPartner
+    from database.models.control_plane import AS2Partner as GlobalTradingPartner
     from sqlalchemy import select as sql_select
 
     tenant_id = None
@@ -161,10 +161,14 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         result = await session.execute(
             sql_select(GlobalTradingPartner.tenant_id)
             .where(GlobalTradingPartner.as2_id == as2_msg.as2_to)
+            .where(GlobalTradingPartner.is_local.is_(True))
             .where(GlobalTradingPartner.active.is_(True))
-            .limit(1)
         )
-        tenant_id = result.scalar_one_or_none()
+        tenant_rows = result.fetchall()
+        if len(tenant_rows) > 1:
+            raise ValueError(f"Ambiguous AS2-To match: multiple tenants claim {as2_msg.as2_to}")
+        if tenant_rows:
+            tenant_id = tenant_rows[0][0]
     except Exception as e:
         logger.warning("tenant_resolution_failed", error=str(e), as2_to=as2_msg.as2_to)
 
@@ -281,7 +285,8 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
                 trace_id=trace_id,
                 direction="INBOUND",
                 connection_type="AS2",
-                trading_partner_id=partner.id,  # type: ignore[arg-type]
+                sender_id=as2_msg.as2_from,
+                receiver_id=as2_msg.as2_to,
                 s3_key=storage_uri,
                 status=status,
                 as2_message_id=as2_msg.message_id,

@@ -17,9 +17,13 @@ export const oidcConfig: AuthProviderProps = {
   response_type: "code",
   scope: "openid profile email",
   post_logout_redirect_uri: window.location.origin,
-  onSigninCallback: (_user: User | void) => {
-    // After successful login, redirect directly to the dashboard
-    // This prevents the 404 error on the /callback route
-    window.location.replace('/dashboard')
+  onSigninCallback: (user: User | void) => {
+    // Restore the saved return URL/state from the auth flow when it exists
+    let returnUrl = (user?.state as { returnUrl?: string })?.returnUrl || '/'
+    // Validate the returnUrl to prevent open redirects
+    if (typeof returnUrl !== "string" || !returnUrl.startsWith("/") || returnUrl.startsWith("//")) {
+      returnUrl = "/"
+    }
+    window.location.replace(returnUrl)
   }
 }

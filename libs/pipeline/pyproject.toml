@@ -13,6 +13,8 @@ dependencies = [
     "transformer",
     "database",
     "identity",
+    "paramiko>=5.0.0",
+    "types-paramiko>=3.0.0",
 ]
 
 [tool.uv.sources]

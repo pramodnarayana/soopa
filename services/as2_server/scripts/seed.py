@@ -6,7 +6,10 @@ import os
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models import DatabaseShard, Tenant, TenantUser, User
+from dotenv import load_dotenv
 from sqlalchemy.future import select
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,8 +71,8 @@ async def seed_database() -> None:
                 logger.info("Repaired Tenant 0 shard_id and shard_schema to shard_1/tenant_host.")
 
         # 3. Seed Default User
-        admin_email = os.getenv("ADMIN_EMAIL")
-        admin_name = os.getenv("ADMIN_NAME", "Admin User")
+        admin_email = os.getenv("SYSTEM_ADMIN_EMAIL")
+        admin_name = os.getenv("SYSTEM_ADMIN_NAME", "System Admin")
 
         if admin_email:
             logger.info("Seeding Default Admin User...")
@@ -92,7 +95,7 @@ async def seed_database() -> None:
                 session.add(tenant_user)
                 logger.info("Mapped Admin User to Tenant 0.")
         else:
-            logger.info("ADMIN_EMAIL not provided. Skipping default admin creation.")
+            logger.info("SYSTEM_ADMIN_EMAIL not provided. Skipping default admin creation.")
 
         await session.commit()
         logger.info("Database seed completed successfully.")
