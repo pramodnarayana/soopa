@@ -35,9 +35,17 @@ class UnitOfWork:
 
     async def commit(self) -> None:
         """Commits transactions on both active sessions."""
-        await self.global_session.commit()
-        if self.tenant_session:
-            await self.tenant_session.commit()
+        try:
+            if self.tenant_session:
+                await self.tenant_session.flush()
+            await self.global_session.flush()
+
+            if self.tenant_session:
+                await self.tenant_session.commit()
+            await self.global_session.commit()
+        except Exception:
+            await self.rollback()
+            raise
 
     async def rollback(self) -> None:
         """Rolls back transactions on both active sessions."""

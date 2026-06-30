@@ -161,6 +161,7 @@ async def receive_as2(request: Request, session: SessionDep, s3: S3Dep) -> Any:
         result = await session.execute(
             sql_select(GlobalTradingPartner.tenant_id)
             .where(GlobalTradingPartner.as2_id == as2_msg.as2_to)
+            .where(GlobalTradingPartner.is_local.is_(True))
             .where(GlobalTradingPartner.active.is_(True))
             .limit(1)
         )

@@ -46,13 +46,17 @@ export function AS2PartnerCard({ count, onSave }: AS2PartnerCardProps) {
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (!isLocal && !certPem) {
+      alert("Remote AS2 partners require a public certificate.");
+      return;
+    }
     const formData = new FormData(e.currentTarget)
     await onSave({
       name: formData.get('name') as string,
       type: 'AS2',
       as2_id: formData.get('as2_id') as string,
       is_local: isLocal,
-      public_cert_pem: isLocal ? undefined : formData.get('public_cert_pem') as string,
+      public_cert_pem: isLocal ? undefined : certPem,
     })
     setIsOpen(false)
     setCertPem("") // Reset after save
@@ -142,7 +146,13 @@ export function AS2PartnerCard({ count, onSave }: AS2PartnerCardProps) {
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-3 text-center" onClick={() => fileInputRef.current?.click()}>
+                        <div
+                          className="flex flex-col items-center gap-3 text-center"
+                          onClick={() => fileInputRef.current?.click()}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+                          tabIndex={0}
+                          role="button"
+                        >
                           <div className="rounded-full bg-white p-3 shadow-sm border border-slate-100 cursor-pointer group-hover:border-indigo-200">
                             <UploadCloud className="h-6 w-6 text-indigo-500" />
                           </div>
@@ -156,7 +166,7 @@ export function AS2PartnerCard({ count, onSave }: AS2PartnerCardProps) {
                     </div>
 
                     {/* Hidden input to pass data to formData */}
-                    <input type="hidden" name="public_cert_pem" value={certPem} required={!isLocal} />
+                    <input type="hidden" name="public_cert_pem" value={certPem} />
                   </div>
                 )}
               <Button type="submit" className="w-full h-11 mt-2 text-base font-semibold shadow-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white">Save Trading Partner</Button>

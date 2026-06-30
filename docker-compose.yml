@@ -80,12 +80,12 @@ services:
     ports:
       - "127.0.0.1:8200:8200"
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: "${VAULT_DEV_ROOT_TOKEN_ID:-root}"
+      VAULT_DEV_ROOT_TOKEN_ID: "${VAULT_DEV_ROOT_TOKEN_ID}"
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
     healthcheck:
-      test: ["CMD", "vault", "status"]
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -53,7 +53,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_api_payloads_trace_id'), 'api_payloads', ['trace_id'], unique=False)
     op.create_table('as2_partners',
     sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=True),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('is_local', sa.Boolean(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('as2_id', sa.String(length=255), nullable=False),
@@ -160,11 +160,11 @@ def upgrade() -> None:
     op.create_index(op.f('ix_webhook_partners_tenant_id'), 'webhook_partners', ['tenant_id'], unique=False)
     op.create_table('as2_partnerships',
     sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=True),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('local_partner_id', sa.UUID(), nullable=False),
     sa.Column('remote_partner_id', sa.UUID(), nullable=False),
-    sa.Column('host', sa.String(length=1024), nullable=True),
-    sa.Column('port', sa.Integer(), nullable=True),
+    sa.Column('local_url', sa.String(length=1024), nullable=True),
+    sa.Column('remote_url', sa.String(length=1024), nullable=True),
     sa.Column('credentials_vault_ref', sa.String(length=255), nullable=True),
     sa.Column('mdn_type', sa.String(length=50), nullable=False),
     sa.Column('mdn_url', sa.String(length=1024), nullable=True),

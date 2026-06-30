@@ -24,8 +24,7 @@ class CreateAS2TradingPartnerRequest(BaseModel):
 class CreateAS2PartnershipRequest(BaseModel):
     local_partner_id: UUID = Field(..., description="ID of the local identity")
     remote_partner_id: UUID = Field(..., description="ID of the remote identity")
-    host: str | None = Field(None, max_length=1024, description="Remote host URL or IP")
-    port: int | None = Field(None, ge=1, le=65535, description="Remote port")
+    remote_url: str | None = Field(None, max_length=1024, description="Remote AS2 URL")
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for basic auth"
     )

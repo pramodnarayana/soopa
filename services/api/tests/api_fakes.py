@@ -56,8 +56,14 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
     async def list_partnerships(self) -> list[Any]:
         return self.partnerships
 
-    async def get_as2_partners_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
-        return {p["id"]: p["cmd"].name for p in self.partners if p["id"] in ids}
+    async def get_as2_partners_by_ids(
+        self, ids: list[uuid.UUID], tenant_id: int
+    ) -> dict[uuid.UUID, str]:
+        return {
+            p["id"]: p["cmd"].name
+            for p in self.partners
+            if p["id"] in ids and p["tenant_id"] == tenant_id
+        }
 
 
 class FakeRoute:

@@ -105,6 +105,10 @@ class DeliveryService:
             return
 
     async def _deliver_sftp(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
+        if not await self.repository.claim_edi_message(trace_id):
+            logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
+            return
+
         partner = await self.repository.get_sftp_partner(partner_id)
         if not partner:
             raise ValueError(f"SFTP partner {partner_id} not found.")

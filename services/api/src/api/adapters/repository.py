@@ -71,13 +71,23 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         )
         self.session.add(record)
         await self.session.flush()
+
+        await self.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="AS2_PARTNER_CREATED",
+            payload={"partnership_id": str(partnership_id), "tenant_id": tenant_id},
+        )
+
         return partnership_id
 
-    async def get_as2_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_as2_partners_by_ids(self, ids: list[UUID], tenant_id: int) -> dict[UUID, str]:
         if not ids:
             return {}
         result = await self.session.execute(
-            select(AS2Partner.id, AS2Partner.name).where(AS2Partner.id.in_(ids))
+            select(AS2Partner.id, AS2Partner.name).where(
+                AS2Partner.id.in_(ids),
+                (AS2Partner.tenant_id == tenant_id) | (AS2Partner.tenant_id.is_(None)),
+            )
         )
         return {row.id: row.name for row in result.all()}
 
@@ -130,7 +140,9 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         if not ids:
             return {}
         result = await self.session.execute(
-            select(SFTPPartner.id, SFTPPartner.name).where(SFTPPartner.id.in_(ids))
+            select(SFTPPartner.id, SFTPPartner.name).where(
+                SFTPPartner.id.in_(ids), SFTPPartner.tenant_id == self._tenant_id()
+            )
         )
         return {row.id: row.name for row in result.all()}
 
@@ -139,7 +151,9 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         if not ids:
             return {}
         result = await self.session.execute(
-            select(WebhookPartner.id, WebhookPartner.name).where(WebhookPartner.id.in_(ids))
+            select(WebhookPartner.id, WebhookPartner.name).where(
+                WebhookPartner.id.in_(ids), WebhookPartner.tenant_id == self._tenant_id()
+            )
         )
         return {row.id: row.name for row in result.all()}
 
@@ -159,6 +173,14 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> UUID:
         tenant_id = self._tenant_id()
+
+        destinations = [
+            d
+            for d in (cmd.webhook_partner_id, cmd.as2_partner_id, cmd.sftp_partner_id)
+            if d is not None
+        ]
+        if len(destinations) != 1:
+            raise ValueError("Exactly one destination (webhook, as2, or sftp) must be provided")
 
         # Validate target UUIDs belong to this tenant
         if cmd.webhook_partner_id:
@@ -213,6 +235,10 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
 
     async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> UUID:
         tenant_id = self._tenant_id()
+
+        destinations = [d for d in (cmd.as2_partner_id, cmd.sftp_partner_id) if d is not None]
+        if len(destinations) != 1:
+            raise ValueError("Exactly one destination (as2 or sftp) must be provided")
 
         # Validate target UUIDs belong to this tenant
         if cmd.as2_partner_id:

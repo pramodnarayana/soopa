@@ -105,7 +105,7 @@ class ProvisioningService:
             direction="OUTBOUND",
         )
 
-    async def list_routes(self) -> list[dict[str, Any]]:
+    async def list_routes(self, tenant_id: int) -> list[dict[str, Any]]:
         routes_data = await self.tenant_repo.get_all_routes()
         inbound = routes_data.get("inbound", [])
         outbound = routes_data.get("outbound", [])
@@ -131,7 +131,7 @@ class ProvisioningService:
                 sftp_ids.add(r.sftp_partner_id)
 
         # Fetch names
-        as2_names = await self.global_repo.get_as2_partners_by_ids(list(as2_ids))
+        as2_names = await self.global_repo.get_as2_partners_by_ids(list(as2_ids), tenant_id)
         sftp_names = await self.tenant_repo.get_sftp_partners_by_ids(list(sftp_ids))
         webhook_names = await self.tenant_repo.get_webhook_partners_by_ids(list(webhook_ids))
 

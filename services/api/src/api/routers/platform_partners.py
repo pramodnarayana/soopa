@@ -126,18 +126,11 @@ async def create_platform_as2_partnership(
     """
     try:
         async with uow:
-            allow_insecure = (
-                request.advanced_flags.get("allow_insecure", False)
-                if request.advanced_flags
-                else False
-            )
-            scheme = "http" if allow_insecure else "https"
-
             cmd = CreateAS2PartnershipCmd(
                 local_partner_id=request.local_partner_id,
                 remote_partner_id=request.remote_partner_id,
                 local_url=None,
-                remote_url=f"{scheme}://{request.host}:{request.port}" if request.host else None,
+                remote_url=request.remote_url,
                 credentials_vault_ref=request.credentials_vault_ref,
                 mdn_type=request.mdn_type,
                 mdn_url=request.mdn_url,
@@ -154,7 +147,7 @@ async def create_platform_as2_partnership(
                 local_partner_id=str(request.local_partner_id),
                 remote_partner_id=str(request.remote_partner_id),
                 local_url=None,
-                remote_url=f"http://{request.host}:{request.port}" if request.host else None,
+                remote_url=request.remote_url,
                 mdn_type=request.mdn_type,
                 mdn_url=request.mdn_url,
                 encryption_algorithm=request.encryption_algorithm,

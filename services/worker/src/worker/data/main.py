@@ -217,6 +217,14 @@ async def poll_sqs_queue(
                             await sqs.delete_message(
                                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
                             )
+                        except (ValueError, KeyError, NotImplementedError) as e:
+                            # Permanently delete messages with unrecoverable configuration errors
+                            logger.error(
+                                f"[{queue_name}] Permanent validation error, deleting permanently: {e}"
+                            )
+                            await sqs.delete_message(
+                                QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                            )
                         except Exception as e:
                             logger.exception(
                                 f"[{queue_name}] Transient error processing message: {e}"

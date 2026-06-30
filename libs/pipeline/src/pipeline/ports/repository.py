@@ -14,6 +14,10 @@ class RepositoryPort(Protocol):
         """Updates the status of an EDI Message."""
         ...
 
+    async def claim_edi_message(self, trace_id: str) -> bool:
+        """Atomically claims an EDI message."""
+        ...
+
     async def save_api_payload(
         self, trace_id: str, direction: str, s3_uri: str, status: str
     ) -> None:

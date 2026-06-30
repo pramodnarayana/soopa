@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from identity.dependencies import get_current_tenant_id
 
 from api.adapters.http.dtos import (
@@ -40,8 +40,9 @@ async def create_as2_partner(
         service = ProvisioningService(uow.control_plane, None)  # type: ignore
 
         if not request.public_cert_pem and not request.public_cert_vault_ref:
-            raise ValueError(
-                "Remote AS2 partners require a public certificate (PEM or Vault reference)."
+            raise HTTPException(
+                status_code=422,
+                detail="Remote AS2 partners require a public certificate (PEM or Vault reference).",
             )
 
         cmd = CreateAS2TradingPartnerCmd(

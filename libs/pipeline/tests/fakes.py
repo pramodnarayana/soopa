@@ -62,6 +62,13 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         if trace_id in self.edi_messages:
             self.edi_messages[trace_id]["status"] = status
 
+    async def claim_edi_message(self, trace_id: str) -> bool:
+        msg = self.edi_messages.get(trace_id)
+        if msg and msg["status"] == "PENDING_DELIVERY":
+            msg["status"] = "PROCESSING"
+            return True
+        return False
+
     async def save_api_payload(
         self, trace_id: str, direction: str, s3_uri: str, status: str
     ) -> None:

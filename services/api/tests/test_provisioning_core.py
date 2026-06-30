@@ -101,7 +101,7 @@ async def test_list_routes(service: ProvisioningService):
     tenant_repo.inbound_routes = [inbound_route]
     tenant_repo.outbound_routes = [outbound_route]
 
-    routes = await service.list_routes()
+    routes = await service.list_routes(1)
 
     assert len(routes) == 2
     inbound_res = next(r for r in routes if r["direction"] == "INBOUND")

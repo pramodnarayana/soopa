@@ -4,10 +4,11 @@ Follows Hexagonal Architecture by adapting the HTTP layer to the Identity domain
 """
 
 import contextlib
+import hashlib
 import logging
 import time
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any
 
 import httpx
 from config.settings import get_settings
@@ -33,9 +34,10 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
     auto_error=False,
 )
 
-# Simple in-memory cache: { token: (payload, expiry_time) }
+# Simple in-memory cache: { cache_key: (payload, expiry_time) }
 _userinfo_cache: dict[str, tuple[dict[str, Any], float]] = {}
 CACHE_TTL = 60.0  # seconds
+MAX_CACHE_SIZE = 1000
 
 
 async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, Any]:
@@ -52,12 +54,14 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
         )
 
     now = time.time()
-    if token in _userinfo_cache:
-        payload, expiry = _userinfo_cache[token]
+    cache_key = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    if cache_key in _userinfo_cache:
+        payload, expiry = _userinfo_cache[cache_key]
         if now < expiry:
             return payload
         else:
-            del _userinfo_cache[token]
+            del _userinfo_cache[cache_key]
 
     settings = get_settings()
 
@@ -69,9 +73,17 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
             response.raise_for_status()
             payload = response.json()
 
-            payload_dict = cast(dict[str, Any], payload)
+            if not isinstance(payload, dict) or "sub" not in payload:
+                raise ValueError("Payload missing expected structure")
+
+            payload_dict = payload
+
+            # Bounded eviction
+            if len(_userinfo_cache) >= MAX_CACHE_SIZE:
+                _userinfo_cache.pop(next(iter(_userinfo_cache)))
+
             # Save to cache
-            _userinfo_cache[token] = (payload_dict, now + CACHE_TTL)
+            _userinfo_cache[cache_key] = (payload_dict, now + CACHE_TTL)
             return payload_dict
     except httpx.HTTPError as e:
         logger.error(f"UserInfo Validation failed: {e}")

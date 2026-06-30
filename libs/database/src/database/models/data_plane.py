@@ -41,11 +41,10 @@ class TenantAwareMixin:
 # ---------------------------------------------------------------------------
 
 
-class AS2Partner(TenantBase):
+class AS2Partner(TenantBase, TenantAwareMixin):
     __tablename__ = "as2_partners"
 
     id = Column(UUID(as_uuid=True), primary_key=True)
-    tenant_id = Column(Integer, nullable=True)
     is_local = Column(Boolean, nullable=False, default=False)
     name = Column(String(255), nullable=False)
     as2_id = Column(String(255), nullable=False)
@@ -55,11 +54,10 @@ class AS2Partner(TenantBase):
     active = Column(Boolean, default=True)
 
 
-class AS2Partnership(TenantBase):
+class AS2Partnership(TenantBase, TenantAwareMixin):
     __tablename__ = "as2_partnerships"
 
     id = Column(UUID(as_uuid=True), primary_key=True)
-    tenant_id = Column(Integer, nullable=True)
 
     local_partner_id = Column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
@@ -68,8 +66,8 @@ class AS2Partnership(TenantBase):
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
-    host = Column(String(1024), nullable=True)
-    port = Column(Integer, nullable=True)
+    local_url = Column(String(1024), nullable=True)
+    remote_url = Column(String(1024), nullable=True)
     credentials_vault_ref = Column(String(255), nullable=True)
 
     mdn_type = Column(String(50), nullable=False, default="SYNC")

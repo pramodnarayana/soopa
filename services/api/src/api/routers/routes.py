@@ -35,7 +35,7 @@ async def list_routes(
 
         data_plane = cast(DataPlaneRepositoryPort, uow.data_plane)
         service = ProvisioningService(uow.control_plane, data_plane)
-        routes = await service.list_routes()
+        routes = await service.list_routes(tenant_id)
 
         return [RouteItemResponse(**r) for r in routes]
 

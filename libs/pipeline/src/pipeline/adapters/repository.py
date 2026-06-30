@@ -80,6 +80,20 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         await self.session.execute(stmt)
         await self.session.flush()
 
+    async def claim_edi_message(self, trace_id: str) -> bool:
+        stmt = (
+            update(EdiMessage)
+            .where(
+                EdiMessage.trace_id == uuid.UUID(trace_id),
+                EdiMessage.status == "PENDING_DELIVERY",
+            )
+            .values(status="PROCESSING")
+            .returning(EdiMessage.id)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.scalar_one_or_none() is not None
+
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
             select(ApiPayload).where(ApiPayload.trace_id == uuid.UUID(trace_id))

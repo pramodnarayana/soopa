@@ -24,7 +24,7 @@ class ControlPlaneRepositoryPort(Protocol):
         """Inserts an AS2 Partnership in the Global DB and returns its UUID."""
         ...
 
-    async def get_as2_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_as2_partners_by_ids(self, ids: list[UUID], tenant_id: int) -> dict[UUID, str]:
         """Returns a dict mapping AS2 Partner ID to Name."""
         ...
 

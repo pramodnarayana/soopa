@@ -22,16 +22,17 @@ def generate_self_signed_cert(common_name: str) -> tuple[bytes, bytes]:
         ]
     )
 
+    now = datetime.datetime.now(datetime.UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(issuer)
         .public_key(private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_before(now)
         .not_valid_after(
             # Valid for 10 years
-            datetime.datetime.utcnow() + datetime.timedelta(days=3650)
+            now + datetime.timedelta(days=3650)
         )
         .sign(private_key, hashes.SHA256())
     )

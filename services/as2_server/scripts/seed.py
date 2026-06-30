@@ -95,7 +95,7 @@ async def seed_database() -> None:
                 session.add(tenant_user)
                 logger.info("Mapped Admin User to Tenant 0.")
         else:
-            logger.info("ADMIN_EMAIL not provided. Skipping default admin creation.")
+            logger.info("SYSTEM_ADMIN_EMAIL not provided. Skipping default admin creation.")
 
         await session.commit()
         logger.info("Database seed completed successfully.")
