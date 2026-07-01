@@ -1,55 +1,43 @@
+"""
+Unit tests for DeliveryService — inbound webhook and outbound SFTP paths.
+All test doubles are imported from fakes.py (DRY). No mock library used.
+"""
+
 import pytest
-from fakes import InMemoryRepositoryAdapter, InMemoryStorageAdapter
+from fakes import (
+    FakeAS2DeliveryAdapter,
+    FakeHttpDeliveryAdapter,
+    FakeSftpDeliveryAdapter,
+    InMemoryRepositoryAdapter,
+    InMemoryStorageAdapter,
+)
 from pipeline.core.deliver import DeliveryService
 
 pytestmark = pytest.mark.asyncio
 
 
-class FakeHttpDeliveryAdapter:
-    def __init__(self, status_code: int = 200) -> None:
-        self.delivered: list[dict] = []
-        self.status_code = status_code
-
-    async def deliver(self, url: str, payload: bytes, auth_token: str | None = None) -> int:
-        self.delivered.append({"url": url, "payload": payload, "auth_token": auth_token})
-        return self.status_code
-
-
-class FakeSftpDeliveryAdapter:
-    def __init__(self) -> None:
-        self.delivered: list[dict] = []
-
-    async def deliver(
-        self,
-        host: str,
-        port: int,
-        username: str,
-        password: str,
-        host_key: str | None,
-        remote_path: str,
-        filename: str,
-        payload: bytes,
-    ) -> None:
-        self.delivered.append(
-            {
-                "host": host,
-                "port": port,
-                "username": username,
-                "password": password,
-                "remote_path": remote_path,
-                "filename": filename,
-                "payload": payload,
-                "host_key": host_key,
-            }
-        )
+def make_service(
+    storage: InMemoryStorageAdapter | None = None,
+    repo: InMemoryRepositoryAdapter | None = None,
+    http: FakeHttpDeliveryAdapter | None = None,
+    sftp: FakeSftpDeliveryAdapter | None = None,
+    as2: FakeAS2DeliveryAdapter | None = None,
+) -> DeliveryService:
+    """Factory that satisfies the required as2_delivery port (Null Object not needed in tests)."""
+    return DeliveryService(
+        storage=storage or InMemoryStorageAdapter(),
+        repository=repo or InMemoryRepositoryAdapter(),
+        http_delivery=http or FakeHttpDeliveryAdapter(),
+        sftp_delivery=sftp or FakeSftpDeliveryAdapter(),
+        as2_delivery=as2 or FakeAS2DeliveryAdapter(),
+    )
 
 
 async def test_delivery_service_inbound_webhook() -> None:
-    # Arrange
+    # ── Arrange ────────────────────────────────────────────────────────────────
     storage = InMemoryStorageAdapter()
     repo = InMemoryRepositoryAdapter()
     http_adapter = FakeHttpDeliveryAdapter()
-    sftp_adapter = FakeSftpDeliveryAdapter()
 
     trace_id = "trace-456"
     s3_uri = "s3://fake-bucket/api_payloads/trace-456/translated.json"
@@ -57,7 +45,6 @@ async def test_delivery_service_inbound_webhook() -> None:
 
     storage.store[s3_uri] = b'{"hello": "world"}'
 
-    # Needs EdiMessage to get sender/receiver/direction
     repo.edi_messages[trace_id] = {
         "trace_id": trace_id,
         "direction": "INBOUND",
@@ -67,13 +54,11 @@ async def test_delivery_service_inbound_webhook() -> None:
         "s3_key": edi_s3_uri,
         "status": "TRANSLATED",
     }
-
     repo.api_payloads[trace_id] = {
         "trace_id": trace_id,
         "s3_key": s3_uri,
         "status": "PENDING_DELIVERY",
     }
-
     repo.routes.append(
         {
             "route_id": "r1",
@@ -90,26 +75,24 @@ async def test_delivery_service_inbound_webhook() -> None:
         "auth_header_vault_ref": None,
     }
 
-    # Act
-    service = DeliveryService(storage, repo, http_adapter, sftp_adapter)
+    # ── Act ────────────────────────────────────────────────────────────────────
+    service = make_service(storage=storage, repo=repo, http=http_adapter)
     await service.deliver(trace_id)
 
-    # Assert
+    # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(http_adapter.delivered) == 1
     assert http_adapter.delivered[0]["url"] == "https://webhook.example.com/edi"
     assert repo.api_payloads[trace_id]["status"] == "DELIVERED"
 
 
 async def test_delivery_service_outbound_sftp() -> None:
-    # Arrange
+    # ── Arrange ────────────────────────────────────────────────────────────────
     storage = InMemoryStorageAdapter()
     repo = InMemoryRepositoryAdapter()
-    http_adapter = FakeHttpDeliveryAdapter()
     sftp_adapter = FakeSftpDeliveryAdapter()
 
     trace_id = "trace-sftp"
     edi_s3_uri = "s3://fake-bucket/edi_messages/trace-sftp/translated.edi"
-
     storage.store[edi_s3_uri] = b"FAKE*EDI*DATA~"
 
     repo.edi_messages[trace_id] = {
@@ -121,7 +104,6 @@ async def test_delivery_service_outbound_sftp() -> None:
         "s3_key": edi_s3_uri,
         "status": "PENDING_DELIVERY",
     }
-
     repo.routes.append(
         {
             "route_id": "r2",
@@ -140,11 +122,11 @@ async def test_delivery_service_outbound_sftp() -> None:
         "remote_path": "/out",
     }
 
-    # Act
-    service = DeliveryService(storage, repo, http_adapter, sftp_adapter)
+    # ── Act ────────────────────────────────────────────────────────────────────
+    service = make_service(storage=storage, repo=repo, sftp=sftp_adapter)
     await service.deliver(trace_id)
 
-    # Assert
+    # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(sftp_adapter.delivered) == 1
     assert sftp_adapter.delivered[0]["host"] == "sftp.example.com"
     assert sftp_adapter.delivered[0]["payload"] == b"FAKE*EDI*DATA~"
@@ -152,9 +134,7 @@ async def test_delivery_service_outbound_sftp() -> None:
 
 
 async def test_delivery_service_no_route_raises() -> None:
-    storage = InMemoryStorageAdapter()
     repo = InMemoryRepositoryAdapter()
-
     trace_id = "trace-err"
     repo.edi_messages[trace_id] = {
         "trace_id": trace_id,
@@ -164,12 +144,13 @@ async def test_delivery_service_no_route_raises() -> None:
         "transaction_type": "850",
     }
 
-    service = DeliveryService(storage, repo, FakeHttpDeliveryAdapter(), FakeSftpDeliveryAdapter())
+    service = make_service(repo=repo)
     with pytest.raises(ValueError, match="No route found"):
         await service.deliver(trace_id)
 
 
 async def test_delivery_service_http_failure_sets_failed_status() -> None:
+    # ── Arrange ────────────────────────────────────────────────────────────────
     storage = InMemoryStorageAdapter()
     repo = InMemoryRepositoryAdapter()
     http_adapter = FakeHttpDeliveryAdapter(status_code=503)
@@ -206,8 +187,10 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
         "url": "https://webhook.example.com/edi",
     }
 
-    service = DeliveryService(storage, repo, http_adapter, FakeSftpDeliveryAdapter())
+    # ── Act ────────────────────────────────────────────────────────────────────
+    service = make_service(storage=storage, repo=repo, http=http_adapter)
     await service.deliver(trace_id)
 
+    # ── Assert ─────────────────────────────────────────────────────────────────
     assert repo.api_payloads[trace_id]["status"] == "FAILED"
     assert len(http_adapter.delivered) == 1

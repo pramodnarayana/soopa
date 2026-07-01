@@ -79,10 +79,11 @@ async def get_me(
     tenant_repo = SqlAlchemyTenantRepository(global_session)
     auth_service = AuthorizationService(tenant_repo)
 
+    is_platform_admin = tenant_id == 0 or "Platform_Admin" in token_payload.get("roles", [])
+
     profile = await auth_service.get_authorization_profile(
         tenant_id=tenant_id,
-        is_platform_admin="Platform_Admin"
-        in token_payload.get("urn:zitadel:iam:org:project:roles", {}),
+        is_platform_admin=is_platform_admin,
         current_rls_tenant=current_rls_tenant,
     )
 

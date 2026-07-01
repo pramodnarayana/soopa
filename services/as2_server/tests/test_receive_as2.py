@@ -158,7 +158,13 @@ class TestAS2MessageReceiving:
             message_id="test-enc-001",
             content_type='application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"',
         )
-        response = await as2_client.post("/as2", content=encrypted_as2_payload, headers=headers)
+        from unittest.mock import patch
+
+        with patch(
+            "as2_server.core.receive_as2.decrypt_payload",
+            side_effect=Exception("Decryption simulated error"),
+        ):
+            response = await as2_client.post("/as2", content=encrypted_as2_payload, headers=headers)
 
         assert response.status_code == 200
         assert b"decryption-failed" in response.content
@@ -177,7 +183,7 @@ class TestAS2MessageReceiving:
         )
         from unittest.mock import patch
 
-        with patch("as2_server.main.verify_signature", return_value=(False, b"")):
+        with patch("as2_server.core.receive_as2.verify_signature", return_value=(False, b"")):
             response = await as2_client.post("/as2", content=signed_as2_payload, headers=headers)
 
         assert response.status_code == 200

@@ -1,21 +1,20 @@
 """
 AS2 Core Library.
-Contains pure business logic and cryptographic wrappers for the AS2 protocol.
+Contains pure business logic for the AS2 protocol.
 """
 
-from .mdn import calculate_mic, generate_mdn, render_mdn_report
+from .builder import OutboundAS2Message, build_outbound_message
+from .mdn import Disposition, calculate_mic, generate_mdn
 from .message import AS2MDN, AS2Message
 from .parser import parse_as2_request
-from .smime import decrypt_payload, sign_payload, verify_signature
 
 __all__ = [
     "AS2Message",
     "AS2MDN",
+    "OutboundAS2Message",
+    "build_outbound_message",
     "parse_as2_request",
     "generate_mdn",
-    "render_mdn_report",
     "calculate_mic",
-    "decrypt_payload",
-    "verify_signature",
-    "sign_payload",
+    "Disposition",
 ]

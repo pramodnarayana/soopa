@@ -20,6 +20,7 @@ members = [
     "identity",
     "observability",
     "pipeline",
+    "security",
     "transformer",
     "worker",
 ]
@@ -307,30 +308,40 @@ name = "as2-core"
 version = "0.1.0"
 source = { editable = "libs/as2_core" }
 dependencies = [
-    { name = "cryptography" },
+    { name = "security" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "cryptography", specifier = ">=41.0.0" }]
+requires-dist = [{ name = "security", editable = "libs/security" }]
 
 [[package]]
 name = "as2-server"
 version = "0.1.0"
 source = { editable = "services/as2_server" }
 dependencies = [
+    { name = "as2-core" },
+    { name = "config" },
+    { name = "database" },
     { name = "fastapi" },
     { name = "gunicorn" },
+    { name = "observability" },
     { name = "prometheus-client" },
     { name = "python-dotenv" },
+    { name = "security" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "as2-core", editable = "libs/as2_core" },
+    { name = "config", editable = "libs/config" },
+    { name = "database", editable = "libs/database" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "gunicorn", specifier = ">=22.0.0" },
+    { name = "observability", editable = "libs/observability" },
     { name = "prometheus-client", specifier = ">=0.20.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "security", editable = "libs/security" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.22.0" },
 ]
 
@@ -2095,12 +2106,14 @@ version = "0.1.0"
 source = { editable = "libs/pipeline" }
 dependencies = [
     { name = "aioboto3" },
+    { name = "as2-core" },
     { name = "bots-core" },
     { name = "database" },
     { name = "httpx" },
     { name = "identity" },
     { name = "paramiko" },
     { name = "pydantic" },
+    { name = "security" },
     { name = "transformer" },
     { name = "types-paramiko" },
 ]
@@ -2108,12 +2121,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aioboto3", specifier = ">=13.1.1" },
+    { name = "as2-core", editable = "libs/as2_core" },
     { name = "bots-core", editable = "libs/bots_core" },
     { name = "database", editable = "libs/database" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "identity", editable = "libs/identity" },
     { name = "paramiko", specifier = ">=5.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "security", editable = "libs/security" },
     { name = "transformer", editable = "libs/transformer" },
     { name = "types-paramiko", specifier = ">=3.0.0" },
 ]
@@ -2481,6 +2496,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyopenssl"
+version = "26.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/b7/da07bae88f5a9506b4def6f2f4903cf4c3b8831e560dba8fa18ca08f758f/pyopenssl-26.3.0.tar.gz", hash = "sha256:589de7fae1c9ea670d18422ed00fc04da787bbde8e1454aea872aa57b49ad341", size = 182024, upload-time = "2026-06-12T20:28:07.458Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/18/1dd71c9b43192ab83f1d531ad6002dc81108ac36c475f79fb7a295abe2f4/pyopenssl-26.3.0-py3-none-any.whl", hash = "sha256:46367f8f66b92271e6d218da9c87607e1ef5a0bc5c8dea5bb3db82f395c385a3", size = 56008, upload-time = "2026-06-12T20:28:05.999Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2662,6 +2690,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/62/74/8d69dcb7a9efe8baa2046891735e5dfe433ad558ae23d9e3c14c633d1d58/s3transfer-0.14.0.tar.gz", hash = "sha256:eff12264e7c8b4985074ccce27a3b38a485bb7f7422cc8046fee9be4983e4125", size = 151547, upload-time = "2025-09-09T19:23:31.089Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/f0/ae7ca09223a81a1d890b2557186ea015f6e0502e9b8cb8e1813f1d8cfa4e/s3transfer-0.14.0-py3-none-any.whl", hash = "sha256:ea3b790c7077558ed1f02a3072fb3cb992bbbd253392f4b6e9e8976941c7d456", size = 85712, upload-time = "2025-09-09T19:23:30.041Z" },
+]
+
+[[package]]
+name = "security"
+version = "0.1.0"
+source = { editable = "libs/security" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyopenssl" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=41.0.0" },
+    { name = "pyopenssl", specifier = ">=26.3.0" },
 ]
 
 [[package]]

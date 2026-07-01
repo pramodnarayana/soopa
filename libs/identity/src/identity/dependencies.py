@@ -77,6 +77,14 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
 
             payload_dict = payload
 
+            # Normalize identity provider specific role claims into a standard format
+            # This prevents Zitadel implementation details from leaking into the core application
+            zitadel_roles = payload_dict.pop("urn:zitadel:iam:org:project:roles", {})
+            if isinstance(zitadel_roles, dict):
+                payload_dict["roles"] = list(zitadel_roles.keys())
+            else:
+                payload_dict["roles"] = zitadel_roles or []
+
             # Bounded eviction
             if len(_userinfo_cache) >= MAX_CACHE_SIZE:
                 _userinfo_cache.pop(next(iter(_userinfo_cache)))

@@ -203,11 +203,17 @@ async def as2_client(
     mock_partner.as2_id = sender_keypair.as2_id
 
     with (
-        patch("as2_server.main.TradingPartnerRepository") as mock_partner_repo_cls,
-        patch("as2_server.main.EdiMessageRepository") as mock_payload_repo_cls,
-        patch("as2_server.main.get_host_private_key") as mock_get_host_private_key,
+        patch("as2_server.adapters.repository.DbTradingPartnerRepository") as mock_partner_repo_cls,
+        patch("as2_server.adapters.repository.DbEdiMessageRepository") as mock_payload_repo_cls,
+        patch(
+            "as2_server.adapters.vault.EnvironmentVaultService.get_host_private_key"
+        ) as mock_get_host_private_key,
+        patch(
+            "as2_server.adapters.vault.EnvironmentVaultService.get_host_certificate"
+        ) as mock_get_host_certificate,
     ):
         mock_get_host_private_key.return_value = receiver_keypair.private_key_pem
+        mock_get_host_certificate.return_value = receiver_keypair.public_cert_pem
         mock_partner_repo = AsyncMock()
 
         def mock_find(as2_id: str) -> Any:
@@ -221,18 +227,19 @@ async def as2_client(
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
 
-        # Override the FastAPI S3 dependency and Session dependency
-        from as2_server.main import app, get_s3_storage
+        import uuid
+
+        from as2_server.main import app
         from database.session import get_session
 
         async def override_get_session() -> AsyncGenerator[AsyncMock, None]:
             mock_session = AsyncMock()
             mock_result = MagicMock()
-            mock_result.fetchall.return_value = [(0,)]
+            mock_result.fetchall.return_value = [(uuid.uuid4(),)]
             mock_session.execute.return_value = mock_result
             yield mock_session
 
-        app.dependency_overrides[get_s3_storage] = lambda: MockS3Storage()
+        app.state.s3_storage = MockS3Storage()
         app.dependency_overrides[get_session] = override_get_session
 
         # Mock the db_router on app state for the /ready probe

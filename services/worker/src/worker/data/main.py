@@ -12,6 +12,7 @@ import aioboto3  # type: ignore[import-untyped]
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from pipeline.adapters.http import HttpxDeliveryAdapter
+from pipeline.adapters.null_as2 import NullAS2DeliveryAdapter
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
 from pipeline.adapters.sftp import ParamikoSftpDeliveryAdapter
 from pipeline.adapters.storage import S3StorageAdapter
@@ -126,7 +127,13 @@ async def process_delivery(
         sftp_adapter = ParamikoSftpDeliveryAdapter()
 
         # Instantiate Domain Service
-        service = DeliveryService(storage_adapter, repo_adapter, http_adapter, sftp_adapter)
+        service = DeliveryService(
+            storage_adapter,
+            repo_adapter,
+            http_adapter,
+            sftp_adapter,
+            as2_delivery=NullAS2DeliveryAdapter(),
+        )
 
         # Execute pure domain logic
         await service.deliver(trace_id)
