@@ -216,7 +216,7 @@ async def as2_client(
         mock_get_host_certificate.return_value = receiver_keypair.public_cert_pem
         mock_partner_repo = AsyncMock()
 
-        def mock_find(as2_id: str) -> Any:
+        def mock_find(tenant_id: Any, as2_id: str) -> Any:
             if as2_id == sender_keypair.as2_id:
                 return mock_partner
             return None

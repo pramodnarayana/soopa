@@ -174,24 +174,24 @@ class DeliveryService:
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return
 
-        remote_partner = await self.repository.get_as2_partner(partner_id)
-        if not remote_partner:
-            raise ValueError(f"AS2 partner {partner_id} not found.")
-
-        remote_url: str | None = remote_partner.get("remote_url")
-        if not remote_url:
-            raise ValueError(f"AS2 partner {partner_id} has no remote_url configured.")
-
-        local_partner_id: str | None = remote_partner.get("local_partner_id")
-        local_partner = (
-            await self.repository.get_local_as2_partner(local_partner_id)
-            if local_partner_id
-            else None
-        )
-
-        raw_payload = await self.storage.download(edi_msg["s3_key"])
-
         try:
+            remote_partner = await self.repository.get_as2_partner(partner_id)
+            if not remote_partner:
+                raise ValueError(f"AS2 partner {partner_id} not found.")
+
+            remote_url: str | None = remote_partner.get("remote_url")
+            if not remote_url:
+                raise ValueError(f"AS2 partner {partner_id} has no remote_url configured.")
+
+            local_partner_id: str | None = remote_partner.get("local_partner_id")
+            local_partner = (
+                await self.repository.get_local_as2_partner(local_partner_id)
+                if local_partner_id
+                else None
+            )
+
+            raw_payload = await self.storage.download(edi_msg["s3_key"])
+
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,
                 local_partner=local_partner,
@@ -203,27 +203,66 @@ class DeliveryService:
             return
 
         try:
-            status_code, _response_body = await self.as2_delivery.deliver(
+            status_code, response_headers, response_body = await self.as2_delivery.deliver(
                 url=remote_url,
                 body=as2_msg.body,
                 headers=as2_msg.headers,
             )
         except RuntimeError:
-            # Misconfiguration (e.g. NullAS2DeliveryAdapter) — must propagate,
-            # not be silently swallowed as a delivery failure.
-            raise
+            # Misconfiguration (e.g. NullAS2DeliveryAdapter) — treat as a terminal failure
+            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
+            return
         except Exception:
             await self.repository.update_edi_message_status(trace_id, "FAILED")
             logger.exception(f"AS2 HTTP transmission failed for trace_id={trace_id}")
             return
 
         if 200 <= status_code < 300:
-            await self.repository.update_edi_message_status(trace_id, "DELIVERED")
-            logger.info(
-                f"Delivered trace_id={trace_id} → {remote_url} "
-                f"(HTTP {status_code}). MIC={as2_msg.mic}"
-            )
-            # TODO (Phase 2): Parse _response_body as sync MDN → store in ack_receipts.
+            import email
+
+            # Reconstruct the HTTP response as an email message to parse the multipart MDN
+            headers_str = "\r\n".join(f"{k}: {v}" for k, v in response_headers.items())
+            raw_msg_bytes = headers_str.encode("utf-8") + b"\r\n\r\n" + response_body
+            msg = email.message_from_bytes(raw_msg_bytes)
+
+            disposition = ""
+            received_mic = ""
+            for part in msg.walk():
+                if part.get_content_type() == "message/disposition-notification":
+                    payload = part.get_payload()
+                    if isinstance(payload, list) and payload:
+                        disp_msg = payload[0]
+                        if isinstance(disp_msg, email.message.Message):
+                            disposition = str(disp_msg.get("Disposition", ""))
+                            received_mic = str(disp_msg.get("Received-content-MIC", ""))
+                    break
+
+            is_success = False
+            if (
+                disposition
+                and "processed" in disposition.lower()
+                and "failed" not in disposition.lower()
+            ):
+                is_success = True
+                if as2_msg.mic and (
+                    not received_mic
+                    or as2_msg.mic.replace(" ", "").lower() != received_mic.replace(" ", "").lower()
+                ):
+                    is_success = False
+
+            if is_success:
+                await self.repository.update_edi_message_status(trace_id, "DELIVERED")
+                logger.info(
+                    f"Delivered trace_id={trace_id} → {remote_url} "
+                    f"(HTTP {status_code}). MIC={as2_msg.mic}"
+                )
+            else:
+                await self.repository.update_edi_message_status(trace_id, "FAILED")
+                logger.error(
+                    f"Sync MDN indicates failure for trace_id={trace_id}. "
+                    f"Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
+                )
         else:
             await self.repository.update_edi_message_status(trace_id, "FAILED")
             logger.error(

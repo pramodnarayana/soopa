@@ -2703,7 +2703,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cryptography", specifier = ">=41.0.0" },
+    { name = "cryptography", specifier = ">=44.0.0" },
     { name = "pyopenssl", specifier = ">=26.3.0" },
 ]
 

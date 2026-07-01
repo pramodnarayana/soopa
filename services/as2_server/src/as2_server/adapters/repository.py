@@ -1,4 +1,3 @@
-import typing
 import uuid
 
 from database.models.control_plane import AS2Partner as GlobalTradingPartner
@@ -14,7 +13,7 @@ class AS2TenantRepositoryAdapter:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def resolve_tenant_id(self, as2_to: str) -> uuid.UUID | None:
+    async def resolve_tenant_id(self, as2_to: str) -> int | None:
         result = await self.session.execute(
             sql_select(GlobalTradingPartner.tenant_id)
             .where(GlobalTradingPartner.as2_id == as2_to)
@@ -25,7 +24,7 @@ class AS2TenantRepositoryAdapter:
         if len(tenant_rows) > 1:
             raise ValueError(f"Ambiguous AS2-To match: multiple tenants claim {as2_to}")
         if tenant_rows:
-            return typing.cast(uuid.UUID, tenant_rows[0][0])
+            return int(tenant_rows[0][0])
         return None
 
 
@@ -33,10 +32,8 @@ class TradingPartnerRepositoryAdapter:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = DbTradingPartnerRepository(session)
 
-    async def find_by_as2_id(self, tenant_id: uuid.UUID, as2_id: str) -> PartnerEntity | None:
-        # AS2 Server usually sets tenant_context outside, but we can pass it explicitly or rely on the context.
-        # Here we rely on the tenant context which is set in the router.
-        partner = await self.repo.find_by_as2_id(as2_id)
+    async def find_by_as2_id(self, tenant_id: int, as2_id: str) -> PartnerEntity | None:
+        partner = await self.repo.find_by_as2_id(tenant_id, as2_id)
         if not partner:
             return None
         return PartnerEntity(as2_id=partner.as2_id, public_cert_pem=partner.public_cert_pem)
@@ -48,7 +45,7 @@ class EdiMessageRepositoryAdapter:
 
     async def save_message(
         self,
-        tenant_id: uuid.UUID,
+        tenant_id: int,
         trace_id: uuid.UUID,
         direction: str,
         connection_type: str,
@@ -59,6 +56,7 @@ class EdiMessageRepositoryAdapter:
         as2_message_id: str,
     ) -> None:
         await self.repo.save_message(
+            tenant_id=tenant_id,
             trace_id=trace_id,
             direction=direction,
             connection_type=connection_type,

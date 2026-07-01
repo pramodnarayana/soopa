@@ -45,8 +45,6 @@ class ReceiveAS2UseCase:
             tenant_id = await self.tenant_repo.resolve_tenant_id(as2_msg.as2_to)
         except ValueError as e:
             self.logger.warning("tenant_resolution_ambiguous", error=str(e), as2_to=as2_msg.as2_to)
-        except Exception as e:
-            self.logger.warning("tenant_resolution_failed", error=str(e), as2_to=as2_msg.as2_to)
 
         if not tenant_id:
             self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
@@ -97,6 +95,10 @@ class ReceiveAS2UseCase:
                     logger.error("as2_decrypt_failed", error=str(e))
                     disposition = Disposition.DECRYPTION_FAILED
 
+        # The MIC MUST be calculated over the signed payload BEFORE signature verification (RFC 4130).
+        # We capture the payload here (which is either the raw payload, or the decrypted signed payload)
+        mic_payload = processed_payload
+
         if as2_msg.is_signed and "failed" not in disposition:
             with self.tracer.start_span("as2.verify_signature") as span:
                 if not partner.public_cert_pem:
@@ -121,7 +123,7 @@ class ReceiveAS2UseCase:
                         logger.info("as2_signature_verified")
 
         with self.tracer.start_span("as2.s3_upload"):
-            as2_msg.payload = processed_payload
+            # Upload the inner EDI payload (after decryption and verification extraction)
             storage_uri = await self.storage.upload(
                 tenant_id, as2_msg.message_id, processed_payload
             )
@@ -141,6 +143,8 @@ class ReceiveAS2UseCase:
                 as2_message_id=as2_msg.message_id,
             )
 
+        # generate_mdn calculates the MIC using as2_msg.payload
+        as2_msg.payload = mic_payload
         mdn = generate_mdn(as2_msg, disposition=disposition)
 
         duration = time.perf_counter() - start_time

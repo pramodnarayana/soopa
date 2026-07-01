@@ -1,6 +1,5 @@
 import uuid
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from database.models.control_plane import AS2Partner
@@ -12,39 +11,48 @@ from database.repository import (
 pytestmark = pytest.mark.asyncio
 
 
-@patch("database.repository.get_tenant_id", return_value=123)
-async def test_trading_partner_repository_find_by_as2_id(mock_get_tenant_id: Any) -> None:
-    session = AsyncMock()
+async def test_trading_partner_repository_find_by_as2_id() -> None:
+    mock_session = AsyncMock()
+    tenant_id = uuid.uuid4()
+
+    partner = AS2Partner(
+        tenant_id=tenant_id,
+        as2_id="test_partner",
+        active=True,
+    )
     mock_result = MagicMock()
-    mock_partner = AS2Partner(as2_id="TEST-ID", name="Test", tenant_id=1)
-    mock_result.scalar_one_or_none.return_value = mock_partner
-    session.execute.return_value = mock_result
+    mock_result.scalar_one_or_none.return_value = partner
+    mock_session.execute.return_value = mock_result
 
-    repo = TradingPartnerRepository(session)
-    result = await repo.find_by_as2_id("TEST-ID")
+    repo = TradingPartnerRepository(mock_session)
+    result = await repo.find_by_as2_id(tenant_id, "test_partner")
 
-    assert result == mock_partner
-    session.execute.assert_called_once()
+    assert result == partner
+    mock_session.execute.assert_called_once()
 
 
-@patch("database.repository.get_tenant_id", return_value=123)
-async def test_edi_message_repository_save_message(mock_get_tenant_id: Any) -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
-    repo = EdiMessageRepository(session)
+async def test_edi_message_repository_save_message() -> None:
+    mock_session = AsyncMock()
+    tenant_id = uuid.uuid4()
 
+    repo = EdiMessageRepository(mock_session)
+
+    trace_id = uuid.uuid4()
     result = await repo.save_message(
-        trace_id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        trace_id=trace_id,
         direction="INBOUND",
         connection_type="AS2",
-        s3_key="s3://bucket/test.bin",
-        sender_id="SENDER1",
-        receiver_id="RECEIVER1",
+        s3_key="s3://bucket/test.edi",
+        sender_id="sender",
+        receiver_id="receiver",
+        status="RECEIVED",
+        as2_message_id="msg-123",
     )
 
     assert result.direction == "INBOUND"
     assert result.status == "RECEIVED"
-    assert result.sender_id == "SENDER1"
-    assert result.receiver_id == "RECEIVER1"
-    session.add.assert_called_once()
-    session.flush.assert_awaited_once()
+    assert result.sender_id == "sender"
+    assert result.receiver_id == "receiver"
+    mock_session.add.assert_called_once()
+    mock_session.flush.assert_awaited_once()

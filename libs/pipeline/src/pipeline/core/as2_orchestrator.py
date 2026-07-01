@@ -32,7 +32,9 @@ async def _resolve_pem(
     Resolves a PEM value from the Vault (preferred) or from a stored inline string.
     Returns None if neither source is available.
     """
-    if vault_ref and vault:
+    if vault_ref:
+        if not vault:
+            raise RuntimeError("Vault reference configured but no VaultAdapter provided.")
         raw = await vault.get_secret(vault_ref)
         return raw.encode() if isinstance(raw, str) else raw
     if inline_pem:

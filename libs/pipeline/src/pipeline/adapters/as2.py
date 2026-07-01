@@ -28,7 +28,7 @@ class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
         url: str,
         body: bytes,
         headers: dict[str, str],
-    ) -> tuple[int, bytes]:
+    ) -> tuple[int, dict[str, str], bytes]:
         """
         Executes the AS2 HTTP POST.
 
@@ -44,8 +44,11 @@ class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
         ) as client:
             response = await client.post(url, content=body, headers=headers)
 
+        # Convert httpx headers to a standard dict
+        resp_headers = {k.lower(): v for k, v in response.headers.items()}
+
         logger.info(
             f"AS2 response from {url}: HTTP {response.status_code}, "
             f"Content-Length={len(response.content)}"
         )
-        return response.status_code, response.content
+        return response.status_code, resp_headers, response.content

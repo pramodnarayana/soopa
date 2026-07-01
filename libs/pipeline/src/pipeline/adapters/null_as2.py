@@ -24,12 +24,6 @@ class NullAS2DeliveryAdapter(AS2DeliveryPort):
     """
 
     async def deliver(
-        self,
-        url: str,
-        body: bytes,
-        headers: dict[str, str],
-    ) -> tuple[int, bytes]:
-        raise RuntimeError(
-            "AS2 delivery was triggered but NullAS2DeliveryAdapter is configured. "
-            "Inject HttpxAS2DeliveryAdapter if this worker needs to send AS2 messages."
-        )
+        self, url: str, body: bytes, headers: dict[str, str]
+    ) -> tuple[int, dict[str, str], bytes]:
+        raise RuntimeError("NullAS2DeliveryAdapter used in production wiring!")

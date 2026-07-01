@@ -82,8 +82,10 @@ async def get_raw_jwt(token: str | None = Depends(oauth2_scheme)) -> dict[str, A
             zitadel_roles = payload_dict.pop("urn:zitadel:iam:org:project:roles", {})
             if isinstance(zitadel_roles, dict):
                 payload_dict["roles"] = list(zitadel_roles.keys())
+            elif isinstance(zitadel_roles, list):
+                payload_dict["roles"] = zitadel_roles
             else:
-                payload_dict["roles"] = zitadel_roles or []
+                payload_dict["roles"] = []
 
             # Bounded eviction
             if len(_userinfo_cache) >= MAX_CACHE_SIZE:

@@ -195,22 +195,52 @@ class FakeSftpDeliveryAdapter:
 class FakeAS2DeliveryAdapter:
     """Records all AS2 delivery calls. Returns a minimal sync MDN response."""
 
-    def __init__(self, status_code: int = 200) -> None:
-        self.delivered: list[dict[str, Any]] = []
+    def __init__(
+        self,
+        status_code: int = 200,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
+        self.headers = headers or {
+            "Content-Type": 'multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"'
+        }
+        self.delivered: list[dict[str, Any]] = []
+        if body is not None:
+            self.body = body
+        else:
+            self.body = (
+                b"------=_MDNBoundary\r\n"
+                b"Content-Type: text/plain; charset=us-ascii\r\n\r\n"
+                b"The AS2 message has been processed.\r\n"
+                b"------=_MDNBoundary\r\n"
+                b"Content-Type: message/disposition-notification\r\n\r\n"
+                b"Original-Message-ID: <msg-123>\r\n"
+                b"Disposition: automatic-action/MDN-sent-automatically; processed\r\n"
+                b"------=_MDNBoundary--\r\n"
+            )
 
     async def deliver(
-        self,
-        url: str,
-        body: bytes,
-        headers: dict[str, str],
-    ) -> tuple[int, bytes]:
+        self, url: str, body: bytes, headers: dict[str, str]
+    ) -> tuple[int, dict[str, str], bytes]:
         self.delivered.append({"url": url, "body": body, "headers": headers})
-        mdn_body = (
-            b"Content-Type: message/disposition-notification\r\n\r\n"
-            b"Disposition: automatic-action/MDN-sent-automatically; processed"
-        )
-        return self.status_code, mdn_body
+        if getattr(self, "raise_on_deliver", False):
+            raise Exception("Mock delivery failure")
+
+        import base64
+        import hashlib
+
+        digest = hashlib.sha256(body).digest()
+        mic = base64.b64encode(digest).decode("ascii") + ", sha256"
+
+        resp_body = self.body
+        if b"Received-content-MIC" not in resp_body:
+            resp_body = resp_body.replace(
+                b"Disposition: automatic-action/MDN-sent-automatically; processed\r\n",
+                f"Disposition: automatic-action/MDN-sent-automatically; processed\r\nReceived-content-MIC: {mic}\r\n".encode(),
+            )
+
+        return self.status_code, self.headers, resp_body
 
 
 class FakeVault:

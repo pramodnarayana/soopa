@@ -9,13 +9,13 @@ class PartnerEntity:
 
 
 class ITradingPartnerRepository(Protocol):
-    async def find_by_as2_id(self, tenant_id: uuid.UUID, as2_id: str) -> PartnerEntity | None: ...
+    async def find_by_as2_id(self, tenant_id: int, as2_id: str) -> PartnerEntity | None: ...
 
 
 class IEdiMessageRepository(Protocol):
     async def save_message(
         self,
-        tenant_id: uuid.UUID,
+        tenant_id: int,
         trace_id: uuid.UUID,
         direction: str,
         connection_type: str,
@@ -28,6 +28,6 @@ class IEdiMessageRepository(Protocol):
 
 
 class IAS2TenantRepository(Protocol):
-    async def resolve_tenant_id(self, as2_to: str) -> uuid.UUID | None:
+    async def resolve_tenant_id(self, as2_to: str) -> int | None:
         """Resolves the tenant ID by looking at the global trading partners."""
         ...

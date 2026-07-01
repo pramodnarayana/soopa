@@ -13,7 +13,7 @@ class AS2DeliveryPort(Protocol):
         url: str,
         body: bytes,
         headers: dict[str, str],
-    ) -> tuple[int, bytes]:
+    ) -> tuple[int, dict[str, str], bytes]:
         """
         Sends the AS2 POST request to the remote trading partner.
 
@@ -23,7 +23,7 @@ class AS2DeliveryPort(Protocol):
             headers: The AS2 HTTP headers dict (AS2-From, AS2-To, Message-ID, etc.).
 
         Returns:
-            A tuple of (http_status_code, response_body_bytes).
+            A tuple of (http_status_code, response_headers, response_body_bytes).
             The caller is responsible for parsing the MDN from the response body.
         """
         ...

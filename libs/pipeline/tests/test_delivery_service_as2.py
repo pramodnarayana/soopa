@@ -171,11 +171,11 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     assert len(as2_adapter.delivered) == 1
 
 
-async def test_deliver_as2_null_adapter_raises_on_route_match() -> None:
+async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
     """
     NullAS2DeliveryAdapter replaces the previous `as2_delivery=None` anti-pattern.
-    When AS2 is routed but the Null adapter is injected, a descriptive RuntimeError
-    is raised — not an AttributeError on None.
+    When AS2 is routed but the Null adapter is injected, it raises a RuntimeError
+    which is caught internally and the message is marked as FAILED.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
     storage = InMemoryStorageAdapter()
@@ -188,8 +188,10 @@ async def test_deliver_as2_null_adapter_raises_on_route_match() -> None:
 
     # ── Act / Assert ───────────────────────────────────────────────────────────
     service = make_service(storage=storage, repo=repo, as2=NullAS2DeliveryAdapter())
-    with pytest.raises(RuntimeError, match="NullAS2DeliveryAdapter"):
-        await service.deliver(trace_id)
+    await service.deliver(trace_id)
+
+    # It should catch the RuntimeError and mark the message as FAILED
+    assert repo.edi_messages[trace_id]["status"] == "FAILED"
 
 
 async def test_deliver_as2_idempotent_claim() -> None:

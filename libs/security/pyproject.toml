@@ -7,7 +7,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "cryptography>=41.0.0",
+    "cryptography>=44.0.0",
     "pyopenssl>=26.3.0",
 ]
 

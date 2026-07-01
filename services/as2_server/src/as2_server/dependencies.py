@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from database.session import get_session
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .adapters.repository import (
@@ -25,7 +25,7 @@ def get_receive_as2_use_case(
     """
     s3_storage = getattr(request.app.state, "s3_storage", None)
     if not s3_storage:
-        raise RuntimeError("S3 Storage not initialized")
+        raise HTTPException(status_code=503, detail="S3 Storage not initialized")
 
     return ReceiveAS2UseCase(
         tenant_repo=AS2TenantRepositoryAdapter(session),

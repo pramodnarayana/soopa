@@ -12,6 +12,7 @@ import tempfile
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.ciphers import algorithms
 from cryptography.hazmat.primitives.serialization import pkcs7
 
 
@@ -61,9 +62,9 @@ def encrypt_payload(
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
     if algorithm.upper() in ("AES256", "AES-256", "AES256_CBC"):
-        cipher = pkcs7.PKCS7SupportedEnvelopeAlgorithms.AES_256_CBC  # type: ignore[attr-defined]
+        cipher: type[algorithms.AES128] | type[algorithms.AES256] = algorithms.AES256
     elif algorithm.upper() in ("AES128", "AES-128", "AES128_CBC"):
-        cipher = pkcs7.PKCS7SupportedEnvelopeAlgorithms.AES_128_CBC  # type: ignore[attr-defined]
+        cipher = algorithms.AES128
     else:
         raise ValueError(f"Unsupported encryption algorithm: {algorithm!r}. Use AES256 or AES128.")
 
@@ -71,7 +72,8 @@ def encrypt_payload(
         pkcs7.PKCS7EnvelopeBuilder()
         .set_data(payload)
         .add_recipient(cert)
-        .encrypt(serialization.Encoding.SMIME, options=[], encryption_algorithm=cipher)  # type: ignore[call-arg]
+        .set_content_encryption_algorithm(cipher)
+        .encrypt(serialization.Encoding.SMIME, options=[])
     )
 
 
@@ -101,9 +103,10 @@ def verify_signature(signed_data: bytes, public_cert_pem: bytes) -> tuple[bool, 
             input=signed_data,
             capture_output=True,
             check=True,
+            timeout=10.0,
         )
         return True, result.stdout
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return False, b""
     finally:
         os.unlink(cert_file.name)
