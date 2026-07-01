@@ -2,7 +2,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from database.models import ApiPayload, EdiMessage
+from database.models import ApiGateway, EdiMessage
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
 
 pytestmark = pytest.mark.asyncio
@@ -14,7 +14,7 @@ async def test_get_edi_message_success() -> None:
 
     mock_record = MagicMock(spec=EdiMessage)
     mock_record.trace_id = uuid.uuid4()
-    mock_record.s3_key = "s3://foo"
+    mock_record.edi_data = "s3://foo"
     mock_record.format_standard = "X12"
     mock_record.transaction_type = "850"
     mock_record.status = "RECEIVED"
@@ -26,7 +26,7 @@ async def test_get_edi_message_success() -> None:
     result = await adapter.get_edi_message(str(mock_record.trace_id))
 
     assert result is not None
-    assert result["s3_key"] == "s3://foo"
+    assert result["edi_data"] == "s3://foo"
     assert result["format_standard"] == "X12"
     assert result["status"] == "RECEIVED"
 
@@ -52,9 +52,9 @@ async def test_save_api_payload() -> None:
 
     mock_session.add.assert_called_once()
     added_obj = mock_session.add.call_args[0][0]
-    assert isinstance(added_obj, ApiPayload)
+    assert isinstance(added_obj, ApiGateway)
     assert str(added_obj.trace_id) == trace_id
-    assert added_obj.s3_key == "s3://out"
+    assert added_obj.request == "s3://out"
 
     mock_session.flush.assert_awaited_once()
 
@@ -74,9 +74,9 @@ async def test_get_api_payload() -> None:
     mock_session = AsyncMock()
     mock_result = MagicMock()
 
-    mock_record = MagicMock(spec=ApiPayload)
+    mock_record = MagicMock(spec=ApiGateway)
     mock_record.trace_id = uuid.uuid4()
-    mock_record.s3_key = "s3://out"
+    mock_record.request = "s3://out"
     mock_record.status = "PENDING_DELIVERY"
 
     mock_result.scalar_one_or_none.return_value = mock_record

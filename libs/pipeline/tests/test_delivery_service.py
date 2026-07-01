@@ -40,7 +40,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     http_adapter = FakeHttpDeliveryAdapter()
 
     trace_id = "trace-456"
-    s3_uri = "s3://fake-bucket/api_payloads/trace-456/translated.json"
+    s3_uri = "s3://fake-bucket/api_gateway/trace-456/translated.json"
     edi_s3_uri = "s3://fake-bucket/edi_messages/trace-456/raw.edi"
 
     storage.store[s3_uri] = b'{"hello": "world"}'
@@ -51,12 +51,12 @@ async def test_delivery_service_inbound_webhook() -> None:
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "850",
-        "s3_key": edi_s3_uri,
+        "edi_data": edi_s3_uri,
         "status": "TRANSLATED",
     }
-    repo.api_payloads[trace_id] = {
+    repo.api_gateway[trace_id] = {
         "trace_id": trace_id,
-        "s3_key": s3_uri,
+        "request": s3_uri,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -82,7 +82,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(http_adapter.delivered) == 1
     assert http_adapter.delivered[0]["url"] == "https://webhook.example.com/edi"
-    assert repo.api_payloads[trace_id]["status"] == "DELIVERED"
+    assert repo.api_gateway[trace_id]["status"] == "DELIVERED"
 
 
 async def test_delivery_service_outbound_sftp() -> None:
@@ -101,7 +101,7 @@ async def test_delivery_service_outbound_sftp() -> None:
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "855",
-        "s3_key": edi_s3_uri,
+        "edi_data": edi_s3_uri,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -156,7 +156,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     http_adapter = FakeHttpDeliveryAdapter(status_code=503)
 
     trace_id = "trace-fail"
-    s3_uri = "s3://fake-bucket/api_payloads/trace-fail/translated.json"
+    s3_uri = "s3://fake-bucket/api_gateway/trace-fail/translated.json"
     storage.store[s3_uri] = b'{"hello": "world"}'
 
     repo.edi_messages[trace_id] = {
@@ -167,9 +167,9 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
         "transaction_type": "850",
         "status": "TRANSLATED",
     }
-    repo.api_payloads[trace_id] = {
+    repo.api_gateway[trace_id] = {
         "trace_id": trace_id,
-        "s3_key": s3_uri,
+        "request": s3_uri,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -192,5 +192,5 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     await service.deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert repo.api_payloads[trace_id]["status"] == "FAILED"
+    assert repo.api_gateway[trace_id]["status"] == "FAILED"
     assert len(http_adapter.delivered) == 1

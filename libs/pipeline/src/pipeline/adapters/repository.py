@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from database.models import ApiPayload, EdiMessage
+from database.models import ApiGateway, EdiMessage
 from database.models import TenantOutbox as Outbox
 from database.models.data_plane import (
     AS2Partner,
@@ -35,7 +35,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
         return {
             "trace_id": str(record.trace_id),
-            "s3_key": record.s3_key,
+            "edi_data": record.edi_data,
             "format_standard": record.format_standard,
             "transaction_type": record.transaction_type,
             "sender_id": record.sender_id,
@@ -55,10 +55,10 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def save_api_payload(
         self, trace_id: str, direction: str, s3_uri: str, status: str
     ) -> None:
-        record = ApiPayload(
+        record = ApiGateway(
             trace_id=uuid.UUID(trace_id),
             direction=direction,
-            s3_key=s3_uri,
+            request=s3_uri,
             status=status,
         )
         self.session.add(record)
@@ -96,35 +96,35 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(ApiPayload).where(ApiPayload.trace_id == uuid.UUID(trace_id))
+            select(ApiGateway).where(ApiGateway.trace_id == uuid.UUID(trace_id))
         )
         record = result.scalar_one_or_none()
         if not record:
             return None
         return {
             "trace_id": str(record.trace_id),
-            "s3_key": record.s3_key,
+            "request": record.request,
             "status": record.status,
             "direction": record.direction,
         }
 
     async def update_api_payload_status(self, trace_id: str, status: str) -> None:
         await self.session.execute(
-            update(ApiPayload)
-            .where(ApiPayload.trace_id == uuid.UUID(trace_id))
+            update(ApiGateway)
+            .where(ApiGateway.trace_id == uuid.UUID(trace_id))
             .values(status=status)
         )
         await self.session.flush()
 
     async def claim_api_payload(self, trace_id: str) -> bool:
         stmt = (
-            update(ApiPayload)
+            update(ApiGateway)
             .where(
-                ApiPayload.trace_id == uuid.UUID(trace_id),
-                ApiPayload.status == "PENDING_DELIVERY",
+                ApiGateway.trace_id == uuid.UUID(trace_id),
+                ApiGateway.status == "PENDING_DELIVERY",
             )
             .values(status="PROCESSING")
-            .returning(ApiPayload.id)
+            .returning(ApiGateway.id)
         )
         result = await self.session.execute(stmt)
         await self.session.flush()

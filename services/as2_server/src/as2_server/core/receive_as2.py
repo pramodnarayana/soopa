@@ -138,7 +138,7 @@ class ReceiveAS2UseCase:
                 connection_type="AS2",
                 sender_id=as2_msg.as2_from,
                 receiver_id=as2_msg.as2_to,
-                s3_key=storage_uri,
+                edi_data=storage_uri,
                 status=status,
                 as2_message_id=as2_msg.message_id,
             )

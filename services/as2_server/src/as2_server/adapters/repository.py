@@ -51,7 +51,7 @@ class EdiMessageRepositoryAdapter:
         connection_type: str,
         sender_id: str,
         receiver_id: str,
-        s3_key: str,
+        edi_data: str,
         status: str,
         as2_message_id: str,
     ) -> None:
@@ -62,7 +62,7 @@ class EdiMessageRepositoryAdapter:
             connection_type=connection_type,
             sender_id=sender_id,
             receiver_id=receiver_id,
-            s3_key=s3_key,
+            edi_data=edi_data,
             status=status,
-            as2_message_id=as2_message_id,
+            message_id=as2_message_id,
         )

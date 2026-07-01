@@ -35,11 +35,11 @@ class EdiMessageRepository:
         trace_id: UUID,
         direction: str,
         connection_type: str,
-        s3_key: str,
+        edi_data: str,
         sender_id: str | None = None,
         receiver_id: str | None = None,
         status: str = "RECEIVED",
-        as2_message_id: str | None = None,
+        message_id: str | None = None,
     ) -> EdiMessage:
         record = EdiMessage(
             tenant_id=tenant_id,
@@ -48,9 +48,9 @@ class EdiMessageRepository:
             connection_type=connection_type,
             sender_id=sender_id,
             receiver_id=receiver_id,
-            s3_key=s3_key,
+            edi_data=edi_data,
             status=status,
-            as2_message_id=as2_message_id,
+            message_id=message_id,
         )
         self.session.add(record)
         await self.session.flush()

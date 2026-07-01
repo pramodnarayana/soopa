@@ -113,7 +113,7 @@ class DeliveryService:
             raise ValueError(f"Webhook partner {partner_id} not found.")
 
         try:
-            raw_payload = await self.storage.download(api_payload["s3_key"])
+            raw_payload = await self.storage.download(api_payload["request"])
 
             auth_token = None
             if partner.get("auth_header_vault_ref") and self.vault:
@@ -145,7 +145,7 @@ class DeliveryService:
             raise ValueError(f"SFTP partner {partner_id} not found.")
 
         try:
-            raw_payload = await self.storage.download(edi_msg["s3_key"])
+            raw_payload = await self.storage.download(edi_msg["edi_data"])
             filename = f"{trace_id}.edi"
 
             password: str = partner["credentials_vault_ref"]
@@ -190,7 +190,7 @@ class DeliveryService:
                 else None
             )
 
-            raw_payload = await self.storage.download(edi_msg["s3_key"])
+            raw_payload = await self.storage.download(edi_msg["edi_data"])
 
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,
@@ -239,17 +239,29 @@ class DeliveryService:
                     break
 
             is_success = False
-            if (
-                disposition
-                and "processed" in disposition.lower()
-                and "failed" not in disposition.lower()
-            ):
-                is_success = True
-                if as2_msg.mic and (
-                    not received_mic
-                    or as2_msg.mic.replace(" ", "").lower() != received_mic.replace(" ", "").lower()
-                ):
-                    is_success = False
+            if disposition:
+                # Disposition header format: <action-mode>/<sending-mode>; <disposition-type>[/<disposition-modifier>]
+                # e.g., "automatic-action/MDN-sent-automatically; processed"
+                disp_parts = disposition.split(";", 1)
+                if len(disp_parts) == 2:
+                    status_part = disp_parts[1].strip().lower()
+                    # A disposition is a success if it starts with 'processed' and has no failure/error modifiers.
+                    if (
+                        status_part.startswith("processed")
+                        and "error" not in status_part
+                        and "failed" not in status_part
+                    ):
+                        is_success = True
+                        if as2_msg.mic and (
+                            not received_mic
+                            or as2_msg.mic.replace(" ", "").lower()
+                            != received_mic.replace(" ", "").lower()
+                        ):
+                            is_success = False
+                            logger.warning(
+                                f"MDN MIC mismatch for trace_id={trace_id}. "
+                                f"Expected {as2_msg.mic}, got {received_mic}"
+                            )
 
             if is_success:
                 await self.repository.update_edi_message_status(trace_id, "DELIVERED")
