@@ -61,7 +61,7 @@ def json_to_edi(
         from bots_core.utils.botslib import botsglobal
 
         data_dir = botsglobal.ini.get("directories", "data")
-        fd, output_file_path = tempfile.mkstemp(suffix=".edi", dir=data_dir)
+        fd, output_file_path = tempfile.mkstemp(suffix=".edi", dir=data_dir or None)
         os.close(fd)
 
     try:

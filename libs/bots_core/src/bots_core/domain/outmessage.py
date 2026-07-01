@@ -431,7 +431,13 @@ class Outmessage(message.Message):
                                 recordbuffer += fieldbuffer
                                 fieldbuffer = []
                             else:
-                                fieldbuffer.append({VALUE: "", SFIELD: type_of_field})
+                                fieldbuffer.append(
+                                    {
+                                        VALUE: "",
+                                        SFIELD: type_of_field,
+                                        FORMATFROMGRAMMAR: field_definition.format,
+                                    }
+                                )
                             type_of_field = 2
                     if field_has_data:
                         # write recordbuffer to lex_record

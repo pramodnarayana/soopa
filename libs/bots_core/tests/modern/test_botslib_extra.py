@@ -158,28 +158,25 @@ def test_botsimport_raises_scriptimporterror():
 # ---------------------------------------------------------------------------
 
 
-def test_readdata_bin_and_pickled(tmp_path):
-    # Setup global INI mock so abspathdata allows tmp_path
+def test_readdata_bin_and_pickled(patch_data_dir):
+    # Setup global INI mock so abspathdata allows patch_data_dir
     original_get = botslib.botsglobal.ini.get
 
     def patched_get(section, key, fallback=""):
         if section == "directories" and key == "data":
-            return str(tmp_path)
+            return str(patch_data_dir)
         return original_get(section, key, fallback)
 
     botslib.botsglobal.ini.get = patched_get
 
-    try:
-        f = tmp_path / "test.pkl"
-        data = {"key": "value"}
-        with open(f, "wb") as out:
-            pickle.dump(data, out)
+    f = patch_data_dir / "test.pkl"
+    data = {"key": "value"}
+    with open(f, "wb") as out:
+        pickle.dump(data, out)
 
-        assert botslib.readdata_bin(str(f)) == pickle.dumps(data)
-        assert botslib.readdata_pickled(str(f)) == data
+    assert botslib.readdata_bin(str(f)) == pickle.dumps(data)
+    assert botslib.readdata_pickled(str(f)) == data
 
-        f2 = tmp_path / "test2.pkl"
-        botslib.writedata_pickled(str(f2), data)
-        assert botslib.readdata_pickled(str(f2)) == data
-    finally:
-        botslib.botsglobal.ini.get = original_get
+    f2 = patch_data_dir / "test2.pkl"
+    botslib.writedata_pickled(str(f2), data)
+    assert botslib.readdata_pickled(str(f2)) == data

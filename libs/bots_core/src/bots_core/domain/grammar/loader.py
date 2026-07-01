@@ -184,7 +184,7 @@ def do_recorddefs(grammar_obj):
 
     # If already parsed
     if grammar_obj.recorddefs and all(
-        isinstance(v, list) and v and isinstance(v[0], FieldDefinition)
+        isinstance(v, list) and v and all(isinstance(f, FieldDefinition) for f in v)
         for v in grammar_obj.recorddefs.values()
     ):
         return

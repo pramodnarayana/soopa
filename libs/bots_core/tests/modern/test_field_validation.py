@@ -18,23 +18,10 @@ import json
 import pytest
 from bots_core.domain.exceptions import OutMessageError
 from bots_core.facade import edi_to_json, json_to_edi
-from bots_core.utils.botslib import botsglobal
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _patch_data_dir(tmp_path):
-    orig = botsglobal.ini.get
-
-    def patched(section, key, fallback=""):
-        if section == "directories" and key == "data":
-            return str(tmp_path)
-        return orig(section, key, fallback)
-
-    botsglobal.ini.get = patched
-    return orig
 
 
 def _x12_edi(
@@ -60,14 +47,10 @@ def _x12_edi(
     )
 
 
-def _parse(tmp_path, edi_content):
-    f = tmp_path / "in.edi"
+def _parse(patch_data_dir, edi_content):
+    f = patch_data_dir / "in.edi"
     f.write_text(edi_content)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        return json.loads(edi_to_json(str(f), editype="x12", messagetype="x12"))
-    finally:
-        botsglobal.ini.get = orig
+    return json.loads(edi_to_json(str(f), editype="x12", messagetype="x12"))
 
 
 # ---------------------------------------------------------------------------
@@ -86,14 +69,14 @@ def test_mpathformat_joins_with_dash():
 # ---------------------------------------------------------------------------
 
 
-def test_valid_x12_parse_no_errors(tmp_path):
+def test_valid_x12_parse_no_errors(patch_data_dir):
     """Well-formed X12 → no MessageError raised, all segments present."""
-    ast = _parse(tmp_path, _x12_edi())
+    ast = _parse(patch_data_dir, _x12_edi())
     isa = ast["children"][0]
     assert isa["record"]["BOTSID"] == "ISA"
 
 
-def test_valid_x12_multiple_po1_lines(tmp_path):
+def test_valid_x12_multiple_po1_lines(patch_data_dir):
     """Multiple PO1 segments parse cleanly — exercises loop counting."""
     edi = (
         "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       "
@@ -109,16 +92,12 @@ def test_valid_x12_multiple_po1_lines(tmp_path):
         "GE*1*1~\r\n"
         "IEA*1*000000001~\r\n"
     )
-    f = tmp_path / "multi_po1.edi"
+    f = patch_data_dir / "multi_po1.edi"
     f.write_text(edi)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        result = json.loads(edi_to_json(str(f), editype="x12", messagetype="x12"))
-        st = result["children"][0]["children"][0]["children"][0]
-        po1_nodes = [c for c in st["children"] if c["record"]["BOTSID"] == "PO1"]
-        assert len(po1_nodes) == 3
-    finally:
-        botsglobal.ini.get = orig
+    result = json.loads(edi_to_json(str(f), editype="x12", messagetype="x12"))
+    st = result["children"][0]["children"][0]["children"][0]
+    po1_nodes = [c for c in st["children"] if c["record"]["BOTSID"] == "PO1"]
+    assert len(po1_nodes) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +105,7 @@ def test_valid_x12_multiple_po1_lines(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_invalid_date_in_gs_segment_generates_error(tmp_path):
+def test_invalid_date_in_gs_segment_generates_error(patch_data_dir):
     """GS04 date field with invalid date generates [F07] error."""
     edi = (
         "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       "
@@ -140,24 +119,20 @@ def test_invalid_date_in_gs_segment_generates_error(tmp_path):
         "GE*1*1~\r\n"
         "IEA*1*000000001~\r\n"
     )
-    f = tmp_path / "bad_date.edi"
+    f = patch_data_dir / "bad_date.edi"
     f.write_text(edi)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        from bots_core.domain.inmessage import parse_edi_file
+    from bots_core.domain.inmessage import parse_edi_file
 
-        obj = parse_edi_file(
-            editype="x12",
-            messagetype="x12",
-            filename=str(f),
-            charset="utf-8",
-        )
-        # F07 error in errorlist for bad date
-        assert any(
-            "F07" in e for e in obj.errorlist
-        ), f"Expected F07 (date validation error), got: {obj.errorlist}"
-    finally:
-        botsglobal.ini.get = orig
+    obj = parse_edi_file(
+        editype="x12",
+        messagetype="x12",
+        filename=str(f),
+        charset="utf-8",
+    )
+    # F07 error in errorlist for bad date
+    assert any("F07" in e for e in obj.errorlist), (
+        f"Expected F07 (date validation error), got: {obj.errorlist}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -256,24 +231,20 @@ def _minimal_x12_json():
     )
 
 
-def test_json_to_edi_produces_valid_x12(tmp_path):
+def test_json_to_edi_produces_valid_x12(patch_data_dir):
     """Round-trip: parse valid X12 → JSON → write back → contains all expected segments."""
     edi = _x12_edi()
-    f = tmp_path / "rt.edi"
+    f = patch_data_dir / "rt.edi"
     f.write_text(edi)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        j = edi_to_json(str(f), editype="x12", messagetype="x12")
-        out = json_to_edi(j, editype="x12", messagetype="x12")
-        assert "ISA*00*" in out
-        assert "GS*PO*" in out
-        assert "ST*850*" in out
-        assert "BEG*00*SA*" in out
-        assert "SE*" in out
-        assert "GE*" in out
-        assert "IEA*" in out
-    finally:
-        botsglobal.ini.get = orig
+    j = edi_to_json(str(f), editype="x12", messagetype="x12")
+    out = json_to_edi(j, editype="x12", messagetype="x12")
+    assert "ISA*00*" in out
+    assert "GS*PO*" in out
+    assert "ST*850*" in out
+    assert "BEG*00*SA*" in out
+    assert "SE*" in out
+    assert "GE*" in out
+    assert "IEA*" in out
 
 
 # ---------------------------------------------------------------------------
@@ -281,44 +252,36 @@ def test_json_to_edi_produces_valid_x12(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_x12_sniff_not_isa(tmp_path):
+def test_x12_sniff_not_isa(patch_data_dir):
     """File not starting with ISA → [A60] fatal error."""
-    p = tmp_path / "notx12.edi"
+    p = patch_data_dir / "notx12.edi"
     p.write_text("GS*PO*SENDER*RECEIVER*20210101*1200*1*X*004010~\r\n")
-    orig = _patch_data_dir(tmp_path)
-    try:
-        from bots_core.domain.inmessage import parse_edi_file
+    from bots_core.domain.inmessage import parse_edi_file
 
-        obj = parse_edi_file(
-            editype="x12",
-            messagetype="x12",
-            filename=str(p),
-            charset="utf-8",
-        )
-        assert obj.errorfatal
-        assert any("A60" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    obj = parse_edi_file(
+        editype="x12",
+        messagetype="x12",
+        filename=str(p),
+        charset="utf-8",
+    )
+    assert obj.errorfatal
+    assert any("A60" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_x12_sniff_only_whitespace(tmp_path):
+def test_x12_sniff_only_whitespace(patch_data_dir):
     """File containing only whitespace → [A61] fatal error."""
-    p = tmp_path / "whitespace.edi"
+    p = patch_data_dir / "whitespace.edi"
     p.write_text("   \n\r\n   ")
-    orig = _patch_data_dir(tmp_path)
-    try:
-        from bots_core.domain.inmessage import parse_edi_file
+    from bots_core.domain.inmessage import parse_edi_file
 
-        obj = parse_edi_file(
-            editype="x12",
-            messagetype="x12",
-            filename=str(p),
-            charset="utf-8",
-        )
-        assert obj.errorfatal
-        assert any("A61" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    obj = parse_edi_file(
+        editype="x12",
+        messagetype="x12",
+        filename=str(p),
+        charset="utf-8",
+    )
+    assert obj.errorfatal
+    assert any("A61" in e for e in obj.errorlist), obj.errorlist
 
 
 # ---------------------------------------------------------------------------

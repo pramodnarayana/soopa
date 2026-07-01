@@ -17,15 +17,15 @@ from bots_core.utils.botslib import (
 # ---------------------------------------------------------------------------
 
 
-def test_dirshouldbethere_creates_dir(tmp_path):
-    new_dir = str(tmp_path / "subdir" / "nested")
+def test_dirshouldbethere_creates_dir(patch_data_dir):
+    new_dir = str(patch_data_dir / "subdir" / "nested")
     assert not os.path.exists(new_dir)
     assert dirshouldbethere(new_dir) is True
     assert os.path.isdir(new_dir)
 
 
-def test_dirshouldbethere_existing_dir_is_noop(tmp_path):
-    existing_dir = str(tmp_path)
+def test_dirshouldbethere_existing_dir_is_noop(patch_data_dir):
+    existing_dir = str(patch_data_dir)
     assert dirshouldbethere(existing_dir) is False  # Should not raise and return False
     assert os.path.isdir(existing_dir)
 
@@ -35,13 +35,13 @@ def test_dirshouldbethere_existing_dir_is_noop(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_opendata_write_and_read(tmp_path):
+def test_opendata_write_and_read(patch_data_dir):
     """Round-trip: write a file via opendata, read it back."""
     filename = "test_opendata.txt"
     content = "Hello, bots!\nLine two.\n"
 
-    # Patch botsglobal so abspathdata resolves under tmp_path
-    data_dir = str(tmp_path)
+    # Patch botsglobal so abspathdata resolves under patch_data_dir
+    data_dir = str(patch_data_dir)
 
     original_get = botslib.botsglobal.ini.get
 
@@ -52,40 +52,34 @@ def test_opendata_write_and_read(tmp_path):
 
     botslib.botsglobal.ini.get = patched_get  # type: ignore[method-assign]
 
-    try:
-        with opendata(filename, "w", charset="utf-8") as f:
-            f.write(content)
+    with opendata(filename, "w", charset="utf-8") as f:
+        f.write(content)
 
-        result = readdata(filename, charset="utf-8")
-        assert result == content
-    finally:
-        botslib.botsglobal.ini.get = original_get
+    result = readdata(filename, charset="utf-8")
+    assert result == content
 
 
-def test_opendata_binary_write_and_read(tmp_path):
+def test_opendata_binary_write_and_read(patch_data_dir):
     """Write binary data and read it back via opendata_bin."""
     from bots_core.utils.botslib import opendata_bin
 
-    filepath = str(tmp_path / "test_binary.edi")
+    filepath = str(patch_data_dir / "test_binary.edi")
     content = b"ISA*00*TEST~"
 
     original_get = botslib.botsglobal.ini.get
 
     def patched_get(section, key, fallback=""):
         if section == "directories" and key == "data":
-            return str(tmp_path)
+            return str(patch_data_dir)
         return original_get(section, key, fallback)
 
     botslib.botsglobal.ini.get = patched_get  # type: ignore[method-assign]
-    try:
-        with opendata_bin(filepath, "wb") as f:
-            f.write(content)
+    with opendata_bin(filepath, "wb") as f:
+        f.write(content)
 
-        with opendata_bin(filepath, "rb") as f:
-            result = f.read()
-        assert result == content
-    finally:
-        botslib.botsglobal.ini.get = original_get
+    with opendata_bin(filepath, "rb") as f:
+        result = f.read()
+    assert result == content
 
 
 # ---------------------------------------------------------------------------

@@ -11,23 +11,10 @@ These cover the heavily-uncovered paths in parsers/edifact.py.
 import pytest
 from bots_core.domain.exceptions import InMessageError
 from bots_core.domain.inmessage import parse_edi_file
-from bots_core.utils.botslib import botsglobal
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _patch_data_dir(tmp_path):
-    orig = botsglobal.ini.get
-
-    def patched(section, key, fallback=""):
-        if section == "directories" and key == "data":
-            return str(tmp_path)
-        return orig(section, key, fallback)
-
-    botsglobal.ini.get = patched
-    return orig
 
 
 def _basic_edifact(
@@ -54,13 +41,13 @@ def _basic_edifact(
     )
 
 
-def _write(tmp_path, content, filename="test.edi"):
-    p = tmp_path / filename
+def _write(patch_data_dir, content, filename="test.edi"):
+    p = patch_data_dir / filename
     p.write_text(content, encoding="utf-8")
     return str(p)
 
 
-def _parse(path, tmp_path):
+def _parse(path, patch_data_dir):
     return parse_edi_file(
         editype="edifact",
         messagetype="edifact",
@@ -74,55 +61,43 @@ def _parse(path, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_sniff_bom_raises(tmp_path):
+def test_sniff_bom_raises(patch_data_dir):
     """UTF-8 BOM at start → [A68] error."""
     content = b"\xef\xbb\xbfUNB+utf8:1+S+R+210101:1200+1'\n"
-    p = tmp_path / "bom.edi"
+    p = patch_data_dir / "bom.edi"
     p.write_bytes(content)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = parse_edi_file(
-            editype="edifact",
-            messagetype="edifact",
-            filename=str(p),
-            charset="utf-8",
-        )
-        assert obj.errorfatal
-        assert any("A68" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    obj = parse_edi_file(
+        editype="edifact",
+        messagetype="edifact",
+        filename=str(p),
+        charset="utf-8",
+    )
+    assert obj.errorfatal
+    assert any("A68" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_sniff_missing_unb_raises(tmp_path):
+def test_sniff_missing_unb_raises(patch_data_dir):
     """File that starts with random text → [A54] error."""
-    p = _write(tmp_path, "NOTEDI+GARBAGE'\n")
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert obj.errorfatal
-        assert any("A54" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, "NOTEDI+GARBAGE'\n")
+    obj = _parse(p, patch_data_dir)
+    assert obj.errorfatal
+    assert any("A54" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_sniff_una_then_garbage(tmp_path):
+def test_sniff_una_then_garbage(patch_data_dir):
     """UNA present but truncated → [A53] error."""
     # UNA needs 6 chars after 'UNA'; give only 2
     content = b"UNA:+"
-    p = tmp_path / "una_trunc.edi"
+    p = patch_data_dir / "una_trunc.edi"
     p.write_bytes(content)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = parse_edi_file(
-            editype="edifact",
-            messagetype="edifact",
-            filename=str(p),
-            charset="utf-8",
-        )
-        assert obj.errorfatal
-        assert any("A53" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    obj = parse_edi_file(
+        editype="edifact",
+        messagetype="edifact",
+        filename=str(p),
+        charset="utf-8",
+    )
+    assert obj.errorfatal
+    assert any("A53" in e for e in obj.errorlist), obj.errorlist
 
 
 # ---------------------------------------------------------------------------
@@ -130,41 +105,29 @@ def test_sniff_una_then_garbage(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_edifact_correct_envelope_no_errors(tmp_path):
+def test_edifact_correct_envelope_no_errors(patch_data_dir):
     """Perfectly formed EDIFACT → no envelope errors (E0x)."""
-    p = _write(tmp_path, _basic_edifact())
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        env_errors = [e for e in obj.errorlist if "[E" in e]
-        assert env_errors == [], f"Unexpected envelope errors: {env_errors}"
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, _basic_edifact())
+    obj = _parse(p, patch_data_dir)
+    env_errors = [e for e in obj.errorlist if "[E" in e]
+    assert env_errors == [], f"Unexpected envelope errors: {env_errors}"
 
 
-def test_edifact_unb_unz_reference_mismatch(tmp_path):
+def test_edifact_unb_unz_reference_mismatch(patch_data_dir):
     """UNB ref ≠ UNZ ref → [E01]."""
-    p = _write(tmp_path, _basic_edifact(unb_ref="111", unz_ref="999"))
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert any("E01" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, _basic_edifact(unb_ref="111", unz_ref="999"))
+    obj = _parse(p, patch_data_dir)
+    assert any("E01" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_edifact_unz_count_too_high(tmp_path):
+def test_edifact_unz_count_too_high(patch_data_dir):
     """UNZ says 5 messages but only 1 → [E02]."""
-    p = _write(tmp_path, _basic_edifact(unz_count="5"))
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert any("E02" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, _basic_edifact(unz_count="5"))
+    obj = _parse(p, patch_data_dir)
+    assert any("E02" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_edifact_unz_count_non_numeric(tmp_path):
+def test_edifact_unz_count_non_numeric(patch_data_dir):
     """UNZ count = 'X' (non-numeric) → [E03]."""
     content = (
         "UNA:+.? '\n"
@@ -175,38 +138,26 @@ def test_edifact_unz_count_non_numeric(tmp_path):
         "UNT+4+1'\n"
         "UNZ+X+1'\n"
     )
-    p = _write(tmp_path, content)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert any("E03" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, content)
+    obj = _parse(p, patch_data_dir)
+    assert any("E03" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_edifact_unh_unt_reference_mismatch(tmp_path):
+def test_edifact_unh_unt_reference_mismatch(patch_data_dir):
     """UNH ref ≠ UNT ref → [E04]."""
-    p = _write(tmp_path, _basic_edifact(unh_ref="AAA", unt_ref="ZZZ"))
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert any("E04" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, _basic_edifact(unh_ref="AAA", unt_ref="ZZZ"))
+    obj = _parse(p, patch_data_dir)
+    assert any("E04" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_edifact_unt_segment_count_too_high(tmp_path):
+def test_edifact_unt_segment_count_too_high(patch_data_dir):
     """UNT count says 99 but actual is 4 → [E05]."""
-    p = _write(tmp_path, _basic_edifact(unt_count="99"))
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert any("E05" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, _basic_edifact(unt_count="99"))
+    obj = _parse(p, patch_data_dir)
+    assert any("E05" in e for e in obj.errorlist), obj.errorlist
 
 
-def test_edifact_unt_count_non_numeric(tmp_path):
+def test_edifact_unt_count_non_numeric(patch_data_dir):
     """UNT count = 'Z' → [E06]."""
     content = (
         "UNA:+.? '\n"
@@ -217,13 +168,9 @@ def test_edifact_unt_count_non_numeric(tmp_path):
         "UNT+Z+1'\n"
         "UNZ+1+1'\n"
     )
-    p = _write(tmp_path, content)
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert any("E06" in e for e in obj.errorlist), obj.errorlist
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, content)
+    obj = _parse(p, patch_data_dir)
+    assert any("E06" in e for e in obj.errorlist), obj.errorlist
 
 
 # ---------------------------------------------------------------------------
@@ -231,21 +178,17 @@ def test_edifact_unt_count_non_numeric(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_unknown_editype_raises(tmp_path):
+def test_unknown_editype_raises(patch_data_dir):
     """Requesting unknown editype → InMessageError raised immediately."""
-    p = _write(tmp_path, "dummy")
-    orig = _patch_data_dir(tmp_path)
-    try:
-        with pytest.raises(InMessageError) as exc_info:
-            parse_edi_file(
-                editype="UNKNOWN_FORMAT",
-                messagetype="X",
-                filename=p,
-                charset="utf-8",
-            )
-        assert "Unknown editype" in str(exc_info.value)
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, "dummy")
+    with pytest.raises(InMessageError) as exc_info:
+        parse_edi_file(
+            editype="UNKNOWN_FORMAT",
+            messagetype="X",
+            filename=p,
+            charset="utf-8",
+        )
+    assert "Unknown editype" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
@@ -253,15 +196,11 @@ def test_unknown_editype_raises(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_edifact_syntax_separators_stored(tmp_path):
+def test_edifact_syntax_separators_stored(patch_data_dir):
     """After parsing, edifact.syntax captures the actual separators used."""
-    p = _write(tmp_path, _basic_edifact())
-    orig = _patch_data_dir(tmp_path)
-    try:
-        obj = _parse(p, tmp_path)
-        assert obj.syntax.get("record_sep") == "'"
-        assert obj.syntax.get("field_sep") == "+"
-        assert obj.syntax.get("sfield_sep") == ":"
-        assert obj.syntax.get("record_tag_sep", "") == ""
-    finally:
-        botsglobal.ini.get = orig
+    p = _write(patch_data_dir, _basic_edifact())
+    obj = _parse(p, patch_data_dir)
+    assert obj.syntax.get("record_sep") == "'"
+    assert obj.syntax.get("field_sep") == "+"
+    assert obj.syntax.get("sfield_sep") == ":"
+    assert obj.syntax.get("record_tag_sep", "") == ""

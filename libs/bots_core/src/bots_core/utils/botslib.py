@@ -167,9 +167,19 @@ def abspath(soort, filename):
 
 def abspathdata(filename):
     data_dir = botsglobal.ini.get("directories", "data")
-    if filename.startswith(data_dir):
-        return filename
-    return os.path.join(data_dir, filename)
+    if not data_dir:
+        raise ValueError("directories.data configuration is missing or empty")
+    data_dir_real = os.path.realpath(data_dir)
+
+    if os.path.isabs(filename):
+        full_path = os.path.realpath(filename)
+    else:
+        full_path = os.path.realpath(os.path.join(data_dir_real, filename))
+
+    if os.path.commonpath([data_dir_real, full_path]) != data_dir_real:
+        raise ValueError(f"Path is outside data directory: {filename}")
+
+    return full_path
 
 
 def deldata(filename):
@@ -185,7 +195,11 @@ def _validate_data_path(filename):
     if ".." in filename or filename.startswith("/etc/") or filename.startswith("/root/"):
         raise ValueError(f"Path traversal is not permitted: {filename}")
     data_dir = botsglobal.ini.get("directories", "data")
-    if not os.path.abspath(filename).startswith(os.path.abspath(data_dir)):
+    if not data_dir:
+        raise ValueError("directories.data configuration is missing or empty")
+    data_dir_real = os.path.realpath(data_dir)
+    filename_real = os.path.realpath(filename)
+    if os.path.commonpath([data_dir_real, filename_real]) != data_dir_real:
         raise ValueError(f"Path is outside data directory: {filename}")
 
 

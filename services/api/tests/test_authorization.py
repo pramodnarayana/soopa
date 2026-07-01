@@ -59,12 +59,12 @@ async def test_authorization_standard_user(service: AuthorizationService):
     assert profile["rls_enforced_tenant"] == 1
 
 
-def test_authorization_platform_admin_by_tenant_id():
+def test_authorization_platform_admin_explicit_grant():
     import asyncio
 
     repo = FakeTenantRepository()
     svc = AuthorizationService(repo)
     profile = asyncio.run(svc.get_authorization_profile(0, True, None))
-    # tenant_id == 0 now grants platform admin as a fallback for local dev
+    # Explicitly passing is_platform_admin=True grants Owner role
     assert profile["is_platform_admin"] is True
     assert profile["role"] == "Owner"
