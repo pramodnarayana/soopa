@@ -41,11 +41,11 @@ async def test_s3_storage_adapter_upload(mock_session_cls: MagicMock) -> None:
     adapter = S3StorageAdapter(bucket_name="test-bucket")
 
     # Act
-    uri = await adapter.upload(b"test data", key_prefix="/api_payloads/123", file_name="out.json")
+    uri = await adapter.upload(b"test data", key_prefix="/api_gateway/123", file_name="out.json")
 
     # Assert
-    assert uri == "s3://test-bucket/api_payloads/123/out.json"
+    assert uri == "s3://test-bucket/api_gateway/123/out.json"
     mock_session.client.assert_called_once_with("s3", region_name="us-east-1")
     mock_client.put_object.assert_awaited_once_with(
-        Bucket="test-bucket", Key="api_payloads/123/out.json", Body=b"test data"
+        Bucket="test-bucket", Key="api_gateway/123/out.json", Body=b"test data"
     )

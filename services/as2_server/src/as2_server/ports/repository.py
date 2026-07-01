@@ -21,7 +21,7 @@ class IEdiMessageRepository(Protocol):
         connection_type: str,
         sender_id: str,
         receiver_id: str,
-        s3_key: str,
+        edi_data: str,
         status: str,
         as2_message_id: str,
     ) -> None: ...

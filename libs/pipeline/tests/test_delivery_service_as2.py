@@ -71,7 +71,7 @@ def _seed_as2_route(
         "sender_id": "SENDER",
         "receiver_id": "RECEIVER",
         "transaction_type": transaction_type,
-        "s3_key": edi_s3_uri,
+        "edi_data": edi_s3_uri,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -146,7 +146,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
         "sender_id": "S1",
         "receiver_id": "R1",
         "transaction_type": "856",
-        "s3_key": edi_s3_uri,
+        "edi_data": edi_s3_uri,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -215,7 +215,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
         "sender_id": "A",
         "receiver_id": "B",
         "transaction_type": "810",
-        "s3_key": edi_s3_uri,
+        "edi_data": edi_s3_uri,
         "status": "PROCESSING",
     }
     repo.routes.append(
@@ -260,7 +260,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
         "sender_id": "X",
         "receiver_id": "Y",
         "transaction_type": "850",
-        "s3_key": edi_s3_uri,
+        "edi_data": edi_s3_uri,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(

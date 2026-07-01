@@ -204,12 +204,24 @@ class EdiMessage(TenantBase, TenantAwareMixin):
 
     sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    as2_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mdn_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mdn_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    mdn_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_name: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    encryption_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_resend: Mapped[bool] = mapped_column(Boolean, default=False)
+    status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    state: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    msg_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     interchange_control_no: Mapped[str | None] = mapped_column(String(255), nullable=True)
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     format_standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    s3_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    edi_data: Mapped[str] = mapped_column(String(1024), nullable=False)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
@@ -222,8 +234,8 @@ class EdiMessage(TenantBase, TenantAwareMixin):
     __table_args__ = (Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),)
 
 
-class ApiPayload(TenantBase, TenantAwareMixin):
-    __tablename__ = "api_payloads"
+class ApiGateway(TenantBase, TenantAwareMixin):
+    __tablename__ = "api_gateway"
 
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
@@ -231,32 +243,20 @@ class ApiPayload(TenantBase, TenantAwareMixin):
     trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    inbound_route_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("inbound_routes.id"), nullable=True
-    )
-    outbound_route_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True
-    )
 
     webhook_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     http_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     target_format: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    s3_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    request: Mapped[str] = mapped_column(String(1024), nullable=False)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    headers: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "(inbound_route_id IS NOT NULL AND outbound_route_id IS NULL) OR "
-            "(inbound_route_id IS NULL AND outbound_route_id IS NOT NULL)",
-            name="chk_api_payload_single_route",
-        ),
     )
 
 

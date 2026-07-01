@@ -18,7 +18,7 @@ async def test_translate_edi_to_json_success() -> None:
 
     repo.edi_messages[trace_id] = {
         "trace_id": trace_id,
-        "s3_key": s3_uri,
+        "edi_data": s3_uri,
         "format_standard": "X12",
         "transaction_type": "850",
         "status": "RECEIVED",
@@ -40,12 +40,12 @@ async def test_translate_edi_to_json_success() -> None:
     # 3. JSON payload uploaded to storage
     assert storage.upload_count == 1
 
-    # 4. ApiPayload record created in DB
-    assert trace_id in repo.api_payloads
-    api_payload = repo.api_payloads[trace_id]
+    # 4. ApiGateway record created in DB
+    assert trace_id in repo.api_gateway
+    api_payload = repo.api_gateway[trace_id]
     assert api_payload["direction"] == "OUTBOUND"
     assert api_payload["status"] == "PENDING_DELIVERY"
-    assert api_payload["s3_key"].startswith("s3://fake-bucket")
+    assert api_payload["request"].startswith("s3://fake-bucket")
 
     # 5. Outbox event published for DELIVER
     assert len(repo.outbox) == 1

@@ -13,7 +13,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_trading_partner_repository_find_by_as2_id() -> None:
     mock_session = AsyncMock()
-    tenant_id = uuid.uuid4()
+    tenant_id = 1
 
     partner = AS2Partner(
         tenant_id=tenant_id,
@@ -33,7 +33,8 @@ async def test_trading_partner_repository_find_by_as2_id() -> None:
 
 async def test_edi_message_repository_save_message() -> None:
     mock_session = AsyncMock()
-    tenant_id = uuid.uuid4()
+    mock_session.add = MagicMock()
+    tenant_id = 1
 
     repo = EdiMessageRepository(mock_session)
 
@@ -43,16 +44,18 @@ async def test_edi_message_repository_save_message() -> None:
         trace_id=trace_id,
         direction="INBOUND",
         connection_type="AS2",
-        s3_key="s3://bucket/test.edi",
-        sender_id="sender",
-        receiver_id="receiver",
+        edi_data="s3://bucket/tenants/1/inbound/test.edi",
+        sender_id="SENDER123",
+        receiver_id="RECV456",
         status="RECEIVED",
-        as2_message_id="msg-123",
+        message_id="msg-123",
     )
 
     assert result.direction == "INBOUND"
     assert result.status == "RECEIVED"
-    assert result.sender_id == "sender"
-    assert result.receiver_id == "receiver"
+    assert result.sender_id == "SENDER123"
+    assert result.receiver_id == "RECV456"
+    assert result.edi_data == "s3://bucket/tenants/1/inbound/test.edi"
+    assert result.message_id == "msg-123"
     mock_session.add.assert_called_once()
     mock_session.flush.assert_awaited_once()

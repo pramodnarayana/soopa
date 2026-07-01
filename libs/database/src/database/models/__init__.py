@@ -13,7 +13,7 @@ from .control_plane import (
 )
 from .data_plane import (
     AckReceipt,
-    ApiPayload,
+    ApiGateway,
     AuditLog,
     EdiMessage,
     InboundRoute,
@@ -48,7 +48,7 @@ __all__ = [
     "InboundRoute",
     "OutboundRoute",
     "EdiMessage",
-    "ApiPayload",
+    "ApiGateway",
     "Job",
     "TenantOutbox",
     "ProcessedEvent",

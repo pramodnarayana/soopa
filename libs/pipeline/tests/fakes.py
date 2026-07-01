@@ -48,7 +48,7 @@ class FakeTransformerAdapter(TransformerPort):
 class InMemoryRepositoryAdapter(RepositoryPort):
     def __init__(self) -> None:
         self.edi_messages: dict[str, dict[str, Any]] = {}
-        self.api_payloads: dict[str, dict[str, Any]] = {}
+        self.api_gateway: dict[str, dict[str, Any]] = {}
         self.outbox: list[dict[str, Any]] = []
         self.routes: list[dict[str, Any]] = []
         self.webhook_partners: dict[str, dict[str, Any]] = {}
@@ -73,10 +73,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def save_api_payload(
         self, trace_id: str, direction: str, s3_uri: str, status: str
     ) -> None:
-        self.api_payloads[trace_id] = {
+        self.api_gateway[trace_id] = {
             "trace_id": trace_id,
             "direction": direction,
-            "s3_key": s3_uri,
+            "request": s3_uri,
             "status": status,
         }
 
@@ -96,14 +96,14 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         )
 
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
-        return self.api_payloads.get(trace_id)
+        return self.api_gateway.get(trace_id)
 
     async def update_api_payload_status(self, trace_id: str, status: str) -> None:
-        if trace_id in self.api_payloads:
-            self.api_payloads[trace_id]["status"] = status
+        if trace_id in self.api_gateway:
+            self.api_gateway[trace_id]["status"] = status
 
     async def claim_api_payload(self, trace_id: str) -> bool:
-        payload = self.api_payloads.get(trace_id)
+        payload = self.api_gateway.get(trace_id)
         if payload and payload["status"] == "PENDING_DELIVERY":
             payload["status"] = "PROCESSING"
             return True

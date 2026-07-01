@@ -36,7 +36,7 @@ class TranslationService:
             raise ValueError(f"No EDI message found for trace_id={trace_id}")
 
         # 1. Download payload
-        s3_uri = edi_msg["s3_key"]
+        s3_uri = edi_msg["edi_data"]
         raw_payload = await self.storage.download(s3_uri)
 
         # 2. Translate
@@ -48,14 +48,16 @@ class TranslationService:
 
         json_bytes = json.dumps(json_dict).encode("utf-8")
 
+        tenant_id = edi_msg.get("tenant_id")
+
         # 3. Upload translated payload
         new_s3_uri = await self.storage.upload(
             payload=json_bytes,
-            key_prefix=f"api_payloads/{trace_id}",
+            key_prefix=f"tenants/{tenant_id}/api_gateway/{trace_id}",
             file_name="translated.json",
         )
 
-        # 4. Save ApiPayload to DB
+        # 4. Save ApiGateway to DB
         await self.repository.save_api_payload(
             trace_id=trace_id,
             direction="OUTBOUND",
