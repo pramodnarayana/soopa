@@ -1,0 +1,16 @@
+[project]
+name = "security"
+version = "0.1.0"
+description = "Enterprise Cryptography Library for PKCS7, S/MIME, and X509"
+authors = [
+    {name = "EDI Security Team", email = "security@edi.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=44.0.0",
+    "pyopenssl>=26.3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

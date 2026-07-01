@@ -7,9 +7,12 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "cryptography>=41.0.0",
+    "security",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+security = { workspace = true }

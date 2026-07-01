@@ -1,6 +1,21 @@
+"""
+Delivery Service — orchestrates the final-mile delivery of EDI and JSON payloads.
+
+Design decisions:
+  - OCP: Uses a handler registry dict instead of an if/elif chain.
+    Adding a new protocol (FTP, VAN) requires only adding a new entry to
+    `_HANDLER_KEYS` and a new `_deliver_*` method — no modification of existing logic.
+  - SRP: AS2 crypto preparation is delegated to AS2MessageOrchestrator.
+  - DIP: Depends only on Port abstractions, never on concrete adapters.
+  - Fail-fast: `as2_delivery` is required (not Optional). Use NullAS2DeliveryAdapter
+    for worker deployments that don't need AS2 delivery.
+"""
+
 import logging
 from typing import Any
 
+from pipeline.core.as2_orchestrator import AS2MessageOrchestrator
+from pipeline.ports.as2 import AS2DeliveryPort
 from pipeline.ports.http import HttpDeliveryPort
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.sftp import SftpDeliveryPort
@@ -9,11 +24,21 @@ from pipeline.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 
+# ── Handler Registry ──────────────────────────────────────────────────────────
+# Maps route field name → method name on DeliveryService.
+# OCP: Open for extension (add a key + method), closed for modification
+# (existing entries are never touched).
+_HANDLER_KEYS: list[tuple[str, str]] = [
+    ("webhook_partner_id", "_deliver_webhook"),
+    ("sftp_partner_id", "_deliver_sftp"),
+    ("as2_partner_id", "_deliver_as2"),
+]
+
 
 class DeliveryService:
     """
-    Pure domain service for orchestrating delivery of payloads (JSON or EDI).
-    Follows Hexagonal Architecture and performs dynamic Envelope Routing.
+    Orchestrates final-mile delivery of EDI and API payloads.
+    Routes messages to the correct delivery handler based on the route config.
     """
 
     def __init__(
@@ -22,18 +47,21 @@ class DeliveryService:
         repository: RepositoryPort,
         http_delivery: HttpDeliveryPort,
         sftp_delivery: SftpDeliveryPort,
+        as2_delivery: AS2DeliveryPort,
         vault: VaultPort | None = None,
     ) -> None:
         self.storage = storage
         self.repository = repository
         self.http_delivery = http_delivery
         self.sftp_delivery = sftp_delivery
+        self.as2_delivery = as2_delivery
         self.vault = vault
+        self._as2_orchestrator = AS2MessageOrchestrator(vault=vault)
 
     async def deliver(self, trace_id: str) -> None:
         """
-        Dynamically looks up the route using the ISA envelope and delivers
-        the payload to the configured trading partner.
+        Looks up the route for the given trace_id and dispatches to the
+        correct delivery handler via the handler registry.
         """
         logger.info(f"Starting delivery pipeline for trace_id={trace_id}")
 
@@ -49,26 +77,29 @@ class DeliveryService:
         if not sender_id or not receiver_id:
             raise ValueError(f"EDI Message {trace_id} is missing sender/receiver IDs for routing.")
 
-        # 1. Lookup Route
         route = await self.repository.get_route(direction, sender_id, receiver_id, transaction_type)
         if not route:
             logger.error(f"No {direction} route found for {sender_id}->{receiver_id}")
             raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
 
-        # 2. Execute Delivery based on configured partner
-        if route.get("webhook_partner_id"):
-            await self._deliver_webhook(trace_id, route["webhook_partner_id"])
-        elif route.get("sftp_partner_id"):
-            await self._deliver_sftp(trace_id, route["sftp_partner_id"], edi_msg)
-        elif route.get("as2_partner_id"):
-            await self._deliver_as2(trace_id, route["as2_partner_id"], edi_msg)
-        else:
-            raise ValueError(
-                f"Route {route['route_id']} is not configured with any destination partner."
-            )
+        # ── Dispatch via registry (OCP) ───────────────────────────────────────
+        for route_key, handler_name in _HANDLER_KEYS:
+            partner_id = route.get(route_key)
+            if partner_id:
+                handler = getattr(self, handler_name)
+                await handler(trace_id, partner_id, edi_msg)
+                return
 
-    async def _deliver_webhook(self, trace_id: str, partner_id: str) -> None:
-        # Webhook delivery expects the JSON translated ApiPayload
+        raise ValueError(
+            f"Route {route['route_id']} is not configured with any destination partner."
+        )
+
+    # ── Delivery Handlers ─────────────────────────────────────────────────────
+
+    async def _deliver_webhook(
+        self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]
+    ) -> None:
+        """Delivers the translated JSON payload to a webhook endpoint."""
         if not await self.repository.claim_api_payload(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return
@@ -93,18 +124,18 @@ class DeliveryService:
             )
         except Exception:
             await self.repository.update_api_payload_status(trace_id, "FAILED")
-            logger.exception(f"Delivery failed for trace_id={trace_id}")
+            logger.exception(f"Webhook delivery failed for trace_id={trace_id}")
             return
 
         if 200 <= status_code < 300:
             await self.repository.update_api_payload_status(trace_id, "DELIVERED")
-            logger.info(f"Successfully delivered trace_id={trace_id} to webhook {partner['url']}")
+            logger.info(f"Delivered trace_id={trace_id} → webhook {partner['url']}")
         else:
             await self.repository.update_api_payload_status(trace_id, "FAILED")
-            logger.error(f"Failed to deliver trace_id={trace_id}. HTTP Status: {status_code}")
-            return
+            logger.error(f"Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}")
 
     async def _deliver_sftp(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
+        """Uploads the raw EDI payload to the partner's SFTP server."""
         if not await self.repository.claim_edi_message(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return
@@ -113,13 +144,11 @@ class DeliveryService:
         if not partner:
             raise ValueError(f"SFTP partner {partner_id} not found.")
 
-        # We deliver the EDI payload directly for SFTP
         try:
             raw_payload = await self.storage.download(edi_msg["s3_key"])
-            # Generate a filename
             filename = f"{trace_id}.edi"
 
-            password = partner["credentials_vault_ref"]
+            password: str = partner["credentials_vault_ref"]
             if password and self.vault:
                 password = await self.vault.get_secret(password)
 
@@ -134,16 +163,108 @@ class DeliveryService:
                 payload=raw_payload,
             )
             await self.repository.update_edi_message_status(trace_id, "DELIVERED")
-            logger.info(f"Successfully delivered trace_id={trace_id} to SFTP {partner['host']}")
+            logger.info(f"Delivered trace_id={trace_id} → SFTP {partner['host']}")
         except Exception:
             await self.repository.update_edi_message_status(trace_id, "FAILED")
             logger.exception(f"SFTP delivery failed for trace_id={trace_id}")
-            return
 
     async def _deliver_as2(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
-        partner = await self.repository.get_as2_partner(partner_id)
-        if not partner:
-            raise ValueError(f"AS2 partner {partner_id} not found.")
+        """Transmits the EDI payload via AS2 (RFC 4130)."""
+        if not await self.repository.claim_edi_message(trace_id):
+            logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
+            return
 
-        raise NotImplementedError("AS2 dispatch via pyas2/Mendelson is not yet implemented.")
-        logger.info(f"Mock AS2 delivery successful for trace_id={trace_id} to {partner['as2_id']}")
+        try:
+            remote_partner = await self.repository.get_as2_partner(partner_id)
+            if not remote_partner:
+                raise ValueError(f"AS2 partner {partner_id} not found.")
+
+            remote_url: str | None = remote_partner.get("remote_url")
+            if not remote_url:
+                raise ValueError(f"AS2 partner {partner_id} has no remote_url configured.")
+
+            local_partner_id: str | None = remote_partner.get("local_partner_id")
+            local_partner = (
+                await self.repository.get_local_as2_partner(local_partner_id)
+                if local_partner_id
+                else None
+            )
+
+            raw_payload = await self.storage.download(edi_msg["s3_key"])
+
+            as2_msg = await self._as2_orchestrator.build(
+                raw_payload=raw_payload,
+                local_partner=local_partner,
+                remote_partner=remote_partner,
+            )
+        except Exception:
+            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            logger.exception(f"AS2 message build failed for trace_id={trace_id}")
+            return
+
+        try:
+            status_code, response_headers, response_body = await self.as2_delivery.deliver(
+                url=remote_url,
+                body=as2_msg.body,
+                headers=as2_msg.headers,
+            )
+        except RuntimeError:
+            # Misconfiguration (e.g. NullAS2DeliveryAdapter) — treat as a terminal failure
+            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
+            return
+        except Exception:
+            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            logger.exception(f"AS2 HTTP transmission failed for trace_id={trace_id}")
+            return
+
+        if 200 <= status_code < 300:
+            import email
+
+            # Reconstruct the HTTP response as an email message to parse the multipart MDN
+            headers_str = "\r\n".join(f"{k}: {v}" for k, v in response_headers.items())
+            raw_msg_bytes = headers_str.encode("utf-8") + b"\r\n\r\n" + response_body
+            msg = email.message_from_bytes(raw_msg_bytes)
+
+            disposition = ""
+            received_mic = ""
+            for part in msg.walk():
+                if part.get_content_type() == "message/disposition-notification":
+                    payload = part.get_payload()
+                    if isinstance(payload, list) and payload:
+                        disp_msg = payload[0]
+                        if isinstance(disp_msg, email.message.Message):
+                            disposition = str(disp_msg.get("Disposition", ""))
+                            received_mic = str(disp_msg.get("Received-content-MIC", ""))
+                    break
+
+            is_success = False
+            if (
+                disposition
+                and "processed" in disposition.lower()
+                and "failed" not in disposition.lower()
+            ):
+                is_success = True
+                if as2_msg.mic and (
+                    not received_mic
+                    or as2_msg.mic.replace(" ", "").lower() != received_mic.replace(" ", "").lower()
+                ):
+                    is_success = False
+
+            if is_success:
+                await self.repository.update_edi_message_status(trace_id, "DELIVERED")
+                logger.info(
+                    f"Delivered trace_id={trace_id} → {remote_url} "
+                    f"(HTTP {status_code}). MIC={as2_msg.mic}"
+                )
+            else:
+                await self.repository.update_edi_message_status(trace_id, "FAILED")
+                logger.error(
+                    f"Sync MDN indicates failure for trace_id={trace_id}. "
+                    f"Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
+                )
+        else:
+            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            logger.error(
+                f"AS2 delivery failed for trace_id={trace_id} → {remote_url} (HTTP {status_code})"
+            )

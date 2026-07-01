@@ -1,6 +1,5 @@
 from uuid import UUID
 
-from identity.tenant_context import get_tenant_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,10 +11,7 @@ class TradingPartnerRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def find_by_as2_id(self, as2_id: str) -> AS2Partner | None:
-        tenant_id = get_tenant_id()
-        if tenant_id is None:
-            raise RuntimeError("Database queries require an active tenant context.")
+    async def find_by_as2_id(self, tenant_id: int, as2_id: str) -> AS2Partner | None:
 
         result = await self.session.execute(
             select(AS2Partner).where(
@@ -31,14 +27,11 @@ class EdiMessageRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _tenant_id(self) -> int:
-        tenant_id = get_tenant_id()
-        if tenant_id is None:
-            raise RuntimeError("Database queries require an active tenant context.")
-        return tenant_id
+    # removed _tenant_id
 
     async def save_message(
         self,
+        tenant_id: int,
         trace_id: UUID,
         direction: str,
         connection_type: str,
@@ -49,7 +42,7 @@ class EdiMessageRepository:
         as2_message_id: str | None = None,
     ) -> EdiMessage:
         record = EdiMessage(
-            tenant_id=self._tenant_id(),
+            tenant_id=tenant_id,
             trace_id=trace_id,
             direction=direction,
             connection_type=connection_type,

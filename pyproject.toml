@@ -24,6 +24,7 @@ pythonpath = [
     "libs/config/src",
     "libs/identity/src",
     "libs/observability/src",
+    "libs/security/src",
     "services/as2_server/src",
 ]
 addopts = "-v --tb=short"

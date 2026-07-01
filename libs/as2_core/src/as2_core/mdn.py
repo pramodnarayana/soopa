@@ -5,8 +5,18 @@ Calculates MIC (Message Integrity Check) and constructs the multipart/report.
 
 import base64
 import hashlib
+from enum import StrEnum
 
 from .message import AS2MDN, AS2Message
+
+
+class Disposition(StrEnum):
+    PROCESSED = "automatic-action/MDN-sent-automatically; processed"
+    DECRYPTION_FAILED = "automatic-action/MDN-sent-automatically; failed/decryption-failed"
+    AUTHENTICATION_FAILED = "automatic-action/MDN-sent-automatically; failed/authentication-failed"
+    INSUFFICIENT_SECURITY = (
+        "automatic-action/MDN-sent-automatically; failed/insufficient-message-security"
+    )
 
 
 def calculate_mic(payload: bytes, mic_alg: str = "sha256") -> str:
@@ -49,26 +59,3 @@ def generate_mdn(original_message: AS2Message, disposition: str, mic_alg: str = 
         mic=mic,
         is_signed=False,  # Will be signed later if requested via disposition-notification-options
     )
-
-
-def render_mdn_report(mdn: AS2MDN, boundary: str = "----=_MDNBoundary") -> bytes:
-    """
-    Renders the MDN dataclass into a raw HTTP multipart/report payload.
-    """
-    # This is a simplified representation of RFC 4130 multipart/report construction.
-    report = (
-        f"--{boundary}\r\n"
-        "Content-Type: text/plain; charset=us-ascii\r\n\r\n"
-        f"The AS2 message has been processed.\r\n"
-        f"--{boundary}\r\n"
-        "Content-Type: message/disposition-notification\r\n\r\n"
-        f"Original-Message-ID: <{mdn.original_message_id}>\r\n"
-        f"Disposition: {mdn.disposition}\r\n"
-    )
-
-    if mdn.mic:
-        report += f"Received-content-MIC: {mdn.mic}\r\n"
-
-    report += f"--{boundary}--\r\n"
-
-    return report.encode("utf-8")

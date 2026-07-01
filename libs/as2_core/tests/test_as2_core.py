@@ -9,7 +9,7 @@ All inputs and outputs are raw Python bytes/dicts.
 """
 
 import pytest
-from as2_core.mdn import calculate_mic, generate_mdn, render_mdn_report
+from as2_core.mdn import Disposition, calculate_mic, generate_mdn
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
 
@@ -136,18 +136,18 @@ class TestMDNGeneration:
     def test_mdn_swaps_from_and_to(self) -> None:
         """The MDN must swap AS2-From and AS2-To (we reply to the sender)."""
         msg = self._make_message()
-        mdn = generate_mdn(msg, disposition="automatic-action/MDN-sent-automatically; processed")
+        mdn = generate_mdn(msg, disposition=Disposition.PROCESSED)
         assert mdn.headers["AS2-From"] == "SOOPAEDI"
         assert mdn.headers["AS2-To"] == "PARTNER"
 
     def test_mdn_includes_original_message_id(self) -> None:
         msg = self._make_message()
-        mdn = generate_mdn(msg, disposition="processed")
+        mdn = generate_mdn(msg, disposition=Disposition.PROCESSED)
         assert mdn.original_message_id == "original-msg-001"
 
     def test_mdn_calculates_mic_when_payload_present(self) -> None:
         msg = self._make_message()
-        mdn = generate_mdn(msg, disposition="processed")
+        mdn = generate_mdn(msg, disposition=Disposition.PROCESSED)
         assert mdn.mic is not None
         assert len(mdn.mic) > 0
 
@@ -158,23 +158,5 @@ class TestMDNGeneration:
             as2_to="SOOPAEDI",
             payload=b"",
         )
-        mdn = generate_mdn(msg, disposition="processed")
+        mdn = generate_mdn(msg, disposition=Disposition.PROCESSED)
         assert mdn.mic is None
-
-    def test_render_mdn_report_contains_required_fields(self) -> None:
-        msg = self._make_message()
-        mdn = generate_mdn(msg, disposition="automatic-action/MDN-sent-automatically; processed")
-        report = render_mdn_report(mdn)
-
-        assert b"message/disposition-notification" in report
-        assert b"original-msg-001" in report
-        assert b"Received-content-MIC" in report
-
-    def test_render_mdn_report_for_failure_contains_disposition(self) -> None:
-        msg = self._make_message()
-        mdn = generate_mdn(
-            msg, disposition="automatic-action/MDN-sent-automatically; failed/authentication-failed"
-        )
-        report = render_mdn_report(mdn)
-
-        assert b"failed/authentication-failed" in report

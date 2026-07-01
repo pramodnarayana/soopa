@@ -12,7 +12,19 @@ dependencies = [
     "gunicorn>=22.0.0",
     "prometheus-client>=0.20.0",
     "python-dotenv>=1.0.0",
+    "as2-core",
+    "security",
+    "database",
+    "config",
+    "observability",
 ]
+
+[tool.uv.sources]
+as2-core = { workspace = true }
+security = { workspace = true }
+database = { workspace = true }
+config = { workspace = true }
+observability = { workspace = true }
 
 
 [build-system]

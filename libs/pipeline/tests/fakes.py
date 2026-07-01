@@ -54,6 +54,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         self.webhook_partners: dict[str, dict[str, Any]] = {}
         self.sftp_partners: dict[str, dict[str, Any]] = {}
         self.as2_partners: dict[str, dict[str, Any]] = {}
+        self.local_as2_partners: dict[str, dict[str, Any]] = {}
 
     async def get_edi_message(self, trace_id: str) -> dict[str, Any] | None:
         return self.edi_messages.get(trace_id)
@@ -138,3 +139,124 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
     async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
         return self.as2_partners.get(partner_id)
+
+    async def get_local_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+        return self.local_as2_partners.get(partner_id)
+
+
+# ---------------------------------------------------------------------------
+# Delivery Port Fakes — single source of truth for all test files (DRY)
+# ---------------------------------------------------------------------------
+
+
+class FakeHttpDeliveryAdapter:
+    """Records all webhook delivery calls. Configurable response status code."""
+
+    def __init__(self, status_code: int = 200) -> None:
+        self.delivered: list[dict[str, Any]] = []
+        self.status_code = status_code
+
+    async def deliver(self, url: str, payload: bytes, auth_token: str | None = None) -> int:
+        self.delivered.append({"url": url, "payload": payload, "auth_token": auth_token})
+        return self.status_code
+
+
+class FakeSftpDeliveryAdapter:
+    """Records all SFTP delivery calls. Always succeeds."""
+
+    def __init__(self) -> None:
+        self.delivered: list[dict[str, Any]] = []
+
+    async def deliver(
+        self,
+        host: str,
+        port: int,
+        username: str,
+        password: str,
+        host_key: str | None,
+        remote_path: str,
+        filename: str,
+        payload: bytes,
+    ) -> None:
+        self.delivered.append(
+            {
+                "host": host,
+                "port": port,
+                "username": username,
+                "password": password,
+                "host_key": host_key,
+                "remote_path": remote_path,
+                "filename": filename,
+                "payload": payload,
+            }
+        )
+
+
+class FakeAS2DeliveryAdapter:
+    """Records all AS2 delivery calls. Returns a minimal sync MDN response."""
+
+    def __init__(
+        self,
+        status_code: int = 200,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self.headers = headers or {
+            "Content-Type": 'multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"'
+        }
+        self.delivered: list[dict[str, Any]] = []
+        if body is not None:
+            self.body = body
+        else:
+            self.body = (
+                b"------=_MDNBoundary\r\n"
+                b"Content-Type: text/plain; charset=us-ascii\r\n\r\n"
+                b"The AS2 message has been processed.\r\n"
+                b"------=_MDNBoundary\r\n"
+                b"Content-Type: message/disposition-notification\r\n\r\n"
+                b"Original-Message-ID: <msg-123>\r\n"
+                b"Disposition: automatic-action/MDN-sent-automatically; processed\r\n"
+                b"------=_MDNBoundary--\r\n"
+            )
+
+    async def deliver(
+        self, url: str, body: bytes, headers: dict[str, str]
+    ) -> tuple[int, dict[str, str], bytes]:
+        self.delivered.append({"url": url, "body": body, "headers": headers})
+        if getattr(self, "raise_on_deliver", False):
+            raise Exception("Mock delivery failure")
+
+        import base64
+        import hashlib
+
+        digest = hashlib.sha256(body).digest()
+        mic = base64.b64encode(digest).decode("ascii") + ", sha256"
+
+        resp_body = self.body
+        if b"Received-content-MIC" not in resp_body:
+            resp_body = resp_body.replace(
+                b"Disposition: automatic-action/MDN-sent-automatically; processed\r\n",
+                f"Disposition: automatic-action/MDN-sent-automatically; processed\r\nReceived-content-MIC: {mic}\r\n".encode(),
+            )
+
+        return self.status_code, self.headers, resp_body
+
+
+class FakeVault:
+    """Returns pre-seeded secrets by reference key. Raises KeyError on unknown refs."""
+
+    def __init__(self, secrets: dict[str, str] | None = None) -> None:
+        self.secrets: dict[str, str] = secrets or {}
+
+    async def get_secret(self, ref: str) -> str:
+        if ref not in self.secrets:
+            raise KeyError(f"FakeVault: unknown secret ref '{ref}'")
+        return self.secrets[ref]
+
+
+class NullVault:
+    """Always raises — use when tests must assert that Vault is never called."""
+
+    async def get_secret(self, ref: str) -> str:
+        raise AssertionError(f"NullVault.get_secret called unexpectedly with ref='{ref}'")

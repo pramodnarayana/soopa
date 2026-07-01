@@ -216,7 +216,33 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return {
             "name": partner.name,
             "as2_id": partner.as2_id,
+            "public_cert_pem": partner.public_cert_pem,
+            "public_cert_vault_ref": partner.public_cert_vault_ref,
             "local_url": partnership.local_url,
             "remote_url": partnership.remote_url,
+            "local_partner_id": str(partnership.local_partner_id),
             "credentials_vault_ref": partnership.credentials_vault_ref,
+            "encryption_algorithm": partnership.encryption_algorithm,
+            "signature_algorithm": partnership.signature_algorithm,
+            "mdn_type": partnership.mdn_type,
+            "mdn_url": partnership.mdn_url,
+        }
+
+    async def get_local_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+        """Fetches the local (our) AS2 partner to retrieve signing key and cert refs."""
+        result = await self.session.execute(
+            select(AS2Partner).where(
+                AS2Partner.id == uuid.UUID(partner_id),
+                AS2Partner.active.is_(True),
+            )
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "name": record.name,
+            "as2_id": record.as2_id,
+            "public_cert_pem": record.public_cert_pem,
+            "public_cert_vault_ref": record.public_cert_vault_ref,
+            "private_key_vault_ref": record.private_key_vault_ref,
         }
