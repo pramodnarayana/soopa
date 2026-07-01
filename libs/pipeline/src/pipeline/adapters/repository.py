@@ -35,6 +35,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
         return {
             "trace_id": str(record.trace_id),
+            "tenant_id": record.tenant_id,
             "edi_data": record.edi_data,
             "format_standard": record.format_standard,
             "transaction_type": record.transaction_type,

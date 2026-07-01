@@ -33,6 +33,7 @@ async def test_trading_partner_repository_find_by_as2_id() -> None:
 
 async def test_edi_message_repository_save_message() -> None:
     mock_session = AsyncMock()
+    mock_session.add = MagicMock()
     tenant_id = 1
 
     repo = EdiMessageRepository(mock_session)
@@ -43,7 +44,7 @@ async def test_edi_message_repository_save_message() -> None:
         trace_id=trace_id,
         direction="INBOUND",
         connection_type="AS2",
-        edi_data="s3://bucket/test.edi",
+        edi_data="s3://bucket/tenants/1/inbound/test.edi",
         sender_id="SENDER123",
         receiver_id="RECV456",
         status="RECEIVED",
@@ -54,5 +55,7 @@ async def test_edi_message_repository_save_message() -> None:
     assert result.status == "RECEIVED"
     assert result.sender_id == "SENDER123"
     assert result.receiver_id == "RECV456"
+    assert result.edi_data == "s3://bucket/tenants/1/inbound/test.edi"
+    assert result.message_id == "msg-123"
     mock_session.add.assert_called_once()
     mock_session.flush.assert_awaited_once()

@@ -2,7 +2,9 @@
 Pure logic for parsing AS2 raw HTTP requests into AS2Message dataclasses.
 """
 
-from .message import AS2Message
+import email
+
+from .message import AS2MDN, AS2Message
 
 
 def parse_as2_request(headers: dict[str, str], raw_body: bytes) -> AS2Message:
@@ -36,4 +38,38 @@ def parse_as2_request(headers: dict[str, str], raw_body: bytes) -> AS2Message:
         is_signed=is_signed,
         is_compressed=is_compressed,
         raw_mime=raw_body,
+    )
+
+
+def parse_mdn(headers: dict[str, str], raw_body: bytes) -> AS2MDN:
+    """
+    Parses a raw MDN HTTP response (headers and body) into an AS2MDN.
+    """
+
+    # Reconstruct the HTTP response as an email message to parse the multipart MDN
+    headers_str = "\r\n".join(f"{k}: {v}" for k, v in headers.items())
+    raw_msg_bytes = headers_str.encode("utf-8") + b"\r\n\r\n" + raw_body
+    msg = email.message_from_bytes(raw_msg_bytes)
+
+    disposition = ""
+    received_mic = None
+    original_message_id = ""
+
+    for part in msg.walk():
+        if part.get_content_type() == "message/disposition-notification":
+            payload = part.get_payload()
+            if isinstance(payload, list) and payload:
+                disp_msg = payload[0]
+                if isinstance(disp_msg, email.message.Message):
+                    disposition = str(disp_msg.get("Disposition", ""))
+                    received_mic = str(disp_msg.get("Received-content-MIC", ""))
+                    original_message_id = str(disp_msg.get("Original-Message-ID", "")).strip(" <>")
+            break
+
+    return AS2MDN(
+        original_message_id=original_message_id,
+        disposition=disposition,
+        headers=headers,
+        mic=received_mic,
+        is_signed=False,
     )

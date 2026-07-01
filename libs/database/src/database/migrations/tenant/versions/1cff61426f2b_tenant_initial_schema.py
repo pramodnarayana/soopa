@@ -54,7 +54,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_api_gateway_tenant_id"), "api_gateway", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_api_gateway_trace_id"), "api_gateway", ["trace_id"], unique=True)
+    op.create_index(op.f("ix_api_gateway_trace_id"), "api_gateway", ["trace_id"], unique=False)
     op.create_table(
         "as2_partners",
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
@@ -115,7 +115,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_edi_messages_tenant_id"), "edi_messages", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_edi_messages_trace_id"), "edi_messages", ["trace_id"], unique=True)
+    op.create_index(op.f("ix_edi_messages_trace_id"), "edi_messages", ["trace_id"], unique=False)
     op.create_index(
         "ix_edi_msgs_sender_recv",
         "edi_messages",
@@ -232,14 +232,17 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["as2_partner_id"],
             ["as2_partners.id"],
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["sftp_partner_id"],
             ["sftp_partners.id"],
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["webhook_partner_id"],
             ["webhook_partners.id"],
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint(
@@ -272,10 +275,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["as2_partner_id"],
             ["as2_partners.id"],
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["sftp_partner_id"],
             ["sftp_partners.id"],
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint(

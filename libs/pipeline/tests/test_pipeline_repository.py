@@ -87,6 +87,7 @@ async def test_get_api_payload() -> None:
 
     assert result is not None
     assert result["status"] == "PENDING_DELIVERY"
+    assert result["request"] == "s3://out"
 
 
 async def test_update_api_payload_status() -> None:

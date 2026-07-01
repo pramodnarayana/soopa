@@ -219,24 +219,11 @@ class DeliveryService:
             return
 
         if 200 <= status_code < 300:
-            import email
+            from as2_core import parse_mdn
 
-            # Reconstruct the HTTP response as an email message to parse the multipart MDN
-            headers_str = "\r\n".join(f"{k}: {v}" for k, v in response_headers.items())
-            raw_msg_bytes = headers_str.encode("utf-8") + b"\r\n\r\n" + response_body
-            msg = email.message_from_bytes(raw_msg_bytes)
-
-            disposition = ""
-            received_mic = ""
-            for part in msg.walk():
-                if part.get_content_type() == "message/disposition-notification":
-                    payload = part.get_payload()
-                    if isinstance(payload, list) and payload:
-                        disp_msg = payload[0]
-                        if isinstance(disp_msg, email.message.Message):
-                            disposition = str(disp_msg.get("Disposition", ""))
-                            received_mic = str(disp_msg.get("Received-content-MIC", ""))
-                    break
+            mdn = parse_mdn(response_headers, response_body)
+            disposition = mdn.disposition
+            received_mic = mdn.mic
 
             is_success = False
             if disposition:

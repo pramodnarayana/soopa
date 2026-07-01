@@ -48,10 +48,12 @@ class TranslationService:
 
         json_bytes = json.dumps(json_dict).encode("utf-8")
 
+        tenant_id = edi_msg.get("tenant_id")
+
         # 3. Upload translated payload
         new_s3_uri = await self.storage.upload(
             payload=json_bytes,
-            key_prefix=f"api_gateway/{trace_id}",
+            key_prefix=f"tenants/{tenant_id}/api_gateway/{trace_id}",
             file_name="translated.json",
         )
 
