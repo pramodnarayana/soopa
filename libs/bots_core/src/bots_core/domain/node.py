@@ -10,16 +10,6 @@ from bots_core.domain.exceptions import MappingFormatError, MappingRootError
 
 # bots-modules
 logger = logging.getLogger(__name__)
-from bots_core.infrastructure.config.botsconfig import (
-    BOTSIDNR,
-    FIELDS,
-    ID,
-    ISFIELD,
-    LEVEL,
-    MPATH,
-    QUERIES,
-    SUBFIELDS,
-)
 from bots_core.utils import botslib
 from bots_core.utils.botslib import gettext as _
 
@@ -63,6 +53,8 @@ class Node:
         result = {}
         if self.record:
             result["record"] = self.record.copy()
+        if self._queries:
+            result["queries"] = self._queries.copy()
         if self.children:
             result["children"] = [child.to_dict() for child in self.children]
         return result
@@ -71,6 +63,8 @@ class Node:
     def from_dict(cls, data: dict) -> "Node":
         """Deserialize a Node tree from a pure Python dictionary."""
         node = cls(record=data.get("record", {}).copy())
+        if "queries" in data:
+            node._queries = data["queries"].copy()
         for child_data in data.get("children", []):
             node.append(cls.from_dict(child_data))
         return node
@@ -161,7 +155,7 @@ class Node:
         information will be placed in ta_info and in db-ta
         """
         tmpdict = {}
-        for key, value in record_definition[QUERIES].items():
+        for key, value in record_definition.queries.items():
             # search in last added node
             found = self.enhancedget(value)
             if found is not None:
@@ -252,7 +246,7 @@ class Node:
     def _changecore(self, where, change):
         # check all key, value for first part of where;
         for key, value in where[0].items():
-            if key not in self.record or value != self.record[key]:
+            if self.record is None or key not in self.record or value != self.record[key]:
                 # no match:
                 return False
         # all key,value are matched.
@@ -286,7 +280,7 @@ class Node:
     def _deletecore(self, mpaths):
         # check all items in first part of mpaths
         for key, value in mpaths[0].items():
-            if key not in self.record or value != self.record[key]:
+            if self.record is None or key not in self.record or value != self.record[key]:
                 return 0
         # all items are matched
         if len(mpaths) == 1:
@@ -357,7 +351,7 @@ class Node:
             # node is not end-node
             # check all items in mpath;
             for key, value in mpaths[0].items():
-                if key not in self.record or value != self.record[key]:
+                if not self.record or key not in self.record or value != self.record[key]:
                     # does not match/is not right node
                     return None
             # all items in mpath are matched and OK; recursuve search
@@ -374,7 +368,7 @@ class Node:
         terug = 1
         # check all items in mpath;
         for key, value in mpaths[0].items():
-            if key not in self.record:
+            if not self.record or key not in self.record:
                 # does not match/is not right node
                 return None
             if value is None:
@@ -434,7 +428,7 @@ class Node:
     def _getloopcore(self, mpaths):
         """recursive part of getloop()"""
         for key, value in mpaths[0].items():
-            if key not in self.record or value != self.record[key]:
+            if self.record is None or key not in self.record or value != self.record[key]:
                 return
         # all items are checked and OK.
         if len(mpaths) == 1:
@@ -467,7 +461,7 @@ class Node:
     def _getloopcore_including_mpath(self, mpaths):
         """recursive part of getloop()"""
         for key, value in mpaths[0].items():
-            if key not in self.record or value != self.record[key]:
+            if self.record is None or key not in self.record or value != self.record[key]:
                 return
         # all items are checked and OK.
         if len(mpaths) == 1:
@@ -790,26 +784,26 @@ class Node:
             mpath = mpaths[0]
             for record_definition in structure:
                 if (
-                    record_definition[ID] == mpath["BOTSID"]
-                    and record_definition[BOTSIDNR] == mpath["BOTSIDnr"]
+                    record_definition.id == mpath["BOTSID"]
+                    and record_definition.botsidnr == mpath["BOTSIDnr"]
                 ):
                     for key in mpath:
                         if key == "BOTSIDnr":
                             # BOTSIDnr is not in grammar, so do not check
                             continue
-                        for field_definition in record_definition[FIELDS]:
-                            if field_definition[ISFIELD]:
-                                if key == field_definition[ID]:
+                        for field_definition in record_definition.fields:
+                            if field_definition.is_field:
+                                if key == field_definition.id:
                                     # check next key
                                     break
                             else:
-                                if key == field_definition[ID]:
+                                if key == field_definition.id:
                                     # first check compostie-key itself, for repeating composites
                                     # check next key
                                     break
-                                for grammarsubfield in field_definition[SUBFIELDS]:
+                                for grammarsubfield in field_definition.subfields:
                                     # loop subfields
-                                    if key == grammarsubfield[ID]:
+                                    if key == grammarsubfield.id:
                                         # check next key
                                         break
                                 else:
@@ -818,13 +812,12 @@ class Node:
                                 # check next key
                                 break
                         else:
-                            # Not found in record!
                             return False
                     # all fields in mpath are correct; go to next level of mpath..
                     if mpaths[1:]:
-                        if LEVEL not in record_definition:
+                        if not getattr(record_definition, "level", None):
                             return False
-                        return _mpath_ok_with_grammar(record_definition[LEVEL], mpaths[1:])
+                        return _mpath_ok_with_grammar(record_definition.level, mpaths[1:])
                     # no more levels, all fields found
                     return True
             return False
@@ -869,7 +862,7 @@ class Node:
         # new list
         new = []
         for childnode in self.children:
-            if childnode.structure[MPATH] in print_as_row:
+            if childnode.structure.mpath in print_as_row:
                 if not new:
                     # new is still empty
                     new.append([childnode])

@@ -70,8 +70,11 @@ class SQLAlchemyIdentityRepository(IIdentityRepository):
         # Format: "<base_name>'s Organization (<uuid>)"
         # Reserve: 17 chars for "'s Organization (" + 32 for hex UUID + 1 for ")" = 50 chars
         max_base_name_len = 255 - 50
+        user_display_name = user.name or user.email
         base_name = (
-            user.name[:max_base_name_len] if len(user.name) > max_base_name_len else user.name
+            user_display_name[:max_base_name_len]
+            if len(user_display_name) > max_base_name_len
+            else user_display_name
         )
         tenant = Tenant(
             name=f"{base_name}'s Organization ({tenant_uuid})",

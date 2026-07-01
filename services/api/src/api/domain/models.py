@@ -28,6 +28,7 @@ class CreateAS2PartnershipCmd:
     mdn_url: str | None = None
     encryption_algorithm: str = "AES256"
     signature_algorithm: str = "SHA256"
+    edi_version: str | None = None
     advanced_flags: dict[str, Any] | None = None
 
 

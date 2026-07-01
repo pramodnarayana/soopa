@@ -11,6 +11,7 @@ export type Partnership = {
   mdn_type: string;
   encryption_algorithm: string;
   signature_algorithm: string;
+  edi_version?: string | null;
 }
 
 interface PlatformPartnersContextType {

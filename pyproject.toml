@@ -82,8 +82,7 @@ indent-style = "space"
 source = ["libs", "services"]
 omit = [
     "*/tests/*",
-    "*/migrations/*",
-    "libs/bots_core/*"
+    "*/migrations/*"
 ]
 
 [tool.coverage.report]

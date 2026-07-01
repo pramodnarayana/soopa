@@ -8,13 +8,11 @@ class AuthorizationService:
         self.tenant_repo = tenant_repo
 
     async def get_authorization_profile(
-        self, tenant_id: int, token_payload: dict[str, Any], current_rls_tenant: int | None
+        self, tenant_id: int, is_platform_admin: bool, current_rls_tenant: int | None
     ) -> dict[str, Any]:
         """
         Calculates the user's roles, permissions, and feature flags without touching HTTP or SQLAlchemy.
         """
-        zitadel_roles = token_payload.get("urn:zitadel:iam:org:project:roles", {})
-        is_platform_admin = "Platform_Admin" in zitadel_roles
 
         # Fetch Tenant feature flags using Port
         tenant_flags = await self.tenant_repo.get_tenant_flags(tenant_id)

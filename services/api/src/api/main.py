@@ -5,7 +5,7 @@ from typing import Any
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.session import get_global_session
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException
 from identity.dependencies import get_current_tenant_id, get_raw_jwt, get_tenant_session
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,19 +80,12 @@ async def get_me(
     auth_service = AuthorizationService(tenant_repo)
 
     profile = await auth_service.get_authorization_profile(
-        tenant_id=tenant_id, token_payload=token_payload, current_rls_tenant=current_rls_tenant
+        tenant_id=tenant_id,
+        is_platform_admin="Platform_Admin"
+        in token_payload.get("urn:zitadel:iam:org:project:roles", {}),
+        current_rls_tenant=current_rls_tenant,
     )
 
-    # Prevent non-admins from spoofing X-Tenant-ID
-    _ = token_payload.get("urn:zitadel:iam:org:project:roles", {}).get("tenant_id")
-    # Zitadel might encode the tenant in roles or metadata, let's assume it's in a custom claim for now
-    # or rely on auth_service.
-    if not profile["is_platform_admin"]:
-        token_tenant = token_payload.get("urn:soopa:tenant_id")
-        if token_tenant is None or str(token_tenant) != str(tenant_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Tenant ID mismatch or missing claim.",
-            )
-
+    # The tenant_id is securely resolved from the database via get_current_tenant_id.
+    # Therefore, we do not need to check for a custom token claim here.
     return profile

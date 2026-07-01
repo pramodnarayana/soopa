@@ -16,22 +16,13 @@ import socket
 import sys
 
 from bots_core.domain.exceptions import (
-    KillWholeFileException,
-    PanicError,
-    ParsePassthroughException,
-    ScriptError,
     ScriptImportError,
-    txtexc,
 )
-from bots_core.infrastructure.config.botsconfig import DONE, ERROR, FILEOUT, OK, PROCESS
 
 gettext = std_gettext.gettext
 
 
 class _BotsGlobalStub:
-    routeid = None
-    confirmrules = []
-
     class ini:
         @staticmethod
         def get(*args, **kwargs):
@@ -46,25 +37,10 @@ class _BotsGlobalStub:
             return False
 
     version = ""
-    db_port = None
     logger = logging.getLogger(__name__)
-
-    class currentrun:
-        @staticmethod
-        def get_minta4query():
-            return ""
 
 
 botsglobal = _BotsGlobalStub()
-
-
-def insertta(querystring, params=None):
-    """Insert a transaction record into the database and return the inserted idta."""
-    if botsglobal.db_port is None:
-        # Fallback if no DB port is configured
-        return 1
-    return botsglobal.db_port.insertta(querystring, params)
-
 
 try:
     import pickle
@@ -77,278 +53,6 @@ _ = gettext
 MAXINT = (2**31) - 1
 
 logger = logging.getLogger(__name__)
-
-
-# **********************************************************/**
-# ************* getters/setters for some globals ***********/**
-# **********************************************************/**
-def setrouteid(routeid):
-    botsglobal.routeid = routeid
-
-
-def getrouteid():
-    return botsglobal.routeid
-
-
-# **********************************************************/**
-# ***************** class  Transaction *********************/**
-# **********************************************************/**
-
-# Per-execution context for process stack (moved out of class to avoid shared mutable state)
-_processlist_stack = [0]
-
-
-class _Transaction:
-    """
-    abstract class for db-ta.
-    This class is used for communication with db-ta.
-    """
-
-    # filtering values for db handling to avoid unknown fields in db.
-    filterlist = (
-        "statust",
-        "status",
-        "divtext",
-        "parent",
-        "child",
-        "script",
-        "frompartner",
-        "topartner",
-        "fromchannel",
-        "tochannel",
-        "editype",
-        "messagetype",
-        "merge",
-        "testindicator",
-        "reference",
-        "frommail",
-        "tomail",
-        "contenttype",
-        "errortext",
-        "filename",
-        "charset",
-        "alt",
-        "idroute",
-        "nrmessages",
-        "retransmit",
-        "confirmasked",
-        "confirmed",
-        "confirmtype",
-        "confirmidta",
-        "envelope",
-        "botskey",
-        "cc",
-        "filesize",
-        "numberofresends",
-        "rsrv1",
-        "rsrv2",
-        "rsrv3",
-        "rsrv4",
-        "rsrv5",
-    )
-    idta = None
-
-    @property
-    def processlist(self):
-        """Access the per-execution process stack."""
-        return _processlist_stack
-
-    def update(self, **ta_info):
-        """
-        Updates db-ta with named-parameters/dict.
-        Use a filter to update only valid fields in db-ta
-        """
-        setstring = ",".join(key + "=%(" + key + ")s" for key in ta_info if key in self.filterlist)
-        if not setstring:
-            # nothing to update
-            return
-        ta_info["selfid"] = self.idta
-        print(
-            """UPDATE ta
-               SET """
-            + setstring
-            + """
-               WHERE idta=%(selfid)s""",
-            ta_info,
-        )
-
-    def delete(self):
-        """Deletes current transaction"""
-        print(
-            "DELETE FROM ta WHERE idta=%(idta)s",
-            {"idta": self.idta},
-        )
-
-    def deletechildren(self):
-        self.deleteonlychildren_core(self.idta)
-
-    def deleteonlychildren_core(self, idta):
-        for row in query("SELECT idta FROM ta WHERE parent=%(idta)s", {"idta": idta}):
-            self.deleteonlychildren_core(row["idta"])
-            print(
-                """DELETE FROM ta WHERE idta=%(idta)s""",
-                {"idta": row["idta"]},
-            )
-
-    def syn(self, *ta_vars):
-        """access of attributes of transaction as ta.fromid, ta.filename etc"""
-        varsstring = ",".join(ta_vars)
-        for row in query(
-            "SELECT "
-            + varsstring
-            + """
-                 FROM ta WHERE idta=%(idta)s""",
-            {"idta": self.idta},
-        ):
-            self.__dict__.update(dict(row))
-
-    def synall(self):
-        """access of attributes of transaction as ta.fromid, ta.filename etc"""
-        for row in query("""SELECT * FROM ta WHERE idta=%(idta)s""", {"idta": self.idta}):
-            self.__dict__.update(dict(row))
-
-    def copyta(self, status, **ta_info):
-        """
-        copy old transaction, return new transaction.
-        parameters for new transaction are in ta_info
-        (new transaction is updated with these values).
-        """
-        script = _processlist_stack[-1]
-        newidta = insertta(
-            """INSERT INTO ta (
-                script,status,parent,frompartner,topartner,fromchannel,tochannel,editype,messagetype,
-                alt,merge,testindicator,reference,frommail,tomail,charset,contenttype,filename,idroute,
-                nrmessages,botskey,envelope,rsrv3,cc)
-            SELECT %(script)s,%(newstatus)s,idta,frompartner,topartner,fromchannel,tochannel,editype,messagetype,
-                alt,merge,testindicator,reference,frommail,tomail,charset,contenttype,filename,idroute,nrmessages,
-                botskey,envelope,rsrv3,cc
-            FROM ta
-            WHERE idta=%(idta)s""",
-            {"idta": self.idta, "script": script, "newstatus": status},
-        )
-        newta = OldTransaction(newidta)
-        newta.update(**ta_info)
-        return newta
-
-
-class OldTransaction(_Transaction):
-    """Resurrect old transaction"""
-
-    def __init__(self, idta):
-        self.idta = idta
-
-
-class NewTransaction(_Transaction):
-    """Generate new transaction."""
-
-    def __init__(self, **ta_info):
-        # filter ta_info
-        updatedict = dict((key, value) for key, value in ta_info.items() if key in self.filterlist)
-        updatedict["script"] = _processlist_stack[-1]
-        namesstring = ",".join(key for key in updatedict)
-        varsstring = ",".join(f"%({key})s" for key in updatedict)
-        self.idta = insertta(
-            f"""INSERT INTO ta ({namesstring}) VALUES ({varsstring})""",
-            updatedict,
-        )
-
-
-class NewProcess(NewTransaction):
-    """
-    Create a new process (which is very much like a transaction).
-    Used in logging of processes.
-    Each process is placed on stack processlist
-    """
-
-    def __init__(self, functionname=""):
-        super().__init__(filename=functionname, status=PROCESS, idroute=getrouteid())
-        _processlist_stack.append(self.idta)
-
-    def update(self, **ta_info):
-        """update process, delete from process-stack."""
-        super().update(**ta_info)
-        _processlist_stack.pop()
-
-
-# **********************************************************/**
-# ************************ Database ************************/**
-# **********************************************************/**
-def addinfocore(change, where, wherestring):
-    """core function for add/changes information in db-ta's."""
-    wherestring = " WHERE idta > %(rootidta)s AND " + wherestring
-    # count the number of dbta changed
-    counter = 0
-    for row in query("""SELECT idta FROM ta """ + wherestring, where):
-        counter += 1
-        ta_from = OldTransaction(row["idta"])
-        # make new ta from ta_from, using parameters from change
-        ta_from.copyta(**change)
-        # update 'old' ta
-        ta_from.update(statust=DONE)
-    return counter
-
-
-def addinfo(change, where):
-    """
-    change ta's to new phase: ta's are copied to new ta.
-    returns the number of db-ta that have been changed.
-    change (dict): values to change.
-    where (dict): selection.
-    """
-    where.setdefault("rootidta", botsglobal.currentrun.get_minta4query())
-    # where.setdefault('statust', OK)
-    # change.setdefault('statust', OK)
-
-    # wherestring; does not use rootidta
-    wherestring = " AND ".join(f"{key}=%({key})s " for key in where if key != "rootidta")
-    return addinfocore(change=change, where=where, wherestring=wherestring)
-
-
-def updateinfocore(change, where, wherestring=""):
-    """
-    update info in ta's.
-    where (dict) selects ta's,
-    change (dict) sets values;
-    """
-    wherestring = f" WHERE idta > %(rootidta)s AND {wherestring}"
-    # change-dict: discard empty values.
-    # Change keys: this is needed because same keys can be in where-dict
-    change2 = [(key, value) for key, value in change.items() if value is not None]
-    if not change2:
-        return False
-    changestring = ",".join(f"{key}=%(change_{key})s" for key, value in change2)
-    where.update((f"change_{key}", value) for key, value in change2)
-    if botsglobal.db_port is None:
-        from bots_core.domain.exceptions import PanicError
-
-        raise PanicError("Database port is not initialized")
-    return botsglobal.db_port.changeq(f"UPDATE ta SET {changestring}{wherestring}", where)
-
-
-def updateinfo(change, where):
-    """
-    update ta's.
-    returns the number of db-ta that have been changed.
-    change (dict): values to change.
-    where (dict): selection.
-    """
-    where.setdefault("rootidta", botsglobal.currentrun.get_minta4query())
-    where.setdefault("statust", OK)
-    change.setdefault("statust", OK)
-    # wherestring for copy & done
-    wherestring = " AND ".join(f"{key}=%({key})s " for key in where if key != "rootidta")
-    return updateinfocore(change=change, where=where, wherestring=wherestring)
-
-
-def changestatustinfo(change, where):
-    return updateinfo({"statust": change}, where)
-
-
-def query(querystring, *args):
-    """general query. yields rows from query"""
-    if botsglobal.db_port is None:
-        raise PanicError("Database port is not initialized")
-    yield from botsglobal.db_port.query(querystring, *args)
 
 
 # **********************************************************/**
@@ -394,55 +98,7 @@ def sendbotsemail(partner, subject, reporttext) -> bool | None:
     return False
 
 
-def log_session(func):
-    """
-    used as decorator.
-    The decorated functions are logged as processes.
-    Errors in these functions are caught and logged.
-    """
-
-    def wrapper(*args, **argv):
-        try:
-            ta_process = NewProcess(func.__name__)
-        except Exception:
-            botsglobal.logger.exception("System error - no new process made")
-            raise
-        try:
-            terug = func(*args, **argv)
-        except Exception:
-            txt = txtexc()
-            botsglobal.logger.error("Error in process: %(txt)s", {"txt": txt})
-            ta_process.update(statust=ERROR, errortext=txt)
-            return False
-
-        ta_process.update(statust=DONE)
-        return terug
-
-    return wrapper
-
-
-class ErrorProcess(NewTransaction):
-    """
-    Used in logging of errors in processes:
-    communication.py to indicate errors in receiving files (files have not been received)
-    """
-
-    def __init__(self, functionname="", errortext="", channeldict=None):
-        fromchannel = tochannel = ""
-        if channeldict:
-            if channeldict["inorout"] == "in":
-                fromchannel = channeldict["idchannel"]
-            else:
-                tochannel = channeldict["idchannel"]
-        super().__init__(
-            filename=functionname,
-            status=PROCESS,
-            idroute=getrouteid(),
-            statust=ERROR,
-            errortext=errortext,
-            fromchannel=fromchannel,
-            tochannel=tochannel,
-        )
+# Removed logging and error processes
 
 
 # **********************************************************/**
@@ -510,27 +166,48 @@ def abspath(soort, filename):
 
 
 def abspathdata(filename):
-    data_dir = botsglobal.ini.get("directories", "data", "")
+    data_dir = botsglobal.ini.get("directories", "data")
     if not data_dir:
-        raise ValueError("Data directory is not configured in botsglobal.ini")
-    base_dir = os.path.abspath(data_dir)
-    filepath = os.path.abspath(os.path.join(base_dir, filename))
-    if os.path.commonpath([base_dir, filepath]) != base_dir:
-        raise ValueError(f"Path escape detected: {filename}")
-    return filepath
+        raise ValueError("directories.data configuration is missing or empty")
+    data_dir_real = os.path.realpath(data_dir)
+
+    if os.path.isabs(filename):
+        full_path = os.path.realpath(filename)
+    else:
+        full_path = os.path.realpath(os.path.join(data_dir_real, filename))
+
+    if os.path.commonpath([data_dir_real, full_path]) != data_dir_real:
+        raise ValueError(f"Path is outside data directory: {filename}")
+
+    return full_path
 
 
 def deldata(filename):
     """delete internal data file."""
     filename = abspathdata(filename)
+    _validate_data_path(filename)
     with contextlib.suppress(Exception):
         os.remove(filename)
+
+
+def _validate_data_path(filename):
+    """Ensure that the file path does not contain unauthorized traversals."""
+    if ".." in filename or filename.startswith("/etc/") or filename.startswith("/root/"):
+        raise ValueError(f"Path traversal is not permitted: {filename}")
+    data_dir = botsglobal.ini.get("directories", "data")
+    if not data_dir:
+        raise ValueError("directories.data configuration is missing or empty")
+    data_dir_real = os.path.realpath(data_dir)
+    filename_real = os.path.realpath(filename)
+    if os.path.commonpath([data_dir_real, filename_real]) != data_dir_real:
+        raise ValueError(f"Path is outside data directory: {filename}")
 
 
 def opendata(filename, mode, charset=None, errors="strict"):
     """open internal data file as unicode."""
     # pylint: disable=deprecated-method
     filename = abspathdata(filename)
+    _validate_data_path(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
     return codecs.open(filename, mode, charset, errors)
@@ -546,6 +223,7 @@ def opendata_bin(filename, mode="rb"):
     """open internal data file as binary."""
     # pylint: disable=unspecified-encoding
     filename = abspathdata(filename)
+    _validate_data_path(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
     return open(filename, mode=mode)  # noqa: SIM115
@@ -553,7 +231,7 @@ def opendata_bin(filename, mode="rb"):
 
 def readdata_bin(filename):
     """read internal data file in memory as binary."""
-    with open(abspathdata(filename), mode="rb") as filehandler:
+    with opendata_bin(filename, mode="rb") as filehandler:
         content = filehandler.read()
     return content
 
@@ -564,13 +242,6 @@ def readdata_pickled(filename):
     WARNING: Only load pickles from trusted internal sources.
     This function should only be used for BOTS internal data files.
     """
-    # Validate that filename is from a trusted internal path
-    abs_filename = abspathdata(filename)
-    # Only allow loading from internal data directories (basic safety check)
-    # In production, consider replacing pickle entirely with JSON/msgpack
-    if not abs_filename:
-        raise ValueError("Cannot load pickle from untrusted path")
-
     filehandler = opendata_bin(filename, mode="rb")
     try:
         content = pickle.load(filehandler)
@@ -581,280 +252,16 @@ def readdata_pickled(filename):
 
 def writedata_pickled(filename, content):
     """pickle is a binary/byte stream"""
+    filehandler = opendata_bin(filename, mode="wb")
+    try:
+        pickle.dump(content, filehandler)
+    finally:
+        filehandler.close()
 
 
 # **********************************************************/**
 # ***************** calling modules, programs **************/**
-# **********************************************************/**
-def runscript(module, modulefile, functioninscript, **argv):
-    """
-    Execute userscript. Functioninscript is supposed to be there; if not AttributeError is raised.
-    Often is checked in advance if Functioninscript does exist.
-    """
-    logger.debug(
-        'Run userscript "%(functioninscript)s" in "%(modulefile)s".',
-        {"functioninscript": functioninscript, "modulefile": modulefile},
-    )
-    functiontorun = getattr(module, functioninscript)
-    try:
-        if callable(functiontorun):
-            return functiontorun(**argv)
-        return functiontorun
-
-    except (ParsePassthroughException, KillWholeFileException):
-        # special cases; these exceptions are handled later in specific ways.
-        raise
-
-    except Exception as exc:
-        txt = txtexc()
-        _exception = ScriptError(
-            _('Userscript "%(modulefile)s": "%(txt)s".'), {"modulefile": modulefile, "txt": txt}
-        )
-        # _exception.__cause__ = None
-        raise _exception from exc
-
-
-def tryrunscript(module, modulefile, functioninscript, **argv):
-    if module and hasattr(module, functioninscript):
-        runscript(module, modulefile, functioninscript, **argv)
-        return True
-    return False
-
-
-def runscriptyield(module, modulefile, functioninscript, **argv):
-    logger.debug(
-        'Run userscript "%(functioninscript)s" in "%(modulefile)s".',
-        {"functioninscript": functioninscript, "modulefile": modulefile},
-    )
-    functiontorun = getattr(module, functioninscript)
-    try:
-        yield from functiontorun(**argv)
-    except (ParsePassthroughException, KillWholeFileException):
-        # special cases; these exceptions are handled later in specific ways.
-        raise
-    except Exception as exc:
-        txt = txtexc()
-        _exception = ScriptError(
-            _('Script file "%(modulefile)s": "%(txt)s".'), {"modulefile": modulefile, "txt": txt}
-        )
-        # _exception.__cause__ = None
-        raise _exception from exc
-
-
-# **********************************************************/**
-# *************** confirmrules *****************************/**
-# **********************************************************/**
-_CONFIRMRULES = []
-
-
-def prepare_confirmrules():
-    """
-    as confirmrules are often used, read these into memory. Reason: performance.
-    additional notes:
-     - there are only a few confirmrules (10 would be a lot I guess).
-     - indexing is not helpfull for confirmrules,
-       this means that each time the whole confirmrule-tabel is scanned.
-     - as confirmrules are used for incoming and outgoing (x12, edifact, email)
-       this will almost always lead to better performance.
-    """
-    temp_rules = []
-    for confirmdict in query(
-        """SELECT confirmtype,
-                ruletype,
-                idroute,
-                idchannel_id as idchannel,
-                frompartner_id as frompartner,
-                topartner_id as topartner,
-                messagetype,negativerule
-            FROM confirmrule
-            WHERE active=%(active)s
-            ORDER BY negativerule ASC
-            """,
-        {"active": True},
-    ):
-        temp_rules.append(dict(confirmdict))
-
-    _CONFIRMRULES.clear()
-    _CONFIRMRULES.extend(temp_rules)
-
-
-def set_asked_confirmrules(routedict, rootidta):
-    """set 'ask confirmation/acknowledgements for x12 and edifact"""
-    if not globalcheckconfirmrules("ask-x12-997") and not globalcheckconfirmrules(
-        "ask-edifact-CONTRL"
-    ):
-        return
-    for row in query(
-        """SELECT parent,editype,messagetype,frompartner,topartner
-               FROM ta
-               WHERE idta>%(rootidta)s
-               AND status=%(status)s
-               AND statust=%(statust)s
-               AND (editype='edifact' OR editype='x12') """,
-        {"status": FILEOUT, "statust": OK, "rootidta": rootidta},
-    ):
-        if row["editype"] == "x12":
-            if row["messagetype"][:3] in ["997", "999"]:
-                continue
-            confirmtype = "ask-x12-997"
-        else:
-            if row["messagetype"][:6] in ["CONTRL", "APERAK"]:
-                continue
-            confirmtype = "ask-edifact-CONTRL"
-        if not checkconfirmrules(
-            confirmtype,
-            idroute=routedict["idroute"],
-            idchannel=routedict["tochannel"],
-            topartner=row["topartner"],
-            frompartner=row["frompartner"],
-            messagetype=row["messagetype"],
-        ):
-            continue
-        print(
-            """UPDATE ta
-                   SET confirmasked=%(confirmasked)s, confirmtype=%(confirmtype)s
-                   WHERE idta=%(parent)s """,
-            {"parent": row["parent"], "confirmasked": True, "confirmtype": confirmtype},
-        )
-
-
-def globalcheckconfirmrules(confirmtype):
-    """global check if confirmrules with this confirmtype is uberhaupt used."""
-    return any(confirmdict["confirmtype"] == confirmtype for confirmdict in _CONFIRMRULES)
-
-
-def checkconfirmrules(confirmtype, **kwargs):
-    # pylint: disable=too-many-branches
-    # boolean to return: confirm of not?
-    confirm = False
-    # confirmrules are evaluated one by one; first the positive rules, than the negative rules.
-    # this make it possible to include first, than exclude. Eg: send for 'all', than exclude certain partners.
-    for confirmdict in _CONFIRMRULES:
-        if confirmdict["confirmtype"] != confirmtype:
-            continue
-        if confirmdict["ruletype"] == "all":
-            confirm = not confirmdict["negativerule"]
-        elif confirmdict["ruletype"] == "confirmasked":
-            if kwargs.get("confirmasked") and confirmtype.startswith("send-"):
-                confirm = not confirmdict["negativerule"]
-        elif confirmdict["ruletype"] == "route":
-            if "idroute" in kwargs and confirmdict["idroute"] == kwargs["idroute"]:
-                confirm = not confirmdict["negativerule"]
-        elif confirmdict["ruletype"] == "channel":
-            if "idchannel" in kwargs and confirmdict["idchannel"] == kwargs["idchannel"]:
-                confirm = not confirmdict["negativerule"]
-        elif confirmdict["ruletype"] == "frompartner":
-            if "frompartner" in kwargs and confirmdict["frompartner"] == kwargs["frompartner"]:
-                confirm = not confirmdict["negativerule"]
-        elif confirmdict["ruletype"] == "topartner":
-            if "topartner" in kwargs and confirmdict["topartner"] == kwargs["topartner"]:
-                confirm = not confirmdict["negativerule"]
-        elif confirmdict["ruletype"] == "messagetype":
-            if "messagetype" in kwargs and confirmdict["messagetype"] == kwargs["messagetype"]:
-                confirm = not confirmdict["negativerule"]
-    return confirm
-
-
-# **********************************************************/**
-# ***************###############  misc.   #############
-# **********************************************************/**
-def set_database_lock():
-    try:
-        print("""INSERT INTO mutex (mutexk) VALUES (1)""")
-    except Exception:
-        return False
-    return True
-
-
-def remove_database_lock():
-    print("""DELETE FROM mutex WHERE mutexk=1""")
-
-
-def check_if_other_engine_is_running():
-    """
-    bots-engine always connects to 127.0.0.1 port 28081 (or port as set in bots.ini).
-    this  is a good way of detecting that another bots-engien is still running.
-    problem is avoided anyway if using jobqueueserver.
-    """
-    try:
-        engine_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        port = botsglobal.ini.getint("settings", "port", 28081)
-        engine_socket.bind(("127.0.0.1", port))
-    except OSError:
-        engine_socket.close()
-        raise
-    return engine_socket
-
-
-def trace_origin(ta, where=None):
-    if where is None:
-        where = {}
-    """
-    bots traces back all from the current step/ta.
-    where is a dict that is used to indicate a condition.
-    eg:  {'status':EXTERNIN}
-    If bots finds a ta for which this is true, the ta is added to a list.
-    The list is returned when all tracing is done, and contains all ta's for which 'where' is True
-    """
-
-    def trace_recurse(ta):
-        """
-        recursive
-        walk over ta's backward (to origin).
-        if condition is met, add the ta to a list
-        """
-        for idta in get_parent(ta):
-            donelijst.append(idta)
-            taparent = OldTransaction(idta=idta)
-            taparent.synall()
-            for key, value in where.items():
-                if getattr(taparent, key) != value:
-                    break
-            else:
-                # all where-criteria are true;
-                teruglijst.append(taparent)
-            trace_recurse(taparent)
-
-    def get_parent(ta):
-        """yields the parents of a ta"""
-        if ta.parent:
-            # parent via the normal parent-attribute
-            if ta.parent not in donelijst:
-                yield ta.parent
-        else:
-            # no parent via parent-link, so look via child-link
-            for row in query(
-                """SELECT idta
-                    FROM ta
-                    WHERE idta>%(minidta)s
-                    AND idta<%(maxidta)s
-                    AND child=%(idta)s""",
-                {"idta": ta.idta, "minidta": ta.script, "maxidta": ta.idta},
-            ):
-                if row["idta"] in donelijst:
-                    continue
-                yield row["idta"]
-
-    donelijst = []
-    teruglijst = []
-    ta.synall()
-    trace_recurse(ta)
-    return teruglijst
-
-
-def countoutfiles(idchannel, rootidta):
-    """counts the number of edifiles to be transmitted via outchannel."""
-    for row in query(
-        """SELECT COUNT(*) as count
-               FROM ta
-               WHERE idta>%(rootidta)s
-               AND status=%(status)s
-               AND statust=%(statust)s
-               AND tochannel=%(tochannel)s
-               """,
-        {"status": FILEOUT, "statust": OK, "tochannel": idchannel, "rootidta": rootidta},
-    ):
-        return row["count"]
+# Removed runscript, confirmrules, database locks, and tracing logic
 
 
 def botsinfo():
