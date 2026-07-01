@@ -356,7 +356,11 @@ class Outmessage(message.Message):
                             field_has_data = True
                             # append field
                             fieldbuffer.append(
-                                {VALUE: noderecord[grammarsubfield.id], SFIELD: type_of_field}
+                                {
+                                    VALUE: noderecord[grammarsubfield.id],
+                                    SFIELD: type_of_field,
+                                    FORMATFROMGRAMMAR: grammarsubfield.format,
+                                }
                             )
                             recordbuffer += fieldbuffer
                             fieldbuffer = []

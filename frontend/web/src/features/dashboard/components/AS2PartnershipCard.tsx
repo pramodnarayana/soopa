@@ -29,7 +29,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
   const [mdnType, setMdnType] = useState('SYNC')
   const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256_CBC')
   const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256')
-  const [ediVersion, setEdiVersion] = useState('X12-005010')
+  const [ediVersion, setEdiVersion] = useState('NONE')
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -81,7 +81,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
             <form onSubmit={handleSave} className="grid gap-6 py-4">
 
               {/* Identities Section */}
-              <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="grid gap-2">
                   <Label className="text-slate-600 font-medium">Local Station (Your AS2)</Label>
                   <Select value={localPartnerId} onValueChange={setLocalPartnerId} required>
@@ -118,7 +118,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
               </div>
 
               {/* Networking Section */}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="grid gap-2">
                   <Label htmlFor="local_url" className="text-slate-600 font-medium">Local URL</Label>
                   <Input id="local_url" name="local_url" required placeholder="http://my-as2.com:10080/as2" className="h-10 rounded-xl" />
@@ -131,7 +131,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
 
               {/* Advanced Settings */}
               <div className="flex flex-col gap-6 pt-2 border-t border-slate-100">
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="grid gap-2">
                     <Label className="text-slate-600 font-medium">MDN Delivery Type</Label>
                     <Select value={mdnType} onValueChange={setMdnType}>
@@ -154,7 +154,7 @@ export function AS2PartnershipCard({ count, availablePartners, onSave }: AS2Part
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   <div className="grid gap-2">
                     <Label className="text-slate-600 font-medium">Encryption</Label>
                     <Select value={encryptionAlgorithm} onValueChange={setEncryptionAlgorithm}>

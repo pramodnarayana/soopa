@@ -166,11 +166,16 @@ def abspath(soort, filename):
 
 
 def abspathdata(filename):
-    return filename
+    data_dir = botsglobal.ini.get("directories", "data")
+    if filename.startswith(data_dir):
+        return filename
+    return os.path.join(data_dir, filename)
 
 
 def deldata(filename):
     """delete internal data file."""
+    filename = abspathdata(filename)
+    _validate_data_path(filename)
     with contextlib.suppress(Exception):
         os.remove(filename)
 
@@ -179,11 +184,15 @@ def _validate_data_path(filename):
     """Ensure that the file path does not contain unauthorized traversals."""
     if ".." in filename or filename.startswith("/etc/") or filename.startswith("/root/"):
         raise ValueError(f"Path traversal is not permitted: {filename}")
+    data_dir = botsglobal.ini.get("directories", "data")
+    if not os.path.abspath(filename).startswith(os.path.abspath(data_dir)):
+        raise ValueError(f"Path is outside data directory: {filename}")
 
 
 def opendata(filename, mode, charset=None, errors="strict"):
     """open internal data file as unicode."""
     # pylint: disable=deprecated-method
+    filename = abspathdata(filename)
     _validate_data_path(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
@@ -199,6 +208,7 @@ def readdata(filename, charset=None, errors="strict"):
 def opendata_bin(filename, mode="rb"):
     """open internal data file as binary."""
     # pylint: disable=unspecified-encoding
+    filename = abspathdata(filename)
     _validate_data_path(filename)
     if "w" in mode:
         dirshouldbethere(os.path.dirname(filename))
@@ -207,7 +217,7 @@ def opendata_bin(filename, mode="rb"):
 
 def readdata_bin(filename):
     """read internal data file in memory as binary."""
-    with open(filename, mode="rb") as filehandler:
+    with opendata_bin(filename, mode="rb") as filehandler:
         content = filehandler.read()
     return content
 

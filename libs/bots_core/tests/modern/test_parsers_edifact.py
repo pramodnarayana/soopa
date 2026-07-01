@@ -77,17 +77,17 @@ def test_parser_lexer_trailing_separators():
 
 
 def test_separatorcheck_uniqueness():
-    with pytest.raises(InMessageError, match="same separator is used twice"):
+    with pytest.raises(InMessageError, match=r"\[A64\]"):
         var.separatorcheck("++'")
 
 
 def test_separatorcheck_space():
-    with pytest.raises(InMessageError, match="space is used as separator"):
+    with pytest.raises(InMessageError, match=r"\[A65\]"):
         var.separatorcheck("+ '")
 
 
 def test_separatorcheck_alfanumeric():
-    with pytest.raises(InMessageError, match="separator is alfanumeric"):
+    with pytest.raises(InMessageError, match=r"\[A66\]"):
         var.separatorcheck("+a'")
 
 
@@ -110,4 +110,4 @@ def test_parsefields_repeating_element_not_allowed():
     )
 
     p._parsefields(p.lex_records[0], struct)
-    assert any("expect not-repeating element" in err for err in p.errorlist)
+    assert any("[F40]" in err for err in p.errorlist)

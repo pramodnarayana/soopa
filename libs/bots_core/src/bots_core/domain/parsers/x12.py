@@ -233,7 +233,7 @@ class x12(var):
                         self.ta_info["frompartner"] = field[VALUE]
                     elif count_fields == 9:
                         self.ta_info["topartner"] = field[VALUE]
-                    elif count_fields == 15:
+                    elif count_fields == 14:
                         self.ta_info["reference"] = field[VALUE]
                         return
                 return

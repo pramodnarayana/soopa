@@ -16,9 +16,12 @@ async def test_authorization_platform_admin(service: AuthorizationService):
 
     # Platform Admin status comes only from the trusted role claim in the token
     token_payload = {"urn:zitadel:iam:org:project:roles": {"Platform_Admin": {}}}
+    is_platform_admin = "Platform_Admin" in token_payload.get(
+        "urn:zitadel:iam:org:project:roles", {}
+    )
 
     profile = await service.get_authorization_profile(
-        tenant_id=0, token_payload=token_payload, current_rls_tenant=0
+        tenant_id=0, is_platform_admin=is_platform_admin, current_rls_tenant=0
     )
 
     assert profile["status"] == "success"
@@ -38,9 +41,12 @@ async def test_authorization_standard_user(service: AuthorizationService):
     tenant_repo.flags[1] = {"allow_private_as2": False}
 
     token_payload = {"urn:zitadel:iam:org:project:roles": {}}
+    is_platform_admin = "Platform_Admin" in token_payload.get(
+        "urn:zitadel:iam:org:project:roles", {}
+    )
 
     profile = await service.get_authorization_profile(
-        tenant_id=1, token_payload=token_payload, current_rls_tenant=1
+        tenant_id=1, is_platform_admin=is_platform_admin, current_rls_tenant=1
     )
 
     assert profile["status"] == "success"
@@ -58,7 +64,7 @@ def test_authorization_platform_admin_by_tenant_id():
 
     repo = FakeTenantRepository()
     svc = AuthorizationService(repo)
-    profile = asyncio.run(svc.get_authorization_profile(0, {}, None))
+    profile = asyncio.run(svc.get_authorization_profile(0, True, None))
     # tenant_id == 0 now grants platform admin as a fallback for local dev
     assert profile["is_platform_admin"] is True
     assert profile["role"] == "Owner"

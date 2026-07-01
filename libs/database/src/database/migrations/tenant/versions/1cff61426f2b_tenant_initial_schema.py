@@ -52,7 +52,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_api_payloads_tenant_id'), 'api_payloads', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_api_payloads_trace_id'), 'api_payloads', ['trace_id'], unique=True)
     op.create_table('as2_partners',
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('is_local', sa.Boolean(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
@@ -159,7 +159,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_webhook_partners_tenant_id'), 'webhook_partners', ['tenant_id'], unique=False)
     op.create_table('as2_partnerships',
-    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('local_partner_id', sa.UUID(), nullable=False),
     sa.Column('remote_partner_id', sa.UUID(), nullable=False),

@@ -82,9 +82,7 @@ indent-style = "space"
 source = ["libs", "services"]
 omit = [
     "*/tests/*",
-    "*/migrations/*",
-    "libs/bots_core/src/bots_core/utils/xml2botsgrammar.py",
-    "libs/bots_core/src/bots_core/domain/grammar/grammarcheck.py"
+    "*/migrations/*"
 ]
 
 [tool.coverage.report]

@@ -188,9 +188,17 @@ class var(Inmessage):
         # it appears a csv record is not always closed properly,
         # so force the closing of the last record of csv file:
         if mode_inrecord and self.ta_info.get("allow_lastrecordnotclosedproperly", False):
-            # append element in record
-            lex_record.append({VALUE: value, SFIELD: sfield, LIN: valueline, POS: valuepos})
-            self.lex_records.append(lex_record)
+            # append element in record only if there's actually a value
+            if value:
+                lex_record.append({VALUE: value, SFIELD: sfield, LIN: valueline, POS: valuepos})
+                self.lex_records.append(lex_record)
+            else:
+                raise InMessageError(
+                    _(
+                        "[A51]: Found non-valid data at end of edi file;"
+                        " probably a problem with separators or message structure: empty leftover data."
+                    ),
+                )
         else:
             leftover = value.strip("\x00\x1a")
             if leftover:

@@ -20,13 +20,13 @@ from bots_core.utils.botslib import (
 def test_dirshouldbethere_creates_dir(tmp_path):
     new_dir = str(tmp_path / "subdir" / "nested")
     assert not os.path.exists(new_dir)
-    dirshouldbethere(new_dir)
+    assert dirshouldbethere(new_dir) is True
     assert os.path.isdir(new_dir)
 
 
 def test_dirshouldbethere_existing_dir_is_noop(tmp_path):
     existing_dir = str(tmp_path)
-    dirshouldbethere(existing_dir)  # Should not raise
+    assert dirshouldbethere(existing_dir) is False  # Should not raise and return False
     assert os.path.isdir(existing_dir)
 
 
@@ -48,7 +48,7 @@ def test_opendata_write_and_read(tmp_path):
     def patched_get(section, key, fallback=""):
         if section == "directories" and key == "data":
             return data_dir
-        return fallback
+        return original_get(section, key, fallback)
 
     botslib.botsglobal.ini.get = patched_get  # type: ignore[method-assign]
 
@@ -69,12 +69,23 @@ def test_opendata_binary_write_and_read(tmp_path):
     filepath = str(tmp_path / "test_binary.edi")
     content = b"ISA*00*TEST~"
 
-    with opendata_bin(filepath, "wb") as f:
-        f.write(content)
+    original_get = botslib.botsglobal.ini.get
 
-    with opendata_bin(filepath, "rb") as f:
-        result = f.read()
-    assert result == content
+    def patched_get(section, key, fallback=""):
+        if section == "directories" and key == "data":
+            return str(tmp_path)
+        return original_get(section, key, fallback)
+
+    botslib.botsglobal.ini.get = patched_get  # type: ignore[method-assign]
+    try:
+        with opendata_bin(filepath, "wb") as f:
+            f.write(content)
+
+        with opendata_bin(filepath, "rb") as f:
+            result = f.read()
+        assert result == content
+    finally:
+        botslib.botsglobal.ini.get = original_get
 
 
 # ---------------------------------------------------------------------------

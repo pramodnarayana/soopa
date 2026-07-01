@@ -80,7 +80,10 @@ async def get_me(
     auth_service = AuthorizationService(tenant_repo)
 
     profile = await auth_service.get_authorization_profile(
-        tenant_id=tenant_id, token_payload=token_payload, current_rls_tenant=current_rls_tenant
+        tenant_id=tenant_id,
+        is_platform_admin="Platform_Admin"
+        in token_payload.get("urn:zitadel:iam:org:project:roles", {}),
+        current_rls_tenant=current_rls_tenant,
     )
 
     # The tenant_id is securely resolved from the database via get_current_tenant_id.

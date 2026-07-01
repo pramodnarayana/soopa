@@ -116,10 +116,9 @@ def test_edifact_checkenvelope():
     # UNH1 != UNT1
     # UNH2 unt count invalid
     # UNB count != 2 (it's 2)
-    assert len(parser.errorlist) > 0
-    assert any("UNB-reference" in err for err in parser.errorlist)
-    assert any("UNH-reference" in err for err in parser.errorlist)
-    assert any("invalid" in err for err in parser.errorlist)
+    assert any("[E01]" in err for err in parser.errorlist)
+    assert any("[E04]" in err for err in parser.errorlist)
+    assert any("[E06]" in err for err in parser.errorlist)
 
 
 def test_edifact_checkenvelope_with_ung():
@@ -150,6 +149,5 @@ def test_edifact_checkenvelope_with_ung():
     parser.root = root
     parser.checkenvelope()
 
-    assert len(parser.errorlist) > 0
-    assert any("UNG-reference" in err for err in parser.errorlist)
-    assert any("Groupcount" in err for err in parser.errorlist)
+    assert any("[E07]" in err for err in parser.errorlist)
+    assert any("[E08]" in err or "[E09]" in err for err in parser.errorlist)

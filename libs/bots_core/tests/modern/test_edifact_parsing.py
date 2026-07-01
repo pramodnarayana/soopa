@@ -259,9 +259,9 @@ def test_edifact_syntax_separators_stored(tmp_path):
     orig = _patch_data_dir(tmp_path)
     try:
         obj = _parse(p, tmp_path)
-        # These are set in edifact.set_syntax_used()
-        for key in ("record_sep", "field_sep", "sfield_sep"):
-            assert key in obj.syntax, f"Missing key {key!r} in obj.syntax"
+        assert obj.syntax.get("record_sep") == "'"
+        assert obj.syntax.get("field_sep") == "+"
+        assert obj.syntax.get("sfield_sep") == ":"
         assert obj.syntax.get("record_tag_sep", "") == ""
     finally:
         botsglobal.ini.get = orig

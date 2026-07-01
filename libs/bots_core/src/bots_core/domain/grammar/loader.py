@@ -183,8 +183,10 @@ def do_recorddefs(grammar_obj):
         )
 
     # If already parsed
-    first_val = next(iter(grammar_obj.recorddefs.values())) if grammar_obj.recorddefs else None
-    if isinstance(first_val, list) and first_val and isinstance(first_val[0], FieldDefinition):
+    if grammar_obj.recorddefs and all(
+        isinstance(v, list) and v and isinstance(v[0], FieldDefinition)
+        for v in grammar_obj.recorddefs.values()
+    ):
         return
     # not checked (in this run): so check the recorddefs
     for recordid, fields in grammar_obj.recorddefs.items():
@@ -311,12 +313,10 @@ def do_structure(grammar_obj):
             {"grammar": grammar_obj.grammarname},
         )
 
-    if isinstance(grammar_obj.structure[0], StructureNode):
-        # Already checked and converted to StructureNode in a previous run
-        return
+    if not isinstance(grammar_obj.structure[0], StructureNode):
+        # not checked (in this run): so check the structure and convert
+        validator.checkstructure(grammar_obj, grammar_obj.structure, [])
 
-    # not checked (in this run): so check the structure
-    validator.checkstructure(grammar_obj, grammar_obj.structure, [])
     if grammar_obj.syntax["checkcollision"]:
         validator.checkbackcollision(grammar_obj, grammar_obj.structure)
         validator.checknestedcollision(grammar_obj, grammar_obj.structure)

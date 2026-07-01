@@ -28,6 +28,11 @@ ERROR_IN_GRAMMAR = "BOTS_error_1$%3@7#!%+_)_+[{]}"
 def checkfield(grammar_obj, field, recordid):
     """'normalise' field: make list equal length"""
     # pylint: disable=too-many-branches, too-many-statements
+    if not isinstance(field, list):
+        raise GrammarError(
+            _('Grammar "%(grammar)s", in recorddefs, record "%(record)s": field is not a list.'),
+            {"grammar": grammar_obj.grammarname, "record": recordid},
+        )
     len_field = len(field)
     if len_field == 3:
         # that is: composite
@@ -118,6 +123,18 @@ def checkfield(grammar_obj, field, recordid):
         if isinstance(field[LENGTH], (int, float)):
             pass
         elif isinstance(field[LENGTH], tuple):
+            if len(field[LENGTH]) < 2:
+                raise GrammarError(
+                    _(
+                        'Grammar "%(grammar)s", in recorddefs, record "%(record)s",'
+                        ' field "%(field)s": LENGTH tuple must contain at least (min, max).'
+                    ),
+                    {
+                        "grammar": grammar_obj.grammarname,
+                        "record": recordid,
+                        "field": field[ID],
+                    },
+                )
             if not isinstance(field[LENGTH][0], (int, float)):
                 raise GrammarError(
                     _(
