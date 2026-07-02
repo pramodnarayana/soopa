@@ -3,6 +3,17 @@ from typing import Any
 from uuid import UUID
 
 # ---------------------------------------------------------------------------
+# Sentinels
+# ---------------------------------------------------------------------------
+
+
+class UnsetType:
+    pass
+
+
+UNSET = UnsetType()
+
+# ---------------------------------------------------------------------------
 # Partner Creation Commands
 # ---------------------------------------------------------------------------
 
@@ -46,17 +57,17 @@ class CreateAS2PartnershipCmd:
 
 @dataclass(frozen=True)
 class UpdateAS2PartnershipCmd:
-    name: str | None = None
-    local_partner_id: UUID | None = None
-    remote_partner_id: UUID | None = None
-    credentials_vault_ref: str | None = None
-    mdn_type: str | None = None
-    mdn_url: str | None = None
-    encryption_algorithm: str | None = None
-    signature_algorithm: str | None = None
-    edi_version: str | None = None
-    advanced_flags: dict[str, Any] | None = None
-    active: bool | None = None
+    name: str | UnsetType = UNSET
+    local_partner_id: UUID | UnsetType = UNSET
+    remote_partner_id: UUID | UnsetType = UNSET
+    credentials_vault_ref: str | None | UnsetType = UNSET
+    mdn_type: str | UnsetType = UNSET
+    mdn_url: str | None | UnsetType = UNSET
+    encryption_algorithm: str | UnsetType = UNSET
+    signature_algorithm: str | UnsetType = UNSET
+    edi_version: str | None | UnsetType = UNSET
+    advanced_flags: dict[str, Any] | None | UnsetType = UNSET
+    active: bool | UnsetType = UNSET
 
 
 @dataclass(frozen=True)
@@ -73,10 +84,11 @@ class CreateSFTPPartnerCmd:
 class UpdateSFTPPartnerCmd:
     name: str | None = None
     host: str | None = None
+    port: int | None = None
     username: str | None = None
     credentials_vault_ref: str | None = None
-    port: int | None = None
     remote_path: str | None = None
+    active: bool | None = None
 
 
 @dataclass(frozen=True)

@@ -51,7 +51,7 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
     if (formData.local_partner_id !== partnership.local_partner_id) payload.local_partner_id = formData.local_partner_id;
     if (formData.remote_partner_id !== partnership.remote_partner_id) payload.remote_partner_id = formData.remote_partner_id;
     if (formData.mdn_type !== partnership.mdn_type) payload.mdn_type = formData.mdn_type;
-    if (formData.mdn_url !== partnership.mdn_url) payload.mdn_url = formData.mdn_url;
+    if (formData.mdn_url !== partnership.mdn_url) payload.mdn_url = formData.mdn_url || null;
     if (formData.encryption_algorithm !== partnership.encryption_algorithm) payload.encryption_algorithm = formData.encryption_algorithm;
     if (formData.signature_algorithm !== partnership.signature_algorithm) payload.signature_algorithm = formData.signature_algorithm;
     if (formData.edi_version !== partnership.edi_version) payload.edi_version = formData.edi_version;

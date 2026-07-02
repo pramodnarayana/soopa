@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -83,10 +84,16 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == partner_id,
-                (AS2Partner.tenant_id == tenant_id) | (AS2Partner.tenant_id.is_(None)),
+                AS2Partner.tenant_id == tenant_id,
             )
         )
         return result.scalar_one_or_none()
+
+    async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]:
+        result = await self.session.execute(
+            select(AS2Partner).where(AS2Partner.tenant_id == tenant_id)
+        )
+        return result.scalars().all()
 
     async def delete_as2_identity(self, tenant_id: int, partner_id: UUID) -> None:
         await self.session.execute(
@@ -125,29 +132,31 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
     async def update_as2_partnership(
         self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
     ) -> None:
+        from api.domain.models import UNSET
+
         partnership = await self.get_as2_partnership(tenant_id, partnership_id)
         if partnership:
-            if cmd.name is not None:
+            if cmd.name is not UNSET:
                 partnership.name = cmd.name
-            if cmd.local_partner_id is not None:
+            if cmd.local_partner_id is not UNSET:
                 partnership.local_partner_id = cmd.local_partner_id
-            if cmd.remote_partner_id is not None:
+            if cmd.remote_partner_id is not UNSET:
                 partnership.remote_partner_id = cmd.remote_partner_id
-            if cmd.credentials_vault_ref is not None:
+            if cmd.credentials_vault_ref is not UNSET:
                 partnership.credentials_vault_ref = cmd.credentials_vault_ref
-            if cmd.mdn_type is not None:
+            if cmd.mdn_type is not UNSET:
                 partnership.mdn_type = cmd.mdn_type
-            if cmd.mdn_url is not None:
+            if cmd.mdn_url is not UNSET:
                 partnership.mdn_url = cmd.mdn_url
-            if cmd.encryption_algorithm is not None:
+            if cmd.encryption_algorithm is not UNSET:
                 partnership.encryption_algorithm = cmd.encryption_algorithm
-            if cmd.signature_algorithm is not None:
+            if cmd.signature_algorithm is not UNSET:
                 partnership.signature_algorithm = cmd.signature_algorithm
-            if cmd.edi_version is not None:
+            if cmd.edi_version is not UNSET:
                 partnership.edi_version = cmd.edi_version
-            if cmd.advanced_flags is not None:
+            if cmd.advanced_flags is not UNSET:
                 partnership.advanced_flags = cmd.advanced_flags
-            if cmd.active is not None:
+            if cmd.active is not UNSET:
                 partnership.active = cmd.active
         await self.session.flush()
 
@@ -173,7 +182,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),
-                (AS2Partner.tenant_id == tenant_id) | (AS2Partner.tenant_id.is_(None)),
+                AS2Partner.tenant_id == tenant_id,
             )
         )
         return {row.id: row.name for row in result.all()}
@@ -230,6 +239,12 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         )
         return result.scalar_one_or_none()
 
+    async def list_sftp_partners(self) -> Sequence[Any]:
+        result = await self.session.execute(
+            select(SFTPPartner).where(SFTPPartner.tenant_id == self._tenant_id())
+        )
+        return result.scalars().all()
+
     async def update_sftp_partner(self, partner_id: UUID, cmd: UpdateSFTPPartnerCmd) -> None:
         partner = await self.get_sftp_partner(partner_id)
         if partner:
@@ -265,6 +280,20 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
             )
         )
         return {row.id: row.name for row in result.all()}
+
+    async def get_webhook_partner(self, partner_id: UUID) -> Any:
+        result = await self.session.execute(
+            select(WebhookPartner).where(
+                WebhookPartner.id == partner_id, WebhookPartner.tenant_id == self._tenant_id()
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_webhook_partners(self) -> Sequence[Any]:
+        result = await self.session.execute(
+            select(WebhookPartner).where(WebhookPartner.tenant_id == self._tenant_id())
+        )
+        return result.scalars().all()
 
     async def get_webhook_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
         """Returns a dict mapping Webhook Partner ID to Name."""

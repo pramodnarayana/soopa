@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
 import { createPartnersRepository } from './partnersApi';
 import type { UpdatePartnerPayload, UpdatePartnershipPayload, CreatePartnerPayload, CreatePartnershipPayload, RotateCertPayload } from '../types';
@@ -24,6 +25,32 @@ export const partnersKeys = {
 function useRepository() {
   const auth = useAuth();
   return createPartnersRepository(auth.user?.access_token ?? '');
+}
+
+// ─────────────────────────────────────────────
+// Helper — reusable mutation wrapper with toast
+// ─────────────────────────────────────────────
+
+function useToastMutation<TData, TVariables = any>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
+  successMessage: string,
+  queryKeysToInvalidate: QueryKey[] = []
+) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      queryKeysToInvalidate.forEach(key => {
+        queryClient.invalidateQueries({ queryKey: key });
+      });
+      toast({ title: 'Success', description: successMessage });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -76,60 +103,38 @@ export function useTenantPartnersQuery() {
 
 export function useCreatePlatformPartnerMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: (payload: CreatePartnerPayload) => {
-      // Business rule: remote partners require a public certificate
+  return useToastMutation(
+    (payload: CreatePartnerPayload) => {
       if (!payload.is_local && !payload.public_cert_pem?.trim()) {
         throw new Error('Remote AS2 partners require a public certificate.');
       }
       return repo.createPlatformPartner(payload);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.platformPartners() });
-      toast({ title: 'Success', description: 'Trading partner created successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    'Trading partner created successfully.',
+    [partnersKeys.platformPartners()]
+  );
 }
 
 export function useUpdatePlatformPartnerMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) =>
+  return useToastMutation(
+    ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) =>
       repo.updatePlatformPartner(id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.platformPartners() });
-      toast({ title: 'Success', description: 'Partner updated successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    'Partner updated successfully.',
+    [partnersKeys.platformPartners()]
+  );
 }
 
 export function useDeletePlatformPartner() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: (id: string) => repo.deletePlatformPartner(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.platformPartners() });
-      toast({ title: 'Success', description: 'Partner deleted.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+  return useToastMutation(
+    (id: string) => repo.deletePlatformPartner(id),
+    'Partner deleted.',
+    [partnersKeys.platformPartners()]
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -138,59 +143,38 @@ export function useDeletePlatformPartner() {
 
 export function useCreatePlatformPartnershipMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: (payload: CreatePartnershipPayload) => {
+  return useToastMutation(
+    (payload: CreatePartnershipPayload) => {
       if (!payload.local_partner_id || !payload.remote_partner_id) {
         throw new Error('Both a local and remote trading partner must be selected.');
       }
       return repo.createPlatformPartnership(payload);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.platformPartnerships() });
-      toast({ title: 'Success', description: 'Partnership created successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    'Partnership created successfully.',
+    [partnersKeys.platformPartnerships()]
+  );
 }
 
 export function useUpdatePlatformPartnershipMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdatePartnershipPayload }) =>
+  return useToastMutation(
+    ({ id, payload }: { id: string; payload: UpdatePartnershipPayload }) =>
       repo.updatePlatformPartnership(id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.platformPartnerships() });
-      toast({ title: 'Success', description: 'Partnership updated successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    'Partnership updated successfully.',
+    [partnersKeys.platformPartnerships()]
+  );
 }
 
 export function useDeletePlatformPartnershipMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: (id: string) => repo.deletePlatformPartnership(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.platformPartnerships() });
-      toast({ title: 'Success', description: 'Partnership deleted successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+  return useToastMutation(
+    (id: string) => repo.deletePlatformPartnership(id),
+    'Partnership deleted successfully.',
+    [partnersKeys.platformPartnerships()]
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -199,37 +183,23 @@ export function useDeletePlatformPartnershipMutation() {
 
 export function useUpdateSftpPartnerMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) =>
+  return useToastMutation(
+    ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) =>
       repo.updateSftpPartner(id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.tenant() });
-      toast({ title: 'Success', description: 'SFTP Partner updated successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+    'SFTP Partner updated successfully.',
+    [partnersKeys.tenant()]
+  );
 }
 
 export function useDeleteSftpPartner() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
-  return useMutation({
-    mutationFn: (id: string) => repo.deleteSftpPartner(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.tenant() });
-      toast({ title: 'Success', description: 'SFTP Partner deleted successfully.' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
+  return useToastMutation(
+    (id: string) => repo.deleteSftpPartner(id),
+    'SFTP Partner deleted successfully.',
+    [partnersKeys.tenant()]
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -238,14 +208,12 @@ export function useDeleteSftpPartner() {
 
 export function useRotateCertificatesMutation() {
   const repo = useRepository();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: RotateCertPayload }) =>
+  return useToastMutation(
+    ({ id, payload }: { id: string; payload: RotateCertPayload }) =>
       repo.rotateCertificates(id, payload),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: partnersKeys.all });
-      queryClient.invalidateQueries({ queryKey: partnersKeys.certificates(id) });
-    },
-  });
+    'Certificate operation successful.',
+    [
+      partnersKeys.all,
+    ]
+  );
 }

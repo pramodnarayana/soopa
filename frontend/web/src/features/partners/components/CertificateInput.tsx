@@ -49,7 +49,6 @@ export function CertificateInput({ value, onChange }: CertificateInputProps) {
   };
 
   const switchMode = (next: CertMode) => {
-    handleClear();
     setMode(next);
   };
 

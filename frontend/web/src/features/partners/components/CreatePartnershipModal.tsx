@@ -28,10 +28,10 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
   const createPartnership = useCreatePlatformPartnershipMutation();
 
   useEffect(() => {
-    if (!mdnUrl && platformConfig?.available_as2_receive_urls?.length) {
+    if (mdnType === 'ASYNC' && !mdnUrl && platformConfig?.available_as2_receive_urls?.length) {
       setMdnUrl(platformConfig.available_as2_receive_urls[0]);
     }
-  }, [platformConfig, mdnUrl]);
+  }, [platformConfig, mdnUrl, mdnType]);
 
   const reset = () => {
     setName('')
@@ -58,7 +58,7 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
         local_partner_id: localPartnerId,
         remote_partner_id: remotePartnerId,
         mdn_type: mdnType,
-        mdn_url: mdnUrl || undefined,
+        mdn_url: mdnType === 'ASYNC' ? (mdnUrl || undefined) : undefined,
         encryption_algorithm: encryptionAlgorithm,
         signature_algorithm: signatureAlgorithm,
         edi_version: ediVersion === "NONE" ? undefined : ediVersion,

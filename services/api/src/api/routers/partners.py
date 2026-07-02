@@ -2,7 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from identity.dependencies import get_current_tenant_id
+from identity.dependencies import get_current_tenant_id, get_raw_jwt
 
 from api.adapters.http.dtos import (
     CertificateExportResponse,
@@ -18,6 +18,7 @@ from api.adapters.vault import vault
 from api.core.provisioning import ProvisioningService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
+    get_current_user_profile,
     get_tenant_uow,
     get_uow,
 )
@@ -38,11 +39,50 @@ async def list_tenant_partners(
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Lists all tenant-level partners (AS2 and SFTP)."""
-    # For now, return empty list or just what we have from a basic query
-    # Since this is a new enterprise addition.
     async with uow:
-        # Simplistic implementation just to fulfill the API contract for the UI.
-        return []
+        from collections.abc import Sequence
+
+        as2_partners: Sequence[Any] = []
+        if uow.control_plane:
+            as2_partners = await uow.control_plane.list_as2_partners(tenant_id)
+
+        sftp_partners: Sequence[Any] = []
+        webhook_partners: Sequence[Any] = []
+        if uow.data_plane:
+            sftp_partners = await uow.data_plane.list_sftp_partners()
+            webhook_partners = await uow.data_plane.list_webhook_partners()
+
+        partners = []
+        for p in as2_partners:
+            partners.append(
+                PartnerResponse(
+                    partner_id=p.id,
+                    tenant_id=p.tenant_id,
+                    type="AS2",
+                    status="ACTIVE" if p.active else "INACTIVE",
+                )
+            )
+        for p in sftp_partners:
+            partners.append(
+                PartnerResponse(
+                    partner_id=p.id,
+                    tenant_id=p.tenant_id,
+                    type="SFTP",
+                    status="ACTIVE" if p.active else "INACTIVE",
+                )
+            )
+
+        for p in webhook_partners:
+            partners.append(
+                PartnerResponse(
+                    partner_id=p.id,
+                    tenant_id=p.tenant_id,
+                    type="WEBHOOK",
+                    status="ACTIVE" if p.active else "INACTIVE",
+                )
+            )
+
+        return partners
 
 
 @router.post(
@@ -104,6 +144,7 @@ async def update_as2_partner(
             as2_id=request.as2_id,
             is_local=request.is_local,
             url=str(request.url) if request.url else None,
+            active=request.active,
         )
         entity = await service.update_as2_partner(tenant_id, partner_id, cmd)
         await uow.commit()
@@ -124,6 +165,8 @@ async def export_as2_certificates(
     partner_id: UUID,
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_uow),
+    token_payload: dict[str, Any] = Depends(get_raw_jwt),
+    profile: dict[str, Any] = Depends(get_current_user_profile),
 ) -> Any:
     """Exports current and previous certificates for an AS2 partner."""
     async with uow:
@@ -138,6 +181,15 @@ async def export_as2_certificates(
 
         # Only Local partners have private keys. Fetch them if the vault ref exists.
         if partner.is_local:
+            if "certificates:export_private" not in profile["permissions"]:
+                raise HTTPException(
+                    status_code=403, detail="Insufficient permissions to export private keys."
+                )
+
+            from api.adapters.vault import VaultAdapter
+
+            vault = VaultAdapter()
+
             if partner.private_key_vault_ref:
                 try:
                     response.private_key_pem = vault.retrieve_private_key(
@@ -193,12 +245,16 @@ async def rotate_as2_certificates(
             new_private_pem = priv_bytes.decode("utf-8")
             new_public_pem = pub_bytes.decode("utf-8")
         else:
+            if not request.public_cert_pem:
+                raise HTTPException(
+                    status_code=400, detail="Public certificate PEM is required for upload"
+                )
             new_public_pem = request.public_cert_pem
             if partner.is_local:
                 new_private_pem = request.private_key_pem
 
         # Store private key in vault if local
-        new_private_key_vault_ref = None
+        new_private_key_vault_ref = partner.private_key_vault_ref
         if partner.is_local and new_private_pem:
             try:
                 new_private_key_vault_ref = vault.store_private_key(
@@ -215,11 +271,10 @@ async def rotate_as2_certificates(
         # Update DB entity
         partner.prev_public_cert_pem = partner.public_cert_pem
         partner.prev_public_cert_vault_ref = partner.public_cert_vault_ref
-        partner.prev_private_key_vault_ref = partner.private_key_vault_ref
+        if new_private_pem:
+            partner.prev_private_key_vault_ref = partner.private_key_vault_ref
 
         partner.public_cert_pem = new_public_pem
-        # For public cert vault ref, we don't strictly need to store the public cert in vault anymore as it's in DB,
-        # but we'll leave the ref empty for the new one if we don't store it, or keep it same logic if needed.
         partner.public_cert_vault_ref = None
         partner.private_key_vault_ref = new_private_key_vault_ref
 
@@ -282,6 +337,7 @@ async def update_sftp_partner(
             username=request.username,
             remote_path=request.remote_path,
             credentials_vault_ref=request.credentials_vault_ref,
+            active=request.active,
         )
         entity = await service.update_sftp_partner(tenant_id, partner_id, cmd)
         await uow.commit()
@@ -302,16 +358,18 @@ async def delete_sftp_partner(
 ) -> None:
     """Deletes an SFTP partner."""
     async with uow:
+        from sqlalchemy.exc import IntegrityError
+
         try:
             if uow.data_plane is None:
                 raise HTTPException(status_code=500, detail="Tenant data plane not available")
             await uow.data_plane.delete_sftp_partner(partner_id)
             await uow.commit()
+        except IntegrityError as e:
+            raise HTTPException(
+                status_code=400, detail="Partner is in use and cannot be deleted."
+            ) from e
         except Exception as e:
-            if "IntegrityError" in str(type(e)):
-                raise HTTPException(
-                    status_code=400, detail="Partner is in use and cannot be deleted."
-                ) from e
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 

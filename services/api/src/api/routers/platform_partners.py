@@ -83,27 +83,18 @@ async def create_platform_as2_partner(
             partner_id = await uow.control_plane.create_as2_identity(tenant_id=0, cmd=cmd)
 
             await uow.commit()
+            p = await uow.control_plane.get_as2_partner(tenant_id=0, partner_id=partner_id)
 
             return AS2TradingPartnerResponse(
                 id=str(partner_id),
-                name=request.name,
-                as2_id=request.as2_id,
-                is_local=request.is_local,
-                url=str(request.url) if request.url else None,
+                name=p.name,
+                as2_id=p.as2_id,
+                is_local=p.is_local,
+                url=p.url,
+                active=p.active,
             )
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
-    except Exception:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.exception("Internal error creating platform AS2 partner")
-
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse(
-            status_code=500, content={"detail": "An internal server error occurred."}
-        )
 
 
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])
@@ -164,6 +155,8 @@ async def update_platform_as2_partner(
                 url=updated_partner.url,
                 active=updated_partner.active,
             )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -212,31 +205,28 @@ async def create_platform_as2_partnership(
 
             partnership_id = await uow.control_plane.create_as2_partnership(tenant_id=0, cmd=cmd)
             await uow.commit()
+            p = await uow.control_plane.get_as2_partnership(
+                tenant_id=0, partnership_id=partnership_id
+            )
 
             return AS2PartnershipResponse(
                 id=str(partnership_id),
                 tenant_id=0,
-                name=request.name,
-                local_partner_id=str(request.local_partner_id),
-                remote_partner_id=str(request.remote_partner_id),
-                mdn_type=request.mdn_type,
-                mdn_url=str(request.mdn_url) if request.mdn_url else None,
-                encryption_algorithm=request.encryption_algorithm,
-                signature_algorithm=request.signature_algorithm,
-                edi_version=request.edi_version,
-                status="active",
+                name=p.name,
+                local_partner_id=str(p.local_partner_id),
+                remote_partner_id=str(p.remote_partner_id),
+                mdn_type=p.mdn_type,
+                mdn_url=p.mdn_url,
+                encryption_algorithm=p.encryption_algorithm,
+                signature_algorithm=p.signature_algorithm,
+                edi_version=p.edi_version,
+                status="active" if p.active else "inactive",
+                active=p.active,
             )
-    except Exception:
-        import logging
-
-        from fastapi.responses import JSONResponse
-
-        logger = logging.getLogger(__name__)
-        logger.exception("Internal error creating platform AS2 partner")
-
-        return JSONResponse(
-            status_code=500, content={"detail": "An internal server error occurred."}
-        )
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=400, detail="AS2 Partnership already exists for these partners."
+        ) from e
 
 
 @router.put("/as2/partnerships/{partnership_id}", response_model=AS2PartnershipResponse)
@@ -247,18 +237,27 @@ async def update_platform_as2_partnership(
 ) -> Any:
     try:
         async with uow:
+            from api.domain.models import UNSET
+
+            def get_val(field: str) -> Any:
+                return getattr(request, field) if field in request.model_fields_set else UNSET
+
+            mdn_url_val = get_val("mdn_url")
+            if mdn_url_val not in (UNSET, None):
+                mdn_url_val = str(mdn_url_val)
+
             cmd = UpdateAS2PartnershipCmd(
-                name=request.name,
-                local_partner_id=request.local_partner_id,
-                remote_partner_id=request.remote_partner_id,
-                credentials_vault_ref=request.credentials_vault_ref,
-                mdn_type=request.mdn_type,
-                mdn_url=str(request.mdn_url) if request.mdn_url else None,
-                encryption_algorithm=request.encryption_algorithm,
-                signature_algorithm=request.signature_algorithm,
-                edi_version=request.edi_version,
-                advanced_flags=request.advanced_flags,
-                active=request.active,
+                name=get_val("name"),
+                local_partner_id=get_val("local_partner_id"),
+                remote_partner_id=get_val("remote_partner_id"),
+                credentials_vault_ref=get_val("credentials_vault_ref"),
+                mdn_type=get_val("mdn_type"),
+                mdn_url=mdn_url_val,
+                encryption_algorithm=get_val("encryption_algorithm"),
+                signature_algorithm=get_val("signature_algorithm"),
+                edi_version=get_val("edi_version"),
+                advanced_flags=get_val("advanced_flags"),
+                active=get_val("active"),
             )
             await uow.control_plane.update_as2_partnership(
                 tenant_id=0, partnership_id=partnership_id, cmd=cmd
@@ -285,16 +284,10 @@ async def update_platform_as2_partnership(
                 status="active" if p.active else "inactive",
                 active=p.active,
             )
-    except Exception:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.exception("Internal error updating platform AS2 partnership")
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse(
-            status_code=500, content={"detail": "An internal server error occurred."}
-        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete(

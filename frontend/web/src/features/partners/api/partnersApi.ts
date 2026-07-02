@@ -25,13 +25,20 @@ class HttpPartnersRepository implements IPartnersRepository {
   }
 
   private async request<T>(url: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(url, { ...init, headers: this.headers });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => res.statusText);
-      throw new Error(detail || `HTTP ${res.status}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const res = await fetch(url, { ...init, headers: this.headers, signal: controller.signal });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => res.statusText);
+        throw new Error(detail || `HTTP ${res.status}`);
+      }
+      if (res.status === 204) return undefined as unknown as T;
+      return res.json() as Promise<T>;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    if (res.status === 204) return undefined as unknown as T;
-    return res.json() as Promise<T>;
   }
 
   // ── Platform Trading Partners ──────────────

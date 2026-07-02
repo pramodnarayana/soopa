@@ -114,7 +114,9 @@ const columns = [
   }),
 ];
 
-export function PartnershipsTable({ data, availablePartners, isLoading }: { data: Partnership[]; availablePartners: any[]; isLoading: boolean }) {
+import type { Partner } from '../context/PartnersContext';
+
+export function PartnershipsTable({ data, availablePartners, isLoading }: { data: Partnership[]; availablePartners: Partner[]; isLoading: boolean }) {
   const table = useReactTable({
     data,
     columns,
@@ -184,6 +186,15 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
                 <tr
                   className={`hover:bg-slate-50/50 transition-colors group cursor-pointer ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
                   onClick={() => row.toggleExpanded()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      row.toggleExpanded();
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={row.getIsExpanded()}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-6 py-4">

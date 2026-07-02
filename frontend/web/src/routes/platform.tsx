@@ -11,7 +11,7 @@ import {
   Server,
   LogOut
 } from 'lucide-react'
-import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
+
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
 
 export const Route = createRoute({
@@ -22,9 +22,7 @@ export const Route = createRoute({
 
 export function AppWrapper() {
   return (
-    <PlatformPartnersProvider>
-      <AppLayout />
-    </PlatformPartnersProvider>
+    <AppLayout />
   )
 }
 

@@ -3,9 +3,14 @@ import { PartnershipsTable } from '@/features/partners/components/PartnershipsTa
 import { usePlatformPartners } from '@/features/partners/context/PlatformPartnersContext'
 import { Network } from 'lucide-react'
 import { CreatePartnershipModal } from '@/features/partners/components/CreatePartnershipModal'
+import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
 
 export const Route = createFileRoute('/platform/partnerships')({
-  component: PartnershipsPage,
+  component: () => (
+    <PlatformPartnersProvider>
+      <PartnershipsPage />
+    </PlatformPartnersProvider>
+  )
 })
 
 export function PartnershipsPage() {

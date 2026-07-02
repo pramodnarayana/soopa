@@ -8,22 +8,41 @@ class AuthorizationService:
         self.tenant_repo = tenant_repo
 
     async def get_authorization_profile(
-        self, tenant_id: int, is_platform_admin: bool, current_rls_tenant: int | None
+        self,
+        tenant_id: int,
+        is_platform_admin: bool,
+        current_rls_tenant: int | None,
+        roles: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Calculates the user's roles, permissions, and feature flags without touching HTTP or SQLAlchemy.
         """
+        roles = roles or []
 
         # Fetch Tenant feature flags using Port
         tenant_flags = await self.tenant_repo.get_tenant_flags(tenant_id)
         allow_private_as2 = tenant_flags.get("allow_private_as2", False) if tenant_flags else False
 
         # Map Role to Granular Permissions
-        role = "Owner" if is_platform_admin else "Standard"
+        if is_platform_admin:
+            role = "Owner"
+        elif any(str(r).lower() in ["owner", "admin"] for r in roles):
+            role = "Admin"
+        else:
+            role = "Standard"
+
         permissions = []
 
         if role in ["Owner", "Admin"]:
-            permissions.extend(["users:read", "users:write", "users:delete", "routes:manage"])
+            permissions.extend(
+                [
+                    "users:read",
+                    "users:write",
+                    "users:delete",
+                    "routes:manage",
+                    "certificates:export_private",
+                ]
+            )
         else:
             permissions.extend(["users:read"])
 

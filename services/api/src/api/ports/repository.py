@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -59,6 +60,10 @@ class ControlPlaneRepositoryPort(Protocol):
         """Returns a dict mapping AS2 Partner ID to Name."""
         ...
 
+    async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]:
+        """Lists AS2 Partners for a tenant."""
+        ...
+
     async def create_outbox_event(
         self, tenant_id: int, event_type: str, payload: dict[str, Any]
     ) -> UUID:
@@ -85,6 +90,18 @@ class DataPlaneRepositoryPort(Protocol):
 
     async def get_sftp_partner(self, partner_id: UUID) -> Any:
         """Gets an SFTP Partner from the Tenant DB."""
+        ...
+
+    async def get_webhook_partner(self, partner_id: UUID) -> Any:
+        """Gets a Webhook Partner from the Tenant DB."""
+        ...
+
+    async def list_webhook_partners(self) -> Sequence[Any]:
+        """Lists Webhook Partners."""
+        ...
+
+    async def list_sftp_partners(self) -> Sequence[Any]:
+        """Lists SFTP Partners."""
         ...
 
     async def get_sftp_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:

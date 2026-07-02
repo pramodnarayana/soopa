@@ -1,21 +1,28 @@
 import os
 from functools import lru_cache
+from typing import Any
 
 from database.session import get_global_session
 from fastapi import Depends, HTTPException
 
 # Import tenant_session from identity
-from identity.dependencies import get_current_tenant_id, get_tenant_session
+from identity.dependencies import get_current_tenant_id, get_raw_jwt, get_tenant_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.adapters.repository import (
     SqlAlchemyControlPlaneRepository,
     SqlAlchemyDataPlaneRepository,
+    SqlAlchemyTenantRepository,
 )
 from api.adapters.sqs_queue import SQSMessageQueueAdapter
+from api.core.authorization import AuthorizationService
 from api.core.uow import UnitOfWork
 from api.ports.message_queue import MessageQueuePort
-from api.ports.repository import ControlPlaneRepositoryPort, DataPlaneRepositoryPort
+from api.ports.repository import (
+    ControlPlaneRepositoryPort,
+    DataPlaneRepositoryPort,
+    TenantRepositoryPort,
+)
 
 
 @lru_cache
@@ -61,3 +68,34 @@ def require_platform_admin(tenant_id: int = Depends(get_current_tenant_id)) -> i
             detail="Forbidden. This action requires Platform Admin (Tenant 0) privileges.",
         )
     return tenant_id
+
+
+def get_tenant_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> TenantRepositoryPort:
+    return SqlAlchemyTenantRepository(session)
+
+
+def get_authorization_service(
+    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
+) -> AuthorizationService:
+    return AuthorizationService(tenant_repo)
+
+
+async def get_current_user_profile(
+    tenant_id: int = Depends(get_current_tenant_id),
+    token_payload: dict[str, Any] = Depends(get_raw_jwt),
+    auth_service: AuthorizationService = Depends(get_authorization_service),
+) -> dict[str, Any]:
+    roles = token_payload.get("roles", [])
+    if isinstance(roles, dict):
+        roles = list(roles.keys())
+
+    is_platform_admin = tenant_id == 0 or "Platform_Admin" in roles
+
+    return await auth_service.get_authorization_profile(
+        tenant_id=tenant_id,
+        is_platform_admin=is_platform_admin,
+        current_rls_tenant=None,
+        roles=roles,
+    )

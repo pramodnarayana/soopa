@@ -7,7 +7,7 @@ Each service can use the full AppSettings or cherry-pick specific groups.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -101,6 +101,12 @@ class AppSettings(BaseSettings):
     otel: OtelSettings = Field(default_factory=OtelSettings)
     identity: IdentitySettings = Field(default_factory=IdentitySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
+
+    @model_validator(mode="after")
+    def validate_external_url(self) -> "AppSettings":
+        if self.env != "development" and "localhost" in self.server.external_url:
+            raise ValueError("external_url must not be localhost in non-development environments")
+        return self
 
 
 @lru_cache

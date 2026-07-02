@@ -206,7 +206,7 @@ def upgrade() -> None:
         "as2_partnerships",
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
-        sa.Column("name", sa.String(length=255), nullable=True),
+        sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("local_partner_id", sa.UUID(), nullable=False),
         sa.Column("remote_partner_id", sa.UUID(), nullable=False),
         sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),

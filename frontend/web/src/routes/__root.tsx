@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import { useAuth } from 'react-oidc-context'
 import { Button } from '@/components/ui/button'
+import { Toaster } from '@/components/ui/toaster'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -29,6 +30,7 @@ export function RootComponent() {
   return (
     <div className="font-sans antialiased text-slate-900 min-h-screen">
       <Outlet />
+      <Toaster />
     </div>
   )
 }

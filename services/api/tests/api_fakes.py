@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from api.domain.models import (
@@ -36,6 +37,42 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
+    async def get_as2_partner(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
+        for p in self.partners:
+            if p["id"] == partner_id and p["tenant_id"] == tenant_id:
+                # Mock an AS2Partner DB object
+                class FakePartner:
+                    id = p["id"]
+                    tenant_id = p["tenant_id"]
+                    name = p["cmd"].name
+                    as2_id = p["cmd"].as2_id
+                    is_local = p["cmd"].is_local
+                    url = p["cmd"].url
+                    active = p.get("status", "INACTIVE") == "ACTIVE"
+
+                return FakePartner()
+        return None
+
+    async def get_as2_partnership(self, tenant_id: int, partnership_id: uuid.UUID) -> Any:
+        for p in self.partnerships:
+            if p["id"] == partnership_id and p["tenant_id"] == tenant_id:
+
+                class FakePartnership:
+                    id = p["id"]
+                    tenant_id = p["tenant_id"]
+                    name = p["cmd"].name
+                    local_partner_id = p["cmd"].local_partner_id
+                    remote_partner_id = p["cmd"].remote_partner_id
+                    mdn_type = p["cmd"].mdn_type
+                    mdn_url = p["cmd"].mdn_url
+                    encryption_algorithm = p["cmd"].encryption_algorithm
+                    signature_algorithm = p["cmd"].signature_algorithm
+                    edi_version = p["cmd"].edi_version
+                    active = p.get("status", "INACTIVE") == "ACTIVE"
+
+                return FakePartnership()
+        return None
+
     async def create_outbox_event(
         self, tenant_id: int, event_type: str, payload: dict[str, Any]
     ) -> None:
@@ -52,6 +89,9 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
 
     async def list_trading_partners(self) -> list[Any]:
         return self.partners
+
+    async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]:
+        return [p for p in self.partners if p["tenant_id"] == tenant_id]
 
     async def list_partnerships(self) -> list[Any]:
         return self.partnerships
@@ -106,8 +146,14 @@ class FakeDataPlaneRepository(DataPlaneRepositoryPort):
         self.webhook_partners.append({"id": p_id, "cmd": cmd})
         return p_id
 
+    async def list_sftp_partners(self) -> Sequence[Any]:
+        return self.sftp_partners
+
     async def get_sftp_partners_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         return {p["id"]: p["cmd"].name for p in self.sftp_partners if p["id"] in ids}
+
+    async def list_webhook_partners(self) -> Sequence[Any]:
+        return self.webhook_partners
 
     async def get_webhook_partners_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         return {p["id"]: p["cmd"].name for p in self.webhook_partners if p["id"] in ids}

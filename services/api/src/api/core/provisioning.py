@@ -98,7 +98,7 @@ class ProvisioningService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             type="SFTP",
-            status="ACTIVE",
+            status="INACTIVE",
         )
 
     async def update_sftp_partner(
@@ -106,12 +106,15 @@ class ProvisioningService:
     ) -> PartnerEntity:
         logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
         await self.tenant_repo.update_sftp_partner(partner_id=partner_id, cmd=cmd)
+        updated = await self.tenant_repo.get_sftp_partner(partner_id)
+        if not updated:
+            raise ValueError(f"SFTP partner {partner_id} not found")
 
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
             type="SFTP",
-            status="ACTIVE",
+            status="ACTIVE" if updated.active else "INACTIVE",
         )
 
     async def create_as2_partnership(
@@ -119,6 +122,14 @@ class ProvisioningService:
     ) -> PartnerEntity:
         if not self.global_repo:
             raise ValueError("Control plane repository is required for AS2 partnership creation")
+
+        local_partner = await self.global_repo.get_as2_partner(tenant_id, cmd.local_partner_id)
+        if not local_partner:
+            raise ValueError(f"Local AS2 partner {cmd.local_partner_id} not found")
+
+        remote_partner = await self.global_repo.get_as2_partner(tenant_id, cmd.remote_partner_id)
+        if not remote_partner:
+            raise ValueError(f"Remote AS2 partner {cmd.remote_partner_id} not found")
 
         logger.info(
             f"Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}"
@@ -129,7 +140,7 @@ class ProvisioningService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             type="AS2_PARTNERSHIP",
-            status="ACTIVE",
+            status="INACTIVE",
         )
 
     async def update_as2_partnership(
@@ -142,12 +153,15 @@ class ProvisioningService:
         await self.global_repo.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
+        updated = await self.global_repo.get_as2_partnership(tenant_id, partnership_id)
+        if not updated:
+            raise ValueError(f"AS2 partnership {partnership_id} not found")
 
         return PartnerEntity(
             partner_id=partnership_id,
             tenant_id=tenant_id,
             type="AS2_PARTNERSHIP",
-            status="ACTIVE",
+            status="ACTIVE" if updated.active else "INACTIVE",
         )
 
     async def create_webhook_partner(
@@ -162,7 +176,7 @@ class ProvisioningService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             type="WEBHOOK",
-            status="ACTIVE",
+            status="INACTIVE",
         )
 
     async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> RouteEntity:

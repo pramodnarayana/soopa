@@ -27,6 +27,7 @@ export function SharedRowActions({
         onClick={onToggleActive}
         disabled={isUpdating}
         title={isActive ? `Deactivate ${entityName}` : `Activate ${entityName}`}
+        aria-label={isActive ? `Deactivate ${entityName}` : `Activate ${entityName}`}
         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${isActive ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-300'} ${isUpdating ? 'opacity-50 cursor-wait' : ''}`}
       >
         <span
@@ -42,6 +43,7 @@ export function SharedRowActions({
         disabled={isDeleting}
         className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
         title={`Delete ${entityName}`}
+        aria-label={`Delete ${entityName}`}
       >
         {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
       </button>

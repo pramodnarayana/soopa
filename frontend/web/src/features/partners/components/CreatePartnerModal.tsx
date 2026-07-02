@@ -7,6 +7,7 @@ import { Plus } from 'lucide-react';
 import { CertificateInput } from './CertificateInput';
 import { useCreatePlatformPartnerMutation } from '../api/partnerHooks';
 import { usePlatformConfig } from '@/features/platform/api/configHooks';
+import { useToast } from '@/hooks/use-toast';
 import { Combobox } from '@/components/ui/combobox';
 import { useEffect } from 'react';
 
@@ -20,6 +21,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
   const isDuplicate = existingAs2Ids.includes(as2Id);
 
   const { data: platformConfig } = usePlatformConfig();
+  const { toast } = useToast();
   const createPartner = useCreatePlatformPartnerMutation();
 
   useEffect(() => {
@@ -43,6 +45,18 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
+
+    if (!url || url.trim() === '') {
+      toast({ title: 'Error', description: 'Receiving URL is required.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      new URL(url);
+    } catch {
+      toast({ title: 'Error', description: 'Receiving URL must be a valid URL.', variant: 'destructive' });
+      return;
+    }
 
     createPartner.mutate(
       {

@@ -3,9 +3,14 @@ import { PartnersTable } from '@/features/partners/components/PartnersTable'
 import { usePlatformPartners } from '@/features/partners/context/PlatformPartnersContext'
 import { Server } from 'lucide-react'
 import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal'
+import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
 
 export const Route = createFileRoute('/platform/partners')({
-  component: TradingPartnersPage,
+  component: () => (
+    <PlatformPartnersProvider>
+      <TradingPartnersPage />
+    </PlatformPartnersProvider>
+  )
 })
 
 export function TradingPartnersPage() {

@@ -6,15 +6,19 @@ import {
   useReactTable,
   getExpandedRowModel,
 } from '@tanstack/react-table';
+
+declare module '@tanstack/react-table' {
+  interface TableMeta<TData extends unknown> {
+    scope?: 'platform' | 'tenant';
+  }
+}
 import type { Partner } from '../context/PartnersContext';
 import { useDeletePlatformPartner, useDeleteSftpPartner, useUpdatePlatformPartnerMutation, useUpdateSftpPartnerMutation } from '../api/partnerHooks';
 import { Server, CheckCircle2 } from 'lucide-react';
 import { PartnerDetails } from './PartnerDetails';
 import { SharedRowActions } from './SharedRowActions';
-import { useToast } from '@/hooks/use-toast';
 
 function PartnerRowActions({ partner, scope }: { partner: Partner; scope: 'platform' | 'tenant' }) {
-  const { toast } = useToast();
   const deletePlatform = useDeletePlatformPartner();
   const deleteSftp = useDeleteSftpPartner();
   const updatePlatform = useUpdatePlatformPartnerMutation();
@@ -28,13 +32,9 @@ function PartnerRowActions({ partner, scope }: { partner: Partner; scope: 'platf
     if (!window.confirm(`Are you sure you want to delete ${partner.name}?`)) return;
 
     if (scope === 'platform') {
-      deletePlatform.mutate(partner.id, {
-        onSuccess: () => toast({ title: 'Success', description: 'Partner deleted successfully.' })
-      });
+      deletePlatform.mutate(partner.id);
     } else {
-      deleteSftp.mutate(partner.id, {
-        onSuccess: () => toast({ title: 'Success', description: 'Partner deleted successfully.' })
-      });
+      deleteSftp.mutate(partner.id);
     }
   };
 
@@ -44,13 +44,9 @@ function PartnerRowActions({ partner, scope }: { partner: Partner; scope: 'platf
     const payload = { active: newActiveState };
 
     if (scope === 'platform') {
-      updatePlatform.mutate({ id: partner.id, payload }, {
-        onSuccess: () => toast({ title: 'Success', description: `Partner ${newActiveState ? 'activated' : 'deactivated'}.` })
-      });
+      updatePlatform.mutate({ id: partner.id, payload });
     } else {
-      updateSftp.mutate({ id: partner.id, payload }, {
-        onSuccess: () => toast({ title: 'Success', description: `Partner ${newActiveState ? 'activated' : 'deactivated'}.` })
-      });
+      updateSftp.mutate({ id: partner.id, payload });
     }
   };
 
@@ -114,7 +110,7 @@ const columns = [
     header: '',
     cell: (info) => (
       <div className="flex justify-end">
-        <PartnerRowActions partner={info.row.original} scope={(info.table.options.meta as any)?.scope || 'tenant'} />
+        <PartnerRowActions partner={info.row.original} scope={info.table.options.meta?.scope || 'tenant'} />
       </div>
     ),
   }),
@@ -193,6 +189,15 @@ export function PartnersTable({ data, isLoading, scope = 'tenant' }: { data: Par
                 <tr
                   className={`hover:bg-slate-50/50 transition-colors group cursor-pointer ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
                   onClick={() => row.toggleExpanded()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      row.toggleExpanded();
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={row.getIsExpanded()}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-6 py-4">

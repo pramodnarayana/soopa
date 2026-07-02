@@ -86,6 +86,7 @@ async def get_me(
         tenant_id=tenant_id,
         is_platform_admin=is_platform_admin,
         current_rls_tenant=current_rls_tenant,
+        roles=token_payload.get("roles", []),
     )
 
     # The tenant_id is securely resolved from the database via get_current_tenant_id.

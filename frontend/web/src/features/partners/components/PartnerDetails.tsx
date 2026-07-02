@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import type { Partner } from '../context/PartnersContext';
 import { useCertificatesExportQuery, useUpdatePlatformPartnerMutation, useUpdateSftpPartnerMutation, useRotateCertificatesMutation } from '../api/partnerHooks';
-import { Copy, Download, Loader2, ChevronDown, ChevronRight, CheckCircle2, Clock, Upload, RefreshCw } from 'lucide-react';
+import { Copy, Download, Loader2, ChevronDown, ChevronRight, CheckCircle2, Clock, Upload, RefreshCw, ClipboardPaste } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +21,9 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
   const updateSftp = useUpdateSftpPartnerMutation();
   const rotateCertificates = useRotateCertificatesMutation();
   const isSubmitting = updatePlatform.isPending || updateSftp.isPending;
+
+  const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
+  const [pasteValue, setPasteValue] = useState('');
 
   const { data: certs, isLoading: certsLoading, error: certsError } = useCertificatesExportQuery(partner.id);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,14 +68,7 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
   };
 
   const handleGenerateCertificate = () => {
-    rotateCertificates.mutate({ id: partner.id, payload: { action: 'generate' } }, {
-      onSuccess: () => {
-        toast({ title: 'Success', description: 'Certificate auto-generated and activated.' });
-      },
-      onError: (err: any) => {
-        toast({ title: 'Error', description: err.message || 'Failed to generate certificate.', variant: 'destructive' });
-      }
-    });
+    rotateCertificates.mutate({ id: partner.id, payload: { action: 'generate' } });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,25 +76,28 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
     if (!files || files.length === 0) return;
 
     try {
-      let combinedText = '';
+      let publicCert = '';
+      let privateKey = '';
+
       for (let i = 0; i < files.length; i++) {
         const text = await files[i].text();
-        combinedText += text + '\n';
+        // Split by the standard PEM headers and parse blocks
+        if (text.includes('-----BEGIN CERTIFICATE-----')) {
+          const match = text.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g);
+          if (match && match.length > 0) publicCert = match[0] + '\n';
+        }
+        if (text.includes('-----BEGIN PRIVATE KEY-----') || text.includes('-----BEGIN RSA PRIVATE KEY-----')) {
+          const match = text.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
+          if (match && match.length > 0) privateKey = match[0] + '\n';
+        }
       }
 
       rotateCertificates.mutate({
         id: partner.id,
         payload: {
           action: 'upload',
-          public_cert_pem: combinedText,
-          private_key_pem: partner.is_local ? combinedText : undefined
-        }
-      }, {
-        onSuccess: () => {
-          toast({ title: 'Success', description: 'Certificate uploaded and activated.' });
-        },
-        onError: (err: any) => {
-          toast({ title: 'Error', description: err.message || 'Failed to upload certificate.', variant: 'destructive' });
+          public_cert_pem: publicCert.trim() || undefined as any, // required, but validation will catch if undefined
+          private_key_pem: partner.is_local && privateKey.trim() ? privateKey.trim() : undefined
         }
       });
     } catch { // eslint-disable-line no-unused-vars
@@ -106,6 +107,37 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  const handlePasteSubmit = () => {
+    if (!pasteValue.trim()) return;
+
+    let publicCert = '';
+    let privateKey = '';
+
+    const text = pasteValue;
+    if (text.includes('-----BEGIN CERTIFICATE-----')) {
+      const match = text.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g);
+      if (match && match.length > 0) publicCert = match[0] + '\n';
+    }
+    if (text.includes('-----BEGIN PRIVATE KEY-----') || text.includes('-----BEGIN RSA PRIVATE KEY-----')) {
+      const match = text.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
+      if (match && match.length > 0) privateKey = match[0] + '\n';
+    }
+
+    rotateCertificates.mutate({
+      id: partner.id,
+      payload: {
+        action: 'upload',
+        public_cert_pem: publicCert.trim() || undefined as any,
+        private_key_pem: partner.is_local && privateKey.trim() ? privateKey.trim() : undefined
+      }
+    }, {
+      onSuccess: () => {
+        setPasteDialogOpen(false);
+        setPasteValue('');
+      }
+    });
   };
 
   return (
@@ -201,6 +233,10 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
                   Generate Certificate
                 </Button>
               )}
+              <Button variant="outline" size="sm" onClick={() => setPasteDialogOpen(true)} disabled={rotateCertificates.isPending}>
+                <ClipboardPaste className="w-4 h-4 mr-2" />
+                Paste
+              </Button>
               <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={rotateCertificates.isPending}>
                 <Upload className="w-4 h-4 mr-2" />
                 Upload
@@ -256,6 +292,29 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
           ) : null}
         </div>
       )}
+
+      <Dialog open={pasteDialogOpen} onOpenChange={setPasteDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Paste Certificate</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              className="min-h-[200px] font-mono text-xs p-4 bg-slate-50 border-slate-200"
+              placeholder={"-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----"}
+              value={pasteValue}
+              onChange={(e) => setPasteValue(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPasteDialogOpen(false); setPasteValue(''); }}>Cancel</Button>
+            <Button onClick={handlePasteSubmit} disabled={!pasteValue.trim() || rotateCertificates.isPending}>
+              {rotateCertificates.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save Certificate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

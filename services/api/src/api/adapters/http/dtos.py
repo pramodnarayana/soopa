@@ -69,12 +69,12 @@ class UpdateAS2TradingPartnerRequest(BaseModel):
 
 
 class UpdateAS2PartnershipRequest(BaseModel):
-    name: str | None = Field(None, max_length=255, description="Optional name for the partnership")
-    local_partner_id: UUID | None = Field(None)
-    remote_partner_id: UUID | None = Field(None)
-    credentials_vault_ref: str | None = Field(None, max_length=512)
-    mdn_type: str | None = Field(None, max_length=50)
-    mdn_url: HttpUrl | str | None = Field(None)
+    name: str | None = Field(None, max_length=255)
+    local_partner_id: UUID | None = None
+    remote_partner_id: UUID | None = None
+    credentials_vault_ref: str | None = Field(None, max_length=255)
+    mdn_type: Literal["SYNC", "ASYNC", "NONE"] | None = Field(None)
+    mdn_url: HttpUrl | None = Field(None)
     encryption_algorithm: str | None = Field(None, max_length=50)
     signature_algorithm: str | None = Field(None, max_length=50)
     edi_version: (
@@ -164,11 +164,13 @@ class AS2TradingPartnerResponse(BaseModel):
     as2_id: str
     is_local: bool
     url: str | None = None
-    active: bool = True
+    active: bool = False
 
 
 class RotateCertificateRequest(BaseModel):
-    action: str = Field(..., description="Action to perform: generate or upload")
+    action: Literal["generate", "upload"] = Field(
+        ..., description="Action to perform: generate or upload"
+    )
     public_cert_pem: str | None = Field(None, description="Public certificate in PEM format")
     private_key_pem: str | None = Field(None, description="Private key in PEM format")
 
@@ -192,7 +194,7 @@ class AS2PartnershipResponse(BaseModel):
     signature_algorithm: str
     edi_version: str | None = None
     status: str
-    active: bool = True
+    active: bool = False
 
 
 class RouteResponse(BaseModel):
