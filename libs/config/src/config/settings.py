@@ -81,6 +81,15 @@ class IdentitySettings(BaseSettings):
     )
 
 
+class ServerSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="SERVER_", env_file=".env", extra="ignore")
+
+    external_url: str = Field(
+        default="http://localhost:8000",
+        description="The external base URL of the EDI platform",
+    )
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -91,6 +100,7 @@ class AppSettings(BaseSettings):
     s3: S3Settings = Field(default_factory=S3Settings)
     otel: OtelSettings = Field(default_factory=OtelSettings)
     identity: IdentitySettings = Field(default_factory=IdentitySettings)
+    server: ServerSettings = Field(default_factory=ServerSettings)
 
 
 @lru_cache

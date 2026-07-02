@@ -1,13 +1,70 @@
+import React from 'react';
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
+  getExpandedRowModel,
 } from '@tanstack/react-table';
 import type { Partner } from '../context/PartnersContext';
-import { MoreHorizontal, Server, Plus, CheckCircle2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Link } from '@tanstack/react-router';
+import { useDeletePlatformPartner, useDeleteSftpPartner, useUpdatePlatformPartnerMutation, useUpdateSftpPartnerMutation } from '../api/partnerHooks';
+import { Server, CheckCircle2 } from 'lucide-react';
+import { PartnerDetails } from './PartnerDetails';
+import { SharedRowActions } from './SharedRowActions';
+import { useToast } from '@/hooks/use-toast';
+
+function PartnerRowActions({ partner, scope }: { partner: Partner; scope: 'platform' | 'tenant' }) {
+  const { toast } = useToast();
+  const deletePlatform = useDeletePlatformPartner();
+  const deleteSftp = useDeleteSftpPartner();
+  const updatePlatform = useUpdatePlatformPartnerMutation();
+  const updateSftp = useUpdateSftpPartnerMutation();
+
+  const isDeleting = deletePlatform.isPending || deleteSftp.isPending;
+  const isUpdating = updatePlatform.isPending || updateSftp.isPending;
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation(); // prevent row expansion
+    if (!window.confirm(`Are you sure you want to delete ${partner.name}?`)) return;
+
+    if (scope === 'platform') {
+      deletePlatform.mutate(partner.id, {
+        onSuccess: () => toast({ title: 'Success', description: 'Partner deleted successfully.' })
+      });
+    } else {
+      deleteSftp.mutate(partner.id, {
+        onSuccess: () => toast({ title: 'Success', description: 'Partner deleted successfully.' })
+      });
+    }
+  };
+
+  const handleToggleActive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newActiveState = partner.active === false ? true : false;
+    const payload = { active: newActiveState };
+
+    if (scope === 'platform') {
+      updatePlatform.mutate({ id: partner.id, payload }, {
+        onSuccess: () => toast({ title: 'Success', description: `Partner ${newActiveState ? 'activated' : 'deactivated'}.` })
+      });
+    } else {
+      updateSftp.mutate({ id: partner.id, payload }, {
+        onSuccess: () => toast({ title: 'Success', description: `Partner ${newActiveState ? 'activated' : 'deactivated'}.` })
+      });
+    }
+  };
+
+  return (
+    <SharedRowActions
+      isActive={partner.active !== false}
+      isUpdating={isUpdating}
+      isDeleting={isDeleting}
+      onToggleActive={handleToggleActive}
+      onDelete={handleDelete}
+      entityName="Partner"
+    />
+  );
+}
 
 const columnHelper = createColumnHelper<Partner>();
 
@@ -42,19 +99,22 @@ const columns = [
   }),
   columnHelper.accessor('is_local', {
     header: 'Role',
-    cell: (info) => (
-      <span className="text-sm font-medium text-slate-500">
-        {info.getValue() ? 'Local Station' : 'Remote Station'}
-      </span>
-    ),
+    cell: (info) => {
+      const isLocal = info.getValue();
+      if (isLocal === undefined) return null;
+      return (
+        <span className="text-sm font-medium text-slate-500">
+          {isLocal ? 'Local Station' : 'Remote Station'}
+        </span>
+      );
+    },
   }),
   columnHelper.display({
     id: 'actions',
-    cell: () => (
+    header: '',
+    cell: (info) => (
       <div className="flex justify-end">
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
+        <PartnerRowActions partner={info.row.original} scope={(info.table.options.meta as any)?.scope || 'tenant'} />
       </div>
     ),
   }),
@@ -65,6 +125,11 @@ export function PartnersTable({ data, isLoading, scope = 'tenant' }: { data: Par
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowCanExpand: () => true,
+    getExpandedRowModel: getExpandedRowModel(),
+    meta: {
+      scope
+    }
   });
 
   if (isLoading) {
@@ -96,16 +161,7 @@ export function PartnersTable({ data, isLoading, scope = 'tenant' }: { data: Par
           <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-300 mb-6 shadow-sm">
             <Server className="w-8 h-8" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900 mb-2">No Trading Partners Found</h3>
-          <p className="text-slate-500 max-w-sm mb-6 leading-relaxed">
-            There are currently no trading partners provisioned for this {scope}. Get started by creating your first local station.
-          </p>
-          <Link to={scope === 'platform' ? '/platform/partners' : '/tenant/partners'}>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Provision Partner
-            </Button>
-          </Link>
+          <h3 className="text-lg font-bold text-slate-900 mb-2">No Active Trading Partners</h3>
         </div>
       </div>
     );
@@ -133,13 +189,25 @@ export function PartnersTable({ data, isLoading, scope = 'tenant' }: { data: Par
           </thead>
           <tbody className="divide-y divide-slate-100">
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50/50 transition-colors group">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-6 py-4">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
+              <React.Fragment key={row.id}>
+                <tr
+                  className={`hover:bg-slate-50/50 transition-colors group cursor-pointer ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
+                  onClick={() => row.toggleExpanded()}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-6 py-4">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+                {row.getIsExpanded() && (
+                  <tr>
+                    <td colSpan={row.getVisibleCells().length} className="p-0">
+                      <PartnerDetails partner={row.original} scope={scope} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

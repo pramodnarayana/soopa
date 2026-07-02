@@ -6,7 +6,7 @@ export const Route = createRootRoute({
   component: RootComponent,
 })
 
-function RootComponent() {
+export function RootComponent() {
   const auth = useAuth()
 
   // Global authentication error boundary

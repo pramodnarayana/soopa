@@ -66,7 +66,9 @@ async def test_control_plane_repository(control_repo: SqlAlchemyControlPlaneRepo
     assert names == {}
 
     # 3. Create Partnership
-    p_cmd = CreateAS2PartnershipCmd(local_partner_id=p_id2, remote_partner_id=p_id1)
+    p_cmd = CreateAS2PartnershipCmd(
+        name="Test Partnership", local_partner_id=p_id2, remote_partner_id=p_id1
+    )
     partnership_id = await control_repo.create_as2_partnership(tenant_id=1, cmd=p_cmd)
 
     assert partnership_id is not None

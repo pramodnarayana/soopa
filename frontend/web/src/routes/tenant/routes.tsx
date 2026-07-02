@@ -9,7 +9,7 @@ export const Route = createRoute({
   component: RoutesPage,
 })
 
-function RoutesPage() {
+export function RoutesPage() {
   return (
     <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
 

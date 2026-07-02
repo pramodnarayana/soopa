@@ -143,10 +143,10 @@ class MockSession:
             class P:
                 def __init__(self):
                     self.id = "123"
+                    self.tenant_id = 0
+                    self.name = "Test Partnership"
                     self.local_partner_id = "456"
                     self.remote_partner_id = "789"
-                    self.local_url = None
-                    self.remote_url = None
                     self.mdn_type = "SYNC"
                     self.mdn_url = None
                     self.encryption_algorithm = "AES256"
@@ -163,6 +163,8 @@ class MockSession:
                     self.name = "Test"
                     self.as2_id = "TEST"
                     self.is_local = True
+                    self.url = None
+                    self.active = True
 
             return MockResult([T()])
 

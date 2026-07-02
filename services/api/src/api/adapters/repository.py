@@ -9,6 +9,9 @@ from api.domain.models import (
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookPartnerCmd,
+    UpdateAS2PartnershipCmd,
+    UpdateAS2TradingPartnerCmd,
+    UpdateSFTPPartnerCmd,
 )
 from api.ports.repository import (
     ControlPlaneRepositoryPort,
@@ -27,7 +30,7 @@ from database.models.data_plane import (
     WebhookPartner,
 )
 from identity.tenant_context import get_tenant_id
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -43,24 +46,62 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             name=cmd.name,
             as2_id=cmd.as2_id,
             is_local=cmd.is_local,
+            url=cmd.url,
             public_cert_pem=cmd.public_cert_pem,
             public_cert_vault_ref=cmd.public_cert_vault_ref,
             private_key_vault_ref=cmd.private_key_vault_ref,
-            active=True,
+            active=False,
         )
         self.session.add(record)
         await self.session.flush()
         return partner_id
+
+    async def update_as2_identity(
+        self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
+    ) -> None:
+        partner = await self.get_as2_partner(tenant_id, partner_id)
+        if partner:
+            if cmd.name is not None:
+                partner.name = cmd.name
+            if cmd.as2_id is not None:
+                partner.as2_id = cmd.as2_id
+            if cmd.is_local is not None:
+                partner.is_local = cmd.is_local
+            if cmd.url is not None:
+                partner.url = cmd.url
+            if cmd.public_cert_pem is not None:
+                partner.public_cert_pem = cmd.public_cert_pem
+            if cmd.public_cert_vault_ref is not None:
+                partner.public_cert_vault_ref = cmd.public_cert_vault_ref
+            if cmd.private_key_vault_ref is not None:
+                partner.private_key_vault_ref = cmd.private_key_vault_ref
+            if cmd.active is not None:
+                partner.active = cmd.active
+        await self.session.flush()
+
+    async def get_as2_partner(self, tenant_id: int, partner_id: UUID) -> Any:
+        result = await self.session.execute(
+            select(AS2Partner).where(
+                AS2Partner.id == partner_id,
+                (AS2Partner.tenant_id == tenant_id) | (AS2Partner.tenant_id.is_(None)),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_as2_identity(self, tenant_id: int, partner_id: UUID) -> None:
+        await self.session.execute(
+            delete(AS2Partner).where(AS2Partner.id == partner_id, AS2Partner.tenant_id == tenant_id)
+        )
+        await self.session.flush()
 
     async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
         partnership_id = uuid.uuid4()
         record = AS2Partnership(
             id=partnership_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             local_partner_id=cmd.local_partner_id,
             remote_partner_id=cmd.remote_partner_id,
-            local_url=cmd.local_url,
-            remote_url=cmd.remote_url,
             credentials_vault_ref=cmd.credentials_vault_ref,
             mdn_type=cmd.mdn_type,
             mdn_url=cmd.mdn_url,
@@ -68,7 +109,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             signature_algorithm=cmd.signature_algorithm,
             edi_version=cmd.edi_version,
             advanced_flags=cmd.advanced_flags,
-            active=True,
+            active=False,
         )
         self.session.add(record)
         await self.session.flush()
@@ -80,6 +121,51 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         )
 
         return partnership_id
+
+    async def update_as2_partnership(
+        self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+    ) -> None:
+        partnership = await self.get_as2_partnership(tenant_id, partnership_id)
+        if partnership:
+            if cmd.name is not None:
+                partnership.name = cmd.name
+            if cmd.local_partner_id is not None:
+                partnership.local_partner_id = cmd.local_partner_id
+            if cmd.remote_partner_id is not None:
+                partnership.remote_partner_id = cmd.remote_partner_id
+            if cmd.credentials_vault_ref is not None:
+                partnership.credentials_vault_ref = cmd.credentials_vault_ref
+            if cmd.mdn_type is not None:
+                partnership.mdn_type = cmd.mdn_type
+            if cmd.mdn_url is not None:
+                partnership.mdn_url = cmd.mdn_url
+            if cmd.encryption_algorithm is not None:
+                partnership.encryption_algorithm = cmd.encryption_algorithm
+            if cmd.signature_algorithm is not None:
+                partnership.signature_algorithm = cmd.signature_algorithm
+            if cmd.edi_version is not None:
+                partnership.edi_version = cmd.edi_version
+            if cmd.advanced_flags is not None:
+                partnership.advanced_flags = cmd.advanced_flags
+            if cmd.active is not None:
+                partnership.active = cmd.active
+        await self.session.flush()
+
+    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
+        await self.session.execute(
+            delete(AS2Partnership).where(
+                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tenant_id
+            )
+        )
+        await self.session.flush()
+
+    async def get_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> Any:
+        result = await self.session.execute(
+            select(AS2Partnership).where(
+                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tenant_id
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def get_as2_partners_by_ids(self, ids: list[UUID], tenant_id: int) -> dict[UUID, str]:
         if not ids:
@@ -130,11 +216,44 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
             username=cmd.username,
             remote_path=cmd.remote_path,
             credentials_vault_ref=cmd.credentials_vault_ref,
-            active=True,
+            active=False,
         )
         self.session.add(record)
         await self.session.flush()
         return partner_id
+
+    async def get_sftp_partner(self, partner_id: UUID) -> SFTPPartner | None:
+        result = await self.session.execute(
+            select(SFTPPartner).where(
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == self._tenant_id()
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def update_sftp_partner(self, partner_id: UUID, cmd: UpdateSFTPPartnerCmd) -> None:
+        partner = await self.get_sftp_partner(partner_id)
+        if partner:
+            if cmd.name is not None:
+                partner.name = cmd.name
+            if cmd.host is not None:
+                partner.host = cmd.host
+            if cmd.port is not None:
+                partner.port = cmd.port
+            if cmd.username is not None:
+                partner.username = cmd.username
+            if cmd.remote_path is not None:
+                partner.remote_path = cmd.remote_path
+            if cmd.credentials_vault_ref is not None:
+                partner.credentials_vault_ref = cmd.credentials_vault_ref
+        await self.session.flush()
+
+    async def delete_sftp_partner(self, partner_id: UUID) -> None:
+        await self.session.execute(
+            delete(SFTPPartner).where(
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == self._tenant_id()
+            )
+        )
+        await self.session.flush()
 
     async def get_sftp_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
         """Returns a dict mapping SFTP Partner ID to Name."""
@@ -166,7 +285,7 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
             name=cmd.name,
             url=cmd.url,
             auth_header_vault_ref=cmd.auth_header_vault_ref,
-            active=True,
+            active=False,
         )
         self.session.add(record)
         await self.session.flush()

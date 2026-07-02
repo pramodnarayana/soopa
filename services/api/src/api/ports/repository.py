@@ -8,6 +8,9 @@ from api.domain.models import (
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookPartnerCmd,
+    UpdateAS2PartnershipCmd,
+    UpdateAS2TradingPartnerCmd,
+    UpdateSFTPPartnerCmd,
 )
 
 
@@ -20,8 +23,36 @@ class ControlPlaneRepositoryPort(Protocol):
         """Inserts an AS2 Partner in the Global DB and returns its UUID."""
         ...
 
+    async def update_as2_identity(
+        self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
+    ) -> None:
+        """Updates an AS2 Partner in the Global DB."""
+        ...
+
+    async def get_as2_partner(self, tenant_id: int, partner_id: UUID) -> Any:
+        """Gets an AS2 Partner in the Global DB."""
+        ...
+
+    async def delete_as2_identity(self, tenant_id: int, partner_id: UUID) -> None:
+        """Deletes an AS2 Identity from the Global DB."""
+        ...
+
     async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
         """Inserts an AS2 Partnership in the Global DB and returns its UUID."""
+        ...
+
+    async def update_as2_partnership(
+        self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+    ) -> None:
+        """Updates an AS2 Partnership in the Global DB."""
+        ...
+
+    async def get_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> Any:
+        """Gets an AS2 Partnership from the Global DB."""
+        ...
+
+    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
+        """Deletes an AS2 Partnership from the Global DB."""
         ...
 
     async def get_as2_partners_by_ids(self, ids: list[UUID], tenant_id: int) -> dict[UUID, str]:
@@ -42,6 +73,18 @@ class DataPlaneRepositoryPort(Protocol):
 
     async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> UUID:
         """Inserts an SFTP Partner into the Tenant DB and returns its UUID."""
+        ...
+
+    async def update_sftp_partner(self, partner_id: UUID, cmd: UpdateSFTPPartnerCmd) -> None:
+        """Updates an SFTP Partner in the Tenant DB."""
+        ...
+
+    async def delete_sftp_partner(self, partner_id: UUID) -> None:
+        """Deletes an SFTP Partner from the Tenant DB."""
+        ...
+
+    async def get_sftp_partner(self, partner_id: UUID) -> Any:
+        """Gets an SFTP Partner from the Tenant DB."""
         ...
 
     async def get_sftp_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:

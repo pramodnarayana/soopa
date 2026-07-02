@@ -9,7 +9,7 @@ export const Route = createRoute({
   component: MarketingLayout,
 })
 
-function MarketingLayout() {
+export function MarketingLayout() {
   const auth = useAuth()
 
   if (auth.isAuthenticated) {

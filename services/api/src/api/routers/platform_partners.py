@@ -1,23 +1,33 @@
 from typing import Any
+from uuid import UUID
 
 from database.models.control_plane import AS2Partner, AS2Partnership
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from api.adapters.http.dtos import (
     AS2PartnershipResponse,
     AS2TradingPartnerResponse,
     CreateAS2PartnershipRequest,
     CreateAS2TradingPartnerRequest,
+    UpdateAS2PartnershipRequest,
+    UpdateAS2TradingPartnerRequest,
 )
 from api.adapters.vault import vault
+from api.core.provisioning import ProvisioningService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
     get_uow,
     require_platform_admin,
 )
 from api.domain.certificate import generate_self_signed_cert
-from api.domain.models import CreateAS2PartnershipCmd, CreateAS2TradingPartnerCmd
+from api.domain.models import (
+    CreateAS2PartnershipCmd,
+    CreateAS2TradingPartnerCmd,
+    UpdateAS2PartnershipCmd,
+    UpdateAS2TradingPartnerCmd,
+)
 
 # Enforce require_platform_admin on all routes in this router
 router = APIRouter(
@@ -63,6 +73,7 @@ async def create_platform_as2_partner(
                 name=request.name,
                 as2_id=request.as2_id,
                 is_local=request.is_local,
+                url=str(request.url) if request.url else None,
                 public_cert_pem=public_cert_pem,
                 public_cert_vault_ref=request.public_cert_vault_ref,
                 private_key_vault_ref=private_key_vault_ref,
@@ -78,7 +89,10 @@ async def create_platform_as2_partner(
                 name=request.name,
                 as2_id=request.as2_id,
                 is_local=request.is_local,
+                url=str(request.url) if request.url else None,
             )
+    except IntegrityError as e:
+        raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
     except Exception:
         import logging
 
@@ -111,9 +125,66 @@ async def list_platform_as2_partners(
                 name=p.name,
                 as2_id=p.as2_id,
                 is_local=p.is_local,
+                url=p.url,
+                active=p.active,
             )
             for p in partners
         ]
+
+
+@router.put("/as2/trading-partners/{partner_id}", response_model=AS2TradingPartnerResponse)
+async def update_platform_as2_partner(
+    partner_id: UUID,
+    request: UpdateAS2TradingPartnerRequest,
+    uow: UnitOfWork = Depends(get_uow),
+) -> Any:
+    """Updates a global AS2 partner."""
+    async with uow:
+        cmd = UpdateAS2TradingPartnerCmd(
+            name=request.name,
+            as2_id=request.as2_id,
+            is_local=request.is_local,
+            url=str(request.url) if request.url else None,
+            active=request.active,
+        )
+        try:
+            await uow.control_plane.update_as2_identity(tenant_id=0, partner_id=partner_id, cmd=cmd)
+            updated_partner = await uow.control_plane.get_as2_partner(
+                tenant_id=0, partner_id=partner_id
+            )
+            if not updated_partner:
+                raise HTTPException(status_code=404, detail="Partner not found after update")
+
+            await uow.commit()
+            return AS2TradingPartnerResponse(
+                id=str(updated_partner.id),
+                name=updated_partner.name,
+                as2_id=updated_partner.as2_id,
+                is_local=updated_partner.is_local,
+                url=updated_partner.url,
+                active=updated_partner.active,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.delete("/as2/trading-partners/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_platform_as2_partner(
+    partner_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
+) -> None:
+    """Deletes an AS2 partner."""
+    async with uow:
+        svc = ProvisioningService(tenant_repo=None, global_repo=uow.control_plane)  # type: ignore[arg-type]
+        try:
+            await svc.delete_as2_partner(tenant_id=0, partner_id=partner_id)
+            await uow.commit()
+        except Exception as e:
+            if "IntegrityError" in str(type(e)):
+                raise HTTPException(
+                    status_code=400, detail="Partner is in use and cannot be deleted."
+                ) from e
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/as2/partnerships", response_model=Any, status_code=status.HTTP_201_CREATED)
@@ -127,10 +198,9 @@ async def create_platform_as2_partnership(
     try:
         async with uow:
             cmd = CreateAS2PartnershipCmd(
+                name=request.name,
                 local_partner_id=request.local_partner_id,
                 remote_partner_id=request.remote_partner_id,
-                local_url=None,
-                remote_url=str(request.remote_url) if request.remote_url else None,
                 credentials_vault_ref=request.credentials_vault_ref,
                 mdn_type=request.mdn_type,
                 mdn_url=str(request.mdn_url) if request.mdn_url else None,
@@ -145,12 +215,12 @@ async def create_platform_as2_partnership(
 
             return AS2PartnershipResponse(
                 id=str(partnership_id),
+                tenant_id=0,
+                name=request.name,
                 local_partner_id=str(request.local_partner_id),
                 remote_partner_id=str(request.remote_partner_id),
-                local_url=None,
-                remote_url=request.remote_url,
                 mdn_type=request.mdn_type,
-                mdn_url=request.mdn_url,
+                mdn_url=str(request.mdn_url) if request.mdn_url else None,
                 encryption_algorithm=request.encryption_algorithm,
                 signature_algorithm=request.signature_algorithm,
                 edi_version=request.edi_version,
@@ -169,6 +239,87 @@ async def create_platform_as2_partnership(
         )
 
 
+@router.put("/as2/partnerships/{partnership_id}", response_model=AS2PartnershipResponse)
+async def update_platform_as2_partnership(
+    partnership_id: UUID,
+    request: UpdateAS2PartnershipRequest,
+    uow: UnitOfWork = Depends(get_uow),
+) -> Any:
+    try:
+        async with uow:
+            cmd = UpdateAS2PartnershipCmd(
+                name=request.name,
+                local_partner_id=request.local_partner_id,
+                remote_partner_id=request.remote_partner_id,
+                credentials_vault_ref=request.credentials_vault_ref,
+                mdn_type=request.mdn_type,
+                mdn_url=str(request.mdn_url) if request.mdn_url else None,
+                encryption_algorithm=request.encryption_algorithm,
+                signature_algorithm=request.signature_algorithm,
+                edi_version=request.edi_version,
+                advanced_flags=request.advanced_flags,
+                active=request.active,
+            )
+            await uow.control_plane.update_as2_partnership(
+                tenant_id=0, partnership_id=partnership_id, cmd=cmd
+            )
+            await uow.commit()
+
+            p = await uow.control_plane.get_as2_partnership(
+                tenant_id=0, partnership_id=partnership_id
+            )
+            if not p:
+                raise HTTPException(status_code=404, detail="Partnership not found")
+
+            return AS2PartnershipResponse(
+                id=str(p.id),
+                tenant_id=p.tenant_id,
+                name=p.name,
+                local_partner_id=str(p.local_partner_id),
+                remote_partner_id=str(p.remote_partner_id),
+                mdn_type=p.mdn_type,
+                mdn_url=p.mdn_url,
+                encryption_algorithm=p.encryption_algorithm,
+                signature_algorithm=p.signature_algorithm,
+                edi_version=p.edi_version,
+                status="active" if p.active else "inactive",
+                active=p.active,
+            )
+    except Exception:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Internal error updating platform AS2 partnership")
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=500, content={"detail": "An internal server error occurred."}
+        )
+
+
+@router.delete(
+    "/as2/partnerships/{partnership_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_platform_as2_partnership(
+    partnership_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
+) -> None:
+    try:
+        async with uow:
+            await uow.control_plane.delete_as2_partnership(
+                tenant_id=0, partnership_id=partnership_id
+            )
+            await uow.commit()
+    except Exception as err:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Internal error deleting platform AS2 partnership")
+        raise HTTPException(status_code=500, detail="An internal server error occurred.") from err
+
+
 @router.get("/as2/partnerships", response_model=list[AS2PartnershipResponse])
 async def list_platform_as2_partnerships(
     uow: UnitOfWork = Depends(get_uow),
@@ -185,16 +336,17 @@ async def list_platform_as2_partnerships(
         return [
             AS2PartnershipResponse(
                 id=str(p.id),
+                tenant_id=p.tenant_id,
+                name=p.name,
                 local_partner_id=str(p.local_partner_id),
                 remote_partner_id=str(p.remote_partner_id),
-                local_url=p.local_url,
-                remote_url=p.remote_url,
                 mdn_type=p.mdn_type,
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
                 edi_version=p.edi_version,
                 status="active" if p.active else "inactive",
+                active=p.active,
             )
             for p in partnerships
         ]

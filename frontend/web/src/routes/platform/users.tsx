@@ -16,7 +16,7 @@ const PLATFORM_USERS = [
   { id: '3', name: 'Charlie', email: 'charlie@soopa.com', role: 'Standard' as const },
 ]
 
-function PlatformUsers() {
+export function PlatformUsers() {
   const { data: userProfile } = useDashboardData()
 
   return (

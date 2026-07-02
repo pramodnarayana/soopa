@@ -51,3 +51,6 @@ htmlcov/
 
 # LocalStack Data
 volume/
+
+# Log files
+*.log

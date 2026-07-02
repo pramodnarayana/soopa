@@ -12,6 +12,19 @@ class CreateAS2TradingPartnerCmd:
     name: str
     as2_id: str
     is_local: bool = False
+    url: str | None = None
+    public_cert_pem: str | None = None
+    public_cert_vault_ref: str | None = None
+    private_key_vault_ref: str | None = None
+
+
+@dataclass(frozen=True)
+class UpdateAS2TradingPartnerCmd:
+    name: str | None = None
+    as2_id: str | None = None
+    is_local: bool | None = None
+    url: str | None = None
+    active: bool | None = None
     public_cert_pem: str | None = None
     public_cert_vault_ref: str | None = None
     private_key_vault_ref: str | None = None
@@ -21,8 +34,7 @@ class CreateAS2TradingPartnerCmd:
 class CreateAS2PartnershipCmd:
     local_partner_id: UUID
     remote_partner_id: UUID
-    local_url: str | None = None
-    remote_url: str | None = None
+    name: str
     credentials_vault_ref: str | None = None
     mdn_type: str = "SYNC"
     mdn_url: str | None = None
@@ -33,12 +45,37 @@ class CreateAS2PartnershipCmd:
 
 
 @dataclass(frozen=True)
+class UpdateAS2PartnershipCmd:
+    name: str | None = None
+    local_partner_id: UUID | None = None
+    remote_partner_id: UUID | None = None
+    credentials_vault_ref: str | None = None
+    mdn_type: str | None = None
+    mdn_url: str | None = None
+    encryption_algorithm: str | None = None
+    signature_algorithm: str | None = None
+    edi_version: str | None = None
+    advanced_flags: dict[str, Any] | None = None
+    active: bool | None = None
+
+
+@dataclass(frozen=True)
 class CreateSFTPPartnerCmd:
     name: str
     host: str
     username: str
     credentials_vault_ref: str
     port: int = 22
+    remote_path: str | None = None
+
+
+@dataclass(frozen=True)
+class UpdateSFTPPartnerCmd:
+    name: str | None = None
+    host: str | None = None
+    username: str | None = None
+    credentials_vault_ref: str | None = None
+    port: int | None = None
     remote_path: str | None = None
 
 

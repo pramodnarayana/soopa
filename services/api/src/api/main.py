@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api import cdc_relay
 from api.adapters.repository import SqlAlchemyTenantRepository
 from api.core.authorization import AuthorizationService
-from api.routers import partners, platform_partners, routes
+from api.routers import partners, platform_config, platform_partners, routes
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ app = FastAPI(
 app.include_router(cdc_relay.router)
 app.include_router(partners.router)
 app.include_router(platform_partners.router)
+app.include_router(platform_config.router)
 app.include_router(routes.router)
 
 

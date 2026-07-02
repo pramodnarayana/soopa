@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from uuid import UUID
 
 from api.domain.models import (
     CreateAS2PartnershipCmd,
@@ -10,6 +11,9 @@ from api.domain.models import (
     CreateWebhookPartnerCmd,
     PartnerEntity,
     RouteEntity,
+    UpdateAS2PartnershipCmd,
+    UpdateAS2TradingPartnerCmd,
+    UpdateSFTPPartnerCmd,
 )
 from api.ports.repository import ControlPlaneRepositoryPort, DataPlaneRepositoryPort
 
@@ -59,11 +63,49 @@ class ProvisioningService:
             status="PROVISIONING",
         )
 
+    async def delete_as2_partner(self, tenant_id: int, partner_id: UUID) -> None:
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required for AS2 partner deletion")
+        logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
+        await self.global_repo.delete_as2_identity(tenant_id, partner_id)
+
+    async def update_as2_partner(
+        self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
+    ) -> PartnerEntity:
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required for AS2 partner updates")
+        logger.info(f"Updating AS2 partner {partner_id} for tenant {tenant_id}")
+        await self.global_repo.update_as2_identity(tenant_id, partner_id, cmd)
+
+        updated_partner = await self.global_repo.get_as2_partner(tenant_id, partner_id)
+        if not updated_partner:
+            raise ValueError("Partner not found after update")
+
+        return PartnerEntity(
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+            type="AS2",
+            status="ACTIVE" if updated_partner.active else "INACTIVE",
+        )
+
     async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
 
         # Written directly to Tenant DB
         partner_id = await self.tenant_repo.create_sftp_partner(cmd=cmd)
+
+        return PartnerEntity(
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+            type="SFTP",
+            status="ACTIVE",
+        )
+
+    async def update_sftp_partner(
+        self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
+    ) -> PartnerEntity:
+        logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
+        await self.tenant_repo.update_sftp_partner(partner_id=partner_id, cmd=cmd)
 
         return PartnerEntity(
             partner_id=partner_id,
@@ -85,6 +127,24 @@ class ProvisioningService:
 
         return PartnerEntity(
             partner_id=partner_id,
+            tenant_id=tenant_id,
+            type="AS2_PARTNERSHIP",
+            status="ACTIVE",
+        )
+
+    async def update_as2_partnership(
+        self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+    ) -> PartnerEntity:
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required for AS2 partnership update")
+
+        logger.info(f"Updating AS2 partnership {partnership_id}")
+        await self.global_repo.update_as2_partnership(
+            tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
+        )
+
+        return PartnerEntity(
+            partner_id=partnership_id,
             tenant_id=tenant_id,
             type="AS2_PARTNERSHIP",
             status="ACTIVE",

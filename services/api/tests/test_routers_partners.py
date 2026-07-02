@@ -52,7 +52,11 @@ def test_create_platform_as2_partnership(client, fake_uow):
     remote_id = str(uuid.uuid4())
     response = client.post(
         "/api/v1/platform/partners/as2/partnerships",
-        json={"local_partner_id": local_id, "remote_partner_id": remote_id},
+        json={
+            "name": "Test Partnership",
+            "local_partner_id": local_id,
+            "remote_partner_id": remote_id,
+        },
     )
     assert response.status_code == 201
     data = response.json()
