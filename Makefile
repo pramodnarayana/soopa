@@ -67,7 +67,7 @@ db-reset:
 	@echo "Wiping application databases (leaving Zitadel intact)..."
 	docker compose stop postgres_global postgres_shard_1
 	docker compose rm -f -v postgres_global postgres_shard_1
-	-docker volume rm $$(docker volume ls -q | grep -E "postgres_global_data|postgres_shard_1_data") 2>/dev/null
+	-docker volume rm $$(docker volume ls -q | grep -E "postgres_global_data|postgres_shard_[0-9]+_data") 2>/dev/null
 	@echo "Restarting application databases..."
 	docker compose up -d postgres_global postgres_shard_1
 	@echo "Waiting for databases to initialize..."

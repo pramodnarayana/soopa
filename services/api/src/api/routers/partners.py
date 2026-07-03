@@ -186,9 +186,7 @@ async def export_as2_certificates(
                     status_code=403, detail="Insufficient permissions to export private keys."
                 )
 
-            from api.adapters.vault import VaultAdapter
-
-            vault = VaultAdapter()
+            from api.adapters.vault import vault
 
             if partner.private_key_vault_ref:
                 try:
@@ -369,6 +367,10 @@ async def delete_sftp_partner(
             raise HTTPException(
                 status_code=400, detail="Partner is in use and cannot be deleted."
             ) from e
+        except HTTPException:
+            raise
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 

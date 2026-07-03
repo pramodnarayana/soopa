@@ -48,6 +48,11 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
       if (formData.is_local !== partner.is_local) payload.is_local = formData.is_local;
       if (formData.url !== partner.url) payload.url = formData.url;
 
+      if (formData.is_local && !formData.url?.trim()) {
+        toast({ title: 'Error', description: 'Receiving URL is required for local partners.', variant: 'destructive' });
+        return;
+      }
+
       updatePlatform.mutate({ id: partner.id, payload }, {
         onSuccess: () => {
           toast({ title: 'Success', description: 'Partner updated successfully.' });
@@ -84,11 +89,11 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
         // Split by the standard PEM headers and parse blocks
         if (text.includes('-----BEGIN CERTIFICATE-----')) {
           const match = text.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g);
-          if (match && match.length > 0) publicCert = match[0] + '\n';
+          if (match && match.length > 0) publicCert += match.join('\n') + '\n';
         }
         if (text.includes('-----BEGIN PRIVATE KEY-----') || text.includes('-----BEGIN RSA PRIVATE KEY-----')) {
           const match = text.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
-          if (match && match.length > 0) privateKey = match[0] + '\n';
+          if (match && match.length > 0) privateKey += match.join('\n') + '\n';
         }
       }
 
@@ -118,11 +123,11 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
     const text = pasteValue;
     if (text.includes('-----BEGIN CERTIFICATE-----')) {
       const match = text.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g);
-      if (match && match.length > 0) publicCert = match[0] + '\n';
+      if (match && match.length > 0) publicCert += match.join('\n') + '\n';
     }
     if (text.includes('-----BEGIN PRIVATE KEY-----') || text.includes('-----BEGIN RSA PRIVATE KEY-----')) {
       const match = text.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
-      if (match && match.length > 0) privateKey = match[0] + '\n';
+      if (match && match.length > 0) privateKey += match.join('\n') + '\n';
     }
 
     rotateCertificates.mutate({
@@ -293,7 +298,10 @@ export function PartnerDetails({ partner }: { partner: Partner; scope: 'platform
         </div>
       )}
 
-      <Dialog open={pasteDialogOpen} onOpenChange={setPasteDialogOpen}>
+      <Dialog open={pasteDialogOpen} onOpenChange={(open) => {
+        setPasteDialogOpen(open);
+        if (!open) setPasteValue('');
+      }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Paste Certificate</DialogTitle>
@@ -357,6 +365,15 @@ function CertificateRow({
       <tr
         className="hover:bg-slate-50 transition-colors cursor-pointer group"
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded(!expanded);
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={expanded}
       >
         <td className="px-6 py-4 whitespace-nowrap">
           {role === 'Active' ? (

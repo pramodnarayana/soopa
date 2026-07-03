@@ -149,6 +149,19 @@ class ProvisioningService:
         if not self.global_repo:
             raise ValueError("Control plane repository is required for AS2 partnership update")
 
+        check_ids: list[UUID] = []
+        if isinstance(cmd.local_partner_id, UUID):
+            check_ids.append(cmd.local_partner_id)
+        if isinstance(cmd.remote_partner_id, UUID):
+            check_ids.append(cmd.remote_partner_id)
+
+        if check_ids:
+            valid_partners = await self.global_repo.get_as2_partners_by_ids(check_ids, tenant_id)
+            if len(valid_partners) != len(check_ids):
+                raise ValueError(
+                    "Invalid local_partner_id or remote_partner_id referenced in update"
+                )
+
         logger.info(f"Updating AS2 partnership {partnership_id}")
         await self.global_repo.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd

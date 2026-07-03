@@ -31,8 +31,19 @@ class HttpPartnersRepository implements IPartnersRepository {
     try {
       const res = await fetch(url, { ...init, headers: this.headers, signal: controller.signal });
       if (!res.ok) {
-        const detail = await res.text().catch(() => res.statusText);
-        throw new Error(detail || `HTTP ${res.status}`);
+        const contentType = res.headers.get("content-type");
+        let errorMessage = res.statusText;
+        if (contentType && contentType.includes("application/json")) {
+          try {
+            const data = await res.json();
+            errorMessage = typeof data.detail === "string" ? data.detail : (data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+          } catch {
+            errorMessage = await res.text().catch(() => res.statusText);
+          }
+        } else {
+          errorMessage = await res.text().catch(() => res.statusText);
+        }
+        throw new Error(errorMessage || `HTTP ${res.status}`);
       }
       if (res.status === 204) return undefined as unknown as T;
       return res.json() as Promise<T>;

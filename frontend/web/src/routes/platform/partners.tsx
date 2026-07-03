@@ -14,7 +14,7 @@ export const Route = createFileRoute('/platform/partners')({
 })
 
 export function TradingPartnersPage() {
-  const { partners, isLoading } = usePlatformPartners();
+  const { partners, isLoading, error } = usePlatformPartners();
 
   const localPartners = partners.filter(p => p.is_local);
   const remotePartners = partners.filter(p => !p.is_local);
@@ -31,7 +31,16 @@ export function TradingPartnersPage() {
         <CreatePartnerModal existingAs2Ids={partners.map(p => p.as2_id).filter(Boolean) as string[]} />
       </div>
 
-      {partners.length === 0 && !isLoading ? (
+      {isLoading ? (
+        <div className="space-y-4">
+          <div className="h-10 bg-slate-100 rounded-md animate-pulse" />
+          <div className="h-40 bg-slate-50 rounded-md animate-pulse" />
+        </div>
+      ) : error ? (
+        <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
+          Failed to load partners: {error.message}
+        </div>
+      ) : partners.length === 0 ? (
         <PartnersTable data={[]} isLoading={false} scope="platform" />
       ) : (
         <div className="space-y-8">

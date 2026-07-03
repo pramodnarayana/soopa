@@ -12,6 +12,7 @@ interface PlatformPartnersContextType {
   partners: Partner[];
   partnerships: Partnership[];
   isLoading: boolean;
+  error: Error | null;
   refresh: () => Promise<void>;
 }
 
@@ -21,23 +22,26 @@ export function PlatformPartnersProvider({ children }: { children: React.ReactNo
   const {
     data: partners = [],
     isLoading: isLoadingPartners,
+    error: errorPartners,
     refetch: refetchPartners,
   } = usePlatformPartnersQuery();
 
   const {
     data: partnerships = [],
     isLoading: isLoadingPartnerships,
+    error: errorPartnerships,
     refetch: refetchPartnerships,
   } = usePlatformPartnershipsQuery();
 
   const isLoading = isLoadingPartners || isLoadingPartnerships;
+  const error = errorPartners || errorPartnerships;
 
   const refresh = useCallback(async () => {
     await Promise.all([refetchPartners(), refetchPartnerships()]);
   }, [refetchPartners, refetchPartnerships]);
 
   return (
-    <PlatformPartnersContext.Provider value={{ partners, partnerships, isLoading, refresh }}>
+    <PlatformPartnersContext.Provider value={{ partners, partnerships, isLoading, error, refresh }}>
       {children}
     </PlatformPartnersContext.Provider>
   );

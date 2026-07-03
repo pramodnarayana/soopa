@@ -1,7 +1,7 @@
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -56,6 +56,15 @@ class CreateWebhookPartnerRequest(BaseModel):
     auth_header_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for auth header"
     )
+
+    @field_validator("url")
+    @classmethod
+    def validate_no_loopback(cls, v: HttpUrl) -> HttpUrl:
+        if v.host in ("127.0.0.1", "localhost", "::1") or (
+            v.host and v.host.startswith("169.254.")
+        ):
+            raise ValueError("Loopback or link-local addresses are not permitted for webhooks.")
+        return v
 
 
 class UpdateAS2TradingPartnerRequest(BaseModel):

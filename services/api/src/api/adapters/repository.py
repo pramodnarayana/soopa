@@ -260,6 +260,8 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
                 partner.remote_path = cmd.remote_path
             if cmd.credentials_vault_ref is not None:
                 partner.credentials_vault_ref = cmd.credentials_vault_ref
+            if cmd.active is not None:
+                partner.active = cmd.active
         await self.session.flush()
 
     async def delete_sftp_partner(self, partner_id: UUID) -> None:
@@ -314,7 +316,7 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
             name=cmd.name,
             url=cmd.url,
             auth_header_vault_ref=cmd.auth_header_vault_ref,
-            active=False,
+            active=True,
         )
         self.session.add(record)
         await self.session.flush()

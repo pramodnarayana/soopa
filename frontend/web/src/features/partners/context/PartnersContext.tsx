@@ -5,20 +5,21 @@ import { useTenantPartnersQuery } from '../api/partnerHooks';
 interface PartnersContextType {
   partners: Partner[];
   isLoading: boolean;
+  error: Error | null;
   refresh: () => Promise<void>;
 }
 
 const PartnersContext = createContext<PartnersContextType | undefined>(undefined);
 
 export function PartnersProvider({ children }: { children: React.ReactNode }) {
-  const { data: partners = [], isLoading, refetch } = useTenantPartnersQuery();
+  const { data: partners = [], isLoading, error, refetch } = useTenantPartnersQuery();
 
   const refresh = useCallback(async () => {
     await refetch();
   }, [refetch]);
 
   return (
-    <PartnersContext.Provider value={{ partners, isLoading, refresh }}>
+    <PartnersContext.Provider value={{ partners, isLoading, error, refresh }}>
       {children}
     </PartnersContext.Provider>
   );

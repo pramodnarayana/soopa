@@ -45,6 +45,13 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
     onChange(e)
   }
 
+  const optionsMap = React.useMemo(() => {
+    return options.reduce((acc, opt) => {
+      acc[opt.toLowerCase()] = opt;
+      return acc;
+    }, {} as Record<string, string>);
+  }, [options]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -93,7 +100,7 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
                   onSelect={(currentValue) => {
                     // Shadcn CommandItem lowercases the value by default unless specified
                     // We need to pass the original case string back
-                    const originalCaseOption = options.find(o => o.toLowerCase() === currentValue) || currentValue;
+                    const originalCaseOption = optionsMap[currentValue] || currentValue;
                     handleSelect(originalCaseOption);
                   }}
                 >

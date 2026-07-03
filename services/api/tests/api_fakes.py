@@ -49,6 +49,10 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     is_local = p["cmd"].is_local
                     url = p["cmd"].url
                     active = p.get("status", "INACTIVE") == "ACTIVE"
+                    private_key_vault_ref = None
+                    prev_private_key_vault_ref = None
+                    public_cert_pem = None
+                    prev_public_cert_pem = None
 
                 return FakePartner()
         return None
@@ -69,6 +73,10 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     signature_algorithm = p["cmd"].signature_algorithm
                     edi_version = p["cmd"].edi_version
                     active = p.get("status", "INACTIVE") == "ACTIVE"
+                    private_key_vault_ref = None
+                    prev_private_key_vault_ref = None
+                    public_cert_pem = None
+                    prev_public_cert_pem = None
 
                 return FakePartnership()
         return None

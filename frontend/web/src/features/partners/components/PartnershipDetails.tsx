@@ -31,8 +31,8 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
       mdn_type: partnership.mdn_type || 'SYNC',
       mdn_url: partnership.mdn_url || '',
       encryption_algorithm: partnership.encryption_algorithm || 'AES256_CBC',
-      signature_algorithm: partnership.signature_algorithm || 'SHA256',
-      edi_version: partnership.edi_version || 'X12-004010',
+      signature_algorithm: partnership.signature_algorithm || 'MIC_SHA256',
+      edi_version: partnership.edi_version || 'X12_004010',
     }
   });
 
@@ -203,10 +203,10 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SHA256">SHA-256</SelectItem>
-                    <SelectItem value="SHA384">SHA-384</SelectItem>
-                    <SelectItem value="SHA512">SHA-512</SelectItem>
-                    <SelectItem value="SHA1">SHA-1 (Legacy)</SelectItem>
+                    <SelectItem value="MIC_SHA256">SHA-256</SelectItem>
+                    <SelectItem value="MIC_SHA384">SHA-384</SelectItem>
+                    <SelectItem value="MIC_SHA512">SHA-512</SelectItem>
+                    <SelectItem value="MIC_SHA1">SHA-1 (Legacy)</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -224,10 +224,10 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="X12-004010">X12 4010</SelectItem>
-                    <SelectItem value="X12-005010">X12 5010</SelectItem>
-                    <SelectItem value="EDIFACT-D96A">EDIFACT D96A</SelectItem>
-                    <SelectItem value="EDIFACT-D01B">EDIFACT D01B</SelectItem>
+                    <SelectItem value="X12_004010">X12 4010</SelectItem>
+                    <SelectItem value="X12_005010">X12 5010</SelectItem>
+                    <SelectItem value="EDIFACT_D96A">EDIFACT D96A</SelectItem>
+                    <SelectItem value="EDIFACT_D01B">EDIFACT D01B</SelectItem>
                   </SelectContent>
                 </Select>
               )}

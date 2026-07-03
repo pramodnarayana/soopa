@@ -19,7 +19,11 @@ export function SharedRowActions({
   entityName = "Item"
 }: SharedRowActionsProps) {
   return (
-    <div className="flex items-center gap-4 pr-4">
+    <div
+      className="flex items-center gap-4 pr-4"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
       <button
         type="button"
         role="switch"

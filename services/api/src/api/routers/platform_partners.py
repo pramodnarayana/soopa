@@ -223,6 +223,8 @@ async def create_platform_as2_partnership(
                 status="active" if p.active else "inactive",
                 active=p.active,
             )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except IntegrityError as e:
         raise HTTPException(
             status_code=400, detail="AS2 Partnership already exists for these partners."
@@ -284,6 +286,12 @@ async def update_platform_as2_partnership(
                 status="active" if p.active else "inactive",
                 active=p.active,
             )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=400, detail="AS2 Partnership already exists for these partners."
+        ) from e
     except HTTPException:
         raise
     except Exception as e:

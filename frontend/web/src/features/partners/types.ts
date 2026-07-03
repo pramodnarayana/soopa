@@ -96,8 +96,12 @@ export interface UpdatePartnershipPayload {
   active?: boolean;
 }
 
-export interface RotateCertPayload {
-  action: 'generate' | 'upload';
-  public_cert_pem?: string;
-  private_key_pem?: string;
-}
+export type RotateCertPayload =
+  | {
+      action: 'generate';
+    }
+  | {
+      action: 'upload';
+      public_cert_pem: string;
+      private_key_pem?: string;
+    };

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { UploadCloud, FileCode, ClipboardPaste } from 'lucide-react';
 
@@ -20,6 +20,11 @@ export function CertificateInput({ value, onChange }: CertificateInputProps) {
   const [mode, setMode] = useState<CertMode>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [pasteValue, setPasteValue] = useState(value);
+
+  React.useEffect(() => {
+    setPasteValue(value);
+  }, [value]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const readFile = (file: File) => {
