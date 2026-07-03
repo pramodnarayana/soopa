@@ -60,7 +60,7 @@ async def test_create_webhook_partner(service: ProvisioningService):
     partner = await service.create_webhook_partner(tenant_id=1, cmd=cmd)
 
     assert partner.type == "WEBHOOK"
-    assert partner.status == "INACTIVE"
+    assert partner.status == "ACTIVE"
 
     tenant_repo: FakeDataPlaneRepository = service.tenant_repo
     assert len(tenant_repo.webhook_partners) == 1

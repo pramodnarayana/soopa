@@ -189,7 +189,7 @@ class ProvisioningService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             type="WEBHOOK",
-            status="INACTIVE",
+            status="ACTIVE",
         )
 
     async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> RouteEntity:

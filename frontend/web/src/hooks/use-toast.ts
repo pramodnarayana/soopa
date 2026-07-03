@@ -14,6 +14,8 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 const actionTypes = {
@@ -141,12 +143,30 @@ type Toast = Omit<ToasterToast, "id">
 function toast({ ...props }: Toast) {
   const id = genId()
 
-  const update = (props: ToasterToast) =>
+  const update = (props: ToasterToast) => {
     dispatch({
       type: "UPDATE_TOAST",
       toast: { ...props, id },
     })
-  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+    const sonnerOpts: any = { description: props.description, id }
+    if (props.action) {
+      sonnerOpts.action = {
+        label: props.action.label,
+        onClick: props.action.onClick
+      }
+    }
+    if (props.variant === "destructive") {
+      sonnerToast.error(props.title as any, sonnerOpts)
+    } else {
+      sonnerToast(props.title as any, sonnerOpts)
+    }
+  }
+
+  const dismiss = () => {
+    dispatch({ type: "DISMISS_TOAST", toastId: id })
+    sonnerToast.dismiss(id)
+  }
 
   dispatch({
     type: "ADD_TOAST",
@@ -161,10 +181,18 @@ function toast({ ...props }: Toast) {
   })
 
   // Call Sonner toast under the hood for actual display
+  const sonnerOpts: any = { description: props.description, id }
+  if (props.action) {
+    sonnerOpts.action = {
+      label: props.action.label,
+      onClick: props.action.onClick
+    }
+  }
+
   if (props.variant === "destructive") {
-    sonnerToast.error(props.title as any, { description: props.description as any, id })
+    sonnerToast.error(props.title as any, sonnerOpts)
   } else {
-    sonnerToast(props.title as any, { description: props.description as any, id })
+    sonnerToast(props.title as any, sonnerOpts)
   }
 
   return {

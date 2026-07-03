@@ -122,7 +122,7 @@ async def get_current_tenant_id(
     use_case: ResolveTenantUseCase = Depends(get_resolve_tenant_use_case),
 ) -> int:
     """
-    Resolves the external Authentik user email from the JWT to our internal global DB tenant_id.
+    Resolves the external user email from the JWT to our internal global DB tenant_id.
     """
     email = token_payload.get("email")
     name = token_payload.get("name")
