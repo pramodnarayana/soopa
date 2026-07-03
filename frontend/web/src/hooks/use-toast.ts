@@ -1,5 +1,5 @@
 import * as React from "react"
-import { toast as sonnerToast } from "sonner"
+import { toast as sonnerToast, type ExternalToast } from "sonner"
 
 import type {
   ToastActionElement,
@@ -140,6 +140,26 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
+function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
+  const sonnerOpts: ExternalToast = {
+    description: props.description,
+    id
+  }
+
+  if (props.action) {
+    sonnerOpts.action = {
+      label: props.action.label as React.ReactNode,
+      onClick: props.action.onClick
+    }
+  }
+
+  if (props.variant === "destructive") {
+    sonnerToast.error(props.title as React.ReactNode, sonnerOpts)
+  } else {
+    sonnerToast(props.title as React.ReactNode, sonnerOpts)
+  }
+}
+
 function toast({ ...props }: Toast) {
   const id = genId()
 
@@ -149,18 +169,7 @@ function toast({ ...props }: Toast) {
       toast: { ...props, id },
     })
 
-    const sonnerOpts: any = { description: props.description, id }
-    if (props.action) {
-      sonnerOpts.action = {
-        label: props.action.label,
-        onClick: props.action.onClick
-      }
-    }
-    if (props.variant === "destructive") {
-      sonnerToast.error(props.title as any, sonnerOpts)
-    } else {
-      sonnerToast(props.title as any, sonnerOpts)
-    }
+    dispatchSonnerToast(props, id)
   }
 
   const dismiss = () => {
@@ -181,19 +190,7 @@ function toast({ ...props }: Toast) {
   })
 
   // Call Sonner toast under the hood for actual display
-  const sonnerOpts: any = { description: props.description, id }
-  if (props.action) {
-    sonnerOpts.action = {
-      label: props.action.label,
-      onClick: props.action.onClick
-    }
-  }
-
-  if (props.variant === "destructive") {
-    sonnerToast.error(props.title as any, sonnerOpts)
-  } else {
-    sonnerToast(props.title as any, sonnerOpts)
-  }
+  dispatchSonnerToast(props, id)
 
   return {
     id: id,
