@@ -1,137 +1,59 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Partner } from './PartnersContext';
-import { useAuth } from 'react-oidc-context';
+import { createContext, useContext, useCallback } from 'react';
+import type { Partner, Partnership } from '../types';
+import { usePlatformPartnersQuery, usePlatformPartnershipsQuery } from '../api/partnerHooks';
 
-export type Partnership = {
-  id: string;
-  local_partner_id: string;
-  remote_partner_id: string;
-  host?: string;
-  port?: number;
-  mdn_type: string;
-  encryption_algorithm: string;
-  signature_algorithm: string;
-  edi_version?: string | null;
-}
+// ─────────────────────────────────────────────
+// Context contract — read-only data only.
+// Mutations are consumed directly via hooks at
+// the component level (useCreatePlatformPartnerMutation, etc.)
+// ─────────────────────────────────────────────
 
 interface PlatformPartnersContextType {
   partners: Partner[];
   partnerships: Partnership[];
-  addPartner: (partner: any) => Promise<void>;
-  addPartnership: (payload: any) => Promise<void>;
-  removePartner: (id: string) => void;
   isLoading: boolean;
+  error: Error | null;
   refresh: () => Promise<void>;
 }
 
 const PlatformPartnersContext = createContext<PlatformPartnersContextType | undefined>(undefined);
 
 export function PlatformPartnersProvider({ children }: { children: React.ReactNode }) {
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [partnerships, setPartnerships] = useState<Partnership[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const auth = useAuth();
+  const {
+    data: partners = [],
+    isLoading: isLoadingPartners,
+    error: errorPartners,
+    refetch: refetchPartners,
+  } = usePlatformPartnersQuery();
 
-  const fetchPartners = useCallback(async () => {
-    if (!auth.isAuthenticated) return;
-    try {
-      setIsLoading(true);
-      const [partnersRes, partnershipsRes] = await Promise.all([
-        fetch('/api/v1/platform/partners/as2/trading-partners', {
-          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
-        }),
-        fetch('/api/v1/platform/partners/as2/partnerships', {
-          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
-        })
-      ]);
+  const {
+    data: partnerships = [],
+    isLoading: isLoadingPartnerships,
+    error: errorPartnerships,
+    refetch: refetchPartnerships,
+  } = usePlatformPartnershipsQuery();
 
-      if (partnersRes.ok) {
-        const data = await partnersRes.json();
-        setPartners(data);
-      } else {
-        setPartners([]);
-      }
-      if (partnershipsRes.ok) {
-        const data = await partnershipsRes.json();
-        setPartnerships(data);
-      } else {
-        setPartnerships([]);
-      }
-    } catch (e) {
-      console.error("Failed to fetch platform partners", e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [auth.isAuthenticated, auth.user?.access_token]);
+  const isLoading = isLoadingPartners || isLoadingPartnerships;
+  const error = errorPartners || errorPartnerships;
 
-  useEffect(() => {
-    fetchPartners();
-  }, [fetchPartners]);
-
-  const addPartner = async (payload: any) => {
-    if (!auth.isAuthenticated) return;
-    try {
-      const res = await fetch('/api/v1/platform/partners/as2/trading-partners', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${auth.user?.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        await fetchPartners();
-      } else {
-        const err = await res.json();
-        console.error("Failed to create partner", err);
-        throw new Error(err.detail || "Failed to create partner");
-      }
-    } catch (e) {
-      console.error(e);
-      throw e;
-    }
-  };
-
-  const addPartnership = async (payload: any) => {
-    if (!auth.isAuthenticated) return;
-    try {
-      const res = await fetch('/api/v1/platform/partners/as2/partnerships', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${auth.user?.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        await fetchPartners();
-      } else {
-        const err = await res.json();
-        console.error("Failed to create partnership", err);
-        throw new Error(err.detail || "Failed to create partnership");
-      }
-    } catch (e) {
-      console.error(e);
-      throw e;
-    }
-  };
-
-  const removePartner = (id: string) => {
-    // API not implemented yet, just optimistic update for now
-    setPartners((prev) => prev.filter((p) => p.id !== id));
-  };
+  const refresh = useCallback(async () => {
+    await Promise.all([refetchPartners(), refetchPartnerships()]);
+  }, [refetchPartners, refetchPartnerships]);
 
   return (
-    <PlatformPartnersContext.Provider value={{ partners, partnerships, addPartner, addPartnership, removePartner, isLoading, refresh: fetchPartners }}>
+    <PlatformPartnersContext.Provider value={{ partners, partnerships, isLoading, error, refresh }}>
       {children}
     </PlatformPartnersContext.Provider>
   );
 }
 
 export function usePlatformPartners() {
-  const context = useContext(PlatformPartnersContext);
-  if (context === undefined) {
+  const ctx = useContext(PlatformPartnersContext);
+  if (ctx === undefined) {
     throw new Error('usePlatformPartners must be used within a PlatformPartnersProvider');
   }
-  return context;
+  return ctx;
 }
+
+// Re-export domain types so consumers don't need a second import path
+export type { Partner, Partnership };

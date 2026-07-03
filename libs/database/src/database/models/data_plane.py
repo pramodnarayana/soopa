@@ -52,7 +52,14 @@ class AS2Partner(TenantBase, TenantAwareMixin):
     public_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    prev_public_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prev_public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    prev_private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AS2Partnership(TenantBase, TenantAwareMixin):
@@ -61,6 +68,7 @@ class AS2Partnership(TenantBase, TenantAwareMixin):
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
@@ -69,8 +77,6 @@ class AS2Partnership(TenantBase, TenantAwareMixin):
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
-    local_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     mdn_type: Mapped[str] = mapped_column(String(50), nullable=False, default="SYNC")
@@ -81,7 +87,7 @@ class AS2Partnership(TenantBase, TenantAwareMixin):
 
     advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +107,7 @@ class SFTPPartner(TenantBase, TenantAwareMixin):
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     credentials_vault_ref: Mapped[str] = mapped_column(String(255), nullable=False)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class WebhookPartner(TenantBase, TenantAwareMixin):
@@ -113,7 +119,7 @@ class WebhookPartner(TenantBase, TenantAwareMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     auth_header_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class InboundRoute(TenantBase, TenantAwareMixin):
@@ -134,7 +140,7 @@ class InboundRoute(TenantBase, TenantAwareMixin):
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -168,7 +174,7 @@ class OutboundRoute(TenantBase, TenantAwareMixin):
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         CheckConstraint(

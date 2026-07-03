@@ -66,7 +66,9 @@ async def test_control_plane_repository(control_repo: SqlAlchemyControlPlaneRepo
     assert names == {}
 
     # 3. Create Partnership
-    p_cmd = CreateAS2PartnershipCmd(local_partner_id=p_id2, remote_partner_id=p_id1)
+    p_cmd = CreateAS2PartnershipCmd(
+        name="Test Partnership", local_partner_id=p_id2, remote_partner_id=p_id1
+    )
     partnership_id = await control_repo.create_as2_partnership(tenant_id=1, cmd=p_cmd)
 
     assert partnership_id is not None
@@ -131,3 +133,21 @@ async def test_data_plane_repository(
 
     wh_names = await tenant_repo.get_webhook_partners_by_ids([wh_id])
     assert wh_names == {}
+
+
+@pytest.mark.asyncio
+async def test_get_as2_partner_tenant_isolation(control_repo: SqlAlchemyControlPlaneRepository):
+    # Verify that get_as2_partner includes a tenant_id check in the where clause
+    import uuid
+
+    partner_id = uuid.uuid4()
+    await control_repo.get_as2_partner(tenant_id=1, partner_id=partner_id)
+
+    # Extract the call arguments to session.execute
+    control_repo.session.execute.assert_called_once()
+    call_args = control_repo.session.execute.call_args[0][0]
+
+    # We can check that the SQL string contains the tenant_id binding
+    compiled = str(call_args.compile(compile_kwargs={"literal_binds": True}))
+    assert "tenant_id =" in compiled
+    assert "1" in compiled

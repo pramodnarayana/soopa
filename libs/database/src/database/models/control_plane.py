@@ -93,7 +93,14 @@ class AS2Partner(GlobalBase):
     )  # Retained for legacy/external, but vault preferred
     public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    prev_public_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prev_public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    prev_private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -121,6 +128,7 @@ class AS2Partnership(GlobalBase):
     tenant_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
     )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
@@ -130,8 +138,6 @@ class AS2Partnership(GlobalBase):
     )
 
     # Core AS2 Networking
-    local_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Core AS2 Protocol Settings
@@ -144,7 +150,7 @@ class AS2Partnership(GlobalBase):
     # Advanced OpenAS2 settings
     advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

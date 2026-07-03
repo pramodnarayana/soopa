@@ -22,7 +22,7 @@ export const Route = createRoute({
   component: AppWrapper,
 })
 
-function AppWrapper() {
+export function AppWrapper() {
   return (
     <PartnersProvider>
       <AppLayout />
@@ -30,7 +30,7 @@ function AppWrapper() {
   )
 }
 
-function AppLayout() {
+export function AppLayout() {
   const auth = useAuth()
   const redirectTriggered = useRef(false)
   const location = useLocation()

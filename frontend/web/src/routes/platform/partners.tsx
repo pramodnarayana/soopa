@@ -1,32 +1,64 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AS2PartnerCard } from '@/features/dashboard/components/AS2PartnerCard'
-import { AS2PartnershipCard } from '@/features/dashboard/components/AS2PartnershipCard'
+import { PartnersTable } from '@/features/partners/components/PartnersTable'
 import { usePlatformPartners } from '@/features/partners/context/PlatformPartnersContext'
+import { Server } from 'lucide-react'
+import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal'
+import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
 
 export const Route = createFileRoute('/platform/partners')({
-  component: PlatformPartnersPage,
+  component: () => (
+    <PlatformPartnersProvider>
+      <TradingPartnersPage />
+    </PlatformPartnersProvider>
+  )
 })
 
-function PlatformPartnersPage() {
-  const { partners, partnerships, addPartner, addPartnership } = usePlatformPartners()
+export function TradingPartnersPage() {
+  const { partners, isLoading, error } = usePlatformPartners();
 
-  const as2Count = partners.filter(p => p.type === 'AS2').length
-  const partnershipCount = partnerships.length
+  const localPartners = partners.filter(p => p.is_local);
+  const remotePartners = partners.filter(p => !p.is_local);
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Trading Partners</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AS2PartnerCard
-          count={as2Count}
-          onSave={addPartner}
-        />
-        <AS2PartnershipCard
-          count={partnershipCount}
-          availablePartners={partners}
-          onSave={addPartnership}
-        />
+      <div className="mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+            <Server className="w-5 h-5" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Trading Partners</h1>
+        </div>
+        <CreatePartnerModal existingAs2Ids={partners.map(p => p.as2_id).filter(Boolean) as string[]} />
       </div>
+
+      {isLoading ? (
+        <div className="space-y-4">
+          <div className="h-10 bg-slate-100 rounded-md animate-pulse" />
+          <div className="h-40 bg-slate-50 rounded-md animate-pulse" />
+        </div>
+      ) : error ? (
+        <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
+          Failed to load partners: {error.message}
+        </div>
+      ) : partners.length === 0 ? (
+        <PartnersTable data={[]} isLoading={false} scope="platform" />
+      ) : (
+        <div className="space-y-8">
+          {localPartners.length > 0 && (
+            <section>
+              <h2 className="text-xl font-semibold text-slate-800 mb-4 px-2">Local Stations</h2>
+              <PartnersTable data={localPartners} isLoading={isLoading} scope="platform" />
+            </section>
+          )}
+
+          {remotePartners.length > 0 && (
+            <section>
+              <h2 className="text-xl font-semibold text-slate-800 mb-4 px-2">Remote Stations</h2>
+              <PartnersTable data={remotePartners} isLoading={isLoading} scope="platform" />
+            </section>
+          )}
+        </div>
+      )}
     </div>
   )
 }

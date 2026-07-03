@@ -41,6 +41,10 @@ async def replicate_tenant_config(
                 public_cert_pem=global_tp.public_cert_pem,
                 public_cert_vault_ref=global_tp.public_cert_vault_ref,
                 private_key_vault_ref=global_tp.private_key_vault_ref,
+                prev_public_cert_pem=global_tp.prev_public_cert_pem,
+                prev_public_cert_vault_ref=global_tp.prev_public_cert_vault_ref,
+                prev_private_key_vault_ref=global_tp.prev_private_key_vault_ref,
+                url=global_tp.url,
                 active=global_tp.active,
             )
             .on_conflict_do_update(
@@ -53,6 +57,10 @@ async def replicate_tenant_config(
                     "public_cert_pem": global_tp.public_cert_pem,
                     "public_cert_vault_ref": global_tp.public_cert_vault_ref,
                     "private_key_vault_ref": global_tp.private_key_vault_ref,
+                    "prev_public_cert_pem": global_tp.prev_public_cert_pem,
+                    "prev_public_cert_vault_ref": global_tp.prev_public_cert_vault_ref,
+                    "prev_private_key_vault_ref": global_tp.prev_private_key_vault_ref,
+                    "url": global_tp.url,
                     "active": global_tp.active,
                 },
             )
@@ -71,8 +79,6 @@ async def replicate_tenant_config(
                 tenant_id=tenant_id,
                 local_partner_id=global_ps.local_partner_id,
                 remote_partner_id=global_ps.remote_partner_id,
-                local_url=global_ps.local_url,
-                remote_url=global_ps.remote_url,
                 credentials_vault_ref=global_ps.credentials_vault_ref,
                 mdn_type=global_ps.mdn_type,
                 mdn_url=global_ps.mdn_url,
@@ -87,8 +93,6 @@ async def replicate_tenant_config(
                 set_={
                     "local_partner_id": global_ps.local_partner_id,
                     "remote_partner_id": global_ps.remote_partner_id,
-                    "local_url": global_ps.local_url,
-                    "remote_url": global_ps.remote_url,
                     "credentials_vault_ref": global_ps.credentials_vault_ref,
                     "mdn_type": global_ps.mdn_type,
                     "mdn_url": global_ps.mdn_url,

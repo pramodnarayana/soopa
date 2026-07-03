@@ -16,7 +16,7 @@ const TENANT_USERS = [
   { id: '103', name: 'Frank Customer', email: 'frank@customer.com', role: 'Standard' as const },
 ]
 
-function TenantUsers() {
+export function TenantUsers() {
   const { data: userProfile } = useDashboardData()
 
   return (

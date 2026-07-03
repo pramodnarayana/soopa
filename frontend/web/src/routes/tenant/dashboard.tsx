@@ -11,7 +11,7 @@ export const Route = createRoute({
   component: Dashboard,
 })
 
-function Dashboard() {
+export function Dashboard() {
   const { data: userProfile, isLoading, error } = useDashboardData()
 
   return (

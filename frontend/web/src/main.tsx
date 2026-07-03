@@ -7,7 +7,16 @@ import { oidcConfig } from './auth'
 import { routeTree } from './routeTree.gen'
 import './index.css'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
+      retry: 1,
+    },
+  },
+})
 
 const router = createRouter({
   routeTree,

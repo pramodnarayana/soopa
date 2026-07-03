@@ -1,40 +1,74 @@
+import React from 'react';
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
+  getExpandedRowModel,
 } from '@tanstack/react-table';
 import type { Partnership } from '../context/PlatformPartnersContext';
-import { MoreHorizontal, Network, Plus, ShieldCheck } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Link } from '@tanstack/react-router';
+import { Network, ShieldCheck } from 'lucide-react';
+import { PartnershipDetails } from './PartnershipDetails';
+import { SharedRowActions } from './SharedRowActions';
+import { useUpdatePlatformPartnershipMutation, useDeletePlatformPartnershipMutation } from '../api/partnerHooks';
+
+function PartnershipRowActions({ partnership }: { partnership: Partnership }) {
+  const updatePlatform = useUpdatePlatformPartnershipMutation();
+  const deletePlatform = useDeletePlatformPartnershipMutation();
+  const isUpdating = updatePlatform.isPending;
+  const isDeleting = deletePlatform.isPending;
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Are you sure you want to delete this partnership? This action cannot be undone.')) {
+      deletePlatform.mutate(partnership.id);
+    }
+  };
+
+  const handleToggleActive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newActiveState = partnership.active === false ? true : false;
+    const payload = { active: newActiveState };
+    updatePlatform.mutate({ id: partnership.id, payload });
+  };
+
+  return (
+    <SharedRowActions
+      isActive={partnership.active !== false}
+      isUpdating={isUpdating}
+      isDeleting={isDeleting}
+      onToggleActive={handleToggleActive}
+      onDelete={handleDelete}
+      entityName="Partnership"
+    />
+  );
+}
 
 const columnHelper = createColumnHelper<Partnership>();
 
 const columns = [
-  columnHelper.accessor('id', {
-    header: 'Partnership',
-    cell: (info) => (
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-          <Network className="w-4 h-4" />
-        </div>
-        <span className="font-semibold text-slate-900 font-mono text-xs">
-          {info.getValue().substring(0, 8)}...
-        </span>
-      </div>
-    ),
-  }),
-  columnHelper.accessor('host', {
-    header: 'Host & Port',
+
+  columnHelper.accessor('name', {
+    header: 'Partnership Name',
     cell: (info) => {
-      const host = info.row.original.host;
-      const port = info.row.original.port;
-      if (!host) return <span className="text-slate-400 text-sm">N/A</span>;
+      const name = info.getValue();
+      if (!name) return (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <Network className="w-4 h-4" />
+          </div>
+          <span className="text-slate-400 text-sm">Unnamed Partnership</span>
+        </div>
+      );
       return (
-        <span className="font-mono text-sm text-slate-600">
-          {host}:{port}
-        </span>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <Network className="w-4 h-4" />
+          </div>
+          <span className="font-medium text-sm text-slate-700">
+            {name}
+          </span>
+        </div>
       );
     },
   }),
@@ -71,21 +105,24 @@ const columns = [
   }),
   columnHelper.display({
     id: 'actions',
-    cell: () => (
+    header: '',
+    cell: (info) => (
       <div className="flex justify-end">
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
+        <PartnershipRowActions partnership={info.row.original} />
       </div>
     ),
   }),
 ];
 
-export function PartnershipsTable({ data, isLoading, scope = 'tenant' }: { data: Partnership[]; isLoading: boolean; scope?: 'platform' | 'tenant' }) {
+import type { Partner } from '../context/PartnersContext';
+
+export function PartnershipsTable({ data, availablePartners, isLoading }: { data: Partnership[]; availablePartners: Partner[]; isLoading: boolean }) {
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowCanExpand: () => true,
+    getExpandedRowModel: getExpandedRowModel(),
   });
 
   if (isLoading) {
@@ -117,16 +154,7 @@ export function PartnershipsTable({ data, isLoading, scope = 'tenant' }: { data:
           <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-300 mb-6 shadow-sm">
             <Network className="w-8 h-8" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900 mb-2">No AS2 Partnerships Found</h3>
-          <p className="text-slate-500 max-w-sm mb-6 leading-relaxed">
-            There are currently no active AS2 partnerships configured for this {scope}. Get started by setting up a connection between a local and remote station.
-          </p>
-          <Link to={scope === 'platform' ? '/platform/partners' : '/tenant/partners'}>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Configure Partnership
-            </Button>
-          </Link>
+          <h3 className="text-lg font-bold text-slate-900 mb-2">No Active Partnerships</h3>
         </div>
       </div>
     );
@@ -154,13 +182,34 @@ export function PartnershipsTable({ data, isLoading, scope = 'tenant' }: { data:
           </thead>
           <tbody className="divide-y divide-slate-100">
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50/50 transition-colors group">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-6 py-4">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
+              <React.Fragment key={row.id}>
+                <tr
+                  className={`hover:bg-slate-50/50 transition-colors group cursor-pointer ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
+                  onClick={() => row.toggleExpanded()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      row.toggleExpanded();
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={row.getIsExpanded()}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-6 py-4">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+                {row.getIsExpanded() && (
+                  <tr>
+                    <td colSpan={row.getVisibleCells().length} className="p-0">
+                      <PartnershipDetails partnership={row.original} availablePartners={availablePartners} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

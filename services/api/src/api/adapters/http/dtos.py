@@ -1,7 +1,7 @@
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -12,6 +12,7 @@ class CreateAS2TradingPartnerRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the AS2 Trading Partner")
     as2_id: str = Field(..., max_length=255, description="AS2 ID for the partner")
     is_local: bool = Field(False, description="Is this a local station?")
+    url: HttpUrl | None = Field(None, description="Receiving URL for this Trading Partner")
     public_cert_pem: str | None = Field(None, description="Public certificate in PEM format")
     public_cert_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for public cert"
@@ -22,9 +23,9 @@ class CreateAS2TradingPartnerRequest(BaseModel):
 
 
 class CreateAS2PartnershipRequest(BaseModel):
+    name: str = Field(..., max_length=255, description="Name for the partnership")
     local_partner_id: UUID = Field(..., description="ID of the local identity")
     remote_partner_id: UUID = Field(..., description="ID of the remote identity")
-    remote_url: HttpUrl | None = Field(None, description="Remote AS2 URL")
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for basic auth"
     )
@@ -55,6 +56,53 @@ class CreateWebhookPartnerRequest(BaseModel):
     auth_header_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for auth header"
     )
+
+    @field_validator("url")
+    @classmethod
+    def validate_no_loopback(cls, v: HttpUrl) -> HttpUrl:
+        if v.host in ("127.0.0.1", "localhost", "::1") or (
+            v.host and v.host.startswith("169.254.")
+        ):
+            raise ValueError("Loopback or link-local addresses are not permitted for webhooks.")
+        return v
+
+
+class UpdateAS2TradingPartnerRequest(BaseModel):
+    name: str | None = Field(None, max_length=255, description="Name of the trading partner")
+    as2_id: str | None = Field(None, max_length=255, description="AS2 ID (local or remote)")
+    is_local: bool | None = Field(
+        None, description="True if local station, False if remote station"
+    )
+    url: HttpUrl | None = Field(None, description="Receiving URL for this Trading Partner")
+    active: bool | None = None
+
+
+class UpdateAS2PartnershipRequest(BaseModel):
+    name: str | None = Field(None, max_length=255)
+    local_partner_id: UUID | None = None
+    remote_partner_id: UUID | None = None
+    credentials_vault_ref: str | None = Field(None, max_length=255)
+    mdn_type: Literal["SYNC", "ASYNC", "NONE"] | None = Field(None)
+    mdn_url: HttpUrl | None = Field(None)
+    encryption_algorithm: str | None = Field(None, max_length=50)
+    signature_algorithm: str | None = Field(None, max_length=50)
+    edi_version: (
+        Literal["X12-004010", "X12-005010", "EDIFACT-D96A", "EDIFACT-D01B", "NONE"] | None
+    ) = Field(None)
+    advanced_flags: dict[str, Any] | None = Field(None)
+    active: bool | None = Field(None)
+
+
+class UpdateSFTPPartnerRequest(BaseModel):
+    name: str | None = Field(None, max_length=255, description="Name of the SFTP partner")
+    host: str | None = Field(None, max_length=255, description="SFTP host/IP")
+    port: int | None = Field(None, description="SFTP port")
+    username: str | None = Field(None, max_length=255, description="SFTP username")
+    remote_path: str | None = Field(None, max_length=1024, description="Remote path to poll/drop")
+    credentials_vault_ref: str | None = Field(
+        None, max_length=512, description="Vault reference for password/key"
+    )
+    active: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -124,20 +172,38 @@ class AS2TradingPartnerResponse(BaseModel):
     type: str = "AS2"
     as2_id: str
     is_local: bool
+    url: str | None = None
+    active: bool = False
+
+
+class RotateCertificateRequest(BaseModel):
+    action: Literal["generate", "upload"] = Field(
+        ..., description="Action to perform: generate or upload"
+    )
+    public_cert_pem: str | None = Field(None, description="Public certificate in PEM format")
+    private_key_pem: str | None = Field(None, description="Private key in PEM format")
+
+
+class CertificateExportResponse(BaseModel):
+    public_cert_pem: str | None = None
+    private_key_pem: str | None = None
+    prev_public_cert_pem: str | None = None
+    prev_private_key_pem: str | None = None
 
 
 class AS2PartnershipResponse(BaseModel):
     id: str
+    tenant_id: int | None
+    name: str | None = None
     local_partner_id: str
     remote_partner_id: str
-    local_url: str | None = None
-    remote_url: str | None = None
     mdn_type: str
     mdn_url: str | None = None
     encryption_algorithm: str
     signature_algorithm: str
     edi_version: str | None = None
     status: str
+    active: bool = False
 
 
 class RouteResponse(BaseModel):

@@ -7,7 +7,7 @@ export const Route = createRoute({
   component: LandingPage,
 })
 
-function LandingPage() {
+export function LandingPage() {
   return (
     <div className="relative flex-1 flex flex-col items-center justify-center overflow-hidden bg-white">
       {/* Subtle Dot Pattern */}

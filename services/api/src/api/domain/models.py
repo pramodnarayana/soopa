@@ -3,6 +3,17 @@ from typing import Any
 from uuid import UUID
 
 # ---------------------------------------------------------------------------
+# Sentinels
+# ---------------------------------------------------------------------------
+
+
+class UnsetType:
+    pass
+
+
+UNSET = UnsetType()
+
+# ---------------------------------------------------------------------------
 # Partner Creation Commands
 # ---------------------------------------------------------------------------
 
@@ -12,6 +23,19 @@ class CreateAS2TradingPartnerCmd:
     name: str
     as2_id: str
     is_local: bool = False
+    url: str | None = None
+    public_cert_pem: str | None = None
+    public_cert_vault_ref: str | None = None
+    private_key_vault_ref: str | None = None
+
+
+@dataclass(frozen=True)
+class UpdateAS2TradingPartnerCmd:
+    name: str | None = None
+    as2_id: str | None = None
+    is_local: bool | None = None
+    url: str | None = None
+    active: bool | None = None
     public_cert_pem: str | None = None
     public_cert_vault_ref: str | None = None
     private_key_vault_ref: str | None = None
@@ -21,8 +45,7 @@ class CreateAS2TradingPartnerCmd:
 class CreateAS2PartnershipCmd:
     local_partner_id: UUID
     remote_partner_id: UUID
-    local_url: str | None = None
-    remote_url: str | None = None
+    name: str
     credentials_vault_ref: str | None = None
     mdn_type: str = "SYNC"
     mdn_url: str | None = None
@@ -33,6 +56,21 @@ class CreateAS2PartnershipCmd:
 
 
 @dataclass(frozen=True)
+class UpdateAS2PartnershipCmd:
+    name: str | UnsetType = UNSET
+    local_partner_id: UUID | UnsetType = UNSET
+    remote_partner_id: UUID | UnsetType = UNSET
+    credentials_vault_ref: str | None | UnsetType = UNSET
+    mdn_type: str | UnsetType = UNSET
+    mdn_url: str | None | UnsetType = UNSET
+    encryption_algorithm: str | UnsetType = UNSET
+    signature_algorithm: str | UnsetType = UNSET
+    edi_version: str | None | UnsetType = UNSET
+    advanced_flags: dict[str, Any] | None | UnsetType = UNSET
+    active: bool | UnsetType = UNSET
+
+
+@dataclass(frozen=True)
 class CreateSFTPPartnerCmd:
     name: str
     host: str
@@ -40,6 +78,17 @@ class CreateSFTPPartnerCmd:
     credentials_vault_ref: str
     port: int = 22
     remote_path: str | None = None
+
+
+@dataclass(frozen=True)
+class UpdateSFTPPartnerCmd:
+    name: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    credentials_vault_ref: str | None = None
+    remote_path: str | None = None
+    active: bool | None = None
 
 
 @dataclass(frozen=True)

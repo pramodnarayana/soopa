@@ -4,16 +4,14 @@ from typing import Any
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.session import get_global_session
 from fastapi import Depends, FastAPI, HTTPException
-from identity.dependencies import get_current_tenant_id, get_raw_jwt, get_tenant_session
+from identity.dependencies import get_current_tenant_id, get_tenant_session
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
-from api.adapters.repository import SqlAlchemyTenantRepository
-from api.core.authorization import AuthorizationService
-from api.routers import partners, platform_partners, routes
+from api.dependencies import get_current_user_profile
+from api.routers import partners, platform_config, platform_partners, routes
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +53,7 @@ app = FastAPI(
 app.include_router(cdc_relay.router)
 app.include_router(partners.router)
 app.include_router(platform_partners.router)
+app.include_router(platform_config.router)
 app.include_router(routes.router)
 
 
@@ -62,8 +61,7 @@ app.include_router(routes.router)
 async def get_me(
     tenant_id: int = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_tenant_session),
-    global_session: AsyncSession = Depends(get_global_session),
-    token_payload: dict[str, Any] = Depends(get_raw_jwt),
+    profile: dict[str, Any] = Depends(get_current_user_profile),
 ) -> Any:
     """
     Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
@@ -75,18 +73,4 @@ async def get_me(
     if str(current_rls_tenant) != str(tenant_id):
         raise HTTPException(status_code=403, detail="RLS context mismatch. Unauthorized access.")
 
-    # 2. Get Authorization Profile via Service
-    tenant_repo = SqlAlchemyTenantRepository(global_session)
-    auth_service = AuthorizationService(tenant_repo)
-
-    is_platform_admin = tenant_id == 0 or "Platform_Admin" in token_payload.get("roles", [])
-
-    profile = await auth_service.get_authorization_profile(
-        tenant_id=tenant_id,
-        is_platform_admin=is_platform_admin,
-        current_rls_tenant=current_rls_tenant,
-    )
-
-    # The tenant_id is securely resolved from the database via get_current_tenant_id.
-    # Therefore, we do not need to check for a custom token claim here.
     return profile

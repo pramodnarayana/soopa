@@ -9,10 +9,9 @@ import {
   Network,
   ChevronRight,
   Server,
-  LogOut,
-  Plus
+  LogOut
 } from 'lucide-react'
-import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
+
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
 
 export const Route = createRoute({
@@ -21,15 +20,13 @@ export const Route = createRoute({
   component: AppWrapper,
 })
 
-function AppWrapper() {
+export function AppWrapper() {
   return (
-    <PlatformPartnersProvider>
-      <AppLayout />
-    </PlatformPartnersProvider>
+    <AppLayout />
   )
 }
 
-function AppLayout() {
+export function AppLayout() {
   const auth = useAuth()
   const redirectTriggered = useRef(false)
   const location = useLocation()
@@ -67,7 +64,7 @@ function AppLayout() {
   }
 
   const NavItem = ({ icon: Icon, label, to }: { icon: any, label: string, to: string }) => {
-    const active = location.pathname.startsWith(to)
+    const active = location.pathname === to || location.pathname.startsWith(`${to}/`)
     return (
       <Link to={to} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
         <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`} />
@@ -96,9 +93,8 @@ function AppLayout() {
           <NavItem icon={LayoutDashboard} label="Overview" to="/platform/dashboard" />
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Configuration</div>
-          <NavItem icon={Plus} label="Trading Partner" to="/platform/partners" />
-          <NavItem icon={Server} label="Active Partners" to="/platform/active-partners" />
-          <NavItem icon={Network} label="Active Partnerships" to="/platform/active-partnerships" />
+          <NavItem icon={Server} label="Trading Partners" to="/platform/partners" />
+          <NavItem icon={Network} label="Partnerships" to="/platform/partnerships" />
 
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">System Admin</div>
           <NavItem icon={Network} label="Tenants" to="/platform/tenants" />

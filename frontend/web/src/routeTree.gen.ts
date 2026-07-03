@@ -20,9 +20,8 @@ import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as PlatformUsersRouteImport } from './routes/platform/users'
 import { Route as PlatformTenantsRouteImport } from './routes/platform/tenants'
 import { Route as PlatformPartnersRouteImport } from './routes/platform/partners'
+import { Route as PlatformPartnershipsRouteImport } from './routes/platform/partnerships'
 import { Route as PlatformDashboardRouteImport } from './routes/platform/dashboard'
-import { Route as PlatformActivePartnershipsRouteImport } from './routes/platform/active-partnerships'
-import { Route as PlatformActivePartnersRouteImport } from './routes/platform/active-partners'
 
 const TenantRoute = TenantRouteImport.update({
   id: '/tenant',
@@ -78,20 +77,14 @@ const PlatformPartnersRoute = PlatformPartnersRouteImport.update({
   path: '/partners',
   getParentRoute: () => PlatformRoute,
 } as any)
+const PlatformPartnershipsRoute = PlatformPartnershipsRouteImport.update({
+  id: '/partnerships',
+  path: '/partnerships',
+  getParentRoute: () => PlatformRoute,
+} as any)
 const PlatformDashboardRoute = PlatformDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => PlatformRoute,
-} as any)
-const PlatformActivePartnershipsRoute =
-  PlatformActivePartnershipsRouteImport.update({
-    id: '/active-partnerships',
-    path: '/active-partnerships',
-    getParentRoute: () => PlatformRoute,
-  } as any)
-const PlatformActivePartnersRoute = PlatformActivePartnersRouteImport.update({
-  id: '/active-partners',
-  path: '/active-partners',
   getParentRoute: () => PlatformRoute,
 } as any)
 
@@ -99,10 +92,9 @@ export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
   '/platform': typeof PlatformRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
-  '/platform/active-partners': typeof PlatformActivePartnersRoute
-  '/platform/active-partnerships': typeof PlatformActivePartnershipsRoute
   '/platform/dashboard': typeof PlatformDashboardRoute
   '/platform/partners': typeof PlatformPartnersRoute
+  '/platform/partnerships': typeof PlatformPartnershipsRoute
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -113,10 +105,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/platform': typeof PlatformRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
-  '/platform/active-partners': typeof PlatformActivePartnersRoute
-  '/platform/active-partnerships': typeof PlatformActivePartnershipsRoute
   '/platform/dashboard': typeof PlatformDashboardRoute
   '/platform/partners': typeof PlatformPartnersRoute
+  '/platform/partnerships': typeof PlatformPartnershipsRoute
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -130,10 +121,9 @@ export interface FileRoutesById {
   '/_marketing': typeof MarketingRouteWithChildren
   '/platform': typeof PlatformRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
-  '/platform/active-partners': typeof PlatformActivePartnersRoute
-  '/platform/active-partnerships': typeof PlatformActivePartnershipsRoute
   '/platform/dashboard': typeof PlatformDashboardRoute
   '/platform/partners': typeof PlatformPartnersRoute
+  '/platform/partnerships': typeof PlatformPartnershipsRoute
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -148,10 +138,9 @@ export interface FileRouteTypes {
     | '/'
     | '/platform'
     | '/tenant'
-    | '/platform/active-partners'
-    | '/platform/active-partnerships'
     | '/platform/dashboard'
     | '/platform/partners'
+    | '/platform/partnerships'
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
@@ -162,10 +151,9 @@ export interface FileRouteTypes {
   to:
     | '/platform'
     | '/tenant'
-    | '/platform/active-partners'
-    | '/platform/active-partnerships'
     | '/platform/dashboard'
     | '/platform/partners'
+    | '/platform/partnerships'
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
@@ -178,10 +166,9 @@ export interface FileRouteTypes {
     | '/_marketing'
     | '/platform'
     | '/tenant'
-    | '/platform/active-partners'
-    | '/platform/active-partnerships'
     | '/platform/dashboard'
     | '/platform/partners'
+    | '/platform/partnerships'
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
@@ -283,18 +270,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformDashboardRouteImport
       parentRoute: typeof PlatformRoute
     }
-    '/platform/active-partnerships': {
-      id: '/platform/active-partnerships'
-      path: '/active-partnerships'
-      fullPath: '/platform/active-partnerships'
-      preLoaderRoute: typeof PlatformActivePartnershipsRouteImport
-      parentRoute: typeof PlatformRoute
-    }
-    '/platform/active-partners': {
-      id: '/platform/active-partners'
-      path: '/active-partners'
-      fullPath: '/platform/active-partners'
-      preLoaderRoute: typeof PlatformActivePartnersRouteImport
+    '/platform/partnerships': {
+      id: '/platform/partnerships'
+      path: '/partnerships'
+      fullPath: '/platform/partnerships'
+      preLoaderRoute: typeof PlatformPartnershipsRouteImport
       parentRoute: typeof PlatformRoute
     }
   }
@@ -313,19 +293,17 @@ const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
 )
 
 interface PlatformRouteChildren {
-  PlatformActivePartnersRoute: typeof PlatformActivePartnersRoute
-  PlatformActivePartnershipsRoute: typeof PlatformActivePartnershipsRoute
   PlatformDashboardRoute: typeof PlatformDashboardRoute
   PlatformPartnersRoute: typeof PlatformPartnersRoute
+  PlatformPartnershipsRoute: typeof PlatformPartnershipsRoute
   PlatformTenantsRoute: typeof PlatformTenantsRoute
   PlatformUsersRoute: typeof PlatformUsersRoute
 }
 
 const PlatformRouteChildren: PlatformRouteChildren = {
-  PlatformActivePartnersRoute: PlatformActivePartnersRoute,
-  PlatformActivePartnershipsRoute: PlatformActivePartnershipsRoute,
   PlatformDashboardRoute: PlatformDashboardRoute,
   PlatformPartnersRoute: PlatformPartnersRoute,
+  PlatformPartnershipsRoute: PlatformPartnershipsRoute,
   PlatformTenantsRoute: PlatformTenantsRoute,
   PlatformUsersRoute: PlatformUsersRoute,
 }
