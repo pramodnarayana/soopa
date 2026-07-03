@@ -1,5 +1,5 @@
 import * as React from "react"
-import { toast as sonnerToast } from "sonner"
+import { toast as sonnerToast, type ExternalToast } from "sonner"
 
 import type {
   ToastActionElement,
@@ -14,6 +14,8 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 const actionTypes = {
@@ -138,15 +140,42 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
+function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
+  const sonnerOpts: ExternalToast = {
+    description: props.description,
+    id
+  }
+
+  if (props.action) {
+    sonnerOpts.action = {
+      label: props.action.label as React.ReactNode,
+      onClick: props.action.onClick
+    }
+  }
+
+  if (props.variant === "destructive") {
+    sonnerToast.error(props.title as React.ReactNode, sonnerOpts)
+  } else {
+    sonnerToast(props.title as React.ReactNode, sonnerOpts)
+  }
+}
+
 function toast({ ...props }: Toast) {
   const id = genId()
 
-  const update = (props: ToasterToast) =>
+  const update = (props: ToasterToast) => {
     dispatch({
       type: "UPDATE_TOAST",
       toast: { ...props, id },
     })
-  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+    dispatchSonnerToast(props, id)
+  }
+
+  const dismiss = () => {
+    dispatch({ type: "DISMISS_TOAST", toastId: id })
+    sonnerToast.dismiss(id)
+  }
 
   dispatch({
     type: "ADD_TOAST",
@@ -161,11 +190,7 @@ function toast({ ...props }: Toast) {
   })
 
   // Call Sonner toast under the hood for actual display
-  if (props.variant === "destructive") {
-    sonnerToast.error(props.title as any, { description: props.description as any, id })
-  } else {
-    sonnerToast(props.title as any, { description: props.description as any, id })
-  }
+  dispatchSonnerToast(props, id)
 
   return {
     id: id,

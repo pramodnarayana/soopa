@@ -27,8 +27,17 @@ const ToastDescription = () => null
 const ToastClose = () => null
 const ToastAction = () => null
 
-type ToastProps = any
-type ToastActionElement = any
+import * as React from "react"
+
+type ToastProps = {
+  className?: string
+  variant?: "default" | "destructive"
+}
+
+type ToastActionElement = {
+  label: React.ReactNode
+  onClick: () => void
+}
 
 export {
   type ToastProps,

@@ -208,6 +208,8 @@ async def create_platform_as2_partnership(
             p = await uow.control_plane.get_as2_partnership(
                 tenant_id=0, partnership_id=partnership_id
             )
+            if not p:
+                raise HTTPException(status_code=404, detail="Partnership not found")
 
             return AS2PartnershipResponse(
                 id=str(partnership_id),
@@ -229,6 +231,8 @@ async def create_platform_as2_partnership(
         raise HTTPException(
             status_code=400, detail="AS2 Partnership already exists for these partners."
         ) from e
+    except HTTPException:
+        raise
 
 
 @router.put("/as2/partnerships/{partnership_id}", response_model=AS2PartnershipResponse)
