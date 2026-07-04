@@ -40,8 +40,8 @@ check-all: format lint typecheck test
 # --- Local Development Server ---
 
 dev:
-	@echo "Starting both Frontend and Backend concurrently..."
-	pnpm dlx concurrently --kill-others -c "blue,magenta" -n "api,web" "make dev-api" "make dev-web"
+	@echo "Starting Frontend, API, and Worker concurrently..."
+	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan" -n "api,web,worker" "make dev-api" "make dev-web" "make dev-worker"
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."
@@ -54,6 +54,10 @@ dev-api:
 dev-web:
 	@echo "Starting React Frontend with Vite..."
 	cd frontend/web && pnpm dev
+
+dev-worker:
+	@echo "Starting Provision Worker for local development..."
+	ENVIRONMENT=development PYTHONPATH=services/worker/src:libs/database/src:libs/config/src:libs/pipeline/src uv run python services/worker/src/worker/provision/main.py
 
 db-init:
 	@echo "Waiting for databases to be ready..."

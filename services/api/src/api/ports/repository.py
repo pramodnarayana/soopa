@@ -8,125 +8,80 @@ from api.domain.models import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookPartnerCmd,
+    CreateWebhookCmd,
     UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
+    UpdateInboundRouteCmd,
+    UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
 
 
 class ControlPlaneRepositoryPort(Protocol):
     """
-    Port for the Control Plane repository, handling Global AS2 configs.
+    Port for the Control Plane repository, handling Global AS2 configs and Tenant configs as SoT.
     """
 
-    async def create_as2_identity(self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd) -> UUID:
-        """Inserts an AS2 Partner in the Global DB and returns its UUID."""
-        ...
-
+    async def create_as2_identity(
+        self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
+    ) -> UUID: ...
     async def update_as2_identity(
         self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
-    ) -> None:
-        """Updates an AS2 Partner in the Global DB."""
-        ...
-
-    async def get_as2_partner(self, tenant_id: int, partner_id: UUID) -> Any:
-        """Gets an AS2 Partner in the Global DB."""
-        ...
-
-    async def delete_as2_identity(self, tenant_id: int, partner_id: UUID) -> None:
-        """Deletes an AS2 Identity from the Global DB."""
-        ...
-
-    async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
-        """Inserts an AS2 Partnership in the Global DB and returns its UUID."""
-        ...
-
+    ) -> None: ...
+    async def get_as2_partner(self, tenant_id: int, partner_id: UUID) -> Any: ...
+    async def delete_as2_identity(self, tenant_id: int, partner_id: UUID) -> None: ...
+    async def create_as2_partnership(
+        self, tenant_id: int, cmd: CreateAS2PartnershipCmd
+    ) -> UUID: ...
     async def update_as2_partnership(
         self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
-    ) -> None:
-        """Updates an AS2 Partnership in the Global DB."""
-        ...
-
-    async def get_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> Any:
-        """Gets an AS2 Partnership from the Global DB."""
-        ...
-
-    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
-        """Deletes an AS2 Partnership from the Global DB."""
-        ...
-
-    async def get_as2_partners_by_ids(self, ids: list[UUID], tenant_id: int) -> dict[UUID, str]:
-        """Returns a dict mapping AS2 Partner ID to Name."""
-        ...
-
-    async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]:
-        """Lists AS2 Partners for a tenant."""
-        ...
-
+    ) -> None: ...
+    async def get_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> Any: ...
+    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None: ...
+    async def get_as2_partners_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]: ...
+    async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]: ...
     async def create_outbox_event(
         self, tenant_id: int, event_type: str, payload: dict[str, Any]
-    ) -> UUID:
-        """Inserts an Outbox event into the Global DB."""
-        ...
+    ) -> UUID: ...
+
+    # SFTP Partners
+    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> UUID: ...
+    async def update_sftp_partner(
+        self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
+    ) -> None: ...
+    async def delete_sftp_partner(self, tenant_id: int, partner_id: UUID) -> None: ...
+    async def get_sftp_partner(self, tenant_id: int, partner_id: UUID) -> Any: ...
+    async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]: ...
+    async def get_sftp_partners_by_ids(
+        self, tenant_id: int, ids: list[UUID]
+    ) -> dict[UUID, str]: ...
+
+    # Webhook Partners
+    async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> UUID: ...
+    async def get_webhook(self, tenant_id: int, partner_id: UUID) -> Any: ...
+    async def list_webhooks(self, tenant_id: int) -> Sequence[Any]: ...
+    async def get_webhooks_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]: ...
+
+    # Routes
+    async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> UUID: ...
+    async def update_inbound_route(
+        self, tenant_id: int, route_id: UUID, cmd: UpdateInboundRouteCmd
+    ) -> bool: ...
+    async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...
+    async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> UUID: ...
+    async def update_outbound_route(
+        self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
+    ) -> bool: ...
+    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...
+    async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]: ...
 
 
 class DataPlaneRepositoryPort(Protocol):
     """
-    Port for the Data Plane repository, handling Tenant-specific configs directly.
+    Port for the Data Plane repository, handling Operational Data.
     """
 
-    async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> UUID:
-        """Inserts an SFTP Partner into the Tenant DB and returns its UUID."""
-        ...
-
-    async def update_sftp_partner(self, partner_id: UUID, cmd: UpdateSFTPPartnerCmd) -> None:
-        """Updates an SFTP Partner in the Tenant DB."""
-        ...
-
-    async def delete_sftp_partner(self, partner_id: UUID) -> None:
-        """Deletes an SFTP Partner from the Tenant DB."""
-        ...
-
-    async def get_sftp_partner(self, partner_id: UUID) -> Any:
-        """Gets an SFTP Partner from the Tenant DB."""
-        ...
-
-    async def get_webhook_partner(self, partner_id: UUID) -> Any:
-        """Gets a Webhook Partner from the Tenant DB."""
-        ...
-
-    async def list_webhook_partners(self) -> Sequence[Any]:
-        """Lists Webhook Partners."""
-        ...
-
-    async def list_sftp_partners(self) -> Sequence[Any]:
-        """Lists SFTP Partners."""
-        ...
-
-    async def get_sftp_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
-        """Returns a dict mapping SFTP Partner ID to Name."""
-        ...
-
-    async def get_webhook_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
-        """Returns a dict mapping Webhook Partner ID to Name."""
-        ...
-
-    async def create_webhook_partner(self, cmd: CreateWebhookPartnerCmd) -> UUID:
-        """Inserts a Webhook Partner into the Tenant DB and returns its UUID."""
-        ...
-
-    async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> UUID:
-        """Inserts an Inbound Route into the Tenant DB and returns its UUID."""
-        ...
-
-    async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> UUID:
-        """Inserts an Outbound Route into the Tenant DB and returns its UUID."""
-        ...
-
-    async def get_all_routes(self) -> dict[str, list[Any]]:
-        """Retrieves all Inbound and Outbound Routes for the tenant."""
-        ...
+    pass
 
 
 class TenantRepositoryPort(Protocol):
@@ -134,6 +89,4 @@ class TenantRepositoryPort(Protocol):
     Port for retrieving tenant-level configuration globally.
     """
 
-    async def get_tenant_flags(self, tenant_id: int) -> dict[str, Any] | None:
-        """Retrieves tenant flags such as allow_private_as2."""
-        ...
+    async def get_tenant_flags(self, tenant_id: int) -> dict[str, Any] | None: ...

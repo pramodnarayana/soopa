@@ -24,7 +24,7 @@ def client(fake_uow):
 
 def test_create_platform_as2_partner(client, fake_uow):
     response = client.post(
-        "/api/v1/platform/partners/as2/trading-partners",
+        "/api/v1/platform/trading-partners/as2/trading-partners",
         json={"name": "Test Global Partner", "as2_id": "GLOBAL_AS2"},
     )
     assert response.status_code == 201
@@ -37,10 +37,10 @@ def test_create_platform_as2_partner(client, fake_uow):
 def test_list_platform_as2_partners(client, fake_uow):
     # Ensure there's a partner first
     client.post(
-        "/api/v1/platform/partners/as2/trading-partners",
+        "/api/v1/platform/trading-partners/as2/trading-partners",
         json={"name": "Test Global Partner", "as2_id": "GLOBAL_AS2"},
     )
-    response = client.get("/api/v1/platform/partners/as2/trading-partners")
+    response = client.get("/api/v1/platform/trading-partners/as2/trading-partners")
     assert response.status_code == 200
     assert len(response.json()) == 1
 
@@ -51,7 +51,7 @@ def test_create_platform_as2_partnership(client, fake_uow):
     local_id = str(uuid.uuid4())
     remote_id = str(uuid.uuid4())
     response = client.post(
-        "/api/v1/platform/partners/as2/partnerships",
+        "/api/v1/platform/trading-partners/as2/partnerships",
         json={
             "name": "Test Partnership",
             "local_partner_id": local_id,
@@ -65,19 +65,19 @@ def test_create_platform_as2_partnership(client, fake_uow):
 
 
 def test_list_platform_as2_partnerships(client):
-    response = client.get("/api/v1/platform/partners/as2/partnerships")
+    response = client.get("/api/v1/platform/trading-partners/as2/partnerships")
     assert response.status_code == 200
     assert len(response.json()) == 1
 
 
 def test_create_tenant_sftp_partner(client, fake_uow):
     response = client.post(
-        "/api/v1/partners/sftp",
+        "/api/v1/trading-partners/sftp",
         json={
             "name": "My SFTP",
             "host": "sftp.test",
             "username": "user",
-            "credentials_vault_ref": "ref",
+            "password": "secretpassword",
         },
     )
     assert response.status_code == 201
@@ -87,7 +87,7 @@ def test_create_tenant_sftp_partner(client, fake_uow):
 
 def test_create_tenant_webhook_partner(client, fake_uow):
     response = client.post(
-        "/api/v1/partners/webhook", json={"name": "My Webhook", "url": "http://hook.test"}
+        "/api/v1/webhooks/webhook", json={"name": "My Webhook", "url": "https://example.com"}
     )
     assert response.status_code == 201
     data = response.json()
@@ -95,16 +95,6 @@ def test_create_tenant_webhook_partner(client, fake_uow):
 
 
 def test_list_tenant_partners(client, fake_uow):
-    response = client.get("/api/v1/partners")
+    response = client.get("/api/v1/trading-partners")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
-
-
-def test_create_tenant_as2_partner(client, fake_uow):
-    response = client.post(
-        "/api/v1/partners/as2/trading-partners",
-        json={"name": "My AS2", "as2_id": "AS2_ID_1", "public_cert_pem": "some_cert_data"},
-    )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["type"] == "AS2"

@@ -74,7 +74,7 @@ class PartnerPort(Protocol):
         """Fetches SFTP partner config."""
         ...
 
-    async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
         """Fetches Webhook partner config."""
         ...
 

@@ -1,5 +1,6 @@
 import * as React from "react"
 import { toast as sonnerToast, type ExternalToast } from "sonner"
+import { Copy } from "lucide-react"
 
 import type {
   ToastActionElement,
@@ -140,6 +141,8 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
+const ERROR_TOAST_DURATION = 10000; // Errors persist for 10s (auto-pauses on hover)
+
 function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
   const sonnerOpts: ExternalToast = {
     description: props.description,
@@ -154,7 +157,36 @@ function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
   }
 
   if (props.variant === "destructive") {
-    sonnerToast.error(props.title as React.ReactNode, sonnerOpts)
+    // Apply global defaults for all error-level toasts
+    sonnerOpts.duration = ERROR_TOAST_DURATION;
+
+    const ToastContent = () => (
+      <div className="flex items-start justify-between w-full gap-3 group/toast-inner">
+        <div className="flex flex-col gap-1 pr-4">
+          <span className="font-semibold">{props.title}</span>
+          {props.description && <span className="text-sm opacity-90">{props.description}</span>}
+        </div>
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const textToCopy = [props.title, props.description].filter(Boolean).join('\n');
+            try {
+              await navigator.clipboard.writeText(textToCopy);
+              sonnerToast.success("Copied to clipboard", { duration: 2000 });
+            } catch {
+              sonnerToast.error("Failed to copy to clipboard", { duration: 2000 });
+            }
+          }}
+          className="p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          title="Copy error message"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
+      </div>
+    );
+
+    sonnerToast.error(<ToastContent />, sonnerOpts)
   } else {
     sonnerToast(props.title as React.ReactNode, sonnerOpts)
   }

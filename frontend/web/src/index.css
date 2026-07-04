@@ -58,4 +58,10 @@
     background-color: var(--background);
     color: var(--foreground);
   }
+
+  /* Ensure toast notifications allow text selection */
+  [data-sonner-toast] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
 }

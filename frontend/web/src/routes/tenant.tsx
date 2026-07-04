@@ -10,10 +10,8 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-  Server,
-  FileDown
 } from 'lucide-react'
-import { PartnersProvider, usePartners } from '@/features/partners/context/PartnersContext'
+import { PartnersProvider } from '@/features/partners/context/PartnersContext'
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
 
 export const Route = createRoute({
@@ -34,7 +32,6 @@ export function AppLayout() {
   const auth = useAuth()
   const redirectTriggered = useRef(false)
   const location = useLocation()
-  const { partners } = usePartners()
 
   // 1. Fetch user data (role, features)
   const { data: userProfile, isLoading: isProfileLoading } = useDashboardData()
@@ -97,28 +94,12 @@ export function AppLayout() {
         <nav className="flex-1 px-4 py-8 flex flex-col gap-1.5 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">Platform</div>
           <NavItem icon={LayoutDashboard} label="Overview" to="/tenant/dashboard" />
+          <NavItem icon={Network} label="Endpoints" to="/tenant/endpoints" />
           <NavItem icon={Users} label="Trading Partners" to="/tenant/partners" />
           <NavItem icon={Network} label="Routes" to="/tenant/routes" />
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-6">System</div>
           <NavItem icon={Users} label="User Management" to="/tenant/users" />
-
-          {partners.length > 0 && (
-            <>
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">My Trading Partners</div>
-              {partners.map(p => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 hover:bg-slate-50 cursor-pointer group">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${p.type === 'AS2' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-sky-50 border-sky-100 text-sky-600'}`}>
-                    {p.type === 'AS2' ? <Server className="w-4 h-4" /> : <FileDown className="w-4 h-4" />}
-                  </div>
-                  <div className="flex flex-col overflow-hidden">
-                    <span className="text-sm font-semibold text-slate-700 truncate">{p.name}</span>
-                    <span className="text-xs text-slate-400">{p.type} Integration</span>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Configuration</div>
           <NavItem icon={Settings} label="Settings" to="/dashboard" />

@@ -51,7 +51,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         self.api_gateway: dict[str, dict[str, Any]] = {}
         self.outbox: list[dict[str, Any]] = []
         self.routes: list[dict[str, Any]] = []
-        self.webhook_partners: dict[str, dict[str, Any]] = {}
+        self.webhooks: dict[str, dict[str, Any]] = {}
         self.sftp_partners: dict[str, dict[str, Any]] = {}
         self.as2_partners: dict[str, dict[str, Any]] = {}
         self.local_as2_partners: dict[str, dict[str, Any]] = {}
@@ -134,8 +134,8 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
         return self.sftp_partners.get(partner_id)
 
-    async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
-        return self.webhook_partners.get(partner_id)
+    async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
+        return self.webhooks.get(partner_id)
 
     async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
         return self.as2_partners.get(partner_id)
@@ -174,6 +174,7 @@ class FakeSftpDeliveryAdapter:
         username: str,
         password: str,
         host_key: str | None,
+        client_key: str | None,
         remote_path: str,
         filename: str,
         payload: bytes,
@@ -185,7 +186,9 @@ class FakeSftpDeliveryAdapter:
                 "username": username,
                 "password": password,
                 "host_key": host_key,
-                "remote_path": remote_path,
+                "client_key": client_key,
+                "outbound_remote_path": remote_path,
+                "inbound_remote_path": remote_path,
                 "filename": filename,
                 "payload": payload,
             }

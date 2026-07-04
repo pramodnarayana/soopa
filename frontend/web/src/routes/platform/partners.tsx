@@ -1,9 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { PartnersTable } from '@/features/partners/components/PartnersTable'
+import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable'
 import { usePlatformPartners } from '@/features/partners/context/PlatformPartnersContext'
 import { Server } from 'lucide-react'
 import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal'
 import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
+import type { AS2Partner } from '@/features/partners/types'
 
 export const Route = createFileRoute('/platform/partners')({
   component: () => (
@@ -16,8 +17,8 @@ export const Route = createFileRoute('/platform/partners')({
 export function TradingPartnersPage() {
   const { partners, isLoading, error } = usePlatformPartners();
 
-  const localPartners = partners.filter(p => p.is_local);
-  const remotePartners = partners.filter(p => !p.is_local);
+  const localPartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && p.is_local);
+  const remotePartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && !p.is_local);
 
   return (
     <div className="p-8">
@@ -28,7 +29,7 @@ export function TradingPartnersPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Trading Partners</h1>
         </div>
-        <CreatePartnerModal existingAs2Ids={partners.map(p => p.as2_id).filter(Boolean) as string[]} />
+        <CreatePartnerModal existingAs2Ids={partners.map(p => p.type === 'AS2' ? p.as2_id : null).filter(Boolean) as string[]} />
       </div>
 
       {isLoading ? (
@@ -41,20 +42,20 @@ export function TradingPartnersPage() {
           Failed to load partners: {error.message}
         </div>
       ) : partners.length === 0 ? (
-        <PartnersTable data={[]} isLoading={false} scope="platform" />
+        <As2PartnersTable data={[]} isLoading={false} />
       ) : (
         <div className="space-y-8">
           {localPartners.length > 0 && (
             <section>
               <h2 className="text-xl font-semibold text-slate-800 mb-4 px-2">Local Stations</h2>
-              <PartnersTable data={localPartners} isLoading={isLoading} scope="platform" />
+              <As2PartnersTable data={localPartners} isLoading={isLoading} />
             </section>
           )}
 
           {remotePartners.length > 0 && (
             <section>
               <h2 className="text-xl font-semibold text-slate-800 mb-4 px-2">Remote Stations</h2>
-              <PartnersTable data={remotePartners} isLoading={isLoading} scope="platform" />
+              <As2PartnersTable data={remotePartners} isLoading={isLoading} />
             </section>
           )}
         </div>

@@ -17,6 +17,7 @@ dependencies = [
     "identity",
     "paramiko>=5.0.0",
     "types-paramiko>=3.0.0",
+    "patches",
 ]
 
 [tool.uv.sources]
@@ -26,6 +27,7 @@ database = { workspace = true }
 identity = { workspace = true }
 as2-core = { workspace = true }
 security = { workspace = true }
+patches = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

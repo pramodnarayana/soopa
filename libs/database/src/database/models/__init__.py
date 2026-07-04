@@ -23,7 +23,7 @@ from .data_plane import (
     SFTPPartner,
     TenantAwareMixin,
     TenantBase,
-    WebhookPartner,
+    Webhook,
 )
 from .data_plane import (
     Outbox as TenantOutbox,
@@ -44,7 +44,7 @@ __all__ = [
     "TenantBase",
     "TenantAwareMixin",
     "SFTPPartner",
-    "WebhookPartner",
+    "Webhook",
     "InboundRoute",
     "OutboundRoute",
     "EdiMessage",

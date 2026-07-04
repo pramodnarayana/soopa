@@ -27,6 +27,7 @@ def test_create_inbound_route(client):
         "/api/v1/routes/inbound",
         json={
             "as2_partner_id": str(uuid.uuid4()),
+            "name": "My Route",
             "isa_sender_id": "S1",
             "isa_receiver_id": "R1",
             "transaction_type": "850",
@@ -44,6 +45,7 @@ def test_create_outbound_route(client):
         "/api/v1/routes/outbound",
         json={
             "as2_partner_id": str(uuid.uuid4()),
+            "name": "My Route",
             "isa_sender_id": "S1",
             "isa_receiver_id": "R1",
             "transaction_type": "855",

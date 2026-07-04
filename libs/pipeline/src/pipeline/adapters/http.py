@@ -17,10 +17,28 @@ class HttpxDeliveryAdapter(HttpDeliveryPort):
         if self.validator and not self.validator(url):
             raise ValueError("URL validation failed for provided destination.")
 
-        headers = {"Content-Type": "application/json"}
+        import ipaddress
+        import socket
+        from urllib.parse import urlparse
+
+        import anyio
+
+        parsed = urlparse(url)
+        if not parsed.hostname:
+            raise ValueError("Invalid URL")
+
+        ip = await anyio.to_thread.run_sync(socket.gethostbyname, parsed.hostname)
+        ip_obj = ipaddress.ip_address(ip)
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_unspecified:
+            raise ValueError("SSRF check failed: internal IP")
+
+        port_str = f":{parsed.port}" if parsed.port else ""
+        safe_url = parsed._replace(netloc=f"{ip}{port_str}").geturl()
+
+        headers = {"Content-Type": "application/json", "Host": parsed.hostname}
         if auth_token:
             headers["Authorization"] = auth_token
 
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
-            response = await client.post(url, content=payload, headers=headers)
+            response = await client.post(safe_url, content=payload, headers=headers)
             return response.status_code

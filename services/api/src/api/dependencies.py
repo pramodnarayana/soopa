@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException
 from identity.dependencies import get_current_tenant_id, get_raw_jwt, get_tenant_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
 from api.adapters.repository import (
     SqlAlchemyControlPlaneRepository,
     SqlAlchemyDataPlaneRepository,
@@ -23,6 +24,13 @@ from api.ports.repository import (
     DataPlaneRepositoryPort,
     TenantRepositoryPort,
 )
+from api.ports.sftp_tester import SftpTesterPort
+
+
+@lru_cache
+def get_sftp_tester() -> SftpTesterPort:
+    """Returns the Paramiko-based SFTP connection tester."""
+    return ParamikoSftpTesterAdapter()
 
 
 @lru_cache

@@ -1,7 +1,8 @@
+import { DataTable } from '@/components/ui/data-table';
 import React from 'react';
 import {
   createColumnHelper,
-  flexRender,
+
   getCoreRowModel,
   useReactTable,
   getExpandedRowModel,
@@ -125,95 +126,15 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
     getExpandedRowModel: getExpandedRowModel(),
   });
 
-  if (isLoading) {
-    return (
-      <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-slate-100/50 flex justify-between items-center">
-          <div>
-            <div className="h-6 w-48 bg-slate-100 rounded-md animate-pulse mb-2" />
-            <div className="h-4 w-64 bg-slate-100 rounded-md animate-pulse" />
-          </div>
-        </div>
-        <div className="p-8">
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-4">
-                <div className="h-12 w-full bg-slate-50 rounded-xl animate-pulse" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (data.length === 0) {
-    return (
-      <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden">
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-300 mb-6 shadow-sm">
-            <Network className="w-8 h-8" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-900 mb-2">No Active Partnerships</h3>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-slate-200/60 bg-slate-50/50">
-                {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {table.getRowModel().rows.map((row) => (
-              <React.Fragment key={row.id}>
-                <tr
-                  className={`hover:bg-slate-50/50 transition-colors group cursor-pointer ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
-                  onClick={() => row.toggleExpanded()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      row.toggleExpanded();
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-expanded={row.getIsExpanded()}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-6 py-4">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-                {row.getIsExpanded() && (
-                  <tr>
-                    <td colSpan={row.getVisibleCells().length} className="p-0">
-                      <PartnershipDetails partnership={row.original} availablePartners={availablePartners} />
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <DataTable
+      table={table}
+      isLoading={isLoading}
+      dataLength={data.length}
+      emptyIcon={<Network className="w-8 h-8" />}
+      emptyTitle="No Active Partnerships"
+      columnsLength={columns.length}
+      renderExpandedRow={(row) => <PartnershipDetails partnership={row.original} availablePartners={availablePartners} onCancel={() => row.toggleExpanded()} />}
+    />
   );
 }

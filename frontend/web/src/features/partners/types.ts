@@ -8,17 +8,30 @@ export type PartnerType = 'AS2' | 'SFTP';
 // Domain Entities
 // ─────────────────────────────────────────────
 
-export interface Partner {
+export interface BasePartner {
   id: string;
   name: string;
   type: PartnerType;
-  host?: string;
-  as2_id?: string;
-  username?: string;
-  is_local?: boolean;
-  url?: string;
   active?: boolean;
 }
+
+export interface AS2Partner extends BasePartner {
+  type: 'AS2';
+  as2_id: string;
+  is_local: boolean;
+  url?: string;
+}
+
+export interface SFTPPartner extends BasePartner {
+  type: 'SFTP';
+  host: string;
+  port: number;
+  username: string;
+  inbound_remote_path?: string;
+  outbound_remote_path?: string;
+}
+
+export type Partner = AS2Partner | SFTPPartner;
 
 export interface Partnership {
   id: string;
@@ -69,7 +82,9 @@ export interface UpdatePartnerPayload {
   host?: string;
   port?: number;
   username?: string;
-  remote_path?: string;
+  inbound_remote_path?: string;
+  outbound_remote_path?: string;
+  password?: string;
   credentials_vault_ref?: string;
 }
 
@@ -82,6 +97,17 @@ export interface CreatePartnershipPayload {
   signature_algorithm: string;
   edi_version?: string;
   mdn_url?: string;
+}
+
+export interface CreateSftpPartnerPayload {
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  inbound_remote_path?: string;
+  outbound_remote_path?: string;
+  password?: string;
+  credentials_vault_ref?: string;
 }
 
 export interface UpdatePartnershipPayload {

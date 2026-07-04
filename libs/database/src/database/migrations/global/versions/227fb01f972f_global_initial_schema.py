@@ -164,29 +164,119 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("local_partner_id", "remote_partner_id", name="uq_as2_partnership"),
     )
+    op.create_table(
+        "sftp_partners",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("host", sa.String(length=1024), nullable=False),
+        sa.Column("port", sa.Integer(), nullable=False),
+        sa.Column("username", sa.String(length=255), nullable=False),
+        sa.Column("host_key", sa.Text(), nullable=True),
+        sa.Column("inbound_remote_path", sa.String(length=1024), nullable=True),
+        sa.Column("outbound_remote_path", sa.String(length=1024), nullable=True),
+        sa.Column("password_encrypted", sa.String(length=1024), nullable=True),
+        sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),
+        sa.Column("active", sa.Boolean(), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        op.f("ix_sftp_partners_tenant_id"), "sftp_partners", ["tenant_id"], unique=False
+    )
+    op.create_table(
+        "webhooks",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("url", sa.String(length=1024), nullable=False),
+        sa.Column("auth_header_vault_ref", sa.String(length=255), nullable=True),
+        sa.Column("active", sa.Boolean(), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_webhooks_tenant_id"), "webhooks", ["tenant_id"], unique=False)
+    op.create_table(
+        "inbound_routes",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("transaction_type", sa.String(length=50), nullable=False),
+        sa.Column(
+            "processing_mode",
+            sa.String(length=50),
+            server_default="TRANSLATE",
+            nullable=False,
+        ),
+        sa.Column("webhook_id", sa.UUID(), nullable=True),
+        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
+        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
+        sa.Column("active", sa.Boolean(), nullable=False),
+        sa.CheckConstraint(
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            name="chk_inbound_routes_exactly_one_dest",
+        ),
+        sa.ForeignKeyConstraint(["as2_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["sftp_partner_id"], ["sftp_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["webhook_id"], ["webhooks.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        op.f("ix_inbound_routes_tenant_id"), "inbound_routes", ["tenant_id"], unique=False
+    )
+    op.create_index(
+        "ix_inbound_routes_unique_active",
+        "inbound_routes",
+        ["tenant_id", "isa_sender_id", "isa_receiver_id", "transaction_type"],
+        unique=True,
+        postgresql_where=sa.text("active = true"),
+    )
+    op.create_table(
+        "outbound_routes",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("transaction_type", sa.String(length=50), nullable=False),
+        sa.Column(
+            "processing_mode",
+            sa.String(length=50),
+            server_default="TRANSLATE",
+            nullable=False,
+        ),
+        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
+        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
+        sa.Column("active", sa.Boolean(), nullable=False),
+        sa.CheckConstraint(
+            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            name="chk_outbound_routes_exactly_one_dest",
+        ),
+        sa.ForeignKeyConstraint(["as2_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["sftp_partner_id"], ["sftp_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        op.f("ix_outbound_routes_tenant_id"), "outbound_routes", ["tenant_id"], unique=False
+    )
+    op.create_index(
+        "ix_outbound_routes_unique_active",
+        "outbound_routes",
+        ["tenant_id", "isa_sender_id", "isa_receiver_id", "transaction_type"],
+        unique=True,
+        postgresql_where=sa.text("active = true"),
+    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
-    # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_table("as2_partnerships")
-    op.drop_table("tenant_users")
-    op.drop_index(
-        "ix_global_outbox_pending",
-        table_name="outbox",
-        postgresql_where=sa.text("status = 'PENDING'"),
-    )
-    op.drop_table("outbox")
-    op.drop_index(
-        "uq_global_as2_id", table_name="as2_partners", postgresql_where=sa.text("tenant_id IS NULL")
-    )
-    op.drop_table("as2_partners")
-    op.drop_table("tenants")
-    op.drop_index("uq_users_email_lower", table_name="users")
-    op.drop_table("users")
-    op.drop_index(op.f("ix_system_audit_log_trace_id"), table_name="system_audit_log")
-    op.drop_index("ix_system_audit_log_tenant_time", table_name="system_audit_log")
-    op.drop_table("system_audit_log")
-    op.drop_table("database_shards")
-    # ### end Alembic commands ###
+    """The initial schema has no downgrade path.
+
+    In development, drop and recreate the database instead:
+        make db-reset
+    """
+    raise NotImplementedError("Cannot downgrade the initial schema. Run `make db-reset` instead.")

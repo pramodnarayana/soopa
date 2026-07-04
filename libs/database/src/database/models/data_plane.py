@@ -105,13 +105,16 @@ class SFTPPartner(TenantBase, TenantAwareMixin):
     host: Mapped[str] = mapped_column(String(1024), nullable=False)
     port: Mapped[int] = mapped_column(Integer, default=22)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
-    remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    credentials_vault_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    host_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    outbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    password_encrypted: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
-class WebhookPartner(TenantBase, TenantAwareMixin):
-    __tablename__ = "webhook_partners"
+class Webhook(TenantBase, TenantAwareMixin):
+    __tablename__ = "webhooks"
 
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
@@ -128,11 +131,15 @@ class InboundRoute(TenantBase, TenantAwareMixin):
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
     isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
     transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    webhook_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("webhook_partners.id"), nullable=True
+    processing_mode: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="TRANSLATE"
+    )
+    webhook_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
     )
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
@@ -144,7 +151,7 @@ class InboundRoute(TenantBase, TenantAwareMixin):
 
     __table_args__ = (
         CheckConstraint(
-            "(webhook_partner_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
         ),
         Index(
@@ -165,9 +172,13 @@ class OutboundRoute(TenantBase, TenantAwareMixin):
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
     isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
     transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    processing_mode: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="TRANSLATE"
+    )
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
     )

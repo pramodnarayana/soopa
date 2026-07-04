@@ -1,0 +1,122 @@
+import { DataTable } from '@/components/ui/data-table';
+import React from 'react';
+import {
+  createColumnHelper,
+
+  getCoreRowModel,
+  useReactTable,
+  getExpandedRowModel,
+} from '@tanstack/react-table';
+
+import type { AS2Partner } from '../types';
+import { useDeletePlatformPartner, useUpdatePlatformPartnerMutation } from '../api/partnerHooks';
+import { Server, CheckCircle2 } from 'lucide-react';
+import { As2PartnerDetails } from './As2PartnerDetails';
+import { SharedRowActions } from './SharedRowActions';
+
+function As2PartnerRowActions({ partner }: { partner: AS2Partner }) {
+  const deletePlatform = useDeletePlatformPartner();
+  const updatePlatform = useUpdatePlatformPartnerMutation();
+
+  const isDeleting = deletePlatform.isPending;
+  const isUpdating = updatePlatform.isPending;
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation(); // prevent row expansion
+    if (!window.confirm(`Are you sure you want to delete ${partner.name}?`)) return;
+    deletePlatform.mutate(partner.id);
+  };
+
+  const handleToggleActive = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newActiveState = partner.active === false ? true : false;
+    updatePlatform.mutate({ id: partner.id, payload: { active: newActiveState } });
+  };
+
+  return (
+    <SharedRowActions
+      isActive={partner.active !== false}
+      isUpdating={isUpdating}
+      isDeleting={isDeleting}
+      onToggleActive={handleToggleActive}
+      onDelete={handleDelete}
+      entityName="AS2 Partner"
+    />
+  );
+}
+
+const columnHelper = createColumnHelper<AS2Partner>();
+
+const columns = [
+  columnHelper.accessor('name', {
+    header: 'Partner Name',
+    cell: (info) => (
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+          <Server className="w-4 h-4" />
+        </div>
+        <span className="font-semibold text-slate-900">{info.getValue()}</span>
+      </div>
+    ),
+  }),
+  columnHelper.accessor('as2_id', {
+    header: 'AS2 ID',
+    cell: (info) => (
+      <span className="font-mono text-sm px-2 py-1 bg-slate-100 rounded-md text-slate-600 border border-slate-200">
+        {info.getValue() as string}
+      </span>
+    ),
+  }),
+  columnHelper.accessor('type', {
+    header: 'Type',
+    cell: (info) => (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        {info.getValue()}
+      </span>
+    ),
+  }),
+  columnHelper.accessor('is_local', {
+    header: 'Role',
+    cell: (info) => {
+      const isLocal = info.getValue() as boolean | undefined;
+      if (isLocal === undefined) return null;
+      return (
+        <span className="text-sm font-medium text-slate-500">
+          {isLocal ? 'Local Station' : 'Remote Station'}
+        </span>
+      );
+    },
+  }),
+  columnHelper.display({
+    id: 'actions',
+    header: '',
+    cell: (info) => (
+      <div className="flex justify-end">
+        <As2PartnerRowActions partner={info.row.original} />
+      </div>
+    ),
+  }),
+];
+
+export function As2PartnersTable({ data, isLoading }: { data: AS2Partner[]; isLoading: boolean }) {
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getRowCanExpand: () => true,
+    getExpandedRowModel: getExpandedRowModel(),
+  });
+
+  return (
+    <DataTable
+      table={table}
+      isLoading={isLoading}
+      dataLength={data.length}
+      emptyIcon={<Server className="w-8 h-8" />}
+      emptyTitle="No Active AS2 Partners"
+      columnsLength={columns.length}
+      renderExpandedRow={(row) => <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />}
+    />
+  );
+}

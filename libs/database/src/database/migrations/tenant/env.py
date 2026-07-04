@@ -17,7 +17,10 @@ target_metadata = TenantBase.metadata
 # For generating migrations, we connect to shard 1 as a representative database
 # During actual 'upgrade', the custom runner injects the URL dynamically.
 _ini_url = config.get_main_option("sqlalchemy.url")
-TENANT_DB_URL = _ini_url if _ini_url else "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+TENANT_DB_URL = (
+    _ini_url if _ini_url else "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+)
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""

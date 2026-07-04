@@ -8,7 +8,7 @@ from api.domain.models import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookPartnerCmd,
+    CreateWebhookCmd,
 )
 from api.ports.repository import (
     ControlPlaneRepositoryPort,
@@ -21,6 +21,8 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
     def __init__(self):
         self.partners = []
         self.partnerships = []
+        self.sftp_partners = []
+        self.webhooks = []
         self.outbox_events = []
 
     async def create_as2_identity(
@@ -99,13 +101,27 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         return self.partners
 
     async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]:
-        return [p for p in self.partners if p["tenant_id"] == tenant_id]
+        results = []
+        for p in self.partners:
+            if p["tenant_id"] == tenant_id:
+
+                class FakePartner:
+                    id = p["id"]
+                    tenant_id = p["tenant_id"]
+                    name = p["cmd"].name
+                    as2_id = p["cmd"].as2_id
+                    is_local = p["cmd"].is_local
+                    url = p["cmd"].url
+                    active = p.get("status", "INACTIVE") == "ACTIVE"
+
+                results.append(FakePartner())
+        return results
 
     async def list_partnerships(self) -> list[Any]:
         return self.partnerships
 
     async def get_as2_partners_by_ids(
-        self, ids: list[uuid.UUID], tenant_id: int
+        self, tenant_id: int, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
         return {
             p["id"]: p["cmd"].name
@@ -113,13 +129,102 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
+    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
+        p_id = uuid.uuid4()
+        self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
+        return p_id
+
+    async def get_sftp_partners_by_ids(
+        self, tenant_id: int, ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        return {
+            p["id"]: p["cmd"].name
+            for p in self.sftp_partners
+            if p["id"] in ids and p["tenant_id"] == tenant_id
+        }
+
+    async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> uuid.UUID:
+        p_id = uuid.uuid4()
+        self.webhooks.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
+        return p_id
+
+    async def get_webhooks_by_ids(
+        self, tenant_id: int, ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        return {
+            p["id"]: p["cmd"].name
+            for p in self.webhooks
+            if p["id"] in ids and p["tenant_id"] == tenant_id
+        }
+
+    async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> uuid.UUID:
+        r_id = uuid.uuid4()
+        if not hasattr(self, "inbound_routes"):
+            self.inbound_routes = []
+        self.inbound_routes.append(FakeRoute(r_id, cmd))
+        return r_id
+
+    async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
+        r_id = uuid.uuid4()
+        if not hasattr(self, "outbound_routes"):
+            self.outbound_routes = []
+        self.outbound_routes.append(FakeRoute(r_id, cmd))
+        return r_id
+
+    async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
+        inbound = getattr(self, "inbound_routes", [])
+        outbound = getattr(self, "outbound_routes", [])
+        return {"inbound": inbound, "outbound": outbound}
+
+    async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]:
+        return [p for p in getattr(self, "sftp_partners", []) if p["tenant_id"] == tenant_id]
+
+    async def list_webhooks(self, tenant_id: int) -> Sequence[Any]:
+        return [p for p in getattr(self, "webhooks", []) if p["tenant_id"] == tenant_id]
+
+    async def get_sftp_partner(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
+        for p in self.sftp_partners:
+            if p["id"] == partner_id and p["tenant_id"] == tenant_id:
+
+                class MockPartner:
+                    id = p["id"]
+                    tenant_id = p["tenant_id"]
+                    name = p["cmd"].name
+                    active = True
+                    host = p["cmd"].host
+                    port = p["cmd"].port
+                    username = p["cmd"].username
+                    inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
+                    outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
+                    host_key = getattr(p["cmd"], "host_key", None)
+
+                return MockPartner()
+        return None
+
+    async def get_webhook(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
+        for p in self.webhooks:
+            if p["id"] == partner_id and p["tenant_id"] == tenant_id:
+
+                class MockWebhook:
+                    id = p["id"]
+                    tenant_id = p["tenant_id"]
+                    name = p["cmd"].name
+                    active = True
+                    url = getattr(p["cmd"], "url", None)
+
+                return MockWebhook()
+        return None
+
 
 class FakeRoute:
     def __init__(self, id, cmd):
         self.id = id
+        self.name = getattr(cmd, "name", "Test Route")
+        self.processing_mode = getattr(cmd, "processing_mode", "TRANSLATE")
+        self.active = True
         self.as2_partner_id = getattr(cmd, "as2_partner_id", None)
         self.sftp_partner_id = getattr(cmd, "sftp_partner_id", None)
-        self.webhook_partner_id = getattr(cmd, "webhook_partner_id", None)
+        self.webhook_id = getattr(cmd, "webhook_id", None)
         self.isa_sender_id = getattr(cmd, "isa_sender_id", "S1")
         self.isa_receiver_id = getattr(cmd, "isa_receiver_id", "R1")
 
@@ -129,7 +234,7 @@ class FakeDataPlaneRepository(DataPlaneRepositoryPort):
         self.inbound_routes = []
         self.outbound_routes = []
         self.sftp_partners = []
-        self.webhook_partners = []
+        self.webhooks = []
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
@@ -149,10 +254,43 @@ class FakeDataPlaneRepository(DataPlaneRepositoryPort):
         self.sftp_partners.append({"id": p_id, "cmd": cmd})
         return p_id
 
-    async def create_webhook_partner(self, cmd: CreateWebhookPartnerCmd) -> uuid.UUID:
+    async def get_sftp_partner(self, partner_id: uuid.UUID) -> Any:
+        for p in self.sftp_partners:
+            if p["id"] == partner_id:
+
+                class MockPartner:
+                    id = p["id"]
+                    tenant_id = 1
+                    name = p["cmd"].name
+                    active = True
+                    host = p["cmd"].host
+                    port = p["cmd"].port
+                    username = p["cmd"].username
+                    inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
+                    outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
+                    host_key = getattr(p["cmd"], "host_key", None)
+
+                return MockPartner()
+        return None
+
+    async def create_webhook(self, cmd: CreateWebhookCmd) -> uuid.UUID:
         p_id = uuid.uuid4()
-        self.webhook_partners.append({"id": p_id, "cmd": cmd})
+        self.webhooks.append({"id": p_id, "cmd": cmd})
         return p_id
+
+    async def get_webhook(self, partner_id: uuid.UUID) -> Any:
+        for p in self.webhooks:
+            if p["id"] == partner_id:
+
+                class MockWebhook:
+                    id = p["id"]
+                    tenant_id = 1
+                    name = p["cmd"].name
+                    active = True
+                    url = getattr(p["cmd"], "url", None)
+
+                return MockWebhook()
+        return None
 
     async def list_sftp_partners(self) -> Sequence[Any]:
         return self.sftp_partners
@@ -160,11 +298,11 @@ class FakeDataPlaneRepository(DataPlaneRepositoryPort):
     async def get_sftp_partners_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         return {p["id"]: p["cmd"].name for p in self.sftp_partners if p["id"] in ids}
 
-    async def list_webhook_partners(self) -> Sequence[Any]:
-        return self.webhook_partners
+    async def list_webhooks(self) -> Sequence[Any]:
+        return self.webhooks
 
-    async def get_webhook_partners_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
-        return {p["id"]: p["cmd"].name for p in self.webhook_partners if p["id"] in ids}
+    async def get_webhooks_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+        return {p["id"]: p["cmd"].name for p in self.webhooks if p["id"] in ids}
 
 
 class FakeTenantRepository(TenantRepositoryPort):

@@ -77,6 +77,17 @@ class VaultAdapter:
 
         return pem_str.encode("utf-8")
 
+    def delete_secret(self, vault_ref: str) -> None:
+        """
+        Deletes a secret from Vault.
+        """
+        try:
+            self.client.secrets.kv.v2.delete_latest_versions(
+                path=vault_ref, mount_point=self.mount_point
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete secret from vault: {e}")
+
 
 # Singleton instance
 vault = VaultAdapter()

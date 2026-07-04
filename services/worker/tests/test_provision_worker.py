@@ -42,6 +42,24 @@ async def test_poll_global_outbox_processes_event(mock_replicate: AsyncMock) -> 
     mock_global_session.commit.assert_awaited_once()
 
 
+def _make_scalars_result(items: list) -> MagicMock:
+    """Creates a mock SQLAlchemy result that supports both iteration and .scalars().all()."""
+    mock_result = MagicMock()
+    # Support for `for item in result.scalars():` (iteration)
+    mock_result.scalars.return_value = iter(items)
+    # Support for `result.scalars().all()` (in sync_deletes)
+    mock_scalars = MagicMock()
+    mock_scalars.__iter__ = MagicMock(return_value=iter(items))
+    mock_scalars.all.return_value = items
+    mock_result.scalars.return_value = mock_scalars
+    return mock_result
+
+
+def _make_empty_scalars_result() -> MagicMock:
+    """Creates a mock that returns empty for both iteration and .scalars().all()."""
+    return _make_scalars_result([])
+
+
 async def test_replicate_tenant_config() -> None:
     mock_global_session = AsyncMock()
     mock_tenant_session = AsyncMock()
@@ -56,33 +74,55 @@ async def test_replicate_tenant_config() -> None:
     mock_tp.public_cert_pem = "PEM"
     mock_tp.public_cert_vault_ref = "vault://acme-pub"
     mock_tp.private_key_vault_ref = None
+    mock_tp.prev_public_cert_pem = None
+    mock_tp.prev_public_cert_vault_ref = None
+    mock_tp.prev_private_key_vault_ref = None
+    mock_tp.url = None
     mock_tp.active = True
-
-    # We have 2 queries in replicate_tenant_config (AS2Partner and AS2Partnership)
-    mock_result_tp = MagicMock()
-    mock_result_tp.scalars.return_value = [mock_tp]
 
     mock_ps = MagicMock()
     mock_ps.id = "ps-uuid"
     mock_ps.tenant_id = 99
+    mock_ps.name = "Partnership 1"
     mock_ps.local_partner_id = "loc"
     mock_ps.remote_partner_id = "rem"
-    mock_ps.local_url = "http://l"
-    mock_ps.remote_url = "http://r"
     mock_ps.credentials_vault_ref = "ref"
     mock_ps.mdn_type = "SYNC"
     mock_ps.mdn_url = None
     mock_ps.encryption_algorithm = "AES"
     mock_ps.signature_algorithm = "SHA"
     mock_ps.advanced_flags = None
+    mock_ps.edi_version = None
     mock_ps.active = True
 
-    mock_result_ps = MagicMock()
-    mock_result_ps.scalars.return_value = [mock_ps]
+    # replicate_tenant_config makes 6 global_session.execute calls for replication:
+    #   1. AS2Partners, 2. AS2Partnerships, 3. SFTPPartners,
+    #   4. Webhooks, 5. InboundRoutes, 6. OutboundRoutes
+    # Then sync_deletes is called 6 times, each making 1 global_session.execute call
+    #   (the second execute per sync_deletes goes to tenant_session).
+    # Total global_session.execute calls = 6 (replicate) + 6 (sync_deletes global IDs) = 12
 
-    mock_global_session.execute.side_effect = [mock_result_tp, mock_result_ps]
+    mock_global_session.execute.side_effect = [
+        # Replication phase (6 calls)
+        _make_scalars_result([mock_tp]),  # AS2Partners
+        _make_scalars_result([mock_ps]),  # AS2Partnerships
+        _make_empty_scalars_result(),  # SFTPPartners
+        _make_empty_scalars_result(),  # Webhooks
+        _make_empty_scalars_result(),  # InboundRoutes
+        _make_empty_scalars_result(),  # OutboundRoutes
+        # sync_deletes phase - global IDs queries (6 calls)
+        _make_empty_scalars_result(),  # AS2Partners global IDs
+        _make_empty_scalars_result(),  # AS2Partnerships global IDs
+        _make_empty_scalars_result(),  # SFTPPartners global IDs
+        _make_empty_scalars_result(),  # Webhooks global IDs
+        _make_empty_scalars_result(),  # InboundRoutes global IDs
+        _make_empty_scalars_result(),  # OutboundRoutes global IDs
+    ]
+
+    # sync_deletes also queries tenant_session for IDs (6 calls)
+    mock_tenant_session.execute.return_value = _make_empty_scalars_result()
 
     await replicate_tenant_config(99, mock_global_session, mock_tenant_session)
 
-    assert mock_global_session.execute.await_count == 2
+    assert mock_global_session.execute.await_count == 12
     mock_tenant_session.commit.assert_awaited_once()
