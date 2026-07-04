@@ -10,7 +10,7 @@ interface DataTableProps<TData> {
   emptyIcon?: React.ReactNode;
   emptyTitle?: string;
   emptyDescription?: string;
-  renderExpandedRow?: (row: any) => React.ReactNode;
+  renderExpandedRow?: (row: import('@tanstack/react-table').Row<TData>) => React.ReactNode;
 }
 
 export function DataTable<TData>({
@@ -71,6 +71,8 @@ export function DataTable<TData>({
                   className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
                   onClick={renderExpandedRow ? () => row.toggleExpanded() : undefined}
                   onKeyDown={renderExpandedRow ? (e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'INPUT') return;
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       row.toggleExpanded();

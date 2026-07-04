@@ -56,6 +56,7 @@ class CreateSFTPPartnerRequest(BaseModel):
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for SSH private key"
     )
+    host_key: str | None = Field(None, description="Host key for SFTP verification")
 
 
 class TestSFTPConnectionRequest(BaseModel):
@@ -135,6 +136,7 @@ class UpdateSFTPPartnerRequest(BaseModel):
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for password/key"
     )
+    host_key: str | None = Field(None, description="Host key for SFTP verification")
     active: bool | None = None
 
 
@@ -236,6 +238,7 @@ class PartnerResponse(BaseModel):
     username: str | None = None
     inbound_remote_path: str | None = None
     outbound_remote_path: str | None = None
+    host_key: str | None = None
 
     def model_post_init(self, __context: Any) -> None:
         if self.id is None:
@@ -300,6 +303,6 @@ class RouteItemResponse(BaseModel):
     webhook_id: UUID | None = None
     as2_partner_id: UUID | None = None
     sftp_partner_id: UUID | None = None
-    status: str = "Active"
+    status: str = Field(default="ACTIVE")
     active: bool = False
     processing_mode: str = "TRANSLATE"

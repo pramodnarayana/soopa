@@ -63,10 +63,18 @@ app = FastAPI(
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    logger.error(f"422 Error at {request.url.path}: {exc.errors()}")
+    errors = exc.errors()
+    sanitized_errors = []
+    for error in errors:
+        error_dict = dict(error)
+        error_dict.pop("input", None)
+        error_dict.pop("url", None)
+        sanitized_errors.append(error_dict)
+
+    logger.error(f"422 Error at {request.url.path}: {sanitized_errors}")
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()},
+        content={"detail": sanitized_errors},
     )
 
 

@@ -1,4 +1,8 @@
+import os
 from unittest.mock import AsyncMock, MagicMock
+
+# Set dummy encryption key for tests before importing repository that uses db_encryption
+os.environ["DB_ENCRYPTION_KEY"] = "sKkXvO6eX2Xo6-k2d_WqVf9j_w2_mCq7jR9b9w0wWf4="
 
 import pytest
 from api.adapters.repository import SqlAlchemyControlPlaneRepository, SqlAlchemyDataPlaneRepository

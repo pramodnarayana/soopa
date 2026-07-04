@@ -165,7 +165,7 @@ class DeliveryService:
                 password=password or "",
                 host_key=partner.get("host_key"),
                 client_key=client_key,
-                remote_path=partner["outbound_remote_path"],
+                remote_path=partner.get("outbound_remote_path") or "/",
                 filename=filename,
                 payload=raw_payload,
             )

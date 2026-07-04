@@ -262,9 +262,13 @@ export function CreateSftpPartnerModal() {
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2 -mr-2 text-red-600 hover:text-red-700 hover:bg-red-100 shrink-0"
-                onClick={() => {
-                  navigator.clipboard.writeText(testResult.message);
-                  toast({ title: 'Copied to clipboard' });
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(testResult.message);
+                    toast({ title: 'Copied to clipboard' });
+                  } catch {
+                    toast({ title: 'Failed to copy', variant: 'destructive' });
+                  }
                 }}
               >
                 <Copy className="w-4 h-4" />

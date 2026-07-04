@@ -229,6 +229,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             else None,
             password_encrypted=db_encryption.encrypt(cmd.password) if cmd.password else None,
             credentials_vault_ref=cmd.credentials_vault_ref,
+            host_key=cmd.host_key,
             active=False,
         )
         self.session.add(record)
@@ -272,6 +273,8 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 )
             if cmd.credentials_vault_ref is not None:
                 partner.credentials_vault_ref = cmd.credentials_vault_ref
+            if cmd.host_key is not None:
+                partner.host_key = cmd.host_key
             if cmd.active is not None:
                 partner.active = cmd.active
         await self.session.flush()
@@ -447,6 +450,15 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             record.sftp_partner_id = cmd.sftp_partner_id
         if not isinstance(cmd.active, UnsetType):
             record.active = cmd.active
+
+        destinations = [
+            d
+            for d in (record.webhook_id, record.as2_partner_id, record.sftp_partner_id)
+            if d is not None
+        ]
+        if len(destinations) != 1:
+            raise ValueError("Exactly one destination must be provided")
+
         await self.session.flush()
         return True
 
@@ -547,6 +559,11 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             record.sftp_partner_id = cmd.sftp_partner_id
         if not isinstance(cmd.active, UnsetType):
             record.active = cmd.active
+
+        destinations = [d for d in (record.as2_partner_id, record.sftp_partner_id) if d is not None]
+        if len(destinations) != 1:
+            raise ValueError("Exactly one destination (as2 or sftp) must be provided")
+
         await self.session.flush()
         return True
 

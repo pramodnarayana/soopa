@@ -114,24 +114,17 @@ async def update_inbound_route(
         service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
         from api.domain.models import UNSET, UpdateInboundRouteCmd
 
+        dump = request.model_dump(exclude_unset=True)
         cmd = UpdateInboundRouteCmd(
-            name=request.name if request.name is not None else UNSET,
-            isa_sender_id=request.isa_sender_id if request.isa_sender_id is not None else UNSET,
-            isa_receiver_id=request.isa_receiver_id
-            if request.isa_receiver_id is not None
-            else UNSET,
-            transaction_type=request.transaction_type
-            if request.transaction_type is not None
-            else UNSET,
-            processing_mode=request.processing_mode
-            if request.processing_mode is not None
-            else UNSET,
-            webhook_id=request.webhook_id if request.webhook_id is not None else UNSET,
-            as2_partner_id=request.as2_partner_id if request.as2_partner_id is not None else UNSET,
-            sftp_partner_id=request.sftp_partner_id
-            if request.sftp_partner_id is not None
-            else UNSET,
-            active=request.active if request.active is not None else UNSET,
+            name=dump.get("name", UNSET),
+            isa_sender_id=dump.get("isa_sender_id", UNSET),
+            isa_receiver_id=dump.get("isa_receiver_id", UNSET),
+            transaction_type=dump.get("transaction_type", UNSET),
+            processing_mode=dump.get("processing_mode", UNSET),
+            webhook_id=dump.get("webhook_id", UNSET),
+            as2_partner_id=dump.get("as2_partner_id", UNSET),
+            sftp_partner_id=dump.get("sftp_partner_id", UNSET),
+            active=dump.get("active", UNSET),
         )
 
         success = await service.update_inbound_route(tenant_id, route_id, cmd)
@@ -166,23 +159,16 @@ async def update_outbound_route(
         service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
         from api.domain.models import UNSET, UpdateOutboundRouteCmd
 
+        dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundRouteCmd(
-            name=request.name if request.name is not None else UNSET,
-            isa_sender_id=request.isa_sender_id if request.isa_sender_id is not None else UNSET,
-            isa_receiver_id=request.isa_receiver_id
-            if request.isa_receiver_id is not None
-            else UNSET,
-            transaction_type=request.transaction_type
-            if request.transaction_type is not None
-            else UNSET,
-            processing_mode=request.processing_mode
-            if request.processing_mode is not None
-            else UNSET,
-            as2_partner_id=request.as2_partner_id if request.as2_partner_id is not None else UNSET,
-            sftp_partner_id=request.sftp_partner_id
-            if request.sftp_partner_id is not None
-            else UNSET,
-            active=request.active if request.active is not None else UNSET,
+            name=dump.get("name", UNSET),
+            isa_sender_id=dump.get("isa_sender_id", UNSET),
+            isa_receiver_id=dump.get("isa_receiver_id", UNSET),
+            transaction_type=dump.get("transaction_type", UNSET),
+            processing_mode=dump.get("processing_mode", UNSET),
+            as2_partner_id=dump.get("as2_partner_id", UNSET),
+            sftp_partner_id=dump.get("sftp_partner_id", UNSET),
+            active=dump.get("active", UNSET),
         )
 
         success = await service.update_outbound_route(tenant_id, route_id, cmd)

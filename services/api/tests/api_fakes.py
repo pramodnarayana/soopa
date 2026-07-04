@@ -196,6 +196,7 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     username = p["cmd"].username
                     inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
                     outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
+                    host_key = getattr(p["cmd"], "host_key", None)
 
                 return MockPartner()
         return None
@@ -267,6 +268,7 @@ class FakeDataPlaneRepository(DataPlaneRepositoryPort):
                     username = p["cmd"].username
                     inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
                     outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
+                    host_key = getattr(p["cmd"], "host_key", None)
 
                 return MockPartner()
         return None

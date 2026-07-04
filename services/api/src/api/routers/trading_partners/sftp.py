@@ -145,6 +145,7 @@ async def create_sftp_partner(
             outbound_remote_path=request.outbound_remote_path,
             password=request.password,
             credentials_vault_ref=request.credentials_vault_ref,
+            host_key=request.host_key,
         )
 
         try:
@@ -174,6 +175,7 @@ async def create_sftp_partner(
             username=partner.username,
             inbound_remote_path=partner.inbound_remote_path,
             outbound_remote_path=partner.outbound_remote_path,
+            host_key=partner.host_key,
         )
 
 
@@ -196,6 +198,7 @@ async def update_sftp_partner(
             outbound_remote_path=request.outbound_remote_path,
             password=request.password,
             credentials_vault_ref=request.credentials_vault_ref,
+            host_key=request.host_key,
             active=request.active,
         )
         try:
@@ -225,6 +228,7 @@ async def update_sftp_partner(
             username=partner.username,
             inbound_remote_path=partner.inbound_remote_path,
             outbound_remote_path=partner.outbound_remote_path,
+            host_key=partner.host_key,
         )
 
 

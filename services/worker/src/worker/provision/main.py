@@ -61,7 +61,7 @@ async def replicate_tenant_config(
     # Replicate AS2Partners
     # We replicate all AS2Partners that belong to this tenant, plus any global ones (tenant_id IS NULL)
     stmt = select(GlobalAS2Partner).where(
-        (GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id.is_(None))
+        (GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id == 0)
     )
     tp_result = await global_session.execute(stmt)
 
@@ -159,6 +159,7 @@ async def replicate_tenant_config(
                 username=global_sftp.username,
                 inbound_remote_path=global_sftp.inbound_remote_path,
                 outbound_remote_path=global_sftp.outbound_remote_path,
+                host_key=global_sftp.host_key,
                 password_encrypted=global_sftp.password_encrypted,
                 credentials_vault_ref=global_sftp.credentials_vault_ref,
                 active=global_sftp.active,
@@ -172,6 +173,7 @@ async def replicate_tenant_config(
                     "username": global_sftp.username,
                     "inbound_remote_path": global_sftp.inbound_remote_path,
                     "outbound_remote_path": global_sftp.outbound_remote_path,
+                    "host_key": global_sftp.host_key,
                     "password_encrypted": global_sftp.password_encrypted,
                     "credentials_vault_ref": global_sftp.credentials_vault_ref,
                     "active": global_sftp.active,

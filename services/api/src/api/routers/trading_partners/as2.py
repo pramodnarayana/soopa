@@ -51,9 +51,9 @@ async def export_as2_certificates(
                         partner.private_key_vault_ref
                     ).decode("utf-8")
                 except Exception as e:
-                    logger.error(f"Failed to retrieve private key from vault: {e}")
+                    logger.error(f"Failed to retrieve private key from vault: {e}", exc_info=True)
                     raise HTTPException(
-                        status_code=500, detail=f"Failed to retrieve private key from vault: {e}"
+                        status_code=500, detail="Failed to retrieve private key from vault"
                     ) from e
 
             if partner.prev_private_key_vault_ref:
@@ -62,10 +62,12 @@ async def export_as2_certificates(
                         partner.prev_private_key_vault_ref
                     ).decode("utf-8")
                 except Exception as e:
-                    logger.error(f"Failed to retrieve prev private key from vault: {e}")
+                    logger.error(
+                        f"Failed to retrieve prev private key from vault: {e}", exc_info=True
+                    )
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Failed to retrieve prev private key from vault: {e}",
+                        detail="Failed to retrieve prev private key from vault",
                     ) from e
 
         return response

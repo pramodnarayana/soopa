@@ -80,6 +80,7 @@ class CreateSFTPPartnerCmd:
     outbound_remote_path: str | None = None
     password: str | None = None
     credentials_vault_ref: str | None = None
+    host_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class UpdateSFTPPartnerCmd:
     outbound_remote_path: str | None = None
     active: bool | None = None
     password: str | None = None
+    host_key: str | None = None
 
 
 @dataclass(frozen=True)

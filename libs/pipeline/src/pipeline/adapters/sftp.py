@@ -70,7 +70,11 @@ def get_ssh_client(
             pkey: paramiko.PKey = paramiko.RSAKey.from_private_key(key_io)
         except Exception:
             key_io.seek(0)
-            pkey = paramiko.Ed25519Key.from_private_key(key_io)
+            try:
+                pkey = paramiko.ECDSAKey.from_private_key(key_io)
+            except Exception:
+                key_io.seek(0)
+                pkey = paramiko.Ed25519Key.from_private_key(key_io)
         connect_kwargs["pkey"] = pkey
     elif password:
         connect_kwargs["password"] = password

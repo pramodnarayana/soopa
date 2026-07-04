@@ -27,11 +27,13 @@ async def create_webhook(
     from urllib.parse import urlparse
 
     try:
+        import anyio
+
         parsed = urlparse(str(request.url))
         hostname = parsed.hostname
         if not hostname:
             raise ValueError("Invalid URL")
-        ip = socket.gethostbyname(hostname)
+        ip = await anyio.to_thread.run_sync(socket.gethostbyname, hostname)
         ip_obj = ipaddress.ip_address(ip)
         if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_unspecified:
             raise HTTPException(status_code=400, detail="Webhook URL must be a public address")
