@@ -69,7 +69,7 @@ async def test_delivery_service_inbound_webhook() -> None:
             "webhook_partner_id": "wp1",
         }
     )
-    repo.webhook_partners["wp1"] = {
+    repo.webhooks["wp1"] = {
         "name": "Test Webhook",
         "url": "https://webhook.example.com/edi",
         "auth_header_vault_ref": None,
@@ -119,7 +119,7 @@ async def test_delivery_service_outbound_sftp() -> None:
         "port": 22,
         "username": "user",
         "credentials_vault_ref": "mock_password",
-        "remote_path": "/out",
+        "outbound_remote_path": "/out",
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
             "webhook_partner_id": "wp1",
         }
     )
-    repo.webhook_partners["wp1"] = {
+    repo.webhooks["wp1"] = {
         "name": "Test",
         "url": "https://webhook.example.com/edi",
     }

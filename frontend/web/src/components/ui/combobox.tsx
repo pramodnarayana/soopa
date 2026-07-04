@@ -23,9 +23,10 @@ export interface ComboboxProps {
   placeholder?: string
   emptyText?: string
   disabled?: boolean
+  side?: "top" | "right" | "bottom" | "left"
 }
 
-export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No results found.", disabled = false }: ComboboxProps) {
+export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No results found.", disabled = false, side = "bottom" }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value || "")
 
@@ -69,7 +70,7 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent side={side} portaled={false} className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command>
           <CommandInput
             placeholder={placeholder}

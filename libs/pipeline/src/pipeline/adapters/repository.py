@@ -1,6 +1,7 @@
 import uuid
 from typing import Any
 
+from database.encryption import db_encryption
 from database.models import ApiGateway, EdiMessage
 from database.models import TenantOutbox as Outbox
 from database.models.data_plane import (
@@ -9,7 +10,7 @@ from database.models.data_plane import (
     InboundRoute,
     OutboundRoute,
     SFTPPartner,
-    WebhookPartner,
+    Webhook,
 )
 from pipeline.ports.repository import RepositoryPort
 from sqlalchemy import select, update
@@ -180,15 +181,17 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "host": record.host,
             "port": record.port,
             "username": record.username,
-            "remote_path": record.remote_path,
+            "inbound_remote_path": record.inbound_remote_path,
+            "outbound_remote_path": record.outbound_remote_path,
+            "password": db_encryption.decrypt(record.password_encrypted)
+            if record.password_encrypted
+            else None,
             "credentials_vault_ref": record.credentials_vault_ref,
         }
 
-    async def get_webhook_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(WebhookPartner).where(
-                WebhookPartner.id == uuid.UUID(partner_id), WebhookPartner.active.is_(True)
-            )
+            select(Webhook).where(Webhook.id == uuid.UUID(partner_id), Webhook.active.is_(True))
         )
         record = result.scalar_one_or_none()
         if not record:

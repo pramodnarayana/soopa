@@ -6,6 +6,7 @@ import type {
   UpdatePartnerPayload,
   CreatePartnershipPayload,
   UpdatePartnershipPayload,
+  CreateSftpPartnerPayload,
   RotateCertPayload,
 } from '../types';
 
@@ -33,6 +34,9 @@ export interface IPartnersRepository {
 
   // Tenant Partners
   getTenantPartners(): Promise<Partner[]>;
+  createSftpPartner(payload: CreateSftpPartnerPayload): Promise<Partner>;
   updateSftpPartner(id: string, payload: UpdatePartnerPayload): Promise<Partner>;
   deleteSftpPartner(id: string): Promise<void>;
+  testSftpConnection(payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>): Promise<{ success: boolean; reason?: string }>;
+  testExistingSftpConnection(id: string, payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>): Promise<{ success: boolean; reason?: string }>;
 }

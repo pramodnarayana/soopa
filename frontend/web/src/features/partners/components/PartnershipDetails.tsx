@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { usePlatformConfig } from '@/features/platform/api/configHooks';
 import { Combobox } from '@/components/ui/combobox';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export interface PartnershipDetailsProps {
   partnership: Partnership;
   availablePartners: { id: string; name: string; type: string; is_local?: boolean }[];
 }
 
-export function PartnershipDetails({ partnership, availablePartners }: PartnershipDetailsProps) {
+export function PartnershipDetails({ partnership, availablePartners, onCancel }: { partnership: Partnership, availablePartners: any[], onCancel?: () => void }) {
   const { toast } = useToast();
   const updatePartnership = useUpdatePlatformPartnershipMutation();
   const { data: platformConfig } = usePlatformConfig();
@@ -71,13 +72,26 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
           <div>
             <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-1">Partnership Details</h4>
           </div>
-          <Button
-            type="submit"
-            disabled={!isDirty || isSubmitting}
-            className="min-w-[100px]"
-          >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                reset();
+                if (onCancel) onCancel();
+              }}
+              disabled={!isDirty || isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!isDirty || isSubmitting}
+              className="min-w-[100px]"
+            >
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -88,19 +102,13 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
               name="local_partner_id"
               control={control}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="bg-slate-50 text-slate-500 font-mono text-sm opacity-100 border-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availablePartners.filter(p => p.type === 'AS2' && p.is_local === true).map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                    {!availablePartners.find(p => p.id === field.value) && field.value && (
-                      <SelectItem value={field.value}>{field.value}</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={availablePartners
+                    .filter(p => p.type === 'AS2' && p.is_local === true)
+                    .map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+                />
               )}
             />
           </div>
@@ -111,19 +119,13 @@ export function PartnershipDetails({ partnership, availablePartners }: Partnersh
               name="remote_partner_id"
               control={control}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="bg-slate-50 text-slate-500 font-mono text-sm opacity-100 border-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availablePartners.filter(p => p.type === 'AS2' && !p.is_local).map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                    {!availablePartners.find(p => p.id === field.value) && field.value && (
-                      <SelectItem value={field.value}>{field.value}</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={availablePartners
+                    .filter(p => p.type === 'AS2' && !p.is_local)
+                    .map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+                />
               )}
             />
           </div>

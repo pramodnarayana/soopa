@@ -7,7 +7,7 @@ from api.domain.models import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookPartnerCmd,
+    CreateWebhookCmd,
 )
 from api_fakes import FakeControlPlaneRepository, FakeDataPlaneRepository
 
@@ -48,45 +48,48 @@ async def test_create_sftp_partner(service: ProvisioningService):
     assert partner.type == "SFTP"
     assert partner.status == "INACTIVE"
 
-    tenant_repo: FakeDataPlaneRepository = service.tenant_repo
-    assert len(tenant_repo.sftp_partners) == 1
+    global_repo: FakeControlPlaneRepository = service.global_repo
+    assert len(global_repo.sftp_partners) == 1
 
 
 @pytest.mark.asyncio
 async def test_create_webhook_partner(service: ProvisioningService):
-    cmd = CreateWebhookPartnerCmd(
+    cmd = CreateWebhookCmd(
         name="Webhook Partner", url="https://example.com/webhook", auth_header_vault_ref="vault-ref"
     )
-    partner = await service.create_webhook_partner(tenant_id=1, cmd=cmd)
+    partner = await service.create_webhook(tenant_id=1, cmd=cmd)
 
     assert partner.type == "WEBHOOK"
     assert partner.status == "ACTIVE"
 
-    tenant_repo: FakeDataPlaneRepository = service.tenant_repo
-    assert len(tenant_repo.webhook_partners) == 1
+    global_repo: FakeControlPlaneRepository = service.global_repo
+    assert len(global_repo.webhooks) == 1
 
 
 @pytest.mark.asyncio
 async def test_list_routes(service: ProvisioningService):
-    tenant_repo: FakeDataPlaneRepository = service.tenant_repo
     global_repo: FakeControlPlaneRepository = service.global_repo
 
     # 1. Create a fake AS2 partner for name resolution
     as2_id = await global_repo.create_as2_identity(
         tenant_id=1, cmd=CreateAS2TradingPartnerCmd(name="Walmart", as2_id="WM")
     )
-    sftp_id = await tenant_repo.create_sftp_partner(
+    sftp_id = await global_repo.create_sftp_partner(
+        tenant_id=1,
         cmd=CreateSFTPPartnerCmd(
             name="Internal SFTP",
             host="sftp.example.com",
             username="user",
             credentials_vault_ref="vault-ref",
-        )
+        ),
     )
 
     class FakeRoute:
         def __init__(self, id, as2_partner_id, sftp_partner_id, webhook_partner_id):
             self.id = id
+            self.name = "Test Route"
+            self.processing_mode = "TRANSLATE"
+            self.active = True
             self.as2_partner_id = as2_partner_id
             self.sftp_partner_id = sftp_partner_id
             self.webhook_partner_id = webhook_partner_id
@@ -98,8 +101,8 @@ async def test_list_routes(service: ProvisioningService):
     inbound_route = FakeRoute(uuid.uuid4(), as2_id, sftp_id, None)
     outbound_route = FakeRoute(uuid.uuid4(), as2_id, None, None)
 
-    tenant_repo.inbound_routes = [inbound_route]
-    tenant_repo.outbound_routes = [outbound_route]
+    global_repo.inbound_routes = [inbound_route]
+    global_repo.outbound_routes = [outbound_route]
 
     routes = await service.list_routes(1)
 
@@ -114,6 +117,7 @@ async def test_list_routes(service: ProvisioningService):
 @pytest.mark.asyncio
 async def test_create_inbound_route(service: ProvisioningService):
     cmd = CreateInboundRouteCmd(
+        name="Inbound Route",
         isa_sender_id="S1",
         isa_receiver_id="R1",
         transaction_type="850",
@@ -122,13 +126,14 @@ async def test_create_inbound_route(service: ProvisioningService):
     route = await service.create_inbound_route(tenant_id=1, cmd=cmd)
 
     assert route.direction == "INBOUND"
-    tenant_repo: FakeDataPlaneRepository = service.tenant_repo
-    assert len(tenant_repo.inbound_routes) == 1
+    global_repo: FakeControlPlaneRepository = service.global_repo
+    assert len(global_repo.inbound_routes) == 1
 
 
 @pytest.mark.asyncio
 async def test_create_outbound_route(service: ProvisioningService):
     cmd = CreateOutboundRouteCmd(
+        name="Outbound Route",
         isa_sender_id="S1",
         isa_receiver_id="R1",
         transaction_type="855",
@@ -137,5 +142,5 @@ async def test_create_outbound_route(service: ProvisioningService):
     route = await service.create_outbound_route(tenant_id=1, cmd=cmd)
 
     assert route.direction == "OUTBOUND"
-    tenant_repo: FakeDataPlaneRepository = service.tenant_repo
-    assert len(tenant_repo.outbound_routes) == 1
+    global_repo: FakeControlPlaneRepository = service.global_repo
+    assert len(global_repo.outbound_routes) == 1

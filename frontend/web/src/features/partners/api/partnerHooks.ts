@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
 import { createPartnersRepository } from './partnersApi';
-import type { UpdatePartnerPayload, UpdatePartnershipPayload, CreatePartnerPayload, CreatePartnershipPayload, RotateCertPayload } from '../types';
+import type { UpdatePartnerPayload, UpdatePartnershipPayload, CreatePartnerPayload, CreatePartnershipPayload, RotateCertPayload, CreateSftpPartnerPayload } from '../types';
 import { useToast } from '@/hooks/use-toast';
 
 // ─────────────────────────────────────────────
@@ -181,6 +181,16 @@ export function useDeletePlatformPartnershipMutation() {
 // Tenant Partner Mutations
 // ─────────────────────────────────────────────
 
+export function useCreateSftpPartnerMutation() {
+  const repo = useRepository();
+
+  return useToastMutation(
+    (payload: CreateSftpPartnerPayload) => repo.createSftpPartner(payload),
+    'SFTP Partner created successfully.',
+    [partnersKeys.tenant()]
+  );
+}
+
 export function useUpdateSftpPartnerMutation() {
   const repo = useRepository();
 
@@ -216,4 +226,20 @@ export function useRotateCertificatesMutation() {
       partnersKeys.all,
     ]
   );
+}
+
+export function useTestSftpConnectionMutation() {
+  const repo = useRepository();
+  return useMutation({
+    mutationFn: (payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>) =>
+      repo.testSftpConnection(payload)
+  });
+}
+
+export function useTestExistingSftpConnectionMutation() {
+  const repo = useRepository();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'> }) =>
+      repo.testExistingSftpConnection(id, payload)
+  });
 }

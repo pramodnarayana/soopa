@@ -108,7 +108,7 @@ class DeliveryService:
         if not api_payload:
             raise ValueError(f"No API Payload found for webhook delivery of trace_id={trace_id}")
 
-        partner = await self.repository.get_webhook_partner(partner_id)
+        partner = await self.repository.get_webhook(partner_id)
         if not partner:
             raise ValueError(f"Webhook partner {partner_id} not found.")
 
@@ -148,17 +148,24 @@ class DeliveryService:
             raw_payload = await self.storage.download(edi_msg["edi_data"])
             filename = f"{trace_id}.edi"
 
-            password: str = partner["credentials_vault_ref"]
-            if password and self.vault:
-                password = await self.vault.get_secret(password)
+            password: str | None = partner.get("password")
+            host_key: str | None = None
+            client_key: str | None = None
+
+            if not password and partner.get("credentials_vault_ref") and self.vault:
+                vault_secret = await self.vault.get_secret(partner["credentials_vault_ref"])
+                # We assume the secret from the vault is the SSH private key
+                client_key = vault_secret
+                password = ""
 
             await self.sftp_delivery.deliver(
                 host=partner["host"],
                 port=partner["port"],
                 username=partner["username"],
-                password=password,
-                host_key=None,
-                remote_path=partner["remote_path"],
+                password=password or "",
+                host_key=host_key,
+                client_key=client_key,
+                remote_path=partner["outbound_remote_path"],
                 filename=filename,
                 payload=raw_payload,
             )

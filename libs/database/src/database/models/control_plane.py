@@ -4,6 +4,7 @@ from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -194,3 +195,128 @@ class SystemAuditLog(GlobalBase):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (Index("ix_system_audit_log_tenant_time", "tenant_id", "created_at"),)
+
+
+# ---------------------------------------------------------------------------
+# Tenant Protocol & Routing Models (Global Control Plane configuration)
+# ---------------------------------------------------------------------------
+
+
+class SFTPPartner(GlobalBase):
+    __tablename__ = "sftp_partners"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    host: Mapped[str] = mapped_column(String(1024), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, default=22)
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    inbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    outbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    password_encrypted: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Webhook(GlobalBase):
+    __tablename__ = "webhooks"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    auth_header_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class InboundRoute(GlobalBase):
+    __tablename__ = "inbound_routes"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    processing_mode: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="TRANSLATE"
+    )
+    webhook_partner_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
+    )
+    as2_partner_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
+    )
+    sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(webhook_partner_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            name="chk_inbound_routes_exactly_one_dest",
+        ),
+        Index(
+            "ix_inbound_routes_unique_active",
+            "tenant_id",
+            "isa_sender_id",
+            "isa_receiver_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text("active = true"),
+        ),
+    )
+
+
+class OutboundRoute(GlobalBase):
+    __tablename__ = "outbound_routes"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    processing_mode: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="TRANSLATE"
+    )
+    as2_partner_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
+    )
+    sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            name="chk_outbound_routes_exactly_one_dest",
+        ),
+        Index(
+            "ix_outbound_routes_unique_active",
+            "tenant_id",
+            "isa_sender_id",
+            "isa_receiver_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text("active = true"),
+        ),
+    )

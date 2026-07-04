@@ -44,13 +44,38 @@ class CreateSFTPPartnerRequest(BaseModel):
     host: str = Field(..., max_length=1024, description="Host URL or IP")
     port: int = Field(22, ge=1, le=65535, description="Valid TCP port (1-65535)")
     username: str = Field(..., max_length=255, description="SFTP username")
-    remote_path: str | None = Field(None, max_length=1024, description="Remote directory path")
-    credentials_vault_ref: str = Field(
-        ..., max_length=512, description="Vault reference for password/key"
+    inbound_remote_path: str | None = Field(
+        None, max_length=1024, description="Inbound remote directory path"
+    )
+    outbound_remote_path: str | None = Field(
+        None, max_length=1024, description="Outbound remote directory path"
+    )
+    password: str | None = Field(
+        None, max_length=1024, description="Password to authenticate with the SFTP server"
+    )
+    credentials_vault_ref: str | None = Field(
+        None, max_length=512, description="Vault reference for SSH private key"
     )
 
 
-class CreateWebhookPartnerRequest(BaseModel):
+class TestSFTPConnectionRequest(BaseModel):
+    host: str = Field(..., max_length=1024, description="Host URL or IP")
+    port: int = Field(22, ge=1, le=65535, description="Valid TCP port (1-65535)")
+    username: str = Field(..., max_length=255, description="SFTP username")
+    password: str | None = Field(
+        None, max_length=1024, description="Password to authenticate with the SFTP server"
+    )
+    credentials_vault_ref: str | None = Field(
+        None, max_length=512, description="Vault reference for SSH private key"
+    )
+
+
+class TestConnectionResponse(BaseModel):
+    success: bool
+    reason: str | None = None
+
+
+class CreateWebhookRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the Webhook partner")
     url: HttpUrl = Field(..., description="Webhook endpoint URL")
     auth_header_vault_ref: str | None = Field(
@@ -98,7 +123,15 @@ class UpdateSFTPPartnerRequest(BaseModel):
     host: str | None = Field(None, max_length=255, description="SFTP host/IP")
     port: int | None = Field(None, description="SFTP port")
     username: str | None = Field(None, max_length=255, description="SFTP username")
-    remote_path: str | None = Field(None, max_length=1024, description="Remote path to poll/drop")
+    inbound_remote_path: str | None = Field(
+        None, max_length=1024, description="Inbound path to poll"
+    )
+    outbound_remote_path: str | None = Field(
+        None, max_length=1024, description="Outbound path to drop"
+    )
+    password: str | None = Field(
+        None, max_length=1024, description="Password to authenticate with the SFTP server"
+    )
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for password/key"
     )
@@ -111,10 +144,14 @@ class UpdateSFTPPartnerRequest(BaseModel):
 
 
 class CreateInboundRouteRequest(BaseModel):
+    name: str = Field(..., max_length=255, description="Name of the route")
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
     isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to match")
     transaction_type: str = Field(
         ..., max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
+    )
+    processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] = Field(
+        "TRANSLATE", description="Processing Mode"
     )
     webhook_partner_id: UUID | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
@@ -135,10 +172,14 @@ class CreateInboundRouteRequest(BaseModel):
 
 
 class CreateOutboundRouteRequest(BaseModel):
+    name: str = Field(..., max_length=255, description="Name of the route")
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
     isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to match")
     transaction_type: str = Field(
         ..., max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
+    )
+    processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] = Field(
+        "TRANSLATE", description="Processing Mode"
     )
     as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
     sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
@@ -154,6 +195,26 @@ class CreateOutboundRouteRequest(BaseModel):
         return self
 
 
+class UpdateRouteRequest(BaseModel):
+    active: bool | None = None
+    name: str | None = Field(None, max_length=255, description="Name of the route")
+    isa_sender_id: str | None = Field(None, max_length=255, description="ISA Sender ID to match")
+    isa_receiver_id: str | None = Field(
+        None, max_length=255, description="ISA Receiver ID to match"
+    )
+    transaction_type: str | None = Field(
+        None, max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
+    )
+    processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] | None = Field(
+        None, description="Processing Mode"
+    )
+    webhook_partner_id: UUID | None = Field(
+        None, description="ID of Webhook Partner for transformation routing"
+    )
+    as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
+    sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
+
+
 # ---------------------------------------------------------------------------
 # Responses
 # ---------------------------------------------------------------------------
@@ -161,9 +222,24 @@ class CreateOutboundRouteRequest(BaseModel):
 
 class PartnerResponse(BaseModel):
     partner_id: UUID
+    id: UUID | None = None
     tenant_id: int
+    name: str
     type: str  # AS2, SFTP, WEBHOOK
     status: str
+    active: bool
+    as2_id: str | None = None
+    is_local: bool | None = None
+    url: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    inbound_remote_path: str | None = None
+    outbound_remote_path: str | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.id is None:
+            object.__setattr__(self, "id", self.partner_id)
 
 
 class AS2TradingPartnerResponse(BaseModel):
@@ -214,9 +290,16 @@ class RouteResponse(BaseModel):
 
 class RouteItemResponse(BaseModel):
     route_id: UUID
+    name: str
     direction: str
     isa_sender_id: str
     isa_receiver_id: str
+    transaction_type: str
     destination_type: str
     destination_name: str
+    webhook_partner_id: UUID | None = None
+    as2_partner_id: UUID | None = None
+    sftp_partner_id: UUID | None = None
     status: str = "Active"
+    active: bool = False
+    processing_mode: str = "TRANSLATE"

@@ -8,11 +8,13 @@ from api.domain.models import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookPartnerCmd,
+    CreateWebhookCmd,
     PartnerEntity,
     RouteEntity,
     UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
+    UpdateInboundRouteCmd,
+    UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
 from api.ports.repository import ControlPlaneRepositoryPort, DataPlaneRepositoryPort
@@ -29,7 +31,7 @@ class ProvisioningService:
     def __init__(
         self,
         tenant_repo: DataPlaneRepositoryPort,
-        global_repo: ControlPlaneRepositoryPort | None = None,
+        global_repo: ControlPlaneRepositoryPort,
     ) -> None:
         self.tenant_repo = tenant_repo
         self.global_repo = global_repo
@@ -59,6 +61,7 @@ class ProvisioningService:
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             type="AS2",
             status="PROVISIONING",
         )
@@ -68,6 +71,11 @@ class ProvisioningService:
             raise ValueError("Control plane repository is required for AS2 partner deletion")
         logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
         await self.global_repo.delete_as2_identity(tenant_id, partner_id)
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="AS2_PARTNER_DELETED",
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+        )
 
     async def update_as2_partner(
         self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
@@ -84,6 +92,7 @@ class ProvisioningService:
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
+            name=cmd.name or updated_partner.name,
             type="AS2",
             status="ACTIVE" if updated_partner.active else "INACTIVE",
         )
@@ -91,12 +100,19 @@ class ProvisioningService:
     async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
 
-        # Written directly to Tenant DB
-        partner_id = await self.tenant_repo.create_sftp_partner(cmd=cmd)
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required")
+        partner_id = await self.global_repo.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="SFTP_PARTNER_CREATED",
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+        )
 
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             type="SFTP",
             status="INACTIVE",
         )
@@ -105,14 +121,22 @@ class ProvisioningService:
         self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
-        await self.tenant_repo.update_sftp_partner(partner_id=partner_id, cmd=cmd)
-        updated = await self.tenant_repo.get_sftp_partner(partner_id)
+        await self.global_repo.update_sftp_partner(
+            tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
+        )
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="SFTP_PARTNER_UPDATED",
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+        )
+        updated = await self.global_repo.get_sftp_partner(tenant_id, partner_id)
         if not updated:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
+            name=cmd.name or updated.name,
             type="SFTP",
             status="ACTIVE" if updated.active else "INACTIVE",
         )
@@ -135,10 +159,16 @@ class ProvisioningService:
             f"Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}"
         )
         partner_id = await self.global_repo.create_as2_partnership(tenant_id=tenant_id, cmd=cmd)
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="AS2_PARTNERSHIP_CREATED",
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+        )
 
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             type="AS2_PARTNERSHIP",
             status="INACTIVE",
         )
@@ -166,6 +196,11 @@ class ProvisioningService:
         await self.global_repo.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="AS2_PARTNERSHIP_UPDATED",
+            payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
+        )
         updated = await self.global_repo.get_as2_partnership(tenant_id, partnership_id)
         if not updated:
             raise ValueError(f"AS2 partnership {partnership_id} not found")
@@ -173,28 +208,39 @@ class ProvisioningService:
         return PartnerEntity(
             partner_id=partnership_id,
             tenant_id=tenant_id,
+            name=updated.name,
             type="AS2_PARTNERSHIP",
             status="ACTIVE" if updated.active else "INACTIVE",
         )
 
-    async def create_webhook_partner(
-        self, tenant_id: int, cmd: CreateWebhookPartnerCmd
-    ) -> PartnerEntity:
+    async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> PartnerEntity:
         logger.info(f"Creating Webhook partner {cmd.name} for tenant {tenant_id}")
 
-        # Written directly to Tenant DB
-        partner_id = await self.tenant_repo.create_webhook_partner(cmd=cmd)
+        if not self.global_repo:
+            raise ValueError("Control plane repository is required")
+        partner_id = await self.global_repo.create_webhook(tenant_id=tenant_id, cmd=cmd)
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="WEBHOOK_CREATED",
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+        )
 
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             type="WEBHOOK",
             status="ACTIVE",
         )
 
     async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> RouteEntity:
         logger.info(f"Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
-        route_id = await self.tenant_repo.create_inbound_route(cmd=cmd)
+        route_id = await self.global_repo.create_inbound_route(tenant_id=tenant_id, cmd=cmd)
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="INBOUND_ROUTE_CREATED",
+            payload={"route_id": str(route_id), "tenant_id": tenant_id},
+        )
 
         return RouteEntity(
             route_id=route_id,
@@ -206,7 +252,12 @@ class ProvisioningService:
         self, tenant_id: int, cmd: CreateOutboundRouteCmd
     ) -> RouteEntity:
         logger.info(f"Creating Outbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
-        route_id = await self.tenant_repo.create_outbound_route(cmd=cmd)
+        route_id = await self.global_repo.create_outbound_route(tenant_id=tenant_id, cmd=cmd)
+        await self.global_repo.create_outbox_event(
+            tenant_id=tenant_id,
+            event_type="OUTBOUND_ROUTE_CREATED",
+            payload={"route_id": str(route_id), "tenant_id": tenant_id},
+        )
 
         return RouteEntity(
             route_id=route_id,
@@ -214,8 +265,52 @@ class ProvisioningService:
             direction="OUTBOUND",
         )
 
+    async def update_inbound_route(
+        self, tenant_id: int, route_id: UUID, cmd: UpdateInboundRouteCmd
+    ) -> bool:
+        res = await self.global_repo.update_inbound_route(tenant_id, route_id, cmd)
+        if res:
+            await self.global_repo.create_outbox_event(
+                tenant_id=tenant_id,
+                event_type="INBOUND_ROUTE_UPDATED",
+                payload={"route_id": str(route_id), "tenant_id": tenant_id},
+            )
+        return res
+
+    async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+        res = await self.global_repo.delete_inbound_route(tenant_id, route_id)
+        if res:
+            await self.global_repo.create_outbox_event(
+                tenant_id=tenant_id,
+                event_type="INBOUND_ROUTE_DELETED",
+                payload={"route_id": str(route_id), "tenant_id": tenant_id},
+            )
+        return res
+
+    async def update_outbound_route(
+        self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
+    ) -> bool:
+        res = await self.global_repo.update_outbound_route(tenant_id, route_id, cmd)
+        if res:
+            await self.global_repo.create_outbox_event(
+                tenant_id=tenant_id,
+                event_type="OUTBOUND_ROUTE_UPDATED",
+                payload={"route_id": str(route_id), "tenant_id": tenant_id},
+            )
+        return res
+
+    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+        res = await self.global_repo.delete_outbound_route(tenant_id, route_id)
+        if res:
+            await self.global_repo.create_outbox_event(
+                tenant_id=tenant_id,
+                event_type="OUTBOUND_ROUTE_DELETED",
+                payload={"route_id": str(route_id), "tenant_id": tenant_id},
+            )
+        return res
+
     async def list_routes(self, tenant_id: int) -> list[dict[str, Any]]:
-        routes_data = await self.tenant_repo.get_all_routes()
+        routes_data = await self.global_repo.get_all_routes(tenant_id)
         inbound = routes_data.get("inbound", [])
         outbound = routes_data.get("outbound", [])
 
@@ -245,8 +340,8 @@ class ProvisioningService:
             if self.global_repo
             else {}
         )
-        sftp_names = await self.tenant_repo.get_sftp_partners_by_ids(list(sftp_ids))
-        webhook_names = await self.tenant_repo.get_webhook_partners_by_ids(list(webhook_ids))
+        sftp_names = await self.global_repo.get_sftp_partners_by_ids(tenant_id, list(sftp_ids))
+        webhook_names = await self.global_repo.get_webhooks_by_ids(tenant_id, list(webhook_ids))
 
         results = []
         for r in inbound:
@@ -265,11 +360,17 @@ class ProvisioningService:
             results.append(
                 {
                     "route_id": r.id,
+                    "name": r.name,
                     "direction": "INBOUND",
                     "isa_sender_id": r.isa_sender_id,
                     "isa_receiver_id": r.isa_receiver_id,
+                    "transaction_type": r.transaction_type,
                     "destination_type": dest_type,
                     "destination_name": dest_name,
+                    "webhook_partner_id": r.webhook_partner_id,
+                    "as2_partner_id": r.as2_partner_id,
+                    "sftp_partner_id": r.sftp_partner_id,
+                    "active": r.active,
                 }
             )
 
@@ -286,11 +387,16 @@ class ProvisioningService:
             results.append(
                 {
                     "route_id": r.id,
+                    "name": r.name,
                     "direction": "OUTBOUND",
                     "isa_sender_id": r.isa_sender_id,
                     "isa_receiver_id": r.isa_receiver_id,
+                    "transaction_type": r.transaction_type,
                     "destination_type": dest_type,
                     "destination_name": dest_name,
+                    "as2_partner_id": r.as2_partner_id,
+                    "sftp_partner_id": r.sftp_partner_id,
+                    "active": r.active,
                 }
             )
 

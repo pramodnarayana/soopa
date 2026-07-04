@@ -1,6 +1,7 @@
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from identity.dependencies import get_current_tenant_id
 
 from api.adapters.http.dtos import (
@@ -8,6 +9,7 @@ from api.adapters.http.dtos import (
     CreateOutboundRouteRequest,
     RouteItemResponse,
     RouteResponse,
+    UpdateRouteRequest,
 )
 from api.core.provisioning import ProvisioningService
 from api.core.uow import UnitOfWork
@@ -50,12 +52,14 @@ async def create_inbound_route(
     Creates a new Inbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane)  # type: ignore[arg-type]
+        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
 
         cmd = CreateInboundRouteCmd(
+            name=request.name,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,
             transaction_type=request.transaction_type,
+            processing_mode=request.processing_mode,
             webhook_partner_id=request.webhook_partner_id,
             as2_partner_id=request.as2_partner_id,
             sftp_partner_id=request.sftp_partner_id,
@@ -79,12 +83,14 @@ async def create_outbound_route(
     Creates a new Outbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane)  # type: ignore[arg-type]
+        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
 
         cmd = CreateOutboundRouteCmd(
+            name=request.name,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,
             transaction_type=request.transaction_type,
+            processing_mode=request.processing_mode,
             as2_partner_id=request.as2_partner_id,
             sftp_partner_id=request.sftp_partner_id,
         )
@@ -95,3 +101,108 @@ async def create_outbound_route(
         return RouteResponse(
             route_id=entity.route_id, tenant_id=entity.tenant_id, direction=entity.direction
         )
+
+
+@router.patch("/inbound/{route_id}", status_code=status.HTTP_200_OK)
+async def update_inbound_route(
+    route_id: UUID,
+    request: UpdateRouteRequest,
+    tenant_id: int = Depends(get_current_tenant_id),
+    uow: UnitOfWork = Depends(get_tenant_uow),
+) -> Any:
+    async with uow:
+        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        from api.domain.models import UNSET, UpdateInboundRouteCmd
+
+        cmd = UpdateInboundRouteCmd(
+            name=request.name if request.name is not None else UNSET,
+            isa_sender_id=request.isa_sender_id if request.isa_sender_id is not None else UNSET,
+            isa_receiver_id=request.isa_receiver_id
+            if request.isa_receiver_id is not None
+            else UNSET,
+            transaction_type=request.transaction_type
+            if request.transaction_type is not None
+            else UNSET,
+            processing_mode=request.processing_mode
+            if request.processing_mode is not None
+            else UNSET,
+            webhook_partner_id=request.webhook_partner_id
+            if request.webhook_partner_id is not None
+            else UNSET,
+            as2_partner_id=request.as2_partner_id if request.as2_partner_id is not None else UNSET,
+            sftp_partner_id=request.sftp_partner_id
+            if request.sftp_partner_id is not None
+            else UNSET,
+            active=request.active if request.active is not None else UNSET,
+        )
+
+        success = await service.update_inbound_route(tenant_id, route_id, cmd)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        await uow.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/inbound/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_inbound_route(
+    route_id: UUID,
+    tenant_id: int = Depends(get_current_tenant_id),
+    uow: UnitOfWork = Depends(get_tenant_uow),
+) -> None:
+    async with uow:
+        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        success = await service.delete_inbound_route(tenant_id, route_id)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        await uow.commit()
+
+
+@router.patch("/outbound/{route_id}", status_code=status.HTTP_200_OK)
+async def update_outbound_route(
+    route_id: UUID,
+    request: UpdateRouteRequest,
+    tenant_id: int = Depends(get_current_tenant_id),
+    uow: UnitOfWork = Depends(get_tenant_uow),
+) -> Any:
+    async with uow:
+        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        from api.domain.models import UNSET, UpdateOutboundRouteCmd
+
+        cmd = UpdateOutboundRouteCmd(
+            name=request.name if request.name is not None else UNSET,
+            isa_sender_id=request.isa_sender_id if request.isa_sender_id is not None else UNSET,
+            isa_receiver_id=request.isa_receiver_id
+            if request.isa_receiver_id is not None
+            else UNSET,
+            transaction_type=request.transaction_type
+            if request.transaction_type is not None
+            else UNSET,
+            processing_mode=request.processing_mode
+            if request.processing_mode is not None
+            else UNSET,
+            as2_partner_id=request.as2_partner_id if request.as2_partner_id is not None else UNSET,
+            sftp_partner_id=request.sftp_partner_id
+            if request.sftp_partner_id is not None
+            else UNSET,
+            active=request.active if request.active is not None else UNSET,
+        )
+
+        success = await service.update_outbound_route(tenant_id, route_id, cmd)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        await uow.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/outbound/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_outbound_route(
+    route_id: UUID,
+    tenant_id: int = Depends(get_current_tenant_id),
+    uow: UnitOfWork = Depends(get_tenant_uow),
+) -> None:
+    async with uow:
+        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        success = await service.delete_outbound_route(tenant_id, route_id)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        await uow.commit()

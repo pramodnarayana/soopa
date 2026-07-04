@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Plus } from 'lucide-react'
+import { FormModal } from '@/components/ui/form-modal'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCreatePlatformPartnershipMutation } from '../api/partnerHooks'
 import { usePlatformConfig } from '@/features/platform/api/configHooks'
 import { Combobox } from '@/components/ui/combobox'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 
 export interface CreatePartnershipModalProps {
   availablePartners: { id: string; name: string; type: string; is_local?: boolean }[];
@@ -76,144 +75,124 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
   const remoteIdentities = availablePartners.filter(p => p.type === 'AS2' && !p.is_local)
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
-          <Plus className="h-4 w-4" />
-          Create Partnership
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[800px] rounded-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle className="text-xl">Create Partnership</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSave} className="grid gap-6 py-4">
+    <FormModal
+      title="Create Partnership"
+      triggerText="Create Partnership"
+      isOpen={isOpen}
+      onOpenChange={handleOpenChange}
+      onSubmit={handleSave}
+      isPending={createPartnership.isPending}
+      submitText="Create Partnership"
+      maxWidth="sm:max-w-[800px]"
+    >
+      <div className="grid gap-2">
+        <Label htmlFor="name" className="text-slate-600 font-medium">Partnership Name</Label>
+        <Input id="name" name="name" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Acme Corp X12 Exchange" className="h-10 rounded-xl" />
+      </div>
+
+      {/* Identities Section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+        <div className="grid gap-2">
+          <Label className="text-slate-600 font-medium">Local Station (Your AS2)</Label>
+          <SearchableSelect
+            value={localPartnerId}
+            onChange={setLocalPartnerId}
+            placeholder="Select local Trading Partner"
+            options={localIdentities.map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+            emptyText="No local stations found"
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label className="text-slate-600 font-medium">Remote Station (Partner AS2)</Label>
+          <SearchableSelect
+            value={remotePartnerId}
+            onChange={setRemotePartnerId}
+            placeholder="Select remote Trading Partner"
+            options={remoteIdentities.map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+            emptyText="No remote stations found"
+          />
+        </div>
+      </div>
+
+      {/* Advanced Settings */}
+      <div className="flex flex-col gap-6 pt-2 border-t border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid gap-2">
+            <Label className="text-slate-600 font-medium">MDN Delivery Type</Label>
+            <Select value={mdnType} onValueChange={setMdnType}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue placeholder="Select MDN type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SYNC">Synchronous (Recommended)</SelectItem>
+                <SelectItem value="ASYNC">Asynchronous</SelectItem>
+                <SelectItem value="NONE">None (Fire and Forget)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {mdnType === 'ASYNC' && (
+            <div className="grid gap-2">
+              <Label className="text-slate-600 font-medium">Async MDN Receipt URL</Label>
+              <Combobox
+                options={platformConfig?.available_as2_receive_urls || []}
+                value={mdnUrl}
+                onChange={setMdnUrl}
+                placeholder="https://..."
+                emptyText="Type custom URL..."
+              />
+              <p className="text-xs text-slate-500">This is where the remote partner will send asynchronous MDN receipts back to your server.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid gap-2">
+            <Label className="text-slate-600 font-medium">Encryption</Label>
+            <Select value={encryptionAlgorithm} onValueChange={setEncryptionAlgorithm}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue placeholder="Algorithm" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AES256_CBC">AES-256-CBC</SelectItem>
+                <SelectItem value="AES128_CBC">AES-128-CBC</SelectItem>
+                <SelectItem value="3DES">3DES (Legacy)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="name" className="text-slate-600 font-medium">Partnership Name</Label>
-            <Input id="name" name="name" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Acme Corp X12 Exchange" className="h-10 rounded-xl" />
+            <Label className="text-slate-600 font-medium">Signature</Label>
+            <Select value={signatureAlgorithm} onValueChange={setSignatureAlgorithm}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue placeholder="Algorithm" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SHA256">SHA-256</SelectItem>
+                <SelectItem value="SHA1">SHA-1 (Legacy)</SelectItem>
+                <SelectItem value="MD5">MD5 (Insecure)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Identities Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <div className="grid gap-2">
-              <Label className="text-slate-600 font-medium">Local Station (Your AS2)</Label>
-              <Select value={localPartnerId} onValueChange={setLocalPartnerId} required>
-                <SelectTrigger className="h-10 rounded-xl bg-white">
-                  <SelectValue placeholder="Select local Trading Partner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {localIdentities.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                  {localIdentities.length === 0 && (
-                    <SelectItem value="none" disabled>No local stations found</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-slate-600 font-medium">Remote Station (Partner AS2)</Label>
-              <Select value={remotePartnerId} onValueChange={setRemotePartnerId} required>
-                <SelectTrigger className="h-10 rounded-xl bg-white">
-                  <SelectValue placeholder="Select remote Trading Partner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {remoteIdentities.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                  {remoteIdentities.length === 0 && (
-                    <SelectItem value="none" disabled>No remote stations found</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid gap-2">
+            <Label className="text-slate-600 font-medium">EDI Version</Label>
+            <Select value={ediVersion} onValueChange={setEdiVersion}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue placeholder="Version" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="X12-004010">X12 4010</SelectItem>
+                <SelectItem value="X12-005010">X12 5010</SelectItem>
+                <SelectItem value="EDIFACT-D96A">EDIFACT D96A</SelectItem>
+                <SelectItem value="EDIFACT-D01B">EDIFACT D01B</SelectItem>
+                <SelectItem value="NONE">Not Applicable</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-
-          {/* Advanced Settings */}
-          <div className="flex flex-col gap-6 pt-2 border-t border-slate-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="grid gap-2">
-                <Label className="text-slate-600 font-medium">MDN Delivery Type</Label>
-                <Select value={mdnType} onValueChange={setMdnType}>
-                  <SelectTrigger className="h-10 rounded-xl">
-                    <SelectValue placeholder="Select MDN type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SYNC">Synchronous (Recommended)</SelectItem>
-                    <SelectItem value="ASYNC">Asynchronous</SelectItem>
-                    <SelectItem value="NONE">None (Fire and Forget)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {mdnType === 'ASYNC' && (
-                <div className="grid gap-2">
-                  <Label className="text-slate-600 font-medium">Async MDN Receipt URL</Label>
-                  <Combobox
-                    options={platformConfig?.available_as2_receive_urls || []}
-                    value={mdnUrl}
-                    onChange={setMdnUrl}
-                    placeholder="https://..."
-                    emptyText="Type custom URL..."
-                  />
-                  <p className="text-xs text-slate-500">This is where the remote partner will send asynchronous MDN receipts back to your server.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <div className="grid gap-2">
-                <Label className="text-slate-600 font-medium">Encryption</Label>
-                <Select value={encryptionAlgorithm} onValueChange={setEncryptionAlgorithm}>
-                  <SelectTrigger className="h-10 rounded-xl">
-                    <SelectValue placeholder="Algorithm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="AES256_CBC">AES-256-CBC</SelectItem>
-                    <SelectItem value="AES128_CBC">AES-128-CBC</SelectItem>
-                    <SelectItem value="3DES">3DES (Legacy)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label className="text-slate-600 font-medium">Signature</Label>
-                <Select value={signatureAlgorithm} onValueChange={setSignatureAlgorithm}>
-                  <SelectTrigger className="h-10 rounded-xl">
-                    <SelectValue placeholder="Algorithm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SHA256">SHA-256</SelectItem>
-                    <SelectItem value="SHA1">SHA-1 (Legacy)</SelectItem>
-                    <SelectItem value="MD5">MD5 (Insecure)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label className="text-slate-600 font-medium">EDI Version</Label>
-                <Select value={ediVersion} onValueChange={setEdiVersion}>
-                  <SelectTrigger className="h-10 rounded-xl">
-                    <SelectValue placeholder="Version" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="X12-004010">X12 4010</SelectItem>
-                    <SelectItem value="X12-005010">X12 5010</SelectItem>
-                    <SelectItem value="EDIFACT-D96A">EDIFACT D96A</SelectItem>
-                    <SelectItem value="EDIFACT-D01B">EDIFACT D01B</SelectItem>
-                    <SelectItem value="NONE">Not Applicable</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <Button type="submit" disabled={createPartnership.isPending} className="w-full h-11 mt-4 text-base font-semibold shadow-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white">
-            {createPartnership.isPending ? 'Creating...' : 'Create Partnership'}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </FormModal>
   )
 }

@@ -7,6 +7,7 @@ import type {
   UpdatePartnerPayload,
   CreatePartnershipPayload,
   UpdatePartnershipPayload,
+  CreateSftpPartnerPayload,
   RotateCertPayload,
 } from '../types';
 
@@ -54,50 +55,50 @@ class HttpPartnersRepository implements IPartnersRepository {
 
   // ── Platform Trading Partners ──────────────
   getPlatformPartners(): Promise<Partner[]> {
-    return this.request('/api/v1/platform/partners/as2/trading-partners');
+    return this.request('/api/v1/platform/trading-partners/as2/trading-partners');
   }
 
   createPlatformPartner(payload: CreatePartnerPayload): Promise<Partner> {
-    return this.request('/api/v1/platform/partners/as2/trading-partners', {
+    return this.request('/api/v1/platform/trading-partners/as2/trading-partners', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
   updatePlatformPartner(id: string, payload: UpdatePartnerPayload): Promise<Partner> {
-    return this.request(`/api/v1/platform/partners/as2/trading-partners/${id}`, {
+    return this.request(`/api/v1/platform/trading-partners/as2/trading-partners/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   }
 
   deletePlatformPartner(id: string): Promise<void> {
-    return this.request(`/api/v1/platform/partners/as2/trading-partners/${id}`, {
+    return this.request(`/api/v1/platform/trading-partners/as2/trading-partners/${id}`, {
       method: 'DELETE',
     });
   }
 
   // ── Platform Partnerships ──────────────────
   getPlatformPartnerships(): Promise<Partnership[]> {
-    return this.request('/api/v1/platform/partners/as2/partnerships');
+    return this.request('/api/v1/platform/trading-partners/as2/partnerships');
   }
 
   createPlatformPartnership(payload: CreatePartnershipPayload): Promise<Partnership> {
-    return this.request('/api/v1/platform/partners/as2/partnerships', {
+    return this.request('/api/v1/platform/trading-partners/as2/partnerships', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
   updatePlatformPartnership(id: string, payload: UpdatePartnershipPayload): Promise<Partnership> {
-    return this.request(`/api/v1/platform/partners/as2/partnerships/${id}`, {
+    return this.request(`/api/v1/platform/trading-partners/as2/partnerships/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   }
 
   deletePlatformPartnership(id: string): Promise<void> {
-    return this.request(`/api/v1/platform/partners/as2/partnerships/${id}`, {
+    return this.request(`/api/v1/platform/trading-partners/as2/partnerships/${id}`, {
       method: 'DELETE',
     });
   }
@@ -105,31 +106,53 @@ class HttpPartnersRepository implements IPartnersRepository {
   // ── Certificates ───────────────────────────
   exportCertificates(partnerId: string): Promise<CertificatesExport> {
     return this.request(
-      `/api/v1/partners/as2/trading-partners/${partnerId}/certificates/export`,
+      `/api/v1/trading-partners/as2/trading-partners/${partnerId}/certificates/export`,
     );
   }
 
   rotateCertificates(partnerId: string, payload: RotateCertPayload): Promise<Partner> {
     return this.request(
-      `/api/v1/partners/as2/trading-partners/${partnerId}/certificates/rotate`,
+      `/api/v1/trading-partners/as2/trading-partners/${partnerId}/certificates/rotate`,
       { method: 'PUT', body: JSON.stringify(payload) },
     );
   }
 
   // ── Tenant Partners ────────────────────────
-  getTenantPartners(): Promise<Partner[]> {
-    return this.request('/api/v1/partners');
+  async getTenantPartners(): Promise<Partner[]> {
+    const data = await this.request<any[]>('/api/v1/trading-partners');
+    return data.map((p) => ({ ...p, id: p.partner_id || p.id }));
+  }
+
+  createSftpPartner(payload: CreateSftpPartnerPayload): Promise<Partner> {
+    return this.request('/api/v1/trading-partners/sftp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   updateSftpPartner(id: string, payload: UpdatePartnerPayload): Promise<Partner> {
-    return this.request(`/api/v1/partners/sftp/${id}`, {
+    return this.request(`/api/v1/trading-partners/sftp/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   }
 
   deleteSftpPartner(id: string): Promise<void> {
-    return this.request(`/api/v1/partners/sftp/${id}`, { method: 'DELETE' });
+    return this.request(`/api/v1/trading-partners/sftp/${id}`, { method: 'DELETE' });
+  }
+
+  testSftpConnection(payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>): Promise<{ success: boolean; reason?: string }> {
+    return this.request('/api/v1/trading-partners/sftp/test', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  testExistingSftpConnection(id: string, payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>): Promise<{ success: boolean; reason?: string }> {
+    return this.request(`/api/v1/trading-partners/${id}/sftp/test`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 }
 

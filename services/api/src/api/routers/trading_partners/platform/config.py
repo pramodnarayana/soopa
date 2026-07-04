@@ -4,17 +4,14 @@ from config.settings import get_settings
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(
-    prefix="/api/v1/platform/config",
-    tags=["Platform Config"],
-)
+router = APIRouter(tags=["Platform Config"])
 
 
 class PlatformConfigResponse(BaseModel):
     available_as2_receive_urls: list[str]
 
 
-@router.get("", response_model=PlatformConfigResponse)
+@router.get("/config", response_model=PlatformConfigResponse)
 async def get_platform_config() -> Any:
     settings = get_settings()
 

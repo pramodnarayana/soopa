@@ -2,16 +2,24 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 from identity.dependencies import get_current_tenant_id, get_tenant_session
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
 from api.dependencies import get_current_user_profile
-from api.routers import partners, platform_config, platform_partners, routes
+from api.routers import routes, trading_partners, webhooks
+from api.routers.trading_partners import platform
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +58,34 @@ app = FastAPI(
     },
 )
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    import json
+
+    body = await request.body()
+    try:
+        parsed = json.loads(body)
+    except Exception:
+        parsed = body
+    print("\n" + "=" * 50)
+    print("422 Error - Unprocessable Content")
+    print(f"Path: {request.url.path}")
+    print(f"Payload: {parsed}")
+    print(f"Validation Errors: {exc.errors()}")
+    print("=" * 50 + "\n")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
+
+
 app.include_router(cdc_relay.router)
-app.include_router(partners.router)
-app.include_router(platform_partners.router)
-app.include_router(platform_config.router)
+app.include_router(trading_partners.router)
+app.include_router(webhooks.router)
+app.include_router(platform.router)
 app.include_router(routes.router)
 
 

@@ -4,14 +4,18 @@ from typing import Any
 from uuid import UUID
 
 from api.domain.models import (
+    UNSET,
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookPartnerCmd,
+    CreateWebhookCmd,
+    UnsetType,
     UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
+    UpdateInboundRouteCmd,
+    UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
 from api.ports.repository import (
@@ -19,18 +23,17 @@ from api.ports.repository import (
     DataPlaneRepositoryPort,
     TenantRepositoryPort,
 )
-from database.models.control_plane import AS2Partner, AS2Partnership, Tenant
-from database.models.control_plane import Outbox as GlobalOutbox
-from database.models.data_plane import (
-    AS2Partner as DataPlaneAS2Partner,
-)
-from database.models.data_plane import (
+from database.encryption import db_encryption
+from database.models.control_plane import (
+    AS2Partner,
+    AS2Partnership,
     InboundRoute,
     OutboundRoute,
     SFTPPartner,
-    WebhookPartner,
+    Tenant,
+    Webhook,
 )
-from identity.tenant_context import get_tenant_id
+from database.models.control_plane import Outbox as GlobalOutbox
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,41 +112,24 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             name=cmd.name,
             local_partner_id=cmd.local_partner_id,
             remote_partner_id=cmd.remote_partner_id,
-            credentials_vault_ref=cmd.credentials_vault_ref,
             mdn_type=cmd.mdn_type,
             mdn_url=cmd.mdn_url,
             encryption_algorithm=cmd.encryption_algorithm,
             signature_algorithm=cmd.signature_algorithm,
             edi_version=cmd.edi_version,
-            advanced_flags=cmd.advanced_flags,
             active=False,
         )
         self.session.add(record)
         await self.session.flush()
-
-        await self.create_outbox_event(
-            tenant_id=tenant_id,
-            event_type="AS2_PARTNERSHIP_CREATED",
-            payload={"partnership_id": str(partnership_id), "tenant_id": tenant_id},
-        )
-
         return partnership_id
 
     async def update_as2_partnership(
         self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
     ) -> None:
-        from api.domain.models import UNSET
-
         partnership = await self.get_as2_partnership(tenant_id, partnership_id)
         if partnership:
             if cmd.name is not UNSET:
                 partnership.name = cmd.name
-            if cmd.local_partner_id is not UNSET:
-                partnership.local_partner_id = cmd.local_partner_id
-            if cmd.remote_partner_id is not UNSET:
-                partnership.remote_partner_id = cmd.remote_partner_id
-            if cmd.credentials_vault_ref is not UNSET:
-                partnership.credentials_vault_ref = cmd.credentials_vault_ref
             if cmd.mdn_type is not UNSET:
                 partnership.mdn_type = cmd.mdn_type
             if cmd.mdn_url is not UNSET:
@@ -154,8 +140,6 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 partnership.signature_algorithm = cmd.signature_algorithm
             if cmd.edi_version is not UNSET:
                 partnership.edi_version = cmd.edi_version
-            if cmd.advanced_flags is not UNSET:
-                partnership.advanced_flags = cmd.advanced_flags
             if cmd.active is not UNSET:
                 partnership.active = cmd.active
         await self.session.flush()
@@ -182,7 +166,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),
-                AS2Partner.tenant_id == tenant_id,
+                AS2Partner.tenant_id.in_([tenant_id, 0]),
             )
         )
         return {row.id: row.name for row in result.all()}
@@ -203,27 +187,25 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         await self.session.flush()
         return event_id
 
-
-class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    def _tenant_id(self) -> int:
-        tenant_id = get_tenant_id()
-        if tenant_id is None:
-            raise RuntimeError("Database queries require an active tenant context.")
-        return tenant_id
-
-    async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> UUID:
+    # ------------------------------------------------------------------------
+    # SFTP Partners (Now in Control Plane)
+    # ------------------------------------------------------------------------
+    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> UUID:
         partner_id = uuid.uuid4()
         record = SFTPPartner(
             id=partner_id,
-            tenant_id=self._tenant_id(),
+            tenant_id=tenant_id,
             name=cmd.name,
             host=cmd.host,
             port=cmd.port,
             username=cmd.username,
-            remote_path=cmd.remote_path,
+            inbound_remote_path=cmd.inbound_remote_path
+            if hasattr(cmd, "inbound_remote_path")
+            else None,
+            outbound_remote_path=cmd.outbound_remote_path
+            if hasattr(cmd, "outbound_remote_path")
+            else None,
+            password_encrypted=db_encryption.encrypt(cmd.password) if cmd.password else None,
             credentials_vault_ref=cmd.credentials_vault_ref,
             active=False,
         )
@@ -231,22 +213,24 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         await self.session.flush()
         return partner_id
 
-    async def get_sftp_partner(self, partner_id: UUID) -> SFTPPartner | None:
+    async def get_sftp_partner(self, tenant_id: int, partner_id: UUID) -> Any:
         result = await self.session.execute(
             select(SFTPPartner).where(
-                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == self._tenant_id()
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == tenant_id
             )
         )
         return result.scalar_one_or_none()
 
-    async def list_sftp_partners(self) -> Sequence[Any]:
+    async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]:
         result = await self.session.execute(
-            select(SFTPPartner).where(SFTPPartner.tenant_id == self._tenant_id())
+            select(SFTPPartner).where(SFTPPartner.tenant_id == tenant_id)
         )
         return result.scalars().all()
 
-    async def update_sftp_partner(self, partner_id: UUID, cmd: UpdateSFTPPartnerCmd) -> None:
-        partner = await self.get_sftp_partner(partner_id)
+    async def update_sftp_partner(
+        self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
+    ) -> None:
+        partner = await self.get_sftp_partner(tenant_id, partner_id)
         if partner:
             if cmd.name is not None:
                 partner.name = cmd.name
@@ -256,63 +240,42 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
                 partner.port = cmd.port
             if cmd.username is not None:
                 partner.username = cmd.username
-            if cmd.remote_path is not None:
-                partner.remote_path = cmd.remote_path
+            if hasattr(cmd, "inbound_remote_path") and cmd.inbound_remote_path is not None:
+                partner.inbound_remote_path = cmd.inbound_remote_path
+            if hasattr(cmd, "outbound_remote_path") and cmd.outbound_remote_path is not None:
+                partner.outbound_remote_path = cmd.outbound_remote_path
             if cmd.credentials_vault_ref is not None:
                 partner.credentials_vault_ref = cmd.credentials_vault_ref
             if cmd.active is not None:
                 partner.active = cmd.active
         await self.session.flush()
 
-    async def delete_sftp_partner(self, partner_id: UUID) -> None:
+    async def delete_sftp_partner(self, tenant_id: int, partner_id: UUID) -> None:
         await self.session.execute(
             delete(SFTPPartner).where(
-                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == self._tenant_id()
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == tenant_id
             )
         )
         await self.session.flush()
 
-    async def get_sftp_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
-        """Returns a dict mapping SFTP Partner ID to Name."""
+    async def get_sftp_partners_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
         result = await self.session.execute(
             select(SFTPPartner.id, SFTPPartner.name).where(
-                SFTPPartner.id.in_(ids), SFTPPartner.tenant_id == self._tenant_id()
+                SFTPPartner.id.in_(ids), SFTPPartner.tenant_id == tenant_id
             )
         )
         return {row.id: row.name for row in result.all()}
 
-    async def get_webhook_partner(self, partner_id: UUID) -> Any:
-        result = await self.session.execute(
-            select(WebhookPartner).where(
-                WebhookPartner.id == partner_id, WebhookPartner.tenant_id == self._tenant_id()
-            )
-        )
-        return result.scalar_one_or_none()
-
-    async def list_webhook_partners(self) -> Sequence[Any]:
-        result = await self.session.execute(
-            select(WebhookPartner).where(WebhookPartner.tenant_id == self._tenant_id())
-        )
-        return result.scalars().all()
-
-    async def get_webhook_partners_by_ids(self, ids: list[UUID]) -> dict[UUID, str]:
-        """Returns a dict mapping Webhook Partner ID to Name."""
-        if not ids:
-            return {}
-        result = await self.session.execute(
-            select(WebhookPartner.id, WebhookPartner.name).where(
-                WebhookPartner.id.in_(ids), WebhookPartner.tenant_id == self._tenant_id()
-            )
-        )
-        return {row.id: row.name for row in result.all()}
-
-    async def create_webhook_partner(self, cmd: CreateWebhookPartnerCmd) -> UUID:
+    # ------------------------------------------------------------------------
+    # Webhook Partners (Now in Control Plane)
+    # ------------------------------------------------------------------------
+    async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> UUID:
         partner_id = uuid.uuid4()
-        record = WebhookPartner(
+        record = Webhook(
             id=partner_id,
-            tenant_id=self._tenant_id(),
+            tenant_id=tenant_id,
             name=cmd.name,
             url=cmd.url,
             auth_header_vault_ref=cmd.auth_header_vault_ref,
@@ -322,9 +285,30 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         await self.session.flush()
         return partner_id
 
-    async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> UUID:
-        tenant_id = self._tenant_id()
+    async def get_webhook(self, tenant_id: int, partner_id: UUID) -> Any:
+        result = await self.session.execute(
+            select(Webhook).where(Webhook.id == partner_id, Webhook.tenant_id == tenant_id)
+        )
+        return result.scalar_one_or_none()
 
+    async def list_webhooks(self, tenant_id: int) -> Sequence[Any]:
+        result = await self.session.execute(select(Webhook).where(Webhook.tenant_id == tenant_id))
+        return result.scalars().all()
+
+    async def get_webhooks_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]:
+        if not ids:
+            return {}
+        result = await self.session.execute(
+            select(Webhook.id, Webhook.name).where(
+                Webhook.id.in_(ids), Webhook.tenant_id == tenant_id
+            )
+        )
+        return {row.id: row.name for row in result.all()}
+
+    # ------------------------------------------------------------------------
+    # Routes (Now in Control Plane)
+    # ------------------------------------------------------------------------
+    async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> UUID:
         destinations = [
             d
             for d in (cmd.webhook_partner_id, cmd.as2_partner_id, cmd.sftp_partner_id)
@@ -333,12 +317,11 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (webhook, as2, or sftp) must be provided")
 
-        # Validate target UUIDs belong to this tenant
         if cmd.webhook_partner_id:
             result = await self.session.execute(
-                select(WebhookPartner.id).where(
-                    WebhookPartner.id == cmd.webhook_partner_id,
-                    WebhookPartner.tenant_id == tenant_id,
+                select(Webhook.id).where(
+                    Webhook.id == cmd.webhook_partner_id,
+                    Webhook.tenant_id == tenant_id,
                 )
             )
             if not result.scalar_one_or_none():
@@ -348,9 +331,9 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
 
         if cmd.as2_partner_id:
             result = await self.session.execute(
-                select(DataPlaneAS2Partner.id).where(
-                    DataPlaneAS2Partner.id == cmd.as2_partner_id,
-                    DataPlaneAS2Partner.tenant_id == tenant_id,
+                select(AS2Partner.id).where(
+                    AS2Partner.id == cmd.as2_partner_id,
+                    AS2Partner.tenant_id.in_([tenant_id, 0]),
                 )
             )
             if not result.scalar_one_or_none():
@@ -373,30 +356,70 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         record = InboundRoute(
             id=route_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
             transaction_type=cmd.transaction_type,
             webhook_partner_id=cmd.webhook_partner_id,
             as2_partner_id=cmd.as2_partner_id,
             sftp_partner_id=cmd.sftp_partner_id,
+            processing_mode=cmd.processing_mode,
         )
         self.session.add(record)
         await self.session.flush()
         return route_id
 
-    async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> UUID:
-        tenant_id = self._tenant_id()
+    async def update_inbound_route(
+        self, tenant_id: int, route_id: UUID, cmd: UpdateInboundRouteCmd
+    ) -> bool:
+        result = await self.session.execute(
+            select(InboundRoute).where(
+                InboundRoute.id == route_id, InboundRoute.tenant_id == tenant_id
+            )
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return False
+        if not isinstance(cmd.name, UnsetType):
+            record.name = cmd.name
+        if not isinstance(cmd.isa_sender_id, UnsetType):
+            record.isa_sender_id = cmd.isa_sender_id
+        if not isinstance(cmd.isa_receiver_id, UnsetType):
+            record.isa_receiver_id = cmd.isa_receiver_id
+        if not isinstance(cmd.transaction_type, UnsetType):
+            record.transaction_type = cmd.transaction_type
+        if not isinstance(cmd.processing_mode, UnsetType):
+            record.processing_mode = cmd.processing_mode
+        if not isinstance(cmd.webhook_partner_id, UnsetType):
+            record.webhook_partner_id = cmd.webhook_partner_id
+        if not isinstance(cmd.as2_partner_id, UnsetType):
+            record.as2_partner_id = cmd.as2_partner_id
+        if not isinstance(cmd.sftp_partner_id, UnsetType):
+            record.sftp_partner_id = cmd.sftp_partner_id
+        if not isinstance(cmd.active, UnsetType):
+            record.active = cmd.active
+        await self.session.flush()
+        return True
 
+    async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+        result = await self.session.execute(
+            delete(InboundRoute).where(
+                InboundRoute.id == route_id, InboundRoute.tenant_id == tenant_id
+            )
+        )
+        await self.session.flush()
+        return bool(getattr(result, "rowcount", 0) > 0)
+
+    async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> UUID:
         destinations = [d for d in (cmd.as2_partner_id, cmd.sftp_partner_id) if d is not None]
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (as2 or sftp) must be provided")
 
-        # Validate target UUIDs belong to this tenant
         if cmd.as2_partner_id:
             result = await self.session.execute(
-                select(DataPlaneAS2Partner.id).where(
-                    DataPlaneAS2Partner.id == cmd.as2_partner_id,
-                    DataPlaneAS2Partner.tenant_id == tenant_id,
+                select(AS2Partner.id).where(
+                    AS2Partner.id == cmd.as2_partner_id,
+                    AS2Partner.tenant_id.in_([tenant_id, 0]),
                 )
             )
             if not result.scalar_one_or_none():
@@ -419,18 +442,58 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         record = OutboundRoute(
             id=route_id,
             tenant_id=tenant_id,
+            name=cmd.name,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
             transaction_type=cmd.transaction_type,
             as2_partner_id=cmd.as2_partner_id,
             sftp_partner_id=cmd.sftp_partner_id,
+            processing_mode=cmd.processing_mode,
         )
         self.session.add(record)
         await self.session.flush()
         return route_id
 
-    async def get_all_routes(self) -> dict[str, list[Any]]:
-        tenant_id = self._tenant_id()
+    async def update_outbound_route(
+        self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
+    ) -> bool:
+        result = await self.session.execute(
+            select(OutboundRoute).where(
+                OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+            )
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return False
+        if not isinstance(cmd.name, UnsetType):
+            record.name = cmd.name
+        if not isinstance(cmd.isa_sender_id, UnsetType):
+            record.isa_sender_id = cmd.isa_sender_id
+        if not isinstance(cmd.isa_receiver_id, UnsetType):
+            record.isa_receiver_id = cmd.isa_receiver_id
+        if not isinstance(cmd.transaction_type, UnsetType):
+            record.transaction_type = cmd.transaction_type
+        if not isinstance(cmd.processing_mode, UnsetType):
+            record.processing_mode = cmd.processing_mode
+        if not isinstance(cmd.as2_partner_id, UnsetType):
+            record.as2_partner_id = cmd.as2_partner_id
+        if not isinstance(cmd.sftp_partner_id, UnsetType):
+            record.sftp_partner_id = cmd.sftp_partner_id
+        if not isinstance(cmd.active, UnsetType):
+            record.active = cmd.active
+        await self.session.flush()
+        return True
+
+    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+        result = await self.session.execute(
+            delete(OutboundRoute).where(
+                OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+            )
+        )
+        await self.session.flush()
+        return bool(getattr(result, "rowcount", 0) > 0)
+
+    async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
         inbound_result = await self.session.execute(
             select(InboundRoute).where(InboundRoute.tenant_id == tenant_id)
         )
@@ -442,6 +505,11 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         outbound_routes = list(outbound_result.scalars().all())
 
         return {"inbound": inbound_routes, "outbound": outbound_routes}
+
+
+class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
 
 class SqlAlchemyTenantRepository(TenantRepositoryPort):

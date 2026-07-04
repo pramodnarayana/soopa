@@ -1,20 +1,56 @@
 import asyncio
 import contextlib
 import logging
+from typing import Any
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models.control_plane import AS2Partner as GlobalAS2Partner
 from database.models.control_plane import AS2Partnership as GlobalAS2Partnership
+from database.models.control_plane import InboundRoute as GlobalInboundRoute
+from database.models.control_plane import OutboundRoute as GlobalOutboundRoute
 from database.models.control_plane import Outbox as GlobalOutbox
+from database.models.control_plane import SFTPPartner as GlobalSFTPPartner
+from database.models.control_plane import Webhook as GlobalWebhook
 from database.models.data_plane import AS2Partner as TenantAS2Partner
 from database.models.data_plane import AS2Partnership as TenantAS2Partnership
+from database.models.data_plane import InboundRoute as TenantInboundRoute
+from database.models.data_plane import OutboundRoute as TenantOutboundRoute
+from database.models.data_plane import SFTPPartner as TenantSFTPPartner
+from database.models.data_plane import Webhook as TenantWebhook
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from worker.utils import TenantResolver
 
 logger = logging.getLogger(__name__)
+
+
+async def sync_deletes(
+    tenant_id: int, global_session: Any, tenant_session: Any, global_model: Any, tenant_model: Any
+) -> None:
+    from sqlalchemy import delete, select
+
+    # Get all valid IDs from global
+    global_stmt = select(global_model.id).where(global_model.tenant_id == tenant_id)
+    # Special handling for AS2Partner which has global partners (tenant_id IS NULL)
+    if global_model.__name__ == "AS2Partner":
+        global_stmt = select(global_model.id).where(
+            (global_model.tenant_id == tenant_id) | (global_model.tenant_id.is_(None))
+        )
+    global_ids_result = await global_session.execute(global_stmt)
+    global_ids = set(global_ids_result.scalars().all())
+
+    # Get all IDs in tenant db
+    tenant_stmt = select(tenant_model.id).where(tenant_model.tenant_id == tenant_id)
+    tenant_ids_result = await tenant_session.execute(tenant_stmt)
+    tenant_ids = set(tenant_ids_result.scalars().all())
+
+    # Delete ids in tenant that are not in global
+    ids_to_delete = tenant_ids - global_ids
+    if ids_to_delete:
+        delete_stmt = delete(tenant_model).where(tenant_model.id.in_(list(ids_to_delete)))
+        await tenant_session.execute(delete_stmt)
 
 
 async def replicate_tenant_config(
@@ -77,6 +113,7 @@ async def replicate_tenant_config(
             .values(
                 id=global_ps.id,
                 tenant_id=tenant_id,
+                name=global_ps.name,
                 local_partner_id=global_ps.local_partner_id,
                 remote_partner_id=global_ps.remote_partner_id,
                 credentials_vault_ref=global_ps.credentials_vault_ref,
@@ -91,6 +128,7 @@ async def replicate_tenant_config(
             .on_conflict_do_update(
                 index_elements=["id"],
                 set_={
+                    "name": global_ps.name,
                     "local_partner_id": global_ps.local_partner_id,
                     "remote_partner_id": global_ps.remote_partner_id,
                     "credentials_vault_ref": global_ps.credentials_vault_ref,
@@ -106,7 +144,158 @@ async def replicate_tenant_config(
         )
         await tenant_session.execute(insert_ps_stmt)
 
+    # Replicate SFTPPartners
+    sftp_stmt = select(GlobalSFTPPartner).where(GlobalSFTPPartner.tenant_id == tenant_id)
+    sftp_result = await global_session.execute(sftp_stmt)
+    for global_sftp in sftp_result.scalars():
+        insert_sftp_stmt = (
+            insert(TenantSFTPPartner)
+            .values(
+                id=global_sftp.id,
+                tenant_id=tenant_id,
+                name=global_sftp.name,
+                host=global_sftp.host,
+                port=global_sftp.port,
+                username=global_sftp.username,
+                inbound_remote_path=global_sftp.inbound_remote_path,
+                outbound_remote_path=global_sftp.outbound_remote_path,
+                password_encrypted=global_sftp.password_encrypted,
+                credentials_vault_ref=global_sftp.credentials_vault_ref,
+                active=global_sftp.active,
+            )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={
+                    "name": global_sftp.name,
+                    "host": global_sftp.host,
+                    "port": global_sftp.port,
+                    "username": global_sftp.username,
+                    "inbound_remote_path": global_sftp.inbound_remote_path,
+                    "outbound_remote_path": global_sftp.outbound_remote_path,
+                    "password_encrypted": global_sftp.password_encrypted,
+                    "credentials_vault_ref": global_sftp.credentials_vault_ref,
+                    "active": global_sftp.active,
+                },
+            )
+        )
+        await tenant_session.execute(insert_sftp_stmt)
+
+    # Replicate Webhooks
+    wh_stmt = select(GlobalWebhook).where(GlobalWebhook.tenant_id == tenant_id)
+    wh_result = await global_session.execute(wh_stmt)
+    for global_wh in wh_result.scalars():
+        insert_wh_stmt = (
+            insert(TenantWebhook)
+            .values(
+                id=global_wh.id,
+                tenant_id=tenant_id,
+                name=global_wh.name,
+                url=global_wh.url,
+                auth_header_vault_ref=global_wh.auth_header_vault_ref,
+                active=global_wh.active,
+            )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={
+                    "name": global_wh.name,
+                    "url": global_wh.url,
+                    "auth_header_vault_ref": global_wh.auth_header_vault_ref,
+                    "active": global_wh.active,
+                },
+            )
+        )
+        await tenant_session.execute(insert_wh_stmt)
+
+    # Replicate InboundRoutes
+    ir_stmt = select(GlobalInboundRoute).where(GlobalInboundRoute.tenant_id == tenant_id)
+    ir_result = await global_session.execute(ir_stmt)
+    for global_ir in ir_result.scalars():
+        insert_ir_stmt = (
+            insert(TenantInboundRoute)
+            .values(
+                id=global_ir.id,
+                tenant_id=tenant_id,
+                name=global_ir.name,
+                isa_sender_id=global_ir.isa_sender_id,
+                isa_receiver_id=global_ir.isa_receiver_id,
+                transaction_type=global_ir.transaction_type,
+                processing_mode=global_ir.processing_mode,
+                webhook_partner_id=global_ir.webhook_partner_id,
+                as2_partner_id=global_ir.as2_partner_id,
+                sftp_partner_id=global_ir.sftp_partner_id,
+                active=global_ir.active,
+            )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={
+                    "name": global_ir.name,
+                    "isa_sender_id": global_ir.isa_sender_id,
+                    "isa_receiver_id": global_ir.isa_receiver_id,
+                    "transaction_type": global_ir.transaction_type,
+                    "processing_mode": global_ir.processing_mode,
+                    "webhook_partner_id": global_ir.webhook_partner_id,
+                    "as2_partner_id": global_ir.as2_partner_id,
+                    "sftp_partner_id": global_ir.sftp_partner_id,
+                    "active": global_ir.active,
+                },
+            )
+        )
+        await tenant_session.execute(insert_ir_stmt)
+
+    # Replicate OutboundRoutes
+    or_stmt = select(GlobalOutboundRoute).where(GlobalOutboundRoute.tenant_id == tenant_id)
+    or_result = await global_session.execute(or_stmt)
+    for global_or in or_result.scalars():
+        insert_or_stmt = (
+            insert(TenantOutboundRoute)
+            .values(
+                id=global_or.id,
+                tenant_id=tenant_id,
+                name=global_or.name,
+                isa_sender_id=global_or.isa_sender_id,
+                isa_receiver_id=global_or.isa_receiver_id,
+                transaction_type=global_or.transaction_type,
+                processing_mode=global_or.processing_mode,
+                as2_partner_id=global_or.as2_partner_id,
+                sftp_partner_id=global_or.sftp_partner_id,
+                active=global_or.active,
+            )
+            .on_conflict_do_update(
+                index_elements=["id"],
+                set_={
+                    "name": global_or.name,
+                    "isa_sender_id": global_or.isa_sender_id,
+                    "isa_receiver_id": global_or.isa_receiver_id,
+                    "transaction_type": global_or.transaction_type,
+                    "processing_mode": global_or.processing_mode,
+                    "as2_partner_id": global_or.as2_partner_id,
+                    "sftp_partner_id": global_or.sftp_partner_id,
+                    "active": global_or.active,
+                },
+            )
+        )
+        await tenant_session.execute(insert_or_stmt)
+
+    # Sync deletes for all configurations
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalAS2Partner, TenantAS2Partner
+    )
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalAS2Partnership, TenantAS2Partnership
+    )
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalSFTPPartner, TenantSFTPPartner
+    )
+    await sync_deletes(tenant_id, global_session, tenant_session, GlobalWebhook, TenantWebhook)
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalInboundRoute, TenantInboundRoute
+    )
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalOutboundRoute, TenantOutboundRoute
+    )
+
     await tenant_session.commit()
+
     logger.info(f"Successfully replicated AS2 configuration for tenant_id={tenant_id}")
 
 
@@ -126,7 +315,28 @@ async def poll_global_outbox(
                 select(GlobalOutbox)
                 .where(
                     GlobalOutbox.status == "PENDING",
-                    GlobalOutbox.event_type.in_(["AS2_PARTNER_CREATED", "AS2_PARTNERSHIP_CREATED"]),
+                    GlobalOutbox.event_type.in_(
+                        [
+                            "AS2_PARTNER_CREATED",
+                            "AS2_PARTNERSHIP_CREATED",
+                            "AS2_PARTNER_UPDATED",
+                            "AS2_PARTNERSHIP_UPDATED",
+                            "AS2_PARTNER_DELETED",
+                            "AS2_PARTNERSHIP_DELETED",
+                            "SFTP_PARTNER_CREATED",
+                            "SFTP_PARTNER_UPDATED",
+                            "SFTP_PARTNER_DELETED",
+                            "WEBHOOK_CREATED",
+                            "WEBHOOK_UPDATED",
+                            "WEBHOOK_DELETED",
+                            "INBOUND_ROUTE_CREATED",
+                            "INBOUND_ROUTE_UPDATED",
+                            "INBOUND_ROUTE_DELETED",
+                            "OUTBOUND_ROUTE_CREATED",
+                            "OUTBOUND_ROUTE_UPDATED",
+                            "OUTBOUND_ROUTE_DELETED",
+                        ]
+                    ),
                 )
                 .limit(1)
                 .with_for_update(skip_locked=True)

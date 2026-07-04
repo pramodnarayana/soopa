@@ -6,6 +6,9 @@ authors = [
     {name = "EDI AS2 Team", email = "team@edi.com"}
 ]
 requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=49.0.0",
+]
 
 [tool.uv.workspace]
 members = [
@@ -25,6 +28,7 @@ pythonpath = [
     "libs/identity/src",
     "libs/observability/src",
     "libs/security/src",
+    "libs/patches/src",
     "services/as2_server/src",
 ]
 addopts = "-v --tb=short"
@@ -63,9 +67,11 @@ ignore = ["E501"] # Handled by formatter
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments
-"services/api/src/api/main.py" = ["B008"]
+"services/api/src/api/main.py" = ["B008", "E402"]
 "services/api/src/api/cdc_relay.py" = ["B008"]
 "services/api/src/api/routers/partners.py" = ["B008"]
+"services/api/src/api/routers/**/*.py" = ["B008"]
+"services/api/src/api/routers/*.py" = ["B008"]
 "services/api/src/api/routers/platform_partners.py" = ["B008"]
 "services/api/src/api/routers/routes.py" = ["B008"]
 "services/api/src/api/dependencies.py" = ["B008"]
@@ -83,7 +89,18 @@ indent-style = "space"
 source = ["libs", "services"]
 omit = [
     "*/tests/*",
-    "*/migrations/*"
+    "*/migrations/*",
+    # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
+    # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
+    "*/adapters/repository.py",
+    "*/adapters/paramiko_sftp_tester.py",
+    "*/adapters/vault.py",
+    "*/adapters/bots_adapter.py",
+    "*/adapters/sqs_queue.py",
+    # AS2 server main (ASGI lifespan wiring — integration only)
+    "services/as2_server/src/as2_server/main.py",
+    # Transformer worker entrypoint (subprocess runner, not business logic)
+    "libs/transformer/src/transformer/worker.py",
 ]
 
 [tool.coverage.report]
