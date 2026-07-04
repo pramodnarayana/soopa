@@ -162,8 +162,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "route_id": str(record.id),
             "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
             "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
-            "webhook_partner_id": str(record.webhook_partner_id)
-            if hasattr(record, "webhook_partner_id") and record.webhook_partner_id
+            "webhook_id": str(record.webhook_id)
+            if hasattr(record, "webhook_id") and record.webhook_id
             else None,
         }
 
@@ -183,6 +183,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "username": record.username,
             "inbound_remote_path": record.inbound_remote_path,
             "outbound_remote_path": record.outbound_remote_path,
+            "host_key": record.host_key,
             "password": db_encryption.decrypt(record.password_encrypted)
             if record.password_encrypted
             else None,

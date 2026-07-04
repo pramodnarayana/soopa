@@ -1,4 +1,4 @@
-import {  } from 'react';
+
 import {
   createColumnHelper,
 
@@ -181,7 +181,7 @@ export function RoutesTable({ data, isLoading }: { data: RouteItem[]; isLoading:
       emptyIcon={<Network className="w-8 h-8" />}
       emptyTitle="No Active Routes"
       columnsLength={columns.length}
-      renderExpandedRow={(row, toggle) => <RouteDetails route={row} onCancel={toggle} />}
+      renderExpandedRow={(row) => <RouteDetails route={row.original} onCancel={() => row.toggleExpanded()} />}
     />
   );
 }

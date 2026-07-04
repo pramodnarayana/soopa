@@ -220,7 +220,7 @@ async def replicate_tenant_config(
                 isa_receiver_id=global_ir.isa_receiver_id,
                 transaction_type=global_ir.transaction_type,
                 processing_mode=global_ir.processing_mode,
-                webhook_partner_id=global_ir.webhook_partner_id,
+                webhook_id=global_ir.webhook_id,
                 as2_partner_id=global_ir.as2_partner_id,
                 sftp_partner_id=global_ir.sftp_partner_id,
                 active=global_ir.active,
@@ -233,7 +233,7 @@ async def replicate_tenant_config(
                     "isa_receiver_id": global_ir.isa_receiver_id,
                     "transaction_type": global_ir.transaction_type,
                     "processing_mode": global_ir.processing_mode,
-                    "webhook_partner_id": global_ir.webhook_partner_id,
+                    "webhook_id": global_ir.webhook_id,
                     "as2_partner_id": global_ir.as2_partner_id,
                     "sftp_partner_id": global_ir.sftp_partner_id,
                     "active": global_ir.active,
@@ -276,22 +276,22 @@ async def replicate_tenant_config(
         )
         await tenant_session.execute(insert_or_stmt)
 
-    # Sync deletes for all configurations
+    # Sync deletes for all configurations (Dependent children first)
     await sync_deletes(
-        tenant_id, global_session, tenant_session, GlobalAS2Partner, TenantAS2Partner
+        tenant_id, global_session, tenant_session, GlobalOutboundRoute, TenantOutboundRoute
+    )
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalInboundRoute, TenantInboundRoute
+    )
+    await sync_deletes(tenant_id, global_session, tenant_session, GlobalWebhook, TenantWebhook)
+    await sync_deletes(
+        tenant_id, global_session, tenant_session, GlobalSFTPPartner, TenantSFTPPartner
     )
     await sync_deletes(
         tenant_id, global_session, tenant_session, GlobalAS2Partnership, TenantAS2Partnership
     )
     await sync_deletes(
-        tenant_id, global_session, tenant_session, GlobalSFTPPartner, TenantSFTPPartner
-    )
-    await sync_deletes(tenant_id, global_session, tenant_session, GlobalWebhook, TenantWebhook)
-    await sync_deletes(
-        tenant_id, global_session, tenant_session, GlobalInboundRoute, TenantInboundRoute
-    )
-    await sync_deletes(
-        tenant_id, global_session, tenant_session, GlobalOutboundRoute, TenantOutboundRoute
+        tenant_id, global_session, tenant_session, GlobalAS2Partner, TenantAS2Partner
     )
 
     await tenant_session.commit()

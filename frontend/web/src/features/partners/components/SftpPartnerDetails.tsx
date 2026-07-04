@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import type { SFTPPartner } from '../types';
 import { useUpdateSftpPartnerMutation, useTestExistingSftpConnectionMutation } from '../api/partnerHooks';
@@ -17,7 +17,7 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
 
   const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
 
-  const { register, handleSubmit, reset, getValues, formState: { isDirty } } = useForm({
+  const { register, handleSubmit, reset, getValues, watch, formState: { isDirty } } = useForm({
     defaultValues: {
       name: partner.name,
       host: partner.host || '',
@@ -28,6 +28,12 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
       password: '',
     }
   });
+
+  const watchAll = watch();
+
+  useEffect(() => {
+    setTestResult(null);
+  }, [watchAll.host, watchAll.port, watchAll.username, watchAll.password]);
 
   const onSubmit = (formData: any) => {
     const payload: any = {};
@@ -138,7 +144,7 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
             <Label className="text-xs text-slate-500 block mb-1">Host</Label>
             <div className="flex gap-2">
               <Input {...register("host")} className="flex-1" required />
-              <Input type="number" {...register("port")} className="w-24" placeholder="22" required />
+              <Input type="number" {...register("port", { valueAsNumber: true })} className="w-24" placeholder="22" required />
             </div>
           </div>
           <div>

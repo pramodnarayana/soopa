@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { RouteItem } from '../types';
 import { useUpdateRouteMutation } from '../api/routeHooks';
-import { useTenantPartnersQuery } from '@/features/partners/api/partnerHooks';
-import { useTenantEndpointsQuery } from '@/features/endpoints/api/endpointsHooks';
+import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,11 +22,10 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
   const updateRoute = useUpdateRouteMutation();
   const isSubmitting = updateRoute.isPending;
 
-  const { data: partners } = useTenantPartnersQuery();
-  const { data: endpoints } = useTenantEndpointsQuery();
+  const { data: destinations } = useTenantDestinations(route.direction);
 
   const [targetId, setTargetId] = useState(
-    route.webhook_partner_id || route.as2_partner_id || route.sftp_partner_id || ''
+    route.webhook_id || route.as2_partner_id || route.sftp_partner_id || ''
   );
 
   const { register, handleSubmit, reset, setValue, watch, formState: { isDirty } } = useForm({
@@ -44,7 +42,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
 
   const onSubmit = (formData: any) => {
     const payload: any = {};
-    const initialTargetId = route.webhook_partner_id || route.as2_partner_id || route.sftp_partner_id || '';
+    const initialTargetId = route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '';
 
     if (formData.name !== route.name) payload.name = formData.name;
     if (formData.isa_sender_id !== route.isa_sender_id) payload.isa_sender_id = formData.isa_sender_id;
@@ -54,11 +52,17 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
 
     if (targetId !== initialTargetId) {
       if (route.direction === 'INBOUND') {
-        payload.webhook_partner_id = targetId;
+        payload.webhook_id = targetId;
       } else {
-        const partner = partners?.find(p => p.id === targetId);
-        if (partner?.type === 'AS2') payload.as2_partner_id = targetId;
-        if (partner?.type === 'SFTP') payload.sftp_partner_id = targetId;
+        const partner = destinations?.find(p => p.id === targetId);
+        if (partner?.type === 'AS2') {
+          payload.as2_partner_id = targetId;
+          payload.sftp_partner_id = null;
+        }
+        if (partner?.type === 'SFTP') {
+          payload.sftp_partner_id = targetId;
+          payload.as2_partner_id = null;
+        }
       }
     }
 
@@ -120,28 +124,18 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
               value={targetId}
               onChange={setTargetId}
               placeholder="Select destination"
-              options={route.direction === 'INBOUND'
-                ? (endpoints || []).map(e => ({
-                    value: e.id,
-                    label: (
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{e.type}</span>
-                        {e.name}
-                      </span>
-                    ),
-                    searchString: e.name
-                  }))
-                : (partners || []).filter(p => !(p.type === 'AS2' && p.is_local)).map(p => ({
-                    value: p.id,
-                    label: (
-                      <span className="flex items-center gap-2">
-                        <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{p.type}</span>
-                        {p.name}
-                      </span>
-                    ),
-                    searchString: p.name
-                  }))
-              }
+              options={(destinations || [])
+                .filter(d => route.direction === 'INBOUND' || !(d.type === 'AS2' && (d as any).is_local))
+                .map(d => ({
+                  value: d.id,
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{d.type}</span>
+                      {d.name}
+                    </span>
+                  ),
+                  searchString: d.name
+                }))}
             />
           </div>
         </div>
@@ -152,15 +146,15 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
             variant="outline"
             onClick={() => {
               reset(); if (onCancel) onCancel();
-              setTargetId(route.webhook_partner_id || route.as2_partner_id || route.sftp_partner_id || '');
+              setTargetId(route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '');
             }}
-            disabled={(!isDirty && targetId === (route.webhook_partner_id || route.as2_partner_id || route.sftp_partner_id || '')) || isSubmitting}
+            disabled={(!isDirty && targetId === (route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '')) || isSubmitting}
           >
             Cancel
           </Button>
           <Button
             type="submit"
-            disabled={(!isDirty && targetId === (route.webhook_partner_id || route.as2_partner_id || route.sftp_partner_id || '')) || isSubmitting}
+            disabled={(!isDirty && targetId === (route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '')) || isSubmitting}
           >
             {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Save Changes

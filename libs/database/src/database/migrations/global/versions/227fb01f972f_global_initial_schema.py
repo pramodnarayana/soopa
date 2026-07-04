@@ -164,8 +164,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("local_partner_id", "remote_partner_id", name="uq_as2_partnership"),
     )
-    # SFTP Partners, Webhooks, and Routes — part of Global Control Plane
-    # (merged from 45d4f51d55da_move_ui_configs_to_control_plane)
     op.create_table(
         "sftp_partners",
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
@@ -174,6 +172,7 @@ def upgrade() -> None:
         sa.Column("host", sa.String(length=1024), nullable=False),
         sa.Column("port", sa.Integer(), nullable=False),
         sa.Column("username", sa.String(length=255), nullable=False),
+        sa.Column("host_key", sa.Text(), nullable=True),
         sa.Column("inbound_remote_path", sa.String(length=1024), nullable=True),
         sa.Column("outbound_remote_path", sa.String(length=1024), nullable=True),
         sa.Column("password_encrypted", sa.String(length=1024), nullable=True),
@@ -211,18 +210,18 @@ def upgrade() -> None:
             server_default="TRANSLATE",
             nullable=False,
         ),
-        sa.Column("webhook_partner_id", sa.UUID(), nullable=True),
+        sa.Column("webhook_id", sa.UUID(), nullable=True),
         sa.Column("as2_partner_id", sa.UUID(), nullable=True),
         sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
         sa.CheckConstraint(
-            "(webhook_partner_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
         ),
-        sa.ForeignKeyConstraint(["as2_partner_id"], ["as2_partners.id"]),
-        sa.ForeignKeyConstraint(["sftp_partner_id"], ["sftp_partners.id"]),
+        sa.ForeignKeyConstraint(["as2_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["sftp_partner_id"], ["sftp_partners.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["webhook_partner_id"], ["webhooks.id"]),
+        sa.ForeignKeyConstraint(["webhook_id"], ["webhooks.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -256,8 +255,8 @@ def upgrade() -> None:
             "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
         ),
-        sa.ForeignKeyConstraint(["as2_partner_id"], ["as2_partners.id"]),
-        sa.ForeignKeyConstraint(["sftp_partner_id"], ["sftp_partners.id"]),
+        sa.ForeignKeyConstraint(["as2_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["sftp_partner_id"], ["sftp_partners.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

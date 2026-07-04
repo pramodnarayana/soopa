@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # OCP: Open for extension (add a key + method), closed for modification
 # (existing entries are never touched).
 _HANDLER_KEYS: list[tuple[str, str]] = [
-    ("webhook_partner_id", "_deliver_webhook"),
+    ("webhook_id", "_deliver_webhook"),
     ("sftp_partner_id", "_deliver_sftp"),
     ("as2_partner_id", "_deliver_as2"),
 ]
@@ -149,7 +149,7 @@ class DeliveryService:
             filename = f"{trace_id}.edi"
 
             password: str | None = partner.get("password")
-            host_key: str | None = None
+
             client_key: str | None = None
 
             if not password and partner.get("credentials_vault_ref") and self.vault:
@@ -163,7 +163,7 @@ class DeliveryService:
                 port=partner["port"],
                 username=partner["username"],
                 password=password or "",
-                host_key=host_key,
+                host_key=partner.get("host_key"),
                 client_key=client_key,
                 remote_path=partner["outbound_remote_path"],
                 filename=filename,

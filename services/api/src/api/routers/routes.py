@@ -60,7 +60,7 @@ async def create_inbound_route(
             isa_receiver_id=request.isa_receiver_id,
             transaction_type=request.transaction_type,
             processing_mode=request.processing_mode,
-            webhook_partner_id=request.webhook_partner_id,
+            webhook_id=request.webhook_id,
             as2_partner_id=request.as2_partner_id,
             sftp_partner_id=request.sftp_partner_id,
         )
@@ -126,9 +126,7 @@ async def update_inbound_route(
             processing_mode=request.processing_mode
             if request.processing_mode is not None
             else UNSET,
-            webhook_partner_id=request.webhook_partner_id
-            if request.webhook_partner_id is not None
-            else UNSET,
+            webhook_id=request.webhook_id if request.webhook_id is not None else UNSET,
             as2_partner_id=request.as2_partner_id if request.as2_partner_id is not None else UNSET,
             sftp_partner_id=request.sftp_partner_id
             if request.sftp_partner_id is not None

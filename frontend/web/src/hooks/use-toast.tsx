@@ -167,12 +167,16 @@ function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
           {props.description && <span className="text-sm opacity-90">{props.description}</span>}
         </div>
         <button
-          onClick={(e) => {
+          onClick={async (e) => {
             e.preventDefault();
             e.stopPropagation();
             const textToCopy = [props.title, props.description].filter(Boolean).join('\n');
-            navigator.clipboard.writeText(textToCopy);
-            sonnerToast.success("Copied to clipboard", { duration: 2000 });
+            try {
+              await navigator.clipboard.writeText(textToCopy);
+              sonnerToast.success("Copied to clipboard", { duration: 2000 });
+            } catch {
+              sonnerToast.error("Failed to copy to clipboard", { duration: 2000 });
+            }
           }}
           className="p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
           title="Copy error message"

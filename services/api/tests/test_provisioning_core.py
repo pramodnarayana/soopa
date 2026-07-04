@@ -85,14 +85,14 @@ async def test_list_routes(service: ProvisioningService):
     )
 
     class FakeRoute:
-        def __init__(self, id, as2_partner_id, sftp_partner_id, webhook_partner_id):
+        def __init__(self, id, as2_partner_id, sftp_partner_id, webhook_id):
             self.id = id
             self.name = "Test Route"
             self.processing_mode = "TRANSLATE"
             self.active = True
             self.as2_partner_id = as2_partner_id
             self.sftp_partner_id = sftp_partner_id
-            self.webhook_partner_id = webhook_partner_id
+            self.webhook_id = webhook_id
             self.isa_sender_id = "S1"
             self.isa_receiver_id = "R1"
             self.transaction_type = "850"

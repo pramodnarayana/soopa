@@ -7,7 +7,7 @@ export interface RouteItem {
   transaction_type: string;
   destination_type: string;
   destination_name: string;
-  webhook_partner_id?: string;
+  webhook_id?: string;
   as2_partner_id?: string;
   sftp_partner_id?: string;
   status: string;
@@ -21,7 +21,7 @@ export interface CreateInboundRoutePayload {
   isa_receiver_id: string;
   transaction_type: string;
   processing_mode: 'TRANSLATE' | 'PASSTHROUGH';
-  webhook_partner_id?: string;
+  webhook_id?: string;
   as2_partner_id?: string;
   sftp_partner_id?: string;
 }
@@ -42,7 +42,7 @@ export interface UpdateRoutePayload {
   isa_receiver_id?: string;
   transaction_type?: string;
   processing_mode?: 'TRANSLATE' | 'PASSTHROUGH';
-  webhook_partner_id?: string;
+  webhook_id?: string;
   as2_partner_id?: string;
   sftp_partner_id?: string;
   active?: boolean;

@@ -128,6 +128,28 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
     ) -> None:
         partnership = await self.get_as2_partnership(tenant_id, partnership_id)
         if partnership:
+            if not isinstance(cmd.local_partner_id, UnsetType):
+                if cmd.local_partner_id is not None:
+                    r = await self.session.execute(
+                        select(AS2Partner.id).where(
+                            AS2Partner.id == cmd.local_partner_id,
+                            AS2Partner.tenant_id.in_([tenant_id, 0]),
+                        )
+                    )
+                    if not r.scalar_one_or_none():
+                        raise ValueError("Local AS2 partner not found")
+                partnership.local_partner_id = cmd.local_partner_id
+            if not isinstance(cmd.remote_partner_id, UnsetType):
+                if cmd.remote_partner_id is not None:
+                    r = await self.session.execute(
+                        select(AS2Partner.id).where(
+                            AS2Partner.id == cmd.remote_partner_id,
+                            AS2Partner.tenant_id.in_([tenant_id, 0]),
+                        )
+                    )
+                    if not r.scalar_one_or_none():
+                        raise ValueError("Remote AS2 partner not found")
+                partnership.remote_partner_id = cmd.remote_partner_id
             if cmd.name is not UNSET:
                 partnership.name = cmd.name
             if cmd.mdn_type is not UNSET:
@@ -160,7 +182,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         )
         return result.scalar_one_or_none()
 
-    async def get_as2_partners_by_ids(self, ids: list[UUID], tenant_id: int) -> dict[UUID, str]:
+    async def get_as2_partners_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
         result = await self.session.execute(
@@ -244,6 +266,10 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 partner.inbound_remote_path = cmd.inbound_remote_path
             if hasattr(cmd, "outbound_remote_path") and cmd.outbound_remote_path is not None:
                 partner.outbound_remote_path = cmd.outbound_remote_path
+            if cmd.password is not None:
+                partner.password_encrypted = (
+                    db_encryption.encrypt(cmd.password) if cmd.password else None
+                )
             if cmd.credentials_vault_ref is not None:
                 partner.credentials_vault_ref = cmd.credentials_vault_ref
             if cmd.active is not None:
@@ -310,23 +336,21 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
     # ------------------------------------------------------------------------
     async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> UUID:
         destinations = [
-            d
-            for d in (cmd.webhook_partner_id, cmd.as2_partner_id, cmd.sftp_partner_id)
-            if d is not None
+            d for d in (cmd.webhook_id, cmd.as2_partner_id, cmd.sftp_partner_id) if d is not None
         ]
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (webhook, as2, or sftp) must be provided")
 
-        if cmd.webhook_partner_id:
+        if cmd.webhook_id:
             result = await self.session.execute(
                 select(Webhook.id).where(
-                    Webhook.id == cmd.webhook_partner_id,
+                    Webhook.id == cmd.webhook_id,
                     Webhook.tenant_id == tenant_id,
                 )
             )
             if not result.scalar_one_or_none():
                 raise ValueError(
-                    f"Webhook partner {cmd.webhook_partner_id} not found or does not belong to this tenant"
+                    f"Webhook partner {cmd.webhook_id} not found or does not belong to this tenant"
                 )
 
         if cmd.as2_partner_id:
@@ -360,7 +384,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
             transaction_type=cmd.transaction_type,
-            webhook_partner_id=cmd.webhook_partner_id,
+            webhook_id=cmd.webhook_id,
             as2_partner_id=cmd.as2_partner_id,
             sftp_partner_id=cmd.sftp_partner_id,
             processing_mode=cmd.processing_mode,
@@ -390,11 +414,36 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             record.transaction_type = cmd.transaction_type
         if not isinstance(cmd.processing_mode, UnsetType):
             record.processing_mode = cmd.processing_mode
-        if not isinstance(cmd.webhook_partner_id, UnsetType):
-            record.webhook_partner_id = cmd.webhook_partner_id
+        if not isinstance(cmd.webhook_id, UnsetType):
+            if cmd.webhook_id is not None:
+                r = await self.session.execute(
+                    select(Webhook.id).where(
+                        Webhook.id == cmd.webhook_id, Webhook.tenant_id == tenant_id
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("Webhook partner not found")
+            record.webhook_id = cmd.webhook_id
         if not isinstance(cmd.as2_partner_id, UnsetType):
+            if cmd.as2_partner_id is not None:
+                r = await self.session.execute(
+                    select(AS2Partner.id).where(
+                        AS2Partner.id == cmd.as2_partner_id,
+                        AS2Partner.tenant_id.in_([tenant_id, 0]),
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("AS2 partner not found")
             record.as2_partner_id = cmd.as2_partner_id
         if not isinstance(cmd.sftp_partner_id, UnsetType):
+            if cmd.sftp_partner_id is not None:
+                r = await self.session.execute(
+                    select(SFTPPartner.id).where(
+                        SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("SFTP partner not found")
             record.sftp_partner_id = cmd.sftp_partner_id
         if not isinstance(cmd.active, UnsetType):
             record.active = cmd.active
@@ -476,8 +525,25 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         if not isinstance(cmd.processing_mode, UnsetType):
             record.processing_mode = cmd.processing_mode
         if not isinstance(cmd.as2_partner_id, UnsetType):
+            if cmd.as2_partner_id is not None:
+                r = await self.session.execute(
+                    select(AS2Partner.id).where(
+                        AS2Partner.id == cmd.as2_partner_id,
+                        AS2Partner.tenant_id.in_([tenant_id, 0]),
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("AS2 partner not found")
             record.as2_partner_id = cmd.as2_partner_id
         if not isinstance(cmd.sftp_partner_id, UnsetType):
+            if cmd.sftp_partner_id is not None:
+                r = await self.session.execute(
+                    select(SFTPPartner.id).where(
+                        SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("SFTP partner not found")
             record.sftp_partner_id = cmd.sftp_partner_id
         if not isinstance(cmd.active, UnsetType):
             record.active = cmd.active

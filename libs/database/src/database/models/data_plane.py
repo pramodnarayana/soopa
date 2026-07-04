@@ -105,6 +105,7 @@ class SFTPPartner(TenantBase, TenantAwareMixin):
     host: Mapped[str] = mapped_column(String(1024), nullable=False)
     port: Mapped[int] = mapped_column(Integer, default=22)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
+    host_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     inbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     outbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     password_encrypted: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -137,7 +138,7 @@ class InboundRoute(TenantBase, TenantAwareMixin):
     processing_mode: Mapped[str] = mapped_column(
         String(50), nullable=False, server_default="TRANSLATE"
     )
-    webhook_partner_id: Mapped[PyUUID | None] = mapped_column(
+    webhook_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
     )
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
@@ -150,7 +151,7 @@ class InboundRoute(TenantBase, TenantAwareMixin):
 
     __table_args__ = (
         CheckConstraint(
-            "(webhook_partner_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
         ),
         Index(

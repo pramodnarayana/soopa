@@ -116,7 +116,7 @@ export function As2PartnersTable({ data, isLoading }: { data: AS2Partner[]; isLo
       emptyIcon={<Server className="w-8 h-8" />}
       emptyTitle="No Active AS2 Partners"
       columnsLength={columns.length}
-      renderExpandedRow={(row, toggle) => <As2PartnerDetails partner={row} onCancel={toggle} />}
+      renderExpandedRow={(row) => <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />}
     />
   );
 }

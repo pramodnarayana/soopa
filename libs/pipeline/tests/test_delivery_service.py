@@ -66,7 +66,7 @@ async def test_delivery_service_inbound_webhook() -> None:
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
             "transaction_type": "850",
-            "webhook_partner_id": "wp1",
+            "webhook_id": "wp1",
         }
     )
     repo.webhooks["wp1"] = {
@@ -123,11 +123,18 @@ async def test_delivery_service_outbound_sftp() -> None:
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
+    from fakes import FakeVault
+
+    vault = FakeVault({"mock_password": "fake_private_key_data"})
+
     service = make_service(storage=storage, repo=repo, sftp=sftp_adapter)
+    service.vault = vault
     await service.deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(sftp_adapter.delivered) == 1
+    assert sftp_adapter.delivered[0]["client_key"] == "fake_private_key_data"
+    assert sftp_adapter.delivered[0]["password"] == ""
     assert sftp_adapter.delivered[0]["host"] == "sftp.example.com"
     assert sftp_adapter.delivered[0]["payload"] == b"FAKE*EDI*DATA~"
     assert repo.edi_messages[trace_id]["status"] == "DELIVERED"
@@ -179,7 +186,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
             "transaction_type": "850",
-            "webhook_partner_id": "wp1",
+            "webhook_id": "wp1",
         }
     )
     repo.webhooks["wp1"] = {

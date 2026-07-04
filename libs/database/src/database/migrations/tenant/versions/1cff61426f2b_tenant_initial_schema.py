@@ -180,6 +180,7 @@ def upgrade() -> None:
         sa.Column("host", sa.String(length=1024), nullable=False),
         sa.Column("port", sa.Integer(), nullable=True),
         sa.Column("username", sa.String(length=255), nullable=False),
+        sa.Column("host_key", sa.Text(), nullable=True),
         sa.Column("inbound_remote_path", sa.String(length=1024), nullable=True),
         sa.Column("outbound_remote_path", sa.String(length=1024), nullable=True),
         sa.Column("password_encrypted", sa.String(length=1024), nullable=True),
@@ -231,7 +232,7 @@ def upgrade() -> None:
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
         ),
-        sa.Column("webhook_partner_id", sa.UUID(), nullable=True),
+        sa.Column("webhook_id", sa.UUID(), nullable=True),
         sa.Column("as2_partner_id", sa.UUID(), nullable=True),
         sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
@@ -247,13 +248,13 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["webhook_partner_id"],
+            ["webhook_id"],
             ["webhooks.id"],
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint(
-            "(webhook_partner_id IS NOT NULL)::integer + "
+            "(webhook_id IS NOT NULL)::integer + "
             "(as2_partner_id IS NOT NULL)::integer + "
             "(sftp_partner_id IS NOT NULL)::integer = 1",
             name="chk_inbound_routes_exactly_one_dest",

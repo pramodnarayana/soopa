@@ -4,8 +4,7 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreateInboundRouteMutation, useCreateOutboundRouteMutation } from '../api/routeHooks';
-import { useTenantPartnersQuery } from '@/features/partners/api/partnerHooks';
-import { useTenantEndpointsQuery } from '@/features/endpoints/api/endpointsHooks';
+import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { Network } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { FormModal } from '@/components/ui/form-modal';
@@ -21,8 +20,7 @@ export function CreateRouteModal() {
   const [targetId, setTargetId] = useState('');
 
   const { toast } = useToast();
-  const { data: partners, isLoading: partnersLoading } = useTenantPartnersQuery();
-  const { data: endpoints, isLoading: endpointsLoading } = useTenantEndpointsQuery();
+  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations(direction);
 
   const createInbound = useCreateInboundRouteMutation();
   const createOutbound = useCreateOutboundRouteMutation();
@@ -39,7 +37,7 @@ export function CreateRouteModal() {
     try {
       if (direction === 'INBOUND') {
         // Inbound: Target is an Endpoint (Webhook)
-        const selectedEndpoint = endpoints?.find(e => e.id === targetId);
+        const selectedEndpoint = destinations?.find(e => e.id === targetId);
         if (!selectedEndpoint) {
           toast({ title: 'Invalid endpoint selected', variant: 'destructive' });
           return;
@@ -51,11 +49,11 @@ export function CreateRouteModal() {
           isa_receiver_id: isaReceiver,
           transaction_type: transactionType,
           processing_mode: processingMode,
-          webhook_partner_id: targetId,
+          webhook_id: targetId,
         });
       } else {
         // Outbound: Target is a Trading Partner (AS2/SFTP)
-        const selectedPartner = partners?.find(p => p.id === targetId);
+        const selectedPartner = destinations?.find(p => p.id === targetId);
         if (!selectedPartner) {
           toast({ title: 'Invalid partner selected', variant: 'destructive' });
           return;
@@ -84,8 +82,6 @@ export function CreateRouteModal() {
       toast({ title: 'Failed to create route', description: String(err), variant: 'destructive' });
     }
   };
-
-  const isLoadingDestinations = direction === 'INBOUND' ? endpointsLoading : partnersLoading;
 
   return (
     <FormModal
@@ -188,28 +184,18 @@ export function CreateRouteModal() {
           value={targetId}
           onChange={setTargetId}
           placeholder={isLoadingDestinations ? "Loading..." : "Select destination"}
-          options={direction === 'INBOUND'
-            ? (endpoints || []).map(e => ({
-                value: e.id,
-                label: (
-                  <span className="flex items-center gap-2">
-                    <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{e.type}</span>
-                    {e.name}
-                  </span>
-                ),
-                searchString: e.name
-              }))
-            : (partners || []).filter(p => !(p.type === 'AS2' && p.is_local)).map(p => ({
-                value: p.id,
-                label: (
-                  <span className="flex items-center gap-2">
-                    <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{p.type}</span>
-                    {p.name}
-                  </span>
-                ),
-                searchString: p.name
-              }))
-          }
+          options={(destinations || [])
+            .filter(d => direction === 'INBOUND' || !(d.type === 'AS2' && (d as any).is_local))
+            .map(d => ({
+            value: d.id,
+            label: (
+              <span className="flex items-center gap-2">
+                <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{d.type}</span>
+                {d.name}
+              </span>
+            ),
+            searchString: d.name
+          }))}
         />
       </div>
     </FormModal>

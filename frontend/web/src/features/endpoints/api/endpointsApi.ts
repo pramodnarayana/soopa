@@ -26,7 +26,9 @@ export class HttpEndpointsRepository implements IEndpointsRepository {
       let errMessage = 'API Request Failed';
       try {
         const errData = await res.json();
-        errMessage = errData.detail || errMessage;
+        errMessage = typeof errData.detail === 'string'
+          ? errData.detail
+          : errData.detail?.[0]?.msg || errMessage;
       } catch {
         errMessage = res.statusText;
       }

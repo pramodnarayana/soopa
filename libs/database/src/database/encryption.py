@@ -17,14 +17,13 @@ class DBEncryptionAdapter:
             key = os.getenv("DB_ENCRYPTION_KEY")
             if not key:
                 logger.warning("DB_ENCRYPTION_KEY is not set. Database encryption will fail.")
-                self._fernet = None
-            else:
-                try:
-                    self._fernet = Fernet(key.encode("utf-8"))
-                except Exception as e:
-                    logger.error(f"Failed to initialize Fernet with provided key: {e}")
-                    self._fernet = None
-            self._initialized = True
+                return None
+            try:
+                self._fernet = Fernet(key.encode("utf-8"))
+                self._initialized = True
+            except Exception as e:
+                logger.error(f"Failed to initialize Fernet with provided key: {e}")
+                return None
         return self._fernet
 
     def encrypt(self, data: str) -> str:

@@ -153,7 +153,7 @@ class CreateInboundRouteRequest(BaseModel):
     processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] = Field(
         "TRANSLATE", description="Processing Mode"
     )
-    webhook_partner_id: UUID | None = Field(
+    webhook_id: UUID | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
     as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
@@ -162,7 +162,7 @@ class CreateInboundRouteRequest(BaseModel):
     @model_validator(mode="after")
     def check_exactly_one_destination(self) -> "CreateInboundRouteRequest":
         targets = [
-            self.webhook_partner_id is not None,
+            self.webhook_id is not None,
             self.as2_partner_id is not None,
             self.sftp_partner_id is not None,
         ]
@@ -208,7 +208,7 @@ class UpdateRouteRequest(BaseModel):
     processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] | None = Field(
         None, description="Processing Mode"
     )
-    webhook_partner_id: UUID | None = Field(
+    webhook_id: UUID | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
     as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
@@ -297,7 +297,7 @@ class RouteItemResponse(BaseModel):
     transaction_type: str
     destination_type: str
     destination_name: str
-    webhook_partner_id: UUID | None = None
+    webhook_id: UUID | None = None
     as2_partner_id: UUID | None = None
     sftp_partner_id: UUID | None = None
     status: str = "Active"

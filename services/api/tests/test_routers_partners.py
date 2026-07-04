@@ -87,7 +87,7 @@ def test_create_tenant_sftp_partner(client, fake_uow):
 
 def test_create_tenant_webhook_partner(client, fake_uow):
     response = client.post(
-        "/api/v1/webhooks/webhook", json={"name": "My Webhook", "url": "http://hook.test"}
+        "/api/v1/webhooks/webhook", json={"name": "My Webhook", "url": "https://example.com"}
     )
     assert response.status_code == 201
     data = response.json()

@@ -22,6 +22,24 @@ async def create_webhook(
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Creates a new Webhook delivery destination for this tenant."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(str(request.url))
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("Invalid URL")
+        ip = socket.gethostbyname(hostname)
+        ip_obj = ipaddress.ip_address(ip)
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_unspecified:
+            raise HTTPException(status_code=400, detail="Webhook URL must be a public address")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid webhook URL") from e
+
     async with uow:
         service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
 

@@ -30,11 +30,11 @@ class ProvisioningService:
 
     def __init__(
         self,
-        tenant_repo: DataPlaneRepositoryPort,
         global_repo: ControlPlaneRepositoryPort,
+        tenant_repo: DataPlaneRepositoryPort | None = None,
     ) -> None:
-        self.tenant_repo = tenant_repo
         self.global_repo = global_repo
+        self.tenant_repo = tenant_repo
 
     async def create_as2_partner(
         self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
@@ -186,7 +186,7 @@ class ProvisioningService:
             check_ids.append(cmd.remote_partner_id)
 
         if check_ids:
-            valid_partners = await self.global_repo.get_as2_partners_by_ids(check_ids, tenant_id)
+            valid_partners = await self.global_repo.get_as2_partners_by_ids(tenant_id, check_ids)
             if len(valid_partners) != len(check_ids):
                 raise ValueError(
                     "Invalid local_partner_id or remote_partner_id referenced in update"
@@ -324,8 +324,8 @@ class ProvisioningService:
                 as2_ids.add(r.as2_partner_id)
             if r.sftp_partner_id:
                 sftp_ids.add(r.sftp_partner_id)
-            if r.webhook_partner_id:
-                webhook_ids.add(r.webhook_partner_id)
+            if r.webhook_id:
+                webhook_ids.add(r.webhook_id)
 
         for r in outbound:
             # Note: outbound routes map to as2_partner_id
@@ -334,9 +334,8 @@ class ProvisioningService:
             if r.sftp_partner_id:
                 sftp_ids.add(r.sftp_partner_id)
 
-        # Fetch names
         as2_names = (
-            await self.global_repo.get_as2_partners_by_ids(list(as2_ids), tenant_id)
+            await self.global_repo.get_as2_partners_by_ids(tenant_id, list(as2_ids))
             if self.global_repo
             else {}
         )
@@ -353,9 +352,9 @@ class ProvisioningService:
             elif r.sftp_partner_id:
                 dest_type = "SFTP"
                 dest_name = sftp_names.get(r.sftp_partner_id, str(r.sftp_partner_id))
-            elif r.webhook_partner_id:
+            elif r.webhook_id:
                 dest_type = "WEBHOOK"
-                dest_name = webhook_names.get(r.webhook_partner_id, str(r.webhook_partner_id))
+                dest_name = webhook_names.get(r.webhook_id, str(r.webhook_id))
 
             results.append(
                 {
@@ -367,7 +366,7 @@ class ProvisioningService:
                     "transaction_type": r.transaction_type,
                     "destination_type": dest_type,
                     "destination_name": dest_name,
-                    "webhook_partner_id": r.webhook_partner_id,
+                    "webhook_id": r.webhook_id,
                     "as2_partner_id": r.as2_partner_id,
                     "sftp_partner_id": r.sftp_partner_id,
                     "active": r.active,

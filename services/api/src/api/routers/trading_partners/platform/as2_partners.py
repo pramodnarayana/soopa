@@ -1,9 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from database.models.control_plane import AS2Partner
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from api.adapters.http.dtos import (
@@ -83,6 +81,8 @@ async def create_platform_as2_partner(
                 active=p.active,
             )
     except IntegrityError as e:
+        if request.is_local and private_key_vault_ref:
+            vault.delete_secret(private_key_vault_ref)
         raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
 
 
@@ -94,11 +94,7 @@ async def list_platform_as2_partners(
     Returns all global AS2 partners (tenant_id = 0).
     """
     async with uow:
-        result = await uow.global_session.execute(
-            select(AS2Partner).where(AS2Partner.tenant_id == 0)
-        )
-        partners = result.scalars().all()
-
+        partners = await uow.control_plane.list_as2_partners(tenant_id=0)
         return [
             AS2TradingPartnerResponse(
                 id=str(p.id),

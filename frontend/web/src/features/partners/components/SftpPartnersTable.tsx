@@ -112,7 +112,7 @@ export function SftpPartnersTable({ data, isLoading }: { data: SFTPPartner[]; is
       emptyIcon={<HardDrive className="w-8 h-8" />}
       emptyTitle="No Active SFTP Partners"
       columnsLength={columns.length}
-      renderExpandedRow={(row, toggle) => <SftpPartnerDetails partner={row} onCancel={toggle} />}
+      renderExpandedRow={(row) => <SftpPartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />}
     />
   );
 }

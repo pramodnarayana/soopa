@@ -39,20 +39,28 @@ def apply_legacy_algorithm_support() -> None:
     if _PATCH_APPLIED:
         return
 
-    if "ssh-rsa" not in paramiko.Transport._key_info:  # type: ignore[attr-defined]
-        paramiko.Transport._key_info["ssh-rsa"] = paramiko.RSAKey  # type: ignore[attr-defined]
+    if hasattr(paramiko.Transport, "_key_info") and "ssh-rsa" not in paramiko.Transport._key_info:
+        paramiko.Transport._key_info["ssh-rsa"] = paramiko.RSAKey
 
-    if "ssh-rsa" not in paramiko.RSAKey.HASHES:
+    if hasattr(paramiko.RSAKey, "HASHES") and "ssh-rsa" not in paramiko.RSAKey.HASHES:
         paramiko.RSAKey.HASHES["ssh-rsa"] = hashes.SHA1
 
-    if "ssh-rsa" not in paramiko.Transport._preferred_keys:  # type: ignore[attr-defined]
-        paramiko.Transport._preferred_keys = (  # type: ignore[attr-defined]
-            paramiko.Transport._preferred_keys + ("ssh-rsa", "ssh-dss")  # type: ignore[attr-defined]
+    if (
+        hasattr(paramiko.Transport, "_preferred_keys")
+        and "ssh-rsa" not in paramiko.Transport._preferred_keys
+    ):
+        paramiko.Transport._preferred_keys = paramiko.Transport._preferred_keys + (
+            "ssh-rsa",
+            "ssh-dss",
         )
 
-    if "ssh-rsa" not in paramiko.Transport._preferred_pubkeys:  # type: ignore[attr-defined]
-        paramiko.Transport._preferred_pubkeys = (  # type: ignore[attr-defined]
-            paramiko.Transport._preferred_pubkeys + ("ssh-rsa", "ssh-dss")  # type: ignore[attr-defined]
+    if (
+        hasattr(paramiko.Transport, "_preferred_pubkeys")
+        and "ssh-rsa" not in paramiko.Transport._preferred_pubkeys
+    ):
+        paramiko.Transport._preferred_pubkeys = paramiko.Transport._preferred_pubkeys + (
+            "ssh-rsa",
+            "ssh-dss",
         )
 
     _PATCH_APPLIED = True

@@ -30,6 +30,8 @@ async def export_as2_certificates(
     async with uow:
         partner = await uow.control_plane.get_as2_partner(tenant_id, partner_id)
         if not partner:
+            partner = await uow.control_plane.get_as2_partner(0, partner_id)
+        if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
         response = CertificateExportResponse(
@@ -50,6 +52,9 @@ async def export_as2_certificates(
                     ).decode("utf-8")
                 except Exception as e:
                     logger.error(f"Failed to retrieve private key from vault: {e}")
+                    raise HTTPException(
+                        status_code=500, detail=f"Failed to retrieve private key from vault: {e}"
+                    ) from e
 
             if partner.prev_private_key_vault_ref:
                 try:
@@ -58,5 +63,9 @@ async def export_as2_certificates(
                     ).decode("utf-8")
                 except Exception as e:
                     logger.error(f"Failed to retrieve prev private key from vault: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to retrieve prev private key from vault: {e}",
+                    ) from e
 
         return response

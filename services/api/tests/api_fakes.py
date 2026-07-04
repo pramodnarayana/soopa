@@ -21,6 +21,8 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
     def __init__(self):
         self.partners = []
         self.partnerships = []
+        self.sftp_partners = []
+        self.webhooks = []
         self.outbox_events = []
 
     async def create_as2_identity(
@@ -99,13 +101,27 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         return self.partners
 
     async def list_as2_partners(self, tenant_id: int) -> Sequence[Any]:
-        return [p for p in self.partners if p["tenant_id"] == tenant_id]
+        results = []
+        for p in self.partners:
+            if p["tenant_id"] == tenant_id:
+
+                class FakePartner:
+                    id = p["id"]
+                    tenant_id = p["tenant_id"]
+                    name = p["cmd"].name
+                    as2_id = p["cmd"].as2_id
+                    is_local = p["cmd"].is_local
+                    url = p["cmd"].url
+                    active = p.get("status", "INACTIVE") == "ACTIVE"
+
+                results.append(FakePartner())
+        return results
 
     async def list_partnerships(self) -> list[Any]:
         return self.partnerships
 
     async def get_as2_partners_by_ids(
-        self, ids: list[uuid.UUID], tenant_id: int
+        self, tenant_id: int, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
         return {
             p["id"]: p["cmd"].name
@@ -115,16 +131,12 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
 
     async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
         p_id = uuid.uuid4()
-        if not hasattr(self, "sftp_partners"):
-            self.sftp_partners = []
         self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
     async def get_sftp_partners_by_ids(
         self, tenant_id: int, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
-        if not hasattr(self, "sftp_partners"):
-            self.sftp_partners = []
         return {
             p["id"]: p["cmd"].name
             for p in self.sftp_partners
@@ -133,16 +145,12 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
 
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> uuid.UUID:
         p_id = uuid.uuid4()
-        if not hasattr(self, "webhooks"):
-            self.webhooks = []
         self.webhooks.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
     async def get_webhooks_by_ids(
         self, tenant_id: int, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
-        if not hasattr(self, "webhooks"):
-            self.webhooks = []
         return {
             p["id"]: p["cmd"].name
             for p in self.webhooks
@@ -175,8 +183,6 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         return [p for p in getattr(self, "webhooks", []) if p["tenant_id"] == tenant_id]
 
     async def get_sftp_partner(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
-        if not hasattr(self, "sftp_partners"):
-            self.sftp_partners = []
         for p in self.sftp_partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
 
@@ -195,8 +201,6 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         return None
 
     async def get_webhook(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
-        if not hasattr(self, "webhooks"):
-            self.webhooks = []
         for p in self.webhooks:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
 
@@ -219,7 +223,7 @@ class FakeRoute:
         self.active = True
         self.as2_partner_id = getattr(cmd, "as2_partner_id", None)
         self.sftp_partner_id = getattr(cmd, "sftp_partner_id", None)
-        self.webhook_partner_id = getattr(cmd, "webhook_partner_id", None)
+        self.webhook_id = getattr(cmd, "webhook_id", None)
         self.isa_sender_id = getattr(cmd, "isa_sender_id", "S1")
         self.isa_receiver_id = getattr(cmd, "isa_receiver_id", "R1")
 

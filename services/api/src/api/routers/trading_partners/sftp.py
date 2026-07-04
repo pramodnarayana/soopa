@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.dependencies import get_current_tenant_id
+from sqlalchemy.exc import IntegrityError
 
 from api.adapters.http.dtos import (
     CreateSFTPPartnerRequest,
@@ -27,6 +28,15 @@ from api.ports.sftp_tester import SftpTesterPort
 router = APIRouter(tags=["Partners — SFTP"])
 
 
+async def _get_client_key_from_vault(vault_ref: str) -> str:
+    vault_secret = (
+        await vault.get_secret(vault_ref)
+        if hasattr(vault, "get_secret")
+        else vault.retrieve_private_key(vault_ref)
+    )
+    return vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
+
+
 @router.post("/sftp/test", response_model=TestConnectionResponse, status_code=status.HTTP_200_OK)
 async def test_sftp_connection(
     request: TestSFTPConnectionRequest,
@@ -42,14 +52,7 @@ async def test_sftp_connection(
     client_key_string = None
     if request.credentials_vault_ref:
         try:
-            vault_secret = (
-                await vault.get_secret(request.credentials_vault_ref)
-                if hasattr(vault, "get_secret")
-                else vault.retrieve_private_key(request.credentials_vault_ref)
-            )
-            client_key_string = (
-                vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
-            )
+            client_key_string = await _get_client_key_from_vault(request.credentials_vault_ref)
         except Exception as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 
@@ -102,14 +105,7 @@ async def test_existing_sftp_connection(
     client_key_string = None
     if request.credentials_vault_ref:
         try:
-            vault_secret = (
-                await vault.get_secret(request.credentials_vault_ref)
-                if hasattr(vault, "get_secret")
-                else vault.retrieve_private_key(request.credentials_vault_ref)
-            )
-            client_key_string = (
-                vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
-            )
+            client_key_string = await _get_client_key_from_vault(request.credentials_vault_ref)
         except Exception as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 
@@ -130,6 +126,8 @@ async def create_sftp_partner(
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
+    from sqlalchemy.exc import IntegrityError
+
     if not request.password and not request.credentials_vault_ref:
         raise HTTPException(
             status_code=400, detail="Must provide either password or credentials_vault_ref"
@@ -149,8 +147,13 @@ async def create_sftp_partner(
             credentials_vault_ref=request.credentials_vault_ref,
         )
 
-        _ = await service.create_sftp_partner(tenant_id, cmd)
-        await uow.commit()
+        try:
+            _ = await service.create_sftp_partner(tenant_id, cmd)
+            await uow.commit()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except IntegrityError as e:
+            raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
             if not uow.control_plane:
@@ -195,8 +198,13 @@ async def update_sftp_partner(
             credentials_vault_ref=request.credentials_vault_ref,
             active=request.active,
         )
-        _ = await service.update_sftp_partner(tenant_id, partner_id, cmd)
-        await uow.commit()
+        try:
+            _ = await service.update_sftp_partner(tenant_id, partner_id, cmd)
+            await uow.commit()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except IntegrityError as e:
+            raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
             if not uow.control_plane:
@@ -228,8 +236,6 @@ async def delete_sftp_partner(
 ) -> None:
     """Deletes an SFTP partner."""
     async with uow:
-        from sqlalchemy.exc import IntegrityError
-
         try:
             if uow.control_plane is None:
                 raise HTTPException(status_code=500, detail="Tenant data plane not available")

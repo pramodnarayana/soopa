@@ -114,7 +114,7 @@ class CreateInboundRouteCmd:
     isa_receiver_id: str
     transaction_type: str
     processing_mode: str = "TRANSLATE"
-    webhook_partner_id: UUID | None = None
+    webhook_id: UUID | None = None
     as2_partner_id: UUID | None = None
     sftp_partner_id: UUID | None = None
 
@@ -126,7 +126,7 @@ class UpdateInboundRouteCmd:
     isa_receiver_id: str | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET
     processing_mode: str | UnsetType = UNSET
-    webhook_partner_id: UUID | None | UnsetType = UNSET
+    webhook_id: UUID | None | UnsetType = UNSET
     as2_partner_id: UUID | None | UnsetType = UNSET
     sftp_partner_id: UUID | None | UnsetType = UNSET
     active: bool | UnsetType = UNSET

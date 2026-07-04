@@ -134,7 +134,7 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
       emptyIcon={<Network className="w-8 h-8" />}
       emptyTitle="No Active Partnerships"
       columnsLength={columns.length}
-      renderExpandedRow={(row, toggle) => <PartnershipDetails partnership={row} availablePartners={availablePartners} onCancel={toggle} />}
+      renderExpandedRow={(row) => <PartnershipDetails partnership={row.original} availablePartners={availablePartners} onCancel={() => row.toggleExpanded()} />}
     />
   );
 }

@@ -18,6 +18,7 @@ def get_ssh_client(
     client_key_string: str | None = None,
     host_key_string: str | None = None,
     timeout: int = 10,
+    use_legacy_rsa: bool = False,
 ) -> paramiko.SSHClient:
     """
     Creates an enterprise-grade, configured SSHClient.
@@ -25,23 +26,31 @@ def get_ssh_client(
     """
     client = paramiko.SSHClient()
 
-    if host_key_string:
-        parts = host_key_string.split()
-        if len(parts) >= 2:
-            key_type = parts[0]
-            key_data = base64.b64decode(parts[-1])
-            if "ed25519" in key_type.lower():
-                parsed_key: paramiko.PKey = paramiko.Ed25519Key(data=key_data)
-            elif "ecdsa" in key_type.lower():
-                parsed_key = paramiko.ECDSAKey(data=key_data)
-            else:
-                parsed_key = paramiko.RSAKey(data=key_data)
-            client.get_host_keys().add(hostname=host, keytype=key_type, key=parsed_key)
-            client.set_missing_host_key_policy(paramiko.RejectPolicy())
-        else:
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    else:
+    if not host_key_string:
+        # Trust on First Use (TOFU) / Auto-add for partners who don't provide host keys
+        import logging
+
+        logging.getLogger(__name__).warning(
+            f"No host key provided for {host}. Using AutoAddPolicy (vulnerable to MITM)."
+        )
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    else:
+        parts = host_key_string.split()
+        if len(parts) < 2:
+            raise ValueError(f"Malformed host_key_string: {host_key_string}")
+
+        key_type = parts[0]
+        key_data = base64.b64decode(parts[-1])
+        if "ed25519" in key_type.lower():
+            parsed_key: paramiko.PKey = paramiko.Ed25519Key(data=key_data)
+        elif "ecdsa" in key_type.lower():
+            parsed_key = paramiko.ECDSAKey(data=key_data)
+        else:
+            parsed_key = paramiko.RSAKey(data=key_data)
+
+        host_identifier = f"[{host}]:{port}" if port != 22 else host
+        client.get_host_keys().add(hostname=host_identifier, keytype=key_type, key=parsed_key)
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
     connect_kwargs = {
         "hostname": host,
@@ -50,8 +59,10 @@ def get_ssh_client(
         "look_for_keys": False,
         "allow_agent": False,
         "timeout": timeout,
-        "disabled_algorithms": {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]},
     }
+
+    if use_legacy_rsa:
+        connect_kwargs["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}
 
     if client_key_string:
         key_io = io.StringIO(client_key_string)

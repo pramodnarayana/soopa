@@ -63,19 +63,7 @@ app = FastAPI(
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    import json
-
-    body = await request.body()
-    try:
-        parsed = json.loads(body)
-    except Exception:
-        parsed = body
-    print("\n" + "=" * 50)
-    print("422 Error - Unprocessable Content")
-    print(f"Path: {request.url.path}")
-    print(f"Payload: {parsed}")
-    print(f"Validation Errors: {exc.errors()}")
-    print("=" * 50 + "\n")
+    logger.error(f"422 Error at {request.url.path}: {exc.errors()}")
     return JSONResponse(
         status_code=422,
         content={"detail": exc.errors()},

@@ -10,7 +10,7 @@ interface DataTableProps<TData> {
   emptyIcon?: React.ReactNode;
   emptyTitle?: string;
   emptyDescription?: string;
-  renderExpandedRow?: (row: any, toggle: () => void) => React.ReactNode;
+  renderExpandedRow?: (row: any) => React.ReactNode;
 }
 
 export function DataTable<TData>({
@@ -70,6 +70,13 @@ export function DataTable<TData>({
                 <tr
                   className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
                   onClick={renderExpandedRow ? () => row.toggleExpanded() : undefined}
+                  onKeyDown={renderExpandedRow ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      row.toggleExpanded();
+                    }
+                  } : undefined}
+                  tabIndex={renderExpandedRow ? 0 : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-6 py-4 align-middle">
@@ -80,7 +87,7 @@ export function DataTable<TData>({
                 {renderExpandedRow && row.getIsExpanded() && (
                   <tr>
                     <td colSpan={columnsLength} className="p-0">
-                      {renderExpandedRow(row.original, () => row.toggleExpanded())}
+                      {renderExpandedRow(row)}
                     </td>
                   </tr>
                 )}

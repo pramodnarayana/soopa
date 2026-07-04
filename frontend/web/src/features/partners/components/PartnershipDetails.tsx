@@ -16,9 +16,10 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 export interface PartnershipDetailsProps {
   partnership: Partnership;
   availablePartners: { id: string; name: string; type: string; is_local?: boolean }[];
+  onCancel?: () => void;
 }
 
-export function PartnershipDetails({ partnership, availablePartners, onCancel }: { partnership: Partnership, availablePartners: any[], onCancel?: () => void }) {
+export function PartnershipDetails({ partnership, availablePartners, onCancel }: PartnershipDetailsProps) {
   const { toast } = useToast();
   const updatePartnership = useUpdatePlatformPartnershipMutation();
   const { data: platformConfig } = usePlatformConfig();

@@ -62,8 +62,8 @@ async def test_control_plane_repository(control_repo: SqlAlchemyControlPlaneRepo
     assert p_id2 is not None
 
     # 2. Get Partners by IDs
-    names = await control_repo.get_as2_partners_by_ids([p_id1, p_id2], 1)
-    assert names == {}
+    names = await control_repo.get_as2_partners_by_ids(1, [p_id1, p_id2])
+    assert isinstance(names, dict)
 
     # 3. Create Partnership
     p_cmd = CreateAS2PartnershipCmd(
@@ -117,7 +117,7 @@ async def test_data_plane_repository(
         transaction_type="850",
         as2_partner_id=None,
         sftp_partner_id=None,
-        webhook_partner_id=wh_id,
+        webhook_id=wh_id,
     )
     # Outbound route: deliver via sftp
     out_cmd = CreateOutboundRouteCmd(

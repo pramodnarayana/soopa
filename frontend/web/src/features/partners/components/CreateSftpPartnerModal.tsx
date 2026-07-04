@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormModal } from '@/components/ui/form-modal';
@@ -22,6 +22,10 @@ export function CreateSftpPartnerModal() {
   const [password, setPassword] = useState('');
   const [sftpCredsVault, setSftpCredsVault] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    setTestResult(null);
+  }, [host, port, username, password, sftpCredsVault, authMethod]);
 
   const { toast } = useToast();
   const createSftp = useCreateSftpPartnerMutation();

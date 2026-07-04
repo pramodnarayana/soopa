@@ -104,8 +104,14 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
-        if self.env != "development" and "localhost" in self.server.external_url:
-            raise ValueError("external_url must not be localhost in non-development environments")
+        from urllib.parse import urlparse
+
+        if self.env != "development":
+            parsed = urlparse(self.server.external_url)
+            if parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+                raise ValueError(
+                    "external_url must not be a loopback address in non-development environments"
+                )
         return self
 
 
