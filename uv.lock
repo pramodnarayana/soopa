@@ -17,6 +17,7 @@ members = [
     "config",
     "database",
     "edi",
+    "edi-grammar",
     "identity",
     "observability",
     "patches",
@@ -994,6 +995,11 @@ dev = [
     { name = "pytest-cov", specifier = ">=5.0.0" },
     { name = "ruff", specifier = ">=0.4.0" },
 ]
+
+[[package]]
+name = "edi-grammar"
+version = "0.1.0"
+source = { editable = "libs/edi_grammar" }
 
 [[package]]
 name = "fastapi"

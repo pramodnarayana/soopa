@@ -16,6 +16,7 @@ import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
 import { Route as TenantUsersRouteImport } from './routes/tenant/users'
 import { Route as TenantRoutesRouteImport } from './routes/tenant/routes'
 import { Route as TenantPartnersRouteImport } from './routes/tenant/partners'
+import { Route as TenantEdiToolRouteImport } from './routes/tenant/edi_tool'
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as PlatformUsersRouteImport } from './routes/platform/users'
 import { Route as PlatformTenantsRouteImport } from './routes/platform/tenants'
@@ -62,6 +63,11 @@ const TenantDashboardRoute = TenantDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => TenantRoute,
 } as any)
+const TenantEdiToolRoute = TenantEdiToolRouteImport.update({
+  id: '/edi_tool',
+  path: '/edi_tool',
+  getParentRoute: () => TenantRoute,
+} as any)
 const PlatformUsersRoute = PlatformUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
+  '/tenant/edi_tool': typeof TenantEdiToolRoute
   '/tenant/partners': typeof TenantPartnersRoute
   '/tenant/routes': typeof TenantRoutesRoute
   '/tenant/users': typeof TenantUsersRoute
@@ -228,6 +235,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantRoutesRouteImport
       parentRoute: typeof TenantRoute
     }
+    "/tenant/edi_tool": {
+      "filePath": "tenant/edi_tool.tsx",
+      "parent": "/tenant"
+    },
     '/tenant/partners': {
       id: '/tenant/partners'
       path: '/partners'
@@ -314,6 +325,7 @@ const PlatformRouteWithChildren = PlatformRoute._addFileChildren(
 
 interface TenantRouteChildren {
   TenantDashboardRoute: typeof TenantDashboardRoute
+  TenantEdiToolRoute: typeof TenantEdiToolRoute
   TenantPartnersRoute: typeof TenantPartnersRoute
   TenantRoutesRoute: typeof TenantRoutesRoute
   TenantUsersRoute: typeof TenantUsersRoute
@@ -321,6 +333,7 @@ interface TenantRouteChildren {
 
 const TenantRouteChildren: TenantRouteChildren = {
   TenantDashboardRoute: TenantDashboardRoute,
+  TenantEdiToolRoute: TenantEdiToolRoute,
   TenantPartnersRoute: TenantPartnersRoute,
   TenantRoutesRoute: TenantRoutesRoute,
   TenantUsersRoute: TenantUsersRoute,
