@@ -1,14 +1,19 @@
 from bots_core.infrastructure.config.botsconfig import *
 
 syntax = {
-    'version': '00601',
-    'functionalgroup': 'FT',
+    "version": "00601",
+    "functionalgroup": "FT",
 }
 
 structure = [
-{ID: 'ST', MIN: 1, MAX: 1, LEVEL: [
-    {ID: 'BGF', MIN: 1, MAX: 1},
-    {ID: 'K3', MIN: 1, MAX: 99999},
-    {ID: 'SE', MIN: 1, MAX: 1},
-]}
+    {
+        ID: "ST",
+        MIN: 1,
+        MAX: 1,
+        LEVEL: [
+            {ID: "BGF", MIN: 1, MAX: 1},
+            {ID: "K3", MIN: 1, MAX: 99999},
+            {ID: "SE", MIN: 1, MAX: 1},
+        ],
+    }
 ]
