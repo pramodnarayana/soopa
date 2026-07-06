@@ -222,11 +222,11 @@ class Message:
                                 messagetype,
                                 typeofgrammarfile="grammars",
                             )
-                            # Mark as subtranslation start so the recursive check doesn't try to validate its children against the outer grammar
-                            childnode.queries = {"messagetype": messagetype}
-
                             # Now we validate the subtranslation node against the outer grammar
                             self._checkifrecordsingrammar(childnode, record_definition, grammarname)
+
+                            # Mark as subtranslation start so the recursive check doesn't try to validate its children against the outer grammar
+                            childnode.queries = {"messagetype": messagetype}
 
                             # Validate the children of the subtranslation node
                             for subchild in childnode.children:

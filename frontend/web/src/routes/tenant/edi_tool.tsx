@@ -135,15 +135,19 @@ function EdiToolPage() {
   const { toast } = useToast();
 
   const transformMutation = useMutation({
-    mutationFn: async () => {
-      const action = inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI';
+    mutationFn: async (variables: { action: string; payload: string }) => {
       const response = await axios.post('/api/edi-tools/transform', {
-        action,
-        payload: inputPayload,
+        action: variables.action,
+        payload: variables.payload,
       });
-      return response.data;
+      return { data: response.data, variables };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ data, variables }) => {
+      const currentAction = inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI';
+      if (variables.payload !== debouncedPayload || variables.action !== currentAction) {
+        return; // Ignore stale responses
+      }
+
       setIsValid(data.valid);
       if (data.result) {
         try {
@@ -172,8 +176,14 @@ function EdiToolPage() {
       }
     },
     onError: (error: any) => {
+      setValidationErrors([]);
       setIsValid(false);
-      setOutputResult(error.response?.data?.detail || error.message);
+
+      let errorDetail = error.response?.data?.detail || error.message;
+      if (typeof errorDetail !== 'string') {
+        errorDetail = JSON.stringify(errorDetail);
+      }
+      setOutputResult(errorDetail);
       toast({
         title: 'API Error',
         description: 'Failed to communicate with the testing endpoint.',
@@ -185,7 +195,10 @@ function EdiToolPage() {
   // Auto-run transformation when debounced payload or input format changes
   useEffect(() => {
     if (debouncedPayload.trim()) {
-      transformMutation.mutate();
+      transformMutation.mutate({
+        action: inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI',
+        payload: debouncedPayload,
+      });
     } else {
       setOutputResult('');
       setValidationErrors([]);

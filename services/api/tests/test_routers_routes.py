@@ -38,9 +38,10 @@ def test_create_inbound_route(client):
     assert data["direction"] == "INBOUND"
 
     route_id = data["route_id"]
-    client.get(f"/api/v1/routes/inbound/{route_id}")
-    client.put(f"/api/v1/routes/inbound/{route_id}", json={"name": "updated"})
-    client.delete(f"/api/v1/routes/inbound/{route_id}")
+    patch_resp = client.patch(f"/api/v1/routes/inbound/{route_id}", json={"name": "updated"})
+    assert patch_resp.status_code in (200, 404)
+    del_resp = client.delete(f"/api/v1/routes/inbound/{route_id}")
+    assert del_resp.status_code == 204
 
 
 def test_create_outbound_route(client):
@@ -61,9 +62,10 @@ def test_create_outbound_route(client):
     assert data["direction"] == "OUTBOUND"
 
     route_id = data["route_id"]
-    client.get(f"/api/v1/routes/outbound/{route_id}")
-    client.put(f"/api/v1/routes/outbound/{route_id}", json={"name": "updated"})
-    client.delete(f"/api/v1/routes/outbound/{route_id}")
+    patch_resp = client.patch(f"/api/v1/routes/outbound/{route_id}", json={"name": "updated"})
+    assert patch_resp.status_code in (200, 404)
+    del_resp = client.delete(f"/api/v1/routes/outbound/{route_id}")
+    assert del_resp.status_code == 204
 
 
 def test_list_routes(client):

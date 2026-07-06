@@ -63,7 +63,7 @@ class BotsEDIAdapter(EDITranslatorPort):
             error_msg = str(e)
             parsed_errors = []
 
-            if error_msg.startswith("["):
+            if error_msg.startswith("[") or "Details:" in error_msg:
                 parsed_errors = [line.strip() for line in error_msg.split("\n") if line.strip()]
 
             raise TranslationError(f"AST generation failed: {e}", errors=parsed_errors) from e
@@ -146,23 +146,23 @@ class BotsEDIAdapter(EDITranslatorPort):
 
             # Extract EDIFACT metadata
             for unb_node in self._get_list_of_dicts(ast_dict, "interchange_UNB"):
-                unb02 = self._get_dict(unb_node, "UNB02")
-                sender_id = self._get_str(unb02, "UNB02.01", "UNKNOWN")
-
-                unb03 = self._get_dict(unb_node, "UNB03")
-                receiver_id = self._get_str(unb03, "UNB03.01", "UNKNOWN")
-
-                interchange_control_number = self._get_str(unb_node, "UNB05", "UNKNOWN")
+                unb = self._get_dict(unb_node, "UNB")
+                if unb:
+                    sender_id = self._get_str(unb, "S002.0004", "UNKNOWN")
+                    receiver_id = self._get_str(unb, "S003.0010", "UNKNOWN")
+                    interchange_control_number = self._get_str(unb, "0020", "UNKNOWN")
 
                 for unh_node in self._get_list_of_dicts(unb_node, "transaction_UNH"):
-                    unh02 = self._get_dict(unh_node, "UNH02")
-                    transactions.append(
-                        TransactionSet(
-                            transaction_type=self._get_str(unh02, "UNH02.01", "UNKNOWN"),
-                            control_number=self._get_str(unh_node, "UNH01", "UNKNOWN"),
-                            data=unh_node,
+                    unh = self._get_dict(unh_node, "UNH")
+                    if unh:
+                        unh02 = self._get_dict(unh, "UNH02")
+                        transactions.append(
+                            TransactionSet(
+                                transaction_type=self._get_str(unh02, "UNH02.01", "UNKNOWN"),
+                                control_number=self._get_str(unh, "UNH01", "UNKNOWN"),
+                                data=unh_node,
+                            )
                         )
-                    )
 
             return ParsedEdiPayload(
                 sender_id=sender_id,

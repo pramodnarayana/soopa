@@ -82,8 +82,8 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
 
   const parseBotsError = (errStr: string) => {
     let code = "UNKNOWN";
-    let segment = null;
-    let element = null;
+    let segment: string | null = null;
+    let element: string | null = null;
     let globalMessage = errStr;
     let localMessage = errStr;
 
@@ -254,7 +254,11 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
       });
     }
 
-    return null;
+    return (
+      <span className="text-sm font-medium text-slate-800 break-all">
+        {String(value)}
+      </span>
+    );
   };
 
   // The root structure usually has the transactions object

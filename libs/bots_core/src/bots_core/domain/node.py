@@ -104,10 +104,14 @@ class Node:
         return result
 
     @classmethod
-    def from_dict(cls, data: dict, fallback_seg_id: str = None) -> "Node":
-        """Deserialize a Node tree from a pure Python dictionary."""
+    def from_dict(
+        cls, data: dict, fallback_seg_id: str | None = None, is_array: bool = True
+    ) -> "Node":
+        """
+        Recursively converts a JSON dictionary representation of an EDI AST back into a tree of Bots Node objects.
+        """
         record_data = {}
-        children_lists = []
+        children_lists: list[tuple[str, list, bool]] = []
         is_unwrapped_leaf = True
 
         # Determine the expected key for our own segment data
@@ -127,7 +131,7 @@ class Node:
         for key, value in data.items():
             if isinstance(value, list):
                 is_unwrapped_leaf = False
-                children_lists.append((key, value))
+                children_lists.append((key, value, True))
             elif isinstance(value, dict):
                 is_unwrapped_leaf = False
                 if key == own_key or (
@@ -139,22 +143,28 @@ class Node:
                 ):
                     # It's our own record!
                     record_data = value.copy()
+                    record_data.pop("_is_array", None)
                     record_data["BOTSID"] = key
                     record_data["BOTSIDnr"] = "1"  # Default to 1 since we removed occurrence
                 else:
                     # It's an unwrapped single child node!
-                    children_lists.append((key, [value]))
+                    children_lists.append((key, [value], False))
 
         if is_unwrapped_leaf and fallback_seg_id:
             record_data = data.copy()
+            record_data.pop("_is_array", None)
             record_data["BOTSID"] = fallback_seg_id
             record_data["BOTSIDnr"] = "1"  # Default to 1
 
-        node = cls(record=record_data if record_data else None)
+        node = cls(record=record_data if record_data else None, is_array=is_array)
 
-        for child_list_key, child_list in children_lists:
+        for child_list_key, child_list, child_is_array in children_lists:
             for child_data in child_list:
-                node.append(cls.from_dict(child_data, fallback_seg_id=child_list_key))
+                node.append(
+                    cls.from_dict(
+                        child_data, fallback_seg_id=child_list_key, is_array=child_is_array
+                    )
+                )
 
         return node
 

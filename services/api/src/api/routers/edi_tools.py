@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -29,7 +30,7 @@ async def _handle_edi_to_json(
     logger.info(f"EDI TOOL RECEIVED PAYLOAD LENGTH: {len(raw_bytes)}")
 
     # Delegate parsing and validation to the common BotsEDIAdapter
-    ast_dict, errors = adapter.get_raw_ast(raw_bytes)
+    ast_dict, errors = await asyncio.to_thread(adapter.get_raw_ast, raw_bytes)
 
     # We embed validation errors into an API envelope wrapper
     # so the payload (ast) remains pristine and unpolluted.
@@ -60,7 +61,7 @@ async def _handle_json_to_edi(
     ):
         standard = "edifact"
 
-    edi_str, errors = adapter.serialize_to_edi(ast_dict, standard=standard)
+    edi_str, errors = await asyncio.to_thread(adapter.serialize_to_edi, ast_dict, standard=standard)
 
     # Filter out warnings
     fatal_errors = [e for e in errors if not e.startswith("[W")]

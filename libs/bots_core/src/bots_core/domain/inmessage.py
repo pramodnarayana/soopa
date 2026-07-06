@@ -567,7 +567,8 @@ class Inmessage(message.Message):
     def _readcontent_edifile(self):
         """read content of edi file to memory."""
         if "raw_edi" in self.ta_info:
-            logger.debug("Read edi from raw_edi in memory.", self.ta_info)
+            safe_info = {k: v for k, v in self.ta_info.items() if k != "raw_edi"}
+            logger.debug("Read edi from raw_edi in memory.", safe_info)
             data = self.ta_info["raw_edi"]
             if isinstance(data, bytes):
                 charset = self.ta_info.get("charset") or "utf-8"

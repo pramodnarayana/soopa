@@ -62,7 +62,10 @@ def test_list_platform_as2_partners(client, fake_uow):
 
     # Add coverage for certificate export
     p_id = response.json()[0]["id"]
-    client.get(f"/api/v1/trading-partners/as2/trading-partners/{p_id}/certificates/export")
+    export_resp = client.get(
+        f"/api/v1/platform/trading-partners/as2/trading-partners/{p_id}/certificates/export"
+    )
+    assert export_resp.status_code in (200, 403, 404, 501)
 
 
 def test_get_platform_config(client, fake_uow):

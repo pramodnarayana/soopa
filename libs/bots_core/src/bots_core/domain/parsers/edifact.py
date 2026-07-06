@@ -47,10 +47,12 @@ class edifact(var):
         Charset is determined in _sniff(), then file is decoded.
         """
         if "raw_edi" in self.ta_info:
-            logger.debug("Read edi from raw_edi in memory (binary for edifact).", self.ta_info)
+            safe_info = {k: v for k, v in self.ta_info.items() if k != "raw_edi"}
+            logger.debug("Read edi from raw_edi in memory (binary for edifact).", safe_info)
             data = self.ta_info["raw_edi"]
             if isinstance(data, str):
-                self.rawinput = data.encode("utf-8")
+                charset = self.ta_info.get("charset") or "utf-8"
+                self.rawinput = data.encode(charset)
             else:
                 self.rawinput = data
         else:

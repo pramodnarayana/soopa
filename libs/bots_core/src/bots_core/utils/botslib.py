@@ -161,6 +161,22 @@ def join(*paths):
     return os.path.normpath(os.path.join(*paths))
 
 
+def readdata(filename, charset="utf-8", errors="strict"):
+    with open(filename, encoding=charset, errors=errors) as f:
+        return f.read()
+
+
+def readdata_bin(filename):
+    with open(filename, "rb") as f:
+        return f.read()
+
+
+def opendata(filename, mode, charset="utf-8", errors="strict"):
+    if "b" in mode:
+        return open(filename, mode)
+    return open(filename, mode, encoding=charset, errors=errors)
+
+
 # **********************************************************/**
 # ***************** calling modules, programs **************/**
 # Removed runscript, confirmrules, database locks, and tracing logic

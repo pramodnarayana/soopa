@@ -169,15 +169,16 @@ def json_to_edi(
                         err_msg = err_msg.split("Details: ")[1]
                     if err_msg not in errors:
                         errors.append(err_msg)
-                except Exception:
-                    pass
+                except Exception as e:
+                    if str(e) not in errors:
+                        errors.append(str(e))
             return json.dumps({"edi": result, "errors": errors}, indent=2)
         return result
     except Exception as e:
         if return_errors and "out" in locals():
             # If the engine completely crashed but we want errors, return them alongside whatever was produced
             result = out.ta_info.get("output_string", "")
-            errors = out.errorlist if hasattr(out, "errorlist") else [str(e)]
+            errors = out.errorlist if (hasattr(out, "errorlist") and out.errorlist) else [str(e)]
             return json.dumps({"edi": result, "errors": errors}, indent=2)
         raise RuntimeError(f"Failed to generate EDI: {e}") from e
 

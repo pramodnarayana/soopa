@@ -49,9 +49,9 @@ async def test_bots_adapter_translate_edifact(adapter):
     # Depending on our domain model extraction for EDIFACT, it might extract different fields
     # Default messagetype='envelope' allows parsing just the UNB/UNZ headers
     payload = await adapter.translate(SAMPLE_EDIFACT, editype="edifact", messagetype="envelope")
-    assert payload.sender_id in ("SENDER", "UNKNOWN")
-    assert payload.receiver_id in ("RECEIVER", "UNKNOWN")
-    assert payload.interchange_control_number in ("1", "UNKNOWN")
+    assert payload.sender_id == "SENDER"
+    assert payload.receiver_id == "RECEIVER"
+    assert payload.interchange_control_number == "1"
     assert len(payload.transactions) == 0
 
 
@@ -68,7 +68,7 @@ async def test_bots_adapter_translate_garbage_payload(adapter):
         await adapter.translate(b"GARBAGE")
     assert exc.value.errors is not None
     # Since parsing fails outright, it might just have 1 core error about format
-    assert len(exc.value.errors) >= 0
+    assert len(exc.value.errors) > 0
 
 
 def test_bots_adapter_serialize_to_edi(adapter):
@@ -87,4 +87,5 @@ def test_bots_adapter_serialize_invalid_ast(adapter):
     ast_dict = {"invalid_root": "yes"}
     edi_str, errors = adapter.serialize_to_edi(ast_dict, standard="x12")
     # For a completely invalid AST, it either raises or returns empty edi_str
-    assert edi_str == "" or len(errors) >= 0
+    assert edi_str == ""
+    assert len(errors) > 0

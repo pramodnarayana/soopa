@@ -4,8 +4,8 @@ import xml.etree.ElementTree as ET
 
 
 def build_dictionary():
-    xml_path = "/Users/apple/soopa/soopaedi/bots-grammars/x12/5011/X12.Segment"
-    output_path = "frontend/web/public/edidescription/x12_4010.json"
+    xml_path = "libs/edi_grammar/src/edi_grammar/x12/5011/X12.Segment"
+    output_path = "frontend/web/public/edidescription/x12_5011.json"
 
     if not os.path.exists(xml_path):
         print(f"Error: Could not find {xml_path}")
