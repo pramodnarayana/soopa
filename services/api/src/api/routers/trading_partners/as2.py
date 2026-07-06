@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from identity.dependencies import get_current_tenant_id, get_raw_jwt
 
 from api.adapters.http.dtos import CertificateExportResponse
-from api.adapters.vault import vault
 from api.core.uow import UnitOfWork
-from api.dependencies import get_current_user_profile, get_uow
+from api.dependencies import get_current_user_profile, get_uow, get_vault
+from api.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ async def export_as2_certificates(
     uow: UnitOfWork = Depends(get_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     profile: dict[str, Any] = Depends(get_current_user_profile),
+    vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """Exports current and previous certificates for an AS2 partner."""
     async with uow:

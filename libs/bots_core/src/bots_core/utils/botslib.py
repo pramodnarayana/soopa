@@ -4,8 +4,6 @@ Botslib should not import code from other Bots-modules.
 """
 # pylint: disable=missing-function-docstring, broad-exception-caught, too-many-lines
 
-import codecs
-import contextlib
 import datetime as python_datetime
 import gettext as std_gettext
 import importlib
@@ -44,8 +42,10 @@ botsglobal = _BotsGlobalStub()
 
 try:
     import pickle
+
+    _ = pickle
 except ImportError:
-    import cPickle as pickle
+    pass
 
 
 _ = gettext
@@ -119,7 +119,20 @@ def botsimport(*args):
     return: imported module, filename imported module;
     """
     # assemble import string
-    modulepath = ".".join(("bots_core.usersys",) + args)
+    if args and args[0] == "grammars":
+        if len(args) == 3 and args[1] == "x12" and args[2] != "envelope":
+            # X12 transaction sets are named like 850004010. Version is the last 4 chars (e.g. 4010)
+            grammarname = args[2]
+            if len(grammarname) > 4:
+                version = grammarname[-4:]
+                modulepath = f"edi_grammar.x12.{version}.{grammarname}"
+            else:
+                modulepath = f"edi_grammar.x12.{grammarname}"
+        else:
+            modulepath = ".".join(("edi_grammar",) + args[1:])
+    else:
+        modulepath = ".".join(args)
+
     modulefile = "/".join(args)
 
     try:
@@ -148,115 +161,20 @@ def join(*paths):
     return os.path.normpath(os.path.join(*paths))
 
 
-def dirshouldbethere(path: str) -> bool:
-    """
-    Create directory if path doesn't exist and return True
-    :return:
-        - True if one or several directory was created
-        - False if path already exist
-    """
-    if path and not os.path.exists(path):
-        os.makedirs(path)
-        return True
-    return False
-
-
-def abspath(soort, filename):
-    return filename
-
-
-def abspathdata(filename):
-    data_dir = botsglobal.ini.get("directories", "data")
-    if not data_dir:
-        raise ValueError("directories.data configuration is missing or empty")
-    data_dir_real = os.path.realpath(data_dir)
-
-    if os.path.isabs(filename):
-        full_path = os.path.realpath(filename)
-    else:
-        full_path = os.path.realpath(os.path.join(data_dir_real, filename))
-
-    if os.path.commonpath([data_dir_real, full_path]) != data_dir_real:
-        raise ValueError(f"Path is outside data directory: {filename}")
-
-    return full_path
-
-
-def deldata(filename):
-    """delete internal data file."""
-    filename = abspathdata(filename)
-    _validate_data_path(filename)
-    with contextlib.suppress(Exception):
-        os.remove(filename)
-
-
-def _validate_data_path(filename):
-    """Ensure that the file path does not contain unauthorized traversals."""
-    if ".." in filename or filename.startswith("/etc/") or filename.startswith("/root/"):
-        raise ValueError(f"Path traversal is not permitted: {filename}")
-    data_dir = botsglobal.ini.get("directories", "data")
-    if not data_dir:
-        raise ValueError("directories.data configuration is missing or empty")
-    data_dir_real = os.path.realpath(data_dir)
-    filename_real = os.path.realpath(filename)
-    if os.path.commonpath([data_dir_real, filename_real]) != data_dir_real:
-        raise ValueError(f"Path is outside data directory: {filename}")
-
-
-def opendata(filename, mode, charset=None, errors="strict"):
-    """open internal data file as unicode."""
-    # pylint: disable=deprecated-method
-    filename = abspathdata(filename)
-    _validate_data_path(filename)
-    if "w" in mode:
-        dirshouldbethere(os.path.dirname(filename))
-    return codecs.open(filename, mode, charset, errors)
-
-
-def readdata(filename, charset=None, errors="strict"):
-    """read internal data file in memory as unicode."""
-    with opendata(filename, "r", charset, errors) as filehandler:
-        return filehandler.read()
-
-
-def opendata_bin(filename, mode="rb"):
-    """open internal data file as binary."""
-    # pylint: disable=unspecified-encoding
-    filename = abspathdata(filename)
-    _validate_data_path(filename)
-    if "w" in mode:
-        dirshouldbethere(os.path.dirname(filename))
-    return open(filename, mode=mode)  # noqa: SIM115
+def readdata(filename, charset="utf-8", errors="strict"):
+    with open(filename, encoding=charset, errors=errors) as f:
+        return f.read()
 
 
 def readdata_bin(filename):
-    """read internal data file in memory as binary."""
-    with opendata_bin(filename, mode="rb") as filehandler:
-        content = filehandler.read()
-    return content
+    with open(filename, "rb") as f:
+        return f.read()
 
 
-def readdata_pickled(filename):
-    """
-    pickle is a binary/byte stream
-    WARNING: Only load pickles from trusted internal sources.
-    This function should only be used for BOTS internal data files.
-    """
-    filehandler = opendata_bin(filename, mode="rb")
-    try:
-        content = pickle.load(filehandler)
-    finally:
-        filehandler.close()
-    return content
-
-
-def writedata_pickled(filename, content):
-    """pickle is a binary/byte stream"""
-    filehandler = opendata_bin(filename, mode="wb")
-    try:
-        pickle.dump(content, filehandler)
-    finally:
-        filehandler.close()
+def opendata(filename, mode, charset="utf-8", errors="strict"):
+    if "b" in mode:
+        return open(filename, mode)
+    return open(filename, mode, encoding=charset, errors=errors)
 
 
 # **********************************************************/**

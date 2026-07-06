@@ -1,13 +1,9 @@
 import json
 import logging
-import os
-import tempfile
-
-from bots_core.facade import edi_to_json
 
 from transformer.application.ports import EDITranslatorPort
 from transformer.domain.exceptions import TranslationError
-from transformer.domain.models import ParsedEdiPayload, TransactionSet
+from transformer.domain.models import JsonDict, ParsedEdiPayload, TransactionSet
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +17,85 @@ class BotsEDIAdapter(EDITranslatorPort):
     def __init__(self) -> None:
         pass
 
-    async def translate(self, raw_edi: bytes) -> ParsedEdiPayload:
+    @staticmethod
+    def _get_list_of_dicts(data: JsonDict, key: str) -> list[JsonDict]:
+        val = data.get(key)
+        if isinstance(val, dict):
+            return [val]
+        if isinstance(val, list):
+            return [v for v in val if isinstance(v, dict)]
+        return []
+
+    @staticmethod
+    def _get_dict(data: JsonDict, key: str) -> JsonDict:
+        val = data.get(key)
+        if isinstance(val, dict):
+            return val
+        return {}
+
+    @staticmethod
+    def _get_str(data: JsonDict, key: str, default: str = "") -> str:
+        val = data.get(key)
+        if val is None or val == "":
+            return default
+        return str(val).strip()
+
+    def get_raw_ast(
+        self, raw_edi: bytes, editype: str = "x12", messagetype: str = "envelope"
+    ) -> tuple[JsonDict, list[str]]:
+        """Returns the raw AST dictionary and any validation errors."""
+        try:
+            from bots_core.facade import edi_to_json
+
+            json_result = edi_to_json(
+                raw_edi=raw_edi, editype=editype, messagetype=messagetype, return_errors=True
+            )
+            data = json.loads(json_result)
+            ast_dict = data.get("ast", {})
+            errors = data.get("errors", [])
+            # Clean up the error strings
+            parsed_errors = [
+                line.strip() for err in errors for line in str(err).split("\n") if line.strip()
+            ]
+            return ast_dict, parsed_errors
+        except Exception as e:
+            logger.error(f"Bots error during AST generation: {e}")
+            error_msg = str(e)
+            parsed_errors = []
+
+            if error_msg.startswith("[") or "Details:" in error_msg:
+                parsed_errors = [line.strip() for line in error_msg.split("\n") if line.strip()]
+
+            raise TranslationError(f"AST generation failed: {e}", errors=parsed_errors) from e
+
+    def serialize_to_edi(self, ast_dict: JsonDict, standard: str = "x12") -> tuple[str, list[str]]:
+        """
+        Serializes a JSON AST back into raw EDI format using the Bots engine.
+        """
+        try:
+            from bots_core.facade import json_to_edi
+
+            ast_json_str = json.dumps(ast_dict)
+            result = json_to_edi(
+                json_ast=ast_json_str, editype=standard, messagetype="envelope", return_errors=True
+            )
+
+            data = json.loads(result)
+            edi_str = data.get("edi", "")
+            errors = data.get("errors", [])
+
+            # Clean up the error strings
+            parsed_errors = [
+                line.strip() for err in errors for line in str(err).split("\n") if line.strip()
+            ]
+            return edi_str, parsed_errors
+        except Exception as e:
+            logger.error(f"Bots error during EDI serialization: {e}")
+            raise TranslationError(f"EDI serialization failed: {e}") from e
+
+    async def translate(
+        self, raw_edi: bytes, editype: str = "x12", messagetype: str = "envelope"
+    ) -> ParsedEdiPayload:
         """
         Executes the Bots translation process.
 
@@ -33,37 +107,70 @@ class BotsEDIAdapter(EDITranslatorPort):
         if not raw_edi:
             raise TranslationError("Payload is completely empty, Bots engine aborted.")
 
-        # We assume X12 for now. Extract actual messagetype from ST segment if possible.
-        messagetype = "x12"
         try:
-            raw_text = raw_edi.decode("utf-8", errors="ignore")
-            if "ST*" in raw_text:
-                # Naive extract: 'ST*850*...'
-                messagetype = raw_text.split("ST*")[1].split("*")[0].strip("~\r\n")
-        except Exception:
-            pass
+            ast_dict, errors = self.get_raw_ast(raw_edi, editype=editype, messagetype=messagetype)
+            if errors:
+                raise TranslationError(
+                    f"Validation failed with {len(errors)} errors", errors=errors
+                )
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".edi") as f:
-            f.write(raw_edi)
-            temp_path = f.name
+            sender_id = "UNKNOWN"
+            receiver_id = "UNKNOWN"
+            interchange_control_number = "UNKNOWN"
+            transactions = []
 
-        try:
-            json_result = edi_to_json(temp_path, editype="x12", messagetype=messagetype)
-            # In a real implementation, we would extract sender, receiver, etc from json_result
+            # Extract X12 metadata
+            for isa_node in self._get_list_of_dicts(ast_dict, "interchange_ISA"):
+                isa = self._get_dict(isa_node, "ISA")
+                if isa:
+                    sender_id = self._get_str(isa, "ISA06", "UNKNOWN")
+                    receiver_id = self._get_str(isa, "ISA08", "UNKNOWN")
+                    interchange_control_number = self._get_str(isa, "ISA13", "UNKNOWN")
+
+                    for gs_node in self._get_list_of_dicts(isa_node, "group_GS"):
+                        if self._get_dict(gs_node, "GS"):
+                            for st_node in self._get_list_of_dicts(gs_node, "transaction_ST"):
+                                st_record = self._get_dict(st_node, "ST")
+                                if st_record:
+                                    transactions.append(
+                                        TransactionSet(
+                                            transaction_type=self._get_str(
+                                                st_record, "ST01", "UNKNOWN"
+                                            ),
+                                            control_number=self._get_str(
+                                                st_record, "ST02", "UNKNOWN"
+                                            ),
+                                            data=st_node,
+                                        )
+                                    )
+
+            # Extract EDIFACT metadata
+            for unb_node in self._get_list_of_dicts(ast_dict, "interchange_UNB"):
+                unb = self._get_dict(unb_node, "UNB")
+                if unb:
+                    sender_id = self._get_str(unb, "S002.0004", "UNKNOWN")
+                    receiver_id = self._get_str(unb, "S003.0010", "UNKNOWN")
+                    interchange_control_number = self._get_str(unb, "0020", "UNKNOWN")
+
+                for unh_node in self._get_list_of_dicts(unb_node, "transaction_UNH"):
+                    unh = self._get_dict(unh_node, "UNH")
+                    if unh:
+                        unh02 = self._get_dict(unh, "UNH02")
+                        transactions.append(
+                            TransactionSet(
+                                transaction_type=self._get_str(unh02, "UNH02.01", "UNKNOWN"),
+                                control_number=self._get_str(unh, "UNH01", "UNKNOWN"),
+                                data=unh_node,
+                            )
+                        )
+
             return ParsedEdiPayload(
-                sender_id="UNKNOWN",
-                receiver_id="UNKNOWN",
-                interchange_control_number="UNKNOWN",
-                transactions=[
-                    TransactionSet(
-                        transaction_type=messagetype,
-                        control_number="UNKNOWN",
-                        data=json.loads(json_result),
-                    )
-                ],
+                sender_id=sender_id,
+                receiver_id=receiver_id,
+                interchange_control_number=interchange_control_number,
+                transactions=transactions,
             )
+        except TranslationError:
+            raise
         except Exception as e:
             raise TranslationError(f"Translation failed: {e}") from e
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)

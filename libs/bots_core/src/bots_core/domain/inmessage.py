@@ -491,6 +491,7 @@ class Inmessage(message.Message):
             newnode = node.Node(
                 record=self._parsefields(current_lex_record, structure_level[structure_index]),
                 linpos_info=(current_lex_record[0][LIN], current_lex_record[0][POS]),
+                is_array=(structure_level[structure_index].max_occ != 1),
             )
             # succes! append new node as a child to current (parent)node
             inode.append(newnode)
@@ -558,20 +559,30 @@ class Inmessage(message.Message):
                         structure_index += 1
                         countnrofoccurences = 0
 
-    @staticmethod
-    def _manipulatemessagetype(messagetype, inode):
+    def _manipulatemessagetype(self, messagetype, inode):
         """default: just return messagetype."""
         # pylint: disable=unused-argument
         return messagetype
 
     def _readcontent_edifile(self):
         """read content of edi file to memory."""
-        logger.debug('Read edi file "%(filename)s".', self.ta_info)
-        self.rawinput = botslib.readdata(
-            filename=self.ta_info["filename"],
-            charset=self.ta_info["charset"],
-            errors=self.ta_info["checkcharsetin"],
-        )
+        if "raw_edi" in self.ta_info:
+            safe_info = {k: v for k, v in self.ta_info.items() if k != "raw_edi"}
+            logger.debug("Read edi from raw_edi in memory.", safe_info)
+            data = self.ta_info["raw_edi"]
+            if isinstance(data, bytes):
+                charset = self.ta_info.get("charset") or "utf-8"
+                errors = self.ta_info.get("checkcharsetin") or "strict"
+                self.rawinput = data.decode(charset, errors=errors)
+            else:
+                self.rawinput = data
+        else:
+            logger.debug('Read edi file "%(filename)s".', self.ta_info)
+            self.rawinput = botslib.readdata(
+                filename=self.ta_info["filename"],
+                charset=self.ta_info["charset"],
+                errors=self.ta_info["checkcharsetin"],
+            )
 
     def _sniff(self):
         """

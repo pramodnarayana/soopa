@@ -316,25 +316,29 @@ def test_stripnode_removes_empty_children():
 def test_to_dict_from_dict_roundtrip():
     root, isa, gs, st, po1a, *_ = _build_order_tree()
     d = isa.to_dict()
-    assert d["record"]["BOTSID"] == "ISA"
-    assert len(d["children"]) == 1  # GS
+    assert "ISA" in d
+    assert "group_GS" in d
+    assert isinstance(d["group_GS"], list)
+    assert len(d["group_GS"]) == 1
 
-    restored = Node.from_dict(d)
+    restored = Node.from_dict(d, fallback_seg_id="ISA")
     assert restored.record["BOTSID"] == "ISA"
     assert len(restored.children) == 1
+    assert restored.children[0].record["BOTSID"] == "GS"
 
 
 def test_to_dict_leaf():
     n = Node(record={"BOTSID": "X", "BOTSIDnr": "1", "VAL": "hello"})
     d = n.to_dict()
-    assert d["record"]["VAL"] == "hello"
-    assert d.get("children", []) == []
+    assert d["VAL"] == "hello"
+    assert "children" not in d
 
 
 def test_from_dict_no_children():
-    d = {"record": {"BOTSID": "X", "BOTSIDnr": "1", "VAL": "world"}, "children": []}
-    n = Node.from_dict(d)
+    d = {"VAL": "world"}
+    n = Node.from_dict(d, fallback_seg_id="X")
     assert n.record["VAL"] == "world"
+    assert n.record["BOTSID"] == "X"
     assert n.children == []
 
 

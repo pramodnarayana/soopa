@@ -12,28 +12,25 @@ from api.adapters.http.dtos import (
     TestSFTPConnectionRequest,
     UpdateSFTPPartnerRequest,
 )
-from api.adapters.vault import vault
 from api.core.provisioning import ProvisioningService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
     get_sftp_tester,
     get_tenant_uow,
+    get_vault,
 )
 from api.domain.models import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
 from api.ports.sftp_tester import SftpTesterPort
+from api.ports.vault import VaultPort
 
 router = APIRouter(tags=["Partners — SFTP"])
 
 
-async def _get_client_key_from_vault(vault_ref: str) -> str:
-    vault_secret = (
-        await vault.get_secret(vault_ref)
-        if hasattr(vault, "get_secret")
-        else vault.retrieve_private_key(vault_ref)
-    )
+async def _get_client_key_from_vault(vault_ref: str, vault_port: VaultPort) -> str:
+    vault_secret = vault_port.retrieve_private_key(vault_ref)
     return vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
 
 
@@ -42,6 +39,7 @@ async def test_sftp_connection(
     request: TestSFTPConnectionRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
+    vault_port: VaultPort = Depends(get_vault),
 ) -> Any:
     """Tests an SFTP connection without saving a partner."""
     if not request.password and not request.credentials_vault_ref:
@@ -52,7 +50,9 @@ async def test_sftp_connection(
     client_key_string = None
     if request.credentials_vault_ref:
         try:
-            client_key_string = await _get_client_key_from_vault(request.credentials_vault_ref)
+            client_key_string = await _get_client_key_from_vault(
+                request.credentials_vault_ref, vault_port
+            )
         except Exception as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 
@@ -77,6 +77,7 @@ async def test_existing_sftp_connection(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
+    vault_port: VaultPort = Depends(get_vault),
 ) -> Any:
     """Tests an SFTP connection for an existing partner, pulling missing credentials from the DB."""
     from database.encryption import db_encryption
@@ -105,7 +106,9 @@ async def test_existing_sftp_connection(
     client_key_string = None
     if request.credentials_vault_ref:
         try:
-            client_key_string = await _get_client_key_from_vault(request.credentials_vault_ref)
+            client_key_string = await _get_client_key_from_vault(
+                request.credentials_vault_ref, vault_port
+            )
         except Exception as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 

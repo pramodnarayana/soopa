@@ -8,6 +8,7 @@ from api.domain.models import (
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookCmd,
+    UpdateAS2TradingPartnerCmd,
 )
 from api_fakes import FakeControlPlaneRepository, FakeDataPlaneRepository
 
@@ -33,6 +34,23 @@ async def test_create_as2_partner(service: ProvisioningService):
     assert len(global_repo.outbox_events) == 1
     assert global_repo.outbox_events[0]["event_type"] == "AS2_PARTNER_CREATED"
     assert global_repo.outbox_events[0]["tenant_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_update_and_delete_as2_partner(service: ProvisioningService):
+    cmd = CreateAS2TradingPartnerCmd(name="Test Partner", as2_id="TEST_AS2")
+    partner = await service.create_as2_partner(tenant_id=1, cmd=cmd)
+
+    # Update
+    update_cmd = UpdateAS2TradingPartnerCmd(name="Updated Partner", as2_id="NEW_AS2")
+    updated = await service.update_as2_partner(
+        tenant_id=1, partner_id=partner.partner_id, cmd=update_cmd
+    )
+    assert updated.name == "Updated Partner"
+
+    # Delete
+    await service.delete_as2_partner(tenant_id=1, partner_id=partner.partner_id)
+    assert len(service.global_repo.partners) == 0
 
 
 @pytest.mark.asyncio

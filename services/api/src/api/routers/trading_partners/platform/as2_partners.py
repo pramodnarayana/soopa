@@ -9,17 +9,18 @@ from api.adapters.http.dtos import (
     CreateAS2TradingPartnerRequest,
     UpdateAS2TradingPartnerRequest,
 )
-from api.adapters.vault import vault
 from api.core.provisioning import ProvisioningService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
     get_uow,
+    get_vault,
 )
 from api.domain.certificate import generate_self_signed_cert
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     UpdateAS2TradingPartnerCmd,
 )
+from api.ports.vault import VaultPort
 
 router = APIRouter(tags=["Platform Partners - AS2"])
 
@@ -32,6 +33,7 @@ router = APIRouter(tags=["Platform Partners - AS2"])
 async def create_platform_as2_partner(
     request: CreateAS2TradingPartnerRequest,
     uow: UnitOfWork = Depends(get_uow),
+    vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """
     Creates a new Global AS2 Trading Partner (Local or Remote) in the Control Plane.

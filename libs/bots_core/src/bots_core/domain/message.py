@@ -174,24 +174,31 @@ class Message:
 
         if node_instance.children and not structure.level:
             # record has children, but these are not in the grammar
-            if self.ta_info["checkunknownentities"]:
-                self.add2errorlist(
-                    _(
-                        '[S01]%(linpos)s: Record "%(record)s" in message has children,'
-                        ' but these are not in grammar "%(grammar)s". Found record "%(xx)s".\n'
+            if getattr(structure, "subtranslation", None):
+                # The children belong to the subgrammar, so bypass this error check.
+                pass
+            else:
+                if self.ta_info["checkunknownentities"]:
+                    self.add2errorlist(
+                        _(
+                            '[S01]%(linpos)s: Record "%(record)s" in message has children,'
+                            ' but these are not in grammar "%(grammar)s". Found record "%(xx)s".\n'
+                        )
+                        % {
+                            "linpos": node_instance.linpos(),
+                            "record": node_instance.record["BOTSID"],
+                            "grammar": grammarname,
+                            "xx": node_instance.children[0].record["BOTSID"],
+                        }
                     )
-                    % {
-                        "linpos": node_instance.linpos(),
-                        "record": node_instance.record["BOTSID"],
-                        "grammar": grammarname,
-                        "xx": node_instance.children[0].record["BOTSID"],
-                    }
-                )
-            node_instance.children = []
-            return
+                node_instance.children = []
+                return
 
         for childnode in node_instance.children:
             # for every record/childnode:
+            if not structure.level:
+                continue
+
             for record_definition in structure.level:
                 # search in grammar-records
                 if childnode.record["BOTSID"] == record_definition.id:
@@ -217,6 +224,8 @@ class Message:
                             )
                             # Now we validate the subtranslation node against the outer grammar
                             self._checkifrecordsingrammar(childnode, record_definition, grammarname)
+
+                            # Mark as subtranslation start so the recursive check doesn't try to validate its children against the outer grammar
                             childnode.queries = {"messagetype": messagetype}
 
                             # Validate the children of the subtranslation node

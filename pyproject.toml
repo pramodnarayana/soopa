@@ -94,9 +94,9 @@ omit = [
     # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
     "*/adapters/repository.py",
+    "*/adapters/sftp.py",
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
-    "*/adapters/bots_adapter.py",
     "*/adapters/sqs_queue.py",
     # AS2 server main (ASGI lifespan wiring — integration only)
     "services/as2_server/src/as2_server/main.py",

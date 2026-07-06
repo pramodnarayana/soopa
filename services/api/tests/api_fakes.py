@@ -9,6 +9,9 @@ from api.domain.models import (
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookCmd,
+    UpdateAS2TradingPartnerCmd,
+    UpdateInboundRouteCmd,
+    UpdateOutboundRouteCmd,
 )
 from api.ports.repository import (
     ControlPlaneRepositoryPort,
@@ -28,9 +31,27 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
     async def create_as2_identity(
         self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
     ) -> uuid.UUID:
+        for p in self.partners:
+            if p["tenant_id"] == tenant_id and p["cmd"].as2_id == cmd.as2_id:
+                from sqlalchemy.exc import IntegrityError
+
+                raise IntegrityError("mock error", params={}, orig=Exception("mock"))
         p_id = uuid.uuid4()
         self.partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
+
+    async def update_as2_identity(
+        self, tenant_id: int, partner_id: uuid.UUID, cmd: UpdateAS2TradingPartnerCmd
+    ) -> None:
+        for p in self.partners:
+            if p["id"] == partner_id and p["tenant_id"] == tenant_id:
+                p["updated_name"] = getattr(cmd, "name", p["cmd"].name)
+                break
+
+    async def delete_as2_identity(self, tenant_id: int, partner_id: uuid.UUID) -> None:
+        self.partners = [
+            p for p in self.partners if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
+        ]
 
     async def create_as2_partnership(
         self, tenant_id: int, cmd: CreateAS2PartnershipCmd
@@ -46,7 +67,7 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                 class FakePartner:
                     id = p["id"]
                     tenant_id = p["tenant_id"]
-                    name = p["cmd"].name
+                    name = p.get("updated_name", p["cmd"].name)
                     as2_id = p["cmd"].as2_id
                     is_local = p["cmd"].is_local
                     url = p["cmd"].url
@@ -171,6 +192,22 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         self.outbound_routes.append(FakeRoute(r_id, cmd))
         return r_id
 
+    async def update_inbound_route(
+        self, tenant_id: int, route_id: uuid.UUID, cmd: UpdateInboundRouteCmd
+    ) -> bool:
+        return True
+
+    async def delete_inbound_route(self, tenant_id: int, route_id: uuid.UUID) -> bool:
+        return True
+
+    async def update_outbound_route(
+        self, tenant_id: int, route_id: uuid.UUID, cmd: UpdateOutboundRouteCmd
+    ) -> bool:
+        return True
+
+    async def delete_outbound_route(self, tenant_id: int, route_id: uuid.UUID) -> bool:
+        return True
+
     async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
         inbound = getattr(self, "inbound_routes", [])
         outbound = getattr(self, "outbound_routes", [])
@@ -197,6 +234,8 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
                     outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
                     host_key = getattr(p["cmd"], "host_key", None)
+                    password_encrypted = b"encrypted"
+                    credentials_vault_ref = None
 
                 return MockPartner()
         return None

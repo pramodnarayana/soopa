@@ -124,7 +124,8 @@ class Outmessage(message.Message):
         """
         self.messagegrammarread(typeofgrammarfile="grammars")
         self.checkmessage(self.root, self.defmessage)
-        self.checkforerrorlist()
+        if not self.ta_info.get("ignore_out_errors"):
+            self.checkforerrorlist()
         self.nrmessagewritten = 0
         if self.root.record:
             # root record contains information; write whole tree in one time
@@ -153,16 +154,26 @@ class Outmessage(message.Message):
             self._closewrite()
 
     def _initwrite(self):
-        logger.debug('Start writing to file "%(filename)s".', self.ta_info)
-        self._outstream = botslib.opendata(
-            self.ta_info["filename"],
-            "w",
-            charset=self.ta_info["charset"],
-            errors=self.ta_info["checkcharsetout"],
-        )
+        import io
+
+        if self.ta_info.get("return_string"):
+            logger.debug("Start writing to in-memory string.", self.ta_info)
+            self._outstream = io.StringIO()
+        else:
+            logger.debug('Start writing to file "%(filename)s".', self.ta_info)
+            self._outstream = botslib.opendata(
+                self.ta_info["filename"],
+                "w",
+                charset=self.ta_info["charset"],
+                errors=self.ta_info["checkcharsetout"],
+            )
 
     def _closewrite(self):
-        logger.debug('End writing to file "%(filename)s".', self.ta_info)
+        if self.ta_info.get("return_string"):
+            logger.debug("End writing to in-memory string.", self.ta_info)
+            self.ta_info["output_string"] = self._outstream.getvalue()
+        else:
+            logger.debug('End writing to file "%(filename)s".', self.ta_info)
         self._outstream.close()
 
     def _write(self, node_instance):
