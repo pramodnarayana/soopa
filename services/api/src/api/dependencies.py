@@ -16,6 +16,7 @@ from api.adapters.repository import (
     SqlAlchemyTenantRepository,
 )
 from api.adapters.sqs_queue import SQSMessageQueueAdapter
+from api.adapters.vault import vault
 from api.core.authorization import AuthorizationService
 from api.core.uow import UnitOfWork
 from api.ports.message_queue import MessageQueuePort
@@ -25,12 +26,17 @@ from api.ports.repository import (
     TenantRepositoryPort,
 )
 from api.ports.sftp_tester import SftpTesterPort
+from api.ports.vault import VaultPort
 
 
 @lru_cache
 def get_sftp_tester() -> SftpTesterPort:
     """Returns the Paramiko-based SFTP connection tester."""
     return ParamikoSftpTesterAdapter()
+
+
+def get_vault() -> VaultPort:
+    return vault
 
 
 @lru_cache

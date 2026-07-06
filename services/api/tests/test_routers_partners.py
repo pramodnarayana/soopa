@@ -33,6 +33,22 @@ def client(fake_uow):
 
     app.dependency_overrides[get_sftp_tester] = lambda: FakeSftpTester()
 
+    from api.dependencies import get_vault
+
+    class FakeVault:
+        def store_private_key(self, private_key_pem: bytes, alias_prefix: str = "as2_key") -> str:
+            return "fake_ref"
+
+        def retrieve_private_key(self, vault_ref: str) -> bytes:
+            if vault_ref == "vault-error-ref":
+                raise Exception("Vault error")
+            return b"fake_key"
+
+        def delete_secret(self, vault_ref: str) -> None:
+            pass
+
+    app.dependency_overrides[get_vault] = lambda: FakeVault()
+
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -207,22 +223,17 @@ def test_sftp_connection_failures(client):
     assert response.status_code == 200
     assert response.json()["success"] is False
 
-    from unittest.mock import patch
-
-    with patch(
-        "api.adapters.vault.vault.retrieve_private_key", side_effect=Exception("Vault error")
-    ):
-        response = client.post(
-            "/api/v1/trading-partners/sftp/test",
-            json={
-                "host": "sftp.example.com",
-                "port": 22,
-                "username": "user",
-                "credentials_vault_ref": "secret_key_ref",
-            },
-        )
-        assert response.status_code == 200
-        assert response.json()["success"] is False
+    response = client.post(
+        "/api/v1/trading-partners/sftp/test",
+        json={
+            "host": "sftp.example.com",
+            "port": 22,
+            "username": "user",
+            "credentials_vault_ref": "vault-error-ref",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is False
 
 
 def test_existing_sftp_connection_failures(client, fake_uow):
@@ -278,22 +289,19 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     # Vault error for existing partner with vault ref instead of password
     client.put(
         f"/api/v1/trading-partners/sftp/{p_id}",
-        json={"name": "updated", "credentials_vault_ref": "my_ref", "password": None},
+        json={"name": "updated", "credentials_vault_ref": "vault-error-ref", "password": None},
     )
-    with patch(
-        "api.adapters.vault.vault.retrieve_private_key", side_effect=Exception("Vault error")
-    ):
-        resp = client.post(
-            f"/api/v1/trading-partners/{p_id}/sftp/test",
-            json={
-                "host": "sftp.example.com",
-                "port": 22,
-                "username": "user",
-                "credentials_vault_ref": "my_ref",
-            },
-        )
-        assert resp.status_code == 200
-        assert resp.json()["success"] is False
+    resp = client.post(
+        f"/api/v1/trading-partners/{p_id}/sftp/test",
+        json={
+            "host": "sftp.example.com",
+            "port": 22,
+            "username": "user",
+            "credentials_vault_ref": "vault-error-ref",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is False
 
     # Value Error and Integrity Error for create and update
     from unittest.mock import patch
