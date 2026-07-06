@@ -50,6 +50,18 @@ function EdiToolPage() {
     setIsDragging(false);
   };
 
+  const applyDetectedPayload = (text: string) => {
+    try {
+      JSON.parse(text);
+      setInputFormat('JSON');
+      setOutputFormat('EDI');
+    } catch {
+      setInputFormat('EDI');
+      setOutputFormat('JSON');
+    }
+    setInputPayload(text);
+  };
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -57,18 +69,7 @@ function EdiToolPage() {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       const text = await file.text();
-
-      // Auto-detect JSON and switch modes
-      try {
-        JSON.parse(text);
-        setInputFormat('JSON');
-        setOutputFormat('EDI');
-      } catch {
-        setInputFormat('EDI');
-        setOutputFormat('JSON');
-      }
-
-      setInputPayload(text);
+      applyDetectedPayload(text);
     }
   };
 
@@ -76,18 +77,7 @@ function EdiToolPage() {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       const text = await file.text();
-
-      // Auto-detect JSON and switch modes
-      try {
-        JSON.parse(text);
-        setInputFormat('JSON');
-        setOutputFormat('EDI');
-      } catch {
-        setInputFormat('EDI');
-        setOutputFormat('JSON');
-      }
-
-      setInputPayload(text);
+      applyDetectedPayload(text);
       e.target.value = ''; // Reset input so same file can be uploaded again
     }
   };
@@ -175,7 +165,15 @@ function EdiToolPage() {
         setOutputResult('Valid format.');
       }
     },
-    onError: (error: any) => {
+    onError: (error: any, variables: any) => {
+      const currentAction = inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI';
+      if (
+        variables.payload !== debouncedPayload ||
+        variables.action !== currentAction
+      ) {
+        return; // Ignore stale error responses
+      }
+
       setValidationErrors([]);
       setIsValid(false);
 

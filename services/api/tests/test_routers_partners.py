@@ -287,10 +287,11 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.json()["success"] is False
 
     # Vault error for existing partner with vault ref instead of password
-    client.put(
+    put_resp = client.put(
         f"/api/v1/trading-partners/sftp/{p_id}",
         json={"name": "updated", "credentials_vault_ref": "vault-error-ref", "password": None},
     )
+    assert put_resp.status_code == 200
     resp = client.post(
         f"/api/v1/trading-partners/{p_id}/sftp/test",
         json={
