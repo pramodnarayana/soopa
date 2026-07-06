@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from transformer.domain.models import ParsedEdiPayload
+from transformer.domain.models import JsonDict, ParsedEdiPayload
 
 
 class EDITranslatorPort(Protocol):
@@ -16,5 +16,20 @@ class EDITranslatorPort(Protocol):
         Raises:
             TranslationError: If the EDI engine fails to parse the structure.
             ComplianceError: If the document violates business compliance rules.
+        """
+        ...
+
+    def get_raw_ast(self, raw_edi: bytes) -> tuple[JsonDict, list[str]]:
+        """
+        Returns the raw AST dictionary and any validation errors without creating a domain model.
+        """
+        ...
+
+    def serialize_to_edi(self, ast_dict: JsonDict, standard: str = "x12") -> tuple[str, list[str]]:
+        """
+        Serializes a JSON AST back into raw EDI format.
+
+        Returns:
+            A tuple of (generated_edi_string, list_of_errors).
         """
         ...

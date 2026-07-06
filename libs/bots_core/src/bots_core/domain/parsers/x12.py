@@ -44,10 +44,16 @@ class x12(var):
         finally:
             self.ta_info["strip_value"] = strip_value
 
-    @staticmethod
-    def _manipulatemessagetype(messagetype, inode):
+    def _manipulatemessagetype(self, messagetype, inode):
         """X12 also needs the GS08 field to identify the correct messagetype (e.g. 850 + 004010)."""
-        return messagetype + inode.record.get("GS08", "")
+        version = inode.record.get("GS08", "")
+        if not version:
+            isa_version = self.ta_info.get("version", "")
+            if len(isa_version) == 5:
+                version = isa_version + "0"
+            else:
+                version = isa_version
+        return messagetype + version
 
     def _sniff(self):
         """
@@ -259,4 +265,11 @@ class x12_writer(Outmessage):
 
     def _manipulatemessagetype(self, messagetype, inode):
         """X12 needs version to identify correct messagetype (e.g. 850 + 004010)."""
-        return messagetype + inode.record.get("GS08", "")
+        version = inode.record.get("GS08", "")
+        if not version:
+            isa_version = self.ta_info.get("version", "")
+            if len(isa_version) == 5:
+                version = isa_version + "0"
+            else:
+                version = isa_version
+        return messagetype + version

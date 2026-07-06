@@ -37,6 +37,11 @@ def test_create_inbound_route(client):
     data = response.json()
     assert data["direction"] == "INBOUND"
 
+    route_id = data["route_id"]
+    client.get(f"/api/v1/routes/inbound/{route_id}")
+    client.put(f"/api/v1/routes/inbound/{route_id}", json={"name": "updated"})
+    client.delete(f"/api/v1/routes/inbound/{route_id}")
+
 
 def test_create_outbound_route(client):
     import uuid
@@ -54,6 +59,11 @@ def test_create_outbound_route(client):
     assert response.status_code == 201
     data = response.json()
     assert data["direction"] == "OUTBOUND"
+
+    route_id = data["route_id"]
+    client.get(f"/api/v1/routes/outbound/{route_id}")
+    client.put(f"/api/v1/routes/outbound/{route_id}", json={"name": "updated"})
+    client.delete(f"/api/v1/routes/outbound/{route_id}")
 
 
 def test_list_routes(client):

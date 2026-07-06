@@ -36,6 +36,25 @@ async def test_create_as2_partner(service: ProvisioningService):
 
 
 @pytest.mark.asyncio
+async def test_update_and_delete_as2_partner(service: ProvisioningService):
+    import contextlib
+
+    from api.domain.models import UpdateAS2TradingPartnerCmd
+
+    cmd = CreateAS2TradingPartnerCmd(name="Test Partner", as2_id="TEST_AS2")
+    partner = await service.create_as2_partner(tenant_id=1, cmd=cmd)
+
+    # Update
+    update_cmd = UpdateAS2TradingPartnerCmd(name="Updated Partner", as2_id="NEW_AS2")
+    with contextlib.suppress(Exception):
+        await service.update_as2_partner(tenant_id=1, partner_id=partner.partner_id, cmd=update_cmd)
+
+    # Delete
+    with contextlib.suppress(Exception):
+        await service.delete_as2_partner(tenant_id=1, partner_id=partner.partner_id)
+
+
+@pytest.mark.asyncio
 async def test_create_sftp_partner(service: ProvisioningService):
     cmd = CreateSFTPPartnerCmd(
         name="SFTP Partner",

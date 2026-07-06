@@ -1,0 +1,169 @@
+{
+  "segments": {
+    "UNB": {
+      "info": "Interchange Header",
+      "elements": []
+    },
+    "UNH": {
+      "info": "Message Header",
+      "elements": []
+    },
+    "BGM": {
+      "info": "Beginning of Message",
+      "elements": []
+    },
+    "DTM": {
+      "info": "Date/Time/Period",
+      "elements": []
+    },
+    "NAD": {
+      "info": "Name and Address",
+      "elements": []
+    },
+    "LIN": {
+      "info": "Line Item",
+      "elements": []
+    },
+    "PIA": {
+      "info": "Additional Product Id",
+      "elements": []
+    },
+    "IMD": {
+      "info": "Item Description",
+      "elements": []
+    },
+    "QTY": {
+      "info": "Quantity",
+      "elements": []
+    },
+    "MOA": {
+      "info": "Monetary Amount",
+      "elements": []
+    },
+    "PRI": {
+      "info": "Price Details",
+      "elements": []
+    },
+    "TAX": {
+      "info": "Duty/Tax/Fee Details",
+      "elements": []
+    },
+    "ALC": {
+      "info": "Allowance or Charge",
+      "elements": []
+    },
+    "UNS": {
+      "info": "Section Control",
+      "elements": []
+    },
+    "CNT": {
+      "info": "Control Total",
+      "elements": []
+    },
+    "UNT": {
+      "info": "Message Trailer",
+      "elements": []
+    },
+    "UNZ": {
+      "info": "Interchange Trailer",
+      "elements": []
+    },
+    "RFF": {
+      "info": "Reference",
+      "elements": []
+    },
+    "CUX": {
+      "info": "Currencies",
+      "elements": []
+    },
+    "PAT": {
+      "info": "Payment Terms Basis",
+      "elements": []
+    },
+    "LOC": {
+      "info": "Place/Location Identification",
+      "elements": []
+    },
+    "MEA": {
+      "info": "Measurements",
+      "elements": []
+    },
+    "TDT": {
+      "info": "Details of Transport",
+      "elements": []
+    },
+    "TOD": {
+      "info": "Terms of Delivery or Transport",
+      "elements": []
+    },
+    "FTX": {
+      "info": "Free Text",
+      "elements": []
+    },
+    "PAC": {
+      "info": "Package",
+      "elements": []
+    },
+    "PCI": {
+      "info": "Package Identification",
+      "elements": []
+    },
+    "GIN": {
+      "info": "Goods Identity Number",
+      "elements": []
+    },
+    "EQD": {
+      "info": "Equipment Details",
+      "elements": []
+    },
+    "CTA": {
+      "info": "Contact Information",
+      "elements": []
+    },
+    "COM": {
+      "info": "Communication Contact",
+      "elements": []
+    },
+    "DOC": {
+      "info": "Document/Message Details",
+      "elements": []
+    },
+    "FII": {
+      "info": "Financial Institution Information",
+      "elements": []
+    },
+    "PCD": {
+      "info": "Percentage Details",
+      "elements": []
+    },
+    "QVR": {
+      "info": "Quantity Variances",
+      "elements": []
+    },
+    "AJT": {
+      "info": "Adjustment Details",
+      "elements": []
+    },
+    "INP": {
+      "info": "Parties to Instruction",
+      "elements": []
+    },
+    "RTE": {
+      "info": "Rate Details",
+      "elements": []
+    },
+    "EQA": {
+      "info": "Attached Equipment",
+      "elements": []
+    },
+    "SCC": {
+      "info": "Scheduling Conditions",
+      "elements": []
+    },
+    "CPS": {
+      "info": "Consignment Packing Sequence",
+      "elements": []
+    }
+  },
+  "elements": {}
+}

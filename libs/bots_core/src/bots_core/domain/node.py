@@ -26,17 +26,15 @@ class Node:
     # slots: python optimalisation to preserve memory. Disadv.: no dynamic attr in this class
     # in tests: for normal translations less memory and faster;
     # no effect fo one-on-one translations.
-    __slots__ = ("record", "children", "_queries", "linpos_info", "structure")
+    __slots__ = ("record", "children", "_queries", "linpos_info", "structure", "is_array")
 
-    def __init__(self, record=None, linpos_info=None):
-        if record:
-            record.setdefault("BOTSIDnr", "1")
-        # record is a dict with fields
+    def __init__(self, record: dict = None, linpos_info: tuple = None, is_array: bool = True):
         self.record = record
         self.children = []
-        self.linpos_info = linpos_info
         self._queries = None
+        self.linpos_info = linpos_info
         self.structure = None
+        self.is_array = is_array
 
     def linpos(self) -> str:
         """Return formated self.linpos_info"""
@@ -51,22 +49,113 @@ class Node:
     def to_dict(self) -> dict:
         """Serialize the Node and its children into a pure Python dictionary."""
         result = {}
+        seg_id = self.record.get("BOTSID") if self.record else None
+
         if self.record:
-            result["record"] = self.record.copy()
-        if self._queries:
-            result["queries"] = self._queries.copy()
+            segment_data = self.record.copy()
+            if "BOTSIDnr" in segment_data:
+                del segment_data["BOTSIDnr"]  # Completely remove occurrence key
+            if "BOTSID" in segment_data:
+                del segment_data["BOTSID"]
+
+            # If it's a leaf node (and not an envelope header), output raw unwrapped data
+            if not self.children and seg_id not in ("ISA", "UNB", "GS", "UNG", "ST", "UNH"):
+                segment_data["_is_array"] = self.is_array
+                return segment_data
+
+            # Hierarchical node: wrap it in its segment_id key
+            result[seg_id] = segment_data
+
+        result["_is_array"] = self.is_array
+
         if self.children:
-            result["children"] = [child.to_dict() for child in self.children]
+            grouped_children = {}
+            for child in self.children:
+                child_dict = child.to_dict()
+                child_seg_id = child.record.get("BOTSID") if child.record else "UNKNOWN"
+
+                if child_seg_id in ("ISA", "UNB"):
+                    key = f"interchange_{child_seg_id}"
+                elif child_seg_id in ("GS", "UNG"):
+                    key = f"group_{child_seg_id}"
+                elif child_seg_id in ("ST", "UNH"):
+                    key = f"transaction_{child_seg_id}"
+                elif child.children:
+                    key = f"loop_{child_seg_id}"
+                else:
+                    key = child_seg_id
+
+                grouped_children.setdefault(key, []).append(child_dict)
+
+            for key, child_list in grouped_children.items():
+                is_array = child_list[0].pop("_is_array", True)
+                for c in child_list[1:]:
+                    if "_is_array" in c:
+                        c.pop("_is_array")
+
+                if not is_array and len(child_list) == 1:
+                    result[key] = child_list[0]
+                else:
+                    result[key] = child_list
+
+        if self.record is None and "_is_array" in result:
+            del result["_is_array"]
+
         return result
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Node":
+    def from_dict(cls, data: dict, fallback_seg_id: str = None) -> "Node":
         """Deserialize a Node tree from a pure Python dictionary."""
-        node = cls(record=data.get("record", {}).copy())
-        if "queries" in data:
-            node._queries = data["queries"].copy()
-        for child_data in data.get("children", []):
-            node.append(cls.from_dict(child_data))
+        record_data = {}
+        children_lists = []
+        is_unwrapped_leaf = True
+
+        # Determine the expected key for our own segment data
+        own_key = fallback_seg_id
+        if own_key:
+            if own_key.startswith("interchange_"):
+                own_key = own_key[12:]
+            elif own_key.startswith("group_"):
+                own_key = own_key[6:]
+            elif own_key.startswith("transaction_"):
+                own_key = own_key[12:]
+            elif own_key.startswith("loop_"):
+                own_key = own_key[5:]
+            elif own_key.startswith("segment_"):
+                own_key = own_key[8:]
+
+        for key, value in data.items():
+            if isinstance(value, list):
+                is_unwrapped_leaf = False
+                children_lists.append((key, value))
+            elif isinstance(value, dict):
+                is_unwrapped_leaf = False
+                if key == own_key or (
+                    not own_key
+                    and not key.startswith("interchange_")
+                    and not key.startswith("group_")
+                    and not key.startswith("transaction_")
+                    and not key.startswith("loop_")
+                ):
+                    # It's our own record!
+                    record_data = value.copy()
+                    record_data["BOTSID"] = key
+                    record_data["BOTSIDnr"] = "1"  # Default to 1 since we removed occurrence
+                else:
+                    # It's an unwrapped single child node!
+                    children_lists.append((key, [value]))
+
+        if is_unwrapped_leaf and fallback_seg_id:
+            record_data = data.copy()
+            record_data["BOTSID"] = fallback_seg_id
+            record_data["BOTSIDnr"] = "1"  # Default to 1
+
+        node = cls(record=record_data if record_data else None)
+
+        for child_list_key, child_list in children_lists:
+            for child_data in child_list:
+                node.append(cls.from_dict(child_data, fallback_seg_id=child_list_key))
+
         return node
 
     # ********************************************************

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
 from api.dependencies import get_current_user_profile
-from api.routers import routes, trading_partners, webhooks
+from api.routers import edi_tools, routes, trading_partners, webhooks
 from api.routers.trading_partners import platform
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,7 @@ app.include_router(trading_partners.router)
 app.include_router(webhooks.router)
 app.include_router(platform.router)
 app.include_router(routes.router)
+app.include_router(edi_tools.router)
 
 
 @app.get("/api/me", tags=["Identity"])

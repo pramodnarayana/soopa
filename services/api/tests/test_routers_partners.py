@@ -13,10 +13,26 @@ def fake_uow():
 
 @pytest.fixture
 def client(fake_uow):
+    from api.dependencies import get_current_user_profile
+    from identity.dependencies import get_raw_jwt
+
     app.dependency_overrides[get_uow] = lambda: fake_uow
     app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
     app.dependency_overrides[get_current_tenant_id] = lambda: 1
     app.dependency_overrides[require_platform_admin] = lambda: 0
+    app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "user"}
+    app.dependency_overrides[get_current_user_profile] = lambda: {
+        "permissions": ["certificates:export_private"]
+    }
+
+    from api.dependencies import get_sftp_tester
+
+    class FakeSftpTester:
+        async def test_connection(self, **kwargs):
+            return True, "Success"
+
+    app.dependency_overrides[get_sftp_tester] = lambda: FakeSftpTester()
+
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -38,11 +54,49 @@ def test_list_platform_as2_partners(client, fake_uow):
     # Ensure there's a partner first
     client.post(
         "/api/v1/platform/trading-partners/as2/trading-partners",
-        json={"name": "Test Global Partner", "as2_id": "GLOBAL_AS2"},
+        json={"name": "Test Global Partner", "as2_id": "GLOBAL_AS2", "is_local": True},
     )
     response = client.get("/api/v1/platform/trading-partners/as2/trading-partners")
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+    # Add coverage for certificate export
+    p_id = response.json()[0]["id"]
+    client.get(f"/api/v1/trading-partners/as2/trading-partners/{p_id}/certificates/export")
+
+
+def test_get_platform_config(client, fake_uow):
+    response = client.get("/api/v1/platform/trading-partners/config")
+    assert response.status_code == 200
+
+
+def test_create_platform_as2_partner_duplicate(client, fake_uow):
+    client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "First", "as2_id": "DUP_AS2"},
+    )
+    resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Second", "as2_id": "DUP_AS2"},
+    )
+    assert resp.status_code == 400
+
+
+def test_update_platform_as2_partner(client, fake_uow):
+    resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Temp", "as2_id": "TEMP_AS2"},
+    )
+    p_id = resp.json()["id"]
+
+    resp = client.put(
+        f"/api/v1/platform/trading-partners/as2/trading-partners/{p_id}",
+        json={"name": "Temp Updated"},
+    )
+    assert resp.status_code == 200
+
+    resp = client.delete(f"/api/v1/platform/trading-partners/as2/trading-partners/{p_id}")
+    assert resp.status_code == 204
 
 
 def test_create_platform_as2_partnership(client, fake_uow):
@@ -70,28 +124,239 @@ def test_list_platform_as2_partnerships(client):
     assert len(response.json()) == 1
 
 
+def test_update_platform_as2_partnership(client, fake_uow):
+    import uuid
+
+    ps_id = client.post(
+        "/api/v1/platform/trading-partners/as2/partnerships",
+        json={
+            "name": "Temp Partnership",
+            "local_partner_id": str(uuid.uuid4()),
+            "remote_partner_id": str(uuid.uuid4()),
+        },
+    ).json()["id"]
+
+    resp = client.put(
+        f"/api/v1/platform/trading-partners/as2/partnerships/{ps_id}",
+        json={"name": "Updated Temp Partnership"},
+    )
+    assert resp.status_code == 200
+
+
 def test_create_tenant_sftp_partner(client, fake_uow):
     response = client.post(
         "/api/v1/trading-partners/sftp",
         json={
-            "name": "My SFTP",
-            "host": "sftp.test",
+            "name": "My SFTP Partner",
+            "host": "sftp.example.com",
+            "port": 22,
             "username": "user",
             "password": "secretpassword",
+            "inbound_remote_path": "/inbound",
+            "outbound_remote_path": "/outbound",
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["type"] == "SFTP"
 
+    # Coverage for unimplemented fake paths
+    p_id = data["id"]
+    client.get(f"/api/v1/trading-partners/sftp/{p_id}")
+    client.put(f"/api/v1/trading-partners/sftp/{p_id}", json={"name": "updated"})
+    client.delete(f"/api/v1/trading-partners/sftp/{p_id}")
+
+    # Coverage for test existing partner endpoint
+    from unittest.mock import patch
+
+    with patch("database.encryption.db_encryption.decrypt", return_value="secretpassword"):
+        client.post(
+            f"/api/v1/trading-partners/{p_id}/sftp/test",
+            json={
+                "host": "sftp.example.com",
+                "port": 22,
+                "username": "user",
+            },
+        )
+
+    # Coverage for test endpoint
+    client.post(
+        "/api/v1/trading-partners/sftp/test",
+        json={
+            "host": "sftp.example.com",
+            "port": 22,
+            "username": "user",
+            "password": "secretpassword",
+        },
+    )
+
+
+def test_sftp_connection_failures(client):
+    # Missing password and vault ref
+    response = client.post(
+        "/api/v1/trading-partners/sftp/test",
+        json={
+            "host": "sftp.example.com",
+            "port": 22,
+            "username": "user",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is False
+
+    from unittest.mock import patch
+
+    with patch(
+        "api.adapters.vault.vault.retrieve_private_key", side_effect=Exception("Vault error")
+    ):
+        response = client.post(
+            "/api/v1/trading-partners/sftp/test",
+            json={
+                "host": "sftp.example.com",
+                "port": 22,
+                "username": "user",
+                "credentials_vault_ref": "secret_key_ref",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["success"] is False
+
+
+def test_existing_sftp_connection_failures(client, fake_uow):
+    from unittest.mock import patch
+    from uuid import uuid4
+
+    # Not found handling for operations
+    random_id = str(uuid4())
+    resp = client.put(
+        f"/api/v1/trading-partners/sftp/{random_id}",
+        json={"name": "x", "host": "h", "port": 22, "username": "u"},
+    )
+    assert resp.status_code == 400
+
+    from unittest.mock import AsyncMock
+
+    fake_uow.control_plane.delete_sftp_partner = AsyncMock(side_effect=ValueError("Not found"))
+    resp = client.delete(f"/api/v1/trading-partners/sftp/{random_id}")
+    assert resp.status_code == 400
+
+    fake_uow.control_plane.delete_sftp_partner = AsyncMock(side_effect=Exception("DB Error"))
+    resp = client.delete(f"/api/v1/trading-partners/sftp/{random_id}")
+    assert resp.status_code == 500
+
+    # Setup a partner
+    response = client.post(
+        "/api/v1/trading-partners/sftp",
+        json={
+            "name": "My SFTP Partner 2",
+            "host": "sftp.example.com",
+            "port": 22,
+            "username": "user",
+            "password": "secretpassword",
+            "inbound_remote_path": "/inbound",
+            "outbound_remote_path": "/outbound",
+        },
+    )
+    p_id = response.json()["id"]
+
+    # Test decrypt error
+    with patch("database.encryption.db_encryption.decrypt", side_effect=Exception("Decrypt error")):
+        resp = client.post(
+            f"/api/v1/trading-partners/{p_id}/sftp/test",
+            json={
+                "host": "sftp.example.com",
+                "port": 22,
+                "username": "user",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is False
+
+    # Vault error for existing partner with vault ref instead of password
+    client.put(
+        f"/api/v1/trading-partners/sftp/{p_id}",
+        json={"name": "updated", "credentials_vault_ref": "my_ref", "password": None},
+    )
+    with patch(
+        "api.adapters.vault.vault.retrieve_private_key", side_effect=Exception("Vault error")
+    ):
+        resp = client.post(
+            f"/api/v1/trading-partners/{p_id}/sftp/test",
+            json={
+                "host": "sftp.example.com",
+                "port": 22,
+                "username": "user",
+                "credentials_vault_ref": "my_ref",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is False
+
+    # Value Error and Integrity Error for create and update
+    from unittest.mock import patch
+
+    from sqlalchemy.exc import IntegrityError
+
+    with patch(
+        "api.core.provisioning.ProvisioningService.create_sftp_partner",
+        side_effect=ValueError("Bad value"),
+    ):
+        resp = client.post(
+            "/api/v1/trading-partners/sftp",
+            json={"name": "Error Partner", "host": "h", "port": 22, "username": "u"},
+        )
+        assert resp.status_code == 400
+    with patch(
+        "api.core.provisioning.ProvisioningService.create_sftp_partner",
+        side_effect=IntegrityError("x", "y", "z"),
+    ):
+        resp = client.post(
+            "/api/v1/trading-partners/sftp",
+            json={"name": "Error Partner 2", "host": "h", "port": 22, "username": "u"},
+        )
+        assert resp.status_code == 400
+
+    with patch(
+        "api.core.provisioning.ProvisioningService.update_sftp_partner",
+        side_effect=ValueError("Bad value"),
+    ):
+        resp = client.put(
+            f"/api/v1/trading-partners/sftp/{p_id}",
+            json={"name": "x", "host": "h", "port": 22, "username": "u"},
+        )
+        assert resp.status_code == 400
+    with patch(
+        "api.core.provisioning.ProvisioningService.update_sftp_partner",
+        side_effect=IntegrityError("x", "y", "z"),
+    ):
+        resp = client.put(
+            f"/api/v1/trading-partners/sftp/{p_id}",
+            json={"name": "x", "host": "h", "port": 22, "username": "u"},
+        )
+        assert resp.status_code == 400
+
+    # Delete integrity error
+    fake_uow.control_plane.delete_sftp_partner = AsyncMock(
+        side_effect=IntegrityError("x", "y", "z")
+    )
+    resp = client.delete(f"/api/v1/trading-partners/sftp/{p_id}")
+    assert resp.status_code == 400
+
 
 def test_create_tenant_webhook_partner(client, fake_uow):
     response = client.post(
-        "/api/v1/webhooks/webhook", json={"name": "My Webhook", "url": "https://example.com"}
+        "/api/v1/webhooks/webhook",
+        json={"name": "My Webhook", "url": "https://example.com/webhook"},
     )
     assert response.status_code == 201
     data = response.json()
     assert data["type"] == "WEBHOOK"
+
+    # Coverage for unimplemented fake paths
+    p_id = data["id"]
+    client.get(f"/api/v1/webhooks/webhook/{p_id}")
+    client.put(f"/api/v1/webhooks/webhook/{p_id}", json={"name": "updated"})
+    client.delete(f"/api/v1/webhooks/webhook/{p_id}")
 
 
 def test_list_tenant_partners(client, fake_uow):

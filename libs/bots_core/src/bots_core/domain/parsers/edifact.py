@@ -46,9 +46,17 @@ class edifact(var):
         Read content of EDIFACT file into memory as binary.
         Charset is determined in _sniff(), then file is decoded.
         """
-        logger.debug('Read edi file "%(filename)s".', self.ta_info)
-        # read as binary
-        self.rawinput = botslib.readdata_bin(filename=self.ta_info["filename"])
+        if "raw_edi" in self.ta_info:
+            logger.debug("Read edi from raw_edi in memory (binary for edifact).", self.ta_info)
+            data = self.ta_info["raw_edi"]
+            if isinstance(data, str):
+                self.rawinput = data.encode("utf-8")
+            else:
+                self.rawinput = data
+        else:
+            logger.debug('Read edi file "%(filename)s".', self.ta_info)
+            # read as binary
+            self.rawinput = botslib.readdata_bin(filename=self.ta_info["filename"])
 
     def _sniff(self):
         """

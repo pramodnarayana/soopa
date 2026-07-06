@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
+JsonDict = dict[str, object]
+
 
 class TransactionSet(BaseModel):
     """Represents a single EDI document/transaction set (e.g., an 850 or 810)."""
@@ -10,7 +12,7 @@ class TransactionSet(BaseModel):
         ..., description="The EDI transaction type, e.g., '850', '810', 'ORDERS'"
     )
     control_number: str = Field(..., description="The transaction set control number")
-    data: dict[str, object] = Field(
+    data: JsonDict = Field(
         ..., description="The hierarchical JSON representation of the transaction"
     )
 

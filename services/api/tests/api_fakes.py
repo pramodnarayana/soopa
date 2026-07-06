@@ -28,6 +28,11 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
     async def create_as2_identity(
         self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
     ) -> uuid.UUID:
+        for p in self.partners:
+            if p["tenant_id"] == tenant_id and p["cmd"].as2_id == cmd.as2_id:
+                from sqlalchemy.exc import IntegrityError
+
+                raise IntegrityError("mock error", params={}, orig=Exception("mock"))
         p_id = uuid.uuid4()
         self.partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
@@ -197,6 +202,8 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
                     outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
                     host_key = getattr(p["cmd"], "host_key", None)
+                    password_encrypted = b"encrypted"
+                    credentials_vault_ref = None
 
                 return MockPartner()
         return None
