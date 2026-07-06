@@ -1,4 +1,5 @@
 from bots_core.infrastructure.config.botsconfig import *
+from .records005030 import recorddefs
 
 syntax = {
     "version": "00503",

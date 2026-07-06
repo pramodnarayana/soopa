@@ -1,4 +1,5 @@
 from bots_core.infrastructure.config.botsconfig import *
+from .records004052 import recorddefs
 
 syntax = {
     "version": "00403",  # version of ISA to send

@@ -1,3 +1,4 @@
+from .records005010 import recorddefs
 from bots_core.infrastructure.config.botsconfig import ID, LEVEL, MAX, MIN
 
 syntax = {
