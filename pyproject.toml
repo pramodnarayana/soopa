@@ -49,7 +49,7 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core", "libs/edi_grammar"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -59,6 +59,7 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["libs/edi_grammar/src/edi_grammar/x12", "libs/edi_grammar/src/edi_grammar/edifact"]
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
