@@ -201,8 +201,10 @@ async def test_save_to_data_plane_success(service):
     mock_result.first.return_value = (mock_tenant, mock_shard)
     service.global_session.execute = AsyncMock(return_value=mock_result)
 
+    mock_session = AsyncMock()
+
     async def mock_async_gen():
-        yield AsyncMock()
+        yield mock_session
 
     service.db_router.get_tenant_session = MagicMock(return_value=mock_async_gen())
 
@@ -222,3 +224,5 @@ async def test_save_to_data_plane_success(service):
         res = await service._save_to_data_plane(mock_partnership, mock_as2_msg, b"EDI")
         assert res == "msg-1"
         mock_repo.create_edi_message.assert_awaited_once()
+        mock_repo.create_outbox_event.assert_awaited_once()
+        mock_session.commit.assert_awaited_once()

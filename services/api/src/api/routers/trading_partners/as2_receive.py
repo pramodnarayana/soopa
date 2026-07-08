@@ -46,11 +46,21 @@ async def receive_as2_message(
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
             from as2_core import build_mdn
 
+            error_msg = str(e).lower()
+            if "decrypt" in error_msg:
+                modifier = "error: decryption-failed"
+            elif "authentic" in error_msg or "sign" in error_msg or "cert" in error_msg:
+                modifier = "error: authentication-failed"
+            elif "integr" in error_msg or "mic" in error_msg:
+                modifier = "error: integrity-check-failed"
+            else:
+                modifier = "error: unexpected-processing-error"
+
             mdn = build_mdn(
                 as2_to=as2_to_hdr,
                 as2_from=as2_from_hdr,
                 message_id=msg_id_hdr,
-                disposition=f"automatic-action/MDN-sent-automatically; processed/error: {e}",
+                disposition=f"automatic-action/MDN-sent-automatically; processed/{modifier}",
             )
             return Response(
                 content=mdn.body,

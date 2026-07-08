@@ -72,12 +72,34 @@ class As2ReceiveService:
 
         # 7. Generate MDN
         disposition = "automatic-action/MDN-sent-automatically; processed"
+
+        sign_fn = None
+        requires_signed = any(
+            k.lower() == "disposition-notification-options" for k in as2_msg.headers
+        )
+        if requires_signed:
+            local_priv, local_cert, _ = self._retrieve_keys(
+                local_partner=partnership.local_partner, remote_partner=partnership.remote_partner
+            )
+            if local_priv and local_cert:
+                import functools
+
+                from security.smime import sign_payload
+
+                sign_fn = functools.partial(
+                    sign_payload,
+                    private_key_pem=local_priv,
+                    public_cert_pem=local_cert,
+                    algorithm=partnership.signature_algorithm or "sha256",
+                )
+
         mdn = build_mdn(
             as2_to=as2_msg.as2_to,
             as2_from=as2_msg.as2_from,
             message_id=as2_msg.message_id,
             disposition=disposition,
             mic=mic,
+            sign_fn=sign_fn,
         )
 
         return mdn.body, mdn.headers
@@ -188,7 +210,11 @@ class As2ReceiveService:
             )
             if decrypted:
                 return decrypted
-        except Exception:
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Initial decryption attempt failed (will try fallback): {e}")
             pass
 
         # Fallback to prepending headers for openssl parsing

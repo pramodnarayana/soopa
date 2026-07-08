@@ -33,7 +33,7 @@ def test_as2_receive_value_error_generates_negative_mdn(client):
 
         assert response.status_code == 200
         assert "multipart/report" in response.headers["content-type"]
-        assert b"Test business logic rejection" in response.content
+        assert b"unexpected-processing-error" in response.content
 
 
 def test_as2_receive_generic_exception_generates_negative_mdn(client):

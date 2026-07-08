@@ -72,13 +72,7 @@ class VaultAdapter:
         if not isinstance(inner_data, dict):
             raise TypeError("Expected Vault inner 'data' to be a dictionary")
 
-        if field and field in inner_data:
-            pem_str = inner_data[field]
-        elif "private_key_pem" in inner_data:
-            pem_str = inner_data["private_key_pem"]
-        else:
-            # Fallback to the first available string value
-            pem_str = next(iter(inner_data.values()), None)
+        pem_str = inner_data.get(field) if field else next(iter(inner_data.values()), None)
 
         if not isinstance(pem_str, str):
             raise TypeError("Expected secret value to be a string")

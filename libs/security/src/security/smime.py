@@ -154,7 +154,10 @@ def sign_payload(
         "sha384": hashes.SHA384(),
         "sha512": hashes.SHA512(),
     }
-    hash_alg = alg_map.get(algorithm.lower(), hashes.SHA256())
+    alg_key = algorithm.lower()
+    if alg_key not in alg_map:
+        raise ValueError(f"Unsupported signature algorithm: {algorithm}")
+    hash_alg = alg_map[alg_key]
 
     builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
     builder = builder.add_signer(cert, private_key, hash_algorithm=hash_alg)  # type: ignore[arg-type]

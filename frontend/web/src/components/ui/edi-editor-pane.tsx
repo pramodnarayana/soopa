@@ -15,6 +15,7 @@ export interface EdiEditorPaneProps {
 
 export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, cornerPlaceholder, className = '', acceptedFileExtensions = ".edi,.json,.txt,.x12" }: EdiEditorPaneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -27,8 +28,17 @@ export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, 
   };
 
   const applyFile = async (file: File) => {
-    const text = await file.text();
-    onChange(text);
+    setError(null);
+    if (file.size > 1024 * 1024) {
+      setError('File size exceeds 1MB limit. Please upload a smaller file.');
+      return;
+    }
+    try {
+      const text = await file.text();
+      onChange(text);
+    } catch (err) {
+      setError(`Failed to read file: ${(err as Error).message}`);
+    }
   };
 
   const handleDrop = async (e: React.DragEvent) => {
@@ -57,6 +67,14 @@ export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, 
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {error && (
+        <div className="absolute top-2 right-2 left-2 z-30 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-md shadow-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 font-bold ml-4">
+            ×
+          </button>
+        </div>
+      )}
       {isDragging && (
         <div className="absolute inset-0 bg-indigo-50/90 z-20 flex flex-col items-center justify-center border-2 border-indigo-400 border-dashed m-2 rounded-lg backdrop-blur-sm transition-all duration-200">
           <UploadCloud className="w-10 h-10 text-indigo-500 mb-3 animate-bounce" />

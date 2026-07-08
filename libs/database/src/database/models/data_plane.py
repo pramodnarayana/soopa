@@ -35,7 +35,7 @@ class SanitizedText(TypeDecorator):  # type: ignore
         if value is None:
             return value
         if isinstance(value, bytes):
-            return value.replace(b"\x00", b"")
+            return value.replace(b"\x00", b"").decode("utf-8", errors="replace")
         elif not isinstance(value, str):
             value = str(value)
         return value.replace("\x00", "")
