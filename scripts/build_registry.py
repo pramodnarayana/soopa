@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def build_registry():
+def build_registry() -> None:
     base_dir = Path(__file__).parent.parent / "libs" / "edi_grammar" / "src" / "edi_grammar"
     registry = {}
 

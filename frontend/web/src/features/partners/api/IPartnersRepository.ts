@@ -27,6 +27,7 @@ export interface IPartnersRepository {
   createPlatformPartnership(payload: CreatePartnershipPayload): Promise<Partnership>;
   updatePlatformPartnership(id: string, payload: UpdatePartnershipPayload): Promise<Partnership>;
   deletePlatformPartnership(id: string): Promise<void>;
+  testAs2PartnershipConnection(id: string, custom_payload?: string): Promise<{ success: boolean; mdn_disposition?: string | null; reason?: string | null; sent_payload?: string | null; raw_mdn?: string | null }>;
 
   // Certificates
   exportCertificates(partnerId: string): Promise<CertificatesExport>;

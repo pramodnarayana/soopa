@@ -243,3 +243,11 @@ export function useTestExistingSftpConnectionMutation() {
       repo.testExistingSftpConnection(id, payload)
   });
 }
+
+export function useTestAs2PartnershipConnectionMutation() {
+  const repo = useRepository();
+  return useMutation({
+    mutationFn: ({ id, custom_payload }: { id: string; custom_payload?: string }) =>
+      repo.testAs2PartnershipConnection(id, custom_payload),
+  });
+}

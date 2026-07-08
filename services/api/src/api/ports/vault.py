@@ -8,9 +8,18 @@ class VaultPort(Protocol):
         """
         ...
 
+    def retrieve_secret(self, vault_ref: str) -> bytes:
+        """
+        Retrieves any secret (private key, certificate, or credential) from Vault.
+        The semantically correct method for generic secret retrieval — use this
+        instead of retrieve_private_key() when fetching public certificates.
+        """
+        ...
+
     def retrieve_private_key(self, vault_ref: str) -> bytes:
         """
         Retrieves a private key from Vault.
+        Delegates to retrieve_secret() — kept for backward compatibility.
         """
         ...
 

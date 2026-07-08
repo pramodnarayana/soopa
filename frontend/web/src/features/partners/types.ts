@@ -45,7 +45,7 @@ export interface Partnership {
   mdn_url?: string;
   encryption_algorithm: string;
   signature_algorithm: string;
-  edi_version?: string | null;
+
   active?: boolean;
 }
 
@@ -95,7 +95,7 @@ export interface CreatePartnershipPayload {
   mdn_type: string;
   encryption_algorithm: string;
   signature_algorithm: string;
-  edi_version?: string;
+
   mdn_url?: string;
 }
 
@@ -117,7 +117,7 @@ export interface UpdatePartnershipPayload {
   mdn_url?: string;
   encryption_algorithm?: string;
   signature_algorithm?: string;
-  edi_version?: string;
+
   advanced_flags?: Record<string, unknown>;
   active?: boolean;
 }

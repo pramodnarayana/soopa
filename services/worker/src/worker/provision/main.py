@@ -122,7 +122,6 @@ async def replicate_tenant_config(
                 encryption_algorithm=global_ps.encryption_algorithm,
                 signature_algorithm=global_ps.signature_algorithm,
                 advanced_flags=global_ps.advanced_flags,
-                edi_version=global_ps.edi_version,
                 active=global_ps.active,
             )
             .on_conflict_do_update(
@@ -136,7 +135,6 @@ async def replicate_tenant_config(
                     "mdn_url": global_ps.mdn_url,
                     "encryption_algorithm": global_ps.encryption_algorithm,
                     "signature_algorithm": global_ps.signature_algorithm,
-                    "edi_version": global_ps.edi_version,
                     "advanced_flags": global_ps.advanced_flags,
                     "active": global_ps.active,
                 },

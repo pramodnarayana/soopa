@@ -34,6 +34,7 @@ from database.models.control_plane import (
     Webhook,
 )
 from database.models.control_plane import Outbox as GlobalOutbox
+from database.models.data_plane import EdiMessage
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +42,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def get_partnership_by_as2_ids(
+        self, as2_from: str, as2_to: str
+    ) -> tuple[Any, Any, Any] | None:
+        from database.repository import PartnershipRepository
+
+        repo = PartnershipRepository(self.session)
+        return await repo.get_partnership_by_as2_ids(as2_from, as2_to)
 
     async def create_as2_identity(self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd) -> UUID:
         partner_id = uuid.uuid4()
@@ -116,7 +125,6 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             mdn_url=cmd.mdn_url,
             encryption_algorithm=cmd.encryption_algorithm,
             signature_algorithm=cmd.signature_algorithm,
-            edi_version=cmd.edi_version,
             active=False,
         )
         self.session.add(record)
@@ -160,8 +168,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 partnership.encryption_algorithm = cmd.encryption_algorithm
             if cmd.signature_algorithm is not UNSET:
                 partnership.signature_algorithm = cmd.signature_algorithm
-            if cmd.edi_version is not UNSET:
-                partnership.edi_version = cmd.edi_version
+
             if cmd.active is not UNSET:
                 partnership.active = cmd.active
         await self.session.flush()
@@ -593,6 +600,30 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
 class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def create_edi_message(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
+        msg = EdiMessage(tenant_id=tenant_id, **payload)
+        self.session.add(msg)
+        await self.session.flush()
+        return msg.id
+
+    async def create_outbox_event(
+        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+    ) -> UUID:
+        from database.models.data_plane import Outbox
+
+        event_id = uuid.uuid4()
+        record = Outbox(
+            id=event_id,
+            tenant_id=tenant_id,
+            idempotency_key=uuid.uuid4(),
+            event_type=event_type,
+            payload=payload,
+            status="PENDING",
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return event_id
 
 
 class SqlAlchemyTenantRepository(TenantRepositoryPort):
