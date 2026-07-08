@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -21,6 +22,39 @@ class TradingPartnerRepository:
             )
         )
         return result.scalar_one_or_none()
+
+
+class PartnershipRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_partnership_by_as2_ids(
+        self, as2_from: str, as2_to: str
+    ) -> tuple[Any, Any, Any] | None:
+        from sqlalchemy import func
+        from sqlalchemy.orm import aliased
+
+        from .models.control_plane import AS2Partnership
+
+        LocalPartner = aliased(AS2Partner)
+        RemotePartner = aliased(AS2Partner)
+
+        stmt = (
+            select(AS2Partnership, LocalPartner, RemotePartner)
+            .join(LocalPartner, AS2Partnership.local_partner_id == LocalPartner.id)
+            .join(RemotePartner, AS2Partnership.remote_partner_id == RemotePartner.id)
+            .where(
+                func.lower(LocalPartner.as2_id) == as2_to.lower(),
+                func.lower(RemotePartner.as2_id) == as2_from.lower(),
+            )
+        )
+
+        result = await self.session.execute(stmt)
+        row = result.first()
+        if not row:
+            return None
+
+        return row[0], row[1], row[2]
 
 
 class EdiMessageRepository:

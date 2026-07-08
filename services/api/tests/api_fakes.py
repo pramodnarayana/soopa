@@ -74,7 +74,8 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     active = p.get("status", "INACTIVE") == "ACTIVE"
                     private_key_vault_ref = None
                     prev_private_key_vault_ref = None
-                    public_cert_pem = None
+                    public_cert_pem = p["cmd"].public_cert_pem
+                    public_cert_vault_ref = p["cmd"].public_cert_vault_ref
                     prev_public_cert_pem = None
 
                 return FakePartner()
@@ -94,7 +95,7 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     mdn_url = p["cmd"].mdn_url
                     encryption_algorithm = p["cmd"].encryption_algorithm
                     signature_algorithm = p["cmd"].signature_algorithm
-                    edi_version = p["cmd"].edi_version
+
                     active = p.get("status", "INACTIVE") == "ACTIVE"
                     private_key_vault_ref = None
                     prev_private_key_vault_ref = None
@@ -382,7 +383,7 @@ class MockSession:
                     self.mdn_url = None
                     self.encryption_algorithm = "AES256"
                     self.signature_algorithm = "SHA256"
-                    self.edi_version = None
+
                     self.active = True
 
             return MockResult([P()])

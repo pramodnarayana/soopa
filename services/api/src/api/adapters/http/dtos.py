@@ -33,9 +33,6 @@ class CreateAS2PartnershipRequest(BaseModel):
     mdn_url: HttpUrl | None = Field(None, description="MDN URL for ASYNC")
     encryption_algorithm: str = Field("AES256", max_length=50, description="Encryption Algorithm")
     signature_algorithm: str = Field("SHA256", max_length=50, description="Signature Algorithm")
-    edi_version: Literal["X12-004010", "X12-005010", "EDIFACT-D96A", "EDIFACT-D01B"] | None = Field(
-        None, description="EDI Version (e.g. X12 5010)"
-    )
     advanced_flags: dict[str, Any] | None = Field(None, description="Advanced OpenAS2 JSON flags")
 
 
@@ -76,6 +73,18 @@ class TestConnectionResponse(BaseModel):
     reason: str | None = None
 
 
+class TestAS2ConnectionRequest(BaseModel):
+    custom_payload: str | None = Field(None, description="Optional custom EDI payload to send")
+
+
+class TestAS2ConnectionResponse(BaseModel):
+    success: bool
+    mdn_disposition: str | None = None
+    reason: str | None = None
+    sent_payload: str | None = None
+    raw_mdn: str | None = None
+
+
 class CreateWebhookRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the Webhook partner")
     url: HttpUrl = Field(..., description="Webhook endpoint URL")
@@ -112,9 +121,6 @@ class UpdateAS2PartnershipRequest(BaseModel):
     mdn_url: HttpUrl | None = Field(None)
     encryption_algorithm: str | None = Field(None, max_length=50)
     signature_algorithm: str | None = Field(None, max_length=50)
-    edi_version: (
-        Literal["X12-004010", "X12-005010", "EDIFACT-D96A", "EDIFACT-D01B", "NONE"] | None
-    ) = Field(None)
     advanced_flags: dict[str, Any] | None = Field(None)
     active: bool | None = Field(None)
 
@@ -280,7 +286,7 @@ class AS2PartnershipResponse(BaseModel):
     mdn_url: str | None = None
     encryption_algorithm: str
     signature_algorithm: str
-    edi_version: str | None = None
+
     status: str
     active: bool = False
 

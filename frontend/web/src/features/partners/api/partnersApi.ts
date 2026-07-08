@@ -103,6 +103,13 @@ class HttpPartnersRepository implements IPartnersRepository {
     });
   }
 
+  testAs2PartnershipConnection(id: string, custom_payload?: string): Promise<{ success: boolean; mdn_disposition?: string | null; reason?: string | null; sent_payload?: string | null; raw_mdn?: string | null }> {
+    return this.request(`/api/v1/platform/trading-partners/as2/partnerships/${id}/test`, {
+      method: 'POST',
+      body: custom_payload ? JSON.stringify({ custom_payload }) : undefined,
+    });
+  }
+
   // ── Certificates ───────────────────────────
   exportCertificates(partnerId: string): Promise<CertificatesExport> {
     return this.request(

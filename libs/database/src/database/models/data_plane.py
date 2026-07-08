@@ -16,8 +16,29 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import func, text
+from sqlalchemy.types import TypeDecorator
 
 from .common import OutboxMixin
+
+
+class SanitizedText(TypeDecorator):  # type: ignore
+    """
+    Enterprise-grade Text type that enforces PostgreSQL compliance
+    by automatically stripping NUL bytes (\\x00) and safely decoding
+    bytes with errors='replace'.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):  # type: ignore
+        if value is None:
+            return value
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="replace")
+        elif not isinstance(value, str):
+            value = str(value)
+        return value.replace("\x00", "")
 
 
 class TenantBase(DeclarativeBase):
@@ -83,7 +104,6 @@ class AS2Partnership(TenantBase, TenantAwareMixin):
     mdn_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     encryption_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="AES256")
     signature_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="SHA256")
-    edi_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
@@ -238,7 +258,7 @@ class EdiMessage(TenantBase, TenantAwareMixin):
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     format_standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    edi_data: Mapped[str] = mapped_column(String(1024), nullable=False)
+    edi_data: Mapped[str] = mapped_column(SanitizedText, nullable=False)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")

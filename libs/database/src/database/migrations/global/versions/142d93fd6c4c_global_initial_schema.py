@@ -185,7 +185,6 @@ def upgrade() -> None:
         sa.Column("mdn_url", sa.String(length=1024), nullable=True),
         sa.Column("encryption_algorithm", sa.String(length=50), nullable=False),
         sa.Column("signature_algorithm", sa.String(length=50), nullable=False),
-        sa.Column("edi_version", sa.String(length=50), nullable=True),
         sa.Column("advanced_flags", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),

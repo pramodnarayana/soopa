@@ -35,7 +35,7 @@ export function FormModal({
   footerContent
 }: FormModalProps) {
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange} modal={false}>
       <DialogTrigger asChild>
         <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
           {triggerIcon}
@@ -43,7 +43,11 @@ export function FormModal({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className={`${maxWidth} rounded-2xl`} onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent
+        className={`${maxWidth} rounded-2xl`}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             {icon && (

@@ -92,7 +92,7 @@ async def test_replicate_tenant_config() -> None:
     mock_ps.encryption_algorithm = "AES"
     mock_ps.signature_algorithm = "SHA"
     mock_ps.advanced_flags = None
-    mock_ps.edi_version = None
+
     mock_ps.active = True
 
     # replicate_tenant_config makes 6 global_session.execute calls for replication:

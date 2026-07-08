@@ -19,9 +19,8 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
   const [remotePartnerId, setRemotePartnerId] = useState('')
   const [mdnType, setMdnType] = useState('SYNC')
   const [mdnUrl, setMdnUrl] = useState('')
-  const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256_CBC')
+  const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256')
   const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256')
-  const [ediVersion, setEdiVersion] = useState('X12-004010')
 
   const { data: platformConfig } = usePlatformConfig();
   const createPartnership = useCreatePlatformPartnershipMutation();
@@ -38,9 +37,8 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
     setRemotePartnerId('')
     setMdnType('SYNC')
     setMdnUrl(platformConfig?.available_as2_receive_urls?.[0] || '')
-    setEncryptionAlgorithm('AES256_CBC')
+    setEncryptionAlgorithm('AES256')
     setSignatureAlgorithm('SHA256')
-    setEdiVersion('X12-004010')
   }
 
   const handleOpenChange = (open: boolean) => {
@@ -60,7 +58,6 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
         mdn_url: mdnType === 'ASYNC' ? (mdnUrl || undefined) : undefined,
         encryption_algorithm: encryptionAlgorithm,
         signature_algorithm: signatureAlgorithm,
-        edi_version: ediVersion === "NONE" ? undefined : ediVersion,
       },
       {
         onSuccess: () => {
@@ -147,7 +144,7 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div className="grid gap-2">
             <Label className="text-slate-600 font-medium">Encryption</Label>
             <Select value={encryptionAlgorithm} onValueChange={setEncryptionAlgorithm}>
@@ -155,9 +152,9 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 <SelectValue placeholder="Algorithm" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="AES256_CBC">AES-256-CBC</SelectItem>
-                <SelectItem value="AES128_CBC">AES-128-CBC</SelectItem>
-                <SelectItem value="3DES">3DES (Legacy)</SelectItem>
+                {(platformConfig?.supported_as2_encryption_algorithms || []).map(o => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -169,25 +166,9 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 <SelectValue placeholder="Algorithm" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="SHA256">SHA-256</SelectItem>
-                <SelectItem value="SHA1">SHA-1 (Legacy)</SelectItem>
-                <SelectItem value="MD5">MD5 (Insecure)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label className="text-slate-600 font-medium">EDI Version</Label>
-            <Select value={ediVersion} onValueChange={setEdiVersion}>
-              <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue placeholder="Version" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="X12-004010">X12 4010</SelectItem>
-                <SelectItem value="X12-005010">X12 5010</SelectItem>
-                <SelectItem value="EDIFACT-D96A">EDIFACT D96A</SelectItem>
-                <SelectItem value="EDIFACT-D01B">EDIFACT D01B</SelectItem>
-                <SelectItem value="NONE">Not Applicable</SelectItem>
+                {(platformConfig?.supported_as2_signature_algorithms || []).map(o => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

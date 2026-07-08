@@ -53,9 +53,10 @@ class VaultAdapter:
         )
         return path
 
-    def retrieve_private_key(self, vault_ref: str) -> bytes:
+    def retrieve_secret(self, vault_ref: str) -> bytes:
         """
-        Retrieves a private key from Vault.
+        Retrieves any secret (private key, certificate, or credential) from Vault.
+        This is the canonical retrieval method; retrieve_private_key() delegates here.
         """
         read_response = self.client.secrets.kv.v2.read_secret_version(
             path=vault_ref, mount_point=self.mount_point
@@ -76,6 +77,13 @@ class VaultAdapter:
             raise TypeError("Expected private_key_pem to be a string")
 
         return pem_str.encode("utf-8")
+
+    def retrieve_private_key(self, vault_ref: str) -> bytes:
+        """
+        Retrieves a private key from Vault.
+        Delegates to retrieve_secret() — kept for backward compatibility.
+        """
+        return self.retrieve_secret(vault_ref)
 
     def delete_secret(self, vault_ref: str) -> None:
         """

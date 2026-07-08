@@ -3,7 +3,7 @@ import os
 import xml.etree.ElementTree as ET
 
 
-def build_dictionary():
+def build_dictionary() -> None:
     xml_path = "libs/edi_grammar/src/edi_grammar/x12/5011/X12.Segment"
     output_path = "frontend/web/public/edidescription/x12_5011.json"
 

@@ -10,20 +10,127 @@ from sqlalchemy.exc import IntegrityError
 from api.adapters.http.dtos import (
     AS2PartnershipResponse,
     CreateAS2PartnershipRequest,
+    TestAS2ConnectionRequest,
+    TestAS2ConnectionResponse,
     UpdateAS2PartnershipRequest,
 )
 from api.core.uow import UnitOfWork
 from api.dependencies import (
+    get_as2_tester,
     get_uow,
+    get_vault,
 )
 from api.domain.models import (
     CreateAS2PartnershipCmd,
     UpdateAS2PartnershipCmd,
 )
+from api.ports.as2_tester import AS2TesterPort
+from api.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Platform Partners - AS2 Partnerships"])
+
+
+@router.post(
+    "/as2/partnerships/{partnership_id}/test",
+    response_model=TestAS2ConnectionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def test_as2_partnership_connection(
+    partnership_id: UUID,
+    request: TestAS2ConnectionRequest | None = None,
+    uow: UnitOfWork = Depends(get_uow),
+    as2_tester: AS2TesterPort = Depends(get_as2_tester),
+    vault_port: VaultPort = Depends(get_vault),
+) -> Any:
+    """
+    Tests an AS2 connection for a configured partnership.
+
+    Sends a synthetic AS2 ping (or custom payload) to the remote partner's URL
+    using the partnership's configured cryptographic material.
+    """
+    async with uow:
+        partnership = await uow.control_plane.get_as2_partnership(
+            tenant_id=0, partnership_id=partnership_id
+        )
+        if not partnership:
+            raise HTTPException(status_code=404, detail="Partnership not found")
+
+        local_partner = await uow.control_plane.get_as2_partner(
+            tenant_id=0, partner_id=partnership.local_partner_id
+        )
+        remote_partner = await uow.control_plane.get_as2_partner(
+            tenant_id=0, partner_id=partnership.remote_partner_id
+        )
+
+    if not local_partner:
+        return TestAS2ConnectionResponse(
+            success=False, reason="Local AS2 partner not found for this partnership."
+        )
+    if not remote_partner:
+        return TestAS2ConnectionResponse(
+            success=False, reason="Remote AS2 partner not found for this partnership."
+        )
+    if not remote_partner.url:
+        return TestAS2ConnectionResponse(
+            success=False, reason="Remote partner has no URL configured."
+        )
+
+    # Resolve cryptographic material from Vault or inline PEM
+    local_private_key_pem: bytes | None = None
+    local_cert_pem: bytes | None = None
+    remote_cert_pem: bytes | None = None
+
+    try:
+        if local_partner.private_key_vault_ref:
+            local_private_key_pem = vault_port.retrieve_secret(local_partner.private_key_vault_ref)
+        if local_partner.public_cert_vault_ref:
+            local_cert_pem = vault_port.retrieve_secret(local_partner.public_cert_vault_ref)
+        elif local_partner.public_cert_pem:
+            local_cert_pem = local_partner.public_cert_pem.encode()
+        if remote_partner.public_cert_vault_ref:
+            remote_cert_pem = vault_port.retrieve_secret(remote_partner.public_cert_vault_ref)
+        elif remote_partner.public_cert_pem:
+            remote_cert_pem = remote_partner.public_cert_pem.encode()
+    except Exception as e:
+        return TestAS2ConnectionResponse(
+            success=False, reason=f"Failed to retrieve cryptographic material: {e}"
+        )
+
+    transport_ok, raw_disposition, sent_payload, raw_mdn = await as2_tester.test_connection(
+        remote_url=str(remote_partner.url),
+        as2_from=local_partner.as2_id,
+        as2_to=remote_partner.as2_id,
+        local_private_key_pem=local_private_key_pem,
+        local_cert_pem=local_cert_pem,
+        remote_cert_pem=remote_cert_pem,
+        encryption_algorithm=partnership.encryption_algorithm or "AES256",
+        custom_payload=request.custom_payload if request else None,
+    )
+
+    if not transport_ok:
+        return TestAS2ConnectionResponse(
+            success=False, reason=raw_disposition, sent_payload=sent_payload, raw_mdn=raw_mdn
+        )
+
+    # Business rule (RFC 4130): MDN disposition must start with "processed"
+    disposition = raw_disposition or ""
+    parts = disposition.split(";", 1)
+    status_part = parts[1].strip().lower() if len(parts) == 2 else disposition.strip().lower()
+    is_success = (
+        status_part.startswith("processed")
+        and "error" not in status_part
+        and "failed" not in status_part
+    )
+
+    return TestAS2ConnectionResponse(
+        success=is_success,
+        mdn_disposition=status_part,
+        reason=None if is_success else status_part or disposition,
+        sent_payload=sent_payload,
+        raw_mdn=raw_mdn,
+    )
 
 
 @router.post("/as2/partnerships", response_model=Any, status_code=status.HTTP_201_CREATED)
@@ -45,7 +152,6 @@ async def create_platform_as2_partnership(
                 mdn_url=str(request.mdn_url) if request.mdn_url else None,
                 encryption_algorithm=request.encryption_algorithm,
                 signature_algorithm=request.signature_algorithm,
-                edi_version=request.edi_version,
                 advanced_flags=request.advanced_flags,
             )
 
@@ -67,7 +173,6 @@ async def create_platform_as2_partnership(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                edi_version=p.edi_version,
                 status="active" if p.active else "inactive",
                 active=p.active,
             )
@@ -107,7 +212,6 @@ async def update_platform_as2_partnership(
                 mdn_url=mdn_url_val,
                 encryption_algorithm=get_val("encryption_algorithm"),
                 signature_algorithm=get_val("signature_algorithm"),
-                edi_version=get_val("edi_version"),
                 advanced_flags=get_val("advanced_flags"),
                 active=get_val("active"),
             )
@@ -132,7 +236,6 @@ async def update_platform_as2_partnership(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                edi_version=p.edi_version,
                 status="active" if p.active else "inactive",
                 active=p.active,
             )
@@ -192,7 +295,6 @@ async def list_platform_as2_partnerships(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                edi_version=p.edi_version,
                 status="active" if p.active else "inactive",
                 active=p.active,
             )

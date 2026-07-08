@@ -17,6 +17,14 @@ from dataclasses import dataclass, field
 from .mdn import calculate_mic
 
 
+def _ensure_crlf(data: bytes) -> bytes:
+    """
+    Normalizes line endings to CRLF for MIME canonicalization, as required by
+    AS2/S/MIME signatures.
+    """
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n").replace(b"\n", b"\r\n")
+
+
 @dataclass
 class OutboundAS2Message:
     """
@@ -65,12 +73,27 @@ def build_outbound_message(
     Returns:
         OutboundAS2Message with body bytes and AS2 HTTP headers.
     """
-    # ── Step 1: Compute MIC on the *raw* payload before any wrapping ─────────
+    # ── Step 1: Normalize Payload Line Endings & Construct Inner Entity ───────
+    # AS2 requires CRLF line endings for signature calculation
+    payload = _ensure_crlf(payload)
+
+    if sign_fn is not None or encrypt_fn is not None:
+        # RFC 4130 specifies that the data to be signed/encrypted MUST be a fully
+        # formed MIME entity with its own Content-Type header.
+        mime_headers = f"Content-Type: {content_type}\r\n"
+        mime_headers += "Content-Transfer-Encoding: binary\r\n\r\n"
+        payload = mime_headers.encode("ascii") + payload
+
+    # ── Step 2: Compute MIC on the *raw* payload before any wrapping ─────────
+    # Wait, RFC 4130 says MIC is calculated over the inner MIME entity, meaning
+    # it INCLUDES the Content-Type headers that we just prepended!
     mic = calculate_mic(payload, mic_alg)
 
-    # ── Step 2: Optionally sign ───────────────────────────────────────────────
+    # ── Step 3: Optionally sign ───────────────────────────────────────────────
     current_payload = payload
     current_content_type = content_type
+    current_cte: str | None = None
+    current_cd: str | None = None
     is_signed = False
 
     if sign_fn is not None:
@@ -80,6 +103,10 @@ def build_outbound_message(
         msg = email.message_from_bytes(current_payload)
         signer_ct = msg.get("Content-Type")
         current_content_type = signer_ct or "multipart/signed"
+        if msg.get("Content-Transfer-Encoding"):
+            current_cte = msg.get("Content-Transfer-Encoding")
+        if msg.get("Content-Disposition"):
+            current_cd = msg.get("Content-Disposition")
 
         is_signed = True
 
@@ -97,6 +124,11 @@ def build_outbound_message(
                 "application/pkcs7-mime; smime-type=enveloped-data; name=smime.p7m"
             )
 
+        if msg.get("Content-Transfer-Encoding"):
+            current_cte = msg.get("Content-Transfer-Encoding")
+        if msg.get("Content-Disposition"):
+            current_cd = msg.get("Content-Disposition")
+
         is_encrypted = True
 
     # ── Step 4: Build HTTP Headers ────────────────────────────────────────────
@@ -112,6 +144,11 @@ def build_outbound_message(
         "Disposition-Notification-Options": f"signed-receipt-protocol=required, pkcs7-signature; signed-receipt-micalg=optional, {mic_alg}",
     }
 
+    if current_cte:
+        headers["Content-Transfer-Encoding"] = current_cte
+    if current_cd:
+        headers["Content-Disposition"] = current_cd
+
     if mdn_url:
         # Async MDN: send back to this URL
         headers["Receipt-Delivery-Option"] = mdn_url
@@ -123,6 +160,20 @@ def build_outbound_message(
         security_note_parts.append("encrypted")
     if is_signed:
         security_note_parts.append("signed")
+
+    # ── Step 5: Strip Outer MIME Headers from Body ────────────────────────────
+    if is_encrypted or is_signed:
+        # RFC 5322 specifies \r\n\r\n (or \n\n) as the delimiter between headers and body.
+        # While it might be tempting to use Python's `email.message.Message.get_payload()`,
+        # doing so on a multipart/signed S/MIME payload causes the `email` module to
+        # reconstruct boundaries and standardize newlines, which silently invalidates
+        # the cryptographic signature.
+        # Performing a raw binary split is the enterprise-standard approach for AS2
+        # to guarantee 100% byte-for-byte preservation of the cryptographic payload.
+        if b"\r\n\r\n" in current_payload:
+            _, current_payload = current_payload.split(b"\r\n\r\n", 1)
+        elif b"\n\n" in current_payload:
+            _, current_payload = current_payload.split(b"\n\n", 1)
 
     return OutboundAS2Message(
         body=current_payload,

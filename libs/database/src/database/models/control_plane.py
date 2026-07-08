@@ -146,7 +146,6 @@ class AS2Partnership(GlobalBase):
     mdn_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     encryption_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="AES256")
     signature_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="SHA256")
-    edi_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Advanced OpenAS2 settings
     advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

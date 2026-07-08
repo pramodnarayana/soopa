@@ -5,6 +5,8 @@ Calculates MIC (Message Integrity Check) and constructs the multipart/report.
 
 import base64
 import hashlib
+import uuid
+from dataclasses import dataclass
 from enum import StrEnum
 
 from .message import AS2MDN, AS2Message
@@ -59,3 +61,53 @@ def generate_mdn(original_message: AS2Message, disposition: str, mic_alg: str = 
         mic=mic,
         is_signed=False,  # Will be signed later if requested via disposition-notification-options
     )
+
+
+@dataclass
+class MDNResponse:
+    body: bytes
+    headers: dict[str, str]
+
+
+def build_mdn(
+    as2_to: str, as2_from: str, message_id: str, disposition: str, mic: str | None = None
+) -> MDNResponse:
+    boundary = f"----=_Part_{uuid.uuid4().hex}"
+
+    lines = []
+    lines.append(f"--{boundary}")
+    lines.append("Content-Type: text/plain; charset=us-ascii")
+    lines.append("Content-Transfer-Encoding: 7bit")
+    lines.append("")
+    lines.append("The AS2 message has been received successfully.")
+    lines.append("")
+    lines.append(f"--{boundary}")
+    lines.append("Content-Type: message/disposition-notification")
+    lines.append("Content-Transfer-Encoding: 7bit")
+    lines.append("")
+    lines.append("Reporting-UA: SoopaEDI")
+    lines.append(f"Original-Recipient: rfc822; {as2_to}")
+    lines.append(f"Final-Recipient: rfc822; {as2_to}")
+
+    # if message_id isn't wrapped in <>, wrap it, otherwise use it directly
+    message_id_str = f"<{message_id}>" if not message_id.startswith("<") else message_id
+
+    lines.append(f"Original-Message-ID: {message_id_str}")
+    lines.append(f"Disposition: {disposition}")
+    if mic:
+        lines.append(f"Received-Content-MIC: {mic}")
+    lines.append("")
+    lines.append(f"--{boundary}--")
+    lines.append("")
+
+    body = "\r\n".join(lines).encode("ascii")
+
+    headers = {
+        "AS2-From": as2_to,
+        "AS2-To": as2_from,
+        "Message-ID": f"<mdn-{uuid.uuid4()}@soopa>",
+        "Content-Type": f'multipart/report; report-type=disposition-notification; boundary="{boundary}"',
+        "Connection": "close",
+    }
+
+    return MDNResponse(body=body, headers=headers)
