@@ -47,6 +47,7 @@ async def test_test_connection_success(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is True
@@ -68,6 +69,7 @@ async def test_test_connection_build_fail(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is False
@@ -96,6 +98,7 @@ async def test_test_connection_http_fail(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is False
@@ -125,6 +128,7 @@ async def test_test_connection_http_500(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is False
@@ -157,6 +161,7 @@ async def test_test_connection_parse_fail(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is False
@@ -185,6 +190,7 @@ async def test_test_connection_timeout(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is False
@@ -213,6 +219,7 @@ async def test_test_connection_generic_exception(adapter):
             local_cert_pem=None,
             remote_cert_pem=None,
             encryption_algorithm="AES256",
+            signature_algorithm="SHA256",
         )
 
         assert success is False

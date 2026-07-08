@@ -103,6 +103,7 @@ class TestAS2MessageReceiving:
         response = await as2_client.post("/as2", content=body, headers=headers)
 
         assert response.status_code == 200
+        assert b"processed" in response.content
         assert b"test-signed-001" in response.content
 
     async def test_as2_message_from_unknown_partner_returns_security_failed_mdn(

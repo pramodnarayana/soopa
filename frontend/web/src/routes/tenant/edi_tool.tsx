@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { FileCode, CheckCircle, AlertTriangle, Copy, Trash2 } from 'lucide-react';
@@ -43,42 +44,7 @@ function EdiToolPage() {
 
 
   const handleEditorWillMount = (monaco: any) => {
-    // Only register language if it doesn't already exist to prevent HMR errors
-    if (!monaco.languages.getLanguages().some((l: any) => l.id === 'edi')) {
-      monaco.languages.register({ id: 'edi' });
-      monaco.languages.setMonarchTokensProvider('edi', {
-        tokenizer: {
-          root: [
-            [/^[A-Z0-9]{2,3}(?=\*)/, 'keyword'],
-            [/(~\s*)([A-Z0-9]{2,3})(?=\*)/, ['delimiter', 'keyword']],
-            [/\*/, 'delimiter'],
-            [/~/, 'delimiter'],
-            [/[^*~\n\r]+/, 'string'],
-          ],
-        },
-      });
-    }
-
-    // Define our custom theme for both EDI and JSON
-    monaco.editor.defineTheme('soopa-theme', {
-      base: 'vs',
-      inherit: true,
-      rules: [
-        // EDI Theme: Blue Bold Segments, Dark Green Values, Black Delimiters
-        { token: 'keyword', foreground: '0451a5', fontStyle: 'bold' }, // Blue
-        { token: 'string', foreground: '065f46' },  // Dark Green
-        { token: 'delimiter', foreground: '000000' }, // Black
-
-        // JSON Theme: Blue Bold Keys, Dark Green String Values
-        { token: 'string.key.json', foreground: '0451a5', fontStyle: 'bold' }, // Blue
-        { token: 'string.value.json', foreground: '065f46' }, // Dark Green
-        { token: 'number.json', foreground: '065f46' }, // Dark Green
-        { token: 'keyword.json', foreground: '0451a5', fontStyle: 'bold' }, // Blue
-      ],
-      colors: {
-        'editor.background': '#ffffff',
-      }
-    });
+    registerEdiLanguageAndTheme(monaco);
   };
 
   const { toast } = useToast();

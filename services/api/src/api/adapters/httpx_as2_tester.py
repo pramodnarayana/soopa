@@ -52,6 +52,7 @@ class HttpxAS2TesterAdapter:
         local_cert_pem: bytes | None,
         remote_cert_pem: bytes | None,
         encryption_algorithm: str,
+        signature_algorithm: str,
         custom_payload: str | None = None,
     ) -> tuple[bool, str | None, str | None, str | None]:
         # Build sign/encrypt callables only if keys are available
@@ -60,6 +61,7 @@ class HttpxAS2TesterAdapter:
                 sign_payload,
                 private_key_pem=local_private_key_pem,
                 public_cert_pem=local_cert_pem,
+                algorithm=signature_algorithm,
             )
             if (local_private_key_pem and local_cert_pem)
             else None

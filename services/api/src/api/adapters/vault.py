@@ -53,7 +53,7 @@ class VaultAdapter:
         )
         return path
 
-    def retrieve_secret(self, vault_ref: str) -> bytes:
+    def retrieve_secret(self, vault_ref: str, field: str | None = None) -> bytes:
         """
         Retrieves any secret (private key, certificate, or credential) from Vault.
         This is the canonical retrieval method; retrieve_private_key() delegates here.
@@ -72,9 +72,16 @@ class VaultAdapter:
         if not isinstance(inner_data, dict):
             raise TypeError("Expected Vault inner 'data' to be a dictionary")
 
-        pem_str = inner_data.get("private_key_pem")
+        if field and field in inner_data:
+            pem_str = inner_data[field]
+        elif "private_key_pem" in inner_data:
+            pem_str = inner_data["private_key_pem"]
+        else:
+            # Fallback to the first available string value
+            pem_str = next(iter(inner_data.values()), None)
+
         if not isinstance(pem_str, str):
-            raise TypeError("Expected private_key_pem to be a string")
+            raise TypeError("Expected secret value to be a string")
 
         return pem_str.encode("utf-8")
 
@@ -83,7 +90,7 @@ class VaultAdapter:
         Retrieves a private key from Vault.
         Delegates to retrieve_secret() — kept for backward compatibility.
         """
-        return self.retrieve_secret(vault_ref)
+        return self.retrieve_secret(vault_ref, field="private_key_pem")
 
     def delete_secret(self, vault_ref: str) -> None:
         """

@@ -114,6 +114,14 @@ class DataPlaneRepositoryPort(Protocol):
         """
         ...
 
+    async def create_outbox_event(
+        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+    ) -> UUID:
+        """
+        Saves an outbox event to the Data Plane.
+        """
+        ...
+
 
 class TenantRepositoryPort(Protocol):
     """

@@ -106,6 +106,7 @@ async def test_as2_partnership_connection(
         local_cert_pem=local_cert_pem,
         remote_cert_pem=remote_cert_pem,
         encryption_algorithm=partnership.encryption_algorithm or "AES256",
+        signature_algorithm=partnership.signature_algorithm or "SHA256",
         custom_payload=request.custom_payload if request else None,
     )
 

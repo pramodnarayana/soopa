@@ -84,9 +84,9 @@ def build_outbound_message(
         mime_headers += "Content-Transfer-Encoding: binary\r\n\r\n"
         payload = mime_headers.encode("ascii") + payload
 
-    # ── Step 2: Compute MIC on the *raw* payload before any wrapping ─────────
-    # Wait, RFC 4130 says MIC is calculated over the inner MIME entity, meaning
-    # it INCLUDES the Content-Type headers that we just prepended!
+    # ── Step 2: Compute MIC on the inner MIME entity ──────────────────────────
+    # The MIC is calculated over the entire MIME entity (including the headers
+    # prepended in Step 1) before signing or encryption, per RFC 4130.
     mic = calculate_mic(payload, mic_alg)
 
     # ── Step 3: Optionally sign ───────────────────────────────────────────────
@@ -110,7 +110,7 @@ def build_outbound_message(
 
         is_signed = True
 
-    # ── Step 3: Optionally encrypt ────────────────────────────────────────────
+    # ── Step 4: Optionally encrypt ────────────────────────────────────────────
     is_encrypted = False
     if encrypt_fn is not None:
         current_payload = encrypt_fn(current_payload)  # type: ignore[operator]
@@ -131,7 +131,7 @@ def build_outbound_message(
 
         is_encrypted = True
 
-    # ── Step 4: Build HTTP Headers ────────────────────────────────────────────
+    # ── Step 5: Build HTTP Headers ────────────────────────────────────────────
     message_id = f"<{uuid.uuid4()}@soopaedi>"
     headers: dict[str, str] = {
         "AS2-Version": "1.2",

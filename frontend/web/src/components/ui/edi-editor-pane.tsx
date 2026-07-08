@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { UploadCloud } from 'lucide-react';
+import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
 
 export interface EdiEditorPaneProps {
   value: string;
@@ -9,9 +10,10 @@ export interface EdiEditorPaneProps {
   placeholder?: string;
   cornerPlaceholder?: string;
   className?: string;
+  acceptedFileExtensions?: string;
 }
 
-export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, cornerPlaceholder, className = '' }: EdiEditorPaneProps) {
+export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, cornerPlaceholder, className = '', acceptedFileExtensions = ".edi,.json,.txt,.x12" }: EdiEditorPaneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -45,36 +47,7 @@ export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, 
   };
 
   const handleEditorWillMount = (monaco: any) => {
-    if (!monaco.languages.getLanguages().some((l: any) => l.id === 'edi')) {
-      monaco.languages.register({ id: 'edi' });
-      monaco.languages.setMonarchTokensProvider('edi', {
-        tokenizer: {
-          root: [
-            [/^[A-Z0-9]{2,3}(?=\*)/, 'keyword'],
-            [/(~\s*)([A-Z0-9]{2,3})(?=\*)/, ['delimiter', 'keyword']],
-            [/\*/, 'delimiter'],
-            [/~/, 'delimiter'],
-            [/[^*~\n\r]+/, 'string'],
-          ],
-        },
-      });
-    }
-    monaco.editor.defineTheme('soopa-theme', {
-      base: 'vs',
-      inherit: true,
-      rules: [
-        { token: 'keyword', foreground: '0451a5', fontStyle: 'bold' },
-        { token: 'string', foreground: '065f46' },
-        { token: 'delimiter', foreground: '000000' },
-        { token: 'string.key.json', foreground: '0451a5', fontStyle: 'bold' },
-        { token: 'string.value.json', foreground: '065f46' },
-        { token: 'number.json', foreground: '065f46' },
-        { token: 'keyword.json', foreground: '0451a5', fontStyle: 'bold' },
-      ],
-      colors: {
-        'editor.background': '#ffffff',
-      }
-    });
+    registerEdiLanguageAndTheme(monaco);
   };
 
   return (
@@ -102,7 +75,7 @@ export function EdiEditorPane({ value, onChange, language = 'edi', placeholder, 
           <p className="text-sm text-slate-500 mb-6">{placeholder || `or upload a file, or click anywhere to paste raw ${language.toUpperCase()}`}</p>
           <label className="pointer-events-auto cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition-colors">
             Upload File
-            <input type="file" className="hidden" accept=".edi,.json,.txt,.x12" onChange={handleFileUpload} />
+            <input type="file" className="hidden" accept={acceptedFileExtensions} onChange={handleFileUpload} />
           </label>
         </div>
       )}

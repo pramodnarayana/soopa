@@ -95,6 +95,10 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | No
 
         # Remove PKCS7 padding
         pad_len = padded_plaintext[-1]
+        if pad_len < 1 or pad_len > cipher_class.block_size // 8:  # type: ignore[operator]
+            raise ValueError("Invalid PKCS7 padding length")
+        if padded_plaintext[-pad_len:] != bytes([pad_len]) * pad_len:
+            raise ValueError("Invalid PKCS7 padding bytes")
         return padded_plaintext[:-pad_len]
     except Exception as e:
         logger.debug(f"Manual ASN.1 decryption failed: {e}")
@@ -134,7 +138,9 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
     raise ValueError("All native decryption strategies failed.")
 
 
-def sign_payload(payload: bytes, private_key_pem: bytes, public_cert_pem: bytes) -> bytes:
+def sign_payload(
+    payload: bytes, private_key_pem: bytes, public_cert_pem: bytes, algorithm: str = "sha256"
+) -> bytes:
     """
     Signs a payload for AS2 transmission (S/MIME multipart/signed).
     Uses native cryptography.hazmat to keep private keys in memory.
@@ -142,8 +148,16 @@ def sign_payload(payload: bytes, private_key_pem: bytes, public_cert_pem: bytes)
     private_key = serialization.load_pem_private_key(private_key_pem, password=None)
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
+    alg_map = {
+        "sha1": hashes.SHA1(),
+        "sha256": hashes.SHA256(),
+        "sha384": hashes.SHA384(),
+        "sha512": hashes.SHA512(),
+    }
+    hash_alg = alg_map.get(algorithm.lower(), hashes.SHA256())
+
     builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
-    builder = builder.add_signer(cert, private_key, hash_algorithm=hashes.SHA256())  # type: ignore[arg-type]
+    builder = builder.add_signer(cert, private_key, hash_algorithm=hash_alg)  # type: ignore[arg-type]
 
     # AS2 requires S/MIME encoding for the signed payload
     return builder.sign(serialization.Encoding.SMIME, options=[])

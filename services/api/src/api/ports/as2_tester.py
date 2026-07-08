@@ -11,6 +11,7 @@ class AS2TesterPort(Protocol):
         local_cert_pem: bytes | None,
         remote_cert_pem: bytes | None,
         encryption_algorithm: str,
+        signature_algorithm: str,
         custom_payload: str | None = None,
     ) -> tuple[bool, str | None, str | None, str | None]:
         """

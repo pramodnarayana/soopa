@@ -46,6 +46,9 @@ class PartnershipRepository:
             .where(
                 func.lower(LocalPartner.as2_id) == as2_to.lower(),
                 func.lower(RemotePartner.as2_id) == as2_from.lower(),
+                AS2Partnership.active.is_(True),
+                LocalPartner.active.is_(True),
+                RemotePartner.active.is_(True),
             )
         )
 

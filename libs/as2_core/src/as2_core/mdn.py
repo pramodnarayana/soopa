@@ -4,8 +4,10 @@ Calculates MIC (Message Integrity Check) and constructs the multipart/report.
 """
 
 import base64
+import email
 import hashlib
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -70,7 +72,12 @@ class MDNResponse:
 
 
 def build_mdn(
-    as2_to: str, as2_from: str, message_id: str, disposition: str, mic: str | None = None
+    as2_to: str,
+    as2_from: str,
+    message_id: str,
+    disposition: str,
+    mic: str | None = None,
+    sign_fn: Callable[[bytes], bytes] | None = None,
 ) -> MDNResponse:
     boundary = f"----=_Part_{uuid.uuid4().hex}"
 
@@ -100,14 +107,38 @@ def build_mdn(
     lines.append(f"--{boundary}--")
     lines.append("")
 
-    body = "\r\n".join(lines).encode("ascii")
+    # Construct the inner multipart/report body and headers
+    inner_body = "\r\n".join(lines).encode("ascii")
+    inner_content_type = (
+        f'multipart/report; report-type=disposition-notification; boundary="{boundary}"'
+    )
 
     headers = {
         "AS2-From": as2_to,
         "AS2-To": as2_from,
         "Message-ID": f"<mdn-{uuid.uuid4()}@soopa>",
-        "Content-Type": f'multipart/report; report-type=disposition-notification; boundary="{boundary}"',
         "Connection": "close",
     }
 
-    return MDNResponse(body=body, headers=headers)
+    if sign_fn:
+        # Wrap inner body into a proper MIME entity
+        mime_entity = f"Content-Type: {inner_content_type}\r\n"
+        mime_entity += "Content-Transfer-Encoding: binary\r\n\r\n"
+        wrapped_body = mime_entity.encode("ascii") + inner_body
+
+        signed_body = sign_fn(wrapped_body)
+
+        # Parse the signer's output to extract the correct Content-Type (which includes micalg and signature boundary)
+        msg = email.message_from_bytes(signed_body)
+        signer_ct = msg.get("Content-Type") or "multipart/signed"
+        headers["Content-Type"] = signer_ct
+
+        if msg.get("Content-Transfer-Encoding"):
+            headers["Content-Transfer-Encoding"] = str(msg.get("Content-Transfer-Encoding"))
+        if msg.get("Content-Disposition"):
+            headers["Content-Disposition"] = str(msg.get("Content-Disposition"))
+
+        return MDNResponse(body=signed_body, headers=headers)
+    else:
+        headers["Content-Type"] = inner_content_type
+        return MDNResponse(body=inner_body, headers=headers)

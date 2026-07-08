@@ -139,7 +139,9 @@ class As2ReceiveService:
         is_signed = as2_msg.is_signed
 
         # Decryption Step
-        if is_encrypted and local_priv_key:
+        if is_encrypted:
+            if not local_priv_key:
+                raise ValueError("Message is encrypted but local private key is missing.")
             current_entity = self._decrypt_entity(
                 current_entity, original_headers, local_priv_key, local_cert
             )
@@ -153,7 +155,9 @@ class As2ReceiveService:
 
         # Verification Step
         mic = None
-        if is_signed and remote_cert:
+        if is_signed:
+            if not remote_cert:
+                raise ValueError("Message is signed but remote public certificate is missing.")
             if not is_encrypted:
                 verify_entity = self._reconstruct_smime_headers(original_headers) + current_entity
             else:

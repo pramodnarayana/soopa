@@ -194,7 +194,8 @@ async def test_crypto_pipeline_coverage(service):
 async def test_save_to_data_plane_success(service):
     # Test _save_to_data_plane success path
     mock_tenant = MagicMock(id=1)
-    mock_shard = MagicMock(name="shard1", dsn="sqlite:///:memory:")
+    mock_shard = MagicMock(dsn="sqlite:///:memory:")
+    mock_shard.name = "shard1"
 
     mock_result = MagicMock()
     mock_result.first.return_value = (mock_tenant, mock_shard)

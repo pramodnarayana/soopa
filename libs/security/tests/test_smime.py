@@ -73,3 +73,9 @@ def test_sign_verify_smime():
     signed_data = sign_payload(payload, private_pem, cert_pem)
 
     assert b"test EDI payload data to be signed" in signed_data
+
+    from security.smime import verify_signature
+
+    is_valid, verified_payload = verify_signature(signed_data, cert_pem)
+    assert is_valid is True
+    assert verified_payload == payload
