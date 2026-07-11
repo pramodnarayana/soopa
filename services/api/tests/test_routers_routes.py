@@ -55,6 +55,9 @@ def test_create_outbound_route(client):
             "isa_sender_id": "S1",
             "isa_receiver_id": "R1",
             "transaction_type": "855",
+            "trading_partner_id": "TP1",
+            "gs_sender_id": "GS1",
+            "gs_receiver_id": "GR1",
         },
     )
     assert response.status_code == 201

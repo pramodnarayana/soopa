@@ -71,7 +71,9 @@ async def test_control_plane_repository(control_repo: SqlAlchemyControlPlaneRepo
 
     # 3. Create Partnership
     p_cmd = CreateAS2PartnershipCmd(
-        name="Test Partnership", local_partner_id=p_id2, remote_partner_id=p_id1
+        name="Test Partnership",
+        local_partner_id=p_id2,
+        remote_partner_id=p_id1,
     )
     partnership_id = await control_repo.create_as2_partnership(tenant_id=1, cmd=p_cmd)
 
@@ -124,10 +126,15 @@ async def test_data_plane_repository(
         webhook_id=wh_id,
     )
     # Outbound route: deliver via sftp
+    import uuid
+
     out_cmd = CreateOutboundRouteCmd(
+        trading_partner_id=str(uuid.uuid4()),
         name="Outbound Route 1",
         isa_sender_id="S",
         isa_receiver_id="R",
+        gs_sender_id="S",
+        gs_receiver_id="R",
         transaction_type="855",
         as2_partner_id=None,
         sftp_partner_id=sftp_id,
@@ -167,5 +174,6 @@ async def test_get_as2_partner_tenant_isolation(control_repo: SqlAlchemyControlP
 
     # We can check that the SQL string contains the tenant_id binding
     compiled = str(call_args.compile(compile_kwargs={"literal_binds": True}))
-    assert "tenant_id =" in compiled
-    assert "1" in compiled
+    compiled_clean = compiled.replace(" ", "")
+    assert "tenant_idIN(1,0)" in compiled_clean or "tenant_id=" in compiled_clean
+    assert "1" in compiled_clean

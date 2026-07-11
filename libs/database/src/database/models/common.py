@@ -32,3 +32,15 @@ class OutboxMixin:
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
         return mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TimestampMixin:
+    """Provides created_at and updated_at for configuration tables."""
+
+    @declared_attr
+    def created_at(cls) -> Mapped[datetime]:
+        return mapped_column(DateTime, default=datetime.utcnow)
+
+    @declared_attr
+    def updated_at(cls) -> Mapped[datetime]:
+        return mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

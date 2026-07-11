@@ -60,6 +60,23 @@ class PartnershipRepository:
         return row[0], row[1], row[2]
 
 
+class InboundRouteRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_inbound_route(self, isa_sender_id: str, isa_receiver_id: str) -> Any | None:
+        from .models.control_plane import InboundRoute
+
+        result = await self.session.execute(
+            select(InboundRoute).where(
+                InboundRoute.isa_sender_id == isa_sender_id,
+                InboundRoute.isa_receiver_id == isa_receiver_id,
+                InboundRoute.active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
+
 class EdiMessageRepository:
     def __init__(self, session: AsyncSession):
         self.session = session

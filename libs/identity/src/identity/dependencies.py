@@ -124,12 +124,12 @@ async def get_current_tenant_id(
     """
     Resolves the external user email from the JWT to our internal global DB tenant_id.
     """
-    email = token_payload.get("email")
+    email = token_payload.get("email") or token_payload.get("preferred_username")
     name = token_payload.get("name")
     if not email:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Token does not contain an email claim",
+            detail="Token does not contain an email or preferred_username claim",
         )
 
     try:
@@ -146,35 +146,35 @@ async def get_current_tenant_id(
         ) from e
 
 
-async def get_tenant_session(
+async def get_tenant_session_for_id(
     request: Request,
-    tenant_id: int = Depends(get_current_tenant_id),
-    global_session: AsyncSession = Depends(get_global_session),
+    tenant_id: int,
+    global_session: AsyncSession,
 ) -> AsyncGenerator[AsyncSession, None]:
     """
-    Yields an AsyncSession dynamically bound to the correct database shard,
-    with PostgreSQL Row-Level Security (RLS) automatically applied.
+    Yields an AsyncSession dynamically bound to the correct database shard for a given tenant_id.
     """
     db_router = getattr(request.app.state, "db_router", None)
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
-    # 1. Fetch routing info from Global DB using the shared global_session
     stmt = (
         select(Tenant, DatabaseShard)
         .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
         .where(Tenant.id == tenant_id)
     )
     result = await global_session.execute(stmt)
-    tenant, shard = result.one()
+    row = result.one_or_none()
+    if not row:
+        raise RuntimeError(f"Tenant {tenant_id} not found in database")
+
+    tenant, shard = row
     shard_key = shard.name
     shard_url = shard.dsn
 
-    # 2. Yield the RLS-secured tenant session
     async_gen_tenant = db_router.get_tenant_session(tenant_id, shard_key, shard_url)
     tenant_session: AsyncSession = await async_gen_tenant.__anext__()
 
-    # 3. Set the tenant context variable for repositories that rely on it
     from identity.tenant_context import _tenant_id
 
     token = _tenant_id.set(tenant_id)
@@ -185,3 +185,16 @@ async def get_tenant_session(
         _tenant_id.reset(token)
         with contextlib.suppress(StopAsyncIteration):
             await async_gen_tenant.__anext__()
+
+
+async def get_tenant_session(
+    request: Request,
+    tenant_id: int = Depends(get_current_tenant_id),
+    global_session: AsyncSession = Depends(get_global_session),
+) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Yields an AsyncSession dynamically bound to the correct database shard,
+    using Zitadel JWT authentication to resolve the tenant_id.
+    """
+    async for session in get_tenant_session_for_id(request, tenant_id, global_session):
+        yield session

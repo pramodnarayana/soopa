@@ -4,3 +4,6 @@
 - Use proper separation of concerns (e.g. TanStack layout routes instead of polluting `__root.tsx`).
 - Implement robust error handling, proper typing, and scalable folder structures from the very first commit.
 - Never use anti-patterns to save time. If a proper implementation takes more steps, take the time to do it right.
+
+# Package Manager
+- ALWAYS use `pnpm` for frontend/Node.js package management instead of `npm`. Do not use `npm install`.

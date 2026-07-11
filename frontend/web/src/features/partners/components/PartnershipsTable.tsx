@@ -84,6 +84,7 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
           );
         },
       }),
+
       columnHelper.accessor('local_partner_id', {
         header: 'Local Partner',
         cell: (info) => {

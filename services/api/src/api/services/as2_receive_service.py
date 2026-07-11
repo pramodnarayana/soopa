@@ -289,9 +289,52 @@ class As2ReceiveService:
             return parsed_msg.as_bytes()
         return final_payload_bytes
 
+    def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str]:
+        """
+        Lightweight ISA parser to extract Sender and Receiver for routing
+        without parsing the entire EDI structure.
+        """
+        content = pure_edi_bytes.decode("ascii", errors="ignore")
+        if not content.startswith("ISA"):
+            raise ValueError("Payload does not begin with ISA segment")
+
+        # The ISA segment is 106 characters long.
+        # The element separator is the 4th character.
+        element_separator = content[3]
+
+        isa_segment = content[:106]
+        elements = isa_segment.split(element_separator)
+
+        if len(elements) < 9:
+            raise ValueError("Malformed ISA segment")
+
+        isa_sender = elements[6].strip()
+        isa_receiver = elements[8].strip()
+
+        return isa_sender, isa_receiver
+
     async def _save_to_data_plane(  # type: ignore
         self, partnership, as2_msg: AS2Message, pure_edi_bytes: bytes
     ) -> str:
+
+        # 1. Payload-Based Routing (ISA Extraction)
+        try:
+            isa_sender, isa_receiver = self._extract_isa_headers(pure_edi_bytes)
+        except Exception as e:
+            logger.error(f"Failed to extract ISA headers: {e}")
+            raise ValueError("Invalid EDI payload for routing") from e
+
+        # 2. Query Global DB for the actual Tenant using ISA headers
+        route = await self.uow.control_plane.get_inbound_route(
+            isa_sender_id=isa_sender, isa_receiver_id=isa_receiver
+        )
+        if not route:
+            logger.error(f"No inbound route found for ISA {isa_sender} -> {isa_receiver}")
+            raise ValueError("No matching inbound route found for this ISA pair")
+
+        true_tenant_id = route.tenant_id
+        logger.info(f"Routed AS2 payload ({isa_sender}->{isa_receiver}) to Tenant {true_tenant_id}")
+
         edi_record = {
             "trace_id": uuid.uuid4(),
             "direction": "INBOUND",
@@ -306,28 +349,24 @@ class As2ReceiveService:
             "status": "RECEIVED",
         }
 
-        # Infrastructure logic encapsulated in the service layer
+        # 3. Save directly to the true Tenant's Data Plane Shard
         stmt = (
             select(Tenant, DatabaseShard)
             .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
-            .where(Tenant.id == partnership.tenant_id)
+            .where(Tenant.id == true_tenant_id)
         )
         result = await self.global_session.execute(stmt)
         row = result.first()
         if not row:
-            logger.error(f"Tenant {partnership.tenant_id} not found in global DB")
+            logger.error(f"Tenant {true_tenant_id} not found in global DB")
             raise ValueError("Tenant routing failed")
 
         tenant, shard = row
-        async_gen_tenant = self.db_router.get_tenant_session(
-            partnership.tenant_id, shard.name, shard.dsn
-        )
+        async_gen_tenant = self.db_router.get_tenant_session(true_tenant_id, shard.name, shard.dsn)
         tenant_session = await anext(async_gen_tenant)
         try:
             dp_repo = SqlAlchemyDataPlaneRepository(tenant_session)
-            msg_id = await dp_repo.create_edi_message(
-                tenant_id=partnership.tenant_id, payload=edi_record
-            )
+            msg_id = await dp_repo.create_edi_message(tenant_id=true_tenant_id, payload=edi_record)
 
             outbox_payload = {
                 "edi_message_id": str(msg_id),
@@ -336,7 +375,7 @@ class As2ReceiveService:
                 "status": "RECEIVED",
             }
             await dp_repo.create_outbox_event(
-                tenant_id=partnership.tenant_id,
+                tenant_id=true_tenant_id,
                 event_type="edi_message.received",
                 payload=outbox_payload,
             )

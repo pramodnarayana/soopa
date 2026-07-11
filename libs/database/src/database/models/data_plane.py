@@ -18,7 +18,15 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import func, text
 from sqlalchemy.types import TypeDecorator
 
-from .common import OutboxMixin
+from .common import OutboxMixin, TimestampMixin
+from .replicated_mixins import (
+    AS2PartnerMixin,
+    AS2PartnershipMixin,
+    InboundRouteMixin,
+    OutboundRouteMixin,
+    SFTPPartnerMixin,
+    WebhookMixin,
+)
 
 
 class SanitizedText(TypeDecorator):  # type: ignore
@@ -53,7 +61,12 @@ class TenantAwareMixin:
 
     @declared_attr
     def tenant_id(cls) -> Mapped[int]:
-        return mapped_column(Integer, nullable=False, index=True)
+        return mapped_column(
+            Integer,
+            server_default=text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+            index=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -61,35 +74,12 @@ class TenantAwareMixin:
 # ---------------------------------------------------------------------------
 
 
-class AS2Partner(TenantBase, TenantAwareMixin):
+class AS2Partner(TenantBase, TenantAwareMixin, AS2PartnerMixin, TimestampMixin):
     __tablename__ = "as2_partners"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    is_local: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    as2_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    public_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
-    public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    prev_public_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
-    prev_public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    prev_private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
-
-
-class AS2Partnership(TenantBase, TenantAwareMixin):
+class AS2Partnership(TenantBase, TenantAwareMixin, AS2PartnershipMixin, TimestampMixin):
     __tablename__ = "as2_partnerships"
-
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
@@ -98,66 +88,23 @@ class AS2Partnership(TenantBase, TenantAwareMixin):
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
-    credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    mdn_type: Mapped[str] = mapped_column(String(50), nullable=False, default="SYNC")
-    mdn_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    encryption_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="AES256")
-    signature_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="SHA256")
-
-    advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
-
 
 # ---------------------------------------------------------------------------
 # Tenant Protocol & Routing Models
 # ---------------------------------------------------------------------------
 
 
-class SFTPPartner(TenantBase, TenantAwareMixin):
+class SFTPPartner(TenantBase, TenantAwareMixin, SFTPPartnerMixin, TimestampMixin):
     __tablename__ = "sftp_partners"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    host: Mapped[str] = mapped_column(String(1024), nullable=False)
-    port: Mapped[int] = mapped_column(Integer, default=22)
-    username: Mapped[str] = mapped_column(String(255), nullable=False)
-    host_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    inbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    outbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    password_encrypted: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
-
-class Webhook(TenantBase, TenantAwareMixin):
+class Webhook(TenantBase, TenantAwareMixin, WebhookMixin, TimestampMixin):
     __tablename__ = "webhooks"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    url: Mapped[str] = mapped_column(String(1024), nullable=False)
-    auth_header_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
-
-class InboundRoute(TenantBase, TenantAwareMixin):
+class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMixin):
     __tablename__ = "inbound_routes"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    processing_mode: Mapped[str] = mapped_column(
-        String(50), nullable=False, server_default="TRANSLATE"
-    )
     webhook_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
     )
@@ -167,7 +114,6 @@ class InboundRoute(TenantBase, TenantAwareMixin):
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -186,26 +132,15 @@ class InboundRoute(TenantBase, TenantAwareMixin):
     )
 
 
-class OutboundRoute(TenantBase, TenantAwareMixin):
+class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampMixin):
     __tablename__ = "outbound_routes"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    processing_mode: Mapped[str] = mapped_column(
-        String(50), nullable=False, server_default="TRANSLATE"
-    )
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -213,11 +148,9 @@ class OutboundRoute(TenantBase, TenantAwareMixin):
             name="chk_outbound_routes_exactly_one_dest",
         ),
         Index(
-            "ix_outbound_routes_unique_active",
+            "ix_outbound_routes_unique_trading_partner_id",
             "tenant_id",
-            "isa_sender_id",
-            "isa_receiver_id",
-            "transaction_type",
+            "trading_partner_id",
             unique=True,
             postgresql_where=text("active = true"),
         ),
@@ -229,7 +162,7 @@ class OutboundRoute(TenantBase, TenantAwareMixin):
 # ---------------------------------------------------------------------------
 
 
-class EdiMessage(TenantBase, TenantAwareMixin):
+class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_messages"
 
     id: Mapped[PyUUID] = mapped_column(
@@ -237,7 +170,7 @@ class EdiMessage(TenantBase, TenantAwareMixin):
     )
     trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
-    connection_type: Mapped[str] = mapped_column(String(50), nullable=False)  # AS2, SFTP, FTP
+    connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
 
     sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -253,12 +186,16 @@ class EdiMessage(TenantBase, TenantAwareMixin):
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     msg_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outbound_route_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True, index=True
+    )
 
     interchange_control_no: Mapped[str | None] = mapped_column(String(255), nullable=True)
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     format_standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    edi_data: Mapped[str] = mapped_column(SanitizedText, nullable=False)
+    edi_data: Mapped[str | None] = mapped_column(SanitizedText, nullable=True)
+    storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
@@ -268,7 +205,51 @@ class EdiMessage(TenantBase, TenantAwareMixin):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    __table_args__ = (Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),
+        CheckConstraint(
+            "(edi_data IS NOT NULL OR storage_uri IS NOT NULL)",
+            name="chk_edi_msg_data_or_uri",
+        ),
+    )
+
+
+class EdiJson(TenantBase, TenantAwareMixin):
+    __tablename__ = "edi_json"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
+
+    outbound_route_id: Mapped[PyUUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True, index=True
+    )
+    transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    business_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="TRANSLATED")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
+        Index("ix_edi_json_sender_recv", "sender_id", "receiver_id", "created_at"),
+        CheckConstraint(
+            "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
+            name="chk_edi_json_data_or_uri",
+        ),
+    )
 
 
 class ApiGateway(TenantBase, TenantAwareMixin):
@@ -285,7 +266,8 @@ class ApiGateway(TenantBase, TenantAwareMixin):
     http_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     target_format: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    request: Mapped[str] = mapped_column(String(1024), nullable=False)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
     headers: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
@@ -294,6 +276,13 @@ class ApiGateway(TenantBase, TenantAwareMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
+            name="chk_apigw_data_or_uri",
+        ),
     )
 
 

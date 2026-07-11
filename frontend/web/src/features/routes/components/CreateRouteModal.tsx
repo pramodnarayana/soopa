@@ -1,203 +1,59 @@
 import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCreateInboundRouteMutation, useCreateOutboundRouteMutation } from '../api/routeHooks';
-import { useTenantDestinations } from '../hooks/useTenantDestinations';
-import { Network } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { FormModal } from '@/components/ui/form-modal';
+import { Network, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { InboundRouteForm } from './InboundRouteForm';
+import { OutboundRouteForm } from './OutboundRouteForm';
 
 export function CreateRouteModal() {
   const [isOpen, setIsOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [direction, setDirection] = useState<'INBOUND' | 'OUTBOUND'>('INBOUND');
-  const [processingMode, setProcessingMode] = useState<'TRANSLATE' | 'PASSTHROUGH'>('TRANSLATE');
-  const [transactionType, setTransactionType] = useState('*');
-  const [isaSender, setIsaSender] = useState('');
-  const [isaReceiver, setIsaReceiver] = useState('');
-  const [targetId, setTargetId] = useState('');
-
-  const { toast } = useToast();
-  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations(direction);
-
-  const createInbound = useCreateInboundRouteMutation();
-  const createOutbound = useCreateOutboundRouteMutation();
-
-  const isPending = createInbound.isPending || createOutbound.isPending;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !isaSender || !isaReceiver || !targetId || !transactionType) {
-      toast({ title: 'Please fill all fields', variant: 'destructive' });
-      return;
-    }
-
-    try {
-      if (direction === 'INBOUND') {
-        // Inbound: Target is an Endpoint (Webhook)
-        const selectedEndpoint = destinations?.find(e => e.id === targetId);
-        if (!selectedEndpoint) {
-          toast({ title: 'Invalid endpoint selected', variant: 'destructive' });
-          return;
-        }
-
-        await createInbound.mutateAsync({
-          name,
-          isa_sender_id: isaSender,
-          isa_receiver_id: isaReceiver,
-          transaction_type: transactionType,
-          processing_mode: processingMode,
-          webhook_id: targetId,
-        });
-      } else {
-        // Outbound: Target is a Trading Partner (AS2/SFTP)
-        const selectedPartner = destinations?.find(p => p.id === targetId);
-        if (!selectedPartner) {
-          toast({ title: 'Invalid partner selected', variant: 'destructive' });
-          return;
-        }
-        await createOutbound.mutateAsync({
-          name,
-          isa_sender_id: isaSender,
-          isa_receiver_id: isaReceiver,
-          transaction_type: transactionType,
-          processing_mode: processingMode,
-          as2_partner_id: selectedPartner.type?.toUpperCase() === 'AS2' ? targetId : undefined,
-          sftp_partner_id: selectedPartner.type?.toUpperCase() === 'SFTP' ? targetId : undefined,
-        });
-      }
-
-      toast({ title: 'Route created successfully' });
-      setIsOpen(false);
-
-      // Reset form
-      setName('');
-      setIsaSender('');
-      setIsaReceiver('');
-      setTargetId('');
-      setTransactionType('*');
-    } catch (err) {
-      toast({ title: 'Failed to create route', description: String(err), variant: 'destructive' });
-    }
-  };
+  const [activeTab, setActiveTab] = useState('inbound');
 
   return (
-    <FormModal
-      title="Create Routing Rule"
-      triggerText="Create Route"
-      icon={<Network className="w-4 h-4" />}
-      isOpen={isOpen}
-      onOpenChange={setIsOpen}
-      onSubmit={handleSubmit}
-      isPending={isPending}
-      submitText="Create Route"
-      maxWidth="sm:max-w-[500px]"
-    >
-      <div className="grid gap-2">
-        <Label htmlFor="route_name" className="text-slate-600 font-medium">Route Name</Label>
-        <Input
-          id="route_name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Inbound Walmart 850"
-          className="h-10 rounded-xl text-sm"
-        />
-      </div>
+    <Dialog open={isOpen} onOpenChange={setIsOpen} modal={false}>
+      <DialogTrigger asChild>
+        <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
+          <Plus className="h-4 w-4" />
+          Create Route
+        </Button>
+      </DialogTrigger>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="direction" className="text-slate-600 font-medium">Traffic Flow</Label>
-          <Select value={direction} onValueChange={(v: 'INBOUND' | 'OUTBOUND') => { setDirection(v); setTargetId(''); }}>
-            <SelectTrigger className="h-10 rounded-xl">
-              <SelectValue placeholder="Select traffic flow" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="INBOUND">From EDI</SelectItem>
-              <SelectItem value="OUTBOUND">From JSON</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="transaction_type" className="text-slate-600 font-medium">Transaction</Label>
-          <Input
-            id="transaction_type"
-            value={transactionType}
-            onChange={(e) => setTransactionType(e.target.value)}
-            placeholder="e.g. 850 or *"
-            className="h-10 rounded-xl font-mono text-sm"
-          />
-        </div>
-      </div>
+      <DialogContent
+        className="sm:max-w-[700px] rounded-2xl"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle className="text-xl flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <Network className="w-4 h-4" />
+            </div>
+            Create Routing Rule
+          </DialogTitle>
+        </DialogHeader>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="sender_id" className="text-slate-600 font-medium">ISA Sender ID</Label>
-          <Input
-            id="sender_id"
-            value={isaSender}
-            onChange={(e) => setIsaSender(e.target.value)}
-            placeholder="e.g. ACME_CORP"
-            className="h-10 rounded-xl font-mono text-sm uppercase"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="receiver_id" className="text-slate-600 font-medium">ISA Receiver ID</Label>
-          <Input
-            id="receiver_id"
-            value={isaReceiver}
-            onChange={(e) => setIsaReceiver(e.target.value)}
-            placeholder="e.g. WALMART"
-            className="h-10 rounded-xl font-mono text-sm uppercase"
-          />
-        </div>
-      </div>
+        <div className="flex flex-col h-full py-2">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6 h-12 p-1 bg-slate-100 rounded-xl">
+              <TabsTrigger value="inbound" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm">
+                Inbound (From EDI)
+              </TabsTrigger>
+              <TabsTrigger value="outbound" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-sm">
+                Outbound (From JSON)
+              </TabsTrigger>
+            </TabsList>
 
-      <div className="grid gap-2">
-        <Label htmlFor="processing_mode" className="text-slate-600 font-medium">Processing Mode</Label>
-        <Select value={processingMode} onValueChange={(v: 'TRANSLATE' | 'PASSTHROUGH') => setProcessingMode(v)}>
-          <SelectTrigger className="h-10 rounded-xl">
-            <SelectValue placeholder="Select processing mode" />
-          </SelectTrigger>
-          <SelectContent className="rounded-xl">
-            <SelectItem value="TRANSLATE">
-              <div className="flex flex-col">
-                <span className="font-medium">Translate (EDI ↔ JSON)</span>
-                <span className="text-xs text-slate-500">Parse EDI to JSON and integrate with Webhooks</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="PASSTHROUGH">
-              <div className="flex flex-col">
-                <span className="font-medium">Passthrough (VAN)</span>
-                <span className="text-xs text-slate-500">Forward raw EDI directly to AS2 or SFTP without translating</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+            <TabsContent value="inbound" className="mt-0 outline-none">
+              <InboundRouteForm onSuccess={() => setIsOpen(false)} />
+            </TabsContent>
 
-      <div className="grid gap-2">
-        <Label htmlFor="target" className="text-slate-600 font-medium">Target Destination</Label>
-        <SearchableSelect
-          disabled={isLoadingDestinations}
-          value={targetId}
-          onChange={setTargetId}
-          placeholder={isLoadingDestinations ? "Loading..." : "Select destination"}
-          options={(destinations || [])
-            .filter(d => direction === 'INBOUND' || !(d.type === 'AS2' && (d as any).is_local))
-            .map(d => ({
-            value: d.id,
-            label: (
-              <span className="flex items-center gap-2">
-                <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{d.type}</span>
-                {d.name}
-              </span>
-            ),
-            searchString: d.name
-          }))}
-        />
-      </div>
-    </FormModal>
+            <TabsContent value="outbound" className="mt-0 outline-none">
+              <OutboundRouteForm onSuccess={() => setIsOpen(false)} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -46,6 +46,7 @@ class CreateAS2PartnershipCmd:
     local_partner_id: UUID
     remote_partner_id: UUID
     name: str
+    trading_partner_id: str | None = None
     credentials_vault_ref: str | None = None
     mdn_type: str = "SYNC"
     mdn_url: str | None = None
@@ -115,6 +116,8 @@ class CreateInboundRouteCmd:
     isa_sender_id: str
     isa_receiver_id: str
     transaction_type: str
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
     processing_mode: str = "TRANSLATE"
     webhook_id: UUID | None = None
     as2_partner_id: UUID | None = None
@@ -126,6 +129,8 @@ class UpdateInboundRouteCmd:
     name: str | UnsetType = UNSET
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
+    gs_sender_id: str | None | UnsetType = UNSET
+    gs_receiver_id: str | None | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET
     processing_mode: str | UnsetType = UNSET
     webhook_id: UUID | None | UnsetType = UNSET
@@ -136,10 +141,17 @@ class UpdateInboundRouteCmd:
 
 @dataclass(frozen=True)
 class CreateOutboundRouteCmd:
+    trading_partner_id: str
     name: str
     isa_sender_id: str
     isa_receiver_id: str
+    gs_sender_id: str
+    gs_receiver_id: str
     transaction_type: str
+    isa_sender_qualifier: str | None = None
+    isa_receiver_qualifier: str | None = None
+    default_standard: str = "x12"
+    default_version: str = "004010"
     processing_mode: str = "TRANSLATE"
     as2_partner_id: UUID | None = None
     sftp_partner_id: UUID | None = None
@@ -147,10 +159,17 @@ class CreateOutboundRouteCmd:
 
 @dataclass(frozen=True)
 class UpdateOutboundRouteCmd:
+    trading_partner_id: str | None | UnsetType = UNSET
     name: str | UnsetType = UNSET
     isa_sender_id: str | UnsetType = UNSET
+    isa_sender_qualifier: str | None | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
+    isa_receiver_qualifier: str | None | UnsetType = UNSET
+    gs_sender_id: str | UnsetType = UNSET
+    gs_receiver_id: str | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET
+    default_standard: str | UnsetType = UNSET
+    default_version: str | UnsetType = UNSET
     processing_mode: str | UnsetType = UNSET
     as2_partner_id: UUID | None | UnsetType = UNSET
     sftp_partner_id: UUID | None | UnsetType = UNSET
@@ -176,3 +195,26 @@ class RouteEntity:
     route_id: UUID
     tenant_id: int
     direction: str  # INBOUND, OUTBOUND
+
+
+# ---------------------------------------------------------------------------
+# API Token Commands & Entities
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CreateApiTokenCmd:
+    name: str
+    expires_at: Any | None = None  # datetime or None
+
+
+@dataclass(frozen=True)
+class ApiTokenEntity:
+    """Returned once after creation. client_secret is shown only this time."""
+
+    id: UUID
+    tenant_id: int
+    name: str
+    client_id: str  # stored plaintext, safe to display in UI
+    client_secret: str  # shown once, never stored — only its hash is in DB
+    active: bool

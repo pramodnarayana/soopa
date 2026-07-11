@@ -5,6 +5,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
@@ -18,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
 from api.dependencies import get_current_user_profile
-from api.routers import edi_tools, routes, trading_partners, webhooks
+from api.routers import edi_json, edi_tools, routes, trading_partners, webhooks
+from api.routers.developers import api_tokens
 from api.routers.trading_partners import as2_receive, platform
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,8 @@ app.include_router(platform.router)
 app.include_router(routes.router)
 app.include_router(edi_tools.router)
 app.include_router(as2_receive.router, prefix="/api/v1")
+app.include_router(edi_json.router)
+app.include_router(api_tokens.router)
 
 
 @app.get("/api/me", tags=["Identity"])

@@ -45,19 +45,19 @@ dev:
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	ENVIRONMENT=development uv run uvicorn as2_server.main:app --reload --port 8000
+	ENVIRONMENT=development uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-api:
 	@echo "Starting API Gateway with hot-reload for local development..."
-	ENVIRONMENT=development uv run uvicorn api.main:app --reload --port 8001
+	ENVIRONMENT=development uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 
 dev-web:
 	@echo "Starting React Frontend with Vite..."
 	cd frontend/web && pnpm dev
 
 dev-worker:
-	@echo "Starting Provision Worker for local development..."
-	ENVIRONMENT=development PYTHONPATH=services/worker/src:libs/database/src:libs/config/src:libs/pipeline/src uv run python services/worker/src/worker/provision/main.py
+	@echo "Starting Unified Worker (Data + Provision) for local development..."
+	ENVIRONMENT=development PYTHONPATH=services/worker/src:libs/database/src:libs/config/src:libs/pipeline/src:libs/domain/src:libs/transformer/src uv run python services/worker/src/worker/main.py
 
 db-init:
 	@echo "Waiting for databases to be ready..."
@@ -69,15 +69,22 @@ db-init:
 
 db-reset:
 	@echo "Wiping application databases (leaving Zitadel intact)..."
-	docker compose stop postgres_global postgres_shard_1
-	docker compose rm -f -v postgres_global postgres_shard_1
-	-docker volume rm $$(docker volume ls -q | grep -E "postgres_global_data|postgres_shard_[0-9]+_data") 2>/dev/null
-	@echo "Restarting application databases..."
-	docker compose up -d postgres_global postgres_shard_1
+	docker compose stop postgres_global postgres_shard_1 debezium_shard_1
+	docker compose rm -f -v postgres_global postgres_shard_1 debezium_shard_1
+	-docker volume rm $$(docker volume ls -q | grep -E "postgres_global_data|postgres_shard_[0-9]+_data|debezium_data") 2>/dev/null
+	@echo "Restarting application databases and Debezium..."
+	docker compose up -d postgres_global postgres_shard_1 debezium_shard_1
 	@echo "Waiting for databases to initialize..."
 	sleep 5
 	@echo "Re-running migrations and seeding..."
 	$(MAKE) db-init
+
+sqs-purge:
+	@echo "Purging all LocalStack SQS queues..."
+	uv run python scripts/purge_sqs.py
+
+db-sqs-reset: db-reset sqs-purge
+	@echo "Database and SQS queues have been completely reset."
 
 seed: db-init
 

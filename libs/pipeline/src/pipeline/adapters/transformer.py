@@ -25,9 +25,46 @@ class BotsTransformerAdapter(TransformerPort):
         return {}
 
     async def translate_json_to_edi(
-        self, payload: dict[str, Any], standard: str, transaction_type: str
+        self,
+        payload: dict[str, Any] | list[dict[str, Any]],
+        standard: str,
+        transaction_type: str,
+        route_config: dict[str, Any],
     ) -> bytes:
         """
         Translates JSON to EDI using the wrapped BOTS facade.
         """
-        raise NotImplementedError("JSON to EDI translation is not yet supported via BOTS.")
+        import asyncio
+        import datetime
+
+        from transformer.domain.exceptions import TranslationError
+
+        datetime.datetime.utcnow()
+
+        if isinstance(payload, dict) and (
+            "interchange_ISA" in payload or "interchange_UNB" in payload
+        ):
+            ast_dict: dict[str, Any] = payload
+        else:
+            if standard.lower() == "x12":
+                from transformer.domain.envelope.x12 import X12EnvelopeBuilder
+
+                ast_dict = X12EnvelopeBuilder.build(route_config, payload)
+            elif standard.lower() == "edifact":
+                from transformer.domain.envelope.edifact import EdifactEnvelopeBuilder
+
+                ast_dict = EdifactEnvelopeBuilder.build(route_config, payload)
+            else:
+                raise TranslationError(
+                    message=f"Unsupported standard for envelope building: {standard}"
+                )
+
+        edi_str, errors = await asyncio.to_thread(
+            self._adapter.serialize_to_edi, ast_dict, standard=standard.lower()
+        )
+
+        fatal_errors = [e for e in errors if not e.startswith("[W")]
+        if fatal_errors:
+            raise TranslationError(message="\n".join(fatal_errors), errors=fatal_errors)
+
+        return edi_str.encode("utf-8")

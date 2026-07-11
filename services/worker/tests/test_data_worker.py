@@ -66,16 +66,17 @@ async def test_poll_sqs_queue_processes_message(mock_session_cls: MagicMock) -> 
             mock_resolver,
             mock_db_router,
             "bucket",
-            "http://localhost",
+            "endpoint",
         )
 
     mock_processor.assert_awaited_once_with(
         trace_id="trace-456",
+        event_type="UNKNOWN",
         tenant_id=99,
         resolver=mock_resolver,
         db_router=mock_db_router,
         s3_bucket="bucket",
-        aws_endpoint="http://localhost",
+        aws_endpoint="endpoint",
     )
 
     mock_client.delete_message.assert_awaited_once_with(
@@ -98,10 +99,16 @@ async def test_process_translation(mock_service_cls: MagicMock) -> None:
     mock_tenant_gen.__anext__.return_value = mock_tenant_session
 
     await process_translation(
-        "trace-123", 99, mock_resolver, mock_db_router, "bucket", "http://localhost"
+        "trace-123",
+        "edi_message.received",
+        99,
+        mock_resolver,
+        mock_db_router,
+        "bucket",
+        "http://localhost",
     )
 
-    mock_service.translate.assert_awaited_once_with("trace-123")
+    mock_service.translate.assert_awaited_once_with("trace-123", "edi_message.received")
 
 
 @patch("worker.data.main.DeliveryService")
@@ -120,6 +127,7 @@ async def test_process_delivery(mock_service_cls: MagicMock) -> None:
 
     await process_delivery(
         "trace-123",
+        "DELIVER",
         99,
         mock_resolver,
         mock_db_router,

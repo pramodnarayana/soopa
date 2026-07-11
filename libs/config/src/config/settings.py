@@ -95,6 +95,7 @@ class AppSettings(BaseSettings):
 
     env: Literal["development", "staging", "production"] = Field(default="development")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
+    storage_backend: Literal["postgres", "s3"] = Field(default="postgres")
 
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     s3: S3Settings = Field(default_factory=S3Settings)

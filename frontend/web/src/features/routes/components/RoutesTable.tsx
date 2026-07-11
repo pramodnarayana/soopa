@@ -20,10 +20,15 @@ const columns = [
   columnHelper.accessor('name', {
     header: 'Route Name',
     cell: (info) => (
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-1">
         <span className="font-medium text-slate-900">
           {info.getValue()}
         </span>
+        {info.row.original.trading_partner_id && (
+          <div className="text-xs text-slate-400 mt-1">
+            Trading Partner ID: {info.row.original.trading_partner_id}
+          </div>
+        )}
       </div>
     ),
   }),

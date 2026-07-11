@@ -100,3 +100,4 @@ class VaultAdapter:
 
 # Singleton instance
 vault = VaultAdapter()
+# Trigger reload

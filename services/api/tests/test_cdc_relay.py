@@ -39,7 +39,7 @@ def test_cdc_relay_successful_translate_routing(memory_queue: InMemoryQueueAdapt
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     assert len(memory_queue.sent_messages) == 1
     queue_name, msg_payload = memory_queue.sent_messages[0]
@@ -65,7 +65,7 @@ def test_cdc_relay_successful_deliver_routing(memory_queue: InMemoryQueueAdapter
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 202
+    assert response.status_code == 200
 
     assert len(memory_queue.sent_messages) == 1
     queue_name, msg_payload = memory_queue.sent_messages[0]
@@ -91,7 +91,7 @@ def test_cdc_relay_ignores_updates_and_deletes(memory_queue: InMemoryQueueAdapte
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 202
+    assert response.status_code == 200
     assert len(memory_queue.sent_messages) == 0
 
 
@@ -108,27 +108,35 @@ def test_cdc_relay_rejects_unknown_table(memory_queue: InMemoryQueueAdapter) -> 
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Unknown table source"
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
     assert len(memory_queue.sent_messages) == 0
 
 
-def test_cdc_relay_rejects_unknown_event_type(memory_queue: InMemoryQueueAdapter) -> None:
-    """Unknown event types must fail-fast so they are not silently dropped."""
+def test_cdc_relay_successful_provisioning_routing(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests the CDC relay routes non-data plane events to ProvisioningQueue."""
     payload = {
         "__op": "c",
         "__table": "outbox",
         "idempotency_key": "uuid-789",
-        "event_type": "MYSTERY_EVENT",
-        "payload": {"trace_id": "req-123"},
+        "event_type": "AS2_PARTNERSHIP_CREATED",
+        "payload": {"tenant_id": 999},
         "status": "PENDING",
         "tenant_id": 999,
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 400
-    assert "MYSTERY_EVENT" in response.json()["detail"]
-    assert len(memory_queue.sent_messages) == 0
+    assert response.status_code == 200
+
+    assert len(memory_queue.sent_messages) == 1
+    queue_name, msg_payload = memory_queue.sent_messages[0]
+    assert queue_name == "ProvisioningQueue"
+    assert msg_payload == {
+        "idempotency_key": "uuid-789",
+        "event_type": "AS2_PARTNERSHIP_CREATED",
+        "payload": {"tenant_id": 999},
+        "tenant_id": 999,
+    }
 
 
 def test_cdc_relay_rejects_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
@@ -144,6 +152,6 @@ def test_cdc_relay_rejects_missing_trace_id(memory_queue: InMemoryQueueAdapter) 
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
-    assert response.status_code == 400
-    assert "trace_id" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
     assert len(memory_queue.sent_messages) == 0

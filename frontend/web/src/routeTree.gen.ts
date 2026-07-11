@@ -16,12 +16,14 @@ import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
 import { Route as TenantUsersRouteImport } from './routes/tenant/users'
 import { Route as TenantRoutesRouteImport } from './routes/tenant/routes'
 import { Route as TenantPartnersRouteImport } from './routes/tenant/partners'
-import { Route as TenantEdiToolRouteImport } from './routes/tenant/edi_tool'
+import { Route as TenantEndpointsRouteImport } from './routes/tenant/endpoints'
+import { Route as TenantEdi_toolRouteImport } from './routes/tenant/edi_tool'
+import { Route as TenantDevelopersRouteImport } from './routes/tenant/developers'
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as PlatformUsersRouteImport } from './routes/platform/users'
 import { Route as PlatformTenantsRouteImport } from './routes/platform/tenants'
-import { Route as PlatformPartnersRouteImport } from './routes/platform/partners'
 import { Route as PlatformPartnershipsRouteImport } from './routes/platform/partnerships'
+import { Route as PlatformPartnersRouteImport } from './routes/platform/partners'
 import { Route as PlatformDashboardRouteImport } from './routes/platform/dashboard'
 
 const TenantRoute = TenantRouteImport.update({
@@ -58,14 +60,24 @@ const TenantPartnersRoute = TenantPartnersRouteImport.update({
   path: '/partners',
   getParentRoute: () => TenantRoute,
 } as any)
+const TenantEndpointsRoute = TenantEndpointsRouteImport.update({
+  id: '/endpoints',
+  path: '/endpoints',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantEdi_toolRoute = TenantEdi_toolRouteImport.update({
+  id: '/edi_tool',
+  path: '/edi_tool',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantDevelopersRoute = TenantDevelopersRouteImport.update({
+  id: '/developers',
+  path: '/developers',
+  getParentRoute: () => TenantRoute,
+} as any)
 const TenantDashboardRoute = TenantDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => TenantRoute,
-} as any)
-const TenantEdiToolRoute = TenantEdiToolRouteImport.update({
-  id: '/edi_tool',
-  path: '/edi_tool',
   getParentRoute: () => TenantRoute,
 } as any)
 const PlatformUsersRoute = PlatformUsersRouteImport.update({
@@ -78,14 +90,14 @@ const PlatformTenantsRoute = PlatformTenantsRouteImport.update({
   path: '/tenants',
   getParentRoute: () => PlatformRoute,
 } as any)
-const PlatformPartnersRoute = PlatformPartnersRouteImport.update({
-  id: '/partners',
-  path: '/partners',
-  getParentRoute: () => PlatformRoute,
-} as any)
 const PlatformPartnershipsRoute = PlatformPartnershipsRouteImport.update({
   id: '/partnerships',
   path: '/partnerships',
+  getParentRoute: () => PlatformRoute,
+} as any)
+const PlatformPartnersRoute = PlatformPartnersRouteImport.update({
+  id: '/partners',
+  path: '/partners',
   getParentRoute: () => PlatformRoute,
 } as any)
 const PlatformDashboardRoute = PlatformDashboardRouteImport.update({
@@ -104,7 +116,9 @@ export interface FileRoutesByFullPath {
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
-  '/tenant/edi_tool': typeof TenantEdiToolRoute
+  '/tenant/developers': typeof TenantDevelopersRoute
+  '/tenant/edi_tool': typeof TenantEdi_toolRoute
+  '/tenant/endpoints': typeof TenantEndpointsRoute
   '/tenant/partners': typeof TenantPartnersRoute
   '/tenant/routes': typeof TenantRoutesRoute
   '/tenant/users': typeof TenantUsersRoute
@@ -118,6 +132,9 @@ export interface FileRoutesByTo {
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
+  '/tenant/developers': typeof TenantDevelopersRoute
+  '/tenant/edi_tool': typeof TenantEdi_toolRoute
+  '/tenant/endpoints': typeof TenantEndpointsRoute
   '/tenant/partners': typeof TenantPartnersRoute
   '/tenant/routes': typeof TenantRoutesRoute
   '/tenant/users': typeof TenantUsersRoute
@@ -134,6 +151,9 @@ export interface FileRoutesById {
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
+  '/tenant/developers': typeof TenantDevelopersRoute
+  '/tenant/edi_tool': typeof TenantEdi_toolRoute
+  '/tenant/endpoints': typeof TenantEndpointsRoute
   '/tenant/partners': typeof TenantPartnersRoute
   '/tenant/routes': typeof TenantRoutesRoute
   '/tenant/users': typeof TenantUsersRoute
@@ -151,6 +171,9 @@ export interface FileRouteTypes {
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
+    | '/tenant/developers'
+    | '/tenant/edi_tool'
+    | '/tenant/endpoints'
     | '/tenant/partners'
     | '/tenant/routes'
     | '/tenant/users'
@@ -164,6 +187,9 @@ export interface FileRouteTypes {
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
+    | '/tenant/developers'
+    | '/tenant/edi_tool'
+    | '/tenant/endpoints'
     | '/tenant/partners'
     | '/tenant/routes'
     | '/tenant/users'
@@ -179,6 +205,9 @@ export interface FileRouteTypes {
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
+    | '/tenant/developers'
+    | '/tenant/edi_tool'
+    | '/tenant/endpoints'
     | '/tenant/partners'
     | '/tenant/routes'
     | '/tenant/users'
@@ -235,15 +264,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantRoutesRouteImport
       parentRoute: typeof TenantRoute
     }
-    "/tenant/edi_tool": {
-      "filePath": "tenant/edi_tool.tsx",
-      "parent": "/tenant"
-    },
     '/tenant/partners': {
       id: '/tenant/partners'
       path: '/partners'
       fullPath: '/tenant/partners'
       preLoaderRoute: typeof TenantPartnersRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/endpoints': {
+      id: '/tenant/endpoints'
+      path: '/endpoints'
+      fullPath: '/tenant/endpoints'
+      preLoaderRoute: typeof TenantEndpointsRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/edi_tool': {
+      id: '/tenant/edi_tool'
+      path: '/edi_tool'
+      fullPath: '/tenant/edi_tool'
+      preLoaderRoute: typeof TenantEdi_toolRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/developers': {
+      id: '/tenant/developers'
+      path: '/developers'
+      fullPath: '/tenant/developers'
+      preLoaderRoute: typeof TenantDevelopersRouteImport
       parentRoute: typeof TenantRoute
     }
     '/tenant/dashboard': {
@@ -267,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformTenantsRouteImport
       parentRoute: typeof PlatformRoute
     }
+    '/platform/partnerships': {
+      id: '/platform/partnerships'
+      path: '/partnerships'
+      fullPath: '/platform/partnerships'
+      preLoaderRoute: typeof PlatformPartnershipsRouteImport
+      parentRoute: typeof PlatformRoute
+    }
     '/platform/partners': {
       id: '/platform/partners'
       path: '/partners'
@@ -279,13 +332,6 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/platform/dashboard'
       preLoaderRoute: typeof PlatformDashboardRouteImport
-      parentRoute: typeof PlatformRoute
-    }
-    '/platform/partnerships': {
-      id: '/platform/partnerships'
-      path: '/partnerships'
-      fullPath: '/platform/partnerships'
-      preLoaderRoute: typeof PlatformPartnershipsRouteImport
       parentRoute: typeof PlatformRoute
     }
   }
@@ -325,7 +371,9 @@ const PlatformRouteWithChildren = PlatformRoute._addFileChildren(
 
 interface TenantRouteChildren {
   TenantDashboardRoute: typeof TenantDashboardRoute
-  TenantEdiToolRoute: typeof TenantEdiToolRoute
+  TenantDevelopersRoute: typeof TenantDevelopersRoute
+  TenantEdi_toolRoute: typeof TenantEdi_toolRoute
+  TenantEndpointsRoute: typeof TenantEndpointsRoute
   TenantPartnersRoute: typeof TenantPartnersRoute
   TenantRoutesRoute: typeof TenantRoutesRoute
   TenantUsersRoute: typeof TenantUsersRoute
@@ -333,7 +381,9 @@ interface TenantRouteChildren {
 
 const TenantRouteChildren: TenantRouteChildren = {
   TenantDashboardRoute: TenantDashboardRoute,
-  TenantEdiToolRoute: TenantEdiToolRoute,
+  TenantDevelopersRoute: TenantDevelopersRoute,
+  TenantEdi_toolRoute: TenantEdi_toolRoute,
+  TenantEndpointsRoute: TenantEndpointsRoute,
   TenantPartnersRoute: TenantPartnersRoute,
   TenantRoutesRoute: TenantRoutesRoute,
   TenantUsersRoute: TenantUsersRoute,

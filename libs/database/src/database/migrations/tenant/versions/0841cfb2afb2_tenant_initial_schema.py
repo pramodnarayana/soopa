@@ -1,19 +1,20 @@
 """tenant_initial_schema
 
-Revision ID: 34e9d4ab146a
+Revision ID: 0841cfb2afb2
 Revises:
-Create Date: 2026-07-06 14:56:18.175654
+Create Date: 2026-07-10 11:42:54.246255
 
 """
 
 from collections.abc import Sequence
 
+import database.models.data_plane
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "34e9d4ab146a"
+revision: str = "0841cfb2afb2"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -30,7 +31,12 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("raw_content", sa.Text(), nullable=True),
         sa.Column("received_at", sa.DateTime(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ack_receipts_tenant_id"), "ack_receipts", ["tenant_id"], unique=False)
@@ -44,21 +50,35 @@ def upgrade() -> None:
         sa.Column("webhook_url", sa.String(length=1024), nullable=True),
         sa.Column("http_status_code", sa.Integer(), nullable=True),
         sa.Column("target_format", sa.String(length=50), nullable=True),
-        sa.Column("request", sa.String(length=1024), nullable=False),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("storage_uri", sa.String(length=1024), nullable=True),
         sa.Column("response", sa.Text(), nullable=True),
         sa.Column("headers", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "(payload IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_apigw_data_or_uri"
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_api_gateway_tenant_id"), "api_gateway", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_api_gateway_trace_id"), "api_gateway", ["trace_id"], unique=False)
     op.create_table(
         "as2_partners",
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.Column("is_local", sa.Boolean(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("as2_id", sa.String(length=255), nullable=False),
         sa.Column("public_cert_pem", sa.Text(), nullable=True),
@@ -69,7 +89,8 @@ def upgrade() -> None:
         sa.Column("prev_private_key_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("url", sa.String(length=1024), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_as2_partners_tenant_id"), "as2_partners", ["tenant_id"], unique=False)
@@ -83,50 +104,16 @@ def upgrade() -> None:
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_audit_log_tenant_id"), "audit_log", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_audit_log_trace_id"), "audit_log", ["trace_id"], unique=False)
-    op.create_table(
-        "edi_messages",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.Column("trace_id", sa.UUID(), nullable=False),
-        sa.Column("direction", sa.String(length=50), nullable=False),
-        sa.Column("connection_type", sa.String(length=50), nullable=False),
-        sa.Column("sender_id", sa.String(length=255), nullable=True),
-        sa.Column("receiver_id", sa.String(length=255), nullable=True),
-        sa.Column("message_id", sa.String(length=255), nullable=True),
-        sa.Column("mdn_id", sa.String(length=255), nullable=True),
-        sa.Column("mdn_mode", sa.String(length=50), nullable=True),
-        sa.Column("mdn_response", sa.Text(), nullable=True),
-        sa.Column("file_name", sa.String(length=1024), nullable=True),
-        sa.Column("content_type", sa.String(length=255), nullable=True),
-        sa.Column("signature_algorithm", sa.String(length=50), nullable=True),
-        sa.Column("encryption_algorithm", sa.String(length=50), nullable=True),
-        sa.Column("is_resend", sa.Boolean(), nullable=False),
-        sa.Column("status_message", sa.Text(), nullable=True),
-        sa.Column("state", sa.String(length=255), nullable=True),
-        sa.Column("msg_headers", sa.Text(), nullable=True),
-        sa.Column("interchange_control_no", sa.String(length=255), nullable=True),
-        sa.Column("transaction_type", sa.String(length=50), nullable=True),
-        sa.Column("format_standard", sa.String(length=50), nullable=True),
-        sa.Column("edi_data", sa.Text(), nullable=False),
-        sa.Column("file_size_bytes", sa.BigInteger(), nullable=True),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_edi_messages_tenant_id"), "edi_messages", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_edi_messages_trace_id"), "edi_messages", ["trace_id"], unique=False)
-    op.create_index(
-        "ix_edi_msgs_sender_recv",
-        "edi_messages",
-        ["sender_id", "receiver_id", "created_at"],
-        unique=False,
-    )
     op.create_table(
         "jobs",
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
@@ -137,7 +124,12 @@ def upgrade() -> None:
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_jobs_tenant_id"), "jobs", ["tenant_id"], unique=False)
@@ -147,7 +139,12 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("published_at", sa.DateTime(), nullable=True),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.Column("idempotency_key", sa.UUID(), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -168,7 +165,12 @@ def upgrade() -> None:
         "processed_events",
         sa.Column("idempotency_key", sa.UUID(), nullable=False),
         sa.Column("processed_at", sa.DateTime(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("idempotency_key"),
     )
     op.create_index(
@@ -176,6 +178,12 @@ def upgrade() -> None:
     )
     op.create_table(
         "sftp_partners",
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("host", sa.String(length=1024), nullable=False),
@@ -187,7 +195,8 @@ def upgrade() -> None:
         sa.Column("password_encrypted", sa.String(length=1024), nullable=True),
         sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -195,21 +204,34 @@ def upgrade() -> None:
     )
     op.create_table(
         "webhooks",
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("url", sa.String(length=1024), nullable=False),
         sa.Column("auth_header_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_webhooks_tenant_id"), "webhooks", ["tenant_id"], unique=False)
     op.create_table(
         "as2_partnerships",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("local_partner_id", sa.UUID(), nullable=False),
         sa.Column("remote_partner_id", sa.UUID(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("mdn_type", sa.String(length=50), nullable=False),
         sa.Column("mdn_url", sa.String(length=1024), nullable=True),
@@ -217,7 +239,8 @@ def upgrade() -> None:
         sa.Column("signature_algorithm", sa.String(length=50), nullable=False),
         sa.Column("advanced_flags", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(["local_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["remote_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -227,19 +250,28 @@ def upgrade() -> None:
     )
     op.create_table(
         "inbound_routes",
+        sa.Column("webhook_id", sa.UUID(), nullable=True),
+        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
+        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
         sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("gs_sender_id", sa.String(length=255), nullable=True),
+        sa.Column("gs_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=False),
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
         ),
-        sa.Column("webhook_id", sa.UUID(), nullable=True),
-        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
-        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
             "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
@@ -270,18 +302,32 @@ def upgrade() -> None:
     )
     op.create_table(
         "outbound_routes",
+        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
+        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("trading_partner_id", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_sender_qualifier", sa.String(length=2), nullable=True),
         sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_receiver_qualifier", sa.String(length=2), nullable=True),
+        sa.Column("gs_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("gs_receiver_id", sa.String(length=255), nullable=False),
         sa.Column("transaction_type", sa.String(length=50), nullable=False),
+        sa.Column("default_standard", sa.String(length=50), server_default="x12", nullable=False),
+        sa.Column("default_version", sa.String(length=50), server_default="004010", nullable=False),
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
         ),
-        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
-        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
             "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
@@ -300,11 +346,122 @@ def upgrade() -> None:
         op.f("ix_outbound_routes_tenant_id"), "outbound_routes", ["tenant_id"], unique=False
     )
     op.create_index(
-        "ix_outbound_routes_unique_active",
+        "ix_outbound_routes_unique_trading_partner_id",
         "outbound_routes",
-        ["tenant_id", "isa_sender_id", "isa_receiver_id", "transaction_type"],
+        ["tenant_id", "trading_partner_id"],
         unique=True,
         postgresql_where=sa.text("active = true"),
+    )
+    op.create_table(
+        "edi_json",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("trace_id", sa.UUID(), nullable=False),
+        sa.Column("direction", sa.String(length=50), nullable=False),
+        sa.Column("outbound_route_id", sa.UUID(), nullable=True),
+        sa.Column("transaction_type", sa.String(length=50), nullable=True),
+        sa.Column("standard", sa.String(length=50), nullable=True),
+        sa.Column("sender_id", sa.String(length=255), nullable=True),
+        sa.Column("receiver_id", sa.String(length=255), nullable=True),
+        sa.Column("business_metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("storage_uri", sa.String(length=1024), nullable=True),
+        sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "(payload IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_edi_json_data_or_uri"
+        ),
+        sa.ForeignKeyConstraint(
+            ["outbound_route_id"],
+            ["outbound_routes.id"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "ix_edi_json_business_metadata",
+        "edi_json",
+        ["business_metadata"],
+        unique=False,
+        postgresql_using="gin",
+    )
+    op.create_index(
+        op.f("ix_edi_json_outbound_route_id"), "edi_json", ["outbound_route_id"], unique=False
+    )
+    op.create_index(
+        "ix_edi_json_sender_recv",
+        "edi_json",
+        ["sender_id", "receiver_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(op.f("ix_edi_json_tenant_id"), "edi_json", ["tenant_id"], unique=False)
+    op.create_index(op.f("ix_edi_json_trace_id"), "edi_json", ["trace_id"], unique=False)
+    op.create_index(
+        op.f("ix_edi_json_transaction_type"), "edi_json", ["transaction_type"], unique=False
+    )
+    op.create_table(
+        "edi_messages",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("trace_id", sa.UUID(), nullable=False),
+        sa.Column("direction", sa.String(length=50), nullable=False),
+        sa.Column("connection_type", sa.String(length=50), nullable=True),
+        sa.Column("sender_id", sa.String(length=255), nullable=True),
+        sa.Column("receiver_id", sa.String(length=255), nullable=True),
+        sa.Column("message_id", sa.String(length=255), nullable=True),
+        sa.Column("mdn_id", sa.String(length=255), nullable=True),
+        sa.Column("mdn_mode", sa.String(length=50), nullable=True),
+        sa.Column("mdn_response", sa.Text(), nullable=True),
+        sa.Column("file_name", sa.String(length=1024), nullable=True),
+        sa.Column("content_type", sa.String(length=255), nullable=True),
+        sa.Column("signature_algorithm", sa.String(length=50), nullable=True),
+        sa.Column("encryption_algorithm", sa.String(length=50), nullable=True),
+        sa.Column("is_resend", sa.Boolean(), nullable=False),
+        sa.Column("status_message", sa.Text(), nullable=True),
+        sa.Column("state", sa.String(length=255), nullable=True),
+        sa.Column("msg_headers", sa.Text(), nullable=True),
+        sa.Column("outbound_route_id", sa.UUID(), nullable=True),
+        sa.Column("interchange_control_no", sa.String(length=255), nullable=True),
+        sa.Column("transaction_type", sa.String(length=50), nullable=True),
+        sa.Column("format_standard", sa.String(length=50), nullable=True),
+        sa.Column("edi_data", database.models.data_plane.SanitizedText(), nullable=True),
+        sa.Column("storage_uri", sa.String(length=1024), nullable=True),
+        sa.Column("file_size_bytes", sa.BigInteger(), nullable=True),
+        sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column(
+            "tenant_id",
+            sa.Integer(),
+            server_default=sa.text("current_setting('app.current_tenant')::int"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "(edi_data IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_edi_msg_data_or_uri"
+        ),
+        sa.ForeignKeyConstraint(
+            ["outbound_route_id"],
+            ["outbound_routes.id"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        op.f("ix_edi_messages_outbound_route_id"),
+        "edi_messages",
+        ["outbound_route_id"],
+        unique=False,
+    )
+    op.create_index(op.f("ix_edi_messages_tenant_id"), "edi_messages", ["tenant_id"], unique=False)
+    op.create_index(op.f("ix_edi_messages_trace_id"), "edi_messages", ["trace_id"], unique=False)
+    op.create_index(
+        "ix_edi_msgs_sender_recv",
+        "edi_messages",
+        ["sender_id", "receiver_id", "created_at"],
+        unique=False,
     )
     # ### end Alembic commands ###
 
@@ -312,8 +469,20 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index("ix_edi_msgs_sender_recv", table_name="edi_messages")
+    op.drop_index(op.f("ix_edi_messages_trace_id"), table_name="edi_messages")
+    op.drop_index(op.f("ix_edi_messages_tenant_id"), table_name="edi_messages")
+    op.drop_index(op.f("ix_edi_messages_outbound_route_id"), table_name="edi_messages")
+    op.drop_table("edi_messages")
+    op.drop_index(op.f("ix_edi_json_transaction_type"), table_name="edi_json")
+    op.drop_index(op.f("ix_edi_json_trace_id"), table_name="edi_json")
+    op.drop_index(op.f("ix_edi_json_tenant_id"), table_name="edi_json")
+    op.drop_index("ix_edi_json_sender_recv", table_name="edi_json")
+    op.drop_index(op.f("ix_edi_json_outbound_route_id"), table_name="edi_json")
+    op.drop_index("ix_edi_json_business_metadata", table_name="edi_json", postgresql_using="gin")
+    op.drop_table("edi_json")
     op.drop_index(
-        "ix_outbound_routes_unique_active",
+        "ix_outbound_routes_unique_trading_partner_id",
         table_name="outbound_routes",
         postgresql_where=sa.text("active = true"),
     )
@@ -344,10 +513,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_jobs_trace_id"), table_name="jobs")
     op.drop_index(op.f("ix_jobs_tenant_id"), table_name="jobs")
     op.drop_table("jobs")
-    op.drop_index("ix_edi_msgs_sender_recv", table_name="edi_messages")
-    op.drop_index(op.f("ix_edi_messages_trace_id"), table_name="edi_messages")
-    op.drop_index(op.f("ix_edi_messages_tenant_id"), table_name="edi_messages")
-    op.drop_table("edi_messages")
     op.drop_index(op.f("ix_audit_log_trace_id"), table_name="audit_log")
     op.drop_index(op.f("ix_audit_log_tenant_id"), table_name="audit_log")
     op.drop_table("audit_log")

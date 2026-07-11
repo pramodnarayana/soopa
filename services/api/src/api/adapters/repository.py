@@ -25,6 +25,7 @@ from api.ports.repository import (
 )
 from database.encryption import db_encryption
 from database.models.control_plane import (
+    ApiToken,
     AS2Partner,
     AS2Partnership,
     InboundRoute,
@@ -92,11 +93,29 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 partner.active = cmd.active
         await self.session.flush()
 
+    async def rotate_as2_certificates(
+        self,
+        tenant_id: int,
+        partner_id: UUID,
+        new_public_cert: str,
+        new_private_key_vault_ref: str | None,
+    ) -> None:
+        partner = await self.get_as2_partner(tenant_id, partner_id)
+        if partner:
+            partner.prev_public_cert_pem = partner.public_cert_pem
+            partner.prev_private_key_vault_ref = partner.private_key_vault_ref
+
+            partner.public_cert_pem = new_public_cert
+            if new_private_key_vault_ref is not None:
+                partner.private_key_vault_ref = new_private_key_vault_ref
+
+        await self.session.flush()
+
     async def get_as2_partner(self, tenant_id: int, partner_id: UUID) -> Any:
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == partner_id,
-                AS2Partner.tenant_id == tenant_id,
+                AS2Partner.tenant_id.in_([tenant_id, 0]),
             )
         )
         return result.scalar_one_or_none()
@@ -114,6 +133,13 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         await self.session.flush()
 
     async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
+
+        local_partner = await self.get_as2_partner(tenant_id, cmd.local_partner_id)
+        remote_partner = await self.get_as2_partner(tenant_id, cmd.remote_partner_id)
+
+        if not local_partner or not remote_partner:
+            raise ValueError("Local or Remote partner not found")
+
         partnership_id = uuid.uuid4()
         record = AS2Partnership(
             id=partnership_id,
@@ -393,6 +419,8 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             name=cmd.name,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
+            gs_sender_id=cmd.gs_sender_id,
+            gs_receiver_id=cmd.gs_receiver_id,
             transaction_type=cmd.transaction_type,
             webhook_id=cmd.webhook_id,
             as2_partner_id=cmd.as2_partner_id,
@@ -420,6 +448,10 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             record.isa_sender_id = cmd.isa_sender_id
         if not isinstance(cmd.isa_receiver_id, UnsetType):
             record.isa_receiver_id = cmd.isa_receiver_id
+        if not isinstance(cmd.gs_sender_id, UnsetType):
+            record.gs_sender_id = cmd.gs_sender_id
+        if not isinstance(cmd.gs_receiver_id, UnsetType):
+            record.gs_receiver_id = cmd.gs_receiver_id
         if not isinstance(cmd.transaction_type, UnsetType):
             record.transaction_type = cmd.transaction_type
         if not isinstance(cmd.processing_mode, UnsetType):
@@ -469,6 +501,12 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         await self.session.flush()
         return True
 
+    async def get_inbound_route(self, isa_sender_id: str, isa_receiver_id: str) -> Any | None:
+        from database.repository import InboundRouteRepository
+
+        repo = InboundRouteRepository(self.session)
+        return await repo.get_inbound_route(isa_sender_id, isa_receiver_id)
+
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
             delete(InboundRoute).where(
@@ -510,10 +548,17 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         record = OutboundRoute(
             id=route_id,
             tenant_id=tenant_id,
+            trading_partner_id=cmd.trading_partner_id,
             name=cmd.name,
             isa_sender_id=cmd.isa_sender_id,
+            isa_sender_qualifier=cmd.isa_sender_qualifier,
             isa_receiver_id=cmd.isa_receiver_id,
+            isa_receiver_qualifier=cmd.isa_receiver_qualifier,
+            gs_sender_id=cmd.gs_sender_id,
+            gs_receiver_id=cmd.gs_receiver_id,
             transaction_type=cmd.transaction_type,
+            default_standard=cmd.default_standard,
+            default_version=cmd.default_version,
             as2_partner_id=cmd.as2_partner_id,
             sftp_partner_id=cmd.sftp_partner_id,
             processing_mode=cmd.processing_mode,
@@ -533,14 +578,28 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         record = result.scalar_one_or_none()
         if not record:
             return False
+        if cmd.trading_partner_id is not UNSET:
+            record.trading_partner_id = cmd.trading_partner_id
         if not isinstance(cmd.name, UnsetType):
             record.name = cmd.name
         if not isinstance(cmd.isa_sender_id, UnsetType):
             record.isa_sender_id = cmd.isa_sender_id
+        if not isinstance(cmd.isa_sender_qualifier, UnsetType):
+            record.isa_sender_qualifier = cmd.isa_sender_qualifier
         if not isinstance(cmd.isa_receiver_id, UnsetType):
             record.isa_receiver_id = cmd.isa_receiver_id
+        if not isinstance(cmd.isa_receiver_qualifier, UnsetType):
+            record.isa_receiver_qualifier = cmd.isa_receiver_qualifier
+        if not isinstance(cmd.gs_sender_id, UnsetType):
+            record.gs_sender_id = cmd.gs_sender_id
+        if not isinstance(cmd.gs_receiver_id, UnsetType):
+            record.gs_receiver_id = cmd.gs_receiver_id
         if not isinstance(cmd.transaction_type, UnsetType):
             record.transaction_type = cmd.transaction_type
+        if not isinstance(cmd.default_standard, UnsetType):
+            record.default_standard = cmd.default_standard
+        if not isinstance(cmd.default_version, UnsetType):
+            record.default_version = cmd.default_version
         if not isinstance(cmd.processing_mode, UnsetType):
             record.processing_mode = cmd.processing_mode
         if not isinstance(cmd.as2_partner_id, UnsetType):
@@ -573,6 +632,18 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
 
         await self.session.flush()
         return True
+
+    async def get_outbound_route_by_trading_partner_id(
+        self, tenant_id: int, trading_partner_id: str
+    ) -> OutboundRoute | None:
+        result = await self.session.execute(
+            select(OutboundRoute).where(
+                OutboundRoute.tenant_id == tenant_id,
+                OutboundRoute.trading_partner_id == trading_partner_id,
+                OutboundRoute.active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
@@ -625,6 +696,41 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         await self.session.flush()
         return event_id
 
+    async def get_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> Any:
+        from database.models.data_plane import AS2Partnership
+
+        result = await self.session.execute(
+            select(AS2Partnership).where(
+                AS2Partnership.id == partnership_id,
+                AS2Partnership.tenant_id == tenant_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_as2_partner(self, tenant_id: int, partner_id: UUID) -> Any:
+        from database.models.data_plane import AS2Partner
+
+        result = await self.session.execute(
+            select(AS2Partner).where(AS2Partner.id == partner_id, AS2Partner.tenant_id == tenant_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def create_edi_json(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
+        from database.models.data_plane import EdiJson
+
+        msg = EdiJson(tenant_id=tenant_id, **payload)
+        self.session.add(msg)
+        await self.session.flush()
+        return msg.id
+
+    async def create_api_gateway(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
+        from database.models.data_plane import ApiGateway
+
+        log = ApiGateway(tenant_id=tenant_id, **payload)
+        self.session.add(log)
+        await self.session.flush()
+        return log.id
+
 
 class SqlAlchemyTenantRepository(TenantRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
@@ -636,3 +742,103 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
         if tenant:
             return {"allow_private_as2": tenant.allow_private_as2}
         return None
+
+
+class SqlAlchemyApiTokenRepository:
+    """Repository for managing platform API tokens in the global (control plane) DB."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create_api_token(
+        self,
+        tenant_id: int,
+        name: str,
+        client_id: str,
+        secret_hash: str,
+        expires_at: object | None = None,
+    ) -> UUID:
+        import uuid as uuid_module
+
+        token_id = uuid_module.uuid4()
+        record = ApiToken(
+            id=token_id,
+            tenant_id=tenant_id,
+            name=name,
+            client_id=client_id,
+            secret_hash=secret_hash,
+            expires_at=expires_at,
+            active=True,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return token_id
+
+    async def list_api_tokens(self, tenant_id: int) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(ApiToken)
+            .where(ApiToken.tenant_id == tenant_id)
+            .order_by(ApiToken.created_at.desc())
+        )
+        tokens = result.scalars().all()
+        return [
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "client_id": t.client_id,  # safe to return; secret_hash is never exposed
+                "active": t.active,
+                "last_used_at": t.last_used_at.isoformat() if t.last_used_at else None,
+                "expires_at": t.expires_at.isoformat() if t.expires_at else None,
+                "created_at": t.created_at.isoformat(),
+            }
+            for t in tokens
+        ]
+
+    async def revoke_api_token(self, tenant_id: int, token_id: UUID) -> bool:
+        result = await self.session.execute(
+            select(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return False
+        record.active = False
+        await self.session.flush()
+        return True
+
+    async def delete_api_token(self, tenant_id: int, token_id: UUID) -> bool:
+        result = await self.session.execute(
+            delete(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
+        )
+        await self.session.flush()
+        return (getattr(result, "rowcount", 0) or 0) > 0
+
+    async def get_tenant_id_by_credentials(self, client_id: str, secret_hash: str) -> int | None:
+        """
+        Two-step lookup (indexed client_id → hash check → tenant_id).
+        Step 1: Find row by client_id (plaintext index — O(1), no full scan).
+        Step 2: Verify secret_hash matches (prevents timing attacks via constant-time compare).
+        Also updates last_used_at.
+        """
+        import hmac
+        from datetime import datetime
+
+        from sqlalchemy import update
+
+        result = await self.session.execute(
+            select(ApiToken).where(
+                ApiToken.client_id == client_id,
+                ApiToken.active.is_(True),
+            )
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+
+        # Constant-time comparison prevents timing-based secret enumeration
+        if not hmac.compare_digest(record.secret_hash, secret_hash):
+            return None
+
+        await self.session.execute(
+            update(ApiToken).where(ApiToken.id == record.id).values(last_used_at=datetime.utcnow())
+        )
+        return record.tenant_id

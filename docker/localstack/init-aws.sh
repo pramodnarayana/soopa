@@ -14,4 +14,11 @@ DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/00
 # Create main queue with redrive policy
 awslocal sqs create-queue --queue-name EdiTransformerQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
+# Create Data Plane CDC Queues
+awslocal sqs create-queue --queue-name TranslateQueue
+awslocal sqs create-queue --queue-name DeliverQueue
+
+# Create Control Plane CDC Queues
+awslocal sqs create-queue --queue-name ProvisioningQueue
+
 echo "LocalStack Initialization Complete."

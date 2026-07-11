@@ -41,6 +41,7 @@ class AuthorizationService:
                     "users:delete",
                     "routes:manage",
                     "certificates:export_private",
+                    "certificates:rotate",
                 ]
             )
         else:

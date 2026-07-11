@@ -89,6 +89,7 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                     id = p["id"]
                     tenant_id = p["tenant_id"]
                     name = p["cmd"].name
+                    trading_partner_id = getattr(p["cmd"], "trading_partner_id", None)
                     local_partner_id = p["cmd"].local_partner_id
                     remote_partner_id = p["cmd"].remote_partner_id
                     mdn_type = p["cmd"].mdn_type
