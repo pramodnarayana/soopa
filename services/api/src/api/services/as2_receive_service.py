@@ -370,6 +370,7 @@ class As2ReceiveService:
 
             outbox_payload = {
                 "edi_message_id": str(msg_id),
+                "trace_id": str(edi_record["trace_id"]),
                 "sender_id": as2_msg.as2_from,
                 "receiver_id": as2_msg.as2_to,
                 "status": "RECEIVED",

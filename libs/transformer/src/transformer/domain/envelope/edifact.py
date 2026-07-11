@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from typing import Any
 
 from transformer.domain.ast_utils import ASTUtils
@@ -72,8 +73,6 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
         transaction_type = route_config.get("transaction_type", "UNKNOWN")
 
         # Generation values
-        import uuid
-
         unb05 = str(uuid.uuid4().int % 1000000000).zfill(9)
 
         # Build segments

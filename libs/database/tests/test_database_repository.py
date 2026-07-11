@@ -101,7 +101,7 @@ async def test_inbound_route_repository_get_inbound_route_no_match() -> None:
     mock_session.execute.assert_called_once()
 
 
-async def test_inbound_route_repository_get_inbound_route_no_filters() -> None:
+async def test_inbound_route_repository_get_inbound_route_no_transaction_type() -> None:
     from database.models.control_plane import InboundRoute
     from database.repository import InboundRouteRepository
 
@@ -119,9 +119,7 @@ async def test_inbound_route_repository_get_inbound_route_no_filters() -> None:
     mock_session.execute.return_value = mock_result
 
     repo = InboundRouteRepository(mock_session)
-    result = await repo.get_inbound_route(
-        "SENDER", "RECEIVER", tenant_id=None, transaction_type=None
-    )
+    result = await repo.get_inbound_route("SENDER", "RECEIVER", tenant_id=1, transaction_type=None)
 
     assert result == route
     mock_session.execute.assert_called_once()
