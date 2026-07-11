@@ -19,7 +19,6 @@ from pipeline.ports.as2 import AS2DeliveryPort
 from pipeline.ports.http import HttpDeliveryPort
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.sftp import SftpDeliveryPort
-from pipeline.ports.storage import StoragePort
 from pipeline.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
@@ -43,14 +42,12 @@ class DeliveryService:
 
     def __init__(
         self,
-        storage: StoragePort,
         repository: RepositoryPort,
         http_delivery: HttpDeliveryPort,
         sftp_delivery: SftpDeliveryPort,
         as2_delivery: AS2DeliveryPort,
         vault: VaultPort | None = None,
     ) -> None:
-        self.storage = storage
         self.repository = repository
         self.http_delivery = http_delivery
         self.sftp_delivery = sftp_delivery
@@ -70,17 +67,29 @@ class DeliveryService:
             raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
         direction = edi_msg["direction"]
-        sender_id = edi_msg.get("sender_id")
-        receiver_id = edi_msg.get("receiver_id")
-        transaction_type = edi_msg.get("transaction_type", "*")
+        outbound_route_id = edi_msg.get("outbound_route_id")
 
-        if not sender_id or not receiver_id:
-            raise ValueError(f"EDI Message {trace_id} is missing sender/receiver IDs for routing.")
+        if direction == "OUTBOUND" and outbound_route_id:
+            route = await self.repository.get_outbound_route(outbound_route_id)
+            if not route:
+                logger.error(f"Configured outbound route {outbound_route_id} not found")
+                raise ValueError(f"Configured outbound route {outbound_route_id} not found")
+        else:
+            sender_id = edi_msg.get("sender_id")
+            receiver_id = edi_msg.get("receiver_id")
+            transaction_type = edi_msg.get("transaction_type", "*")
 
-        route = await self.repository.get_route(direction, sender_id, receiver_id, transaction_type)
-        if not route:
-            logger.error(f"No {direction} route found for {sender_id}->{receiver_id}")
-            raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
+            if not sender_id or not receiver_id:
+                raise ValueError(
+                    f"EDI Message {trace_id} is missing sender/receiver IDs for routing."
+                )
+
+            route = await self.repository.get_route(
+                direction, sender_id, receiver_id, transaction_type
+            )
+            if not route:
+                logger.error(f"No {direction} route found for {sender_id}->{receiver_id}")
+                raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
 
         # ── Dispatch via registry (OCP) ───────────────────────────────────────
         for route_key, handler_name in _HANDLER_KEYS:
@@ -113,7 +122,10 @@ class DeliveryService:
             raise ValueError(f"Webhook partner {partner_id} not found.")
 
         try:
-            raw_payload = await self.storage.download(api_payload["request"])
+            import json
+
+            # Extract raw bytes from the dictionary payload
+            raw_payload = json.dumps(api_payload.get("payload")).encode("utf-8")
 
             auth_token = None
             if partner.get("auth_header_vault_ref") and self.vault:
@@ -145,7 +157,7 @@ class DeliveryService:
             raise ValueError(f"SFTP partner {partner_id} not found.")
 
         try:
-            raw_payload = await self.storage.download(edi_msg["edi_data"])
+            raw_payload = edi_msg["edi_data"].encode("utf-8")
             filename = f"{trace_id}.edi"
 
             password: str | None = partner.get("password")
@@ -197,7 +209,7 @@ class DeliveryService:
                 else None
             )
 
-            raw_payload = await self.storage.download(edi_msg["edi_data"])
+            raw_payload = edi_msg["edi_data"].encode("utf-8")
 
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,

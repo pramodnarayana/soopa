@@ -26,8 +26,11 @@ async def test_bots_transformer_edi_to_json(mock_translate: AsyncMock) -> None:
     mock_translate.assert_awaited_once_with(b"ISA*00*")
 
 
-async def test_bots_transformer_json_to_edi_raises_not_implemented() -> None:
-    """translate_json_to_edi is not yet implemented and must raise explicitly."""
+async def test_bots_transformer_json_to_edi_success() -> None:
+    from unittest.mock import patch
+
     adapter = BotsTransformerAdapter()
-    with pytest.raises(NotImplementedError, match="JSON to EDI translation is not yet supported"):
-        await adapter.translate_json_to_edi({"foo": "bar"}, "X12", "850")
+
+    with patch.object(adapter._adapter, "serialize_to_edi", return_value=("ISA*...~", [])):
+        result = await adapter.translate_json_to_edi({"foo": "bar"}, "X12", "850", {})
+        assert result == b"ISA*...~"

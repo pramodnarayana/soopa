@@ -11,12 +11,15 @@ from api.adapters.http.dtos import (
     RouteResponse,
     UpdateRouteRequest,
 )
-from api.core.provisioning import ProvisioningService
+from api.core.services import RouteService
 from api.core.uow import UnitOfWork
 from api.dependencies import get_tenant_uow
 from api.domain.models import (
+    UNSET,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
+    UpdateInboundRouteCmd,
+    UpdateOutboundRouteCmd,
 )
 
 router = APIRouter(prefix="/api/v1/routes", tags=["Routes"])
@@ -31,12 +34,7 @@ async def list_routes(
     List all Active Routes for the current Tenant.
     """
     async with uow:
-        from typing import cast
-
-        from api.ports.repository import DataPlaneRepositoryPort
-
-        data_plane = cast(DataPlaneRepositoryPort, uow.data_plane)
-        service = ProvisioningService(tenant_repo=data_plane, global_repo=uow.control_plane)
+        service = RouteService(global_repo=uow.control_plane)
         routes = await service.list_routes(tenant_id)
 
         return [RouteItemResponse(**r) for r in routes]
@@ -52,12 +50,14 @@ async def create_inbound_route(
     Creates a new Inbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = RouteService(global_repo=uow.control_plane)
 
         cmd = CreateInboundRouteCmd(
             name=request.name,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,
+            gs_sender_id=request.gs_sender_id,
+            gs_receiver_id=request.gs_receiver_id,
             transaction_type=request.transaction_type,
             processing_mode=request.processing_mode,
             webhook_id=request.webhook_id,
@@ -83,13 +83,20 @@ async def create_outbound_route(
     Creates a new Outbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = RouteService(global_repo=uow.control_plane)
 
         cmd = CreateOutboundRouteCmd(
+            trading_partner_id=request.trading_partner_id,
             name=request.name,
             isa_sender_id=request.isa_sender_id,
+            isa_sender_qualifier=request.isa_sender_qualifier,
             isa_receiver_id=request.isa_receiver_id,
+            isa_receiver_qualifier=request.isa_receiver_qualifier,
+            gs_sender_id=request.gs_sender_id,
+            gs_receiver_id=request.gs_receiver_id,
             transaction_type=request.transaction_type,
+            default_standard=request.default_standard,
+            default_version=request.default_version,
             processing_mode=request.processing_mode,
             as2_partner_id=request.as2_partner_id,
             sftp_partner_id=request.sftp_partner_id,
@@ -110,15 +117,19 @@ async def update_inbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
+    """
+    Updates an Inbound Route for the current Tenant.
+    """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
-        from api.domain.models import UNSET, UpdateInboundRouteCmd
+        service = RouteService(global_repo=uow.control_plane)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateInboundRouteCmd(
             name=dump.get("name", UNSET),
             isa_sender_id=dump.get("isa_sender_id", UNSET),
             isa_receiver_id=dump.get("isa_receiver_id", UNSET),
+            gs_sender_id=dump.get("gs_sender_id", UNSET),
+            gs_receiver_id=dump.get("gs_receiver_id", UNSET),
             transaction_type=dump.get("transaction_type", UNSET),
             processing_mode=dump.get("processing_mode", UNSET),
             webhook_id=dump.get("webhook_id", UNSET),
@@ -140,8 +151,11 @@ async def delete_inbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
+    """
+    Deletes an Inbound Route for the current Tenant.
+    """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = RouteService(global_repo=uow.control_plane)
         success = await service.delete_inbound_route(tenant_id, route_id)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
@@ -155,16 +169,25 @@ async def update_outbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
+    """
+    Updates an Outbound Route for the current Tenant.
+    """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
-        from api.domain.models import UNSET, UpdateOutboundRouteCmd
+        service = RouteService(global_repo=uow.control_plane)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundRouteCmd(
+            trading_partner_id=dump.get("trading_partner_id", UNSET),
             name=dump.get("name", UNSET),
             isa_sender_id=dump.get("isa_sender_id", UNSET),
+            isa_sender_qualifier=dump.get("isa_sender_qualifier", UNSET),
             isa_receiver_id=dump.get("isa_receiver_id", UNSET),
+            isa_receiver_qualifier=dump.get("isa_receiver_qualifier", UNSET),
+            gs_sender_id=dump.get("gs_sender_id", UNSET),
+            gs_receiver_id=dump.get("gs_receiver_id", UNSET),
             transaction_type=dump.get("transaction_type", UNSET),
+            default_standard=dump.get("default_standard", UNSET),
+            default_version=dump.get("default_version", UNSET),
             processing_mode=dump.get("processing_mode", UNSET),
             as2_partner_id=dump.get("as2_partner_id", UNSET),
             sftp_partner_id=dump.get("sftp_partner_id", UNSET),
@@ -184,8 +207,11 @@ async def delete_outbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
+    """
+    Deletes an Outbound Route for the current Tenant.
+    """
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = RouteService(global_repo=uow.control_plane)
         success = await service.delete_outbound_route(tenant_id, route_id)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")

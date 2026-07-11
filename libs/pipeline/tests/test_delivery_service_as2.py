@@ -44,23 +44,22 @@ _LOCAL_PARTNER = {
 
 
 def make_service(
-    storage: InMemoryStorageAdapter | None = None,
     repo: InMemoryRepositoryAdapter | None = None,
     as2: FakeAS2DeliveryAdapter | NullAS2DeliveryAdapter | None = None,
 ) -> DeliveryService:
     return DeliveryService(
-        storage=storage or InMemoryStorageAdapter(),
         repository=repo or InMemoryRepositoryAdapter(),
         http_delivery=FakeHttpDeliveryAdapter(),
         sftp_delivery=FakeSftpDeliveryAdapter(),
         as2_delivery=as2 or FakeAS2DeliveryAdapter(),
+        vault=None,
     )
 
 
 def _seed_as2_route(
     repo: InMemoryRepositoryAdapter,
     trace_id: str,
-    edi_s3_uri: str,
+    edi_data: str,
     partner_id: str = "remote-p1",
     transaction_type: str = "850",
 ) -> None:
@@ -71,7 +70,7 @@ def _seed_as2_route(
         "sender_id": "SENDER",
         "receiver_id": "RECEIVER",
         "transaction_type": transaction_type,
-        "edi_data": edi_s3_uri,
+        "edi_data": edi_data,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -108,10 +107,10 @@ async def test_deliver_as2_plain_no_crypto() -> None:
         b"*ZZ*RECEIVER       *210101*1200*^*00501*000000001*0*P*>~"
     )
     storage.store[edi_s3_uri] = raw_edi
-    _seed_as2_route(repo, trace_id, edi_s3_uri)
+    _seed_as2_route(repo, trace_id, raw_edi.decode("utf-8"))
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(storage=storage, repo=repo, as2=as2_adapter).deliver(trace_id)
+    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 1
@@ -146,7 +145,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
         "sender_id": "S1",
         "receiver_id": "R1",
         "transaction_type": "856",
-        "edi_data": edi_s3_uri,
+        "edi_data": "FAKE*EDI~",
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -164,7 +163,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     repo.local_as2_partners[_REMOTE_PARTNER["local_partner_id"]] = _LOCAL_PARTNER
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(storage=storage, repo=repo, as2=as2_adapter).deliver(trace_id)
+    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert repo.edi_messages[trace_id]["status"] == "FAILED"
@@ -184,10 +183,10 @@ async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
     trace_id = "trace-as2-null"
     edi_s3_uri = f"s3://bucket/edi/{trace_id}/raw.edi"
     storage.store[edi_s3_uri] = b"EDI~"
-    _seed_as2_route(repo, trace_id, edi_s3_uri, partner_id="p-null")
+    _seed_as2_route(repo, trace_id, "EDI~", partner_id="p-null")
 
     # ── Act / Assert ───────────────────────────────────────────────────────────
-    service = make_service(storage=storage, repo=repo, as2=NullAS2DeliveryAdapter())
+    service = make_service(repo=repo, as2=NullAS2DeliveryAdapter())
     await service.deliver(trace_id)
 
     # It should catch the RuntimeError and mark the message as FAILED
@@ -215,7 +214,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
         "sender_id": "A",
         "receiver_id": "B",
         "transaction_type": "810",
-        "edi_data": edi_s3_uri,
+        "edi_data": "EDI~",
         "status": "PROCESSING",
     }
     repo.routes.append(
@@ -232,7 +231,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
     repo.local_as2_partners[_REMOTE_PARTNER["local_partner_id"]] = _LOCAL_PARTNER
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(storage=storage, repo=repo, as2=as2_adapter).deliver(trace_id)
+    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 0
@@ -260,7 +259,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
         "sender_id": "X",
         "receiver_id": "Y",
         "transaction_type": "850",
-        "edi_data": edi_s3_uri,
+        "edi_data": "EDI~",
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -278,7 +277,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     # Do NOT seed local_as2_partners["missing-local"]
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(storage=storage, repo=repo, as2=as2_adapter).deliver(trace_id)
+    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert repo.edi_messages[trace_id]["status"] == "FAILED"

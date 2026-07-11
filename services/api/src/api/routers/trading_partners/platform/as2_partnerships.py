@@ -14,6 +14,7 @@ from api.adapters.http.dtos import (
     TestAS2ConnectionResponse,
     UpdateAS2PartnershipRequest,
 )
+from api.core.services import AS2PartnershipService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
     get_as2_tester,
@@ -156,16 +157,17 @@ async def create_platform_as2_partnership(
                 advanced_flags=request.advanced_flags,
             )
 
-            partnership_id = await uow.control_plane.create_as2_partnership(tenant_id=0, cmd=cmd)
+            svc = AS2PartnershipService(global_repo=uow.control_plane)
+            entity = await svc.create_as2_partnership(tenant_id=0, cmd=cmd)
             await uow.commit()
             p = await uow.control_plane.get_as2_partnership(
-                tenant_id=0, partnership_id=partnership_id
+                tenant_id=0, partnership_id=entity.partner_id
             )
             if not p:
                 raise HTTPException(status_code=404, detail="Partnership not found")
 
             return AS2PartnershipResponse(
-                id=str(partnership_id),
+                id=str(entity.partner_id),
                 tenant_id=0,
                 name=p.name,
                 local_partner_id=str(p.local_partner_id),
@@ -216,9 +218,8 @@ async def update_platform_as2_partnership(
                 advanced_flags=get_val("advanced_flags"),
                 active=get_val("active"),
             )
-            await uow.control_plane.update_as2_partnership(
-                tenant_id=0, partnership_id=partnership_id, cmd=cmd
-            )
+            svc = AS2PartnershipService(global_repo=uow.control_plane)
+            await svc.update_as2_partnership(tenant_id=0, partnership_id=partnership_id, cmd=cmd)
             await uow.commit()
 
             p = await uow.control_plane.get_as2_partnership(
@@ -263,9 +264,8 @@ async def delete_platform_as2_partnership(
 ) -> None:
     try:
         async with uow:
-            await uow.control_plane.delete_as2_partnership(
-                tenant_id=0, partnership_id=partnership_id
-            )
+            svc = AS2PartnershipService(global_repo=uow.control_plane)
+            await svc.delete_as2_partnership(tenant_id=0, partnership_id=partnership_id)
             await uow.commit()
     except Exception as err:
         logger.exception("Internal error deleting platform AS2 partnership")

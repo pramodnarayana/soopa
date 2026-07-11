@@ -1,28 +1,35 @@
 import os
+from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any
 
 from database.session import get_global_session
-from fastapi import Depends, HTTPException
-
-# Import tenant_session from identity
-from identity.dependencies import get_current_tenant_id, get_raw_jwt, get_tenant_session
+from fastapi import Depends, HTTPException, Request
+from identity.dependencies import (
+    get_current_tenant_id,
+    get_raw_jwt,
+    get_tenant_session,
+    get_tenant_session_for_id,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
 from api.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
 from api.adapters.repository import (
+    SqlAlchemyApiTokenRepository,
     SqlAlchemyControlPlaneRepository,
     SqlAlchemyDataPlaneRepository,
     SqlAlchemyTenantRepository,
 )
 from api.adapters.sqs_queue import SQSMessageQueueAdapter
 from api.adapters.vault import vault
+from api.auth.api_key import get_tenant_id_from_api_key
 from api.core.authorization import AuthorizationService
 from api.core.uow import UnitOfWork
 from api.ports.as2_tester import AS2TesterPort
 from api.ports.message_queue import MessageQueuePort
 from api.ports.repository import (
+    ApiTokenRepositoryPort,
     ControlPlaneRepositoryPort,
     DataPlaneRepositoryPort,
     TenantRepositoryPort,
@@ -80,6 +87,19 @@ async def get_tenant_uow(
     return UnitOfWork(global_session=global_session, tenant_session=tenant_session)
 
 
+async def get_m2m_tenant_uow(
+    request: Request,
+    tenant_id: int = Depends(get_tenant_id_from_api_key),
+    global_session: AsyncSession = Depends(get_global_session),
+) -> AsyncGenerator[UnitOfWork, None]:
+    """
+    Constructs a UnitOfWork dynamically without relying on Zitadel JWTs.
+    Useful for Machine-to-Machine routes that authenticate via API keys.
+    """
+    async for tenant_session in get_tenant_session_for_id(request, tenant_id, global_session):
+        yield UnitOfWork(global_session=global_session, tenant_session=tenant_session)
+
+
 def require_platform_admin(tenant_id: int = Depends(get_current_tenant_id)) -> int:
     """
     Dependency that enforces the user belongs to Tenant 0 (Platform Admin).
@@ -96,6 +116,13 @@ def get_tenant_repo(
     session: AsyncSession = Depends(get_global_session),
 ) -> TenantRepositoryPort:
     return SqlAlchemyTenantRepository(session)
+
+
+def get_api_token_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> ApiTokenRepositoryPort:
+    """Yields the API token repository bound to the global (control plane) session."""
+    return SqlAlchemyApiTokenRepository(session)
 
 
 def get_authorization_service(

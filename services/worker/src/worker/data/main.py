@@ -11,15 +11,56 @@ from urllib.parse import urlparse
 import aioboto3  # type: ignore[import-untyped]
 from config.settings import get_settings
 from database.connection import DatabaseRouter
+from database.models import DatabaseShard, Tenant
+from domain.events import MessageQueueName
+from dotenv import load_dotenv
+from pipeline.adapters.as2 import HttpxAS2DeliveryAdapter
 from pipeline.adapters.http import HttpxDeliveryAdapter
-from pipeline.adapters.null_as2 import NullAS2DeliveryAdapter
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
 from pipeline.adapters.sftp import ParamikoSftpDeliveryAdapter
 from pipeline.adapters.storage import S3StorageAdapter
 from pipeline.adapters.transformer import BotsTransformerAdapter
 from pipeline.core.deliver import DeliveryService
 from pipeline.core.translate import TranslationService
-from worker.utils import TenantResolver
+from sqlalchemy import select
+from worker.adapters.vault import WorkerVaultAdapter
+
+load_dotenv()
+
+
+class TenantResolver:
+    """
+    Caches tenant-to-shard mapping to avoid querying the Global DB on every SQS message.
+    """
+
+    def __init__(self, db_router: DatabaseRouter, ttl_secs: int = 300):
+        self.db_router = db_router
+        self._cache: dict[int, tuple[str, str, float]] = {}
+        self._ttl = ttl_secs
+
+    async def resolve(self, tenant_id: int) -> tuple[str, str]:
+        import time
+
+        now = time.time()
+        if tenant_id in self._cache:
+            shard_name, shard_dsn, expiry = self._cache[tenant_id]
+            if now < expiry:
+                return shard_name, shard_dsn
+
+        global_gen = self.db_router.get_global_session()
+        global_session = await global_gen.__anext__()
+        try:
+            stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == tenant_id)
+            result = await global_session.execute(stmt)
+            row = result.first()
+            if not row:
+                raise ValueError(f"Tenant {tenant_id} not found in Global DB")
+            _, shard_obj = row
+            self._cache[tenant_id] = (str(shard_obj.name), str(shard_obj.dsn), now + self._ttl)
+            return str(shard_obj.name), str(shard_obj.dsn)
+        finally:
+            await global_gen.aclose()
+
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +114,7 @@ def validate_target_url(url: str) -> bool:
 
 async def process_translation(
     trace_id: str,
+    event_type: str,
     tenant_id: int,
     resolver: TenantResolver,
     db_router: DatabaseRouter,
@@ -85,20 +127,26 @@ async def process_translation(
     tenant_gen = db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
     session = await tenant_gen.__anext__()
     try:
-        # Instantiate Adapters
-        repo_adapter = SqlAlchemyRepositoryAdapter(session)
         storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+        repo_adapter = SqlAlchemyRepositoryAdapter(
+            session=session,
+            settings=get_settings(),
+            storage=storage_adapter,
+        )
         transformer_adapter = BotsTransformerAdapter()
 
         # Instantiate Domain Service
-        service = TranslationService(storage_adapter, transformer_adapter, repo_adapter)
+        service = TranslationService(transformer_adapter, repo_adapter)
 
         # Execute pure domain logic
-        await service.translate(trace_id)
+        print(f"[WORKER] Translating trace_id={trace_id}")
+        await service.translate(trace_id, event_type)
+        print(f"[WORKER] SUCCESS translating trace_id={trace_id}")
 
         # Commit transaction
         await session.commit()
-    except Exception:
+    except Exception as e:
+        print(f"[WORKER] FAILURE in process_translation for trace_id={trace_id}: {e}")
         await session.rollback()
         raise
     finally:
@@ -108,6 +156,7 @@ async def process_translation(
 
 async def process_delivery(
     trace_id: str,
+    event_type: str,
     tenant_id: int,
     resolver: TenantResolver,
     db_router: DatabaseRouter,
@@ -120,19 +169,24 @@ async def process_delivery(
     tenant_gen = db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
     session = await tenant_gen.__anext__()
     try:
-        # Instantiate Adapters
-        repo_adapter = SqlAlchemyRepositoryAdapter(session)
         storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+        repo_adapter = SqlAlchemyRepositoryAdapter(
+            session=session,
+            settings=get_settings(),
+            storage=storage_adapter,
+        )
         http_adapter = HttpxDeliveryAdapter(validator=validate_target_url)
         sftp_adapter = ParamikoSftpDeliveryAdapter()
+        vault_adapter = WorkerVaultAdapter()
+        as2_adapter = HttpxAS2DeliveryAdapter()
 
         # Instantiate Domain Service
         service = DeliveryService(
-            storage_adapter,
-            repo_adapter,
-            http_adapter,
-            sftp_adapter,
-            as2_delivery=NullAS2DeliveryAdapter(),
+            repository=repo_adapter,
+            http_delivery=http_adapter,
+            sftp_delivery=sftp_adapter,
+            as2_delivery=as2_adapter,
+            vault=vault_adapter,
         )
 
         # Execute pure domain logic
@@ -200,6 +254,7 @@ async def poll_sqs_queue(
                             logger.info(f"[{queue_name}] Processing trace_id={trace_id}")
                             kwargs: dict[str, Any] = {
                                 "trace_id": trace_id,
+                                "event_type": body.get("event_type", "UNKNOWN"),
                                 "tenant_id": tenant_id,
                                 "resolver": resolver,
                                 "db_router": db_router,
@@ -251,12 +306,17 @@ async def main() -> None:
 
     translate_task = asyncio.create_task(
         poll_sqs_queue(
-            "TranslateQueue", process_translation, resolver, db_router, s3_bucket, aws_endpoint
+            MessageQueueName.TRANSLATE,
+            process_translation,
+            resolver,
+            db_router,
+            s3_bucket,
+            aws_endpoint,
         )
     )
     deliver_task = asyncio.create_task(
         poll_sqs_queue(
-            "DeliverQueue", process_delivery, resolver, db_router, s3_bucket, aws_endpoint
+            MessageQueueName.DELIVER, process_delivery, resolver, db_router, s3_bucket, aws_endpoint
         )
     )
 

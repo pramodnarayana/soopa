@@ -4,17 +4,26 @@ from database.connection import DatabaseRouter
 from database.models import DatabaseShard, Tenant
 from sqlalchemy import select
 
+from worker.ports.tenant import TenantPort
 
-class TenantResolver:
-    """
-    Caches tenant-to-shard mapping to avoid querying the Global DB on every SQS message.
-    """
 
+class SqlAlchemyTenantAdapter(TenantPort):
     def __init__(self, db_router: DatabaseRouter):
         self.db_router = db_router
         self._cache: dict[int, tuple[str, str]] = {}
 
-    async def resolve(self, tenant_id: int) -> tuple[str, str]:
+    async def get_all_tenant_ids(self) -> list[int]:
+        global_gen = self.db_router.get_global_session()
+        global_session = await global_gen.__anext__()
+        try:
+            stmt = select(Tenant.id).join(DatabaseShard)
+            result = await global_session.execute(stmt)
+            return list(result.scalars().all())
+        finally:
+            with contextlib.suppress(StopAsyncIteration):
+                await global_gen.__anext__()
+
+    async def resolve_shard(self, tenant_id: int) -> tuple[str, str]:
         if tenant_id in self._cache:
             return self._cache[tenant_id]
 

@@ -131,6 +131,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
               )}
             />
           </div>
+
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Partnership Name</Label>
             <Input {...register('name')} required placeholder="e.g. Acme Corp X12 Exchange" />

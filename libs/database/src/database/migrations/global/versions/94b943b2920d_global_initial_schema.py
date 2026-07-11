@@ -1,8 +1,8 @@
 """global_initial_schema
 
-Revision ID: 142d93fd6c4c
+Revision ID: 94b943b2920d
 Revises:
-Create Date: 2026-07-06 14:56:17.633049
+Create Date: 2026-07-10 11:42:52.960482
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "142d93fd6c4c"
+revision: str = "94b943b2920d"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -84,9 +84,9 @@ def upgrade() -> None:
     )
     op.create_table(
         "as2_partners",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=True),
         sa.Column("is_local", sa.Boolean(), nullable=False),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("as2_id", sa.String(length=255), nullable=False),
         sa.Column("public_cert_pem", sa.Text(), nullable=True),
@@ -131,9 +131,26 @@ def upgrade() -> None:
         postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.create_table(
-        "sftp_partners",
+        "api_tokens",
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("client_id", sa.String(length=64), nullable=False),
+        sa.Column("secret_hash", sa.String(length=64), nullable=False),
+        sa.Column("last_used_at", sa.DateTime(), nullable=True),
+        sa.Column("expires_at", sa.DateTime(), nullable=True),
+        sa.Column("active", sa.Boolean(), nullable=False, server_default="true"),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_api_tokens_tenant_id", "api_tokens", ["tenant_id"], unique=False)
+    op.create_index("ix_api_tokens_client_id", "api_tokens", ["client_id"], unique=True)
+    op.create_table(
+        "sftp_partners",
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("host", sa.String(length=1024), nullable=False),
         sa.Column("port", sa.Integer(), nullable=False),
@@ -144,6 +161,8 @@ def upgrade() -> None:
         sa.Column("password_encrypted", sa.String(length=1024), nullable=True),
         sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -163,23 +182,25 @@ def upgrade() -> None:
     )
     op.create_table(
         "webhooks",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("url", sa.String(length=1024), nullable=False),
         sa.Column("auth_header_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_webhooks_tenant_id"), "webhooks", ["tenant_id"], unique=False)
     op.create_table(
         "as2_partnerships",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=True),
-        sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("local_partner_id", sa.UUID(), nullable=False),
         sa.Column("remote_partner_id", sa.UUID(), nullable=False),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("mdn_type", sa.String(length=50), nullable=False),
         sa.Column("mdn_url", sa.String(length=1024), nullable=True),
@@ -197,19 +218,23 @@ def upgrade() -> None:
     )
     op.create_table(
         "inbound_routes",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("webhook_id", sa.UUID(), nullable=True),
+        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
+        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
         sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("gs_sender_id", sa.String(length=255), nullable=True),
+        sa.Column("gs_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=False),
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
         ),
-        sa.Column("webhook_id", sa.UUID(), nullable=True),
-        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
-        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
             "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
@@ -241,18 +266,27 @@ def upgrade() -> None:
     )
     op.create_table(
         "outbound_routes",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
+        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("trading_partner_id", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_sender_qualifier", sa.String(length=2), nullable=True),
         sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_receiver_qualifier", sa.String(length=2), nullable=True),
+        sa.Column("gs_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("gs_receiver_id", sa.String(length=255), nullable=False),
         sa.Column("transaction_type", sa.String(length=50), nullable=False),
+        sa.Column("default_standard", sa.String(length=50), server_default="x12", nullable=False),
+        sa.Column("default_version", sa.String(length=50), server_default="004010", nullable=False),
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
         ),
-        sa.Column("as2_partner_id", sa.UUID(), nullable=True),
-        sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
             "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
@@ -272,9 +306,9 @@ def upgrade() -> None:
         op.f("ix_outbound_routes_tenant_id"), "outbound_routes", ["tenant_id"], unique=False
     )
     op.create_index(
-        "ix_outbound_routes_unique_active",
+        "ix_outbound_routes_unique_trading_partner_id",
         "outbound_routes",
-        ["tenant_id", "isa_sender_id", "isa_receiver_id", "transaction_type"],
+        ["tenant_id", "trading_partner_id"],
         unique=True,
         postgresql_where=sa.text("active = true"),
     )
@@ -285,7 +319,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_index(
-        "ix_outbound_routes_unique_active",
+        "ix_outbound_routes_unique_trading_partner_id",
         table_name="outbound_routes",
         postgresql_where=sa.text("active = true"),
     )
@@ -310,6 +344,9 @@ def downgrade() -> None:
         postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.drop_table("outbox")
+    op.drop_index("ix_api_tokens_client_id", table_name="api_tokens")
+    op.drop_index("ix_api_tokens_tenant_id", table_name="api_tokens")
+    op.drop_table("api_tokens")
     op.drop_index(
         "uq_global_as2_id", table_name="as2_partners", postgresql_where=sa.text("tenant_id IS NULL")
     )

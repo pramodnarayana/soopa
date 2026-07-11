@@ -17,7 +17,6 @@ pytestmark = pytest.mark.asyncio
 
 
 def make_service(
-    storage: InMemoryStorageAdapter | None = None,
     repo: InMemoryRepositoryAdapter | None = None,
     http: FakeHttpDeliveryAdapter | None = None,
     sftp: FakeSftpDeliveryAdapter | None = None,
@@ -25,11 +24,11 @@ def make_service(
 ) -> DeliveryService:
     """Factory that satisfies the required as2_delivery port (Null Object not needed in tests)."""
     return DeliveryService(
-        storage=storage or InMemoryStorageAdapter(),
         repository=repo or InMemoryRepositoryAdapter(),
         http_delivery=http or FakeHttpDeliveryAdapter(),
         sftp_delivery=sftp or FakeSftpDeliveryAdapter(),
         as2_delivery=as2 or FakeAS2DeliveryAdapter(),
+        vault=None,
     )
 
 
@@ -76,7 +75,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    service = make_service(storage=storage, repo=repo, http=http_adapter)
+    service = make_service(repo=repo, http=http_adapter)
     await service.deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
@@ -101,7 +100,7 @@ async def test_delivery_service_outbound_sftp() -> None:
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "855",
-        "edi_data": edi_s3_uri,
+        "edi_data": "FAKE*EDI*DATA~",
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -127,7 +126,7 @@ async def test_delivery_service_outbound_sftp() -> None:
 
     vault = FakeVault({"mock_password": "fake_private_key_data"})
 
-    service = make_service(storage=storage, repo=repo, sftp=sftp_adapter)
+    service = make_service(repo=repo, sftp=sftp_adapter)
     service.vault = vault
     await service.deliver(trace_id)
 
@@ -195,7 +194,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    service = make_service(storage=storage, repo=repo, http=http_adapter)
+    service = make_service(repo=repo, http=http_adapter)
     await service.deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────

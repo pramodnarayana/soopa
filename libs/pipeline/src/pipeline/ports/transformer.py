@@ -13,7 +13,11 @@ class TransformerPort(Protocol):
         ...
 
     async def translate_json_to_edi(
-        self, payload: dict[str, Any], standard: str, transaction_type: str
+        self,
+        payload: dict[str, Any],
+        standard: str,
+        transaction_type: str,
+        route_config: dict[str, Any],
     ) -> bytes:
         """Translates a Canonical JSON Dictionary into raw EDI bytes."""
         ...

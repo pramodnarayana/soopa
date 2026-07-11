@@ -9,7 +9,7 @@ from api.adapters.http.dtos import (
     CreateAS2TradingPartnerRequest,
     UpdateAS2TradingPartnerRequest,
 )
-from api.core.provisioning import ProvisioningService
+from api.core.services import AS2PartnerService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
     get_uow,
@@ -69,13 +69,14 @@ async def create_platform_as2_partner(
             )
 
             # Use tenant_id=0 for global platform partners
-            partner_id = await uow.control_plane.create_as2_identity(tenant_id=0, cmd=cmd)
+            svc = AS2PartnerService(global_repo=uow.control_plane)
+            entity = await svc.create_as2_partner(tenant_id=0, cmd=cmd)
 
             await uow.commit()
-            p = await uow.control_plane.get_as2_partner(tenant_id=0, partner_id=partner_id)
+            p = await uow.control_plane.get_as2_partner(tenant_id=0, partner_id=entity.partner_id)
 
             return AS2TradingPartnerResponse(
-                id=str(partner_id),
+                id=str(entity.partner_id),
                 name=p.name,
                 as2_id=p.as2_id,
                 is_local=p.is_local,
@@ -126,7 +127,8 @@ async def update_platform_as2_partner(
             active=request.active,
         )
         try:
-            await uow.control_plane.update_as2_identity(tenant_id=0, partner_id=partner_id, cmd=cmd)
+            svc = AS2PartnerService(global_repo=uow.control_plane)
+            await svc.update_as2_partner(tenant_id=0, partner_id=partner_id, cmd=cmd)
             updated_partner = await uow.control_plane.get_as2_partner(
                 tenant_id=0, partner_id=partner_id
             )
@@ -155,7 +157,7 @@ async def delete_platform_as2_partner(
 ) -> None:
     """Deletes an AS2 partner."""
     async with uow:
-        svc = ProvisioningService(tenant_repo=None, global_repo=uow.control_plane)
+        svc = AS2PartnerService(global_repo=uow.control_plane)
         try:
             await svc.delete_as2_partner(tenant_id=0, partner_id=partner_id)
             await uow.commit()

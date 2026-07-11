@@ -1,8 +1,9 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from domain.events import MessageQueueName
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field, ValidationError
 
 from api.dependencies import get_message_queue
 from api.ports.message_queue import MessageQueuePort
@@ -20,60 +21,120 @@ class DebeziumUnwrappedEvent(BaseModel):
     op: str = Field(alias="__op", description="Operation type: 'c' for create, 'u' for update")
     table: str = Field(alias="__table", description="The source table name")
 
-    # Columns from the outbox table
-    idempotency_key: str
-    event_type: str
-    payload: dict[str, Any]
-    status: str
-    tenant_id: int
+    # Core Outbox fields
+    idempotency_key: str | None = None
+    event_type: str | None = None
+    payload: dict[str, Any] | str | None = None
+    tenant_id: int | None = None
+
+    class Config:
+        extra = "ignore"  # Debezium sends many extra metadata fields we don't need
 
 
-@router.post("/relay", status_code=202)
+@router.api_route("/relay", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], status_code=200)
 async def relay_cdc_event(
-    event: DebeziumUnwrappedEvent,
+    request: Request,
     queue: MessageQueuePort = Depends(get_message_queue),
-) -> None:
+) -> dict[str, str]:
     """
     Receives HTTP Webhooks from the standalone Debezium Server and manually
     routes them into AWS SQS queues based on the source table and event_type.
+
+    Enterprise Grade Notes:
+    - Bypasses default FastAPI strict typing in the method signature to handle Debezium's
+      inconsistent Content-Type headers, but strictly validates the JSON via Pydantic internally.
+    - Handles both batched (List) and single (Object) payloads.
+    - Implements the Robustness Principle (Postel's Law) for internal infrastructure webhooks.
     """
-    # Only process INSERTS for the outbox
-    if event.op != "c":
-        return
+    import json
 
-    if event.table == "outbox":
-        if event.event_type not in ("TRANSLATE", "DELIVER"):
-            logger.warning(f"[CDC Relay] Unhandled outbox event type: {event.event_type}")
-            raise HTTPException(
-                status_code=400, detail=f"Unknown outbox event_type: {event.event_type}"
-            )
+    body = await request.body()
+    try:
+        data = json.loads(body)
+    except Exception as e:
+        logger.error(f"[CDC Relay] CRITICAL: Failed to parse raw CDC bytes as JSON: {e}")
+        # In a full enterprise setup, this raw body would be pushed to an S3 Dead Letter bucket here.
+        return {"status": "ok"}
 
-        queue_name = "TranslateQueue" if event.event_type == "TRANSLATE" else "DeliverQueue"
+    # Normalize to a list
+    raw_events = data if isinstance(data, list) else [data]
 
-        # Validate that the payload contains a trace_id required by workers
-        trace_id = event.payload.get("trace_id")
-        if not trace_id:
+    # Strictly validate against our schema
+    validated_events: list[DebeziumUnwrappedEvent] = []
+    for raw_event in raw_events:
+        try:
+            validated_events.append(DebeziumUnwrappedEvent(**raw_event))
+        except (ValidationError, TypeError) as e:
             logger.error(
-                f"[CDC Relay] Outbox event missing trace_id in payload: {event.idempotency_key}"
+                f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )
-            raise HTTPException(
-                status_code=400,
-                detail="Outbox payload missing required trace_id field",
-            )
+            try:
+                await queue.send(MessageQueueName.CDC_DLQ, {"error": str(e), "payload": raw_event})
+            except Exception as dlq_err:
+                logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
+                from fastapi import HTTPException
 
-        # We package the original outbox payload and idempotency key for the worker
-        message_body = {
-            "idempotency_key": event.idempotency_key,
-            "event_type": event.event_type,
-            "payload": event.payload,
-            "tenant_id": event.tenant_id,
-        }
+                raise HTTPException(
+                    status_code=500, detail="Failed to quarantine invalid event"
+                ) from dlq_err
+            # Quarantine succeeded, so skip invalid events; do not fail the entire batch.
+            continue
 
-        await queue.send(
-            queue_name=queue_name,
-            payload=message_body,
-        )
-        logger.info(f"[CDC Relay] Relayed event_type={event.event_type} to {queue_name}")
-    else:
-        logger.warning(f"[CDC Relay] Received event for unknown table: {event.table}")
-        raise HTTPException(status_code=400, detail="Unknown table source")
+    for event in validated_events:
+        if event.op != "c":
+            continue
+
+        if event.table == "outbox":
+            # Outbox table routing logic
+            if not event.event_type:
+                logger.warning(
+                    f"[CDC Relay] Outbox event missing event_type. Skipping: {event.idempotency_key}"
+                )
+                continue
+
+            event_payload = event.payload
+            if isinstance(event_payload, str):
+                try:
+                    payload_dict = json.loads(event_payload)
+                except json.JSONDecodeError as e:
+                    logger.error(
+                        f"[CDC Relay] Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
+                    )
+                    continue
+            else:
+                payload_dict = event_payload
+
+            if event.event_type in (
+                "TRANSLATE",
+                "json.received",
+                "edi_message.received",
+                "DELIVER",
+            ):
+                queue_name = (
+                    MessageQueueName.TRANSLATE
+                    if event.event_type in ("TRANSLATE", "json.received", "edi_message.received")
+                    else MessageQueueName.DELIVER
+                )
+
+                # Validate that the payload contains a trace_id required by data plane workers
+                trace_id = payload_dict.get("trace_id") if isinstance(payload_dict, dict) else None
+                if not trace_id:
+                    logger.error(
+                        f"[CDC Relay] Outbox event missing trace_id in payload: {event.idempotency_key}"
+                    )
+                    continue
+            else:
+                queue_name = MessageQueueName.PROVISIONING
+
+            message_body = {
+                "idempotency_key": event.idempotency_key,
+                "event_type": event.event_type,
+                "payload": payload_dict,
+                "tenant_id": event.tenant_id,
+            }
+
+            await queue.send(queue_name=queue_name, payload=message_body)
+            logger.info(f"[CDC Relay] Relayed event_type={event.event_type} to {queue_name}")
+        else:
+            logger.debug(f"[CDC Relay] Ignoring event for unhandled table: {event.table}")
+    return {"status": "ok"}

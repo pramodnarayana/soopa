@@ -12,7 +12,7 @@ from api.adapters.http.dtos import (
     TestSFTPConnectionRequest,
     UpdateSFTPPartnerRequest,
 )
-from api.core.provisioning import ProvisioningService
+from api.core.services import SFTPPartnerService
 from api.core.uow import UnitOfWork
 from api.dependencies import (
     get_sftp_tester,
@@ -137,7 +137,7 @@ async def create_sftp_partner(
         )
 
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = SFTPPartnerService(global_repo=uow.control_plane)
 
         cmd = CreateSFTPPartnerCmd(
             name=request.name,
@@ -191,7 +191,7 @@ async def update_sftp_partner(
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = SFTPPartnerService(global_repo=uow.control_plane)
         cmd = UpdateSFTPPartnerCmd(
             name=request.name,
             host=request.host,

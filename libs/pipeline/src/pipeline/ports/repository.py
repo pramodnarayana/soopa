@@ -11,6 +11,23 @@ class EDIMessagePort(Protocol):
         """Fetches an EDI Message by trace_id."""
         ...
 
+    async def save_edi_message(
+        self,
+        trace_id: str,
+        direction: str,
+        edi_data: str,
+        format_standard: str,
+        transaction_type: str,
+        status: str,
+        connection_type: str | None = "UNKNOWN",
+        sender_id: str | None = None,
+        receiver_id: str | None = None,
+        outbound_route_id: str | None = None,
+        tenant_id: int | None = None,
+    ) -> None:
+        """Saves a newly generated EDI Message."""
+        ...
+
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
         """Updates the status of an EDI Message."""
         ...
@@ -27,13 +44,38 @@ class APIPayloadPort(Protocol):
     """
 
     async def save_api_payload(
-        self, trace_id: str, direction: str, s3_uri: str, status: str
+        self, trace_id: str, direction: str, payload: dict[str, Any], status: str
     ) -> None:
         """Persists a new JSON API Payload record."""
         ...
 
+    async def save_edi_json(
+        self,
+        trace_id: str,
+        direction: str,
+        partnership_id: str | None,
+        transaction_type: str | None,
+        standard: str | None,
+        sender_id: str | None,
+        receiver_id: str | None,
+        business_metadata: dict[str, Any],
+        payload: dict[str, Any],
+        status: str,
+        tenant_id: int | None = None,
+    ) -> str:
+        """Persists a new EdiJson record and returns its UUID as a string."""
+        ...
+
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
         """Fetches an API Payload by trace_id."""
+        ...
+
+    async def get_edi_json(self, trace_id: str) -> dict[str, Any] | None:
+        """Fetches an EdiJson record by trace_id."""
+        ...
+
+    async def update_edi_json_status(self, trace_id: str, status: str) -> None:
+        """Updates the status of an EdiJson record."""
         ...
 
     async def update_api_payload_status(self, trace_id: str, status: str) -> None:
@@ -55,6 +97,10 @@ class RoutePort(Protocol):
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
     ) -> dict[str, Any] | None:
         """Finds the appropriate route based on ISA envelopes."""
+        ...
+
+    async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
+        """Fetches an outbound route by its ID."""
         ...
 
     async def publish_outbox_event(

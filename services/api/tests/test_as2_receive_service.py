@@ -124,7 +124,11 @@ async def test_private_methods_coverage(service):
         return_value=MagicMock(first=MagicMock(return_value=None))
     )
     with pytest.raises(ValueError, match="Tenant routing failed"):
-        await service._save_to_data_plane(MagicMock(tenant_id=1), MagicMock(), b"")
+        await service._save_to_data_plane(
+            MagicMock(tenant_id=1),
+            MagicMock(),
+            b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *210101*1200*^*00501*000000001*0*P*>~",
+        )
 
 
 @pytest.mark.asyncio
@@ -221,7 +225,11 @@ async def test_save_to_data_plane_success(service):
         )
         mock_as2_msg = MagicMock(as2_from="ME", as2_to="YOU", message_id="msg-1")
 
-        res = await service._save_to_data_plane(mock_partnership, mock_as2_msg, b"EDI")
+        res = await service._save_to_data_plane(
+            mock_partnership,
+            mock_as2_msg,
+            b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *210101*1200*^*00501*000000001*0*P*>~",
+        )
         assert res == "msg-1"
         mock_repo.create_edi_message.assert_awaited_once()
         mock_repo.create_outbox_event.assert_awaited_once()

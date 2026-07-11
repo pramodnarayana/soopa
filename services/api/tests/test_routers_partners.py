@@ -119,10 +119,20 @@ def test_update_platform_as2_partner(client, fake_uow):
 
 
 def test_create_platform_as2_partnership(client, fake_uow):
-    import uuid
 
-    local_id = str(uuid.uuid4())
-    remote_id = str(uuid.uuid4())
+    # Create local and remote partners first
+    loc_resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Local Partner", "as2_id": "LOCAL_AS2", "is_local": True},
+    )
+    local_id = loc_resp.json()["id"]
+
+    rem_resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Remote Partner", "as2_id": "REMOTE_AS2", "is_local": False},
+    )
+    remote_id = rem_resp.json()["id"]
+
     response = client.post(
         "/api/v1/platform/trading-partners/as2/partnerships",
         json={
@@ -144,14 +154,26 @@ def test_list_platform_as2_partnerships(client):
 
 
 def test_update_platform_as2_partnership(client, fake_uow):
-    import uuid
+
+    # Create local and remote partners first
+    loc_resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Local Update Partner", "as2_id": "LOC_UPD", "is_local": True},
+    )
+    local_id = loc_resp.json()["id"]
+
+    rem_resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Remote Update Partner", "as2_id": "REM_UPD", "is_local": False},
+    )
+    remote_id = rem_resp.json()["id"]
 
     ps_id = client.post(
         "/api/v1/platform/trading-partners/as2/partnerships",
         json={
             "name": "Temp Partnership",
-            "local_partner_id": str(uuid.uuid4()),
-            "remote_partner_id": str(uuid.uuid4()),
+            "local_partner_id": local_id,
+            "remote_partner_id": remote_id,
         },
     ).json()["id"]
 
@@ -310,7 +332,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     from sqlalchemy.exc import IntegrityError
 
     with patch(
-        "api.core.provisioning.ProvisioningService.create_sftp_partner",
+        "api.core.services.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
         side_effect=ValueError("Bad value"),
     ):
         resp = client.post(
@@ -319,7 +341,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         )
         assert resp.status_code == 400
     with patch(
-        "api.core.provisioning.ProvisioningService.create_sftp_partner",
+        "api.core.services.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
         side_effect=IntegrityError("x", "y", "z"),
     ):
         resp = client.post(
@@ -329,7 +351,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.status_code == 400
 
     with patch(
-        "api.core.provisioning.ProvisioningService.update_sftp_partner",
+        "api.core.services.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
         side_effect=ValueError("Bad value"),
     ):
         resp = client.put(
@@ -338,7 +360,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         )
         assert resp.status_code == 400
     with patch(
-        "api.core.provisioning.ProvisioningService.update_sftp_partner",
+        "api.core.services.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
         side_effect=IntegrityError("x", "y", "z"),
     ):
         resp = client.put(

@@ -11,6 +11,7 @@ import {
   LogOut,
   ChevronRight,
   Wrench,
+  Terminal,
 } from 'lucide-react'
 import { PartnersProvider } from '@/features/partners/context/PartnersContext'
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
@@ -102,8 +103,11 @@ export function AppLayout() {
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-6">Tools</div>
           <NavItem icon={Wrench} label="EDI Tools" to="/tenant/edi_tool" />
 
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-6">System</div>
-          <NavItem icon={Users} label="User Management" to="/tenant/users" />
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Developers</div>
+          <NavItem icon={Terminal} label="API Access" to="/tenant/developers" />
+
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Organization</div>
+          <NavItem icon={Users} label="Members" to="/tenant/users" />
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Configuration</div>
           <NavItem icon={Settings} label="Settings" to="/dashboard" />

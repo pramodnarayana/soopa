@@ -60,6 +60,33 @@ class PartnershipRepository:
         return row[0], row[1], row[2]
 
 
+class InboundRouteRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_inbound_route(
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        tenant_id: int,
+        transaction_type: str | None = None,
+    ) -> Any | None:
+        from .models.control_plane import InboundRoute
+
+        conditions = [
+            InboundRoute.isa_sender_id == isa_sender_id,
+            InboundRoute.isa_receiver_id == isa_receiver_id,
+            InboundRoute.active.is_(True),
+            InboundRoute.tenant_id == tenant_id,
+        ]
+        if transaction_type:
+            conditions.append(InboundRoute.transaction_type == transaction_type)
+
+        stmt = select(InboundRoute).where(*conditions).order_by(InboundRoute.id).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
 class EdiMessageRepository:
     def __init__(self, session: AsyncSession):
         self.session = session

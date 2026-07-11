@@ -5,7 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 os.environ["DB_ENCRYPTION_KEY"] = "sKkXvO6eX2Xo6-k2d_WqVf9j_w2_mCq7jR9b9w0wWf4="
 
 import pytest
-from api.adapters.repository import SqlAlchemyControlPlaneRepository, SqlAlchemyDataPlaneRepository
+from api.adapters.repository import (
+    SqlAlchemyControlPlaneRepository,
+)
 from api.domain.models import (
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
@@ -47,7 +49,7 @@ def control_repo(global_session):
 
 @pytest.fixture
 def tenant_repo(tenant_session):
-    repo = SqlAlchemyDataPlaneRepository(tenant_session)
+    repo = SqlAlchemyControlPlaneRepository(tenant_session)
     repo._tenant_id = MagicMock(return_value=1)
     return repo
 
@@ -71,7 +73,9 @@ async def test_control_plane_repository(control_repo: SqlAlchemyControlPlaneRepo
 
     # 3. Create Partnership
     p_cmd = CreateAS2PartnershipCmd(
-        name="Test Partnership", local_partner_id=p_id2, remote_partner_id=p_id1
+        name="Test Partnership",
+        local_partner_id=p_id2,
+        remote_partner_id=p_id1,
     )
     partnership_id = await control_repo.create_as2_partnership(tenant_id=1, cmd=p_cmd)
 
@@ -124,10 +128,15 @@ async def test_data_plane_repository(
         webhook_id=wh_id,
     )
     # Outbound route: deliver via sftp
+    import uuid
+
     out_cmd = CreateOutboundRouteCmd(
+        trading_partner_id=str(uuid.uuid4()),
         name="Outbound Route 1",
         isa_sender_id="S",
         isa_receiver_id="R",
+        gs_sender_id="S",
+        gs_receiver_id="R",
         transaction_type="855",
         as2_partner_id=None,
         sftp_partner_id=sftp_id,
@@ -167,5 +176,66 @@ async def test_get_as2_partner_tenant_isolation(control_repo: SqlAlchemyControlP
 
     # We can check that the SQL string contains the tenant_id binding
     compiled = str(call_args.compile(compile_kwargs={"literal_binds": True}))
-    assert "tenant_id =" in compiled
-    assert "1" in compiled
+    compiled_clean = compiled.replace(" ", "")
+    assert "tenant_idIN(1,0)" in compiled_clean or "tenant_id=" in compiled_clean
+    assert "1" in compiled_clean
+
+
+@pytest.mark.asyncio
+async def test_get_as2_partner_for_write() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from uuid import UUID
+
+    from api.adapters.repository import SqlAlchemyControlPlaneRepository
+    from database.models.control_plane import AS2Partner
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = AS2Partner(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=1,
+        name="test",
+        as2_id="test",
+    )
+    mock_session.execute.return_value = mock_result
+
+    repo = SqlAlchemyControlPlaneRepository(mock_session)
+    partner = await repo.get_as2_partner_for_write(1, UUID("00000000-0000-0000-0000-000000000000"))
+    assert partner is not None
+
+    mock_session.execute.assert_called_once()
+    stmt = mock_session.execute.call_args[0][0]
+    compiled_stmt = str(stmt.compile(compile_kwargs={"literal_binds": True})).replace("\n", "")
+    assert "tenant_id = 1" in compiled_stmt
+    assert "00000000000000000000000000000000" in compiled_stmt
+
+
+@pytest.mark.asyncio
+async def test_get_as2_partner() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from uuid import UUID
+
+    from api.adapters.repository import SqlAlchemyControlPlaneRepository
+    from database.models.control_plane import AS2Partner
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = AS2Partner(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=1,
+        name="test",
+        as2_id="test",
+    )
+    mock_session.execute.return_value = mock_result
+
+    repo = SqlAlchemyControlPlaneRepository(mock_session)
+    partner = await repo.get_as2_partner(1, UUID("00000000-0000-0000-0000-000000000000"))
+    assert partner is not None
+
+    mock_session.execute.assert_called_once()
+    stmt = mock_session.execute.call_args[0][0]
+    compiled_stmt = str(stmt.compile(compile_kwargs={"literal_binds": True})).replace("\n", "")
+    assert "tenant_id IS NULL" in compiled_stmt or "tenant_id IS NULL" in compiled_stmt.replace(
+        "  ", " "
+    )
+    assert "00000000000000000000000000000000" in compiled_stmt

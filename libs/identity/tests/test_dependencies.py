@@ -65,7 +65,7 @@ async def test_get_current_tenant_id_missing_email() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await get_current_tenant_id({"sub": "123"}, mock_use_case)
     assert exc_info.value.status_code == 403
-    assert "email claim" in str(exc_info.value.detail)
+    assert "email or preferred_username claim" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
@@ -105,7 +105,7 @@ async def test_get_tenant_session() -> None:
     mock_shard.name = "shard_1"
     mock_shard.dsn = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
     mock_result = MagicMock()
-    mock_result.one.return_value = (mock_tenant, mock_shard)
+    mock_result.one_or_none.return_value = (mock_tenant, mock_shard)
     mock_global_session.execute.return_value = mock_result
 
     async def mock_global_session_gen() -> AsyncGenerator[AsyncMock, None]:

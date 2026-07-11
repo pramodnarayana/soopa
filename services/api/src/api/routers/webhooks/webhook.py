@@ -7,7 +7,7 @@ from api.adapters.http.dtos import (
     CreateWebhookRequest,
     PartnerResponse,
 )
-from api.core.provisioning import ProvisioningService
+from api.core.services import WebhookService
 from api.core.uow import UnitOfWork
 from api.dependencies import get_tenant_uow
 from api.domain.models import CreateWebhookCmd
@@ -43,7 +43,7 @@ async def create_webhook(
         raise HTTPException(status_code=400, detail="Invalid webhook URL") from e
 
     async with uow:
-        service = ProvisioningService(tenant_repo=uow.data_plane, global_repo=uow.control_plane)
+        service = WebhookService(global_repo=uow.control_plane)
 
         cmd = CreateWebhookCmd(
             name=request.name,

@@ -12,12 +12,14 @@ dependencies = [
     "database",
     "pipeline",
     "config",
+    "domain",
 ]
 
 [tool.uv.sources]
 database = { workspace = true }
 pipeline = { workspace = true }
 config = { workspace = true }
+domain = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

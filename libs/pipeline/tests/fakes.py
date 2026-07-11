@@ -71,12 +71,12 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         return False
 
     async def save_api_payload(
-        self, trace_id: str, direction: str, s3_uri: str, status: str
+        self, trace_id: str, direction: str, payload: dict[str, Any], status: str
     ) -> None:
         self.api_gateway[trace_id] = {
             "trace_id": trace_id,
             "direction": direction,
-            "request": s3_uri,
+            "payload": payload,
             "status": status,
         }
 

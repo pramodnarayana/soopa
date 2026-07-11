@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID as PyUUID
 
@@ -31,4 +31,20 @@ class OutboxMixin:
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
-        return mapped_column(DateTime, default=datetime.utcnow)
+        return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class TimestampMixin:
+    """Provides created_at and updated_at for configuration tables."""
+
+    @declared_attr
+    def created_at(cls) -> Mapped[datetime]:
+        return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    @declared_attr
+    def updated_at(cls) -> Mapped[datetime]:
+        return mapped_column(
+            DateTime(timezone=True),
+            default=lambda: datetime.now(UTC),
+            onupdate=lambda: datetime.now(UTC),
+        )

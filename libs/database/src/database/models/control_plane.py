@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
@@ -10,14 +9,21 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func, text
 
-from .common import OutboxMixin
+from .common import OutboxMixin, TimestampMixin
+from .replicated_mixins import (
+    AS2PartnerMixin,
+    AS2PartnershipMixin,
+    InboundRouteMixin,
+    OutboundRouteMixin,
+    SFTPPartnerMixin,
+    WebhookMixin,
+)
 
 
 class GlobalBase(DeclarativeBase):
@@ -73,39 +79,41 @@ class TenantUser(GlobalBase):
     __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_tenant_user"),)
 
 
-class AS2Partner(GlobalBase):
+class ApiToken(GlobalBase, TimestampMixin):
+    """
+    Platform-managed API keys for machine-to-machine (ERP → Platform) authentication.
+    Two-part credential: client_id (plaintext, visible) + client_secret (hashed, shown once).
+    """
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # client_id: stored in plaintext, used for fast indexed lookup and displayed in UI
+    client_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    # secret_hash: SHA-256 of the raw client_secret; raw value is never stored
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class AS2Partner(GlobalBase, AS2PartnerMixin, TimestampMixin):
     """
     Global AS2 Partners (both our local gateway config, and remote shared configs).
     """
 
     __tablename__ = "as2_partners"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
     tenant_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
     )  # Null if shared global
     is_local: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    as2_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    public_cert_pem: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # Retained for legacy/external, but vault preferred
-    public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    prev_public_cert_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
-    prev_public_cert_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    prev_private_key_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),
@@ -115,7 +123,7 @@ class AS2Partner(GlobalBase):
     )
 
 
-class AS2Partnership(GlobalBase):
+class AS2Partnership(GlobalBase, AS2PartnershipMixin, TimestampMixin):
     """
     OpenAS2 style Partnership (links Local Partner to Remote Partner)
     and stores all MDN and Encryption properties.
@@ -123,37 +131,15 @@ class AS2Partnership(GlobalBase):
 
     __tablename__ = "as2_partnerships"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
     tenant_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
     remote_partner_id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
-    )
-
-    # Core AS2 Networking
-    credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    # Core AS2 Protocol Settings
-    mdn_type: Mapped[str] = mapped_column(String(50), nullable=False, default="SYNC")
-    mdn_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    encryption_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="AES256")
-    signature_algorithm: Mapped[str] = mapped_column(String(50), nullable=False, default="SHA256")
-
-    # Advanced OpenAS2 settings
-    advanced_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
     __table_args__ = (
@@ -201,58 +187,29 @@ class SystemAuditLog(GlobalBase):
 # ---------------------------------------------------------------------------
 
 
-class SFTPPartner(GlobalBase):
+class SFTPPartner(GlobalBase, SFTPPartnerMixin, TimestampMixin):
     __tablename__ = "sftp_partners"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
     tenant_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    host: Mapped[str] = mapped_column(String(1024), nullable=False)
-    port: Mapped[int] = mapped_column(Integer, default=22)
-    username: Mapped[str] = mapped_column(String(255), nullable=False)
-    host_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    inbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    outbound_remote_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    password_encrypted: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    credentials_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
-class Webhook(GlobalBase):
+class Webhook(GlobalBase, WebhookMixin, TimestampMixin):
     __tablename__ = "webhooks"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
     tenant_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    url: Mapped[str] = mapped_column(String(1024), nullable=False)
-    auth_header_vault_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
-class InboundRoute(GlobalBase):
+class InboundRoute(GlobalBase, InboundRouteMixin, TimestampMixin):
     __tablename__ = "inbound_routes"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
     tenant_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    processing_mode: Mapped[str] = mapped_column(
-        String(50), nullable=False, server_default="TRANSLATE"
-    )
+
     webhook_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
     )
@@ -262,7 +219,6 @@ class InboundRoute(GlobalBase):
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -281,29 +237,19 @@ class InboundRoute(GlobalBase):
     )
 
 
-class OutboundRoute(GlobalBase):
+class OutboundRoute(GlobalBase, OutboundRouteMixin, TimestampMixin):
     __tablename__ = "outbound_routes"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-    )
     tenant_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_sender_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    isa_receiver_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    processing_mode: Mapped[str] = mapped_column(
-        String(50), nullable=False, server_default="TRANSLATE"
-    )
+
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
     )
-    active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -311,11 +257,9 @@ class OutboundRoute(GlobalBase):
             name="chk_outbound_routes_exactly_one_dest",
         ),
         Index(
-            "ix_outbound_routes_unique_active",
+            "ix_outbound_routes_unique_trading_partner_id",
             "tenant_id",
-            "isa_sender_id",
-            "isa_receiver_id",
-            "transaction_type",
+            "trading_partner_id",
             unique=True,
             postgresql_where=text("active = true"),
         ),

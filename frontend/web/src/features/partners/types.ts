@@ -35,6 +35,7 @@ export type Partner = AS2Partner | SFTPPartner;
 
 export interface Partnership {
   id: string;
+
   name?: string;
   local_partner_id: string;
   remote_partner_id: string;

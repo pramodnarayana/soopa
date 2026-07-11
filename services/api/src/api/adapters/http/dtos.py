@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -155,6 +156,8 @@ class CreateInboundRouteRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the route")
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
     isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to match")
+    gs_sender_id: str | None = Field(None, max_length=255, description="GS Sender ID to match")
+    gs_receiver_id: str | None = Field(None, max_length=255, description="GS Receiver ID to match")
     transaction_type: str = Field(
         ..., max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
     )
@@ -180,12 +183,23 @@ class CreateInboundRouteRequest(BaseModel):
 
 
 class CreateOutboundRouteRequest(BaseModel):
+    trading_partner_id: str = Field(
+        ..., max_length=255, description="The ERP's identifier for this route"
+    )
     name: str = Field(..., max_length=255, description="Name of the route")
-    isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
-    isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to match")
+    isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to map")
+    isa_sender_qualifier: str | None = Field(None, max_length=2, description="ISA Sender Qualifier")
+    isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to map")
+    isa_receiver_qualifier: str | None = Field(
+        None, max_length=2, description="ISA Receiver Qualifier"
+    )
+    gs_sender_id: str = Field(..., max_length=255, description="GS Sender ID to map")
+    gs_receiver_id: str = Field(..., max_length=255, description="GS Receiver ID to map")
     transaction_type: str = Field(
         ..., max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
     )
+    default_standard: str = Field("x12", max_length=50, description="EDI Standard")
+    default_version: str = Field("004010", max_length=50, description="EDI Version")
     processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] = Field(
         "TRANSLATE", description="Processing Mode"
     )
@@ -206,9 +220,26 @@ class CreateOutboundRouteRequest(BaseModel):
 class UpdateRouteRequest(BaseModel):
     active: bool | None = None
     name: str | None = Field(None, max_length=255, description="Name of the route")
+    trading_partner_id: str | None = Field(
+        None, max_length=255, description="Trading Partner ID (Outbound only)"
+    )
     isa_sender_id: str | None = Field(None, max_length=255, description="ISA Sender ID to match")
+    isa_sender_qualifier: str | None = Field(
+        None, max_length=2, description="ISA Sender Qualifier (Outbound only)"
+    )
     isa_receiver_id: str | None = Field(
         None, max_length=255, description="ISA Receiver ID to match"
+    )
+    isa_receiver_qualifier: str | None = Field(
+        None, max_length=2, description="ISA Receiver Qualifier (Outbound only)"
+    )
+    gs_sender_id: str | None = Field(None, max_length=255, description="GS Sender ID")
+    gs_receiver_id: str | None = Field(None, max_length=255, description="GS Receiver ID")
+    default_standard: str | None = Field(
+        None, max_length=50, description="EDI Standard (Outbound only)"
+    )
+    default_version: str | None = Field(
+        None, max_length=50, description="EDI Version (Outbound only)"
     )
     transaction_type: str | None = Field(
         None, max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
@@ -279,6 +310,7 @@ class CertificateExportResponse(BaseModel):
 class AS2PartnershipResponse(BaseModel):
     id: str
     tenant_id: int | None
+    trading_partner_id: str | None = None
     name: str | None = None
     local_partner_id: str
     remote_partner_id: str
@@ -299,10 +331,17 @@ class RouteResponse(BaseModel):
 
 class RouteItemResponse(BaseModel):
     route_id: UUID
+    trading_partner_id: str | None = None
     name: str
     direction: str
     isa_sender_id: str
+    isa_sender_qualifier: str | None = None
     isa_receiver_id: str
+    isa_receiver_qualifier: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    default_standard: str | None = None
+    default_version: str | None = None
     transaction_type: str
     destination_type: str
     destination_name: str
@@ -312,3 +351,71 @@ class RouteItemResponse(BaseModel):
     status: str = Field(default="ACTIVE")
     active: bool = False
     processing_mode: str = "TRANSLATE"
+
+
+class OutboundMessageRequest(BaseModel):
+    trading_partner_id: str = Field(
+        ..., description="The ERP's identifier for the routing rule (trading_partner_id)"
+    )
+    payload: dict[str, Any] | list[dict[str, Any]] = Field(
+        ..., description="The JSON payload representing the EDI document(s)"
+    )
+    transaction_type: str | None = Field(
+        None, max_length=50, description="The EDI transaction type, e.g., '204', '850'"
+    )
+
+
+class OutboundMessageResponse(BaseModel):
+    trace_id: UUID = Field(..., description="The Trace ID to track the message lifecycle")
+    status: str = Field(default="ACCEPTED")
+
+
+# ---------------------------------------------------------------------------
+# API Token DTOs
+# ---------------------------------------------------------------------------
+
+
+class CreateApiTokenRequest(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Human-readable label for this token (e.g. 'ERP Integration Prod')",
+    )
+    expires_at: datetime | None = Field(
+        None, description="Optional ISO-8601 expiry datetime. Null = never expires."
+    )
+
+
+class ApiTokenCreatedResponse(BaseModel):
+    """
+    Returned exactly once upon token creation.
+    client_secret is shown here and NEVER returned again.
+    """
+
+    id: UUID
+    name: str
+    client_id: str = Field(
+        ..., description="Plaintext client identifier — safe to display in UI and logs"
+    )
+    client_secret: str = Field(
+        ..., description="Raw client secret — store immediately, shown ONCE only"
+    )
+    active: bool
+    created_at: str
+
+
+class ApiTokenListItem(BaseModel):
+    """Safe list representation — secret is never included."""
+
+    id: UUID
+    name: str
+    client_id: str
+    active: bool
+    last_used_at: str | None
+    expires_at: str | None
+    created_at: str
+
+
+class ApiTokenListResponse(BaseModel):
+    tokens: list[ApiTokenListItem]
