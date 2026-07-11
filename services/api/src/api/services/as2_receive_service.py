@@ -325,9 +325,8 @@ class As2ReceiveService:
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
-        tenant_filter = partnership.tenant_id if partnership.tenant_id != 0 else None
         route = await self.uow.control_plane.get_inbound_route(
-            isa_sender_id=isa_sender, isa_receiver_id=isa_receiver, tenant_id=tenant_filter
+            isa_sender_id=isa_sender, isa_receiver_id=isa_receiver, tenant_id=partnership.tenant_id
         )
         if not route:
             logger.error(f"No inbound route found for ISA {isa_sender} -> {isa_receiver}")

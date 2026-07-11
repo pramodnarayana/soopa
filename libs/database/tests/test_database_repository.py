@@ -84,3 +84,44 @@ async def test_inbound_route_repository_get_inbound_route() -> None:
 
     assert result == route
     mock_session.execute.assert_called_once()
+
+
+async def test_inbound_route_repository_get_inbound_route_no_match() -> None:
+    from database.repository import InboundRouteRepository
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    repo = InboundRouteRepository(mock_session)
+    result = await repo.get_inbound_route("SENDER", "RECEIVER", tenant_id=1, transaction_type="850")
+
+    assert result is None
+    mock_session.execute.assert_called_once()
+
+
+async def test_inbound_route_repository_get_inbound_route_no_filters() -> None:
+    from database.models.control_plane import InboundRoute
+    from database.repository import InboundRouteRepository
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    route = InboundRoute(
+        id=uuid.uuid4(),
+        tenant_id=1,
+        isa_sender_id="SENDER",
+        isa_receiver_id="RECEIVER",
+        transaction_type=None,
+        active=True,
+    )
+    mock_result.scalar_one_or_none.return_value = route
+    mock_session.execute.return_value = mock_result
+
+    repo = InboundRouteRepository(mock_session)
+    result = await repo.get_inbound_route(
+        "SENDER", "RECEIVER", tenant_id=None, transaction_type=None
+    )
+
+    assert result == route
+    mock_session.execute.assert_called_once()

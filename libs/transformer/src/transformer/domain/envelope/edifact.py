@@ -72,7 +72,9 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
         transaction_type = route_config.get("transaction_type", "UNKNOWN")
 
         # Generation values
-        unb05 = str(int(now.timestamp() * 1000) % 1000000000)
+        import uuid
+
+        unb05 = str(uuid.uuid4().int % 1000000000).zfill(9)
 
         # Build segments
         unb_segment = cls._build_unb_segment(route_config, now, unb05)

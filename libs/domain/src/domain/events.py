@@ -26,3 +26,4 @@ class MessageQueueName(StrEnum):
     TRANSLATE = "TranslateQueue"
     DELIVER = "DeliverQueue"
     PROVISIONING = "ProvisioningQueue"
+    CDC_DLQ = "CdcDlqQueue"

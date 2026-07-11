@@ -37,7 +37,7 @@ from database.models.control_plane import (
 )
 from database.models.control_plane import Outbox as GlobalOutbox
 from database.models.data_plane import EdiMessage
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -118,7 +118,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == partner_id,
-                AS2Partner.tenant_id.in_([tenant_id, 0]),
+                or_(AS2Partner.tenant_id == tenant_id, AS2Partner.tenant_id.is_(None)),
             )
         )
         return result.scalar_one_or_none()
@@ -517,7 +517,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         self,
         isa_sender_id: str,
         isa_receiver_id: str,
-        tenant_id: int | None = None,
+        tenant_id: int,
         transaction_type: str | None = None,
     ) -> Any | None:
         from database.repository import InboundRouteRepository
@@ -844,7 +844,7 @@ class SqlAlchemyApiTokenRepository:
 
         from sqlalchemy import or_, update
 
-        now = datetime.now(UTC)
+        now = datetime.now(UTC).replace(tzinfo=None)
         result = await self.session.execute(
             select(ApiToken).where(
                 ApiToken.client_id == client_id,

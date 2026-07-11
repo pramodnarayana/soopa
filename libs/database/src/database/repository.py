@@ -68,7 +68,7 @@ class InboundRouteRepository:
         self,
         isa_sender_id: str,
         isa_receiver_id: str,
-        tenant_id: int | None = None,
+        tenant_id: int,
         transaction_type: str | None = None,
     ) -> Any | None:
         from .models.control_plane import InboundRoute
@@ -77,9 +77,8 @@ class InboundRouteRepository:
             InboundRoute.isa_sender_id == isa_sender_id,
             InboundRoute.isa_receiver_id == isa_receiver_id,
             InboundRoute.active.is_(True),
+            InboundRoute.tenant_id == tenant_id,
         ]
-        if tenant_id is not None and tenant_id != 0:
-            conditions.append(InboundRoute.tenant_id == tenant_id)
         if transaction_type:
             conditions.append(InboundRoute.transaction_type == transaction_type)
 

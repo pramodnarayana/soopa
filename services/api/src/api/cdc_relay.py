@@ -68,7 +68,16 @@ async def relay_cdc_event(
             logger.error(
                 f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )
-            # Skip invalid events; do not fail the entire batch.
+            try:
+                await queue.send(MessageQueueName.CDC_DLQ, {"error": str(e), "payload": raw_event})
+            except Exception as dlq_err:
+                logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
+                from fastapi import HTTPException
+
+                raise HTTPException(
+                    status_code=500, detail="Failed to quarantine invalid event"
+                ) from dlq_err
+            # Quarantine succeeded, so skip invalid events; do not fail the entire batch.
             continue
 
     for event in validated_events:

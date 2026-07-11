@@ -74,9 +74,13 @@ class OutboundService:
                         transaction_type = st.get("ST01")
 
             if not transaction_type:
-                logger.warning(
-                    "Could not determine transaction_type from payload, metadata extraction might fail."
+                transaction_type = route.transaction_type
+
+            if not transaction_type:
+                logger.error(
+                    "Could not determine transaction_type from payload or route configuration."
                 )
+                raise ValueError("Transaction type could not be determined")
 
             business_metadata = {}
             if isinstance(payload, dict):

@@ -81,7 +81,7 @@ class RouteRepositoryPort(Protocol):
         self,
         isa_sender_id: str,
         isa_receiver_id: str,
-        tenant_id: int | None = None,
+        tenant_id: int,
         transaction_type: str | None = None,
     ) -> Any | None: ...
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...

@@ -187,7 +187,7 @@ async def test_get_as2_partner_for_write() -> None:
     from uuid import UUID
 
     from api.adapters.repository import SqlAlchemyControlPlaneRepository
-    from database.models.data_plane import AS2Partner
+    from database.models.control_plane import AS2Partner
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -202,3 +202,40 @@ async def test_get_as2_partner_for_write() -> None:
     repo = SqlAlchemyControlPlaneRepository(mock_session)
     partner = await repo.get_as2_partner_for_write(1, UUID("00000000-0000-0000-0000-000000000000"))
     assert partner is not None
+
+    mock_session.execute.assert_called_once()
+    stmt = mock_session.execute.call_args[0][0]
+    compiled_stmt = str(stmt.compile(compile_kwargs={"literal_binds": True})).replace("\n", "")
+    assert "tenant_id = 1" in compiled_stmt
+    assert "00000000000000000000000000000000" in compiled_stmt
+
+
+@pytest.mark.asyncio
+async def test_get_as2_partner() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from uuid import UUID
+
+    from api.adapters.repository import SqlAlchemyControlPlaneRepository
+    from database.models.control_plane import AS2Partner
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = AS2Partner(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=1,
+        name="test",
+        as2_id="test",
+    )
+    mock_session.execute.return_value = mock_result
+
+    repo = SqlAlchemyControlPlaneRepository(mock_session)
+    partner = await repo.get_as2_partner(1, UUID("00000000-0000-0000-0000-000000000000"))
+    assert partner is not None
+
+    mock_session.execute.assert_called_once()
+    stmt = mock_session.execute.call_args[0][0]
+    compiled_stmt = str(stmt.compile(compile_kwargs={"literal_binds": True})).replace("\n", "")
+    assert "tenant_id IS NULL" in compiled_stmt or "tenant_id IS NULL" in compiled_stmt.replace(
+        "  ", " "
+    )
+    assert "00000000000000000000000000000000" in compiled_stmt
