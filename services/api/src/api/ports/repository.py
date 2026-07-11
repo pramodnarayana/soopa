@@ -78,7 +78,11 @@ class RouteRepositoryPort(Protocol):
         self, tenant_id: int, route_id: UUID, cmd: UpdateInboundRouteCmd
     ) -> bool: ...
     async def get_inbound_route(
-        self, isa_sender_id: str, isa_receiver_id: str, tenant_id: int | None = None
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        tenant_id: int | None = None,
+        transaction_type: str | None = None,
     ) -> Any | None: ...
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...
 

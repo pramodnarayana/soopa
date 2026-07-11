@@ -5,7 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 os.environ["DB_ENCRYPTION_KEY"] = "sKkXvO6eX2Xo6-k2d_WqVf9j_w2_mCq7jR9b9w0wWf4="
 
 import pytest
-from api.adapters.repository import SqlAlchemyControlPlaneRepository, SqlAlchemyDataPlaneRepository
+from api.adapters.repository import (
+    SqlAlchemyControlPlaneRepository,
+)
 from api.domain.models import (
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
@@ -47,7 +49,7 @@ def control_repo(global_session):
 
 @pytest.fixture
 def tenant_repo(tenant_session):
-    repo = SqlAlchemyDataPlaneRepository(tenant_session)
+    repo = SqlAlchemyControlPlaneRepository(tenant_session)
     repo._tenant_id = MagicMock(return_value=1)
     return repo
 
@@ -177,3 +179,26 @@ async def test_get_as2_partner_tenant_isolation(control_repo: SqlAlchemyControlP
     compiled_clean = compiled.replace(" ", "")
     assert "tenant_idIN(1,0)" in compiled_clean or "tenant_id=" in compiled_clean
     assert "1" in compiled_clean
+
+
+@pytest.mark.asyncio
+async def test_get_as2_partner_for_write() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from uuid import UUID
+
+    from api.adapters.repository import SqlAlchemyControlPlaneRepository
+    from database.models.data_plane import AS2Partner
+
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = AS2Partner(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=1,
+        name="test",
+        as2_id="test",
+    )
+    mock_session.execute.return_value = mock_result
+
+    repo = SqlAlchemyControlPlaneRepository(mock_session)
+    partner = await repo.get_as2_partner_for_write(1, UUID("00000000-0000-0000-0000-000000000000"))
+    assert partner is not None

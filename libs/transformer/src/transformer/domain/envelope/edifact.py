@@ -1,5 +1,4 @@
 import datetime
-import random
 from typing import Any
 
 from transformer.domain.ast_utils import ASTUtils
@@ -73,7 +72,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
         transaction_type = route_config.get("transaction_type", "UNKNOWN")
 
         # Generation values
-        unb05 = str(random.randint(1, 999999999))
+        unb05 = str(int(now.timestamp() * 1000) % 1000000000)
 
         # Build segments
         unb_segment = cls._build_unb_segment(route_config, now, unb05)

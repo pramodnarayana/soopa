@@ -42,11 +42,13 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - zitadel_data:/machinekey
+      - zitadel_machinekey:/machinekey
     depends_on:
       zitadel-postgres:
         condition: service_healthy
 
 volumes:
   zitadel_data:
+    driver: local
+  zitadel_machinekey:
     driver: local

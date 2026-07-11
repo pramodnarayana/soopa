@@ -65,7 +65,11 @@ class InboundRouteRepository:
         self.session = session
 
     async def get_inbound_route(
-        self, isa_sender_id: str, isa_receiver_id: str, tenant_id: int | None = None
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        tenant_id: int | None = None,
+        transaction_type: str | None = None,
     ) -> Any | None:
         from .models.control_plane import InboundRoute
 
@@ -76,8 +80,11 @@ class InboundRouteRepository:
         ]
         if tenant_id is not None and tenant_id != 0:
             conditions.append(InboundRoute.tenant_id == tenant_id)
+        if transaction_type:
+            conditions.append(InboundRoute.transaction_type == transaction_type)
 
-        result = await self.session.execute(select(InboundRoute).where(*conditions))
+        stmt = select(InboundRoute).where(*conditions).order_by(InboundRoute.id).limit(1)
+        result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
 

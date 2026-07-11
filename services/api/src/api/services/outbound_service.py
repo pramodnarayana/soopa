@@ -116,7 +116,7 @@ class OutboundService:
                 route_config = {
                     "default_standard": route.default_standard,
                     "default_version": route.default_version,
-                    "transaction_type": transaction_type,
+                    "transaction_type": transaction_type or "",
                     "isa_sender_qualifier": route.isa_sender_qualifier,
                     "isa_sender_id": route.isa_sender_id,
                     "isa_receiver_qualifier": route.isa_receiver_qualifier,

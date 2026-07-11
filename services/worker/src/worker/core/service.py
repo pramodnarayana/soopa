@@ -51,7 +51,8 @@ class ProvisioningWorkerService:
                                 f"Failed to broadcast global event {event.id} to tenant {t_id}: {result}",
                                 exc_info=result,
                             )
-                            errors.append(result)
+                            if not isinstance(result, PermanentProvisioningError):
+                                errors.append(result)
 
                     if errors:
                         raise TransientProvisioningError(

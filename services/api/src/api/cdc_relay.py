@@ -64,7 +64,7 @@ async def relay_cdc_event(
     for raw_event in raw_events:
         try:
             validated_events.append(DebeziumUnwrappedEvent(**raw_event))
-        except ValidationError as e:
+        except (ValidationError, TypeError) as e:
             logger.error(
                 f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )

@@ -74,7 +74,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
     async def update_as2_identity(
         self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
     ) -> None:
-        partner = await self.get_as2_partner(tenant_id, partner_id)
+        partner = await self.get_as2_partner_for_write(tenant_id, partner_id)
         if partner:
             if cmd.name is not None:
                 partner.name = cmd.name
@@ -101,7 +101,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         new_public_cert: str,
         new_private_key_vault_ref: str | None,
     ) -> None:
-        partner = await self.get_as2_partner(tenant_id, partner_id)
+        partner = await self.get_as2_partner_for_write(tenant_id, partner_id)
         if not partner:
             raise ValueError(f"AS2 Partner {partner_id} not found or access denied.")
 
@@ -119,6 +119,15 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             select(AS2Partner).where(
                 AS2Partner.id == partner_id,
                 AS2Partner.tenant_id.in_([tenant_id, 0]),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_as2_partner_for_write(self, tenant_id: int, partner_id: UUID) -> Any:
+        result = await self.session.execute(
+            select(AS2Partner).where(
+                AS2Partner.id == partner_id,
+                AS2Partner.tenant_id == tenant_id,
             )
         )
         return result.scalar_one_or_none()
@@ -505,12 +514,18 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         return True
 
     async def get_inbound_route(
-        self, isa_sender_id: str, isa_receiver_id: str, tenant_id: int | None = None
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        tenant_id: int | None = None,
+        transaction_type: str | None = None,
     ) -> Any | None:
         from database.repository import InboundRouteRepository
 
         repo = InboundRouteRepository(self.session)
-        return await repo.get_inbound_route(isa_sender_id, isa_receiver_id, tenant_id)
+        return await repo.get_inbound_route(
+            isa_sender_id, isa_receiver_id, tenant_id, transaction_type
+        )
 
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
@@ -825,7 +840,7 @@ class SqlAlchemyApiTokenRepository:
         Also updates last_used_at.
         """
         import hmac
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
         from sqlalchemy import or_, update
 
@@ -845,7 +860,8 @@ class SqlAlchemyApiTokenRepository:
         if not hmac.compare_digest(record.secret_hash, secret_hash):
             return None
 
-        await self.session.execute(
-            update(ApiToken).where(ApiToken.id == record.id).values(last_used_at=datetime.now(UTC))
-        )
+        if not record.last_used_at or record.last_used_at < (now - timedelta(hours=1)):
+            await self.session.execute(
+                update(ApiToken).where(ApiToken.id == record.id).values(last_used_at=now)
+            )
         return record.tenant_id
