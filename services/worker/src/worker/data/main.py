@@ -33,13 +33,19 @@ class TenantResolver:
     Caches tenant-to-shard mapping to avoid querying the Global DB on every SQS message.
     """
 
-    def __init__(self, db_router: DatabaseRouter):
+    def __init__(self, db_router: DatabaseRouter, ttl_secs: int = 300):
         self.db_router = db_router
-        self._cache: dict[int, tuple[str, str]] = {}
+        self._cache: dict[int, tuple[str, str, float]] = {}
+        self._ttl = ttl_secs
 
     async def resolve(self, tenant_id: int) -> tuple[str, str]:
+        import time
+
+        now = time.time()
         if tenant_id in self._cache:
-            return self._cache[tenant_id]
+            shard_name, shard_dsn, expiry = self._cache[tenant_id]
+            if now < expiry:
+                return shard_name, shard_dsn
 
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
@@ -50,11 +56,10 @@ class TenantResolver:
             if not row:
                 raise ValueError(f"Tenant {tenant_id} not found in Global DB")
             _, shard_obj = row
-            self._cache[tenant_id] = (str(shard_obj.name), str(shard_obj.dsn))
-            return self._cache[tenant_id]
+            self._cache[tenant_id] = (str(shard_obj.name), str(shard_obj.dsn), now + self._ttl)
+            return str(shard_obj.name), str(shard_obj.dsn)
         finally:
-            with contextlib.suppress(StopAsyncIteration):
-                await global_gen.__anext__()
+            await global_gen.aclose()
 
 
 logger = logging.getLogger(__name__)

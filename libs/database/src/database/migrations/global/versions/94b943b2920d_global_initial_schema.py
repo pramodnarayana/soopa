@@ -144,7 +144,6 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("client_id"),
     )
     op.create_index("ix_api_tokens_tenant_id", "api_tokens", ["tenant_id"], unique=False)
     op.create_index("ix_api_tokens_client_id", "api_tokens", ["client_id"], unique=True)

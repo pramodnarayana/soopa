@@ -131,18 +131,17 @@ class RouteService:
 
         results: list[dict[str, Any]] = []
 
-        for r in inbound:
-            dest_type = "UNKNOWN"
-            dest_name = "Unknown"
+        def _resolve_destination(r: Any) -> tuple[str, str]:
             if r.as2_partner_id:
-                dest_type = "AS2"
-                dest_name = as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
-            elif r.sftp_partner_id:
-                dest_type = "SFTP"
-                dest_name = sftp_names.get(r.sftp_partner_id, str(r.sftp_partner_id))
-            elif r.webhook_id:
-                dest_type = "WEBHOOK"
-                dest_name = webhook_names.get(r.webhook_id, str(r.webhook_id))
+                return "AS2", as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
+            if r.sftp_partner_id:
+                return "SFTP", sftp_names.get(r.sftp_partner_id, str(r.sftp_partner_id))
+            if getattr(r, "webhook_id", None):
+                return "WEBHOOK", webhook_names.get(r.webhook_id, str(r.webhook_id))
+            return "UNKNOWN", "Unknown"
+
+        for r in inbound:
+            dest_type, dest_name = _resolve_destination(r)
 
             results.append(
                 {
@@ -164,14 +163,7 @@ class RouteService:
             )
 
         for r in outbound:
-            dest_type = "UNKNOWN"
-            dest_name = "Unknown"
-            if r.as2_partner_id:
-                dest_type = "AS2"
-                dest_name = as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
-            elif r.sftp_partner_id:
-                dest_type = "SFTP"
-                dest_name = sftp_names.get(r.sftp_partner_id, str(r.sftp_partner_id))
+            dest_type, dest_name = _resolve_destination(r)
 
             results.append(
                 {

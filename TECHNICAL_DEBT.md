@@ -57,6 +57,7 @@ Implement an Outbox Sweeper background worker that acts as a robust enterprise f
 ## 4. Testing
 
 ### No Frontend Test Runner (Vitest)
+
 **Priority:** Medium
 `make test` skips frontend tests with a placeholder comment.
 React component tests and TanStack Query mutation tests are not covered.
@@ -64,5 +65,6 @@ React component tests and TanStack Query mutation tests are not covered.
 ## 5. Database Schema
 
 ### Missing `edi_headers` Table
+
 **Priority:** Medium
 **Description:** We currently lack an `edi_headers` table to store extracted EDI header metadata (e.g. ST/GS segments). This table needs to be created and linked via foreign key to the `outbound_route` table so that EDI messages can be properly tracked and correlated with their configured outbound routes.

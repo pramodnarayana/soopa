@@ -243,7 +243,7 @@ class As2ReceiveService:
         if not has_cte:
             smime_headers += "Content-Transfer-Encoding: binary\r\n"
         smime_headers += "\r\n"
-        return smime_headers.encode("utf-8")
+        return smime_headers.encode("latin-1")
 
     def _verify_and_calculate_mic(
         self, verify_entity: bytes, remote_cert: bytes, message_id: str
@@ -325,8 +325,9 @@ class As2ReceiveService:
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
+        tenant_filter = partnership.tenant_id if partnership.tenant_id != 0 else None
         route = await self.uow.control_plane.get_inbound_route(
-            isa_sender_id=isa_sender, isa_receiver_id=isa_receiver
+            isa_sender_id=isa_sender, isa_receiver_id=isa_receiver, tenant_id=tenant_filter
         )
         if not route:
             logger.error(f"No inbound route found for ISA {isa_sender} -> {isa_receiver}")

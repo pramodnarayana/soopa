@@ -96,3 +96,4 @@ class SqsOutboxAdapter(OutboxPort):
                     logger.exception(
                         f"Transient error processing event {event.id}: {e}. Leaving on queue."
                     )
+                raise

@@ -64,16 +64,20 @@ class InboundRouteRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_inbound_route(self, isa_sender_id: str, isa_receiver_id: str) -> Any | None:
+    async def get_inbound_route(
+        self, isa_sender_id: str, isa_receiver_id: str, tenant_id: int | None = None
+    ) -> Any | None:
         from .models.control_plane import InboundRoute
 
-        result = await self.session.execute(
-            select(InboundRoute).where(
-                InboundRoute.isa_sender_id == isa_sender_id,
-                InboundRoute.isa_receiver_id == isa_receiver_id,
-                InboundRoute.active.is_(True),
-            )
-        )
+        conditions = [
+            InboundRoute.isa_sender_id == isa_sender_id,
+            InboundRoute.isa_receiver_id == isa_receiver_id,
+            InboundRoute.active.is_(True),
+        ]
+        if tenant_id is not None and tenant_id != 0:
+            conditions.append(InboundRoute.tenant_id == tenant_id)
+
+        result = await self.session.execute(select(InboundRoute).where(*conditions))
         return result.scalar_one_or_none()
 
 

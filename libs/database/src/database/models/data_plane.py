@@ -200,11 +200,6 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
     __table_args__ = (
         Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),
         CheckConstraint(

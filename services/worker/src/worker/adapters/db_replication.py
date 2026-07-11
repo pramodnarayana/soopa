@@ -1,4 +1,3 @@
-import contextlib
 import logging
 from typing import Any
 
@@ -39,23 +38,23 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 
         global_gen = self.db_router.get_global_session()
-        global_session = await global_gen.__anext__()
-
         tenant_gen = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
-        tenant_session = await tenant_gen.__anext__()
 
-        try:
-            await self._do_replicate(tenant_id, global_session, tenant_session)
-            await tenant_session.commit()
-            logger.info(f"Successfully replicated configuration for tenant_id={tenant_id}")
-        except Exception as e:
-            await tenant_session.rollback()
-            raise TransientProvisioningError(f"Failed to replicate tenant {tenant_id}: {e}") from e
-        finally:
-            with contextlib.suppress(StopAsyncIteration):
-                await tenant_gen.__anext__()
-            with contextlib.suppress(StopAsyncIteration):
-                await global_gen.__anext__()
+        from contextlib import aclosing
+
+        async with aclosing(global_gen) as global_gen_ctx, aclosing(tenant_gen) as tenant_gen_ctx:
+            global_session = await global_gen_ctx.__anext__()
+            tenant_session = await tenant_gen_ctx.__anext__()
+
+            try:
+                await self._do_replicate(tenant_id, global_session, tenant_session)
+                await tenant_session.commit()
+                logger.info(f"Successfully replicated configuration for tenant_id={tenant_id}")
+            except Exception as e:
+                await tenant_session.rollback()
+                raise TransientProvisioningError(
+                    f"Failed to replicate tenant {tenant_id}: {e}"
+                ) from e
 
     async def _do_replicate(self, tenant_id: int, global_session: Any, tenant_session: Any) -> None:
         # --- AS2 Partners ---
@@ -278,6 +277,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         "isa_receiver_id": global_ir.isa_receiver_id,
                         "transaction_type": global_ir.transaction_type,
                         "processing_mode": global_ir.processing_mode,
+                        "webhook_id": global_ir.webhook_id,
                         "as2_partner_id": global_ir.as2_partner_id,
                         "sftp_partner_id": global_ir.sftp_partner_id,
                         "active": global_ir.active,
@@ -349,22 +349,32 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         # --- Sync deletes (children before parents) ---
         logger.info(f"[tenant={tenant_id}] Syncing deletes...")
         await self._sync_deletes(
-            tenant_id, global_session, tenant_session, GlobalOutboundRoute, TenantOutboundRoute
+            tenant_id,
+            global_session,
+            tenant_session,
+            GlobalOutboundRoute,
+            TenantOutboundRoute,
+            False,
         )
         await self._sync_deletes(
-            tenant_id, global_session, tenant_session, GlobalInboundRoute, TenantInboundRoute
+            tenant_id, global_session, tenant_session, GlobalInboundRoute, TenantInboundRoute, False
         )
         await self._sync_deletes(
-            tenant_id, global_session, tenant_session, GlobalWebhook, TenantWebhook
+            tenant_id, global_session, tenant_session, GlobalWebhook, TenantWebhook, False
         )
         await self._sync_deletes(
-            tenant_id, global_session, tenant_session, GlobalSFTPPartner, TenantSFTPPartner
+            tenant_id, global_session, tenant_session, GlobalSFTPPartner, TenantSFTPPartner, False
         )
         await self._sync_deletes(
-            tenant_id, global_session, tenant_session, GlobalAS2Partnership, TenantAS2Partnership
+            tenant_id,
+            global_session,
+            tenant_session,
+            GlobalAS2Partnership,
+            TenantAS2Partnership,
+            True,
         )
         await self._sync_deletes(
-            tenant_id, global_session, tenant_session, GlobalAS2Partner, TenantAS2Partner
+            tenant_id, global_session, tenant_session, GlobalAS2Partner, TenantAS2Partner, True
         )
 
     async def _sync_deletes(
@@ -374,11 +384,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         tenant_session: Any,
         global_model: Any,
         tenant_model: Any,
+        include_shared: bool,
     ) -> None:
         # Get all valid IDs from global
         global_stmt = select(global_model.id).where(global_model.tenant_id == tenant_id)
         # Special handling for global models (tenant_id = 0 or NULL)
-        if global_model.__name__ in ("AS2Partner", "AS2Partnership"):
+        if include_shared:
             global_stmt = select(global_model.id).where(
                 (global_model.tenant_id == tenant_id)
                 | (global_model.tenant_id == 0)

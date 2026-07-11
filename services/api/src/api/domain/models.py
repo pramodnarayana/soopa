@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -205,7 +206,7 @@ class RouteEntity:
 @dataclass(frozen=True)
 class CreateApiTokenCmd:
     name: str
-    expires_at: Any | None = None  # datetime or None
+    expires_at: datetime | None = None
 
 
 @dataclass(frozen=True)

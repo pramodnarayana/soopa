@@ -145,15 +145,20 @@ async def rotate_as2_certificates(
                 new_private_key_vault_ref=private_key_vault_ref,
             )
             await uow.commit()
-            return AS2TradingPartnerResponse(
-                id=str(updated_partner.partner_id),
-                name=updated_partner.name,
-                as2_id=partner.as2_id,
-                is_local=partner.is_local,
-                url=partner.url,
-                active=updated_partner.status == "ACTIVE",
-            )
+        except ValueError as e:
+            if private_key_vault_ref:
+                vault.delete_secret(private_key_vault_ref)
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
             if private_key_vault_ref:
                 vault.delete_secret(private_key_vault_ref)
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(status_code=500, detail="Internal server error") from e
+
+        return AS2TradingPartnerResponse(
+            id=str(updated_partner.partner_id),
+            name=updated_partner.name,
+            as2_id=partner.as2_id,
+            is_local=partner.is_local,
+            url=partner.url,
+            active=updated_partner.status == "ACTIVE",
+        )

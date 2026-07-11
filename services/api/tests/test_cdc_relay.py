@@ -95,8 +95,8 @@ def test_cdc_relay_ignores_updates_and_deletes(memory_queue: InMemoryQueueAdapte
     assert len(memory_queue.sent_messages) == 0
 
 
-def test_cdc_relay_rejects_unknown_table(memory_queue: InMemoryQueueAdapter) -> None:
-    """Tests the CDC relay fails explicitly on unknown table sources to prevent silent drops."""
+def test_cdc_relay_skips_unknown_table(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests the CDC relay skips unknown table sources to prevent silent drops."""
     payload = {
         "__op": "c",
         "__table": "unknown_table",
@@ -139,8 +139,8 @@ def test_cdc_relay_successful_provisioning_routing(memory_queue: InMemoryQueueAd
     }
 
 
-def test_cdc_relay_rejects_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
-    """Payloads without trace_id must be rejected to prevent poison messages in SQS."""
+def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
+    """Payloads without trace_id must be skipped to prevent poison messages in SQS."""
     payload = {
         "__op": "c",
         "__table": "outbox",

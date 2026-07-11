@@ -34,14 +34,33 @@ class ProvisioningWorkerService:
                 )
                 try:
                     all_tenant_ids = await self.tenant_port.get_all_tenant_ids()
-                    for t_id in all_tenant_ids:
-                        try:
-                            await self.replication_port.replicate_tenant_configuration(t_id)
-                        except Exception as e:
+
+                    import asyncio
+
+                    async def _replicate(t_id: int) -> None:
+                        await self.replication_port.replicate_tenant_configuration(t_id)
+
+                    results = await asyncio.gather(
+                        *[_replicate(t_id) for t_id in all_tenant_ids], return_exceptions=True
+                    )
+
+                    errors = []
+                    for t_id, result in zip(all_tenant_ids, results, strict=False):
+                        if isinstance(result, Exception):
                             logger.exception(
-                                f"Failed to broadcast global event {event.id} to tenant {t_id}: {e}"
+                                f"Failed to broadcast global event {event.id} to tenant {t_id}: {result}",
+                                exc_info=result,
                             )
+                            errors.append(result)
+
+                    if errors:
+                        raise TransientProvisioningError(
+                            f"Global broadcasting failed for some tenants: {errors}"
+                        )
+
                 except Exception as e:
+                    if isinstance(e, TransientProvisioningError):
+                        raise
                     raise TransientProvisioningError(f"Global broadcasting failed: {e}") from e
             else:
                 logger.info(f"Processing provision event {event.id} for tenant_id={tenant_id}")

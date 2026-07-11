@@ -68,7 +68,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
     def build(
         cls, route_config: dict[str, Any], payload: dict[str, Any] | list[dict[str, Any]]
     ) -> dict[str, Any]:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.UTC)
         transactions = payload if isinstance(payload, list) else [payload]
         transaction_type = route_config.get("transaction_type", "UNKNOWN")
 

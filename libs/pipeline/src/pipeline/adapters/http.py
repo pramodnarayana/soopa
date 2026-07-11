@@ -27,9 +27,17 @@ class HttpxDeliveryAdapter(HttpDeliveryPort):
         if not parsed.hostname:
             raise ValueError("Invalid URL")
 
-        ip = await anyio.to_thread.run_sync(socket.gethostbyname, parsed.hostname)
+        addr_info = await anyio.to_thread.run_sync(socket.getaddrinfo, parsed.hostname, None)
+        ip = addr_info[0][4][0]
         ip_obj = ipaddress.ip_address(ip)
-        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_unspecified:
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_unspecified
+            or ip_obj.is_link_local
+            or ip_obj.is_reserved
+            or ip_obj.is_multicast
+        ):
             raise ValueError("SSRF check failed: internal IP")
 
         port_str = f":{parsed.port}" if parsed.port else ""

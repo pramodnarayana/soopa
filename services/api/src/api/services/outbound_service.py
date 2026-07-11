@@ -54,17 +54,22 @@ class OutboundService:
             logger.info(f"Resolved OutboundRoute: {route.id} (Standard: {route.default_standard})")
 
             # 2. Resolve transaction_type from payload if not provided explicitly
-            if not transaction_type and isinstance(payload, dict):
-                transaction_type = payload.get("transaction_type")
+            if not transaction_type:
+                first_payload = (
+                    payload[0]
+                    if isinstance(payload, list) and payload
+                    else (payload if isinstance(payload, dict) else {})
+                )
+                transaction_type = first_payload.get("transaction_type")
                 if not transaction_type:
-                    heading = payload.get("heading", {})
+                    heading = first_payload.get("heading", {})
                     for key in heading:
                         if key.startswith("transaction_set_header_ST"):
                             transaction_type = heading[key].get("transaction_set_identifier_code")
                             break
                 if not transaction_type:
                     # Try ST segment directly (for raw transaction payloads)
-                    st = payload.get("ST", {})
+                    st = first_payload.get("ST", {})
                     if st:
                         transaction_type = st.get("ST01")
 

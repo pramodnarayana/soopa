@@ -84,9 +84,16 @@ async def relay_cdc_event(
                 continue
 
             event_payload = event.payload
-            payload_dict = (
-                json.loads(event_payload) if isinstance(event_payload, str) else event_payload
-            )
+            if isinstance(event_payload, str):
+                try:
+                    payload_dict = json.loads(event_payload)
+                except json.JSONDecodeError as e:
+                    logger.error(
+                        f"[CDC Relay] Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
+                    )
+                    continue
+            else:
+                payload_dict = event_payload
 
             if event.event_type in (
                 "TRANSLATE",

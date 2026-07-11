@@ -1,5 +1,4 @@
 import datetime
-import random
 from typing import Any
 
 from transformer.domain.ast_utils import ASTUtils
@@ -107,13 +106,14 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
     def build(
         cls, route_config: dict[str, Any], payload: dict[str, Any] | list[dict[str, Any]]
     ) -> dict[str, Any]:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.UTC)
         transactions = payload if isinstance(payload, list) else [payload]
         transaction_type = route_config.get("transaction_type", "UNKNOWN")
 
         # Generation values
-        isa13 = f"{random.randint(1, 999999999):09d}"
-        gs06 = str(random.randint(1, 999999999))
+        monotonic_counter = int(now.timestamp() * 1000) % 1000000000
+        isa13 = f"{monotonic_counter:09d}"
+        gs06 = str(monotonic_counter)
 
         # Build segments
         isa_segment = cls._build_isa_segment(route_config, now, isa13)

@@ -41,10 +41,12 @@ function useToastMutation<TData, TVariables = any>(
 }
 
 export function useApiTokensQuery() {
-  const repo = useRepository();
+  const auth = useAuth();
+  const repo = createApiTokenRepository(auth.user?.access_token ?? '');
   return useQuery({
     queryKey: apiTokenKeys.lists(),
     queryFn: () => repo.getApiTokens(),
+    enabled: !!auth.user?.access_token,
   });
 }
 

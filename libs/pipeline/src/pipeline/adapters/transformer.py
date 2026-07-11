@@ -35,11 +35,8 @@ class BotsTransformerAdapter(TransformerPort):
         Translates JSON to EDI using the wrapped BOTS facade.
         """
         import asyncio
-        import datetime
 
         from transformer.domain.exceptions import TranslationError
-
-        datetime.datetime.utcnow()
 
         if isinstance(payload, dict) and (
             "interchange_ISA" in payload or "interchange_UNB" in payload

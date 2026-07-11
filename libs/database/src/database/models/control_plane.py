@@ -102,8 +102,6 @@ class ApiToken(GlobalBase, TimestampMixin):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    __table_args__ = (Index("ix_api_tokens_client_id", "client_id", unique=True),)
-
 
 class AS2Partner(GlobalBase, AS2PartnerMixin, TimestampMixin):
     """

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -21,15 +22,20 @@ interface Props {
 export function TokenCredentialsModal({ token, onClose }: Props) {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
+  const { toast } = useToast();
 
   const copyToClipboard = async (text: string, isSecret: boolean) => {
-    await navigator.clipboard.writeText(text);
-    if (isSecret) {
-      setCopiedSecret(true);
-      setTimeout(() => setCopiedSecret(false), 2000);
-    } else {
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
+    try {
+      await navigator.clipboard.writeText(text);
+      if (isSecret) {
+        setCopiedSecret(true);
+        setTimeout(() => setCopiedSecret(false), 2000);
+      } else {
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 2000);
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to copy to clipboard.', variant: 'destructive' });
     }
   };
 

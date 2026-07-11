@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 
@@ -105,8 +104,6 @@ class TranslationService:
             payload=raw_payload, standard=standard, transaction_type=transaction_type
         )
 
-        json.dumps(json_dict).encode("utf-8")
-
         # 3. Extract Business Metadata
         from pipeline.core.metadata_extractor import MetadataExtractorService
 
@@ -131,8 +128,6 @@ class TranslationService:
             status="PENDING_DELIVERY",
             tenant_id=edi_msg.get("tenant_id"),
         )
-
-        edi_msg.get("tenant_id")
 
         # 5. Save ApiGateway to DB
         await self.repository.save_api_payload(

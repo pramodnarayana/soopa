@@ -93,7 +93,11 @@ const columns = [
     cell: (info) => {
       const val = info.getValue();
       if (!val) return <span className="text-slate-400 italic">Never</span>;
-      return <span className="text-slate-600">{formatDistanceToNow(parseISO(val), { addSuffix: true })}</span>;
+      try {
+        return <span className="text-slate-600">{formatDistanceToNow(parseISO(val), { addSuffix: true })}</span>;
+      } catch {
+        return <span className="text-slate-400 italic">Invalid Date</span>;
+      }
     },
   }),
   columnHelper.accessor('created_at', {

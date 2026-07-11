@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import Sequence
+from datetime import UTC
 from typing import Any
 from uuid import UUID
 
@@ -101,13 +102,15 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         new_private_key_vault_ref: str | None,
     ) -> None:
         partner = await self.get_as2_partner(tenant_id, partner_id)
-        if partner:
-            partner.prev_public_cert_pem = partner.public_cert_pem
-            partner.prev_private_key_vault_ref = partner.private_key_vault_ref
+        if not partner:
+            raise ValueError(f"AS2 Partner {partner_id} not found or access denied.")
 
-            partner.public_cert_pem = new_public_cert
-            if new_private_key_vault_ref is not None:
-                partner.private_key_vault_ref = new_private_key_vault_ref
+        partner.prev_public_cert_pem = partner.public_cert_pem
+        partner.prev_private_key_vault_ref = partner.private_key_vault_ref
+
+        partner.public_cert_pem = new_public_cert
+        if new_private_key_vault_ref is not None:
+            partner.private_key_vault_ref = new_private_key_vault_ref
 
         await self.session.flush()
 
@@ -501,11 +504,13 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         await self.session.flush()
         return True
 
-    async def get_inbound_route(self, isa_sender_id: str, isa_receiver_id: str) -> Any | None:
+    async def get_inbound_route(
+        self, isa_sender_id: str, isa_receiver_id: str, tenant_id: int | None = None
+    ) -> Any | None:
         from database.repository import InboundRouteRepository
 
         repo = InboundRouteRepository(self.session)
-        return await repo.get_inbound_route(isa_sender_id, isa_receiver_id)
+        return await repo.get_inbound_route(isa_sender_id, isa_receiver_id, tenant_id)
 
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
@@ -822,12 +827,14 @@ class SqlAlchemyApiTokenRepository:
         import hmac
         from datetime import datetime
 
-        from sqlalchemy import update
+        from sqlalchemy import or_, update
 
+        now = datetime.now(UTC)
         result = await self.session.execute(
             select(ApiToken).where(
                 ApiToken.client_id == client_id,
                 ApiToken.active.is_(True),
+                or_(ApiToken.expires_at.is_(None), ApiToken.expires_at > now),
             )
         )
         record = result.scalar_one_or_none()
@@ -839,6 +846,6 @@ class SqlAlchemyApiTokenRepository:
             return None
 
         await self.session.execute(
-            update(ApiToken).where(ApiToken.id == record.id).values(last_used_at=datetime.utcnow())
+            update(ApiToken).where(ApiToken.id == record.id).values(last_used_at=datetime.now(UTC))
         )
         return record.tenant_id

@@ -31,6 +31,8 @@ class WorkerVaultAdapter:
             )
             data = resp.get("data", {}).get("data", {})
             val = next(iter(data.values()), None)
-            return val if isinstance(val, str) else ""
+            if val is None:
+                raise ValueError(f"Secret not found at vault path: {vault_ref}")
+            return str(val)
 
         return await asyncio.to_thread(_fetch)

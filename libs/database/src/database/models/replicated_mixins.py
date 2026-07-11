@@ -9,7 +9,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 
 
 class AS2PartnerMixin:
@@ -59,7 +59,7 @@ class AS2PartnerMixin:
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
-        return mapped_column(Boolean, default=False)
+        return mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class AS2PartnershipMixin:
@@ -101,7 +101,7 @@ class AS2PartnershipMixin:
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
-        return mapped_column(Boolean, default=False)
+        return mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class SFTPPartnerMixin:
@@ -151,7 +151,7 @@ class SFTPPartnerMixin:
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
-        return mapped_column(Boolean, default=False)
+        return mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class WebhookMixin:
@@ -177,7 +177,7 @@ class WebhookMixin:
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
-        return mapped_column(Boolean, default=False)
+        return mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class InboundRouteMixin:
@@ -219,7 +219,7 @@ class InboundRouteMixin:
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
-        return mapped_column(Boolean, default=False)
+        return mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class OutboundRouteMixin:
@@ -281,4 +281,4 @@ class OutboundRouteMixin:
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
-        return mapped_column(Boolean, default=False)
+        return mapped_column(Boolean, default=False, server_default=text("false"))

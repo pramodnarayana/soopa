@@ -11,7 +11,7 @@ export function CreateRouteModal() {
   const [activeTab, setActiveTab] = useState('inbound');
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen} modal={false}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
           <Plus className="h-4 w-4" />
@@ -22,7 +22,6 @@ export function CreateRouteModal() {
       <DialogContent
         className="sm:max-w-[700px] rounded-2xl"
         onPointerDownOutside={(e) => e.preventDefault()}
-        onFocusOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">

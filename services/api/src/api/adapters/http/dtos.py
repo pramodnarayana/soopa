@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -381,7 +382,7 @@ class CreateApiTokenRequest(BaseModel):
         max_length=255,
         description="Human-readable label for this token (e.g. 'ERP Integration Prod')",
     )
-    expires_at: str | None = Field(
+    expires_at: datetime | None = Field(
         None, description="Optional ISO-8601 expiry datetime. Null = never expires."
     )
 

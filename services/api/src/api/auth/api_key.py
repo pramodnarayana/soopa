@@ -15,6 +15,7 @@ No external network call to Zitadel or any IdP is made.
 """
 
 import hashlib
+import hmac
 import logging
 
 from database.session import get_global_session
@@ -29,10 +30,10 @@ logger = logging.getLogger(__name__)
 _client_id_header = APIKeyHeader(name="X-Client-ID", auto_error=False)
 _client_secret_header = APIKeyHeader(name="X-Client-Secret", auto_error=False)
 
-# In-process cache: { client_id → tenant_id }
+# In-process cache: { client_id → (tenant_id, secret_hash) }
 # Short-circuits the DB lookup for repeated calls within the same process.
 # Tokens are evicted on revocation via invalidate_token_cache().
-_token_cache: dict[str, int] = {}
+_token_cache: dict[str, tuple[int, str]] = {}
 _MAX_CACHE_SIZE = 5000
 
 
@@ -58,12 +59,14 @@ async def get_tenant_id_from_api_key(
             headers={"WWW-Authenticate": "X-API-Key"},
         )
 
-    # Fast path: cache hit (only safe because we evict on revocation)
-    if client_id in _token_cache:
-        return _token_cache[client_id]
-
     # Hash the secret before touching the DB (raw secret never persisted or logged)
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
+
+    # Fast path: cache hit (only safe because we evict on revocation)
+    if client_id in _token_cache:
+        cached_tenant_id, cached_secret_hash = _token_cache[client_id]
+        if hmac.compare_digest(cached_secret_hash, secret_hash):
+            return cached_tenant_id
 
     repo = SqlAlchemyApiTokenRepository(global_session)
     tenant_id = await repo.get_tenant_id_by_credentials(client_id, secret_hash)
@@ -79,7 +82,7 @@ async def get_tenant_id_from_api_key(
     # Populate cache (bounded eviction)
     if len(_token_cache) >= _MAX_CACHE_SIZE:
         _token_cache.pop(next(iter(_token_cache)))
-    _token_cache[client_id] = tenant_id
+    _token_cache[client_id] = (tenant_id, secret_hash)
 
     return tenant_id
 

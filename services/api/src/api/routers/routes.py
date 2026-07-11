@@ -15,8 +15,11 @@ from api.core.services import RouteService
 from api.core.uow import UnitOfWork
 from api.dependencies import get_tenant_uow
 from api.domain.models import (
+    UNSET,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
+    UpdateInboundRouteCmd,
+    UpdateOutboundRouteCmd,
 )
 
 router = APIRouter(prefix="/api/v1/routes", tags=["Routes"])
@@ -114,9 +117,11 @@ async def update_inbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
+    """
+    Updates an Inbound Route for the current Tenant.
+    """
     async with uow:
         service = RouteService(global_repo=uow.control_plane)
-        from api.domain.models import UNSET, UpdateInboundRouteCmd
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateInboundRouteCmd(
@@ -146,6 +151,9 @@ async def delete_inbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
+    """
+    Deletes an Inbound Route for the current Tenant.
+    """
     async with uow:
         service = RouteService(global_repo=uow.control_plane)
         success = await service.delete_inbound_route(tenant_id, route_id)
@@ -161,9 +169,11 @@ async def update_outbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
+    """
+    Updates an Outbound Route for the current Tenant.
+    """
     async with uow:
         service = RouteService(global_repo=uow.control_plane)
-        from api.domain.models import UNSET, UpdateOutboundRouteCmd
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundRouteCmd(
@@ -197,6 +207,9 @@ async def delete_outbound_route(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
+    """
+    Deletes an Outbound Route for the current Tenant.
+    """
     async with uow:
         service = RouteService(global_repo=uow.control_plane)
         success = await service.delete_outbound_route(tenant_id, route_id)
