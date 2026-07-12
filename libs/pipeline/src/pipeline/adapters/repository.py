@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Any
 
 from config.settings import AppSettings
@@ -33,7 +34,10 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
     async def get_edi_message(self, trace_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(EdiMessage).where(EdiMessage.trace_id == uuid.UUID(trace_id))
+            select(EdiMessage)
+            .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+            .order_by(EdiMessage.created_at.desc())
+            .limit(1)
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -59,12 +63,22 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         }
 
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
-        await self.session.execute(
+        stmt = (
             update(EdiMessage)
             .where(EdiMessage.trace_id == uuid.UUID(trace_id))
-            .values(status=status)
+            .values(status=status, updated_at=datetime.utcnow())
         )
-        await self.session.flush()
+        await self.session.execute(stmt)
+
+    async def update_edi_message_gs_headers(
+        self, trace_id: str, gs_sender_id: str, gs_receiver_id: str
+    ) -> None:
+        stmt = (
+            update(EdiMessage)
+            .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+            .values(gs_sender_id=gs_sender_id, gs_receiver_id=gs_receiver_id)
+        )
+        await self.session.execute(stmt)
 
     async def save_edi_message(
         self,
@@ -77,6 +91,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         connection_type: str | None = "UNKNOWN",
         sender_id: str | None = None,
         receiver_id: str | None = None,
+        gs_sender_id: str | None = None,
+        gs_receiver_id: str | None = None,
         outbound_route_id: str | None = None,
         tenant_id: int | None = None,
     ) -> None:
@@ -99,6 +115,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "transaction_type": transaction_type,
             "sender_id": sender_id,
             "receiver_id": receiver_id,
+            "gs_sender_id": gs_sender_id,
+            "gs_receiver_id": gs_receiver_id,
             "storage_uri": storage_uri,
             "status": status,
             "outbound_route_id": uuid.UUID(outbound_route_id) if outbound_route_id else None,
@@ -119,6 +137,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         standard: str | None,
         sender_id: str | None,
         receiver_id: str | None,
+        gs_sender_id: str | None,
+        gs_receiver_id: str | None,
         business_metadata: dict[str, Any],
         payload: dict[str, Any],
         status: str,
@@ -146,6 +166,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "standard": standard,
             "sender_id": sender_id,
             "receiver_id": receiver_id,
+            "gs_sender_id": gs_sender_id,
+            "gs_receiver_id": gs_receiver_id,
             "business_metadata": business_metadata,
             "payload": payload_dict,
             "storage_uri": storage_uri,
@@ -163,7 +185,10 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         from database.models.data_plane import EdiJson
 
         result = await self.session.execute(
-            select(EdiJson).where(EdiJson.trace_id == uuid.UUID(trace_id))
+            select(EdiJson)
+            .where(EdiJson.trace_id == uuid.UUID(trace_id))
+            .order_by(EdiJson.created_at.desc())
+            .limit(1)
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -218,8 +243,17 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         stmt = (
             update(EdiMessage)
             .where(
-                EdiMessage.trace_id == uuid.UUID(trace_id),
-                EdiMessage.status == "PENDING_DELIVERY",
+                EdiMessage.id
+                == (
+                    select(EdiMessage.id)
+                    .where(
+                        EdiMessage.trace_id == uuid.UUID(trace_id),
+                        EdiMessage.status == "PENDING_DELIVERY",
+                    )
+                    .order_by(EdiMessage.created_at.desc())
+                    .limit(1)
+                    .scalar_subquery()
+                )
             )
             .values(status="PROCESSING")
             .returning(EdiMessage.id)
@@ -247,7 +281,10 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(ApiGateway).where(ApiGateway.trace_id == uuid.UUID(trace_id))
+            select(ApiGateway)
+            .where(ApiGateway.trace_id == uuid.UUID(trace_id))
+            .order_by(ApiGateway.created_at.desc())
+            .limit(1)
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -278,8 +315,17 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         stmt = (
             update(ApiGateway)
             .where(
-                ApiGateway.trace_id == uuid.UUID(trace_id),
-                ApiGateway.status == "PENDING_DELIVERY",
+                ApiGateway.id
+                == (
+                    select(ApiGateway.id)
+                    .where(
+                        ApiGateway.trace_id == uuid.UUID(trace_id),
+                        ApiGateway.status == "PENDING_DELIVERY",
+                    )
+                    .order_by(ApiGateway.created_at.desc())
+                    .limit(1)
+                    .scalar_subquery()
+                )
             )
             .values(status="PROCESSING")
             .returning(ApiGateway.id)
@@ -289,19 +335,32 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return result.scalar_one_or_none() is not None
 
     async def get_route(
-        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
+        self,
+        direction: str,
+        sender_id: str,
+        receiver_id: str,
+        transaction_type: str,
+        gs_sender_id: str | None = None,
+        gs_receiver_id: str | None = None,
     ) -> dict[str, Any] | None:
         if direction not in ("INBOUND", "OUTBOUND"):
             raise ValueError(f"Invalid direction: {direction}")
         model = InboundRoute if direction == "INBOUND" else OutboundRoute
 
         # Exact match or wildcard transaction type
-        stmt = select(model).where(
+        conditions = [
             model.isa_sender_id == sender_id,
             model.isa_receiver_id == receiver_id,
             model.transaction_type.in_([transaction_type, "*"]),
             model.active.is_(True),
-        )
+        ]
+
+        if gs_sender_id:
+            conditions.append(model.gs_sender_id == gs_sender_id)
+        if gs_receiver_id:
+            conditions.append(model.gs_receiver_id == gs_receiver_id)
+
+        stmt = select(model).where(*conditions)
 
         result = await self.session.execute(stmt)
         # Fetch all matches, prefer exact transaction_type over wildcard
@@ -316,6 +375,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         record: Any = records[0]
         return {
             "route_id": str(record.id),
+            "trading_partner_id": getattr(record, "trading_partner_id", None),
             "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
             "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
             "webhook_id": str(record.webhook_id)

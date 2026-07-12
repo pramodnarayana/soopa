@@ -43,6 +43,8 @@ async def test_translate_edi_to_json_success() -> None:
     assert api_payload["direction"] == "OUTBOUND"
     assert api_payload["status"] == "PENDING_DELIVERY"
     assert isinstance(api_payload["payload"], dict)
+    assert "metadata" in api_payload["payload"]
+    assert "transactions" in api_payload["payload"]
 
     # 5. Outbox event published for DELIVER
     assert len(repo.outbox) == 1

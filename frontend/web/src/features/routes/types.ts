@@ -24,6 +24,7 @@ export interface RouteItem {
 
 export interface CreateInboundRoutePayload {
   name: string;
+  trading_partner_id?: string;
   isa_sender_id: string;
   isa_receiver_id: string;
   gs_sender_id?: string;

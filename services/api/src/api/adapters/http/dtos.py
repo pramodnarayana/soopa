@@ -103,6 +103,12 @@ class CreateWebhookRequest(BaseModel):
         return v
 
 
+class UpdateWebhookRequest(BaseModel):
+    name: str | None = Field(None, max_length=255, description="Name of the Webhook partner")
+    active: bool | None = Field(None, description="Active status of the Webhook partner")
+    url: HttpUrl | None = Field(None, description="Receiving URL for the Webhook")
+
+
 class UpdateAS2TradingPartnerRequest(BaseModel):
     name: str | None = Field(None, max_length=255, description="Name of the trading partner")
     as2_id: str | None = Field(None, max_length=255, description="AS2 ID (local or remote)")
@@ -154,6 +160,9 @@ class UpdateSFTPPartnerRequest(BaseModel):
 
 class CreateInboundRouteRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the route")
+    trading_partner_id: str | None = Field(
+        None, max_length=255, description="Trading Partner ID for internal routing"
+    )
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
     isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to match")
     gs_sender_id: str | None = Field(None, max_length=255, description="GS Sender ID to match")
@@ -220,9 +229,7 @@ class CreateOutboundRouteRequest(BaseModel):
 class UpdateRouteRequest(BaseModel):
     active: bool | None = None
     name: str | None = Field(None, max_length=255, description="Name of the route")
-    trading_partner_id: str | None = Field(
-        None, max_length=255, description="Trading Partner ID (Outbound only)"
-    )
+    trading_partner_id: str | None = Field(None, max_length=255, description="Trading Partner ID")
     isa_sender_id: str | None = Field(None, max_length=255, description="ISA Sender ID to match")
     isa_sender_qualifier: str | None = Field(
         None, max_length=2, description="ISA Sender Qualifier (Outbound only)"
@@ -385,6 +392,13 @@ class CreateApiTokenRequest(BaseModel):
     expires_at: datetime | None = Field(
         None, description="Optional ISO-8601 expiry datetime. Null = never expires."
     )
+
+
+class UpdateApiTokenRequest(BaseModel):
+    name: str | None = Field(
+        None, min_length=1, max_length=255, description="Human-readable label for this token"
+    )
+    active: bool | None = Field(None, description="Whether the token is active")
 
 
 class ApiTokenCreatedResponse(BaseModel):

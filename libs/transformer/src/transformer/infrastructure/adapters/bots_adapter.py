@@ -128,21 +128,27 @@ class BotsEDIAdapter(EDITranslatorPort):
                     interchange_control_number = self._get_str(isa, "ISA13", "UNKNOWN")
 
                     for gs_node in self._get_list_of_dicts(isa_node, "group_GS"):
-                        if self._get_dict(gs_node, "GS"):
-                            for st_node in self._get_list_of_dicts(gs_node, "transaction_ST"):
-                                st_record = self._get_dict(st_node, "ST")
-                                if st_record:
-                                    transactions.append(
-                                        TransactionSet(
-                                            transaction_type=self._get_str(
-                                                st_record, "ST01", "UNKNOWN"
-                                            ),
-                                            control_number=self._get_str(
-                                                st_record, "ST02", "UNKNOWN"
-                                            ),
-                                            data=st_node,
-                                        )
+                        gs_record = self._get_dict(gs_node, "GS")
+                        gs_sender = "UNKNOWN"
+                        gs_receiver = "UNKNOWN"
+                        if gs_record:
+                            gs_sender = self._get_str(gs_record, "GS02", "UNKNOWN")
+                            gs_receiver = self._get_str(gs_record, "GS03", "UNKNOWN")
+
+                        for st_node in self._get_list_of_dicts(gs_node, "transaction_ST"):
+                            st_record = self._get_dict(st_node, "ST")
+                            if st_record:
+                                transactions.append(
+                                    TransactionSet(
+                                        transaction_type=self._get_str(
+                                            st_record, "ST01", "UNKNOWN"
+                                        ),
+                                        control_number=self._get_str(st_record, "ST02", "UNKNOWN"),
+                                        gs_sender_id=gs_sender,
+                                        gs_receiver_id=gs_receiver,
+                                        data=st_node,
                                     )
+                                )
 
             # Extract EDIFACT metadata
             for unb_node in self._get_list_of_dicts(ast_dict, "interchange_UNB"):

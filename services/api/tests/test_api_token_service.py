@@ -42,14 +42,14 @@ async def test_api_token_service_list():
 @pytest.mark.asyncio
 async def test_api_token_service_revoke():
     mock_repo = AsyncMock()
-    mock_repo.revoke_api_token.return_value = True
+    mock_repo.update_api_token.return_value = True
 
     svc = ApiTokenService(mock_repo)
     t_id = uuid4()
-    result = await svc.revoke_token(tenant_id=1, token_id=t_id)
+    result = await svc.update_token(tenant_id=1, token_id=t_id, active=False)
 
     assert result is True
-    mock_repo.revoke_api_token.assert_awaited_once_with(1, t_id)
+    mock_repo.update_api_token.assert_awaited_once_with(1, t_id, None, False)
 
 
 @pytest.mark.asyncio

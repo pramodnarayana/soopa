@@ -379,7 +379,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
 
 def test_create_tenant_webhook_partner(client, fake_uow):
     response = client.post(
-        "/api/v1/webhooks/webhook",
+        "/api/v1/webhooks/",
         json={"name": "My Webhook", "url": "https://example.com/webhook"},
     )
     assert response.status_code == 201
@@ -388,9 +388,9 @@ def test_create_tenant_webhook_partner(client, fake_uow):
 
     # Coverage for unimplemented fake paths
     p_id = data["id"]
-    client.get(f"/api/v1/webhooks/webhook/{p_id}")
-    client.put(f"/api/v1/webhooks/webhook/{p_id}", json={"name": "updated"})
-    client.delete(f"/api/v1/webhooks/webhook/{p_id}")
+    client.get(f"/api/v1/webhooks/{p_id}")
+    client.put(f"/api/v1/webhooks/{p_id}", json={"name": "updated"})
+    client.delete(f"/api/v1/webhooks/{p_id}")
 
 
 def test_list_tenant_partners(client, fake_uow):

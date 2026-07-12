@@ -49,7 +49,6 @@ async def test_update_edi_message_status() -> None:
     await adapter.update_edi_message_status(trace_id, "TRANSLATED")
 
     mock_session.execute.assert_awaited_once()
-    mock_session.flush.assert_awaited_once()
 
 
 async def test_save_api_payload() -> None:

@@ -77,8 +77,9 @@ class InboundRouteRepository:
             InboundRoute.isa_sender_id == isa_sender_id,
             InboundRoute.isa_receiver_id == isa_receiver_id,
             InboundRoute.active.is_(True),
-            InboundRoute.tenant_id == tenant_id,
         ]
+        if tenant_id != 0:
+            conditions.append(InboundRoute.tenant_id == tenant_id)
         if transaction_type:
             conditions.append(InboundRoute.transaction_type == transaction_type)
 

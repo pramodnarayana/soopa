@@ -2,7 +2,7 @@ from typing import Any
 
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.storage import StoragePort
-from pipeline.ports.transformer import TransformerPort
+from pipeline.ports.transformer import TransformerPort, TranslatedTransaction
 
 
 class InMemoryStorageAdapter(StoragePort):
@@ -30,11 +30,21 @@ class FakeTransformerAdapter(TransformerPort):
 
     async def translate_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> dict[str, Any]:
+    ) -> list[TranslatedTransaction]:
         self.translate_edi_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
         )
-        return {"fake": "json", "from": standard, "type": transaction_type}
+        return [
+            TranslatedTransaction(
+                transaction_type=transaction_type,
+                isa_sender_id="MOCK_ISA_SENDER",
+                isa_receiver_id="MOCK_ISA_RECEIVER",
+                gs_sender_id="MOCK_GS_SENDER",
+                gs_receiver_id="MOCK_GS_RECEIVER",
+                control_number="MOCK_1234",
+                payload={"fake": "json", "from": standard, "type": transaction_type},
+            )
+        ]
 
     async def translate_json_to_edi(
         self, payload: dict[str, Any], standard: str, transaction_type: str

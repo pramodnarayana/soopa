@@ -12,6 +12,8 @@ class TransactionSet(BaseModel):
         ..., description="The EDI transaction type, e.g., '850', '810', 'ORDERS'"
     )
     control_number: str = Field(..., description="The transaction set control number")
+    gs_sender_id: str | None = Field(default=None, description="Functional Group Sender ID")
+    gs_receiver_id: str | None = Field(default=None, description="Functional Group Receiver ID")
     data: JsonDict = Field(
         ..., description="The hierarchical JSON representation of the transaction"
     )

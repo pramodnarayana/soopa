@@ -117,6 +117,7 @@ class CreateInboundRouteCmd:
     isa_sender_id: str
     isa_receiver_id: str
     transaction_type: str
+    trading_partner_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     processing_mode: str = "TRANSLATE"
@@ -128,6 +129,7 @@ class CreateInboundRouteCmd:
 @dataclass(frozen=True)
 class UpdateInboundRouteCmd:
     name: str | UnsetType = UNSET
+    trading_partner_id: str | None | UnsetType = UNSET
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
     gs_sender_id: str | None | UnsetType = UNSET

@@ -124,8 +124,12 @@ class DeliveryService:
         try:
             import json
 
-            # Extract raw bytes from the dictionary payload
-            raw_payload = json.dumps(api_payload.get("payload")).encode("utf-8")
+            # Make the webhook fully generic: it blindly delivers whatever JSON is in ApiGateway
+            payload_data = api_payload.get("payload")
+            if not payload_data:
+                raise ValueError(f"ApiGateway payload is empty for trace_id={trace_id}")
+
+            raw_payload = json.dumps(payload_data).encode("utf-8")
 
             auth_token = None
             if partner.get("auth_header_vault_ref") and self.vault:

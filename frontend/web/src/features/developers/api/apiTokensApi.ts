@@ -1,7 +1,6 @@
-import type { IApiTokenRepository } from './IApiTokenRepository';
 import type { ApiToken, ApiTokenCreated, CreateApiTokenPayload } from '../types';
 
-class HttpApiTokenRepository implements IApiTokenRepository {
+class HttpApiTokenRepository {
   private readonly headers: Record<string, string>;
 
   constructor(token: string) {
@@ -50,19 +49,20 @@ class HttpApiTokenRepository implements IApiTokenRepository {
     });
   }
 
-  revokeApiToken(id: string): Promise<void> {
+  updateApiToken(id: string, data: { name?: string; active?: boolean }): Promise<void> {
     return this.request(`/api/v1/developers/tokens/${id}`, {
-      method: 'DELETE',
+      method: 'PATCH',
+      body: JSON.stringify(data),
     });
   }
 
   deleteApiToken(id: string): Promise<void> {
-    return this.request(`/api/v1/developers/tokens/${id}/hard`, {
+    return this.request(`/api/v1/developers/tokens/${id}`, {
       method: 'DELETE',
     });
   }
 }
 
-export function createApiTokenRepository(token: string): IApiTokenRepository {
+export function createApiTokenRepository(token: string) {
   return new HttpApiTokenRepository(token);
 }

@@ -32,10 +32,6 @@ export function DevelopersPage() {
             <CreateApiTokenModal />
           </div>
         </div>
-        <p className="text-slate-500 max-w-3xl">
-          Manage API keys for programmatic machine-to-machine integration with your ERP systems.
-          Ensure you treat these credentials like passwords.
-        </p>
       </section>
 
       {/* Main Grid */}

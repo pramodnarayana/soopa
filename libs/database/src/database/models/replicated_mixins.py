@@ -194,6 +194,10 @@ class InboundRouteMixin:
         return mapped_column(String(255), nullable=False)
 
     @declared_attr
+    def trading_partner_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
     def isa_sender_id(cls) -> Mapped[str]:
         return mapped_column(String(255), nullable=False)
 

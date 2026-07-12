@@ -59,12 +59,13 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
     if (formData.isa_sender_id !== route.isa_sender_id) payload.isa_sender_id = formData.isa_sender_id;
     if (formData.isa_receiver_id !== route.isa_receiver_id) payload.isa_receiver_id = formData.isa_receiver_id;
 
+    if (formData.trading_partner_id !== route.trading_partner_id) payload.trading_partner_id = formData.trading_partner_id;
+    if (formData.gs_sender_id !== route.gs_sender_id) payload.gs_sender_id = formData.gs_sender_id;
+    if (formData.gs_receiver_id !== route.gs_receiver_id) payload.gs_receiver_id = formData.gs_receiver_id;
+
     if (isOutbound) {
-      if (formData.trading_partner_id !== route.trading_partner_id) payload.trading_partner_id = formData.trading_partner_id;
       if (formData.isa_sender_qualifier !== route.isa_sender_qualifier) payload.isa_sender_qualifier = formData.isa_sender_qualifier;
       if (formData.isa_receiver_qualifier !== route.isa_receiver_qualifier) payload.isa_receiver_qualifier = formData.isa_receiver_qualifier;
-      if (formData.gs_sender_id !== route.gs_sender_id) payload.gs_sender_id = formData.gs_sender_id;
-      if (formData.gs_receiver_id !== route.gs_receiver_id) payload.gs_receiver_id = formData.gs_receiver_id;
       if (formData.default_standard !== route.default_standard) payload.default_standard = formData.default_standard;
       if (formData.default_version !== route.default_version) payload.default_version = formData.default_version;
     }
@@ -112,12 +113,10 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
             <Input {...register('transaction_type')} disabled={isSubmitting} />
           </div>
 
-          {isOutbound && (
-            <div className="space-y-2">
-              <Label>Trading Partner ID</Label>
-              <Input {...register('trading_partner_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label>Trading Partner ID</Label>
+            <Input {...register('trading_partner_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
+          </div>
 
           {!isOutbound && (
             <div className="space-y-2">
@@ -140,7 +139,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
         </div>
 
         {/* Envelope Configuration (Grid adjustments based on Outbound) */}
-        <div className={`grid grid-cols-1 ${isOutbound ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 pt-4 border-t border-slate-200`}>
+        <div className={`grid grid-cols-1 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-200`}>
           {isOutbound && (
             <div className="space-y-2">
               <Label>ISA Sender Qual</Label>
@@ -163,17 +162,17 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
             <Input {...register('isa_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
           </div>
 
+          <div className="space-y-2">
+            <Label>GS Sender ID</Label>
+            <Input {...register('gs_sender_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
+          </div>
+          <div className="space-y-2">
+            <Label>GS Receiver ID</Label>
+            <Input {...register('gs_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
+          </div>
+
           {isOutbound && (
             <>
-              <div className="space-y-2">
-                <Label>GS Sender ID</Label>
-                <Input {...register('gs_sender_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-              </div>
-              <div className="space-y-2">
-                <Label>GS Receiver ID</Label>
-                <Input {...register('gs_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-              </div>
-
               <div className="space-y-2">
                 <Label>Default Standard</Label>
                 <Input {...register('default_standard')} disabled={isSubmitting} className="font-mono text-sm" />

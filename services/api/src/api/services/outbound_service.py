@@ -144,6 +144,8 @@ class OutboundService:
                 "standard": route.default_standard,
                 "sender_id": sender_id,
                 "receiver_id": receiver_id,
+                "gs_sender_id": route.gs_sender_id,
+                "gs_receiver_id": route.gs_receiver_id,
                 "business_metadata": business_metadata,
                 "payload": edi_json_data,
                 "status": "PENDING",

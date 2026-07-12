@@ -12,7 +12,7 @@ from api.core.uow import UnitOfWork
 from api.dependencies import get_tenant_uow
 from api.domain.models import CreateWebhookCmd
 
-router = APIRouter(prefix="/webhook", tags=["Webhooks"])
+router = APIRouter(tags=["Webhooks"])
 
 
 @router.post("", response_model=PartnerResponse, status_code=status.HTTP_201_CREATED)
