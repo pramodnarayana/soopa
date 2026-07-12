@@ -45,10 +45,12 @@ async def _validate_webhook_url(url: str) -> None:
         hostname = parsed.hostname
         if not hostname:
             raise ValueError("Invalid URL: no hostname")
-        ip = await anyio.to_thread.run_sync(socket.gethostbyname, hostname)
-        ip_obj = ipaddress.ip_address(ip)
-        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_unspecified:
-            raise HTTPException(status_code=400, detail="Webhook URL must be a public address")
+        addr_info = await anyio.to_thread.run_sync(socket.getaddrinfo, hostname, None)
+        for _, _, _, _, sockaddr in addr_info:
+            ip = sockaddr[0]
+            ip_obj = ipaddress.ip_address(ip)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_unspecified:
+                raise HTTPException(status_code=400, detail="Webhook URL must be a public address")
     except HTTPException:
         raise
     except Exception as e:

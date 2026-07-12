@@ -38,9 +38,13 @@ function DeleteTokenDialog({
   const deleteMutation = useDeleteApiTokenMutation();
 
   const handleDelete = async () => {
-    await deleteMutation.mutateAsync(token.id);
-    setConfirmText('');
-    onOpenChange(false);
+    try {
+      await deleteMutation.mutateAsync(token.id);
+      setConfirmText('');
+      onOpenChange(false);
+    } catch {
+      // Rejection handled by mutation's onError or toast system
+    }
   };
 
   const handleClose = () => {
@@ -119,8 +123,12 @@ function RenameTokenDialog({
       onOpenChange(false);
       return;
     }
-    await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
-    onOpenChange(false);
+    try {
+      await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
+      onOpenChange(false);
+    } catch {
+      // Rejection handled by mutation's onError or toast system
+    }
   };
 
   return (

@@ -31,6 +31,40 @@ export function AppWrapper() {
   )
 }
 
+const NavItem = ({ icon: Icon, label, to, indent = false }: { icon: any, label: string, to: string, indent?: boolean }) => {
+  const location = useLocation()
+  const active = location.pathname.startsWith(to)
+  return (
+    <Link to={to} className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group ${indent ? 'pl-11 pr-4' : 'px-4'} ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+      <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`} />
+      <span>{label}</span>
+      {active && <ChevronRight className="w-4 h-4 ml-auto text-indigo-400" />}
+    </Link>
+  )
+}
+
+const NavGroup = ({ icon: Icon, label, children, defaultExpanded = true }: { icon: any, label: string, children: React.ReactNode, defaultExpanded?: boolean }) => {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium w-full text-left"
+      >
+        <Icon className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+        <span className="flex-1">{label}</span>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-1">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AppLayout() {
   const auth = useAuth()
   const redirectTriggered = useRef(false)
@@ -67,39 +101,6 @@ export function AppLayout() {
     // Basic redirect for prototype. In production, use TanStack navigate.
     window.location.href = '/platform/dashboard'
     return null
-  }
-
-  const NavItem = ({ icon: Icon, label, to, indent = false }: { icon: any, label: string, to: string, indent?: boolean }) => {
-    const active = location.pathname.startsWith(to)
-    return (
-      <Link to={to} className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group ${indent ? 'pl-11 pr-4' : 'px-4'} ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-        <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`} />
-        <span>{label}</span>
-        {active && <ChevronRight className="w-4 h-4 ml-auto text-indigo-400" />}
-      </Link>
-    )
-  }
-
-  const NavGroup = ({ icon: Icon, label, children, defaultExpanded = true }: { icon: any, label: string, children: React.ReactNode, defaultExpanded?: boolean }) => {
-    const [expanded, setExpanded] = useState(defaultExpanded)
-    return (
-      <div className="flex flex-col gap-1">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          aria-expanded={expanded}
-          className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium w-full text-left"
-        >
-          <Icon className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
-          <span className="flex-1">{label}</span>
-          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-        </button>
-        {expanded && (
-          <div className="flex flex-col gap-1">
-            {children}
-          </div>
-        )}
-      </div>
-    )
   }
 
   return (

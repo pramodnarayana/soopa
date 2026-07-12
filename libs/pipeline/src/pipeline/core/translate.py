@@ -117,6 +117,12 @@ class TranslationService:
         gs_sender_global = None
         gs_receiver_global = None
 
+        sender_id = edi_msg.get("sender_id")
+        receiver_id = edi_msg.get("receiver_id")
+        partnership_id_str = edi_msg.get("partnership_id")
+        if isinstance(partnership_id_str, uuid.UUID):
+            partnership_id_str = str(partnership_id_str)
+
         for txn in translated_txns:
             txn_type = txn.transaction_type
             gs_sender = txn.gs_sender_id
@@ -126,18 +132,12 @@ class TranslationService:
                 gs_sender_global = gs_sender
                 gs_receiver_global = gs_receiver
 
-            sender_id = edi_msg.get("sender_id")
-            receiver_id = edi_msg.get("receiver_id")
             json_dict = txn.payload
 
             # Embed transaction_type directly into the transaction JSON payload
             json_dict["transaction_type"] = txn_type
 
             business_metadata = extractor.extract(txn_type, json_dict)
-
-            partnership_id_str = edi_msg.get("partnership_id")
-            if isinstance(partnership_id_str, uuid.UUID):
-                partnership_id_str = str(partnership_id_str)
 
             await self.repository.save_edi_json(
                 trace_id=trace_id,
