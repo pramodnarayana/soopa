@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -103,6 +103,13 @@ function RenameTokenDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const [name, setName] = useState(token.name);
+
+  useEffect(() => {
+    if (open) {
+      setName(token.name);
+    }
+  }, [open, token.name]);
+
   const updateMutation = useUpdateApiTokenMutation();
 
   const handleRename = async (e: React.FormEvent) => {

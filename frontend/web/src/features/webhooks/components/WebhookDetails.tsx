@@ -20,7 +20,8 @@ export function WebhookDetails({ webhook, onCancel }: { webhook: Webhook, onCanc
   const onSubmit = (formData: any) => {
     const payload: any = {};
     if (formData.name !== webhook.name) payload.name = formData.name;
-    if (formData.url !== webhook.url) payload.url = formData.url;
+    const originalUrl = webhook.url || '';
+    if (formData.url !== originalUrl) payload.url = formData.url;
 
     if (Object.keys(payload).length === 0) {
       if (onCancel) onCancel();

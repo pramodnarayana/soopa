@@ -169,7 +169,11 @@ class TranslationService:
         # Lookup trading_partner_id from the route for the batch
         sender_global = edi_msg.get("sender_id")
         receiver_global = edi_msg.get("receiver_id")
-        transaction_type_global = edi_msg.get("transaction_type")
+        transaction_type_global = (
+            translated_txns[0].transaction_type
+            if translated_txns
+            else edi_msg.get("transaction_type")
+        )
         route = (
             await self.repository.get_route(
                 "INBOUND",
@@ -196,7 +200,7 @@ class TranslationService:
         await self.repository.save_api_payload(
             trace_id=trace_id,
             direction="OUTBOUND",
-            payload=envelope.model_dump(exclude_none=True),
+            payload=envelope.model_dump(),
             status="PENDING_DELIVERY",
         )
 

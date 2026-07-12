@@ -22,7 +22,7 @@ async def test_api_token_service_create():
     assert result.name == "Test Token"
     assert result.client_id.startswith("soopaedi_acmeco_")
     assert len(result.client_secret) > 0
-    assert result.active is True
+    assert result.active is False
 
     mock_repo.create_api_token.assert_awaited_once()
 

@@ -27,6 +27,7 @@ class FakeTransformerAdapter(TransformerPort):
     def __init__(self) -> None:
         self.translate_edi_calls: list[dict[str, Any]] = []
         self.translate_json_calls: list[dict[str, Any]] = []
+        self.mock_return_transactions: list[TranslatedTransaction] | None = None
 
     async def translate_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
@@ -34,6 +35,8 @@ class FakeTransformerAdapter(TransformerPort):
         self.translate_edi_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
         )
+        if self.mock_return_transactions is not None:
+            return self.mock_return_transactions
         return [
             TranslatedTransaction(
                 transaction_type=transaction_type,

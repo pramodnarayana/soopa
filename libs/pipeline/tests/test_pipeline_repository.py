@@ -54,6 +54,9 @@ async def test_update_edi_message_status() -> None:
 async def test_save_api_payload() -> None:
     mock_session = AsyncMock()
     mock_session.add = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
     adapter = make_adapter(mock_session)
 
     trace_id = str(uuid.uuid4())

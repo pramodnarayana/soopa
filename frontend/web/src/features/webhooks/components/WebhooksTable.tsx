@@ -42,9 +42,13 @@ function DeleteWebhookDialog({
   const confirmValue = webhook.url ?? webhook.id;
 
   const handleDelete = async () => {
-    await deleteMutation.mutateAsync(webhook.id);
-    setConfirmText('');
-    onOpenChange(false);
+    try {
+      await deleteMutation.mutateAsync(webhook.id);
+      setConfirmText('');
+      onOpenChange(false);
+    } catch {
+      // Rejection handled by mutation's onError or toast system
+    }
   };
 
   const handleClose = () => {

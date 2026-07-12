@@ -389,7 +389,7 @@ def test_create_tenant_webhook_partner(client, fake_uow):
     # Coverage for unimplemented fake paths
     p_id = data["id"]
     client.get(f"/api/v1/webhooks/{p_id}")
-    client.put(f"/api/v1/webhooks/{p_id}", json={"name": "updated"})
+    client.patch(f"/api/v1/webhooks/{p_id}", json={"name": "updated"})
     client.delete(f"/api/v1/webhooks/{p_id}")
 
 

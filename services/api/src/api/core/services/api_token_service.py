@@ -85,7 +85,7 @@ class ApiTokenService:
             name=cmd.name,
             client_id=client_id,
             client_secret=client_secret,  # caller must show this exactly once
-            active=True,
+            active=False,
         )
 
     async def list_tokens(self, tenant_id: int) -> list[dict[str, Any]]:

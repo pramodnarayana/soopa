@@ -39,40 +39,9 @@ def _partner_response(partner: Any, tenant_id: int) -> PartnerResponse:
     )
 
 
-@router.get("", response_model=list[PartnerResponse])
-async def list_webhooks(
-    tenant_id: int = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
-) -> Any:
-    """Lists all configured webhook delivery destinations for this tenant."""
-    async with uow:
-        webhooks: Sequence[Any] = []
-        if uow.control_plane:
-            webhooks = await uow.control_plane.list_webhooks(tenant_id)
-
-        return [
-            PartnerResponse(
-                partner_id=p.id,
-                tenant_id=p.tenant_id,
-                name=p.name,
-                type="WEBHOOK",
-                status="ACTIVE" if p.active else "INACTIVE",
-                active=p.active,
-                url=p.url,
-            )
-            for p in webhooks
-        ]
-
-
-@router.post("", response_model=PartnerResponse, status_code=status.HTTP_201_CREATED)
-async def create_webhook(
-    request: CreateWebhookRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
-) -> Any:
-    """Creates a new Webhook delivery destination for this tenant."""
+async def _validate_webhook_url(url: str) -> None:
     try:
-        parsed = urlparse(str(request.url))
+        parsed = urlparse(str(url))
         hostname = parsed.hostname
         if not hostname:
             raise ValueError("Invalid URL: no hostname")
@@ -85,7 +54,32 @@ async def create_webhook(
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid webhook URL") from e
 
+
+@router.get("", response_model=list[PartnerResponse])
+async def list_webhooks(
+    tenant_id: int = Depends(get_current_tenant_id),
+    uow: UnitOfWork = Depends(get_tenant_uow),
+) -> Any:
+    """Lists all configured webhook delivery destinations for this tenant."""
     async with uow:
+        if not uow.control_plane:
+            raise HTTPException(status_code=500, detail="Control plane not initialized")
+        webhooks: Sequence[Any] = await uow.control_plane.list_webhooks(tenant_id)
+        return [_partner_response(p, tenant_id) for p in webhooks]
+
+
+@router.post("", response_model=PartnerResponse, status_code=status.HTTP_201_CREATED)
+async def create_webhook(
+    request: CreateWebhookRequest,
+    tenant_id: int = Depends(get_current_tenant_id),
+    uow: UnitOfWork = Depends(get_tenant_uow),
+) -> Any:
+    """Creates a new Webhook delivery destination for this tenant."""
+    await _validate_webhook_url(str(request.url))
+
+    async with uow:
+        if not uow.control_plane:
+            raise HTTPException(status_code=500, detail="Control plane not initialized")
         service = WebhookService(global_repo=uow.control_plane)
         cmd = CreateWebhookCmd(
             name=request.name,
@@ -113,7 +107,12 @@ async def update_webhook(
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Updates name and/or active status of a Webhook delivery destination."""
+    if request.url:
+        await _validate_webhook_url(str(request.url))
+
     async with uow:
+        if not uow.control_plane:
+            raise HTTPException(status_code=500, detail="Control plane not initialized")
         service = WebhookService(global_repo=uow.control_plane)
         success = await service.update_webhook(
             tenant_id,
@@ -128,7 +127,11 @@ async def update_webhook(
 
     # New session after commit
     async with uow:
+        if not uow.control_plane:
+            raise HTTPException(status_code=500, detail="Control plane not initialized")
         partner = await uow.control_plane.get_webhook(tenant_id, webhook_id)
+        if not partner or partner.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="Webhook not found")
         return _partner_response(partner, tenant_id)
 
 
@@ -140,6 +143,8 @@ async def delete_webhook(
 ) -> None:
     """Permanently deletes a Webhook."""
     async with uow:
+        if not uow.control_plane:
+            raise HTTPException(status_code=500, detail="Control plane not initialized")
         service = WebhookService(global_repo=uow.control_plane)
         success = await service.delete_webhook(tenant_id, webhook_id)
         if not success:

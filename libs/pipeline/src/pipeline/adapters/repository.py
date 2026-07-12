@@ -65,7 +65,16 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
         stmt = (
             update(EdiMessage)
-            .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+            .where(
+                EdiMessage.id
+                == (
+                    select(EdiMessage.id)
+                    .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+                    .order_by(EdiMessage.created_at.desc())
+                    .limit(1)
+                    .scalar_subquery()
+                )
+            )
             .values(status=status, updated_at=datetime.utcnow())
         )
         await self.session.execute(stmt)
@@ -75,7 +84,16 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     ) -> None:
         stmt = (
             update(EdiMessage)
-            .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+            .where(
+                EdiMessage.id
+                == (
+                    select(EdiMessage.id)
+                    .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+                    .order_by(EdiMessage.created_at.desc())
+                    .limit(1)
+                    .scalar_subquery()
+                )
+            )
             .values(gs_sender_id=gs_sender_id, gs_receiver_id=gs_receiver_id)
         )
         await self.session.execute(stmt)
@@ -157,6 +175,21 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 file_name="payload.json",
             )
             payload_dict = {}
+
+        # Idempotency check
+        stmt = (
+            select(EdiJson.id)
+            .where(
+                EdiJson.trace_id == uuid.UUID(trace_id),
+                EdiJson.direction == direction,
+                EdiJson.transaction_type == transaction_type,
+                EdiJson.business_metadata == business_metadata,
+            )
+            .limit(1)
+        )
+        existing_id = (await self.session.execute(stmt)).scalar_one_or_none()
+        if existing_id:
+            return str(existing_id)
 
         record_kwargs = {
             "trace_id": uuid.UUID(trace_id),
@@ -268,6 +301,19 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         import uuid
 
         from database.models.data_plane import ApiGateway
+
+        # Idempotency check
+        stmt = (
+            select(ApiGateway.id)
+            .where(
+                ApiGateway.trace_id == uuid.UUID(trace_id),
+                ApiGateway.direction == direction,
+                ApiGateway.payload == payload,
+            )
+            .limit(1)
+        )
+        if (await self.session.execute(stmt)).scalar_one_or_none():
+            return  # Skip insert
 
         record = ApiGateway(
             trace_id=uuid.UUID(trace_id),

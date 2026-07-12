@@ -67,7 +67,7 @@ export interface UpdateRoutePayload {
   transaction_type?: string;
   processing_mode?: 'TRANSLATE' | 'PASSTHROUGH';
   webhook_id?: string;
-  as2_partner_id?: string;
-  sftp_partner_id?: string;
+  as2_partner_id?: string | null;
+  sftp_partner_id?: string | null;
   active?: boolean;
 }

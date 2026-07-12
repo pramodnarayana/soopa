@@ -73,6 +73,8 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
     if (targetId !== initialTargetId) {
       if (route.direction === 'INBOUND') {
         payload.webhook_id = targetId;
+        payload.as2_partner_id = null;
+        payload.sftp_partner_id = null;
       } else {
         const partner = destinations?.find(p => p.id === targetId);
         if (partner?.type === 'AS2') {

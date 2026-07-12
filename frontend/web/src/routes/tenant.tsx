@@ -86,6 +86,7 @@ export function AppLayout() {
       <div className="flex flex-col gap-1">
         <button
           onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
           className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium w-full text-left"
         >
           <Icon className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />

@@ -41,7 +41,7 @@ def test_create_api_token(client, mock_repo):
     assert data["name"] == "Test Token"
     assert "client_id" in data
     assert "client_secret" in data
-    assert data["active"] is True
+    assert data["active"] is False
 
 
 def test_list_api_tokens(client, mock_repo):
