@@ -224,6 +224,7 @@ def upgrade() -> None:
         sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("trading_partner_id", sa.String(length=255), nullable=True),
         sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
         sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
         sa.Column("gs_sender_id", sa.String(length=255), nullable=True),

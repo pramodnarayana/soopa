@@ -54,6 +54,7 @@ async def create_inbound_route(
 
         cmd = CreateInboundRouteCmd(
             name=request.name,
+            trading_partner_id=request.trading_partner_id,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,
             gs_sender_id=request.gs_sender_id,
@@ -126,6 +127,7 @@ async def update_inbound_route(
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateInboundRouteCmd(
             name=dump.get("name", UNSET),
+            trading_partner_id=dump.get("trading_partner_id", UNSET),
             isa_sender_id=dump.get("isa_sender_id", UNSET),
             isa_receiver_id=dump.get("isa_receiver_id", UNSET),
             gs_sender_id=dump.get("gs_sender_id", UNSET),

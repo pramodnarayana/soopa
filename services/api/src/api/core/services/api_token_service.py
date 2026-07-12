@@ -85,19 +85,21 @@ class ApiTokenService:
             name=cmd.name,
             client_id=client_id,
             client_secret=client_secret,  # caller must show this exactly once
-            active=True,
+            active=False,
         )
 
     async def list_tokens(self, tenant_id: int) -> list[dict[str, Any]]:
         """Returns all tokens for a tenant. client_id is safe; secret is never returned."""
         return await self._repo.list_api_tokens(tenant_id)
 
-    async def revoke_token(self, tenant_id: int, token_id: UUID) -> bool:
-        """Soft-deactivates a token (active=False). Audit record preserved."""
-        result = await self._repo.revoke_api_token(tenant_id, token_id)
+    async def update_token(
+        self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None
+    ) -> bool:
+        """Updates token properties (e.g. name or active status)."""
+        result = await self._repo.update_api_token(tenant_id, token_id, name, active)
         if result:
             logger.info(
-                "API token revoked", extra={"tenant_id": tenant_id, "token_id": str(token_id)}
+                "API token updated", extra={"tenant_id": tenant_id, "token_id": str(token_id)}
             )
         return result
 

@@ -41,7 +41,7 @@ def test_create_api_token(client, mock_repo):
     assert data["name"] == "Test Token"
     assert "client_id" in data
     assert "client_secret" in data
-    assert data["active"] is True
+    assert data["active"] is False
 
 
 def test_list_api_tokens(client, mock_repo):
@@ -66,18 +66,18 @@ def test_list_api_tokens(client, mock_repo):
 
 
 def test_revoke_api_token(client, mock_repo):
-    mock_repo.revoke_api_token.return_value = True
+    mock_repo.update_api_token.return_value = True
     t_id = uuid4()
 
-    response = client.delete(f"/api/v1/developers/tokens/{t_id}")
+    response = client.patch(f"/api/v1/developers/tokens/{t_id}", json={"active": False})
     assert response.status_code == 204
 
 
 def test_revoke_api_token_not_found(client, mock_repo):
-    mock_repo.revoke_api_token.return_value = False
+    mock_repo.update_api_token.return_value = False
     t_id = uuid4()
 
-    response = client.delete(f"/api/v1/developers/tokens/{t_id}")
+    response = client.patch(f"/api/v1/developers/tokens/{t_id}", json={"active": False})
     assert response.status_code == 404
 
 
@@ -85,7 +85,7 @@ def test_delete_api_token(client, mock_repo):
     mock_repo.delete_api_token.return_value = True
     t_id = uuid4()
 
-    response = client.delete(f"/api/v1/developers/tokens/{t_id}/hard")
+    response = client.delete(f"/api/v1/developers/tokens/{t_id}")
     assert response.status_code == 204
 
 
@@ -93,5 +93,5 @@ def test_delete_api_token_not_found(client, mock_repo):
     mock_repo.delete_api_token.return_value = False
     t_id = uuid4()
 
-    response = client.delete(f"/api/v1/developers/tokens/{t_id}/hard")
+    response = client.delete(f"/api/v1/developers/tokens/{t_id}")
     assert response.status_code == 404

@@ -174,6 +174,8 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
 
     sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gs_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gs_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mdn_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mdn_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -225,6 +227,8 @@ class EdiJson(TenantBase, TenantAwareMixin):
     standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
     sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gs_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gs_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     business_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

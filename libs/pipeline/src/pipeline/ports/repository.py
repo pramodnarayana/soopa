@@ -22,14 +22,22 @@ class EDIMessagePort(Protocol):
         connection_type: str | None = "UNKNOWN",
         sender_id: str | None = None,
         receiver_id: str | None = None,
+        gs_sender_id: str | None = None,
+        gs_receiver_id: str | None = None,
         outbound_route_id: str | None = None,
         tenant_id: int | None = None,
     ) -> None:
-        """Saves a newly generated EDI Message."""
+        """Stores a raw EDI message."""
         ...
 
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
         """Updates the status of an EDI Message."""
+        ...
+
+    async def update_edi_message_gs_headers(
+        self, trace_id: str, gs_sender_id: str, gs_receiver_id: str
+    ) -> None:
+        """Updates the GS headers of an EDI Message."""
         ...
 
     async def claim_edi_message(self, trace_id: str) -> bool:
@@ -58,6 +66,8 @@ class APIPayloadPort(Protocol):
         standard: str | None,
         sender_id: str | None,
         receiver_id: str | None,
+        gs_sender_id: str | None,
+        gs_receiver_id: str | None,
         business_metadata: dict[str, Any],
         payload: dict[str, Any],
         status: str,
@@ -94,7 +104,13 @@ class RoutePort(Protocol):
     """
 
     async def get_route(
-        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
+        self,
+        direction: str,
+        sender_id: str,
+        receiver_id: str,
+        transaction_type: str,
+        gs_sender_id: str | None = None,
+        gs_receiver_id: str | None = None,
     ) -> dict[str, Any] | None:
         """Finds the appropriate route based on ISA envelopes."""
         ...

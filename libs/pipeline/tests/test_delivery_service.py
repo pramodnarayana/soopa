@@ -42,7 +42,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     s3_uri = "s3://fake-bucket/api_gateway/trace-456/translated.json"
     edi_s3_uri = "s3://fake-bucket/edi_messages/trace-456/raw.edi"
 
-    storage.store[s3_uri] = b'{"hello": "world"}'
+    storage.store[s3_uri] = b'{"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]}'
 
     repo.edi_messages[trace_id] = {
         "trace_id": trace_id,
@@ -56,6 +56,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     repo.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "request": s3_uri,
+        "payload": {"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]},
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -163,7 +164,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
 
     trace_id = "trace-fail"
     s3_uri = "s3://fake-bucket/api_gateway/trace-fail/translated.json"
-    storage.store[s3_uri] = b'{"hello": "world"}'
+    storage.store[s3_uri] = b'{"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]}'
 
     repo.edi_messages[trace_id] = {
         "trace_id": trace_id,
@@ -176,6 +177,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     repo.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "request": s3_uri,
+        "payload": {"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]},
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(

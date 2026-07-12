@@ -1,6 +1,6 @@
 from typing import Any
 
-from pipeline.ports.transformer import TransformerPort
+from pipeline.ports.transformer import TransformerPort, TranslatedTransaction
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 
@@ -14,15 +14,30 @@ class BotsTransformerAdapter(TransformerPort):
 
     async def translate_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> dict[str, Any]:
+    ) -> list[TranslatedTransaction]:
         """
         Translates EDI to JSON using the wrapped BOTS facade.
         """
         parsed_payload = await self._adapter.translate(payload)
+        transactions = []
         for txn in parsed_payload.transactions:
-            if txn.transaction_type == transaction_type:
-                return txn.data
-        return {}
+            if (
+                not transaction_type
+                or transaction_type == "UNKNOWN"
+                or txn.transaction_type == transaction_type
+            ):
+                transactions.append(
+                    TranslatedTransaction(
+                        transaction_type=txn.transaction_type,
+                        isa_sender_id=parsed_payload.sender_id,
+                        isa_receiver_id=parsed_payload.receiver_id,
+                        gs_sender_id=txn.gs_sender_id,
+                        gs_receiver_id=txn.gs_receiver_id,
+                        control_number=txn.control_number,
+                        payload=txn.data,
+                    )
+                )
+        return transactions
 
     async def translate_json_to_edi(
         self,

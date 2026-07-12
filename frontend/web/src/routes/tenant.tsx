@@ -2,7 +2,7 @@ import { Outlet, createRoute, Link, useLocation } from '@tanstack/react-router'
 import { Route as rootRoute } from './__root'
 import { useAuth } from 'react-oidc-context'
 import { Button } from '@/components/ui/button'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Wrench,
   Terminal,
+  ChevronDown,
 } from 'lucide-react'
 import { PartnersProvider } from '@/features/partners/context/PartnersContext'
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
@@ -27,6 +28,40 @@ export function AppWrapper() {
     <PartnersProvider>
       <AppLayout />
     </PartnersProvider>
+  )
+}
+
+const NavItem = ({ icon: Icon, label, to, indent = false }: { icon: any, label: string, to: string, indent?: boolean }) => {
+  const location = useLocation()
+  const active = location.pathname.startsWith(to)
+  return (
+    <Link to={to} className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group ${indent ? 'pl-11 pr-4' : 'px-4'} ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+      <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`} />
+      <span>{label}</span>
+      {active && <ChevronRight className="w-4 h-4 ml-auto text-indigo-400" />}
+    </Link>
+  )
+}
+
+const NavGroup = ({ icon: Icon, label, children, defaultExpanded = true }: { icon: any, label: string, children: React.ReactNode, defaultExpanded?: boolean }) => {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium w-full text-left"
+      >
+        <Icon className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+        <span className="flex-1">{label}</span>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-1">
+          {children}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -68,17 +103,6 @@ export function AppLayout() {
     return null
   }
 
-  const NavItem = ({ icon: Icon, label, to }: { icon: any, label: string, to: string }) => {
-    const active = location.pathname.startsWith(to)
-    return (
-      <Link to={to} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-        <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`} />
-        <span>{label}</span>
-        {active && <ChevronRight className="w-4 h-4 ml-auto text-indigo-400" />}
-      </Link>
-    )
-  }
-
   return (
     <div className="min-h-screen flex bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
 
@@ -96,21 +120,20 @@ export function AppLayout() {
         <nav className="flex-1 px-4 py-8 flex flex-col gap-1.5 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">Platform</div>
           <NavItem icon={LayoutDashboard} label="Overview" to="/tenant/dashboard" />
-          <NavItem icon={Network} label="Endpoints" to="/tenant/endpoints" />
           <NavItem icon={Users} label="Trading Partners" to="/tenant/partners" />
           <NavItem icon={Network} label="Routes" to="/tenant/routes" />
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-6">Tools</div>
           <NavItem icon={Wrench} label="EDI Tools" to="/tenant/edi_tool" />
 
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Developers</div>
-          <NavItem icon={Terminal} label="API Access" to="/tenant/developers" />
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Settings</div>
+          <NavGroup icon={Terminal} label="Developers">
+            <NavItem icon={Network} label="Webhooks" to="/tenant/webhooks" indent={true} />
+            <NavItem icon={Settings} label="API Access" to="/tenant/developers" indent={true} />
+          </NavGroup>
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Organization</div>
           <NavItem icon={Users} label="Members" to="/tenant/users" />
-
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Configuration</div>
-          <NavItem icon={Settings} label="Settings" to="/dashboard" />
         </nav>
 
         <div className="p-4 border-t border-slate-100">

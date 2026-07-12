@@ -24,6 +24,7 @@ export interface RouteItem {
 
 export interface CreateInboundRoutePayload {
   name: string;
+  trading_partner_id?: string;
   isa_sender_id: string;
   isa_receiver_id: string;
   gs_sender_id?: string;
@@ -66,7 +67,7 @@ export interface UpdateRoutePayload {
   transaction_type?: string;
   processing_mode?: 'TRANSLATE' | 'PASSTHROUGH';
   webhook_id?: string;
-  as2_partner_id?: string;
-  sftp_partner_id?: string;
+  as2_partner_id?: string | null;
+  sftp_partner_id?: string | null;
   active?: boolean;
 }

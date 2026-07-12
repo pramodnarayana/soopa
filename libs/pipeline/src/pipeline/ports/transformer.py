@@ -1,14 +1,27 @@
 from typing import Any, Protocol
 
+from pydantic import BaseModel
+
+
+class TranslatedTransaction(BaseModel):
+    transaction_type: str
+    isa_sender_id: str | None = None
+    isa_receiver_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    control_number: str | None = None
+    payload: dict[str, Any]
+
 
 class TransformerPort(Protocol):
     """
-    Interface for the EDI translation engine.
+    Focused port for EDI/JSON payload translation.
+    Used by the translation worker.
     """
 
     async def translate_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> dict[str, Any]:
+    ) -> list[TranslatedTransaction]:
         """Translates raw EDI bytes into a Canonical JSON Dictionary."""
         ...
 

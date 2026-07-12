@@ -10,10 +10,13 @@ import { Button } from '@/components/ui/button';
 
 export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
   const [name, setName] = useState('');
+  const [tradingPartnerId, setTradingPartnerId] = useState('');
   const [processingMode, setProcessingMode] = useState<'TRANSLATE' | 'PASSTHROUGH'>('TRANSLATE');
   const [transactionType, setTransactionType] = useState('*');
   const [isaSender, setIsaSender] = useState('');
   const [isaReceiver, setIsaReceiver] = useState('');
+  const [gsSender, setGsSender] = useState('');
+  const [gsReceiver, setGsReceiver] = useState('');
   const [targetId, setTargetId] = useState('');
 
   const { toast } = useToast();
@@ -36,11 +39,16 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
 
       await createInbound.mutateAsync({
         name,
+        trading_partner_id: tradingPartnerId || undefined,
         isa_sender_id: isaSender,
         isa_receiver_id: isaReceiver,
+        gs_sender_id: gsSender || undefined,
+        gs_receiver_id: gsReceiver || undefined,
         transaction_type: transactionType,
         processing_mode: processingMode,
-        webhook_id: targetId,
+        webhook_id: selectedEndpoint.type?.toUpperCase() === 'WEBHOOK' ? targetId : undefined,
+        as2_partner_id: selectedEndpoint.type?.toUpperCase() === 'AS2' ? targetId : undefined,
+        sftp_partner_id: selectedEndpoint.type?.toUpperCase() === 'SFTP' ? targetId : undefined,
       });
 
       toast({ title: 'Inbound route created successfully' });
@@ -52,87 +60,109 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <div className="grid gap-2">
-        <Label htmlFor="route_name" className="text-slate-600 font-medium">Route Name *</Label>
-        <Input
-          id="route_name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Inbound Walmart 850"
-          className="h-10 rounded-xl text-sm"
-        />
+
+      {/* General Settings */}
+      <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-xl space-y-4">
+        <h3 className="text-sm font-semibold text-slate-800">General Settings</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="route_name" className="text-slate-600 font-medium">Route Name *</Label>
+            <Input
+              id="route_name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Inbound Walmart 850"
+              className="h-10 bg-white"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="trading_partner_id" className="text-slate-600 font-medium">Trading Partner ID</Label>
+            <Input
+              id="trading_partner_id"
+              value={tradingPartnerId}
+              onChange={(e) => setTradingPartnerId(e.target.value)}
+              placeholder="e.g. WALMART_US"
+              className="h-10 bg-white font-mono uppercase text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="transaction_type" className="text-slate-600 font-medium">Transaction *</Label>
+            <Input
+              id="transaction_type"
+              value={transactionType}
+              onChange={(e) => setTransactionType(e.target.value)}
+              placeholder="e.g. 850 or *"
+              className="h-10 bg-white font-mono text-sm"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="processing_mode" className="text-slate-600 font-medium">Processing Mode *</Label>
+            <Select value={processingMode} onValueChange={(v: 'TRANSLATE' | 'PASSTHROUGH') => setProcessingMode(v)}>
+              <SelectTrigger className="h-10 bg-white">
+                <SelectValue placeholder="Select processing mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TRANSLATE">Translate (EDI ↔ JSON)</SelectItem>
+                <SelectItem value="PASSTHROUGH">Passthrough (VAN)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* EDI Envelope Matchers */}
+      <div className="bg-indigo-50/30 border border-indigo-100 p-4 rounded-xl space-y-4">
+        <h3 className="text-sm font-semibold text-indigo-800">EDI Envelope Matchers</h3>
+
+        <div className="grid grid-cols-4 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="isa_sender" className="text-slate-600 font-medium text-sm font-bold">ISA Sender ID *</Label>
+            <Input id="isa_sender" value={isaSender} onChange={e => setIsaSender(e.target.value)} placeholder="PARTNER" className="h-10 bg-white font-mono text-sm uppercase" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="isa_receiver" className="text-slate-600 font-medium text-sm font-bold">ISA Receiver ID *</Label>
+            <Input id="isa_receiver" value={isaReceiver} onChange={e => setIsaReceiver(e.target.value)} placeholder="ACME_CORP" className="h-10 bg-white font-mono text-sm uppercase" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="gs_sender" className="text-slate-600 font-medium text-sm">GS Sender ID</Label>
+            <Input id="gs_sender" value={gsSender} onChange={e => setGsSender(e.target.value)} placeholder="PARTNER_GS" className="h-10 bg-white font-mono text-sm uppercase" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="gs_receiver" className="text-slate-600 font-medium text-sm">GS Receiver ID</Label>
+            <Input id="gs_receiver" value={gsReceiver} onChange={e => setGsReceiver(e.target.value)} placeholder="ACME_GS" className="h-10 bg-white font-mono text-sm uppercase" />
+          </div>
+        </div>
+      </div>
+
+      {/* Target Destination */}
+      <div className="bg-emerald-50/30 border border-emerald-100 p-4 rounded-xl space-y-4">
+        <h3 className="text-sm font-semibold text-emerald-800">Target Destination</h3>
         <div className="grid gap-2">
-          <Label htmlFor="sender_id" className="text-slate-600 font-medium">ISA Sender ID *</Label>
-          <Input
-            id="sender_id"
-            value={isaSender}
-            onChange={(e) => setIsaSender(e.target.value)}
-            placeholder="e.g. ACME_CORP"
-            className="h-10 rounded-xl font-mono text-sm uppercase"
+          <Label htmlFor="target" className="text-slate-600 font-medium">Webhook / System *</Label>
+          <SearchableSelect
+            disabled={isLoadingDestinations}
+            value={targetId}
+            onChange={setTargetId}
+            placeholder={isLoadingDestinations ? "Loading..." : "Select webhook or partner destination"}
+            options={(destinations || [])
+              .map(d => ({
+              value: d.id,
+              label: (
+                <span className="flex items-center gap-2">
+                  <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{d.type}</span>
+                  {d.name}
+                </span>
+              ),
+              searchString: d.name
+            }))}
           />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="receiver_id" className="text-slate-600 font-medium">ISA Receiver ID *</Label>
-          <Input
-            id="receiver_id"
-            value={isaReceiver}
-            onChange={(e) => setIsaReceiver(e.target.value)}
-            placeholder="e.g. WALMART"
-            className="h-10 rounded-xl font-mono text-sm uppercase"
-          />
-        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="transaction_type" className="text-slate-600 font-medium">Transaction *</Label>
-          <Input
-            id="transaction_type"
-            value={transactionType}
-            onChange={(e) => setTransactionType(e.target.value)}
-            placeholder="e.g. 850 or *"
-            className="h-10 rounded-xl font-mono text-sm"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="processing_mode" className="text-slate-600 font-medium">Processing Mode *</Label>
-          <Select value={processingMode} onValueChange={(v: 'TRANSLATE' | 'PASSTHROUGH') => setProcessingMode(v)}>
-            <SelectTrigger className="h-10 rounded-xl">
-              <SelectValue placeholder="Select processing mode" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="TRANSLATE">Translate (EDI ↔ JSON)</SelectItem>
-              <SelectItem value="PASSTHROUGH">Passthrough (VAN)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="target" className="text-slate-600 font-medium">Target Destination *</Label>
-        <SearchableSelect
-          disabled={isLoadingDestinations}
-          value={targetId}
-          onChange={setTargetId}
-          placeholder={isLoadingDestinations ? "Loading..." : "Select webhook destination"}
-          options={(destinations || [])
-            .map(d => ({
-            value: d.id,
-            label: (
-              <span className="flex items-center gap-2">
-                <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{d.type}</span>
-                {d.name}
-              </span>
-            ),
-            searchString: d.name
-          }))}
-        />
-      </div>
-
-      <div className="flex justify-end mt-4">
+      <div className="flex justify-end mt-2">
         <Button
           type="submit"
           disabled={createInbound.isPending}

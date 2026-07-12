@@ -14,7 +14,13 @@ async def test_bots_transformer_edi_to_json(mock_translate: AsyncMock) -> None:
         receiver_id="B",
         interchange_control_number="1",
         transactions=[
-            TransactionSet(transaction_type="850", control_number="1", data={"foo": "bar"})
+            TransactionSet(
+                transaction_type="850",
+                control_number="1",
+                gs_sender_id="GS_SENDER",
+                gs_receiver_id="GS_RECEIVER",
+                data={"foo": "bar"},
+            )
         ],
     )
     mock_translate.return_value = mock_payload
@@ -22,7 +28,16 @@ async def test_bots_transformer_edi_to_json(mock_translate: AsyncMock) -> None:
     adapter = BotsTransformerAdapter()
     result = await adapter.translate_edi_to_json(b"ISA*00*", "X12", "850")
 
-    assert result == {"foo": "bar"}
+    assert result is not None
+    assert len(result) == 1
+    txn = result[0]
+    assert txn.transaction_type == "850"
+    assert txn.isa_sender_id == "A"
+    assert txn.isa_receiver_id == "B"
+    assert txn.gs_sender_id == "GS_SENDER"
+    assert txn.gs_receiver_id == "GS_RECEIVER"
+    assert txn.control_number == "1"
+    assert txn.payload == {"foo": "bar"}
     mock_translate.assert_awaited_once_with(b"ISA*00*")
 
 

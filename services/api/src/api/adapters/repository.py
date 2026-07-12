@@ -37,7 +37,7 @@ from database.models.control_plane import (
 )
 from database.models.control_plane import Outbox as GlobalOutbox
 from database.models.data_plane import EdiMessage
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -353,7 +353,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             name=cmd.name,
             url=cmd.url,
             auth_header_vault_ref=cmd.auth_header_vault_ref,
-            active=True,
+            active=False,
         )
         self.session.add(record)
         await self.session.flush()
@@ -364,6 +364,38 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             select(Webhook).where(Webhook.id == partner_id, Webhook.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()
+
+    async def update_webhook(
+        self,
+        tenant_id: int,
+        webhook_id: UUID,
+        name: str | None = None,
+        active: bool | None = None,
+        url: str | None = None,
+    ) -> bool:
+        values: dict[str, Any] = {}
+        if name is not None:
+            values["name"] = name
+        if active is not None:
+            values["active"] = active
+        if url is not None:
+            values["url"] = url
+
+        if not values:
+            return True
+
+        stmt = (
+            update(Webhook)
+            .where(Webhook.id == webhook_id, Webhook.tenant_id == tenant_id)
+            .values(**values)
+        )
+        result = await self.session.execute(stmt)
+        return (getattr(result, "rowcount", 0) or 0) > 0
+
+    async def delete_webhook(self, tenant_id: int, webhook_id: UUID) -> bool:
+        stmt = delete(Webhook).where(Webhook.id == webhook_id, Webhook.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def list_webhooks(self, tenant_id: int) -> Sequence[Any]:
         result = await self.session.execute(select(Webhook).where(Webhook.tenant_id == tenant_id))
@@ -429,6 +461,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             id=route_id,
             tenant_id=tenant_id,
             name=cmd.name,
+            trading_partner_id=cmd.trading_partner_id,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
             gs_sender_id=cmd.gs_sender_id,
@@ -456,6 +489,8 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             return False
         if not isinstance(cmd.name, UnsetType):
             record.name = cmd.name
+        if not isinstance(cmd.trading_partner_id, UnsetType):
+            record.trading_partner_id = cmd.trading_partner_id
         if not isinstance(cmd.isa_sender_id, UnsetType):
             record.isa_sender_id = cmd.isa_sender_id
         if not isinstance(cmd.isa_receiver_id, UnsetType):
@@ -788,7 +823,7 @@ class SqlAlchemyApiTokenRepository:
             client_id=client_id,
             secret_hash=secret_hash,
             expires_at=expires_at,
-            active=True,
+            active=False,
         )
         self.session.add(record)
         await self.session.flush()
@@ -814,16 +849,26 @@ class SqlAlchemyApiTokenRepository:
             for t in tokens
         ]
 
-    async def revoke_api_token(self, tenant_id: int, token_id: UUID) -> bool:
-        result = await self.session.execute(
-            select(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
+    async def update_api_token(
+        self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None
+    ) -> bool:
+        values: dict[str, Any] = {}
+        if name is not None:
+            values["name"] = name
+        if active is not None:
+            values["active"] = active
+
+        if not values:
+            return True
+
+        stmt = (
+            update(ApiToken)
+            .where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
+            .values(**values)
         )
-        record = result.scalar_one_or_none()
-        if not record:
-            return False
-        record.active = False
+        result = await self.session.execute(stmt)
         await self.session.flush()
-        return True
+        return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def delete_api_token(self, tenant_id: int, token_id: UUID) -> bool:
         result = await self.session.execute(

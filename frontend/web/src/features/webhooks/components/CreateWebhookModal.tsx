@@ -2,23 +2,21 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormModal } from '@/components/ui/form-modal';
-import { useCreateWebhookEndpointMutation } from '../api/endpointsHooks';
+import { useCreateWebhookMutation } from '../api/webhookHooks';
 import { useToast } from '@/hooks/use-toast';
 import { Webhook } from 'lucide-react';
 
-export function CreateWebhookEndpointModal() {
+export function CreateWebhookModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
-  const [authHeader, setAuthHeader] = useState('');
 
   const { toast } = useToast();
-  const createWebhook = useCreateWebhookEndpointMutation();
+  const createWebhook = useCreateWebhookMutation();
 
   const reset = () => {
     setName('');
     setUrl('');
-    setAuthHeader('');
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -33,11 +31,7 @@ export function CreateWebhookEndpointModal() {
       return;
     }
     try {
-      await createWebhook.mutateAsync({
-        name,
-        url,
-        auth_header_vault_ref: authHeader || undefined
-      });
+      await createWebhook.mutateAsync({ name, url });
       setIsOpen(false);
       reset();
     } catch {
@@ -47,20 +41,20 @@ export function CreateWebhookEndpointModal() {
 
   return (
     <FormModal
-      title="Add Webhook Endpoint"
+      title="Add Webhook"
       triggerText="Add Webhook"
       icon={<Webhook className="w-5 h-5" />}
       isOpen={isOpen}
       onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
       isPending={createWebhook.isPending}
-      submitText="Save Endpoint"
+      submitText="Save Webhook"
     >
       <div className="grid gap-6">
         <div className="grid gap-2">
-          <Label htmlFor="name" className="text-slate-600 font-medium">Endpoint Name</Label>
+          <Label htmlFor="webhook-name" className="text-slate-600 font-medium">Name</Label>
           <Input
-            id="name"
+            id="webhook-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -70,22 +64,14 @@ export function CreateWebhookEndpointModal() {
         </div>
 
         <div className="grid gap-2">
-          <Label className="text-slate-600 font-medium">Webhook URL</Label>
+          <Label htmlFor="webhook-url" className="text-slate-600 font-medium">Webhook URL</Label>
           <Input
+            id="webhook-url"
             value={url}
             onChange={e => setUrl(e.target.value)}
             placeholder="https://api.your-erp.com/edi-inbox"
             className="h-10 rounded-xl font-mono text-sm"
             required
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label className="text-slate-600 font-medium">Authorization Header (Stored securely in Vault)</Label>
-          <Input
-            value={authHeader}
-            onChange={e => setAuthHeader(e.target.value)}
-            placeholder="Bearer token123..."
-            className="h-10 rounded-xl font-mono text-sm"
           />
         </div>
       </div>

@@ -10,6 +10,7 @@ from api.adapters.http.dtos import (
     ApiTokenListItem,
     ApiTokenListResponse,
     CreateApiTokenRequest,
+    UpdateApiTokenRequest,
 )
 from api.core.services.api_token_service import ApiTokenService
 from api.dependencies import get_api_token_repo
@@ -69,24 +70,27 @@ async def list_api_tokens(
     return ApiTokenListResponse(tokens=[ApiTokenListItem(**t) for t in tokens])
 
 
-@router.delete(
+@router.patch(
     "/{token_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def revoke_api_token(
+async def update_api_token(
     token_id: UUID,
+    request: UpdateApiTokenRequest,
     tenant_id: int = Depends(get_current_tenant_id),
     repo: ApiTokenRepositoryPort = Depends(get_api_token_repo),
 ) -> None:
-    """Revoke (soft delete) an API token."""
+    """Updates an API token (name or active status)."""
     service = ApiTokenService(repo)
-    success = await service.revoke_token(tenant_id, token_id)
+    success = await service.update_token(
+        tenant_id, token_id, name=request.name, active=request.active
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Token not found")
 
 
 @router.delete(
-    "/{token_id}/hard",
+    "/{token_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_api_token(

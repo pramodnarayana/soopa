@@ -148,6 +148,7 @@ class RouteService:
                     "route_id": r.id,
                     "name": r.name,
                     "direction": "INBOUND",
+                    "trading_partner_id": r.trading_partner_id,
                     "isa_sender_id": r.isa_sender_id,
                     "isa_receiver_id": r.isa_receiver_id,
                     "gs_sender_id": r.gs_sender_id,

@@ -79,7 +79,7 @@ class As2ReceiveService:
         )
         if requires_signed:
             local_priv, local_cert, _ = self._retrieve_keys(
-                local_partner=partnership.local_partner, remote_partner=partnership.remote_partner
+                local_partner=local_partner, remote_partner=remote_partner
             )
             if local_priv and local_cert:
                 import functools
@@ -289,7 +289,7 @@ class As2ReceiveService:
             return parsed_msg.as_bytes()
         return final_payload_bytes
 
-    def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str]:
+    def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str, str | None]:
         """
         Lightweight ISA parser to extract Sender and Receiver for routing
         without parsing the entire EDI structure.
@@ -298,10 +298,7 @@ class As2ReceiveService:
         if not content.startswith("ISA"):
             raise ValueError("Payload does not begin with ISA segment")
 
-        # The ISA segment is 106 characters long.
-        # The element separator is the 4th character.
         element_separator = content[3]
-
         isa_segment = content[:106]
         elements = isa_segment.split(element_separator)
 
@@ -311,22 +308,33 @@ class As2ReceiveService:
         isa_sender = elements[6].strip()
         isa_receiver = elements[8].strip()
 
-        return isa_sender, isa_receiver
+        # Attempt to find ST segment to extract transaction type
+        import re
+
+        st_match = re.search(rf"ST\{element_separator}(.*?)\{element_separator}", content)
+        transaction_type = st_match.group(1).strip() if st_match else None
+
+        return isa_sender, isa_receiver, transaction_type
 
     async def _save_to_data_plane(  # type: ignore
         self, partnership, as2_msg: AS2Message, pure_edi_bytes: bytes
     ) -> str:
 
         # 1. Payload-Based Routing (ISA Extraction)
+        # We MUST extract ISA headers here because if the AS2 Partnership is global (tenant_id = 0),
+        # we need to find the true tenant ID by looking up the inbound route.
         try:
-            isa_sender, isa_receiver = self._extract_isa_headers(pure_edi_bytes)
+            isa_sender, isa_receiver, transaction_type = self._extract_isa_headers(pure_edi_bytes)
         except Exception as e:
             logger.error(f"Failed to extract ISA headers: {e}")
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
         route = await self.uow.control_plane.get_inbound_route(
-            isa_sender_id=isa_sender, isa_receiver_id=isa_receiver, tenant_id=partnership.tenant_id
+            isa_sender_id=isa_sender,
+            isa_receiver_id=isa_receiver,
+            tenant_id=partnership.tenant_id or 0,
+            transaction_type=transaction_type,
         )
         if not route:
             logger.error(f"No inbound route found for ISA {isa_sender} -> {isa_receiver}")
@@ -339,8 +347,8 @@ class As2ReceiveService:
             "trace_id": uuid.uuid4(),
             "direction": "INBOUND",
             "connection_type": "AS2",
-            "sender_id": as2_msg.as2_from,
-            "receiver_id": as2_msg.as2_to,
+            "sender_id": isa_sender,
+            "receiver_id": isa_receiver,
             "message_id": as2_msg.message_id,
             "mdn_mode": partnership.mdn_type,
             "signature_algorithm": partnership.signature_algorithm,
@@ -371,8 +379,8 @@ class As2ReceiveService:
             outbox_payload = {
                 "edi_message_id": str(msg_id),
                 "trace_id": str(edi_record["trace_id"]),
-                "sender_id": as2_msg.as2_from,
-                "receiver_id": as2_msg.as2_to,
+                "sender_id": isa_sender,
+                "receiver_id": isa_receiver,
                 "status": "RECEIVED",
             }
             await dp_repo.create_outbox_event(
