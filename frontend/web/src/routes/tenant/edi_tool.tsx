@@ -6,7 +6,7 @@ import { FileCode, CheckCircle, AlertTriangle, Copy, Trash2 } from 'lucide-react
 import { useToast } from '@/hooks/use-toast';
 import { createRoute } from '@tanstack/react-router';
 import { Route as appRoute } from '../tenant';
-import { EdiHumanReadableViewer } from './components/EdiHumanReadableViewer';
+import { EdiHumanReadableViewer } from './-components/EdiHumanReadableViewer';
 import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
 import Editor from '@monaco-editor/react';
 

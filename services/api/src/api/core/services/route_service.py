@@ -59,7 +59,9 @@ class RouteService:
     async def create_outbound_route(
         self, tenant_id: int, cmd: CreateOutboundRouteCmd
     ) -> RouteEntity:
-        logger.info(f"Creating Outbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
+        logger.info(
+            f"Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}"
+        )
         route_id = await self.global_repo.create_outbound_route(tenant_id=tenant_id, cmd=cmd)
         await self.global_repo.create_outbox_event(
             tenant_id=tenant_id,
@@ -172,15 +174,9 @@ class RouteService:
                     "name": r.name,
                     "direction": "OUTBOUND",
                     "trading_partner_id": r.trading_partner_id,
-                    "isa_sender_id": r.isa_sender_id,
-                    "isa_sender_qualifier": r.isa_sender_qualifier,
-                    "isa_receiver_id": r.isa_receiver_id,
-                    "isa_receiver_qualifier": r.isa_receiver_qualifier,
-                    "gs_sender_id": r.gs_sender_id,
-                    "gs_receiver_id": r.gs_receiver_id,
-                    "default_standard": r.default_standard,
-                    "default_version": r.default_version,
-                    "transaction_type": r.transaction_type,
+                    "transaction_type": "*",
+                    "isa_sender_id": None,
+                    "isa_receiver_id": None,
                     "destination_type": dest_type,
                     "destination_name": dest_name,
                     "as2_partner_id": r.as2_partner_id,

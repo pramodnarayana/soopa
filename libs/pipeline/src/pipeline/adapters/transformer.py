@@ -41,7 +41,7 @@ class BotsTransformerAdapter(TransformerPort):
 
     async def translate_json_to_edi(
         self,
-        payload: dict[str, Any] | list[dict[str, Any]],
+        payload: dict[str, Any] | list[Any],
         standard: str,
         transaction_type: str,
         route_config: dict[str, Any],

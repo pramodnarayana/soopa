@@ -9,6 +9,12 @@ from .control_plane import (
     User,
 )
 from .control_plane import (
+    OutboundEdiHeader as GlobalOutboundEdiHeader,
+)
+from .control_plane import (
+    OutboundRoute as GlobalOutboundRoute,
+)
+from .control_plane import (
     Outbox as GlobalOutbox,
 )
 from .data_plane import (
@@ -18,6 +24,7 @@ from .data_plane import (
     EdiMessage,
     InboundRoute,
     Job,
+    OutboundEdiHeader,
     OutboundRoute,
     ProcessedEvent,
     SFTPPartner,
@@ -40,12 +47,15 @@ __all__ = [
     "AS2Partnership",
     "GlobalOutbox",
     "SystemAuditLog",
+    "GlobalOutboundEdiHeader",
+    "GlobalOutboundRoute",
     # Tenant
     "TenantBase",
     "TenantAwareMixin",
     "SFTPPartner",
     "Webhook",
     "InboundRoute",
+    "OutboundEdiHeader",
     "OutboundRoute",
     "EdiMessage",
     "ApiGateway",

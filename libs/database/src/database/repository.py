@@ -81,7 +81,7 @@ class InboundRouteRepository:
         if tenant_id != 0:
             conditions.append(InboundRoute.tenant_id == tenant_id)
         if transaction_type:
-            conditions.append(InboundRoute.transaction_type == transaction_type)
+            conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
 
         stmt = select(InboundRoute).where(*conditions).order_by(InboundRoute.id).limit(1)
         result = await self.session.execute(stmt)

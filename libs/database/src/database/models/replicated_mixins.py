@@ -226,8 +226,8 @@ class InboundRouteMixin:
         return mapped_column(Boolean, default=False, server_default=text("false"))
 
 
-class OutboundRouteMixin:
-    """Shared columns for OutboundRoute across Global and Tenant schemas."""
+class OutboundEdiHeaderMixin:
+    """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
 
     @declared_attr
     def id(cls) -> Mapped[PyUUID]:
@@ -279,9 +279,27 @@ class OutboundRouteMixin:
     def default_version(cls) -> Mapped[str]:
         return mapped_column(String(50), default="004010", server_default="004010")
 
+
+class OutboundRouteMixin:
+    """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
+
     @declared_attr
-    def processing_mode(cls) -> Mapped[str]:
-        return mapped_column(String(50), nullable=False, server_default="TRANSLATE")
+    def id(cls) -> Mapped[PyUUID]:
+        return mapped_column(
+            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+        )
+
+    @declared_attr
+    def trading_partner_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def protocol(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, server_default="AS2")
 
     @declared_attr
     def active(cls) -> Mapped[bool]:

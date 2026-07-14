@@ -133,11 +133,6 @@ async def test_data_plane_repository(
     out_cmd = CreateOutboundRouteCmd(
         trading_partner_id=str(uuid.uuid4()),
         name="Outbound Route 1",
-        isa_sender_id="S",
-        isa_receiver_id="R",
-        gs_sender_id="S",
-        gs_receiver_id="R",
-        transaction_type="855",
         as2_partner_id=None,
         sftp_partner_id=sftp_id,
     )

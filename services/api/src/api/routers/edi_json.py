@@ -6,7 +6,7 @@ from api.adapters.http.dtos import OutboundMessageRequest, OutboundMessageRespon
 from api.auth.api_key import get_tenant_id_from_api_key
 from api.core.uow import UnitOfWork
 from api.dependencies import get_m2m_tenant_uow
-from api.services.outbound_service import OutboundService
+from api.services.api_receiver_service import ApiReceiverService
 
 router = APIRouter(prefix="/api/v1/edi_json", tags=["EDI JSON"])
 
@@ -28,9 +28,9 @@ async def submit_outbound_message(
       X-Client-ID:     soopaedi_<tenant>_<suffix>
       X-Client-Secret: <secret shown once at token creation>
     """
-    service = OutboundService(uow=uow)
+    service = ApiReceiverService(uow=uow)
 
-    trace_id = await service.process_outbound_message(
+    trace_id = await service.process_api_edi_json(
         tenant_id=tenant_id,
         trading_partner_id=request.trading_partner_id,
         payload=request.payload,

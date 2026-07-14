@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
@@ -196,6 +196,25 @@ class CreateOutboundRouteRequest(BaseModel):
         ..., max_length=255, description="The ERP's identifier for this route"
     )
     name: str = Field(..., max_length=255, description="Name of the route")
+    as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
+    sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
+
+    @model_validator(mode="after")
+    def check_exactly_one_destination(self) -> "CreateOutboundRouteRequest":
+        targets = [
+            self.as2_partner_id is not None,
+            self.sftp_partner_id is not None,
+        ]
+        if sum(targets) != 1:
+            raise ValueError("Exactly one destination partner must be specified")
+        return self
+
+
+class CreateOutboundEdiHeaderRequest(BaseModel):
+    name: str = Field(..., max_length=255, description="Name of the header mapping")
+    trading_partner_id: str = Field(
+        ..., max_length=255, description="The ERP's identifier for this route"
+    )
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to map")
     isa_sender_qualifier: str | None = Field(None, max_length=2, description="ISA Sender Qualifier")
     isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to map")
@@ -209,21 +228,30 @@ class CreateOutboundRouteRequest(BaseModel):
     )
     default_standard: str = Field("x12", max_length=50, description="EDI Standard")
     default_version: str = Field("004010", max_length=50, description="EDI Version")
-    processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] = Field(
-        "TRANSLATE", description="Processing Mode"
-    )
-    as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
 
-    @model_validator(mode="after")
-    def check_exactly_one_destination(self) -> "CreateOutboundRouteRequest":
-        targets = [
-            self.as2_partner_id is not None,
-            self.sftp_partner_id is not None,
-        ]
-        if sum(targets) != 1:
-            raise ValueError("Exactly one destination partner must be specified")
-        return self
+
+class UpdateOutboundEdiHeaderRequest(BaseModel):
+    name: str | None = Field(None, max_length=255, description="Name of the header mapping")
+    trading_partner_id: str | None = Field(None, max_length=255, description="Trading Partner ID")
+    isa_sender_id: str | None = Field(None, max_length=255, description="ISA Sender ID to match")
+    isa_sender_qualifier: str | None = Field(
+        None, max_length=2, description="ISA Sender Qualifier (Outbound only)"
+    )
+    isa_receiver_id: str | None = Field(
+        None, max_length=255, description="ISA Receiver ID to match"
+    )
+    isa_receiver_qualifier: str | None = Field(
+        None, max_length=2, description="ISA Receiver Qualifier (Outbound only)"
+    )
+    gs_sender_id: str | None = Field(None, max_length=255, description="GS Sender ID")
+    gs_receiver_id: str | None = Field(None, max_length=255, description="GS Receiver ID")
+    transaction_type: str | None = Field(None, max_length=50, description="EDI Transaction Type")
+    default_standard: str | None = Field(
+        None, max_length=50, description="EDI Standard (Outbound only)"
+    )
+    default_version: str | None = Field(
+        None, max_length=50, description="EDI Version (Outbound only)"
+    )
 
 
 class UpdateRouteRequest(BaseModel):
@@ -336,11 +364,21 @@ class RouteResponse(BaseModel):
     direction: str  # INBOUND, OUTBOUND
 
 
-class RouteItemResponse(BaseModel):
+class BaseRouteItem(BaseModel):
     route_id: UUID
     trading_partner_id: str | None = None
     name: str
-    direction: str
+    destination_type: str
+    destination_name: str
+    webhook_id: UUID | None = None
+    as2_partner_id: UUID | None = None
+    sftp_partner_id: UUID | None = None
+    status: str = Field(default="ACTIVE")
+    active: bool = False
+
+
+class InboundRouteItem(BaseRouteItem):
+    direction: Literal["INBOUND"]
     isa_sender_id: str
     isa_sender_qualifier: str | None = None
     isa_receiver_id: str
@@ -350,14 +388,17 @@ class RouteItemResponse(BaseModel):
     default_standard: str | None = None
     default_version: str | None = None
     transaction_type: str
-    destination_type: str
-    destination_name: str
-    webhook_id: UUID | None = None
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
-    status: str = Field(default="ACTIVE")
-    active: bool = False
     processing_mode: str = "TRANSLATE"
+
+
+class OutboundRouteItem(BaseRouteItem):
+    direction: Literal["OUTBOUND"]
+    transaction_type: str = "*"
+
+
+RouteItemResponse = Annotated[
+    InboundRouteItem | OutboundRouteItem, Field(discriminator="direction")
+]
 
 
 class OutboundMessageRequest(BaseModel):

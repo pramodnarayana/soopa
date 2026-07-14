@@ -19,7 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
 from api.dependencies import get_current_user_profile
-from api.routers import edi_json, edi_tools, routes, trading_partners, webhooks
+from api.routers import (
+    edi_headers,
+    edi_json,
+    edi_tools,
+    explorer,
+    routes,
+    trading_partners,
+    transactions,
+    webhooks,
+)
 from api.routers.developers import api_tokens
 from api.routers.trading_partners import as2_receive, platform
 
@@ -71,6 +80,10 @@ async def validation_exception_handler(
         error_dict = dict(error)
         error_dict.pop("input", None)
         error_dict.pop("url", None)
+        # 'ctx' may contain the raw exception object, which is not JSON-serializable.
+        ctx = error_dict.pop("ctx", None)
+        if ctx:
+            error_dict["ctx"] = {k: str(v) for k, v in ctx.items()}
         sanitized_errors.append(error_dict)
 
     logger.error(f"422 Error at {request.url.path}: {sanitized_errors}")
@@ -85,10 +98,13 @@ app.include_router(trading_partners.router)
 app.include_router(webhooks.router)
 app.include_router(platform.router)
 app.include_router(routes.router)
+app.include_router(edi_headers.router)
 app.include_router(edi_tools.router)
 app.include_router(as2_receive.router, prefix="/api/v1")
 app.include_router(edi_json.router)
 app.include_router(api_tokens.router)
+app.include_router(transactions.router)
+app.include_router(explorer.router)
 
 
 @app.get("/api/me", tags=["Identity"])

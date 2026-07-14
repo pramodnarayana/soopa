@@ -146,6 +146,23 @@ class UpdateInboundRouteCmd:
 class CreateOutboundRouteCmd:
     trading_partner_id: str
     name: str
+    as2_partner_id: UUID | None = None
+    sftp_partner_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class UpdateOutboundRouteCmd:
+    trading_partner_id: str | None | UnsetType = UNSET
+    name: str | UnsetType = UNSET
+    as2_partner_id: UUID | None | UnsetType = UNSET
+    sftp_partner_id: UUID | None | UnsetType = UNSET
+    active: bool | UnsetType = UNSET
+
+
+@dataclass(frozen=True)
+class CreateOutboundEdiHeaderCmd:
+    name: str
+    trading_partner_id: str
     isa_sender_id: str
     isa_receiver_id: str
     gs_sender_id: str
@@ -155,15 +172,12 @@ class CreateOutboundRouteCmd:
     isa_receiver_qualifier: str | None = None
     default_standard: str = "x12"
     default_version: str = "004010"
-    processing_mode: str = "TRANSLATE"
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
 
 
 @dataclass(frozen=True)
-class UpdateOutboundRouteCmd:
+class UpdateOutboundEdiHeaderCmd:
+    name: str | None | UnsetType = UNSET
     trading_partner_id: str | None | UnsetType = UNSET
-    name: str | UnsetType = UNSET
     isa_sender_id: str | UnsetType = UNSET
     isa_sender_qualifier: str | None | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
@@ -173,10 +187,6 @@ class UpdateOutboundRouteCmd:
     transaction_type: str | UnsetType = UNSET
     default_standard: str | UnsetType = UNSET
     default_version: str | UnsetType = UNSET
-    processing_mode: str | UnsetType = UNSET
-    as2_partner_id: UUID | None | UnsetType = UNSET
-    sftp_partner_id: UUID | None | UnsetType = UNSET
-    active: bool | UnsetType = UNSET
 
 
 # ---------------------------------------------------------------------------

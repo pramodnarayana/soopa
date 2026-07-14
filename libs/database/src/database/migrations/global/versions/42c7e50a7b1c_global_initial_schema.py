@@ -1,8 +1,8 @@
-"""global_initial_schema
+"""global initial schema
 
-Revision ID: 94b943b2920d
+Revision ID: 42c7e50a7b1c
 Revises:
-Create Date: 2026-07-10 11:42:52.960482
+Create Date: 2026-07-13 16:15:46.051295
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "94b943b2920d"
+revision: str = "42c7e50a7b1c"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -83,6 +83,23 @@ def upgrade() -> None:
         sa.UniqueConstraint("shard_schema"),
     )
     op.create_table(
+        "api_tokens",
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("client_id", sa.String(length=64), nullable=False),
+        sa.Column("secret_hash", sa.String(length=64), nullable=False),
+        sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("client_id"),
+    )
+    op.create_index(op.f("ix_api_tokens_tenant_id"), "api_tokens", ["tenant_id"], unique=False)
+    op.create_table(
         "as2_partners",
         sa.Column("tenant_id", sa.Integer(), nullable=True),
         sa.Column("is_local", sa.Boolean(), nullable=False),
@@ -96,9 +113,9 @@ def upgrade() -> None:
         sa.Column("prev_public_cert_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("prev_private_key_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("url", sa.String(length=1024), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),
@@ -111,6 +128,43 @@ def upgrade() -> None:
         postgresql_where=sa.text("tenant_id IS NULL"),
     )
     op.create_table(
+        "outbound_edi_headers",
+        sa.Column("tenant_id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("trading_partner_id", sa.String(length=255), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_sender_qualifier", sa.String(length=2), nullable=True),
+        sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("isa_receiver_qualifier", sa.String(length=2), nullable=True),
+        sa.Column("gs_sender_id", sa.String(length=255), nullable=False),
+        sa.Column("gs_receiver_id", sa.String(length=255), nullable=False),
+        sa.Column("transaction_type", sa.String(length=50), nullable=False),
+        sa.Column("default_standard", sa.String(length=50), server_default="x12", nullable=False),
+        sa.Column("default_version", sa.String(length=50), server_default="004010", nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        op.f("ix_outbound_edi_headers_tenant_id"),
+        "outbound_edi_headers",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_outbound_edi_headers_unique_trading_partner_id",
+        "outbound_edi_headers",
+        ["tenant_id", "trading_partner_id"],
+        unique=True,
+    )
+    op.create_table(
         "outbox",
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), nullable=False),
@@ -118,7 +172,7 @@ def upgrade() -> None:
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
@@ -130,23 +184,6 @@ def upgrade() -> None:
         unique=False,
         postgresql_where=sa.text("status = 'PENDING'"),
     )
-    op.create_table(
-        "api_tokens",
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.Column("tenant_id", sa.Integer(), nullable=False),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("client_id", sa.String(length=64), nullable=False),
-        sa.Column("secret_hash", sa.String(length=64), nullable=False),
-        sa.Column("last_used_at", sa.DateTime(), nullable=True),
-        sa.Column("expires_at", sa.DateTime(), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_api_tokens_tenant_id", "api_tokens", ["tenant_id"], unique=False)
-    op.create_index("ix_api_tokens_client_id", "api_tokens", ["client_id"], unique=True)
     op.create_table(
         "sftp_partners",
         sa.Column("tenant_id", sa.Integer(), nullable=False),
@@ -160,9 +197,9 @@ def upgrade() -> None:
         sa.Column("outbound_remote_path", sa.String(length=1024), nullable=True),
         sa.Column("password_encrypted", sa.String(length=1024), nullable=True),
         sa.Column("credentials_vault_ref", sa.String(length=255), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -187,9 +224,9 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("url", sa.String(length=1024), nullable=False),
         sa.Column("auth_header_vault_ref", sa.String(length=255), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -207,9 +244,9 @@ def upgrade() -> None:
         sa.Column("encryption_algorithm", sa.String(length=50), nullable=False),
         sa.Column("signature_algorithm", sa.String(length=50), nullable=False),
         sa.Column("advanced_flags", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["local_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["remote_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE"),
@@ -233,9 +270,9 @@ def upgrade() -> None:
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
         ),
-        sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
@@ -273,21 +310,10 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("trading_partner_id", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("isa_sender_id", sa.String(length=255), nullable=False),
-        sa.Column("isa_sender_qualifier", sa.String(length=2), nullable=True),
-        sa.Column("isa_receiver_id", sa.String(length=255), nullable=False),
-        sa.Column("isa_receiver_qualifier", sa.String(length=2), nullable=True),
-        sa.Column("gs_sender_id", sa.String(length=255), nullable=False),
-        sa.Column("gs_receiver_id", sa.String(length=255), nullable=False),
-        sa.Column("transaction_type", sa.String(length=50), nullable=False),
-        sa.Column("default_standard", sa.String(length=50), server_default="x12", nullable=False),
-        sa.Column("default_version", sa.String(length=50), server_default="004010", nullable=False),
-        sa.Column(
-            "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
-        ),
-        sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("protocol", sa.String(length=50), server_default="AS2", nullable=False),
+        sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
@@ -345,13 +371,17 @@ def downgrade() -> None:
         postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.drop_table("outbox")
-    op.drop_index("ix_api_tokens_client_id", table_name="api_tokens")
-    op.drop_index("ix_api_tokens_tenant_id", table_name="api_tokens")
-    op.drop_table("api_tokens")
+    op.drop_index(
+        "ix_outbound_edi_headers_unique_trading_partner_id", table_name="outbound_edi_headers"
+    )
+    op.drop_index(op.f("ix_outbound_edi_headers_tenant_id"), table_name="outbound_edi_headers")
+    op.drop_table("outbound_edi_headers")
     op.drop_index(
         "uq_global_as2_id", table_name="as2_partners", postgresql_where=sa.text("tenant_id IS NULL")
     )
     op.drop_table("as2_partners")
+    op.drop_index(op.f("ix_api_tokens_tenant_id"), table_name="api_tokens")
+    op.drop_table("api_tokens")
     op.drop_table("tenants")
     op.drop_index("uq_users_email_lower", table_name="users")
     op.drop_table("users")

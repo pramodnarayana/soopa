@@ -51,7 +51,7 @@ async def test_delivery_service_inbound_webhook() -> None:
         "receiver_id": "RECV1",
         "transaction_type": "850",
         "edi_data": edi_s3_uri,
-        "status": "TRANSLATED",
+        "status": "TRANSFORMED",
     }
     repo.api_gateway[trace_id] = {
         "trace_id": trace_id,
@@ -172,7 +172,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "850",
-        "status": "TRANSLATED",
+        "status": "TRANSFORMED",
     }
     repo.api_gateway[trace_id] = {
         "trace_id": trace_id,

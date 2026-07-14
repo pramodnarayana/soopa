@@ -12,8 +12,9 @@ Design decisions:
 """
 
 import logging
-from typing import Any
 
+from domain.models import EdiMessageDomainModel
+from domain.status import MessageStatus
 from pipeline.core.as2_orchestrator import AS2MessageOrchestrator
 from pipeline.ports.as2 import AS2DeliveryPort
 from pipeline.ports.http import HttpDeliveryPort
@@ -55,6 +56,22 @@ class DeliveryService:
         self.vault = vault
         self._as2_orchestrator = AS2MessageOrchestrator(vault=vault)
 
+    async def _emit_delivery_completed(self, trace_id: str, direction: str, status: str) -> None:
+        import uuid
+
+        from domain.events import PipelineEventType
+
+        event_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:DELIVERY_COMPLETED:{status}"))
+        await self.repository.publish_outbox_event(
+            idempotency_key=event_key,
+            event_type=PipelineEventType.DELIVERY_COMPLETED,
+            payload={
+                "trace_id": trace_id,
+                "direction": direction,
+                "status": status,
+            },
+        )
+
     async def deliver(self, trace_id: str) -> None:
         """
         Looks up the route for the given trace_id and dispatches to the
@@ -66,18 +83,19 @@ class DeliveryService:
         if not edi_msg:
             raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
-        direction = edi_msg["direction"]
-        outbound_route_id = edi_msg.get("outbound_route_id")
+        direction = edi_msg.direction
 
-        if direction == "OUTBOUND" and outbound_route_id:
-            route = await self.repository.get_outbound_route(outbound_route_id)
+        if direction == "OUTBOUND" and edi_msg.outbound_route_id:
+            route = await self.repository.get_outbound_route(str(edi_msg.outbound_route_id))
             if not route:
-                logger.error(f"Configured outbound route {outbound_route_id} not found")
-                raise ValueError(f"Configured outbound route {outbound_route_id} not found")
+                logger.error(f"Configured outbound route for {edi_msg.outbound_route_id} not found")
+                raise ValueError(
+                    f"Configured outbound route for {edi_msg.outbound_route_id} not found"
+                )
         else:
-            sender_id = edi_msg.get("sender_id")
-            receiver_id = edi_msg.get("receiver_id")
-            transaction_type = edi_msg.get("transaction_type", "*")
+            sender_id = edi_msg.sender_id
+            receiver_id = edi_msg.receiver_id
+            transaction_type = edi_msg.transaction_type or "*"
 
             if not sender_id or not receiver_id:
                 raise ValueError(
@@ -106,7 +124,7 @@ class DeliveryService:
     # ── Delivery Handlers ─────────────────────────────────────────────────────
 
     async def _deliver_webhook(
-        self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]
+        self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel
     ) -> None:
         """Delivers the translated JSON payload to a webhook endpoint."""
         if not await self.repository.claim_api_payload(trace_id):
@@ -135,22 +153,43 @@ class DeliveryService:
             if partner.get("auth_header_vault_ref") and self.vault:
                 auth_token = await self.vault.get_secret(partner["auth_header_vault_ref"])
 
-            status_code = await self.http_delivery.deliver(
+            status_code, response_text = await self.http_delivery.deliver(
                 url=partner["url"], payload=raw_payload, auth_token=auth_token
             )
-        except Exception:
-            await self.repository.update_api_payload_status(trace_id, "FAILED")
+        except Exception as e:
+            await self.repository.update_api_payload_status(
+                trace_id, MessageStatus.FAILED, webhook_url=partner.get("url"), response=str(e)
+            )
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"Webhook delivery failed for trace_id={trace_id}")
             return
 
         if 200 <= status_code < 300:
-            await self.repository.update_api_payload_status(trace_id, "DELIVERED")
+            await self.repository.update_api_payload_status(
+                trace_id,
+                MessageStatus.DELIVERED,
+                webhook_url=partner.get("url"),
+                http_status_code=status_code,
+                response=response_text,
+            )
+            await self._emit_delivery_completed(
+                trace_id, edi_msg.direction, MessageStatus.DELIVERED
+            )
             logger.info(f"Delivered trace_id={trace_id} → webhook {partner['url']}")
         else:
-            await self.repository.update_api_payload_status(trace_id, "FAILED")
+            await self.repository.update_api_payload_status(
+                trace_id,
+                MessageStatus.FAILED,
+                webhook_url=partner.get("url"),
+                http_status_code=status_code,
+                response=response_text,
+            )
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.error(f"Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}")
 
-    async def _deliver_sftp(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
+    async def _deliver_sftp(
+        self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel
+    ) -> None:
         """Uploads the raw EDI payload to the partner's SFTP server."""
         if not await self.repository.claim_edi_message(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
@@ -161,7 +200,9 @@ class DeliveryService:
             raise ValueError(f"SFTP partner {partner_id} not found.")
 
         try:
-            raw_payload = edi_msg["edi_data"].encode("utf-8")
+            if not edi_msg.edi_data:
+                raise ValueError("Empty EDI data")
+            raw_payload = edi_msg.edi_data.encode("utf-8")
             filename = f"{trace_id}.edi"
 
             password: str | None = partner.get("password")
@@ -185,13 +226,19 @@ class DeliveryService:
                 filename=filename,
                 payload=raw_payload,
             )
-            await self.repository.update_edi_message_status(trace_id, "DELIVERED")
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
+            await self._emit_delivery_completed(
+                trace_id, edi_msg.direction, MessageStatus.DELIVERED
+            )
             logger.info(f"Delivered trace_id={trace_id} → SFTP {partner['host']}")
         except Exception:
-            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"SFTP delivery failed for trace_id={trace_id}")
 
-    async def _deliver_as2(self, trace_id: str, partner_id: str, edi_msg: dict[str, Any]) -> None:
+    async def _deliver_as2(
+        self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel
+    ) -> None:
         """Transmits the EDI payload via AS2 (RFC 4130)."""
         if not await self.repository.claim_edi_message(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
@@ -213,16 +260,19 @@ class DeliveryService:
                 else None
             )
 
-            raw_payload = edi_msg["edi_data"].encode("utf-8")
+            if not edi_msg.edi_data:
+                raise ValueError("Empty EDI data")
+            raw_payload = edi_msg.edi_data.encode("utf-8")
 
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,
                 local_partner=local_partner,
                 remote_partner=remote_partner,
             )
-        except Exception:
-            await self.repository.update_edi_message_status(trace_id, "FAILED")
-            logger.exception(f"AS2 message build failed for trace_id={trace_id}")
+        except ValueError:
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
+            logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
             return
 
         try:
@@ -233,11 +283,13 @@ class DeliveryService:
             )
         except RuntimeError:
             # Misconfiguration (e.g. NullAS2DeliveryAdapter) — treat as a terminal failure
-            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
             return
         except Exception:
-            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"AS2 HTTP transmission failed for trace_id={trace_id}")
             return
 
@@ -274,19 +326,26 @@ class DeliveryService:
                             )
 
             if is_success:
-                await self.repository.update_edi_message_status(trace_id, "DELIVERED")
+                await self.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
+                await self._emit_delivery_completed(
+                    trace_id, edi_msg.direction, MessageStatus.DELIVERED
+                )
                 logger.info(
                     f"Delivered trace_id={trace_id} → {remote_url} "
                     f"(HTTP {status_code}). MIC={as2_msg.mic}"
                 )
             else:
-                await self.repository.update_edi_message_status(trace_id, "FAILED")
+                await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+                await self._emit_delivery_completed(
+                    trace_id, edi_msg.direction, MessageStatus.FAILED
+                )
                 logger.error(
                     f"Sync MDN indicates failure for trace_id={trace_id}. "
                     f"Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
                 )
         else:
-            await self.repository.update_edi_message_status(trace_id, "FAILED")
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.error(
                 f"AS2 delivery failed for trace_id={trace_id} → {remote_url} (HTTP {status_code})"
             )

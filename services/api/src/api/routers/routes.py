@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.dependencies import get_current_tenant_id
+from pydantic import TypeAdapter
 
 from api.adapters.http.dtos import (
     CreateInboundRouteRequest,
@@ -24,6 +25,9 @@ from api.domain.models import (
 
 router = APIRouter(prefix="/api/v1/routes", tags=["Routes"])
 
+# Built once at import time — TypeAdapter construction is not free.
+_route_list_adapter = TypeAdapter(list[RouteItemResponse])
+
 
 @router.get("", response_model=list[RouteItemResponse], status_code=status.HTTP_200_OK)
 async def list_routes(
@@ -36,8 +40,7 @@ async def list_routes(
     async with uow:
         service = RouteService(global_repo=uow.control_plane)
         routes = await service.list_routes(tenant_id)
-
-        return [RouteItemResponse(**r) for r in routes]
+        return _route_list_adapter.validate_python(routes)
 
 
 @router.post("/inbound", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
@@ -89,16 +92,6 @@ async def create_outbound_route(
         cmd = CreateOutboundRouteCmd(
             trading_partner_id=request.trading_partner_id,
             name=request.name,
-            isa_sender_id=request.isa_sender_id,
-            isa_sender_qualifier=request.isa_sender_qualifier,
-            isa_receiver_id=request.isa_receiver_id,
-            isa_receiver_qualifier=request.isa_receiver_qualifier,
-            gs_sender_id=request.gs_sender_id,
-            gs_receiver_id=request.gs_receiver_id,
-            transaction_type=request.transaction_type,
-            default_standard=request.default_standard,
-            default_version=request.default_version,
-            processing_mode=request.processing_mode,
             as2_partner_id=request.as2_partner_id,
             sftp_partner_id=request.sftp_partner_id,
         )
@@ -181,16 +174,6 @@ async def update_outbound_route(
         cmd = UpdateOutboundRouteCmd(
             trading_partner_id=dump.get("trading_partner_id", UNSET),
             name=dump.get("name", UNSET),
-            isa_sender_id=dump.get("isa_sender_id", UNSET),
-            isa_sender_qualifier=dump.get("isa_sender_qualifier", UNSET),
-            isa_receiver_id=dump.get("isa_receiver_id", UNSET),
-            isa_receiver_qualifier=dump.get("isa_receiver_qualifier", UNSET),
-            gs_sender_id=dump.get("gs_sender_id", UNSET),
-            gs_receiver_id=dump.get("gs_receiver_id", UNSET),
-            transaction_type=dump.get("transaction_type", UNSET),
-            default_standard=dump.get("default_standard", UNSET),
-            default_version=dump.get("default_version", UNSET),
-            processing_mode=dump.get("processing_mode", UNSET),
             as2_partner_id=dump.get("as2_partner_id", UNSET),
             sftp_partner_id=dump.get("sftp_partner_id", UNSET),
             active=dump.get("active", UNSET),

@@ -7,6 +7,7 @@ replacing the previous `as2_delivery=None` anti-pattern.
 """
 
 import pytest
+from domain.events import PipelineEventType
 from fakes import (
     FakeAS2DeliveryAdapter,
     FakeHttpDeliveryAdapter,
@@ -166,7 +167,10 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert repo.edi_messages[trace_id]["status"] == "FAILED"
+    assert len(repo.outbox) == 1
+    outbox_event = repo.outbox[0]
+    assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
+    assert outbox_event["payload"]["status"] == "FAILED"
     assert len(as2_adapter.delivered) == 1
 
 
@@ -190,7 +194,10 @@ async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
     await service.deliver(trace_id)
 
     # It should catch the RuntimeError and mark the message as FAILED
-    assert repo.edi_messages[trace_id]["status"] == "FAILED"
+    assert len(repo.outbox) == 1
+    outbox_event = repo.outbox[0]
+    assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
+    assert outbox_event["payload"]["status"] == "FAILED"
 
 
 async def test_deliver_as2_idempotent_claim() -> None:
@@ -235,7 +242,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 0
-    assert repo.edi_messages[trace_id]["status"] == "PROCESSING"
+    assert len(repo.outbox) == 0
 
 
 async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
@@ -280,5 +287,8 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert repo.edi_messages[trace_id]["status"] == "FAILED"
+    assert len(repo.outbox) == 1
+    outbox_event = repo.outbox[0]
+    assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
+    assert outbox_event["payload"]["status"] == "FAILED"
     assert len(as2_adapter.delivered) == 0

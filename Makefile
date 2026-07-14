@@ -86,6 +86,10 @@ sqs-purge:
 db-sqs-reset: db-reset sqs-purge
 	@echo "Database and SQS queues have been completely reset."
 
+clear-data:
+	@echo "Clearing data plane tables (edi_message, edi_json, api_gateway, outbox) and purging SQS..."
+	uv run python scripts/clear_data.py
+
 seed: db-init
 
 # --- Docker Infrastructure (Postgres, LocalStack, OTel) ---

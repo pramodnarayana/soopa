@@ -176,11 +176,6 @@ async def test_create_outbound_route(route_service: RouteService, global_repo):
     cmd = CreateOutboundRouteCmd(
         trading_partner_id=str(uuid.uuid4()),
         name="Outbound Route",
-        isa_sender_id="S1",
-        isa_receiver_id="R1",
-        gs_sender_id="S1",
-        gs_receiver_id="R1",
-        transaction_type="855",
         as2_partner_id=uuid.uuid4(),
     )
     route = await route_service.create_outbound_route(tenant_id=1, cmd=cmd)

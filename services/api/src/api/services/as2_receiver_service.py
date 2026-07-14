@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
-class As2ReceiveService:
+class As2ReceiverService:
     """
     Application Service (Use Case Layer) for handling inbound AS2 messages.
     Strictly follows Single Responsibility Principle and encapsulates business logic.
@@ -330,18 +330,17 @@ class As2ReceiveService:
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
-        route = await self.uow.control_plane.get_inbound_route(
-            isa_sender_id=isa_sender,
-            isa_receiver_id=isa_receiver,
-            tenant_id=partnership.tenant_id or 0,
-            transaction_type=transaction_type,
-        )
-        if not route:
-            logger.error(f"No inbound route found for ISA {isa_sender} -> {isa_receiver}")
-            raise ValueError("No matching inbound route found for this ISA pair")
+        true_tenant_id = await self.uow.control_plane.get_tenant_by_isa(isa_sender, isa_receiver)
+        if not true_tenant_id:
+            true_tenant_id = partnership.tenant_id
 
-        true_tenant_id = route.tenant_id
-        logger.info(f"Routed AS2 payload ({isa_sender}->{isa_receiver}) to Tenant {true_tenant_id}")
+        if not true_tenant_id or true_tenant_id == 0:
+            logger.error(
+                f"Cannot save payload. No tenant could be identified for ISA {isa_sender} -> {isa_receiver}"
+            )
+            raise ValueError("No tenant could be identified for this ISA pair")
+
+        logger.info(f"Saved AS2 payload ({isa_sender}->{isa_receiver}) to Tenant {true_tenant_id}")
 
         edi_record = {
             "trace_id": uuid.uuid4(),
@@ -390,6 +389,7 @@ class As2ReceiveService:
             )
 
             await tenant_session.commit()
+
             return str(msg_id)
         finally:
             await async_gen_tenant.aclose()

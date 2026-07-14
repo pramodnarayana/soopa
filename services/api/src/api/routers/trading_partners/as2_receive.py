@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_vault
 from api.ports.vault import VaultPort
-from api.services.as2_receive_service import As2ReceiveService
+from api.services.as2_receiver_service import As2ReceiverService
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def receive_as2_message(
     headers = dict(request.headers)
 
     # Instantiate the application service (Use Case)
-    service = As2ReceiveService(
+    service = As2ReceiverService(
         global_session=global_session, vault=vault, db_router=request.app.state.db_router
     )
 

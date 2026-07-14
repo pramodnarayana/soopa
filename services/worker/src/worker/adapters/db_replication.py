@@ -5,12 +5,14 @@ from database.connection import DatabaseRouter
 from database.models.control_plane import AS2Partner as GlobalAS2Partner
 from database.models.control_plane import AS2Partnership as GlobalAS2Partnership
 from database.models.control_plane import InboundRoute as GlobalInboundRoute
+from database.models.control_plane import OutboundEdiHeader as GlobalOutboundEdiHeader
 from database.models.control_plane import OutboundRoute as GlobalOutboundRoute
 from database.models.control_plane import SFTPPartner as GlobalSFTPPartner
 from database.models.control_plane import Webhook as GlobalWebhook
 from database.models.data_plane import AS2Partner as TenantAS2Partner
 from database.models.data_plane import AS2Partnership as TenantAS2Partnership
 from database.models.data_plane import InboundRoute as TenantInboundRoute
+from database.models.data_plane import OutboundEdiHeader as TenantOutboundEdiHeader
 from database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from database.models.data_plane import Webhook as TenantWebhook
@@ -311,16 +313,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     tenant_id=tenant_id,
                     trading_partner_id=global_or.trading_partner_id,
                     name=global_or.name,
-                    isa_sender_id=global_or.isa_sender_id,
-                    isa_sender_qualifier=global_or.isa_sender_qualifier,
-                    isa_receiver_id=global_or.isa_receiver_id,
-                    isa_receiver_qualifier=global_or.isa_receiver_qualifier,
-                    gs_sender_id=global_or.gs_sender_id,
-                    gs_receiver_id=global_or.gs_receiver_id,
-                    default_standard=global_or.default_standard,
-                    default_version=global_or.default_version,
-                    transaction_type=global_or.transaction_type,
-                    processing_mode=global_or.processing_mode,
+                    protocol=global_or.protocol,
                     as2_partner_id=global_or.as2_partner_id,
                     sftp_partner_id=global_or.sftp_partner_id,
                     active=global_or.active,
@@ -332,16 +325,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     set_={
                         "trading_partner_id": global_or.trading_partner_id,
                         "name": global_or.name,
-                        "isa_sender_id": global_or.isa_sender_id,
-                        "isa_sender_qualifier": global_or.isa_sender_qualifier,
-                        "isa_receiver_id": global_or.isa_receiver_id,
-                        "isa_receiver_qualifier": global_or.isa_receiver_qualifier,
-                        "gs_sender_id": global_or.gs_sender_id,
-                        "gs_receiver_id": global_or.gs_receiver_id,
-                        "default_standard": global_or.default_standard,
-                        "default_version": global_or.default_version,
-                        "transaction_type": global_or.transaction_type,
-                        "processing_mode": global_or.processing_mode,
+                        "protocol": global_or.protocol,
                         "as2_partner_id": global_or.as2_partner_id,
                         "sftp_partner_id": global_or.sftp_partner_id,
                         "active": global_or.active,
@@ -352,8 +336,70 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             )
             await tenant_session.execute(insert_or_stmt)
 
+        # --- Outbound EDI Headers ---
+        oeh_stmt = select(GlobalOutboundEdiHeader).where(
+            GlobalOutboundEdiHeader.tenant_id == tenant_id
+        )
+        oeh_result = await global_session.execute(oeh_stmt)
+        outbound_edi_headers = oeh_result.scalars().all()
+        logger.info(
+            f"[tenant={tenant_id}] Replicating {len(outbound_edi_headers)} outbound EDI header(s)"
+        )
+
+        for global_oeh in outbound_edi_headers:
+            logger.debug(
+                f"[tenant={tenant_id}] Upserting OutboundEdiHeader id={global_oeh.id} name={global_oeh.name!r}"
+            )
+            insert_oeh_stmt = (
+                insert(TenantOutboundEdiHeader)
+                .values(
+                    id=global_oeh.id,
+                    tenant_id=tenant_id,
+                    trading_partner_id=global_oeh.trading_partner_id,
+                    name=global_oeh.name,
+                    isa_sender_id=global_oeh.isa_sender_id,
+                    isa_sender_qualifier=global_oeh.isa_sender_qualifier,
+                    isa_receiver_id=global_oeh.isa_receiver_id,
+                    isa_receiver_qualifier=global_oeh.isa_receiver_qualifier,
+                    gs_sender_id=global_oeh.gs_sender_id,
+                    gs_receiver_id=global_oeh.gs_receiver_id,
+                    default_standard=global_oeh.default_standard,
+                    default_version=global_oeh.default_version,
+                    transaction_type=global_oeh.transaction_type,
+                    created_at=global_oeh.created_at,
+                    updated_at=global_oeh.updated_at,
+                )
+                .on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={
+                        "trading_partner_id": global_oeh.trading_partner_id,
+                        "name": global_oeh.name,
+                        "isa_sender_id": global_oeh.isa_sender_id,
+                        "isa_sender_qualifier": global_oeh.isa_sender_qualifier,
+                        "isa_receiver_id": global_oeh.isa_receiver_id,
+                        "isa_receiver_qualifier": global_oeh.isa_receiver_qualifier,
+                        "gs_sender_id": global_oeh.gs_sender_id,
+                        "gs_receiver_id": global_oeh.gs_receiver_id,
+                        "default_standard": global_oeh.default_standard,
+                        "default_version": global_oeh.default_version,
+                        "transaction_type": global_oeh.transaction_type,
+                        "created_at": global_oeh.created_at,
+                        "updated_at": global_oeh.updated_at,
+                    },
+                )
+            )
+            await tenant_session.execute(insert_oeh_stmt)
+
         # --- Sync deletes (children before parents) ---
         logger.info(f"[tenant={tenant_id}] Syncing deletes...")
+        await self._sync_deletes(
+            tenant_id,
+            global_session,
+            tenant_session,
+            GlobalOutboundEdiHeader,
+            TenantOutboundEdiHeader,
+            False,
+        )
         await self._sync_deletes(
             tenant_id,
             global_session,

@@ -26,13 +26,13 @@ def memory_queue() -> InMemoryQueueAdapter:  # type: ignore[misc]
 client = TestClient(app)
 
 
-def test_cdc_relay_successful_translate_routing(memory_queue: InMemoryQueueAdapter) -> None:
-    """Tests the CDC relay correctly handles an outbox TRANSLATE insert event."""
+def test_cdc_relay_successful_transform_routing(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests the CDC relay correctly routes an outbox TRANSFORM_EVENT insert to TransformQueue."""
     payload = {
         "__op": "c",
         "__table": "outbox",
         "idempotency_key": "uuid-123",
-        "event_type": "TRANSLATE",
+        "event_type": "TRANSFORM_EVENT",
         "payload": {"trace_id": "req-123"},
         "status": "PENDING",
         "tenant_id": 999,
@@ -43,10 +43,10 @@ def test_cdc_relay_successful_translate_routing(memory_queue: InMemoryQueueAdapt
 
     assert len(memory_queue.sent_messages) == 1
     queue_name, msg_payload = memory_queue.sent_messages[0]
-    assert queue_name == "TranslateQueue"
+    assert queue_name == "TransformQueue"
     assert msg_payload == {
         "idempotency_key": "uuid-123",
-        "event_type": "TRANSLATE",
+        "event_type": "TRANSFORM_EVENT",
         "payload": {"trace_id": "req-123"},
         "tenant_id": 999,
     }
@@ -58,7 +58,7 @@ def test_cdc_relay_successful_deliver_routing(memory_queue: InMemoryQueueAdapter
         "__op": "c",
         "__table": "outbox",
         "idempotency_key": "uuid-456",
-        "event_type": "DELIVER",
+        "event_type": "DELIVER_EVENT",
         "payload": {"trace_id": "req-123", "target": "webhook"},
         "status": "PENDING",
         "tenant_id": 999,
@@ -72,7 +72,7 @@ def test_cdc_relay_successful_deliver_routing(memory_queue: InMemoryQueueAdapter
     assert queue_name == "DeliverQueue"
     assert msg_payload == {
         "idempotency_key": "uuid-456",
-        "event_type": "DELIVER",
+        "event_type": "DELIVER_EVENT",
         "payload": {"trace_id": "req-123", "target": "webhook"},
         "tenant_id": 999,
     }
@@ -145,7 +145,7 @@ def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) ->
         "__op": "c",
         "__table": "outbox",
         "idempotency_key": "uuid-no-trace",
-        "event_type": "TRANSLATE",
+        "event_type": "TRANSFORM_EVENT",
         "payload": {},  # Missing trace_id
         "status": "PENDING",
         "tenant_id": 999,

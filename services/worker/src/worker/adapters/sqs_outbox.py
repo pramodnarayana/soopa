@@ -36,7 +36,7 @@ class SqsEvent(OutboxEvent):
 
 
 class SqsOutboxAdapter(OutboxPort):
-    def __init__(self, queue_name: str = MessageQueueName.PROVISIONING):
+    def __init__(self, queue_name: str = MessageQueueName.PROVISIONING_QUEUE):
         self.queue_name = queue_name
         self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
         self.region = "us-east-1"

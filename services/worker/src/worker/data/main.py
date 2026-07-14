@@ -112,16 +112,17 @@ def validate_target_url(url: str) -> bool:
         return False
 
 
-async def process_translation(
+async def process_pipeline_event(
     trace_id: str,
     event_type: str,
+    payload: dict[str, Any],
     tenant_id: int,
     resolver: TenantResolver,
     db_router: DatabaseRouter,
     s3_bucket: str,
     aws_endpoint: str | None,
 ) -> None:
-    """Sets up the Hexagonal dependencies and executes TranslationService."""
+    """Sets up the Hexagonal dependencies and executes TranslationService or Saga Coordinator."""
     shard_name, shard_dsn = await resolver.resolve(tenant_id)
 
     tenant_gen = db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
@@ -135,13 +136,35 @@ async def process_translation(
         )
         transformer_adapter = BotsTransformerAdapter()
 
-        # Instantiate Domain Service
-        service = TranslationService(transformer_adapter, repo_adapter)
+        from domain.events import PipelineEventType
 
-        # Execute pure domain logic
-        print(f"[WORKER] Translating trace_id={trace_id}")
-        await service.translate(trace_id, event_type)
-        print(f"[WORKER] SUCCESS translating trace_id={trace_id}")
+        if event_type in (
+            PipelineEventType.TRANSFORM_COMPLETED,
+            PipelineEventType.DELIVERY_COMPLETED,
+        ):
+            from pipeline.core.saga import TraceLifecycleService
+
+            saga_service = TraceLifecycleService(repo_adapter)
+            if event_type == PipelineEventType.TRANSFORM_COMPLETED:
+                await saga_service.handle_transform_completed(payload)
+            else:
+                await saga_service.handle_delivery_completed(payload)
+        else:
+            # Execute pure domain logic
+            service = TranslationService(transformer_adapter, repo_adapter)
+            print(f"[WORKER] Translating trace_id={trace_id}")
+
+            from domain.direction import MessageDirection
+
+            direction_str = payload.get("direction", "INBOUND")
+            direction = (
+                MessageDirection.OUTBOUND
+                if direction_str.upper() == "OUTBOUND"
+                else MessageDirection.INBOUND
+            )
+
+            await service.translate(trace_id, direction)
+            print(f"[WORKER] SUCCESS translating trace_id={trace_id}")
 
         # Commit transaction
         await session.commit()
@@ -157,6 +180,7 @@ async def process_translation(
 async def process_delivery(
     trace_id: str,
     event_type: str,
+    payload: dict[str, Any],
     tenant_id: int,
     resolver: TenantResolver,
     db_router: DatabaseRouter,
@@ -255,6 +279,7 @@ async def poll_sqs_queue(
                             kwargs: dict[str, Any] = {
                                 "trace_id": trace_id,
                                 "event_type": body.get("event_type", "UNKNOWN"),
+                                "payload": payload,
                                 "tenant_id": tenant_id,
                                 "resolver": resolver,
                                 "db_router": db_router,
@@ -292,8 +317,8 @@ async def poll_sqs_queue(
                                 f"[{queue_name}] Transient error processing message: {e}"
                             )
         except Exception as e:
-            logger.exception(f"[{queue_name}] SQS client error, retrying in 10s: {e}")
-            await asyncio.sleep(10)
+            logger.exception(f"[{queue_name}] SQS client error, retrying in 2s: {e}")
+            await asyncio.sleep(2)
 
 
 async def main() -> None:
@@ -306,8 +331,8 @@ async def main() -> None:
 
     translate_task = asyncio.create_task(
         poll_sqs_queue(
-            MessageQueueName.TRANSLATE,
-            process_translation,
+            MessageQueueName.TRANSFORM_QUEUE,
+            process_pipeline_event,
             resolver,
             db_router,
             s3_bucket,
@@ -316,7 +341,12 @@ async def main() -> None:
     )
     deliver_task = asyncio.create_task(
         poll_sqs_queue(
-            MessageQueueName.DELIVER, process_delivery, resolver, db_router, s3_bucket, aws_endpoint
+            MessageQueueName.DELIVER_QUEUE,
+            process_delivery,
+            resolver,
+            db_router,
+            s3_bucket,
+            aws_endpoint,
         )
     )
 

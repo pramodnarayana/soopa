@@ -13,13 +13,16 @@ async def test_httpx_delivery_adapter(mock_client_cls: MagicMock) -> None:
 
     mock_response = MagicMock()
     mock_response.status_code = 200
+    mock_response.text = '{"success": true}'
     mock_client.post.return_value = mock_response
 
-    adapter = HttpxDeliveryAdapter(timeout_secs=5)
-
-    status = await adapter.deliver("https://example.com/webhook", b'{"data": "test"}')
+    adapter = HttpxDeliveryAdapter()
+    status, response_body = await adapter.deliver(
+        "https://example.com/webhook", b'{"data": "test"}'
+    )
 
     assert status == 200
+    assert response_body == '{"success": true}'
     mock_client.post.assert_awaited_once_with(
         "https://example.com/webhook",
         content=b'{"data": "test"}',
