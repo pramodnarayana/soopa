@@ -16,78 +16,88 @@ def override_get_current_tenant_id():
     return 1
 
 
-mock_uow = AsyncMock()
-mock_repo = AsyncMock()
-
-mock_msg = MagicMock()
-mock_msg.id = uuid.uuid4()
-mock_msg.trace_id = uuid.uuid4()
-mock_msg.direction = "INBOUND"
-mock_msg.connection_type = "UNKNOWN"
-mock_msg.sender_id = "A"
-mock_msg.receiver_id = "B"
-mock_msg.gs_sender_id = "A"
-mock_msg.gs_receiver_id = "B"
-mock_msg.status = "SUCCESS"
-mock_msg.edi_data = "TEST"
-mock_msg.created_at = datetime.now(UTC)
-mock_msg.outbound_route_id = uuid.uuid4()
-
-mock_json = MagicMock()
-mock_json.id = uuid.uuid4()
-mock_json.transaction_type = "850"
-mock_json.sender_id = "A"
-mock_json.receiver_id = "B"
-mock_json.gs_sender_id = "A"
-mock_json.gs_receiver_id = "B"
-mock_json.business_metadata = {"_routing": {"trading_partner_id": str(uuid.uuid4())}}
-mock_json.payload = "{}"
-mock_json.status = "SUCCESS"
-mock_json.created_at = datetime.now(UTC)
-
-mock_gw = MagicMock()
-mock_gw.id = uuid.uuid4()
-mock_gw.webhook_url = "http://test"
-mock_gw.http_status_code = 200
-mock_gw.payload = "{}"
-mock_gw.response = "{}"
-mock_gw.status = "SUCCESS"
-mock_gw.created_at = datetime.now(UTC)
-
-mock_repo.list_transactions.return_value = [mock_msg]
-mock_repo.get_transaction.return_value = {
-    "edi_message": mock_msg,
-    "edi_json": [mock_json],
-    "api_gateway": [mock_gw],
-}
-mock_repo.get_transaction_thread.return_value = [mock_json]
-mock_uow.data_plane = mock_repo
-
-mock_route = MagicMock()
-mock_route.as2_partner_id = uuid.uuid4()
-mock_route.sftp_partner_id = None
-
-mock_db_result = MagicMock()
-mock_db_result.scalar_one_or_none.side_effect = [mock_route, "Test Partner"]
-
-mock_uow.tenant_session = AsyncMock()
-mock_uow.tenant_session.execute.return_value = mock_db_result
-
-mock_uow.global_session = AsyncMock()
-mock_uow.global_session.execute.return_value = mock_db_result
-
-mock_uow.__aenter__.return_value = mock_uow
+def _make_mock_msg() -> MagicMock:
+    m = MagicMock()
+    m.id = uuid.uuid4()
+    m.trace_id = uuid.uuid4()
+    m.direction = "INBOUND"
+    m.connection_type = "UNKNOWN"
+    m.sender_id = "A"
+    m.receiver_id = "B"
+    m.gs_sender_id = "A"
+    m.gs_receiver_id = "B"
+    m.status = "SUCCESS"
+    m.edi_data = "TEST"
+    m.created_at = datetime.now(UTC)
+    m.outbound_route_id = uuid.uuid4()
+    return m
 
 
-def override_get_tenant_uow():
-    return mock_uow
+def _make_mock_json() -> MagicMock:
+    j = MagicMock()
+    j.id = uuid.uuid4()
+    j.transaction_type = "850"
+    j.sender_id = "A"
+    j.receiver_id = "B"
+    j.gs_sender_id = "A"
+    j.gs_receiver_id = "B"
+    j.business_metadata = {"_routing": {"trading_partner_id": str(uuid.uuid4())}}
+    j.payload = "{}"
+    j.status = "SUCCESS"
+    j.created_at = datetime.now(UTC)
+    return j
+
+
+def _make_mock_gw() -> MagicMock:
+    gw = MagicMock()
+    gw.id = uuid.uuid4()
+    gw.webhook_url = "http://test"
+    gw.http_status_code = 200
+    gw.payload = "{}"
+    gw.response = "{}"
+    gw.status = "SUCCESS"
+    gw.created_at = datetime.now(UTC)
+    return gw
+
+
+@pytest.fixture
+def base_mock_uow():
+    """Fresh mock UoW for every test — prevents side_effect state leakage."""
+    mock_msg = _make_mock_msg()
+    mock_json = _make_mock_json()
+    mock_gw = _make_mock_gw()
+
+    mock_repo = AsyncMock()
+    mock_repo.list_transactions.return_value = [mock_msg]
+    mock_repo.get_transaction.return_value = {
+        "edi_message": mock_msg,
+        "edi_json": [mock_json],
+        "api_gateway": [mock_gw],
+    }
+    mock_repo.get_transaction_thread.return_value = [mock_json]
+
+    mock_route = MagicMock()
+    mock_route.as2_partner_id = uuid.uuid4()
+    mock_route.sftp_partner_id = None
+
+    mock_db_result = MagicMock()
+    mock_db_result.scalar_one_or_none.side_effect = [mock_route, "Test Partner"]
+
+    uow = AsyncMock()
+    uow.data_plane = mock_repo
+    uow.tenant_session = AsyncMock()
+    uow.tenant_session.execute.return_value = mock_db_result
+    uow.global_session = AsyncMock()
+    uow.global_session.execute.return_value = mock_db_result
+    uow.__aenter__.return_value = uow
+    return uow
 
 
 @pytest.fixture(autouse=True)
-def setup_dependencies():
+def setup_dependencies(base_mock_uow):
     app.dependency_overrides[get_current_user_profile] = override_get_current_user_profile
     app.dependency_overrides[get_current_tenant_id] = override_get_current_tenant_id
-    app.dependency_overrides[get_tenant_uow] = override_get_tenant_uow
+    app.dependency_overrides[get_tenant_uow] = lambda: base_mock_uow
     yield
     app.dependency_overrides.clear()
 
@@ -117,6 +127,7 @@ def test_get_transaction_detail_sftp():
 
     from api.dependencies import get_tenant_uow
 
+    mock_uow = AsyncMock()
     mock_uow.control_plane = AsyncMock()
 
     mock_msg = MagicMock()
@@ -160,6 +171,7 @@ def test_get_transaction_detail_fallback():
 
     from api.dependencies import get_tenant_uow
 
+    mock_uow = AsyncMock()
     mock_uow.control_plane = AsyncMock()
 
     mock_msg = MagicMock()
@@ -201,11 +213,13 @@ def test_get_transaction_not_found():
 
     from api.dependencies import get_tenant_uow
 
+    mock_uow = AsyncMock()
     mock_uow.control_plane = AsyncMock()
 
     mock_repo = AsyncMock()
     mock_repo.get_transaction.return_value = None
     mock_uow.data_plane = mock_repo
+    mock_uow.__aenter__.return_value = mock_uow
 
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     uid = str(uuid.uuid4())

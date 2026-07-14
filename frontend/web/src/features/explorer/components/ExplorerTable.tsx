@@ -25,6 +25,8 @@ interface ExplorerTableProps<T> {
   isLoading: boolean
   renderExpanded: (item: T) => React.ReactNode
   headerToolbar?: React.ReactNode
+  onLoadMore?: () => void
+  hasMore?: boolean
 }
 
 export function ExplorerTable<T extends { id: string; trace_id?: string; status?: string }>({
@@ -33,6 +35,8 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
   isLoading,
   renderExpanded,
   headerToolbar,
+  onLoadMore,
+  hasMore,
 }: ExplorerTableProps<T>) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -145,6 +149,15 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                 )}
               </React.Fragment>
             ))
+          )}
+          {hasMore && !isLoading && (
+            <TableRow>
+              <TableCell colSpan={columns.length + 2} className="h-16 text-center">
+                <Button variant="outline" size="sm" onClick={onLoadMore} className="w-48">
+                  Load More
+                </Button>
+              </TableCell>
+            </TableRow>
           )}
         </TableBody>
       </Table>

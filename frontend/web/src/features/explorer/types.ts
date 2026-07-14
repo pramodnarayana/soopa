@@ -1,4 +1,5 @@
 export interface FilterRule {
+  id?: string
   field: string
   operator: 'eq' | 'neq' | 'contains' | 'in'
   value: string | number | boolean | any[]

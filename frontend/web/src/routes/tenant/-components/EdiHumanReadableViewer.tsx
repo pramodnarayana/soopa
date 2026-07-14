@@ -1,11 +1,6 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { AlertTriangle } from 'lucide-react';
-
-interface EdiDictionary {
-  segments: Record<string, { info: string; elements: string[] }>;
-  elements: Record<string, string>;
-}
+import { useEdiDictionary } from './useEdiDictionary';
+import { groupValidationErrors } from './ediErrors';
 
 interface ViewerProps {
   data: any; // The JSON AST
@@ -13,61 +8,7 @@ interface ViewerProps {
 }
 
 export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) {
-  const [dictionary, setDictionary] = useState<EdiDictionary | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchDictionary = async () => {
-      setLoading(true);
-
-      // 1. Determine standard and version
-      let standard = 'x12';
-      let version = '5011';
-
-      if (data?.interchange_ISA || (Array.isArray(data) && data[0]?.interchange_ISA)) {
-        standard = 'x12';
-        const isaWrapper = Array.isArray(data) ? data[0].interchange_ISA : data.interchange_ISA;
-        const isa = Array.isArray(isaWrapper) ? isaWrapper[0] : isaWrapper;
-        if (isa?.ISA?.ISA12) {
-          const v = isa.ISA.ISA12.trim();
-          if (v.length === 5) {
-            version = v.substring(2) + '0'; // e.g. 00401 -> 4010
-          }
-        }
-      } else if (data?.interchange_UNB || (Array.isArray(data) && data[0]?.interchange_UNB)) {
-        standard = 'edifact';
-        version = 'd96a'; // default edifact version
-      }
-
-      try {
-        // 2. Fetch base dictionary
-        const baseRes = await axios.get(`/edidescription/${standard}.json`);
-        let finalDict = baseRes.data;
-
-        // 3. Try fetching version-specific override
-        try {
-          const overrideRes = await axios.get(`/edidescription/${standard}_${version}.json`);
-          // Deep merge the overrides
-          finalDict = {
-            segments: { ...finalDict.segments, ...(overrideRes.data.segments || {}) },
-            elements: { ...finalDict.elements, ...(overrideRes.data.elements || {}) }
-          };
-        } catch {
-          // Version-specific override is optional, so we ignore 404s
-          console.log(`No version override found for ${standard}_${version}.json, using base dictionary.`);
-        }
-
-        setDictionary(finalDict);
-      } catch (err) {
-        console.error(`Failed to load base dictionary for ${standard}`, err);
-        setDictionary(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDictionary();
-  }, [data]);
+  const { dictionary, loading } = useEdiDictionary(data);
 
   if (loading) {
     return <div className="p-4 text-slate-500 animate-pulse">Loading dictionary...</div>;
@@ -77,65 +18,7 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
     return <div className="p-4 text-red-500">Failed to load EDI descriptions.</div>;
   }
 
-  // Parse validation errors from raw strings into structured objects
-  const errorMap = new Map<string, any[]>();
-
-  const parseBotsError = (errStr: string) => {
-    let code = "UNKNOWN";
-    let segment: string | null = null;
-    let element: string | null = null;
-    let globalMessage = errStr;
-    let localMessage = errStr;
-
-    const codeMatch = errStr.match(/^\[([A-Z0-9]+)\]/);
-    if (codeMatch) code = codeMatch[1];
-
-    const fieldMatch = errStr.match(/Record "([^"]+)" field "([^"]+)" (.*)/);
-    if (fieldMatch) {
-      const recordPath = fieldMatch[1];
-      element = fieldMatch[2];
-      const issue = fieldMatch[3];
-
-      segment = recordPath.split("-").pop() || null;
-      if (issue.toLowerCase().includes("mandatory")) {
-        globalMessage = `${element} is missing`;
-        localMessage = `Missing`;
-      } else {
-        globalMessage = `${element} ${issue}`;
-        localMessage = issue.charAt(0).toUpperCase() + issue.slice(1);
-      }
-    } else {
-      const countMatch = errStr.match(/Count in ([A-Z0-9]+)-([A-Z0-9]+) is \d+; should be equal to number of segments (\d+)/);
-      if (countMatch) {
-        segment = countMatch[1];
-        element = countMatch[2];
-        const expected = countMatch[3];
-        globalMessage = `${element} must be ${expected}`;
-        localMessage = `Must be ${expected}`;
-      } else if (codeMatch) {
-        const clean = errStr.replace(/^\[[A-Z0-9]+\](:\s*| line \d+ pos \d+:\s*)?/, '');
-        globalMessage = clean;
-        localMessage = clean;
-      }
-    }
-
-    return { code, segment, element, globalMessage, localMessage, raw: errStr };
-  };
-
-  const parsedErrors = validationErrors.map(errStr => {
-    if (typeof errStr === 'string') {
-      return parseBotsError(errStr);
-    }
-    return errStr; // fallback just in case
-  });
-
-  parsedErrors.forEach(err => {
-    if (err && err.segment) {
-      const list = errorMap.get(err.segment) || [];
-      list.push(err);
-      errorMap.set(err.segment, list);
-    }
-  });
+  const { parsedErrors, errorMap } = groupValidationErrors(validationErrors);
 
   // Recursive function to render a node
   const renderNode = (key: string, value: any, depth = 0) => {

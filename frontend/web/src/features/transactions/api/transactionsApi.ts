@@ -38,7 +38,7 @@ export function useTransactions(params: {
       return response.data
     },
     enabled: !!auth.user?.access_token,
-    refetchInterval: 2000,
+    refetchInterval: 10000,
   })
 }
 
@@ -53,7 +53,7 @@ export function useTransactionDetail(traceId: string) {
       return response.data
     },
     enabled: !!traceId && !!auth.user?.access_token,
-    refetchInterval: 2000,
+    refetchInterval: 10000,
   })
 }
 

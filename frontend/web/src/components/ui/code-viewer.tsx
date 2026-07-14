@@ -31,7 +31,7 @@ export function CodeViewer({ value, language = 'json', className = '', height = 
     <div className={`relative border border-slate-200 rounded-xl overflow-hidden bg-white ${className} group`}>
       <button
         onClick={handleCopy}
-        className="absolute top-4 right-8 z-50 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+        className="absolute top-4 right-8 z-50 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 transition-opacity shadow-sm"
         title="Copy to clipboard"
       >
         {copied ? (

@@ -37,11 +37,45 @@ const availableFields = [
   { label: 'Load Number', value: 'business_metadata.load_number' },
 ]
 
+function ExplorerCommonFields({ item }: { item: any }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-6">
+      <div className="space-y-1.5">
+        <Label className="text-xs text-slate-500">Transaction Type</Label>
+        <Input readOnly value={item.transaction_type || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-slate-500">ISA Sender</Label>
+        <Input readOnly value={item.sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-slate-500">ISA Receiver</Label>
+        <Input readOnly value={item.receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-slate-500">GS Sender</Label>
+        <Input readOnly value={item.gs_sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-slate-500">GS Receiver</Label>
+        <Input readOnly value={item.gs_receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+      </div>
+    </div>
+  )
+}
+
 export function ExplorerLayout() {
   const [filters, setFilters] = useState<FilterRule[]>([])
+  const [activeTab, setActiveTab] = useState('messages')
+  const [messagesOffset, setMessagesOffset] = useState(0)
+  const [jsonOffset, setJsonOffset] = useState(0)
+  const limit = 100
 
-  const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(filters)
-  const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(filters)
+  const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(filters, limit, messagesOffset, activeTab === 'messages')
+  const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(filters, limit, jsonOffset, activeTab === 'json')
+
+  const handleMessagesLoadMore = () => setMessagesOffset(prev => prev + limit)
+  const handleJsonLoadMore = () => setJsonOffset(prev => prev + limit)
 
   return (
     <div className="space-y-6">
@@ -52,7 +86,7 @@ export function ExplorerLayout() {
         </div>
       </div>
 
-      <Tabs defaultValue="messages" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-slate-100/50 p-1 rounded-lg border border-slate-200">
           <TabsTrigger value="messages" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4">
             <div className="flex items-center gap-2">
@@ -82,28 +116,7 @@ export function ExplorerLayout() {
             }
             renderExpanded={(item) => (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-6">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Transaction Type</Label>
-                    <Input readOnly value={item.transaction_type || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">ISA Sender</Label>
-                    <Input readOnly value={item.sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">ISA Receiver</Label>
-                    <Input readOnly value={item.receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">GS Sender</Label>
-                    <Input readOnly value={item.gs_sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">GS Receiver</Label>
-                    <Input readOnly value={item.gs_receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                  </div>
-                </div>
+                <ExplorerCommonFields item={item} />
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 mb-2">Raw Payload</h4>
                   <CodeViewer
@@ -114,6 +127,8 @@ export function ExplorerLayout() {
                 </div>
               </div>
             )}
+            onLoadMore={handleMessagesLoadMore}
+            hasMore={messagesData?.items.length === limit}
           />
         </TabsContent>
 
@@ -131,28 +146,7 @@ export function ExplorerLayout() {
             }
             renderExpanded={(item) => (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-6">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Transaction Type</Label>
-                  <Input readOnly value={item.transaction_type || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">ISA Sender</Label>
-                  <Input readOnly value={item.sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">ISA Receiver</Label>
-                  <Input readOnly value={item.receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">GS Sender</Label>
-                  <Input readOnly value={item.gs_sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">GS Receiver</Label>
-                  <Input readOnly value={item.gs_receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
-                </div>
-              </div>
+              <ExplorerCommonFields item={item} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700 mb-2">Business Metadata</h4>
@@ -173,6 +167,8 @@ export function ExplorerLayout() {
               </div>
             </div>
             )}
+            onLoadMore={handleJsonLoadMore}
+            hasMore={jsonData?.items.length === limit}
           />
         </TabsContent>
       </Tabs>

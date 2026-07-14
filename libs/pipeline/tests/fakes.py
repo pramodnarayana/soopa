@@ -75,12 +75,16 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         self.local_as2_partners: dict[str, dict[str, Any]] = {}
 
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
-        msg = self.edi_messages.get(trace_id)
-        if msg:
+        raw = self.edi_messages.get(trace_id)
+        if raw:
             import uuid
             from datetime import UTC, datetime
 
             from domain.models import EdiMessageDomainModel
+
+            # Shallow-copy so mutations inside the domain model (or test assertions)
+            # don't bleed back into the fake store and cause inter-test coupling.
+            msg = dict(raw)
 
             # Auto-fill required fields if missing
             if "id" not in msg:

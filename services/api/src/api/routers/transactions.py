@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -7,6 +8,8 @@ from pydantic import BaseModel
 
 from api.core.uow import UnitOfWork
 from api.dependencies import get_tenant_uow
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["Transactions"])
 
@@ -196,9 +199,12 @@ async def get_transaction(
                         if edi_msg_dict["connection_type"] == "UNKNOWN":
                             edi_msg_dict["connection_type"] = "SFTP"
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to resolve trading_partner_name from outbound route "
+                    f"for trace_id={trace_id}",
+                    exc_info=True,
+                )
 
-        # 2. Fallback to API routing metadata
         if not trading_partner_name:
             for j in result["edi_json"]:
                 bm = j.business_metadata or {}
@@ -227,7 +233,11 @@ async def get_transaction(
                             trading_partner_name = name
                             break
                     except Exception:
-                        pass
+                        logger.warning(
+                            "Failed to resolve trading_partner_name from business_metadata "
+                            f"for trace_id={trace_id}",
+                            exc_info=True,
+                        )
 
         # 3. Fallback to Webhook URL for inbound deliveries
         if not trading_partner_name and msg.direction == "INBOUND":
@@ -255,7 +265,11 @@ async def get_transaction(
                         if webhook_url:
                             trading_partner_name = f"Webhook: {webhook_url}"
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to resolve trading_partner_name from inbound route/webhook "
+                    f"for trace_id={trace_id}",
+                    exc_info=True,
+                )
 
         return TransactionDetailResponse(
             edi_message=edi_msg_dict,

@@ -14,23 +14,24 @@ def override_get_current_tenant_id():
     return 1
 
 
-mock_uow = AsyncMock()
-mock_repo = AsyncMock()
-mock_repo.explorer_list_edi_messages.return_value = []
-mock_repo.explorer_list_edi_json.return_value = []
-mock_uow.data_plane = mock_repo
-mock_uow.__aenter__.return_value = mock_uow
+@pytest.fixture
+def mock_uow():
+    """Fresh UoW + repo mock for every test to prevent inter-test pollution."""
+    _mock_repo = AsyncMock()
+    _mock_repo.explorer_list_edi_messages.return_value = []
+    _mock_repo.explorer_list_edi_json.return_value = []
 
-
-def override_get_tenant_uow():
-    return mock_uow
+    _mock_uow = AsyncMock()
+    _mock_uow.data_plane = _mock_repo
+    _mock_uow.__aenter__.return_value = _mock_uow
+    return _mock_uow
 
 
 @pytest.fixture(autouse=True)
-def setup_dependencies():
+def setup_dependencies(mock_uow):
     app.dependency_overrides[get_current_user_profile] = override_get_current_user_profile
     app.dependency_overrides[get_current_tenant_id] = override_get_current_tenant_id
-    app.dependency_overrides[get_tenant_uow] = override_get_tenant_uow
+    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     yield
     app.dependency_overrides.clear()
 
@@ -38,11 +39,33 @@ def setup_dependencies():
 client = TestClient(app)
 
 
-def test_explorer_edi_messages():
+def test_explorer_edi_messages(mock_uow):
     response = client.post("/api/v1/explorer/edi-messages", json={"filters": []})
     assert response.status_code == 200
+    mock_uow.data_plane.explorer_list_edi_messages.assert_called_once_with(
+        tenant_id=1, filters=[], limit=50, offset=0
+    )
 
 
-def test_explorer_edi_json():
+def test_explorer_edi_json(mock_uow):
     response = client.post("/api/v1/explorer/edi-json", json={"filters": []})
     assert response.status_code == 200
+    mock_uow.data_plane.explorer_list_edi_json.assert_called_once_with(
+        tenant_id=1, filters=[], limit=50, offset=0
+    )
+
+
+def test_explorer_rejects_invalid_filter_field(mock_uow):
+    response = client.post(
+        "/api/v1/explorer/edi-messages",
+        json={"filters": [{"field": "tenant_id", "operator": "eq", "value": "1"}]},
+    )
+    assert response.status_code == 422
+
+
+def test_explorer_rejects_invalid_operator(mock_uow):
+    response = client.post(
+        "/api/v1/explorer/edi-messages",
+        json={"filters": [{"field": "status", "operator": "like", "value": "DELIVERED"}]},
+    )
+    assert response.status_code == 422

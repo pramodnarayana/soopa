@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.dependencies import get_current_tenant_id
+from pydantic import BaseModel, ConfigDict
 
 from api.adapters.http.dtos import (
     CreateOutboundEdiHeaderRequest,
@@ -20,7 +21,26 @@ from api.domain.models import (
 router = APIRouter(prefix="/api/v1/edi-headers", tags=["EDI Headers"])
 
 
-@router.get("", status_code=status.HTTP_200_OK)
+class OutboundEdiHeaderItem(BaseModel):
+    """Typed response schema for a single Outbound EDI Header entry."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    trading_partner_id: str | None = None
+    isa_sender_id: str
+    isa_sender_qualifier: str | None = None
+    isa_receiver_id: str
+    isa_receiver_qualifier: str | None = None
+    gs_sender_id: str
+    gs_receiver_id: str
+    transaction_type: str
+    default_standard: str
+    default_version: str
+
+
+@router.get("", response_model=list[OutboundEdiHeaderItem], status_code=status.HTTP_200_OK)
 async def list_edi_headers(
     tenant_id: int = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
@@ -31,22 +51,21 @@ async def list_edi_headers(
     async with uow:
         service = EdiHeaderService(global_repo=uow.control_plane)
         headers = await service.get_outbound_edi_headers(tenant_id)
-
         return [
-            {
-                "id": h.id,
-                "name": h.name,
-                "trading_partner_id": h.trading_partner_id,
-                "isa_sender_id": h.isa_sender_id,
-                "isa_sender_qualifier": h.isa_sender_qualifier,
-                "isa_receiver_id": h.isa_receiver_id,
-                "isa_receiver_qualifier": h.isa_receiver_qualifier,
-                "gs_sender_id": h.gs_sender_id,
-                "gs_receiver_id": h.gs_receiver_id,
-                "transaction_type": h.transaction_type,
-                "default_standard": h.default_standard,
-                "default_version": h.default_version,
-            }
+            OutboundEdiHeaderItem(
+                id=h.id,
+                name=h.name,
+                trading_partner_id=h.trading_partner_id,
+                isa_sender_id=h.isa_sender_id,
+                isa_sender_qualifier=h.isa_sender_qualifier,
+                isa_receiver_id=h.isa_receiver_id,
+                isa_receiver_qualifier=h.isa_receiver_qualifier,
+                gs_sender_id=h.gs_sender_id,
+                gs_receiver_id=h.gs_receiver_id,
+                transaction_type=h.transaction_type,
+                default_standard=h.default_standard,
+                default_version=h.default_version,
+            )
             for h in headers
         ]
 

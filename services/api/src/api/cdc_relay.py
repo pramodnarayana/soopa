@@ -12,6 +12,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal/cdc", tags=["CDC Relay"])
 
+# ---------------------------------------------------------------------------
+# Event-type routing constants — single source of truth.
+# Adding a new pipeline event type that belongs on the transform queue only
+# requires editing this set; no if/elif chains to update.
+# ---------------------------------------------------------------------------
+_TRANSFORM_QUEUE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        PipelineEventType.TRANSFORM_EVENT,
+        PipelineEventType.TRANSFORM_COMPLETED,
+        PipelineEventType.DELIVERY_COMPLETED,
+        "json.received",
+        "edi_message.received",
+    }
+)
+
 
 class DebeziumUnwrappedEvent(BaseModel):
     """
@@ -107,23 +122,11 @@ async def relay_cdc_event(
                 payload_dict = event_payload
 
             if event.event_type in (
-                PipelineEventType.TRANSFORM_EVENT,
-                PipelineEventType.TRANSFORM_COMPLETED,
-                PipelineEventType.DELIVERY_COMPLETED,
-                "json.received",
-                "edi_message.received",
-                PipelineEventType.DELIVER_EVENT,
+                _TRANSFORM_QUEUE_EVENT_TYPES | {PipelineEventType.DELIVER_EVENT}
             ):
                 queue_name = (
                     MessageQueueName.TRANSFORM_QUEUE
-                    if event.event_type
-                    in (
-                        PipelineEventType.TRANSFORM_EVENT,
-                        PipelineEventType.TRANSFORM_COMPLETED,
-                        PipelineEventType.DELIVERY_COMPLETED,
-                        "json.received",
-                        "edi_message.received",
-                    )
+                    if event.event_type in _TRANSFORM_QUEUE_EVENT_TYPES
                     else MessageQueueName.DELIVER_QUEUE
                 )
 

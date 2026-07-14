@@ -126,15 +126,6 @@ class TranslationService:
             tenant_id=edi_json.tenant_id,
         )
 
-        # Update the EdiJson record with the generated EDI headers
-        await self.repository.update_edi_json(
-            trace_id=trace_id,
-            sender_id=route_config.get("isa_sender_id"),
-            receiver_id=route_config.get("isa_receiver_id"),
-            gs_sender_id=route_config.get("gs_sender_id"),
-            gs_receiver_id=route_config.get("gs_receiver_id"),
-        )
-
         transform_completed_key = str(
             uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:TRANSFORM_COMPLETED")
         )

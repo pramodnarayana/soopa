@@ -80,6 +80,10 @@ async def validation_exception_handler(
         error_dict = dict(error)
         error_dict.pop("input", None)
         error_dict.pop("url", None)
+        # 'ctx' may contain the raw exception object, which is not JSON-serializable.
+        ctx = error_dict.pop("ctx", None)
+        if ctx:
+            error_dict["ctx"] = {k: str(v) for k, v in ctx.items()}
         sanitized_errors.append(error_dict)
 
     logger.error(f"422 Error at {request.url.path}: {sanitized_errors}")

@@ -25,6 +25,9 @@ from api.domain.models import (
 
 router = APIRouter(prefix="/api/v1/routes", tags=["Routes"])
 
+# Built once at import time — TypeAdapter construction is not free.
+_route_list_adapter = TypeAdapter(list[RouteItemResponse])
+
 
 @router.get("", response_model=list[RouteItemResponse], status_code=status.HTTP_200_OK)
 async def list_routes(
@@ -37,9 +40,7 @@ async def list_routes(
     async with uow:
         service = RouteService(global_repo=uow.control_plane)
         routes = await service.list_routes(tenant_id)
-
-        _adapter = TypeAdapter(list[RouteItemResponse])
-        return _adapter.validate_python(routes)
+        return _route_list_adapter.validate_python(routes)
 
 
 @router.post("/inbound", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)

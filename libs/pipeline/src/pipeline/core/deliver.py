@@ -283,10 +283,12 @@ class DeliveryService:
             )
         except RuntimeError:
             # Misconfiguration (e.g. NullAS2DeliveryAdapter) — treat as a terminal failure
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
             return
         except Exception:
+            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"AS2 HTTP transmission failed for trace_id={trace_id}")
             return

@@ -567,14 +567,19 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> int | None:
         result = await self.session.execute(
-            select(InboundRoute.tenant_id)
-            .where(
+            select(InboundRoute.tenant_id).where(
                 InboundRoute.isa_sender_id == isa_sender_id,
                 InboundRoute.isa_receiver_id == isa_receiver_id,
             )
-            .limit(1)
         )
-        return result.scalar_one_or_none()
+        rows = result.scalars().all()
+        unique_tenants = set(rows)
+        if len(unique_tenants) > 1:
+            raise ValueError(
+                f"Ambiguous ISA pair ({isa_sender_id!r} -> {isa_receiver_id!r}) "
+                f"matched {len(unique_tenants)} distinct tenants: {unique_tenants}"
+            )
+        return rows[0] if rows else None
 
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
@@ -752,6 +757,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             record.default_standard = cmd.default_standard
         if not isinstance(cmd.default_version, UnsetType):
             record.default_version = cmd.default_version
+        await self.session.flush()
         return True
 
     async def delete_outbound_edi_header(self, tenant_id: int, header_id: UUID) -> bool:
@@ -868,6 +874,9 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
     ) -> Sequence[Any]:
         from database.models.data_plane import EdiMessage
 
+        limit = min(max(1, limit), 200)
+        offset = max(0, offset)
+
         stmt = select(EdiMessage).where(EdiMessage.tenant_id == tenant_id)
         if direction:
             stmt = stmt.where(EdiMessage.direction == direction)
@@ -886,6 +895,26 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    # Allowed filter fields and operators — whitelist to prevent arbitrary column access.
+    _ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})
+    _ALLOWED_FIELDS: frozenset[str] = frozenset(
+        {
+            "trading_partner_id",
+            "direction",
+            "status",
+            "transaction_type",
+            "sender_id",
+            "receiver_id",
+            "gs_sender_id",
+            "gs_receiver_id",
+            "format_standard",
+            "connection_type",
+            "business_metadata.shipment_id",
+            "business_metadata.purchase_order_id",
+            "business_metadata.invoice_number",
+        }
+    )
+
     def _apply_dynamic_filters(self, stmt: Any, model: Any, filters: list[dict[str, Any]]) -> Any:
         from sqlalchemy import or_
 
@@ -893,7 +922,11 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
             field = f.get("field")
             operator = f.get("operator", "eq")
             value = f.get("value")
-            if not field or not value:
+            if not field or value is None:
+                continue
+
+            # Reject unknown fields and operators
+            if field not in self._ALLOWED_FIELDS or operator not in self._ALLOWED_OPERATORS:
                 continue
 
             if field == "trading_partner_id":

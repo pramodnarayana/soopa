@@ -9,36 +9,48 @@ export const explorerKeys = {
   json: (filters: FilterRule[]) => [...explorerKeys.all, 'json', filters] as const,
 }
 
-export function useExplorerEdiMessages(filters: FilterRule[]) {
+export function useExplorerQuery<T>(
+  queryKeyArray: readonly unknown[],
+  url: string,
+  filters: FilterRule[],
+  limit: number,
+  offset: number,
+  enabledOverride: boolean = true
+) {
   const auth = useAuth()
 
   return useQuery({
-    queryKey: explorerKeys.messages(filters),
+    queryKey: [...queryKeyArray, limit, offset],
     queryFn: async () => {
-      const response = await axios.post<ExplorerResponse<ExplorerEdiMessage>>(`/api/v1/explorer/edi-messages`,
-        { filters },
+      const response = await axios.post<ExplorerResponse<T>>(url,
+        { filters, limit, offset },
         { headers: { Authorization: `Bearer ${auth.user?.access_token}` } }
       )
       return response.data
     },
-    enabled: !!auth.user?.access_token,
+    enabled: !!auth.user?.access_token && enabledOverride,
     refetchInterval: 2000,
   })
 }
 
-export function useExplorerEdiJson(filters: FilterRule[]) {
-  const auth = useAuth()
+export function useExplorerEdiMessages(filters: FilterRule[], limit: number = 100, offset: number = 0, enabled: boolean = true) {
+  return useExplorerQuery<ExplorerEdiMessage>(
+    explorerKeys.messages(filters),
+    '/api/v1/explorer/edi-messages',
+    filters,
+    limit,
+    offset,
+    enabled
+  )
+}
 
-  return useQuery({
-    queryKey: explorerKeys.json(filters),
-    queryFn: async () => {
-      const response = await axios.post<ExplorerResponse<ExplorerEdiJson>>(`/api/v1/explorer/edi-json`,
-        { filters },
-        { headers: { Authorization: `Bearer ${auth.user?.access_token}` } }
-      )
-      return response.data
-    },
-    enabled: !!auth.user?.access_token,
-    refetchInterval: 2000,
-  })
+export function useExplorerEdiJson(filters: FilterRule[], limit: number = 100, offset: number = 0, enabled: boolean = true) {
+  return useExplorerQuery<ExplorerEdiJson>(
+    explorerKeys.json(filters),
+    '/api/v1/explorer/edi-json',
+    filters,
+    limit,
+    offset,
+    enabled
+  )
 }

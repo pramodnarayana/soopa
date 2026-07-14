@@ -26,8 +26,8 @@ def memory_queue() -> InMemoryQueueAdapter:  # type: ignore[misc]
 client = TestClient(app)
 
 
-def test_cdc_relay_successful_translate_routing(memory_queue: InMemoryQueueAdapter) -> None:
-    """Tests the CDC relay correctly handles an outbox TRANSLATE insert event."""
+def test_cdc_relay_successful_transform_routing(memory_queue: InMemoryQueueAdapter) -> None:
+    """Tests the CDC relay correctly routes an outbox TRANSFORM_EVENT insert to TransformQueue."""
     payload = {
         "__op": "c",
         "__table": "outbox",

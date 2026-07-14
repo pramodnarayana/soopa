@@ -491,15 +491,17 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         trading_partner_id: str | None = None,
         tenant_id: int | None = None,
     ) -> dict[str, Any] | None:
-        from database.models.control_plane import OutboundEdiHeader, OutboundRoute
+        from database.models.data_plane import OutboundEdiHeader, OutboundRoute
 
         query = select(OutboundEdiHeader)
         if route_id:
-            route_result = await self.session.execute(
-                select(OutboundRoute.trading_partner_id, OutboundRoute.tenant_id).where(
-                    OutboundRoute.id == uuid.UUID(route_id)
-                )
+            route_query = select(OutboundRoute.trading_partner_id, OutboundRoute.tenant_id).where(
+                OutboundRoute.id == uuid.UUID(route_id)
             )
+            if tenant_id is not None:
+                route_query = route_query.where(OutboundRoute.tenant_id == tenant_id)
+
+            route_result = await self.session.execute(route_query)
             route_record = route_result.first()
             if not route_record:
                 return None
@@ -507,6 +509,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 OutboundEdiHeader.trading_partner_id == route_record.trading_partner_id,
                 OutboundEdiHeader.tenant_id == route_record.tenant_id,
             )
+            if tenant_id is not None:
+                query = query.where(OutboundEdiHeader.tenant_id == tenant_id)
         elif trading_partner_id and tenant_id is not None:
             query = query.where(
                 OutboundEdiHeader.trading_partner_id == trading_partner_id,

@@ -172,65 +172,71 @@ export function TransactionTimeline({ transaction }: Props) {
     </Card>
   )
 
-  const renderOutboundDeliveryBlock = () => (
-    <Card>
-      <CardHeader className="pb-3 border-b border-slate-100">
-        <CardTitle className={`text-lg ${colorClass}`}>
-          Delivered to {transaction.trading_partner_name || (msg.connection_type && msg.connection_type !== 'UNKNOWN' ? msg.connection_type : 'Partner')}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-100">
-          <div className="flex items-center gap-3">
-            {msg.status?.toUpperCase() === 'DELIVERED' ? (
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-            ) : isFailed ? (
-              <AlertCircle className="w-6 h-6 text-red-500" />
-            ) : (
-              <Activity className="w-6 h-6 text-amber-500" />
-            )}
-            <div>
-              <div className="font-medium text-slate-900">Delivery Status</div>
-              <div className="text-sm text-slate-500 mt-1">
-                {transaction.trading_partner_name && (
-                  <div className="mb-0.5">Trading Partner: {transaction.trading_partner_name}</div>
-                )}
-                <div>Connection Type: {msg.connection_type && msg.connection_type !== 'UNKNOWN' ? msg.connection_type : 'Default Routing'}</div>
+  const renderOutboundDeliveryBlock = () => {
+    const isDeliveryFailed = ['FAILED', 'ERROR'].includes(msg.status?.toUpperCase() || '')
+    const isDelivered = msg.status?.toUpperCase() === 'DELIVERED'
+    const deliveryColorClass = isDeliveryFailed ? 'text-red-600' : isDelivered ? 'text-emerald-600' : 'text-amber-600'
+
+    return (
+      <Card>
+        <CardHeader className="pb-3 border-b border-slate-100">
+          <CardTitle className={`text-lg ${deliveryColorClass}`}>
+            Delivered to {transaction.trading_partner_name || (msg.connection_type && msg.connection_type !== 'UNKNOWN' ? msg.connection_type : 'Partner')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-4">
+          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-100">
+            <div className="flex items-center gap-3">
+              {isDelivered ? (
+                <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              ) : isDeliveryFailed ? (
+                <AlertCircle className="w-6 h-6 text-red-500" />
+              ) : (
+                <Activity className="w-6 h-6 text-amber-500" />
+              )}
+              <div>
+                <div className="font-medium text-slate-900">Delivery Status</div>
+                <div className="text-sm text-slate-500 mt-1">
+                  {transaction.trading_partner_name && (
+                    <div className="mb-0.5">Trading Partner: {transaction.trading_partner_name}</div>
+                  )}
+                  <div>Connection Type: {msg.connection_type && msg.connection_type !== 'UNKNOWN' ? msg.connection_type : 'Default Routing'}</div>
+                </div>
               </div>
             </div>
+            {renderBadge(msg.status)}
           </div>
-          {renderBadge(msg.status)}
-        </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4">
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Sender</div>
-            <div className="font-mono text-slate-900">{msg.sender_id || '-'}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Sender</div>
+              <div className="font-mono text-slate-900">{msg.sender_id || '-'}</div>
+            </div>
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Receiver</div>
+              <div className="font-mono text-slate-900">{msg.receiver_id || '-'}</div>
+            </div>
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Sender</div>
+              <div className="font-mono text-slate-900">{msg.gs_sender_id || '-'}</div>
+            </div>
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Receiver</div>
+              <div className="font-mono text-slate-900">{msg.gs_receiver_id || '-'}</div>
+            </div>
           </div>
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Receiver</div>
-            <div className="font-mono text-slate-900">{msg.receiver_id || '-'}</div>
+          <div className="mt-4">
+            <div className="text-sm font-semibold text-slate-700 mb-2">Raw EDI Payload</div>
+            <CodeViewer
+              language="edi"
+              height={250}
+              value={msg.edi_data || 'No payload available (might be stored in blob).'}
+            />
           </div>
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Sender</div>
-            <div className="font-mono text-slate-900">{msg.gs_sender_id || '-'}</div>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Receiver</div>
-            <div className="font-mono text-slate-900">{msg.gs_receiver_id || '-'}</div>
-          </div>
-        </div>
-        <div className="mt-4">
-          <div className="text-sm font-semibold text-slate-700 mb-2">Raw EDI Payload</div>
-          <CodeViewer
-            language="edi"
-            height={250}
-            value={msg.edi_data || 'No payload available (might be stored in blob).'}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  )
+        </CardContent>
+      </Card>
+    )
+  }
 
   const renderInboundDeliveryBlock = () => (
     <Card>

@@ -17,7 +17,7 @@ export interface TransactionDetailResponse {
   edi_message: {
     id: string
     trace_id: string
-    direction: string
+    direction: 'INBOUND' | 'OUTBOUND'
     connection_type: string | null
     sender_id: string | null
     receiver_id: string | null

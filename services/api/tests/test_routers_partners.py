@@ -402,12 +402,13 @@ def test_list_tenant_partners(client, fake_uow):
 def test_tenant_as2_certificates(client, fake_uow):
     from uuid import uuid4
 
+    # Use a random UUID that doesn't exist in the fake UoW — expect 404 for both endpoints.
     p_id = str(uuid4())
 
-    # Export
+    # Export — partner not found, must return 404
     resp = client.get(f"/api/v1/trading-partners/as2/{p_id}/certificates/export")
-    assert resp.status_code in (200, 404, 500, 403, 501)
+    assert resp.status_code == 404
 
-    # Rotate
+    # Rotate — partner not found, must return 404
     resp = client.put(f"/api/v1/trading-partners/as2/{p_id}/certificates/rotate")
-    assert resp.status_code in (200, 404, 500, 403, 501)
+    assert resp.status_code == 404
