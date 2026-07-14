@@ -170,7 +170,7 @@ async def get_transaction(
         trading_partner_name, new_conn_type = await uow.resolve_trading_partner_name(
             msg, result["edi_json"]
         )
-        if new_conn_type and edi_msg_dict.get("connection_type") == "UNKNOWN":
+        if new_conn_type and edi_msg_dict.get("connection_type") in ("UNKNOWN", None):
             edi_msg_dict["connection_type"] = new_conn_type
 
         return TransactionDetailResponse(

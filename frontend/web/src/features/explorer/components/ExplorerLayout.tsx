@@ -89,9 +89,9 @@ export function ExplorerLayout() {
     if (messagesData?.items) {
       setAccumulatedMessages(prev => {
         if (messagesOffset === 0) return messagesData.items
-        const next = [...prev]
-        next.splice(messagesOffset, limit, ...messagesData.items)
-        return next
+        const nextMap = new Map(prev.map(i => [i.id, i]))
+        messagesData.items.forEach((i: any) => nextMap.set(i.id, i))
+        return Array.from(nextMap.values())
       })
     }
   }, [messagesData, messagesOffset])
@@ -100,9 +100,9 @@ export function ExplorerLayout() {
     if (jsonData?.items) {
       setAccumulatedJson(prev => {
         if (jsonOffset === 0) return jsonData.items
-        const next = [...prev]
-        next.splice(jsonOffset, limit, ...jsonData.items)
-        return next
+        const nextMap = new Map(prev.map(i => [i.id, i]))
+        jsonData.items.forEach((i: any) => nextMap.set(i.id, i))
+        return Array.from(nextMap.values())
       })
     }
   }, [jsonData, jsonOffset])

@@ -570,6 +570,7 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             select(InboundRoute.tenant_id).where(
                 InboundRoute.isa_sender_id == isa_sender_id,
                 InboundRoute.isa_receiver_id == isa_receiver_id,
+                InboundRoute.active.is_(True),
             )
         )
         rows = result.scalars().all()
@@ -916,7 +917,7 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
     )
 
     def _apply_dynamic_filters(self, stmt: Any, model: Any, filters: list[dict[str, Any]]) -> Any:
-        from sqlalchemy import or_
+        from sqlalchemy import and_, or_
 
         for f in filters:
             field = f.get("field")
@@ -931,15 +932,45 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
 
             if field == "trading_partner_id":
                 if hasattr(model, "sender_id") and hasattr(model, "receiver_id"):
+                    has_gs = hasattr(model, "gs_sender_id") and hasattr(model, "gs_receiver_id")
+
                     if operator == "eq":
-                        stmt = stmt.where(or_(model.sender_id == value, model.receiver_id == value))
-                    elif operator == "contains":
-                        stmt = stmt.where(
-                            or_(
-                                model.sender_id.ilike(f"%{value}%"),
-                                model.receiver_id.ilike(f"%{value}%"),
+                        conds = [model.sender_id == value, model.receiver_id == value]
+                        if has_gs:
+                            conds.extend(
+                                [model.gs_sender_id == value, model.gs_receiver_id == value]
                             )
-                        )
+                        stmt = stmt.where(or_(*conds))
+
+                    elif operator == "neq":
+                        conds = [model.sender_id != value, model.receiver_id != value]
+                        if has_gs:
+                            conds.extend(
+                                [model.gs_sender_id != value, model.gs_receiver_id != value]
+                            )
+                        stmt = stmt.where(and_(*conds))
+
+                    elif operator == "contains":
+                        conds = [
+                            model.sender_id.ilike(f"%{value}%"),
+                            model.receiver_id.ilike(f"%{value}%"),
+                        ]
+                        if has_gs:
+                            conds.extend(
+                                [
+                                    model.gs_sender_id.ilike(f"%{value}%"),
+                                    model.gs_receiver_id.ilike(f"%{value}%"),
+                                ]
+                            )
+                        stmt = stmt.where(or_(*conds))
+
+                    elif operator == "in" and isinstance(value, list):
+                        conds = [model.sender_id.in_(value), model.receiver_id.in_(value)]
+                        if has_gs:
+                            conds.extend(
+                                [model.gs_sender_id.in_(value), model.gs_receiver_id.in_(value)]
+                            )
+                        stmt = stmt.where(or_(*conds))
                 continue
 
             if field.startswith("business_metadata.") and hasattr(model, "business_metadata"):
