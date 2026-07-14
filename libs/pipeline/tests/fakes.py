@@ -1,5 +1,6 @@
 from typing import Any
 
+from domain.models import EdiMessageDomainModel
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.storage import StoragePort
 from pipeline.ports.transformer import TransformerPort, TranslatedTransaction
@@ -50,7 +51,11 @@ class FakeTransformerAdapter(TransformerPort):
         ]
 
     async def translate_json_to_edi(
-        self, payload: dict[str, Any], standard: str, transaction_type: str
+        self,
+        payload: dict[str, Any] | list[Any],
+        standard: str,
+        transaction_type: str,
+        route_config: dict[str, Any],
     ) -> bytes:
         self.translate_json_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
@@ -69,8 +74,40 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         self.as2_partners: dict[str, dict[str, Any]] = {}
         self.local_as2_partners: dict[str, dict[str, Any]] = {}
 
-    async def get_edi_message(self, trace_id: str) -> dict[str, Any] | None:
-        return self.edi_messages.get(trace_id)
+    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+        msg = self.edi_messages.get(trace_id)
+        if msg:
+            import uuid
+            from datetime import UTC, datetime
+
+            from domain.models import EdiMessageDomainModel
+
+            # Auto-fill required fields if missing
+            if "id" not in msg:
+                msg["id"] = uuid.uuid4()
+            if "tenant_id" not in msg:
+                msg["tenant_id"] = 1
+            if "created_at" not in msg:
+                msg["created_at"] = datetime.now(UTC)
+            if "updated_at" not in msg:
+                msg["updated_at"] = datetime.now(UTC)
+            if "status" not in msg:
+                msg["status"] = "RECEIVED"
+            if "direction" not in msg:
+                msg["direction"] = "INBOUND"
+
+            # Convert non-UUID trace_id to a valid UUID string (deterministic hash)
+            try:
+                uuid.UUID(str(msg.get("trace_id", trace_id)))
+                msg["trace_id"] = str(msg.get("trace_id", trace_id))
+            except ValueError:
+                import hashlib
+
+                hashed = hashlib.md5(str(msg.get("trace_id", trace_id)).encode()).hexdigest()
+                msg["trace_id"] = str(uuid.UUID(hashed))
+
+            return EdiMessageDomainModel(**msg)
+        return None
 
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
         if trace_id in self.edi_messages:
@@ -84,13 +121,19 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         return False
 
     async def save_api_payload(
-        self, trace_id: str, direction: str, payload: dict[str, Any], status: str
+        self,
+        trace_id: str,
+        direction: str,
+        payload: dict[str, Any],
+        status: str,
+        transaction_type: str | None = None,
+        webhook_url: str | None = None,
     ) -> None:
         self.api_gateway[trace_id] = {
-            "trace_id": trace_id,
             "direction": direction,
             "payload": payload,
             "status": status,
+            "transaction_type": transaction_type,
         }
 
     async def publish_outbox_event(
@@ -111,9 +154,22 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
         return self.api_gateway.get(trace_id)
 
-    async def update_api_payload_status(self, trace_id: str, status: str) -> None:
+    async def update_api_payload_status(
+        self,
+        trace_id: str,
+        status: str,
+        webhook_url: str | None = None,
+        http_status_code: int | None = None,
+        response: str | None = None,
+    ) -> None:
         if trace_id in self.api_gateway:
             self.api_gateway[trace_id]["status"] = status
+            if webhook_url is not None:
+                self.api_gateway[trace_id]["webhook_url"] = webhook_url
+            if http_status_code is not None:
+                self.api_gateway[trace_id]["http_status_code"] = http_status_code
+            if response is not None:
+                self.api_gateway[trace_id]["response"] = response
 
     async def claim_api_payload(self, trace_id: str) -> bool:
         payload = self.api_gateway.get(trace_id)
@@ -169,9 +225,11 @@ class FakeHttpDeliveryAdapter:
         self.delivered: list[dict[str, Any]] = []
         self.status_code = status_code
 
-    async def deliver(self, url: str, payload: bytes, auth_token: str | None = None) -> int:
+    async def deliver(
+        self, url: str, payload: bytes, auth_token: str | None = None
+    ) -> tuple[int, str]:
         self.delivered.append({"url": url, "payload": payload, "auth_token": auth_token})
-        return self.status_code
+        return self.status_code, "Mock response body"
 
 
 class FakeSftpDeliveryAdapter:

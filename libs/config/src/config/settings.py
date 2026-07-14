@@ -94,6 +94,9 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: Literal["development", "staging", "production"] = Field(default="development")
+    edi_environment: Literal["P", "T", "I"] = Field(
+        default="P", description="EDI Environment flag (Production, Test, Information)"
+    )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
     storage_backend: Literal["postgres", "s3"] = Field(default="postgres")
 

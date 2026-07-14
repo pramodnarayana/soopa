@@ -1,4 +1,5 @@
 import pytest
+from domain.events import PipelineEventType
 from fakes import FakeTransformerAdapter, InMemoryRepositoryAdapter, InMemoryStorageAdapter
 from pipeline.core.translate import TranslationService
 
@@ -26,11 +27,13 @@ async def test_translate_edi_to_json_success() -> None:
 
     # Act
     service = TranslationService(transformer, repo)
-    await service.translate(trace_id)
+    from domain.direction import MessageDirection
+
+    await service.translate(trace_id, MessageDirection.INBOUND)
 
     # Assert
-    # 1. EDI message status updated to TRANSLATED
-    assert repo.edi_messages[trace_id]["status"] == "TRANSLATED"
+    # 1. EDI message status is unchanged by TranslationService directly
+    assert repo.edi_messages[trace_id]["status"] == "RECEIVED"
 
     # 2. Transformer was called with correct data
     assert len(transformer.translate_edi_calls) == 1
@@ -50,11 +53,12 @@ async def test_translate_edi_to_json_success() -> None:
     assert api_payload["payload"]["transactions"][0]["transaction_type"] == "850"
     assert api_payload["payload"]["transactions"][0]["fake"] == "json"
 
-    # 5. Outbox event published for DELIVER
+    # 5. Outbox event published for TRANSFORM_COMPLETED
     assert len(repo.outbox) == 1
     outbox_event = repo.outbox[0]
-    assert outbox_event["event_type"] == "DELIVER"
+    assert outbox_event["event_type"] == PipelineEventType.TRANSFORM_COMPLETED
     assert outbox_event["payload"]["trace_id"] == trace_id
+    assert outbox_event["payload"]["direction"] == "INBOUND"
 
 
 async def test_translate_missing_message_raises_error() -> None:
@@ -64,5 +68,7 @@ async def test_translate_missing_message_raises_error() -> None:
 
     service = TranslationService(transformer, repo)
 
+    from domain.direction import MessageDirection
+
     with pytest.raises(ValueError, match="No EDI message found for trace_id=invalid-trace"):
-        await service.translate("invalid-trace")
+        await service.translate("invalid-trace", MessageDirection.INBOUND)

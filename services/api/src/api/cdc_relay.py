@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from domain.events import MessageQueueName
+from domain.events import MessageQueueName, PipelineEventType
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, ValidationError
 
@@ -69,7 +69,9 @@ async def relay_cdc_event(
                 f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )
             try:
-                await queue.send(MessageQueueName.CDC_DLQ, {"error": str(e), "payload": raw_event})
+                await queue.send(
+                    MessageQueueName.CDC_DLQ_QUEUE, {"error": str(e), "payload": raw_event}
+                )
             except Exception as dlq_err:
                 logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
                 from fastapi import HTTPException
@@ -105,15 +107,24 @@ async def relay_cdc_event(
                 payload_dict = event_payload
 
             if event.event_type in (
-                "TRANSLATE",
+                PipelineEventType.TRANSFORM_EVENT,
+                PipelineEventType.TRANSFORM_COMPLETED,
+                PipelineEventType.DELIVERY_COMPLETED,
                 "json.received",
                 "edi_message.received",
-                "DELIVER",
+                PipelineEventType.DELIVER_EVENT,
             ):
                 queue_name = (
-                    MessageQueueName.TRANSLATE
-                    if event.event_type in ("TRANSLATE", "json.received", "edi_message.received")
-                    else MessageQueueName.DELIVER
+                    MessageQueueName.TRANSFORM_QUEUE
+                    if event.event_type
+                    in (
+                        PipelineEventType.TRANSFORM_EVENT,
+                        PipelineEventType.TRANSFORM_COMPLETED,
+                        PipelineEventType.DELIVERY_COMPLETED,
+                        "json.received",
+                        "edi_message.received",
+                    )
+                    else MessageQueueName.DELIVER_QUEUE
                 )
 
                 # Validate that the payload contains a trace_id required by data plane workers
@@ -124,7 +135,7 @@ async def relay_cdc_event(
                     )
                     continue
             else:
-                queue_name = MessageQueueName.PROVISIONING
+                queue_name = MessageQueueName.PROVISIONING_QUEUE
 
             message_body = {
                 "idempotency_key": event.idempotency_key,

@@ -6,15 +6,18 @@ from api.domain.models import (
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
+    CreateOutboundEdiHeaderCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookCmd,
     UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
     UpdateInboundRouteCmd,
+    UpdateOutboundEdiHeaderCmd,
     UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
+from database.models.control_plane import OutboundEdiHeader
 
 
 class AS2TradingPartnerRepositoryPort(Protocol):
@@ -93,16 +96,29 @@ class RouteRepositoryPort(Protocol):
         tenant_id: int,
         transaction_type: str | None = None,
     ) -> Any | None: ...
+    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> int | None: ...
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...
 
     async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> UUID: ...
     async def update_outbound_route(
         self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
     ) -> bool: ...
+    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: int, trading_partner_id: str
     ) -> Any | None: ...
-    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool: ...
+
+    async def create_outbound_edi_header(
+        self, tenant_id: int, cmd: CreateOutboundEdiHeaderCmd
+    ) -> UUID: ...
+    async def update_outbound_edi_header(
+        self, tenant_id: int, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+    ) -> bool: ...
+    async def delete_outbound_edi_header(self, tenant_id: int, header_id: UUID) -> bool: ...
+    async def get_outbound_edi_headers(self, tenant_id: int) -> Sequence[OutboundEdiHeader]: ...
+    async def get_outbound_edi_header_by_trading_partner_id(
+        self, tenant_id: int, trading_partner_id: str
+    ) -> Any | None: ...
 
     async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]: ...
 
@@ -149,7 +165,49 @@ class DataPlaneRepositoryPort(Protocol):
 
     async def create_api_gateway(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
         """
-        Saves a new ApiGateway log record to the Data Plane.
+        Saves a new ApiGateway record to the Data Plane.
+        """
+        ...
+
+    async def list_transactions(
+        self,
+        tenant_id: int,
+        limit: int = 50,
+        offset: int = 0,
+        partner_id: str | None = None,
+        transaction_type: str | None = None,
+        direction: str | None = None,
+    ) -> Sequence[Any]:
+        """
+        Lists transactions joined across Data Plane tables.
+        """
+        ...
+
+    async def explorer_list_edi_messages(
+        self, tenant_id: int, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
+    ) -> Sequence[Any]:
+        """
+        Dynamically query EdiMessage for the data explorer.
+        """
+        ...
+
+    async def explorer_list_edi_json(
+        self, tenant_id: int, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
+    ) -> Sequence[Any]:
+        """
+        Dynamically query EdiJson for the data explorer.
+        """
+        ...
+
+    async def get_transaction(self, tenant_id: int, trace_id: UUID) -> dict[str, Any] | None:
+        """
+        Retrieves a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
+        """
+        ...
+
+    async def get_transaction_thread(self, tenant_id: int, key: str, value: str) -> Sequence[Any]:
+        """
+        Retrieves a chronological thread of documents sharing a specific business metadata key/value.
         """
         ...
 

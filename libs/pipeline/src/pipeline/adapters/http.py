@@ -13,7 +13,9 @@ class HttpxDeliveryAdapter(HttpDeliveryPort):
         self.timeout = timeout_secs
         self.validator = validator
 
-    async def deliver(self, url: str, payload: bytes, auth_token: str | None = None) -> int:
+    async def deliver(
+        self, url: str, payload: bytes, auth_token: str | None = None
+    ) -> tuple[int, str]:
         if self.validator and not self.validator(url):
             raise ValueError("URL validation failed for provided destination.")
 
@@ -23,4 +25,4 @@ class HttpxDeliveryAdapter(HttpDeliveryPort):
 
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
             response = await client.post(url, content=payload, headers=headers)
-            return response.status_code
+            return response.status_code, response.text

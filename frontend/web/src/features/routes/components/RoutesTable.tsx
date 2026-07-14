@@ -63,28 +63,6 @@ const columns = [
       );
     },
   }),
-  columnHelper.accessor('processing_mode', {
-    header: 'Mode',
-    cell: (info) => (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-        info.getValue() === 'TRANSLATE'
-          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-          : 'bg-amber-50 text-amber-700 border-amber-200'
-      }`}>
-        {info.getValue() === 'TRANSLATE' ? 'Translate' : 'Passthrough'}
-      </span>
-    ),
-  }),
-  columnHelper.accessor('isa_sender_id', {
-    header: 'ISA Routing',
-    cell: (info) => (
-      <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
-        <span className="px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200">{info.getValue()}</span>
-        <span className="text-slate-300">→</span>
-        <span className="px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200">{info.row.original.isa_receiver_id}</span>
-      </div>
-    ),
-  }),
   columnHelper.accessor('destination_name', {
     header: 'Target Destination',
     cell: (info) => (

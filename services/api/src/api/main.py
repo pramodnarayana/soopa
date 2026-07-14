@@ -19,7 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
 from api.dependencies import get_current_user_profile
-from api.routers import edi_json, edi_tools, routes, trading_partners, webhooks
+from api.routers import (
+    edi_headers,
+    edi_json,
+    edi_tools,
+    explorer,
+    routes,
+    trading_partners,
+    transactions,
+    webhooks,
+)
 from api.routers.developers import api_tokens
 from api.routers.trading_partners import as2_receive, platform
 
@@ -85,10 +94,13 @@ app.include_router(trading_partners.router)
 app.include_router(webhooks.router)
 app.include_router(platform.router)
 app.include_router(routes.router)
+app.include_router(edi_headers.router)
 app.include_router(edi_tools.router)
 app.include_router(as2_receive.router, prefix="/api/v1")
 app.include_router(edi_json.router)
 app.include_router(api_tokens.router)
+app.include_router(transactions.router)
+app.include_router(explorer.router)
 
 
 @app.get("/api/me", tags=["Identity"])

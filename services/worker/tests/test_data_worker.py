@@ -6,7 +6,7 @@ import pytest
 from worker.data.main import (
     poll_sqs_queue,
     process_delivery,
-    process_translation,
+    process_pipeline_event,
     validate_target_url,
 )
 
@@ -72,6 +72,7 @@ async def test_poll_sqs_queue_processes_message(mock_session_cls: MagicMock) -> 
     mock_processor.assert_awaited_once_with(
         trace_id="trace-456",
         event_type="UNKNOWN",
+        payload={"trace_id": "trace-456"},
         tenant_id=99,
         resolver=mock_resolver,
         db_router=mock_db_router,
@@ -85,30 +86,32 @@ async def test_poll_sqs_queue_processes_message(mock_session_cls: MagicMock) -> 
 
 
 @patch("worker.data.main.TranslationService")
-async def test_process_translation(mock_service_cls: MagicMock) -> None:
+async def test_process_pipeline_event(mock_service_cls: MagicMock) -> None:
     mock_service = AsyncMock()
     mock_service_cls.return_value = mock_service
 
-    mock_resolver = AsyncMock()
-    mock_resolver.resolve.return_value = ("shard1", "url")
-
-    mock_db_router = MagicMock()
+    resolver = AsyncMock()
+    resolver.resolve.return_value = ("shard1", "url")
+    db_router = MagicMock()
     mock_tenant_gen = AsyncMock()
     mock_tenant_session = AsyncMock()
-    mock_db_router.get_tenant_session.return_value = mock_tenant_gen
+    db_router.get_tenant_session.return_value = mock_tenant_gen
     mock_tenant_gen.__anext__.return_value = mock_tenant_session
 
-    await process_translation(
-        "trace-123",
-        "edi_message.received",
-        99,
-        mock_resolver,
-        mock_db_router,
-        "bucket",
-        "http://localhost",
+    await process_pipeline_event(
+        trace_id="test-123",
+        event_type="json.received",
+        payload={"trace_id": "test-123"},
+        tenant_id=1,
+        resolver=resolver,
+        db_router=db_router,
+        s3_bucket="test-bucket",
+        aws_endpoint=None,
     )
 
-    mock_service.translate.assert_awaited_once_with("trace-123", "edi_message.received")
+    from domain.direction import MessageDirection
+
+    mock_service.translate.assert_awaited_once_with("test-123", MessageDirection.INBOUND)
 
 
 @patch("worker.data.main.DeliveryService")
@@ -116,23 +119,23 @@ async def test_process_delivery(mock_service_cls: MagicMock) -> None:
     mock_service = AsyncMock()
     mock_service_cls.return_value = mock_service
 
-    mock_resolver = AsyncMock()
-    mock_resolver.resolve.return_value = ("shard1", "url")
-
-    mock_db_router = MagicMock()
+    resolver = AsyncMock()
+    resolver.resolve.return_value = ("shard1", "url")
+    db_router = MagicMock()
     mock_tenant_gen = AsyncMock()
     mock_tenant_session = AsyncMock()
-    mock_db_router.get_tenant_session.return_value = mock_tenant_gen
+    db_router.get_tenant_session.return_value = mock_tenant_gen
     mock_tenant_gen.__anext__.return_value = mock_tenant_session
 
     await process_delivery(
-        "trace-123",
-        "DELIVER",
-        99,
-        mock_resolver,
-        mock_db_router,
-        "bucket",
-        "http://localhost",
+        trace_id="test-123",
+        event_type="DELIVER",
+        payload={"trace_id": "test-123"},
+        tenant_id=1,
+        resolver=resolver,
+        db_router=db_router,
+        s3_bucket="test-bucket",
+        aws_endpoint=None,
     )
 
-    mock_service.deliver.assert_awaited_once_with("trace-123")
+    mock_service.deliver.assert_awaited_once_with("test-123")

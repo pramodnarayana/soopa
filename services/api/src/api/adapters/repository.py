@@ -9,6 +9,7 @@ from api.domain.models import (
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
+    CreateOutboundEdiHeaderCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookCmd,
@@ -16,6 +17,7 @@ from api.domain.models import (
     UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
     UpdateInboundRouteCmd,
+    UpdateOutboundEdiHeaderCmd,
     UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
@@ -30,6 +32,7 @@ from database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
     InboundRoute,
+    OutboundEdiHeader,
     OutboundRoute,
     SFTPPartner,
     Tenant,
@@ -562,6 +565,17 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             isa_sender_id, isa_receiver_id, tenant_id, transaction_type
         )
 
+    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> int | None:
+        result = await self.session.execute(
+            select(InboundRoute.tenant_id)
+            .where(
+                InboundRoute.isa_sender_id == isa_sender_id,
+                InboundRoute.isa_receiver_id == isa_receiver_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
             delete(InboundRoute).where(
@@ -570,6 +584,17 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
         )
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)
+
+    async def get_outbound_route_by_trading_partner_id(
+        self, tenant_id: int, trading_partner_id: str
+    ) -> Any | None:
+        result = await self.session.execute(
+            select(OutboundRoute).where(
+                OutboundRoute.tenant_id == tenant_id,
+                OutboundRoute.trading_partner_id == trading_partner_id,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> UUID:
         destinations = [d for d in (cmd.as2_partner_id, cmd.sftp_partner_id) if d is not None]
@@ -600,25 +625,15 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 )
 
         route_id = uuid.uuid4()
-        record = OutboundRoute(
+        record_route = OutboundRoute(
             id=route_id,
             tenant_id=tenant_id,
             trading_partner_id=cmd.trading_partner_id,
             name=cmd.name,
-            isa_sender_id=cmd.isa_sender_id,
-            isa_sender_qualifier=cmd.isa_sender_qualifier,
-            isa_receiver_id=cmd.isa_receiver_id,
-            isa_receiver_qualifier=cmd.isa_receiver_qualifier,
-            gs_sender_id=cmd.gs_sender_id,
-            gs_receiver_id=cmd.gs_receiver_id,
-            transaction_type=cmd.transaction_type,
-            default_standard=cmd.default_standard,
-            default_version=cmd.default_version,
             as2_partner_id=cmd.as2_partner_id,
             sftp_partner_id=cmd.sftp_partner_id,
-            processing_mode=cmd.processing_mode,
         )
-        self.session.add(record)
+        self.session.add(record_route)
         await self.session.flush()
         return route_id
 
@@ -630,13 +645,95 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
                 OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
             )
         )
+        record_route = result.scalar_one_or_none()
+        if not record_route:
+            return False
+
+        if cmd.trading_partner_id is not UNSET:
+            record_route.trading_partner_id = cmd.trading_partner_id
+        if not isinstance(cmd.name, UnsetType):
+            record_route.name = cmd.name
+
+        if not isinstance(cmd.as2_partner_id, UnsetType):
+            if cmd.as2_partner_id is not None:
+                r = await self.session.execute(
+                    select(AS2Partner.id).where(
+                        AS2Partner.id == cmd.as2_partner_id,
+                        AS2Partner.tenant_id.in_([tenant_id, 0]),
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("AS2 partner not found")
+            record_route.as2_partner_id = cmd.as2_partner_id
+        if not isinstance(cmd.sftp_partner_id, UnsetType):
+            if cmd.sftp_partner_id is not None:
+                r = await self.session.execute(
+                    select(SFTPPartner.id).where(
+                        SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
+                    )
+                )
+                if not r.scalar_one_or_none():
+                    raise ValueError("SFTP partner not found")
+            record_route.sftp_partner_id = cmd.sftp_partner_id
+        if not isinstance(cmd.active, UnsetType):
+            record_route.active = cmd.active
+
+        destinations = [
+            d for d in (record_route.as2_partner_id, record_route.sftp_partner_id) if d is not None
+        ]
+        if len(destinations) != 1:
+            raise ValueError("Exactly one destination (as2 or sftp) must be provided")
+
+        await self.session.flush()
+        return True
+
+    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+        result = await self.session.execute(
+            delete(OutboundRoute).where(
+                OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+            )
+        )
+        await self.session.flush()
+        return bool(getattr(result, "rowcount", 0) > 0)
+
+    async def create_outbound_edi_header(
+        self, tenant_id: int, cmd: CreateOutboundEdiHeaderCmd
+    ) -> UUID:
+        header_id = uuid.uuid4()
+        record = OutboundEdiHeader(
+            id=header_id,
+            tenant_id=tenant_id,
+            name=cmd.name,
+            trading_partner_id=cmd.trading_partner_id,
+            isa_sender_id=cmd.isa_sender_id,
+            isa_receiver_id=cmd.isa_receiver_id,
+            gs_sender_id=cmd.gs_sender_id,
+            gs_receiver_id=cmd.gs_receiver_id,
+            transaction_type=cmd.transaction_type,
+            isa_sender_qualifier=cmd.isa_sender_qualifier,
+            isa_receiver_qualifier=cmd.isa_receiver_qualifier,
+            default_standard=cmd.default_standard,
+            default_version=cmd.default_version,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return header_id
+
+    async def update_outbound_edi_header(
+        self, tenant_id: int, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+    ) -> bool:
+        result = await self.session.execute(
+            select(OutboundEdiHeader).where(
+                OutboundEdiHeader.id == header_id, OutboundEdiHeader.tenant_id == tenant_id
+            )
+        )
         record = result.scalar_one_or_none()
         if not record:
             return False
-        if cmd.trading_partner_id is not UNSET:
-            record.trading_partner_id = cmd.trading_partner_id
         if not isinstance(cmd.name, UnsetType):
             record.name = cmd.name
+        if not isinstance(cmd.trading_partner_id, UnsetType):
+            record.trading_partner_id = cmd.trading_partner_id
         if not isinstance(cmd.isa_sender_id, UnsetType):
             record.isa_sender_id = cmd.isa_sender_id
         if not isinstance(cmd.isa_sender_qualifier, UnsetType):
@@ -655,59 +752,33 @@ class SqlAlchemyControlPlaneRepository(ControlPlaneRepositoryPort):
             record.default_standard = cmd.default_standard
         if not isinstance(cmd.default_version, UnsetType):
             record.default_version = cmd.default_version
-        if not isinstance(cmd.processing_mode, UnsetType):
-            record.processing_mode = cmd.processing_mode
-        if not isinstance(cmd.as2_partner_id, UnsetType):
-            if cmd.as2_partner_id is not None:
-                r = await self.session.execute(
-                    select(AS2Partner.id).where(
-                        AS2Partner.id == cmd.as2_partner_id,
-                        AS2Partner.tenant_id.in_([tenant_id, 0]),
-                    )
-                )
-                if not r.scalar_one_or_none():
-                    raise ValueError("AS2 partner not found")
-            record.as2_partner_id = cmd.as2_partner_id
-        if not isinstance(cmd.sftp_partner_id, UnsetType):
-            if cmd.sftp_partner_id is not None:
-                r = await self.session.execute(
-                    select(SFTPPartner.id).where(
-                        SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
-                    )
-                )
-                if not r.scalar_one_or_none():
-                    raise ValueError("SFTP partner not found")
-            record.sftp_partner_id = cmd.sftp_partner_id
-        if not isinstance(cmd.active, UnsetType):
-            record.active = cmd.active
-
-        destinations = [d for d in (record.as2_partner_id, record.sftp_partner_id) if d is not None]
-        if len(destinations) != 1:
-            raise ValueError("Exactly one destination (as2 or sftp) must be provided")
-
-        await self.session.flush()
         return True
 
-    async def get_outbound_route_by_trading_partner_id(
-        self, tenant_id: int, trading_partner_id: str
-    ) -> OutboundRoute | None:
+    async def delete_outbound_edi_header(self, tenant_id: int, header_id: UUID) -> bool:
         result = await self.session.execute(
-            select(OutboundRoute).where(
-                OutboundRoute.tenant_id == tenant_id,
-                OutboundRoute.trading_partner_id == trading_partner_id,
-                OutboundRoute.active.is_(True),
-            )
-        )
-        return result.scalar_one_or_none()
-
-    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
-        result = await self.session.execute(
-            delete(OutboundRoute).where(
-                OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+            delete(OutboundEdiHeader).where(
+                OutboundEdiHeader.id == header_id, OutboundEdiHeader.tenant_id == tenant_id
             )
         )
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)
+
+    async def get_outbound_edi_headers(self, tenant_id: int) -> Sequence[OutboundEdiHeader]:
+        result = await self.session.execute(
+            select(OutboundEdiHeader).where(OutboundEdiHeader.tenant_id == tenant_id)
+        )
+        return result.scalars().all()
+
+    async def get_outbound_edi_header_by_trading_partner_id(
+        self, tenant_id: int, trading_partner_id: str
+    ) -> OutboundEdiHeader | None:
+        result = await self.session.execute(
+            select(OutboundEdiHeader).where(
+                OutboundEdiHeader.tenant_id == tenant_id,
+                OutboundEdiHeader.trading_partner_id == trading_partner_id,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
         inbound_result = await self.session.execute(
@@ -785,6 +856,150 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
         self.session.add(log)
         await self.session.flush()
         return log.id
+
+    async def list_transactions(
+        self,
+        tenant_id: int,
+        limit: int = 50,
+        offset: int = 0,
+        partner_id: str | None = None,
+        transaction_type: str | None = None,
+        direction: str | None = None,
+    ) -> Sequence[Any]:
+        from database.models.data_plane import EdiMessage
+
+        stmt = select(EdiMessage).where(EdiMessage.tenant_id == tenant_id)
+        if direction:
+            stmt = stmt.where(EdiMessage.direction == direction)
+        if transaction_type:
+            stmt = stmt.where(EdiMessage.transaction_type == transaction_type)
+        if partner_id:
+            stmt = stmt.where(
+                or_(
+                    EdiMessage.sender_id == partner_id,
+                    EdiMessage.receiver_id == partner_id,
+                    EdiMessage.gs_sender_id == partner_id,
+                    EdiMessage.gs_receiver_id == partner_id,
+                )
+            )
+        stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    def _apply_dynamic_filters(self, stmt: Any, model: Any, filters: list[dict[str, Any]]) -> Any:
+        from sqlalchemy import or_
+
+        for f in filters:
+            field = f.get("field")
+            operator = f.get("operator", "eq")
+            value = f.get("value")
+            if not field or not value:
+                continue
+
+            if field == "trading_partner_id":
+                if hasattr(model, "sender_id") and hasattr(model, "receiver_id"):
+                    if operator == "eq":
+                        stmt = stmt.where(or_(model.sender_id == value, model.receiver_id == value))
+                    elif operator == "contains":
+                        stmt = stmt.where(
+                            or_(
+                                model.sender_id.ilike(f"%{value}%"),
+                                model.receiver_id.ilike(f"%{value}%"),
+                            )
+                        )
+                continue
+
+            if field.startswith("business_metadata.") and hasattr(model, "business_metadata"):
+                json_key = field.split("business_metadata.")[1]
+                column = model.business_metadata[json_key].astext
+                if operator == "eq":
+                    stmt = stmt.where(column == str(value))
+                elif operator == "neq":
+                    stmt = stmt.where(column != str(value))
+                elif operator == "contains":
+                    stmt = stmt.where(column.ilike(f"%{value}%"))
+                continue
+
+            if not hasattr(model, field):
+                continue
+            column = getattr(model, field)
+
+            if operator == "eq":
+                stmt = stmt.where(column == value)
+            elif operator == "neq":
+                stmt = stmt.where(column != value)
+            elif operator == "contains":
+                stmt = stmt.where(column.ilike(f"%{value}%"))
+            elif operator == "in" and isinstance(value, list):
+                stmt = stmt.where(column.in_(value))
+        return stmt
+
+    async def explorer_list_edi_messages(
+        self, tenant_id: int, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
+    ) -> Sequence[Any]:
+        from database.models.data_plane import EdiMessage
+
+        stmt = select(EdiMessage).where(EdiMessage.tenant_id == tenant_id)
+        stmt = self._apply_dynamic_filters(stmt, EdiMessage, filters)
+        stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def explorer_list_edi_json(
+        self, tenant_id: int, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
+    ) -> Sequence[Any]:
+        from database.models.data_plane import EdiJson
+
+        stmt = select(EdiJson).where(EdiJson.tenant_id == tenant_id)
+        stmt = self._apply_dynamic_filters(stmt, EdiJson, filters)
+        stmt = stmt.order_by(EdiJson.created_at.desc()).limit(limit).offset(offset)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def get_transaction(self, tenant_id: int, trace_id: UUID) -> dict[str, Any] | None:
+
+        from database.models.data_plane import ApiGateway, EdiJson, EdiMessage
+
+        msg_stmt = select(EdiMessage).where(
+            EdiMessage.tenant_id == tenant_id, EdiMessage.trace_id == trace_id
+        )
+        json_stmt = (
+            select(EdiJson)
+            .where(EdiJson.tenant_id == tenant_id, EdiJson.trace_id == trace_id)
+            .order_by(EdiJson.created_at.asc())
+        )
+        gw_stmt = (
+            select(ApiGateway)
+            .where(ApiGateway.tenant_id == tenant_id, ApiGateway.trace_id == trace_id)
+            .order_by(ApiGateway.created_at.asc())
+        )
+
+        msg_res = await self.session.execute(msg_stmt)
+        edi_msg = msg_res.scalars().first()
+
+        if not edi_msg:
+            return None
+
+        json_res = await self.session.execute(json_stmt)
+        gw_res = await self.session.execute(gw_stmt)
+
+        return {
+            "edi_message": edi_msg,
+            "edi_json": json_res.scalars().all(),
+            "api_gateway": gw_res.scalars().all(),
+        }
+
+    async def get_transaction_thread(self, tenant_id: int, key: str, value: str) -> Sequence[Any]:
+        from database.models.data_plane import EdiJson
+
+        json_stmt = (
+            select(EdiJson)
+            .where(EdiJson.tenant_id == tenant_id, EdiJson.business_metadata.contains({key: value}))
+            .order_by(EdiJson.created_at.asc())
+        )
+
+        result = await self.session.execute(json_stmt)
+        return result.scalars().all()
 
 
 class SqlAlchemyTenantRepository(TenantRepositoryPort):

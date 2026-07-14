@@ -21,7 +21,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
   const { toast } = useToast();
   const updateRoute = useUpdateRouteMutation();
   const isSubmitting = updateRoute.isPending;
-  const isOutbound = route.direction === 'OUTBOUND';
+  const isInbound = route.direction === 'INBOUND';
 
   const { data: destinations } = useTenantDestinations(route.direction);
 
@@ -33,16 +33,16 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
     defaultValues: {
       name: route.name || '',
       trading_partner_id: route.trading_partner_id || '',
-      isa_sender_id: route.isa_sender_id || '',
-      isa_sender_qualifier: route.isa_sender_qualifier || 'ZZ',
-      isa_receiver_id: route.isa_receiver_id || '',
-      isa_receiver_qualifier: route.isa_receiver_qualifier || 'ZZ',
-      gs_sender_id: route.gs_sender_id || '',
-      gs_receiver_id: route.gs_receiver_id || '',
-      default_standard: route.default_standard || 'x12',
-      default_version: route.default_version || '004010',
+      isa_sender_id: isInbound ? (route.isa_sender_id || '') : '',
+      isa_sender_qualifier: isInbound ? (route.isa_sender_qualifier || 'ZZ') : 'ZZ',
+      isa_receiver_id: isInbound ? (route.isa_receiver_id || '') : '',
+      isa_receiver_qualifier: isInbound ? (route.isa_receiver_qualifier || 'ZZ') : 'ZZ',
+      gs_sender_id: isInbound ? (route.gs_sender_id || '') : '',
+      gs_receiver_id: isInbound ? (route.gs_receiver_id || '') : '',
+      default_standard: isInbound ? (route.default_standard || 'x12') : 'x12',
+      default_version: isInbound ? (route.default_version || '004010') : '004010',
       transaction_type: route.transaction_type || '',
-      processing_mode: route.processing_mode || 'TRANSLATE',
+      processing_mode: isInbound ? (route.processing_mode || 'TRANSLATE') : 'TRANSLATE',
     }
   });
 
@@ -54,20 +54,19 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
 
     if (formData.name !== route.name) payload.name = formData.name;
     if (formData.transaction_type !== route.transaction_type) payload.transaction_type = formData.transaction_type;
-    if (formData.processing_mode !== route.processing_mode) payload.processing_mode = formData.processing_mode;
-
-    if (formData.isa_sender_id !== route.isa_sender_id) payload.isa_sender_id = formData.isa_sender_id;
-    if (formData.isa_receiver_id !== route.isa_receiver_id) payload.isa_receiver_id = formData.isa_receiver_id;
-
     if (formData.trading_partner_id !== route.trading_partner_id) payload.trading_partner_id = formData.trading_partner_id;
-    if (formData.gs_sender_id !== route.gs_sender_id) payload.gs_sender_id = formData.gs_sender_id;
-    if (formData.gs_receiver_id !== route.gs_receiver_id) payload.gs_receiver_id = formData.gs_receiver_id;
 
-    if (isOutbound) {
+    // ISA/GS fields only apply to inbound routes
+    if (isInbound) {
+      if (formData.isa_sender_id !== route.isa_sender_id) payload.isa_sender_id = formData.isa_sender_id;
+      if (formData.isa_receiver_id !== route.isa_receiver_id) payload.isa_receiver_id = formData.isa_receiver_id;
       if (formData.isa_sender_qualifier !== route.isa_sender_qualifier) payload.isa_sender_qualifier = formData.isa_sender_qualifier;
       if (formData.isa_receiver_qualifier !== route.isa_receiver_qualifier) payload.isa_receiver_qualifier = formData.isa_receiver_qualifier;
+      if (formData.gs_sender_id !== route.gs_sender_id) payload.gs_sender_id = formData.gs_sender_id;
+      if (formData.gs_receiver_id !== route.gs_receiver_id) payload.gs_receiver_id = formData.gs_receiver_id;
       if (formData.default_standard !== route.default_standard) payload.default_standard = formData.default_standard;
       if (formData.default_version !== route.default_version) payload.default_version = formData.default_version;
+      if (formData.processing_mode !== route.processing_mode) payload.processing_mode = formData.processing_mode;
     }
 
     if (targetId !== initialTargetId) {
@@ -120,7 +119,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
             <Input {...register('trading_partner_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
           </div>
 
-          {!isOutbound && (
+          {isInbound && (
             <div className="space-y-2">
               <Label>Processing Mode</Label>
               <Select
@@ -140,52 +139,30 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
           )}
         </div>
 
-        {/* Envelope Configuration (Grid adjustments based on Outbound) */}
-        <div className={`grid grid-cols-1 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-200`}>
-          {isOutbound && (
+        {/* Envelope Configuration (ISA/GS - Inbound only) */}
+        {isInbound && (
+          <div className={`grid grid-cols-1 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-200`}>
             <div className="space-y-2">
-              <Label>ISA Sender Qual</Label>
-              <Input {...register('isa_sender_qualifier')} disabled={isSubmitting} className="font-mono text-sm" />
+              <Label>ISA Sender ID</Label>
+              <Input {...register('isa_sender_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
             </div>
-          )}
-          <div className="space-y-2">
-            <Label>ISA Sender ID</Label>
-            <Input {...register('isa_sender_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-          </div>
 
-          {isOutbound && (
             <div className="space-y-2">
-              <Label>ISA Receiver Qual</Label>
-              <Input {...register('isa_receiver_qualifier')} disabled={isSubmitting} className="font-mono text-sm" />
+              <Label>ISA Receiver ID</Label>
+              <Input {...register('isa_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
             </div>
-          )}
-          <div className="space-y-2">
-            <Label>ISA Receiver ID</Label>
-            <Input {...register('isa_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-          </div>
 
-          <div className="space-y-2">
-            <Label>GS Sender ID</Label>
-            <Input {...register('gs_sender_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-          </div>
-          <div className="space-y-2">
-            <Label>GS Receiver ID</Label>
-            <Input {...register('gs_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
-          </div>
+            <div className="space-y-2">
+              <Label>GS Sender ID</Label>
+              <Input {...register('gs_sender_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
+            </div>
 
-          {isOutbound && (
-            <>
-              <div className="space-y-2">
-                <Label>Default Standard</Label>
-                <Input {...register('default_standard')} disabled={isSubmitting} className="font-mono text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label>Default Version</Label>
-                <Input {...register('default_version')} disabled={isSubmitting} className="font-mono text-sm" />
-              </div>
-            </>
-          )}
-        </div>
+            <div className="space-y-2">
+              <Label>GS Receiver ID</Label>
+              <Input {...register('gs_receiver_id')} disabled={isSubmitting} className="font-mono text-sm uppercase" />
+            </div>
+          </div>
+        )}
 
         {/* Target Destination */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-slate-200">

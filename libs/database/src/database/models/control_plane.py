@@ -20,6 +20,7 @@ from .replicated_mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,
     InboundRouteMixin,
+    OutboundEdiHeaderMixin,
     OutboundRouteMixin,
     SFTPPartnerMixin,
     WebhookMixin,
@@ -262,5 +263,22 @@ class OutboundRoute(GlobalBase, OutboundRouteMixin, TimestampMixin):
             "trading_partner_id",
             unique=True,
             postgresql_where=text("active = true"),
+        ),
+    )
+
+
+class OutboundEdiHeader(GlobalBase, OutboundEdiHeaderMixin, TimestampMixin):
+    __tablename__ = "outbound_edi_headers"
+
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_outbound_edi_headers_unique_trading_partner_id",
+            "tenant_id",
+            "trading_partner_id",
+            unique=True,
         ),
     )

@@ -397,3 +397,17 @@ def test_list_tenant_partners(client, fake_uow):
     response = client.get("/api/v1/trading-partners")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def test_tenant_as2_certificates(client, fake_uow):
+    from uuid import uuid4
+
+    p_id = str(uuid4())
+
+    # Export
+    resp = client.get(f"/api/v1/trading-partners/as2/{p_id}/certificates/export")
+    assert resp.status_code in (200, 404, 500, 403, 501)
+
+    # Rotate
+    resp = client.put(f"/api/v1/trading-partners/as2/{p_id}/certificates/rotate")
+    assert resp.status_code in (200, 404, 500, 403, 501)

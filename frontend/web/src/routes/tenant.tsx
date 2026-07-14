@@ -4,7 +4,6 @@ import { useAuth } from 'react-oidc-context'
 import { Button } from '@/components/ui/button'
 import { useEffect, useRef, useState } from 'react'
 import {
-  LayoutDashboard,
   Users,
   Network,
   Settings,
@@ -13,6 +12,7 @@ import {
   Wrench,
   Terminal,
   ChevronDown,
+  Database,
 } from 'lucide-react'
 import { PartnersProvider } from '@/features/partners/context/PartnersContext'
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
@@ -68,8 +68,6 @@ const NavGroup = ({ icon: Icon, label, children, defaultExpanded = true }: { ico
 export function AppLayout() {
   const auth = useAuth()
   const redirectTriggered = useRef(false)
-  const location = useLocation()
-
   // 1. Fetch user data (role, features)
   const { data: userProfile, isLoading: isProfileLoading } = useDashboardData()
 
@@ -119,8 +117,10 @@ export function AppLayout() {
 
         <nav className="flex-1 px-4 py-8 flex flex-col gap-1.5 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">Platform</div>
-          <NavItem icon={LayoutDashboard} label="Overview" to="/tenant/dashboard" />
+
+          <NavItem icon={Database} label="Data Explorer" to="/tenant/explorer" />
           <NavItem icon={Users} label="Trading Partners" to="/tenant/partners" />
+          <NavItem icon={Network} label="EDI Headers" to="/tenant/edi_headers" />
           <NavItem icon={Network} label="Routes" to="/tenant/routes" />
 
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-6">Tools</div>

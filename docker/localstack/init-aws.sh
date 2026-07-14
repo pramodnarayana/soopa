@@ -15,9 +15,9 @@ DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/00
 awslocal sqs create-queue --queue-name EdiTransformerQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 # Create Data Plane CDC Queues and DLQs
-awslocal sqs create-queue --queue-name TranslateQueue-DLQ
-TRANSLATE_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TranslateQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-awslocal sqs create-queue --queue-name TranslateQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSLATE_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
+awslocal sqs create-queue --queue-name TransformQueue-DLQ
+TRANSFORM_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TransformQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+awslocal sqs create-queue --queue-name TransformQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSFORM_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 awslocal sqs create-queue --queue-name DeliverQueue-DLQ
 DELIVER_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/DeliverQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)

@@ -14,6 +14,7 @@ from database.models.data_plane import (
     SFTPPartner,
     Webhook,
 )
+from domain.models import EdiJsonDomainModel, EdiMessageDomainModel
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.storage import StoragePort
 from sqlalchemy import select, update
@@ -32,7 +33,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         self.settings = settings
         self.storage = storage
 
-    async def get_edi_message(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         result = await self.session.execute(
             select(EdiMessage)
             .where(EdiMessage.trace_id == uuid.UUID(trace_id))
@@ -47,20 +48,9 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             raw_bytes = await self.storage.download(record.storage_uri)
             edi_data = raw_bytes.decode("utf-8")
 
-        return {
-            "trace_id": str(record.trace_id),
-            "tenant_id": record.tenant_id,
-            "edi_data": edi_data,
-            "format_standard": record.format_standard,
-            "transaction_type": record.transaction_type,
-            "sender_id": record.sender_id,
-            "receiver_id": record.receiver_id,
-            "direction": record.direction,
-            "status": record.status,
-            "outbound_route_id": str(record.outbound_route_id)
-            if record.outbound_route_id
-            else None,
-        }
+        domain_model = EdiMessageDomainModel.model_validate(record)
+        domain_model.edi_data = edi_data
+        return domain_model
 
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
         stmt = (
@@ -79,9 +69,17 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         )
         await self.session.execute(stmt)
 
-    async def update_edi_message_gs_headers(
-        self, trace_id: str, gs_sender_id: str, gs_receiver_id: str
+    async def update_edi_message_metadata(
+        self,
+        trace_id: str,
+        gs_sender_id: str,
+        gs_receiver_id: str,
+        transaction_type: str | None = None,
     ) -> None:
+        values_to_update = {"gs_sender_id": gs_sender_id, "gs_receiver_id": gs_receiver_id}
+        if transaction_type:
+            values_to_update["transaction_type"] = transaction_type
+
         stmt = (
             update(EdiMessage)
             .where(
@@ -94,7 +92,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                     .scalar_subquery()
                 )
             )
-            .values(gs_sender_id=gs_sender_id, gs_receiver_id=gs_receiver_id)
+            .values(**values_to_update)
         )
         await self.session.execute(stmt)
 
@@ -214,7 +212,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         await self.session.flush()
         return str(record.id)
 
-    async def get_edi_json(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         from database.models.data_plane import EdiJson
 
         result = await self.session.execute(
@@ -234,25 +232,25 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             raw_bytes = await self.storage.download(record.storage_uri)
             payload = json.loads(raw_bytes.decode("utf-8"))
 
-        return {
-            "trace_id": str(record.trace_id),
-            "payload": payload,
-            "transaction_type": record.transaction_type,
-            "standard": record.standard,
-            "direction": record.direction,
-            "status": record.status,
-            "sender_id": record.sender_id,
-            "receiver_id": record.receiver_id,
-            "outbound_route_id": str(record.outbound_route_id)
-            if record.outbound_route_id
-            else None,
-        }
+        domain_model = EdiJsonDomainModel.model_validate(record)
+        domain_model.payload = payload
+        return domain_model
 
     async def update_edi_json_status(self, trace_id: str, status: str) -> None:
         from database.models.data_plane import EdiJson
 
         await self.session.execute(
             update(EdiJson).where(EdiJson.trace_id == uuid.UUID(trace_id)).values(status=status)
+        )
+        await self.session.flush()
+
+    async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
+        from database.models.data_plane import EdiJson
+
+        if not kwargs:
+            return
+        await self.session.execute(
+            update(EdiJson).where(EdiJson.trace_id == uuid.UUID(trace_id)).values(**kwargs)
         )
         await self.session.flush()
 
@@ -296,7 +294,13 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return result.scalar_one_or_none() is not None
 
     async def save_api_payload(
-        self, trace_id: str, direction: str, payload: dict[str, Any], status: str
+        self,
+        trace_id: str,
+        direction: str,
+        payload: dict[str, Any],
+        status: str,
+        transaction_type: str | None = None,
+        webhook_url: str | None = None,
     ) -> None:
         import uuid
 
@@ -318,8 +322,10 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         record = ApiGateway(
             trace_id=uuid.UUID(trace_id),
             direction=direction,
+            transaction_type=transaction_type,
             payload=payload,
             status=status,
+            webhook_url=webhook_url,
             http_status_code=202,
         )
         self.session.add(record)
@@ -349,11 +355,24 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "direction": record.direction,
         }
 
-    async def update_api_payload_status(self, trace_id: str, status: str) -> None:
+    async def update_api_payload_status(
+        self,
+        trace_id: str,
+        status: str,
+        webhook_url: str | None = None,
+        http_status_code: int | None = None,
+        response: str | None = None,
+    ) -> None:
+        values: dict[str, Any] = {"status": status}
+        if webhook_url is not None:
+            values["webhook_url"] = webhook_url
+        if http_status_code is not None:
+            values["http_status_code"] = http_status_code
+        if response is not None:
+            values["response"] = response
+
         await self.session.execute(
-            update(ApiGateway)
-            .where(ApiGateway.trace_id == uuid.UUID(trace_id))
-            .values(status=status)
+            update(ApiGateway).where(ApiGateway.trace_id == uuid.UUID(trace_id)).values(**values)
         )
         await self.session.flush()
 
@@ -389,22 +408,24 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
     ) -> dict[str, Any] | None:
+        from typing import cast
+
         if direction not in ("INBOUND", "OUTBOUND"):
             raise ValueError(f"Invalid direction: {direction}")
         model = InboundRoute if direction == "INBOUND" else OutboundRoute
 
         # Exact match or wildcard transaction type
         conditions = [
-            model.isa_sender_id == sender_id,
-            model.isa_receiver_id == receiver_id,
-            model.transaction_type.in_([transaction_type, "*"]),
-            model.active.is_(True),
+            cast(Any, model).isa_sender_id == sender_id,
+            cast(Any, model).isa_receiver_id == receiver_id,
+            cast(Any, model).transaction_type.in_([transaction_type, "*"]),
+            cast(Any, model).active.is_(True),
         ]
 
         if gs_sender_id:
-            conditions.append(model.gs_sender_id == gs_sender_id)
+            conditions.append(cast(Any, model).gs_sender_id == gs_sender_id)
         if gs_receiver_id:
-            conditions.append(model.gs_receiver_id == gs_receiver_id)
+            conditions.append(cast(Any, model).gs_receiver_id == gs_receiver_id)
 
         stmt = select(model).where(*conditions)
 
@@ -430,37 +451,88 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         }
 
     async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
-        stmt = select(OutboundRoute).where(
-            OutboundRoute.id == uuid.UUID(route_id),
-            OutboundRoute.active.is_(True),
+        result = await self.session.execute(
+            select(OutboundRoute).where(OutboundRoute.id == uuid.UUID(route_id))
         )
-        result = await self.session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "id": str(record.id),
+            "tenant_id": record.tenant_id,
+            "trading_partner_id": record.trading_partner_id,
+            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
+        }
+
+    async def get_outbound_route_by_trading_partner_id(
+        self, trading_partner_id: str, tenant_id: int
+    ) -> dict[str, Any] | None:
+        result = await self.session.execute(
+            select(OutboundRoute).where(
+                OutboundRoute.trading_partner_id == trading_partner_id,
+                OutboundRoute.tenant_id == tenant_id,
+            )
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "id": str(record.id),
+            "tenant_id": record.tenant_id,
+            "trading_partner_id": record.trading_partner_id,
+            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
+        }
+
+    async def get_outbound_edi_header_by_route_or_partner(
+        self,
+        route_id: str | None = None,
+        trading_partner_id: str | None = None,
+        tenant_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        from database.models.control_plane import OutboundEdiHeader, OutboundRoute
+
+        query = select(OutboundEdiHeader)
+        if route_id:
+            route_result = await self.session.execute(
+                select(OutboundRoute.trading_partner_id, OutboundRoute.tenant_id).where(
+                    OutboundRoute.id == uuid.UUID(route_id)
+                )
+            )
+            route_record = route_result.first()
+            if not route_record:
+                return None
+            query = query.where(
+                OutboundEdiHeader.trading_partner_id == route_record.trading_partner_id,
+                OutboundEdiHeader.tenant_id == route_record.tenant_id,
+            )
+        elif trading_partner_id and tenant_id is not None:
+            query = query.where(
+                OutboundEdiHeader.trading_partner_id == trading_partner_id,
+                OutboundEdiHeader.tenant_id == tenant_id,
+            )
+        else:
+            return None
+
+        result = await self.session.execute(query)
         record = result.scalar_one_or_none()
         if not record:
             return None
 
-        connection_type = "UNKNOWN"
-        if record.as2_partner_id:
-            connection_type = "AS2"
-        elif record.sftp_partner_id:
-            connection_type = "SFTP"
-
         return {
-            "route_id": str(record.id),
+            "id": str(record.id),
+            "tenant_id": record.tenant_id,
             "trading_partner_id": record.trading_partner_id,
-            "isa_sender_id": record.isa_sender_id,
+            "default_standard": record.default_standard,
+            "default_version": record.default_version,
             "isa_sender_qualifier": record.isa_sender_qualifier,
-            "isa_receiver_id": record.isa_receiver_id,
+            "isa_sender_id": record.isa_sender_id,
             "isa_receiver_qualifier": record.isa_receiver_qualifier,
+            "isa_receiver_id": record.isa_receiver_id,
             "gs_sender_id": record.gs_sender_id,
             "gs_receiver_id": record.gs_receiver_id,
             "transaction_type": record.transaction_type,
-            "default_standard": record.default_standard,
-            "default_version": record.default_version,
-            "processing_mode": record.processing_mode,
-            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
-            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
-            "connection_type": connection_type,
         }
 
     async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:

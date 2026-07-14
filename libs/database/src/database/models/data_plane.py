@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID as PyUUID
 
@@ -23,6 +23,7 @@ from .replicated_mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,
     InboundRouteMixin,
+    OutboundEdiHeaderMixin,
     OutboundRouteMixin,
     SFTPPartnerMixin,
     WebhookMixin,
@@ -157,6 +158,19 @@ class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampM
     )
 
 
+class OutboundEdiHeader(TenantBase, TenantAwareMixin, OutboundEdiHeaderMixin, TimestampMixin):
+    __tablename__ = "outbound_edi_headers"
+
+    __table_args__ = (
+        Index(
+            "ix_outbound_edi_headers_unique_trading_partner_id",
+            "tenant_id",
+            "trading_partner_id",
+            unique=True,
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Domain Models
 # ---------------------------------------------------------------------------
@@ -211,7 +225,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     )
 
 
-class EdiJson(TenantBase, TenantAwareMixin):
+class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_json"
 
     id: Mapped[PyUUID] = mapped_column(
@@ -234,12 +248,7 @@ class EdiJson(TenantBase, TenantAwareMixin):
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="TRANSLATED")
-
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="TRANSFORMED")
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
@@ -251,7 +260,7 @@ class EdiJson(TenantBase, TenantAwareMixin):
     )
 
 
-class ApiGateway(TenantBase, TenantAwareMixin):
+class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "api_gateway"
 
     id: Mapped[PyUUID] = mapped_column(
@@ -272,11 +281,6 @@ class ApiGateway(TenantBase, TenantAwareMixin):
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
     __table_args__ = (
         CheckConstraint(
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
@@ -285,7 +289,7 @@ class ApiGateway(TenantBase, TenantAwareMixin):
     )
 
 
-class Job(TenantBase, TenantAwareMixin):
+class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "jobs"
 
     id: Mapped[PyUUID] = mapped_column(
@@ -296,10 +300,6 @@ class Job(TenantBase, TenantAwareMixin):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
 
 
 class Outbox(TenantBase, TenantAwareMixin, OutboxMixin):
@@ -309,7 +309,7 @@ class Outbox(TenantBase, TenantAwareMixin, OutboxMixin):
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index(
@@ -325,10 +325,12 @@ class ProcessedEvent(TenantBase, TenantAwareMixin):
     __tablename__ = "processed_events"
 
     idempotency_key: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    processed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
-class AuditLog(TenantBase, TenantAwareMixin):
+class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "audit_log"
 
     id: Mapped[PyUUID] = mapped_column(
@@ -340,7 +342,6 @@ class AuditLog(TenantBase, TenantAwareMixin):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class AckReceipt(TenantBase, TenantAwareMixin):
@@ -353,4 +354,6 @@ class AckReceipt(TenantBase, TenantAwareMixin):
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # MDN, 997, CONTRL
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )

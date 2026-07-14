@@ -1,5 +1,7 @@
 from typing import Any, Protocol
 
+from domain.models import EdiJsonDomainModel, EdiMessageDomainModel
+
 
 class EDIMessagePort(Protocol):
     """
@@ -7,7 +9,7 @@ class EDIMessagePort(Protocol):
     Used by delivery workers that process raw EDI payloads.
     """
 
-    async def get_edi_message(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         """Fetches an EDI Message by trace_id."""
         ...
 
@@ -34,10 +36,14 @@ class EDIMessagePort(Protocol):
         """Updates the status of an EDI Message."""
         ...
 
-    async def update_edi_message_gs_headers(
-        self, trace_id: str, gs_sender_id: str, gs_receiver_id: str
+    async def update_edi_message_metadata(
+        self,
+        trace_id: str,
+        gs_sender_id: str,
+        gs_receiver_id: str,
+        transaction_type: str | None = None,
     ) -> None:
-        """Updates the GS headers of an EDI Message."""
+        """Updates the GS headers and transaction type of an EDI Message."""
         ...
 
     async def claim_edi_message(self, trace_id: str) -> bool:
@@ -52,7 +58,13 @@ class APIPayloadPort(Protocol):
     """
 
     async def save_api_payload(
-        self, trace_id: str, direction: str, payload: dict[str, Any], status: str
+        self,
+        trace_id: str,
+        direction: str,
+        payload: dict[str, Any],
+        status: str,
+        transaction_type: str | None = None,
+        webhook_url: str | None = None,
     ) -> None:
         """Persists a new JSON API Payload record."""
         ...
@@ -80,7 +92,7 @@ class APIPayloadPort(Protocol):
         """Fetches an API Payload by trace_id."""
         ...
 
-    async def get_edi_json(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         """Fetches an EdiJson record by trace_id."""
         ...
 
@@ -88,7 +100,18 @@ class APIPayloadPort(Protocol):
         """Updates the status of an EdiJson record."""
         ...
 
-    async def update_api_payload_status(self, trace_id: str, status: str) -> None:
+    async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
+        """Updates arbitrary fields on an EdiJson record."""
+        ...
+
+    async def update_api_payload_status(
+        self,
+        trace_id: str,
+        status: str,
+        webhook_url: str | None = None,
+        http_status_code: int | None = None,
+        response: str | None = None,
+    ) -> None:
         """Updates the status of an API Payload."""
         ...
 
@@ -117,6 +140,21 @@ class RoutePort(Protocol):
 
     async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
         """Fetches an outbound route by its ID."""
+        ...
+
+    async def get_outbound_route_by_trading_partner_id(
+        self, trading_partner_id: str, tenant_id: int
+    ) -> dict[str, Any] | None:
+        """Fetches an outbound route by Trading Partner ID."""
+        ...
+
+    async def get_outbound_edi_header_by_route_or_partner(
+        self,
+        route_id: str | None = None,
+        trading_partner_id: str | None = None,
+        tenant_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Fetches OutboundEdiHeader by route or partner ID to get translation config like standard, ISA, etc."""
         ...
 
     async def publish_outbox_event(

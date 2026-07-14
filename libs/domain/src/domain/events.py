@@ -1,6 +1,13 @@
 from enum import StrEnum
 
 
+class PipelineEventType(StrEnum):
+    TRANSFORM_EVENT = "TRANSFORM_EVENT"
+    TRANSFORM_COMPLETED = "TRANSFORM_COMPLETED"
+    DELIVER_EVENT = "DELIVER_EVENT"
+    DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
+
+
 class ProvisioningEventType(StrEnum):
     AS2_PARTNER_CREATED = "AS2_PARTNER_CREATED"
     AS2_PARTNER_UPDATED = "AS2_PARTNER_UPDATED"
@@ -23,7 +30,7 @@ class ProvisioningEventType(StrEnum):
 
 
 class MessageQueueName(StrEnum):
-    TRANSLATE = "TranslateQueue"
-    DELIVER = "DeliverQueue"
-    PROVISIONING = "ProvisioningQueue"
-    CDC_DLQ = "CdcDlqQueue"
+    TRANSFORM_QUEUE = "TransformQueue"
+    DELIVER_QUEUE = "DeliverQueue"
+    PROVISIONING_QUEUE = "ProvisioningQueue"
+    CDC_DLQ_QUEUE = "CdcDlqQueue"
