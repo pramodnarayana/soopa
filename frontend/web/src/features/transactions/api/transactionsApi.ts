@@ -26,8 +26,8 @@ export function useTransactions(params: {
     queryKey: transactionsKeys.list(params),
     queryFn: async () => {
       const searchParams = new URLSearchParams()
-      if (params.limit) searchParams.set('limit', params.limit.toString())
-      if (params.offset) searchParams.set('offset', params.offset.toString())
+      if (params.limit !== undefined) searchParams.set('limit', params.limit.toString())
+      if (params.offset !== undefined) searchParams.set('offset', params.offset.toString())
       if (params.partner_id) searchParams.set('partner_id', params.partner_id)
       if (params.transaction_type) searchParams.set('transaction_type', params.transaction_type)
       if (params.direction) searchParams.set('direction', params.direction)

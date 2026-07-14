@@ -951,6 +951,8 @@ class SqlAlchemyDataPlaneRepository(DataPlaneRepositoryPort):
                     stmt = stmt.where(column != str(value))
                 elif operator == "contains":
                     stmt = stmt.where(column.ilike(f"%{value}%"))
+                elif operator == "in" and isinstance(value, list):
+                    stmt = stmt.where(column.in_([str(v) for v in value]))
                 continue
 
             if not hasattr(model, field):

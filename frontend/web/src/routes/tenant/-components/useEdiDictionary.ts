@@ -55,9 +55,12 @@ export function useEdiDictionary(data: any) {
             segments: { ...finalDict.segments, ...(overrideRes.data.segments || {}) },
             elements: { ...finalDict.elements, ...(overrideRes.data.elements || {}) }
           };
-        } catch {
-          // Version-specific override is optional, so we ignore 404s
-          console.log(`No version override found for ${standard}_${version}.json, using base dictionary.`);
+        } catch (err: any) {
+          if (err.response?.status === 404) {
+            console.log(`No version override found for ${standard}_${version}.json, using base dictionary.`);
+          } else {
+            console.warn(`Failed to fetch version override for ${standard}_${version}.json:`, err);
+          }
         }
 
         if (!isCancelled) {

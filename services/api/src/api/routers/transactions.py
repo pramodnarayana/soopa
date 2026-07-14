@@ -167,109 +167,11 @@ async def get_transaction(
                 }
             )
 
-        trading_partner_name = None
-
-        # 1. Resolve from the actual OutboundRoute partnership used for delivery
-        outbound_route_id = getattr(msg, "outbound_route_id", None)
-        if outbound_route_id:
-            try:
-                from database.models.control_plane import AS2Partner, SFTPPartner
-                from database.models.data_plane import OutboundRoute
-                from sqlalchemy import select
-
-                route = None
-                if uow.tenant_session:
-                    route_res = await uow.tenant_session.execute(
-                        select(OutboundRoute).where(OutboundRoute.id == outbound_route_id)
-                    )
-                    route = route_res.scalar_one_or_none()
-                if route:
-                    if route.as2_partner_id:
-                        res = await uow.global_session.execute(
-                            select(AS2Partner.name).where(AS2Partner.id == route.as2_partner_id)
-                        )
-                        trading_partner_name = res.scalar_one_or_none()
-                        if edi_msg_dict["connection_type"] == "UNKNOWN":
-                            edi_msg_dict["connection_type"] = "AS2"
-                    elif route.sftp_partner_id:
-                        res = await uow.global_session.execute(
-                            select(SFTPPartner.name).where(SFTPPartner.id == route.sftp_partner_id)
-                        )
-                        trading_partner_name = res.scalar_one_or_none()
-                        if edi_msg_dict["connection_type"] == "UNKNOWN":
-                            edi_msg_dict["connection_type"] = "SFTP"
-            except Exception:
-                logger.warning(
-                    "Failed to resolve trading_partner_name from outbound route "
-                    f"for trace_id={trace_id}",
-                    exc_info=True,
-                )
-
-        if not trading_partner_name:
-            for j in result["edi_json"]:
-                bm = j.business_metadata or {}
-                routing = bm.get("_routing", {})
-                partner_id = routing.get("trading_partner_id")
-                if partner_id:
-                    try:
-                        import uuid
-
-                        from database.models.control_plane import AS2Partner, SFTPPartner
-                        from sqlalchemy import select
-
-                        pid = uuid.UUID(partner_id)
-                        res = await uow.global_session.execute(
-                            select(AS2Partner.name).where(AS2Partner.id == pid)
-                        )
-                        name = res.scalar_one_or_none()
-                        if name:
-                            trading_partner_name = name
-                            break
-                        res = await uow.global_session.execute(
-                            select(SFTPPartner.name).where(SFTPPartner.id == pid)
-                        )
-                        name = res.scalar_one_or_none()
-                        if name:
-                            trading_partner_name = name
-                            break
-                    except Exception:
-                        logger.warning(
-                            "Failed to resolve trading_partner_name from business_metadata "
-                            f"for trace_id={trace_id}",
-                            exc_info=True,
-                        )
-
-        # 3. Fallback to Webhook URL for inbound deliveries
-        if not trading_partner_name and msg.direction == "INBOUND":
-            try:
-                from database.models.control_plane import Webhook
-                from database.models.data_plane import InboundRoute
-                from sqlalchemy import select
-
-                t_type = None
-                if result["edi_json"]:
-                    t_type = result["edi_json"][0].transaction_type
-
-                if uow.tenant_session:
-                    stmt = select(InboundRoute).where(
-                        InboundRoute.isa_sender_id == msg.sender_id,
-                        InboundRoute.isa_receiver_id == msg.receiver_id,
-                        InboundRoute.transaction_type == t_type,
-                        InboundRoute.active.is_(True),
-                    )
-                    inbound_route = (await uow.tenant_session.execute(stmt)).scalar_one_or_none()
-
-                    if inbound_route and inbound_route.webhook_id:
-                        stmt2 = select(Webhook.url).where(Webhook.id == inbound_route.webhook_id)
-                        webhook_url = (await uow.global_session.execute(stmt2)).scalar_one_or_none()
-                        if webhook_url:
-                            trading_partner_name = f"Webhook: {webhook_url}"
-            except Exception:
-                logger.warning(
-                    "Failed to resolve trading_partner_name from inbound route/webhook "
-                    f"for trace_id={trace_id}",
-                    exc_info=True,
-                )
+        trading_partner_name, new_conn_type = await uow.resolve_trading_partner_name(
+            msg, result["edi_json"]
+        )
+        if new_conn_type and edi_msg_dict.get("connection_type") == "UNKNOWN":
+            edi_msg_dict["connection_type"] = new_conn_type
 
         return TransactionDetailResponse(
             edi_message=edi_msg_dict,

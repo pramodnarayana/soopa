@@ -51,23 +51,7 @@ async def list_edi_headers(
     async with uow:
         service = EdiHeaderService(global_repo=uow.control_plane)
         headers = await service.get_outbound_edi_headers(tenant_id)
-        return [
-            OutboundEdiHeaderItem(
-                id=h.id,
-                name=h.name,
-                trading_partner_id=h.trading_partner_id,
-                isa_sender_id=h.isa_sender_id,
-                isa_sender_qualifier=h.isa_sender_qualifier,
-                isa_receiver_id=h.isa_receiver_id,
-                isa_receiver_qualifier=h.isa_receiver_qualifier,
-                gs_sender_id=h.gs_sender_id,
-                gs_receiver_id=h.gs_receiver_id,
-                transaction_type=h.transaction_type,
-                default_standard=h.default_standard,
-                default_version=h.default_version,
-            )
-            for h in headers
-        ]
+        return headers
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

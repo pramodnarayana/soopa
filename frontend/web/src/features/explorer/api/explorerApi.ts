@@ -23,8 +23,11 @@ export function useExplorerQuery<T>(
     queryKey: [...queryKeyArray, limit, offset],
     queryFn: async () => {
       const response = await axios.post<ExplorerResponse<T>>(url,
-        { filters, limit, offset },
-        { headers: { Authorization: `Bearer ${auth.user?.access_token}` } }
+        { filters },
+        {
+          params: { limit, offset },
+          headers: { Authorization: `Bearer ${auth.user?.access_token}` }
+        }
       )
       return response.data
     },

@@ -8,6 +8,33 @@ interface Props {
   transaction: TransactionDetailResponse
 }
 
+function IsaGsFieldsGrid({
+  senderId, receiverId, gsSenderId, gsReceiverId, className = "grid grid-cols-2 md:grid-cols-4 gap-4 text-sm"
+}: {
+  senderId?: string | null, receiverId?: string | null, gsSenderId?: string | null, gsReceiverId?: string | null, className?: string
+}) {
+  return (
+    <div className={className}>
+      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+        <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Sender</div>
+        <div className="font-mono text-slate-900">{senderId || '-'}</div>
+      </div>
+      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+        <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Receiver</div>
+        <div className="font-mono text-slate-900">{receiverId || '-'}</div>
+      </div>
+      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+        <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Sender</div>
+        <div className="font-mono text-slate-900">{gsSenderId || '-'}</div>
+      </div>
+      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+        <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Receiver</div>
+        <div className="font-mono text-slate-900">{gsReceiverId || '-'}</div>
+      </div>
+    </div>
+  )
+}
+
 export function TransactionTimeline({ transaction }: Props) {
   const { edi_message: msg, edi_json: jsons, api_gateway: gateways } = transaction
 
@@ -40,24 +67,7 @@ export function TransactionTimeline({ transaction }: Props) {
         </div>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Sender</div>
-            <div className="font-mono text-slate-900">{msg.sender_id || '-'}</div>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Receiver</div>
-            <div className="font-mono text-slate-900">{msg.receiver_id || '-'}</div>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Sender</div>
-            <div className="font-mono text-slate-900">{msg.gs_sender_id || '-'}</div>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-            <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Receiver</div>
-            <div className="font-mono text-slate-900">{msg.gs_receiver_id || '-'}</div>
-          </div>
-        </div>
+        <IsaGsFieldsGrid senderId={msg.sender_id} receiverId={msg.receiver_id} gsSenderId={msg.gs_sender_id} gsReceiverId={msg.gs_receiver_id} />
         <div className="mt-4">
           <div className="text-sm font-semibold text-slate-700 mb-2">Raw Payload</div>
           <CodeViewer
@@ -128,24 +138,7 @@ export function TransactionTimeline({ transaction }: Props) {
                 {renderBadge(json.status)}
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-                  <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Sender</div>
-                  <div className="font-mono text-slate-900">{json.sender_id || '-'}</div>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-                  <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Receiver</div>
-                  <div className="font-mono text-slate-900">{json.receiver_id || '-'}</div>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-                  <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Sender</div>
-                  <div className="font-mono text-slate-900">{json.gs_sender_id || '-'}</div>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-                  <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Receiver</div>
-                  <div className="font-mono text-slate-900">{json.gs_receiver_id || '-'}</div>
-                </div>
-              </div>
+              <IsaGsFieldsGrid senderId={json.sender_id} receiverId={json.receiver_id} gsSenderId={json.gs_sender_id} gsReceiverId={json.gs_receiver_id} className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4" />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -207,24 +200,7 @@ export function TransactionTimeline({ transaction }: Props) {
             {renderBadge(msg.status)}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4">
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Sender</div>
-              <div className="font-mono text-slate-900">{msg.sender_id || '-'}</div>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">ISA Receiver</div>
-              <div className="font-mono text-slate-900">{msg.receiver_id || '-'}</div>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Sender</div>
-              <div className="font-mono text-slate-900">{msg.gs_sender_id || '-'}</div>
-            </div>
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
-              <div className="text-slate-500 mb-1 text-xs uppercase font-semibold">GS Receiver</div>
-              <div className="font-mono text-slate-900">{msg.gs_receiver_id || '-'}</div>
-            </div>
-          </div>
+          <IsaGsFieldsGrid senderId={msg.sender_id} receiverId={msg.receiver_id} gsSenderId={msg.gs_sender_id} gsReceiverId={msg.gs_receiver_id} className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4" />
           <div className="mt-4">
             <div className="text-sm font-semibold text-slate-700 mb-2">Raw EDI Payload</div>
             <CodeViewer

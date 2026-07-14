@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FileJson, Database } from 'lucide-react'
 import { CodeViewer } from '@/components/ui/code-viewer'
@@ -71,8 +71,41 @@ export function ExplorerLayout() {
   const [jsonOffset, setJsonOffset] = useState(0)
   const limit = 100
 
+  const [accumulatedMessages, setAccumulatedMessages] = useState<any[]>([])
+  const [accumulatedJson, setAccumulatedJson] = useState<any[]>([])
+
   const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(filters, limit, messagesOffset, activeTab === 'messages')
   const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(filters, limit, jsonOffset, activeTab === 'json')
+
+  const handleFiltersChange = (newFilters: FilterRule[]) => {
+    setFilters(newFilters)
+    setMessagesOffset(0)
+    setJsonOffset(0)
+    setAccumulatedMessages([])
+    setAccumulatedJson([])
+  }
+
+  useEffect(() => {
+    if (messagesData?.items) {
+      setAccumulatedMessages(prev => {
+        if (messagesOffset === 0) return messagesData.items
+        const next = [...prev]
+        next.splice(messagesOffset, limit, ...messagesData.items)
+        return next
+      })
+    }
+  }, [messagesData, messagesOffset])
+
+  useEffect(() => {
+    if (jsonData?.items) {
+      setAccumulatedJson(prev => {
+        if (jsonOffset === 0) return jsonData.items
+        const next = [...prev]
+        next.splice(jsonOffset, limit, ...jsonData.items)
+        return next
+      })
+    }
+  }, [jsonData, jsonOffset])
 
   const handleMessagesLoadMore = () => setMessagesOffset(prev => prev + limit)
   const handleJsonLoadMore = () => setJsonOffset(prev => prev + limit)
@@ -105,13 +138,13 @@ export function ExplorerLayout() {
         <TabsContent value="messages" className="focus:outline-none">
           <ExplorerTable
             columns={messageColumns}
-            data={messagesData?.items || []}
-            isLoading={messagesLoading}
+            data={accumulatedMessages}
+            isLoading={messagesLoading && messagesOffset === 0}
             headerToolbar={
               <FilterBuilder
                 availableFields={availableFields}
                 filters={filters}
-                onChange={setFilters}
+                onChange={handleFiltersChange}
               />
             }
             renderExpanded={(item) => (
@@ -135,13 +168,13 @@ export function ExplorerLayout() {
         <TabsContent value="json" className="focus:outline-none">
           <ExplorerTable
             columns={jsonColumns}
-            data={jsonData?.items || []}
-            isLoading={jsonLoading}
+            data={accumulatedJson}
+            isLoading={jsonLoading && jsonOffset === 0}
             headerToolbar={
               <FilterBuilder
                 availableFields={availableFields}
                 filters={filters}
-                onChange={setFilters}
+                onChange={handleFiltersChange}
               />
             }
             renderExpanded={(item) => (
