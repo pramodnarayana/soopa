@@ -61,12 +61,27 @@ export function TransactionTimeline({ transaction }: Props) {
       <CardHeader className="pb-3 border-b border-slate-100">
         <div className="flex items-center justify-between">
           <CardTitle className={`text-lg flex items-center gap-2 ${colorClass}`}>
-            Received from AS2
+            Received from Trading Partner
           </CardTitle>
           <Badge variant="secondary">{msg.direction}</Badge>
         </div>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
+        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+          <Server className="w-5 h-5 text-slate-400 shrink-0" />
+          <div className="text-sm text-slate-600 space-y-0.5">
+            <div>
+              <span className="font-semibold text-slate-700">Trading Partner:</span>{' '}
+              {transaction.trading_partner_name || <span className="text-slate-400 italic">Unknown</span>}
+            </div>
+            <div>
+              <span className="font-semibold text-slate-700">Connection Type:</span>{' '}
+              {msg.connection_type && msg.connection_type !== 'UNKNOWN'
+                ? msg.connection_type
+                : <span className="text-slate-400 italic">Unknown</span>}
+            </div>
+          </div>
+        </div>
         <IsaGsFieldsGrid senderId={msg.sender_id} receiverId={msg.receiver_id} gsSenderId={msg.gs_sender_id} gsReceiverId={msg.gs_receiver_id} />
         <div className="mt-4">
           <div className="text-sm font-semibold text-slate-700 mb-2">Raw Payload</div>
@@ -79,6 +94,7 @@ export function TransactionTimeline({ transaction }: Props) {
       </CardContent>
     </Card>
   )
+
 
   const renderApiGatewayReceiptBlock = () => (
     <Card>

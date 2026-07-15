@@ -1,12 +1,12 @@
 import logging
 from uuid import UUID
 
+from api.core.uow import UnitOfWork
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     PartnerEntity,
     UpdateAS2TradingPartnerCmd,
 )
-from api.ports.repository import ControlPlaneRepositoryPort
 from domain.events import ProvisioningEventType
 
 logger = logging.getLogger(__name__)
@@ -18,16 +18,16 @@ class AS2PartnerService:
     Operates exclusively on the Global Control Plane repository.
     """
 
-    def __init__(self, global_repo: ControlPlaneRepositoryPort) -> None:
-        self.global_repo = global_repo
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
 
     async def create_as2_partner(
         self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
-        partner_id = await self.global_repo.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
-        await self.global_repo.create_outbox_event(
+        partner_id = await self.uow.control_plane.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
+        await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -45,13 +45,13 @@ class AS2PartnerService:
         self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating AS2 partner {partner_id} for tenant {tenant_id}")
-        await self.global_repo.update_as2_identity(tenant_id, partner_id, cmd)
+        await self.uow.control_plane.update_as2_identity(tenant_id, partner_id, cmd)
 
-        updated_partner = await self.global_repo.get_as2_partner(tenant_id, partner_id)
+        updated_partner = await self.uow.control_plane.get_as2_partner(tenant_id, partner_id)
         if not updated_partner:
             raise ValueError("Partner not found after update")
 
-        await self.global_repo.create_outbox_event(
+        await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -67,8 +67,8 @@ class AS2PartnerService:
 
     async def delete_as2_partner(self, tenant_id: int, partner_id: UUID) -> None:
         logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
-        await self.global_repo.delete_as2_identity(tenant_id, partner_id)
-        await self.global_repo.create_outbox_event(
+        await self.uow.control_plane.delete_as2_identity(tenant_id, partner_id)
+        await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_DELETED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -82,15 +82,15 @@ class AS2PartnerService:
         new_private_key_vault_ref: str | None,
     ) -> PartnerEntity:
         logger.info(f"Rotating certificates for AS2 partner {partner_id} for tenant {tenant_id}")
-        await self.global_repo.rotate_as2_certificates(
+        await self.uow.control_plane.rotate_as2_certificates(
             tenant_id, partner_id, new_public_cert, new_private_key_vault_ref
         )
 
-        updated_partner = await self.global_repo.get_as2_partner(tenant_id, partner_id)
+        updated_partner = await self.uow.control_plane.get_as2_partner(tenant_id, partner_id)
         if not updated_partner:
             raise ValueError("Partner not found after certificate rotation")
 
-        await self.global_repo.create_outbox_event(
+        await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},

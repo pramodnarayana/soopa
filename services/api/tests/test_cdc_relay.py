@@ -43,7 +43,7 @@ def test_cdc_relay_successful_transform_routing(memory_queue: InMemoryQueueAdapt
 
     assert len(memory_queue.sent_messages) == 1
     queue_name, msg_payload = memory_queue.sent_messages[0]
-    assert queue_name == "TransformQueue"
+    assert queue_name.value == "TransformOrchestrationQueue"
     assert msg_payload == {
         "idempotency_key": "uuid-123",
         "event_type": "TRANSFORM_EVENT",

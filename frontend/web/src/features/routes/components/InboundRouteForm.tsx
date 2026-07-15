@@ -5,13 +5,14 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreateInboundRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
+import { ProcessingMode, DestinationType, Direction } from '../types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 
 export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
   const [name, setName] = useState('');
   const [tradingPartnerId, setTradingPartnerId] = useState('');
-  const [processingMode, setProcessingMode] = useState<'TRANSLATE' | 'PASSTHROUGH'>('TRANSLATE');
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>(ProcessingMode.TRANSFORM);
   const [transactionType, setTransactionType] = useState('*');
   const [isaSender, setIsaSender] = useState('');
   const [isaReceiver, setIsaReceiver] = useState('');
@@ -20,7 +21,15 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
   const [targetId, setTargetId] = useState('');
 
   const { toast } = useToast();
-  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations('INBOUND');
+  const { data: allDestinations, isLoading: isLoadingDestinations } = useTenantDestinations(Direction.INBOUND);
+
+  // Filter destinations based on processing mode
+  const destinations = (allDestinations || []).filter(d => {
+    if (processingMode === ProcessingMode.TRANSFORM) return d.type === DestinationType.WEBHOOK;
+    if (processingMode === ProcessingMode.PASSTHROUGH) return d.type === DestinationType.AS2 || d.type === DestinationType.SFTP;
+    return true;
+  });
+
   const createInbound = useCreateInboundRouteMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -46,9 +55,9 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
         gs_receiver_id: gsReceiver || undefined,
         transaction_type: transactionType,
         processing_mode: processingMode,
-        webhook_id: selectedEndpoint.type?.toUpperCase() === 'WEBHOOK' ? targetId : undefined,
-        as2_partner_id: selectedEndpoint.type?.toUpperCase() === 'AS2' ? targetId : undefined,
-        sftp_partner_id: selectedEndpoint.type?.toUpperCase() === 'SFTP' ? targetId : undefined,
+        webhook_id: selectedEndpoint.type === DestinationType.WEBHOOK ? targetId : undefined,
+        as2_partner_id: selectedEndpoint.type === DestinationType.AS2 ? targetId : undefined,
+        sftp_partner_id: selectedEndpoint.type === DestinationType.SFTP ? targetId : undefined,
       });
 
       toast({ title: 'Inbound route created successfully' });
@@ -100,13 +109,19 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="processing_mode" className="text-slate-600 font-medium">Processing Mode *</Label>
-            <Select value={processingMode} onValueChange={(v: 'TRANSLATE' | 'PASSTHROUGH') => setProcessingMode(v)}>
+            <Select
+              value={processingMode}
+              onValueChange={(v: ProcessingMode) => {
+                setProcessingMode(v);
+                setTargetId(''); // Reset target when mode changes
+              }}
+            >
               <SelectTrigger className="h-10 bg-white">
                 <SelectValue placeholder="Select processing mode" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="TRANSLATE">Translate (EDI ↔ JSON)</SelectItem>
-                <SelectItem value="PASSTHROUGH">Passthrough (VAN)</SelectItem>
+                <SelectItem value={ProcessingMode.TRANSFORM}>Transform (EDI ↔ JSON)</SelectItem>
+                <SelectItem value={ProcessingMode.PASSTHROUGH}>Passthrough (VAN)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -146,9 +161,8 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
             disabled={isLoadingDestinations}
             value={targetId}
             onChange={setTargetId}
-            placeholder={isLoadingDestinations ? "Loading..." : "Select webhook or partner destination"}
-            options={(destinations || [])
-              .map(d => ({
+            placeholder={isLoadingDestinations ? "Loading..." : `Select ${processingMode === ProcessingMode.TRANSFORM ? 'webhook' : 'partner'} destination`}
+            options={destinations.map(d => ({
               value: d.id,
               label: (
                 <span className="flex items-center gap-2">

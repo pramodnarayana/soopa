@@ -7,17 +7,14 @@ awslocal s3api put-bucket-acl --bucket edi-as2-payloads --acl public-read
 
 echo "Initializing LocalStack SQS Queues..."
 
-# Create Dead Letter Queue first
-awslocal sqs create-queue --queue-name EdiTransformerQueue-DLQ
-DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/EdiTransformerQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 
-# Create main queue with redrive policy
-awslocal sqs create-queue --queue-name EdiTransformerQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 # Create Data Plane CDC Queues and DLQs
-awslocal sqs create-queue --queue-name TransformQueue-DLQ
-TRANSFORM_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TransformQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-awslocal sqs create-queue --queue-name TransformQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSFORM_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
+awslocal sqs create-queue --queue-name CDC-DLQ
+
+awslocal sqs create-queue --queue-name TransformOrchestrationQueue-DLQ
+TRANSFORM_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TransformOrchestrationQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+awslocal sqs create-queue --queue-name TransformOrchestrationQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSFORM_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 awslocal sqs create-queue --queue-name DeliverQueue-DLQ
 DELIVER_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/DeliverQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)

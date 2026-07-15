@@ -219,7 +219,7 @@ class InboundRouteMixin:
 
     @declared_attr
     def processing_mode(cls) -> Mapped[str]:
-        return mapped_column(String(50), nullable=False, server_default="TRANSLATE")
+        return mapped_column(String(50), nullable=False, server_default="TRANSFORM")
 
     @declared_attr
     def active(cls) -> Mapped[bool]:

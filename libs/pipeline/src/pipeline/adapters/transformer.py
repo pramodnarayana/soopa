@@ -1,6 +1,6 @@
 from typing import Any
 
-from pipeline.ports.transformer import TransformerPort, TranslatedTransaction
+from pipeline.ports.transformer import TransformedTransaction, TransformerPort
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 
@@ -12,13 +12,13 @@ class BotsTransformerAdapter(TransformerPort):
     def __init__(self) -> None:
         self._adapter = BotsEDIAdapter()
 
-    async def translate_edi_to_json(
+    async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TranslatedTransaction]:
+    ) -> list[TransformedTransaction]:
         """
-        Translates EDI to JSON using the wrapped BOTS facade.
+        Transforms EDI to JSON using the wrapped BOTS facade.
         """
-        parsed_payload = await self._adapter.translate(payload)
+        parsed_payload = await self._adapter.transform(payload)
         transactions = []
         for txn in parsed_payload.transactions:
             if (
@@ -27,7 +27,7 @@ class BotsTransformerAdapter(TransformerPort):
                 or txn.transaction_type == transaction_type
             ):
                 transactions.append(
-                    TranslatedTransaction(
+                    TransformedTransaction(
                         transaction_type=txn.transaction_type,
                         isa_sender_id=parsed_payload.sender_id,
                         isa_receiver_id=parsed_payload.receiver_id,
@@ -39,7 +39,7 @@ class BotsTransformerAdapter(TransformerPort):
                 )
         return transactions
 
-    async def translate_json_to_edi(
+    async def transform_json_to_edi(
         self,
         payload: dict[str, Any] | list[Any],
         standard: str,
@@ -47,11 +47,11 @@ class BotsTransformerAdapter(TransformerPort):
         route_config: dict[str, Any],
     ) -> bytes:
         """
-        Translates JSON to EDI using the wrapped BOTS facade.
+        Transforms JSON to EDI using the wrapped BOTS facade.
         """
         import asyncio
 
-        from transformer.domain.exceptions import TranslationError
+        from transformer.domain.exceptions import TransformationError
 
         if isinstance(payload, dict) and (
             "interchange_ISA" in payload or "interchange_UNB" in payload
@@ -67,7 +67,7 @@ class BotsTransformerAdapter(TransformerPort):
 
                 ast_dict = EdifactEnvelopeBuilder.build(route_config, payload)
             else:
-                raise TranslationError(
+                raise TransformationError(
                     message=f"Unsupported standard for envelope building: {standard}"
                 )
 
@@ -77,6 +77,6 @@ class BotsTransformerAdapter(TransformerPort):
 
         fatal_errors = [e for e in errors if not e.startswith("[W")]
         if fatal_errors:
-            raise TranslationError(message="\n".join(fatal_errors), errors=fatal_errors)
+            raise TransformationError(message="\n".join(fatal_errors), errors=fatal_errors)
 
         return edi_str.encode("utf-8")

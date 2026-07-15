@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useCreateOutboundRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
+import { Direction } from '../types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 
@@ -14,7 +15,7 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
 
   const { toast } = useToast();
   // For Outbound, we only fetch destinations that are NOT webhooks
-  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations('OUTBOUND');
+  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations(Direction.OUTBOUND);
   const createOutbound = useCreateOutboundRouteMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {

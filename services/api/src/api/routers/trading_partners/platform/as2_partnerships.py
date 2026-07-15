@@ -23,6 +23,9 @@ from api.dependencies import (
 )
 from api.domain.models import (
     CreateAS2PartnershipCmd,
+    EncryptionAlgorithm,
+    MDNType,
+    SignatureAlgorithm,
     UpdateAS2PartnershipCmd,
 )
 from api.ports.as2_tester import AS2TesterPort
@@ -150,14 +153,14 @@ async def create_platform_as2_partnership(
                 local_partner_id=request.local_partner_id,
                 remote_partner_id=request.remote_partner_id,
                 credentials_vault_ref=request.credentials_vault_ref,
-                mdn_type=request.mdn_type,
+                mdn_type=MDNType(request.mdn_type),
                 mdn_url=str(request.mdn_url) if request.mdn_url else None,
-                encryption_algorithm=request.encryption_algorithm,
-                signature_algorithm=request.signature_algorithm,
+                encryption_algorithm=EncryptionAlgorithm(request.encryption_algorithm),
+                signature_algorithm=SignatureAlgorithm(request.signature_algorithm),
                 advanced_flags=request.advanced_flags,
             )
 
-            svc = AS2PartnershipService(global_repo=uow.control_plane)
+            svc = AS2PartnershipService(uow=uow)
             entity = await svc.create_as2_partnership(tenant_id=0, cmd=cmd)
             await uow.commit()
             p = await uow.control_plane.get_as2_partnership(
@@ -218,7 +221,7 @@ async def update_platform_as2_partnership(
                 advanced_flags=get_val("advanced_flags"),
                 active=get_val("active"),
             )
-            svc = AS2PartnershipService(global_repo=uow.control_plane)
+            svc = AS2PartnershipService(uow=uow)
             await svc.update_as2_partnership(tenant_id=0, partnership_id=partnership_id, cmd=cmd)
             await uow.commit()
 
@@ -264,7 +267,7 @@ async def delete_platform_as2_partnership(
 ) -> None:
     try:
         async with uow:
-            svc = AS2PartnershipService(global_repo=uow.control_plane)
+            svc = AS2PartnershipService(uow=uow)
             await svc.delete_as2_partnership(tenant_id=0, partnership_id=partnership_id)
             await uow.commit()
     except Exception as err:

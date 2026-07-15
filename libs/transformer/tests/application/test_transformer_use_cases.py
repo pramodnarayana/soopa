@@ -13,12 +13,12 @@ class FakeStoragePort:
         return self.raw_data
 
 
-class FakeTranslatorPort:
+class FakeTransformerPort:
     def __init__(self, expected_payload: ParsedEdiPayload):
         self.expected_payload = expected_payload
         self.called_with_raw_edi = None
 
-    async def translate(self, raw_edi: bytes) -> ParsedEdiPayload:
+    async def transform(self, raw_edi: bytes) -> ParsedEdiPayload:
         self.called_with_raw_edi = raw_edi
         return self.expected_payload
 
@@ -51,11 +51,11 @@ async def test_process_inbound_edi_use_case_success():
 
     # Arrange: inject fake dependencies
     storage = FakeStoragePort(raw_data=raw_edi_fixture)
-    translator = FakeTranslatorPort(expected_payload=expected_parsed_payload)
+    transformer = FakeTransformerPort(expected_payload=expected_parsed_payload)
     repository = FakeRepositoryPort()
 
     use_case = ProcessInboundEdiUseCase(
-        storage_port=storage, translator_port=translator, repository_port=repository
+        storage_port=storage, transformer_port=transformer, repository_port=repository
     )
 
     # Act
@@ -65,7 +65,7 @@ async def test_process_inbound_edi_use_case_success():
 
     # Assert
     assert storage.called_with_uri == s3_uri
-    assert translator.called_with_raw_edi == raw_edi_fixture
+    assert transformer.called_with_raw_edi == raw_edi_fixture
     assert repository.saved_trace_id == trace_id
     assert repository.saved_payload == expected_parsed_payload
     assert result == expected_parsed_payload

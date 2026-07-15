@@ -3,7 +3,7 @@ from typing import Any
 
 from domain.events import MessageQueueName, PipelineEventType
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api.dependencies import get_message_queue
 from api.ports.message_queue import MessageQueuePort
@@ -42,8 +42,7 @@ class DebeziumUnwrappedEvent(BaseModel):
     payload: dict[str, Any] | str | None = None
     tenant_id: int | None = None
 
-    class Config:
-        extra = "ignore"  # Debezium sends many extra metadata fields we don't need
+    model_config = ConfigDict(extra="ignore")  # Debezium sends many extra metadata fields
 
 
 @router.api_route("/relay", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], status_code=200)
@@ -125,7 +124,7 @@ async def relay_cdc_event(
                 _TRANSFORM_QUEUE_EVENT_TYPES | {PipelineEventType.DELIVER_EVENT}
             ):
                 queue_name = (
-                    MessageQueueName.TRANSFORM_QUEUE
+                    MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE
                     if event.event_type in _TRANSFORM_QUEUE_EVENT_TYPES
                     else MessageQueueName.DELIVER_QUEUE
                 )

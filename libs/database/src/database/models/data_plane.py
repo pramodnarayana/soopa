@@ -205,6 +205,8 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     outbound_route_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True, index=True
     )
+    as2_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    as2_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     interchange_control_no: Mapped[str | None] = mapped_column(String(255), nullable=True)
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -296,7 +298,7 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSLATE, DELIVER
+    type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSFORM, DELIVER
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

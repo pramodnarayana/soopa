@@ -42,7 +42,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
       default_standard: isInbound ? (route.default_standard || 'x12') : 'x12',
       default_version: isInbound ? (route.default_version || '004010') : '004010',
       transaction_type: route.transaction_type || '',
-      processing_mode: isInbound ? (route.processing_mode || 'TRANSLATE') : 'TRANSLATE',
+      processing_mode: isInbound ? (route.processing_mode || 'TRANSFORM') : 'TRANSFORM',
     }
   });
 
@@ -131,7 +131,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
                   <SelectValue placeholder="Select mode" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="TRANSLATE">Translate (EDI ↔ JSON)</SelectItem>
+                  <SelectItem value="TRANSFORM">Transform (EDI ↔ JSON)</SelectItem>
                   <SelectItem value="PASSTHROUGH">Passthrough (Raw Data)</SelectItem>
                 </SelectContent>
               </Select>

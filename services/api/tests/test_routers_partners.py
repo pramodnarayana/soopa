@@ -410,5 +410,8 @@ def test_tenant_as2_certificates(client, fake_uow):
     assert resp.status_code == 404
 
     # Rotate — partner not found, must return 404
-    resp = client.put(f"/api/v1/trading-partners/as2/{p_id}/certificates/rotate")
+    resp = client.put(
+        f"/api/v1/trading-partners/as2/{p_id}/certificates/rotate",
+        json={"action": "generate", "public_cert_pem": "test", "private_key_pem": "test"},
+    )
     assert resp.status_code == 404

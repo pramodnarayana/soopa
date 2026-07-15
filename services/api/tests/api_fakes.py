@@ -106,12 +106,23 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
                 return FakePartnership()
         return None
 
-    async def create_outbox_event(
-        self, tenant_id: int, event_type: str, payload: dict[str, Any]
-    ) -> None:
+    async def publish_outbox_event(
+        self,
+        tenant_id: int,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: uuid.UUID | None = None,
+    ) -> uuid.UUID:
+        key = idempotency_key or uuid.uuid4()
         self.outbox_events.append(
-            {"tenant_id": tenant_id, "event_type": event_type, "payload": payload}
+            {
+                "tenant_id": tenant_id,
+                "event_type": event_type,
+                "payload": payload,
+                "idempotency_key": key,
+            }
         )
+        return key
 
     async def update_partner_status(
         self, tenant_id: int, partner_id: uuid.UUID, status: str
@@ -261,7 +272,7 @@ class FakeRoute:
     def __init__(self, id, cmd):
         self.id = id
         self.name = getattr(cmd, "name", "Test Route")
-        self.processing_mode = getattr(cmd, "processing_mode", "TRANSLATE")
+        self.processing_mode = getattr(cmd, "processing_mode", "TRANSFORM")
         self.active = True
         self.as2_partner_id = getattr(cmd, "as2_partner_id", None)
         self.sftp_partner_id = getattr(cmd, "sftp_partner_id", None)

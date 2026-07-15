@@ -1,11 +1,34 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
-from uuid import UUID
 
 # ---------------------------------------------------------------------------
 # Sentinels
 # ---------------------------------------------------------------------------
+from enum import StrEnum
+from typing import Any
+from uuid import UUID
+
+
+class MDNType(StrEnum):
+    SYNC = "SYNC"
+    ASYNC = "ASYNC"
+
+
+class EncryptionAlgorithm(StrEnum):
+    AES128 = "AES128"
+    AES192 = "AES192"
+    AES256 = "AES256"
+    DES3 = "3DES"
+    NONE = "NONE"
+
+
+class SignatureAlgorithm(StrEnum):
+    SHA1 = "SHA1"
+    SHA224 = "SHA224"
+    SHA256 = "SHA256"
+    SHA384 = "SHA384"
+    SHA512 = "SHA512"
+    NONE = "NONE"
 
 
 class UnsetType:
@@ -49,10 +72,10 @@ class CreateAS2PartnershipCmd:
     name: str
     trading_partner_id: str | None = None
     credentials_vault_ref: str | None = None
-    mdn_type: str = "SYNC"
+    mdn_type: MDNType = MDNType.SYNC
     mdn_url: str | None = None
-    encryption_algorithm: str = "AES256"
-    signature_algorithm: str = "SHA256"
+    encryption_algorithm: EncryptionAlgorithm = EncryptionAlgorithm.AES256
+    signature_algorithm: SignatureAlgorithm = SignatureAlgorithm.SHA256
 
     advanced_flags: dict[str, Any] | None = None
 
@@ -63,10 +86,10 @@ class UpdateAS2PartnershipCmd:
     local_partner_id: UUID | UnsetType = UNSET
     remote_partner_id: UUID | UnsetType = UNSET
     credentials_vault_ref: str | None | UnsetType = UNSET
-    mdn_type: str | UnsetType = UNSET
+    mdn_type: MDNType | UnsetType = UNSET
     mdn_url: str | None | UnsetType = UNSET
-    encryption_algorithm: str | UnsetType = UNSET
-    signature_algorithm: str | UnsetType = UNSET
+    encryption_algorithm: EncryptionAlgorithm | UnsetType = UNSET
+    signature_algorithm: SignatureAlgorithm | UnsetType = UNSET
 
     advanced_flags: dict[str, Any] | None | UnsetType = UNSET
     active: bool | UnsetType = UNSET
@@ -87,16 +110,16 @@ class CreateSFTPPartnerCmd:
 
 @dataclass(frozen=True)
 class UpdateSFTPPartnerCmd:
-    name: str | None = None
-    host: str | None = None
-    port: int | None = None
-    username: str | None = None
-    credentials_vault_ref: str | None = None
-    inbound_remote_path: str | None = None
-    outbound_remote_path: str | None = None
-    active: bool | None = None
-    password: str | None = None
-    host_key: str | None = None
+    name: str | None | UnsetType = UNSET
+    host: str | None | UnsetType = UNSET
+    port: int | None | UnsetType = UNSET
+    username: str | None | UnsetType = UNSET
+    credentials_vault_ref: str | None | UnsetType = UNSET
+    inbound_remote_path: str | None | UnsetType = UNSET
+    outbound_remote_path: str | None | UnsetType = UNSET
+    active: bool | None | UnsetType = UNSET
+    password: str | None | UnsetType = UNSET
+    host_key: str | None | UnsetType = UNSET
 
 
 @dataclass(frozen=True)
@@ -120,7 +143,7 @@ class CreateInboundRouteCmd:
     trading_partner_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
-    processing_mode: str = "TRANSLATE"
+    processing_mode: str = "TRANSFORM"
     webhook_id: UUID | None = None
     as2_partner_id: UUID | None = None
     sftp_partner_id: UUID | None = None
@@ -231,3 +254,84 @@ class ApiTokenEntity:
     client_id: str  # stored plaintext, safe to display in UI
     client_secret: str  # shown once, never stored — only its hash is in DB
     active: bool
+
+
+@dataclass(frozen=True)
+class EdiMessageDTO:
+    id: UUID
+    trace_id: UUID
+    direction: str
+    connection_type: str | None = None
+    sender_id: str | None = None
+    receiver_id: str | None = None
+    as2_sender_id: str | None = None
+    as2_receiver_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    message_id: str | None = None
+    mdn_id: str | None = None
+    mdn_mode: str | None = None
+    mdn_response: str | None = None
+    file_name: str | None = None
+    content_type: str | None = None
+    signature_algorithm: str | None = None
+    encryption_algorithm: str | None = None
+    compression: str | None = None
+    inbound_route_id: UUID | None = None
+    outbound_route_id: UUID | None = None
+    status: str = "RECEIVED"
+    edi_data: str | None = None
+    interchange_control_no: str | None = None
+    transaction_type: str | None = None
+    format_standard: str | None = None
+    storage_uri: str | None = None
+    file_size_bytes: int | None = None
+    msg_headers: dict[str, Any] | None = None
+    state: str | None = None
+    status_message: str | None = None
+    is_resend: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class EdiJsonDTO:
+    id: UUID
+    trace_id: UUID
+    status: str
+    error_message: str | None = None
+    interchange_control_number: str | None = None
+    group_control_number: str | None = None
+    transaction_set_control_number: str | None = None
+    business_metadata: dict[str, Any] | None = None
+    processing_metadata: dict[str, Any] | None = None
+    transaction_type: str | None = None
+    sender_id: str | None = None
+    receiver_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    payload: dict[str, Any] | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ApiGatewayDTO:
+    id: UUID
+    trace_id: UUID
+    event_type: str | None = None
+    status: str | None = None
+    error_message: str | None = None
+    webhook_url: str | None = None
+    http_status_code: int | None = None
+    payload: dict[str, Any] | None = None
+    response: dict[str, Any] | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class TransactionDetailDTO:
+    edi_message: EdiMessageDTO | None = None
+    edi_jsons: list[EdiJsonDTO] | None = None
+    api_gateways: list[ApiGatewayDTO] | None = None

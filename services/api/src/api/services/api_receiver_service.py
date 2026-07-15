@@ -89,7 +89,7 @@ class ApiReceiverService:
             # 5. Drop Outbox event for Worker to transform
             from domain.events import PipelineEventType
 
-            await data_plane.create_outbox_event(
+            await data_plane.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload={
@@ -98,6 +98,7 @@ class ApiReceiverService:
                     "trading_partner_id": trading_partner_id,
                     "direction": "OUTBOUND",
                 },
+                idempotency_key=trace_id,
             )
 
             await self.uow.commit()

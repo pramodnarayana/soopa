@@ -52,7 +52,7 @@ services:
     - DEBUG=${DEBUG:-0}
     - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
-    - ${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack
+    - localstack_data:/var/lib/localstack
     - /var/run/docker.sock:/var/run/docker.sock
     - ./docker/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
     healthcheck:
@@ -117,3 +117,4 @@ volumes:
   postgres_shard_1_data: null
   postgres_enterprise_1_data: null
   debezium_data: null
+  localstack_data: null

@@ -15,7 +15,9 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "libs/*",
-    "services/*"
+    "services/api",
+    "services/as2_server",
+    "services/workers/*"
 ]
 
 [tool.pytest.ini_options]
@@ -36,9 +38,10 @@ pythonpath = [
     "libs/transformer/src",
     "services/api/src",
     "services/as2_server/src",
-    "services/worker/src",
+    "services/workers/orchestrator/src",
+    "services/workers/compute/src",
 ]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --ignore=services/worker --ignore=libs/transformer/tests/test_worker.py --ignore=libs/transformer/scripts"
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
 ]
@@ -56,7 +59,7 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core", "libs/edi_grammar"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core", "libs/edi_grammar", "services/worker"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -100,7 +103,18 @@ omit = [
     "*/migrations/*",
     # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
-    "*/adapters/repository.py",
+    "services/api/src/api/adapters/edi_header_repository.py",
+    "services/api/src/api/adapters/outbound_route_repository.py",
+    "services/api/src/api/adapters/as2_partnership_repository.py",
+    "services/api/src/api/adapters/transaction_repository.py",
+    "services/api/src/api/adapters/api_token_repository.py",
+    "services/api/src/api/adapters/webhook_repository.py",
+    "services/api/src/api/adapters/outbox_repository.py",
+    "services/api/src/api/adapters/as2_partner_repository.py",
+    "services/api/src/api/adapters/tenant_repository.py",
+    "services/api/src/api/adapters/sftp_repository.py",
+    "services/api/src/api/adapters/data_plane_as2_repository.py",
+    "services/api/src/api/adapters/inbound_route_repository.py",
     "*/adapters/sftp.py",
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
@@ -108,7 +122,8 @@ omit = [
     # AS2 server main (ASGI lifespan wiring — integration only)
     "services/as2_server/src/as2_server/main.py",
     # Transformer worker entrypoint (subprocess runner, not business logic)
-    "libs/transformer/src/transformer/worker.py",
+    "services/workers/compute/src/compute_worker/worker.py",
+    "services/workers/compute/src/compute_worker/main.py",
 ]
 
 [tool.coverage.report]

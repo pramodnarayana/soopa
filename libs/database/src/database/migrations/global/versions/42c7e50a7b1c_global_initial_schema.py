@@ -268,7 +268,7 @@ def upgrade() -> None:
         sa.Column("gs_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=False),
         sa.Column(
-            "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
+            "processing_mode", sa.String(length=50), server_default="TRANSFORM", nullable=False
         ),
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

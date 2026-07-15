@@ -87,9 +87,14 @@ async def test_get_tenant_session_enforces_rls(router: DatabaseRouter) -> None:
 
         assert session == mock_session
         session.execute.assert_called_once()
-        # Ensure RLS was enforced
-        call_arg = session.execute.call_args[0][0]
-        assert str(call_arg) == "SET LOCAL app.current_tenant = '123'"
+        # Ensure RLS was enforced via set_config (parameterized, transaction-local)
+        call_args = session.execute.call_args
+        sql_str = str(call_args[0][0])
+        assert "set_config" in sql_str
+        assert "app.current_tenant" in sql_str
+        # Verify tenant_id was passed as a parameter
+        params = call_args[0][1] if len(call_args[0]) > 1 else call_args[1].get("params", {})
+        assert params["tenant_id"] == "123"
 
 
 @pytest.mark.asyncio

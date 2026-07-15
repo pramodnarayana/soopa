@@ -94,6 +94,10 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: Literal["development", "staging", "production"] = Field(default="development")
+    enable_heavy_compute_queue: bool = Field(
+        default=False,
+        description="Feature flag to route heavy EDI parsing to a dedicated compute queue.",
+    )
     edi_environment: Literal["P", "T", "I"] = Field(
         default="P", description="EDI Environment flag (Production, Test, Information)"
     )

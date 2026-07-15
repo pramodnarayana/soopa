@@ -49,7 +49,7 @@ async def list_edi_headers(
     List all Outbound EDI Headers for the current Tenant.
     """
     async with uow:
-        service = EdiHeaderService(global_repo=uow.control_plane)
+        service = EdiHeaderService(uow=uow)
         headers = await service.get_outbound_edi_headers(tenant_id)
         return headers
 
@@ -64,7 +64,7 @@ async def create_edi_header(
     Creates a new Outbound EDI Header in the Tenant Data Plane.
     """
     async with uow:
-        service = EdiHeaderService(global_repo=uow.control_plane)
+        service = EdiHeaderService(uow=uow)
 
         cmd = CreateOutboundEdiHeaderCmd(
             name=request.name,
@@ -97,7 +97,7 @@ async def update_edi_header(
     Updates an Outbound EDI Header for the current Tenant.
     """
     async with uow:
-        service = EdiHeaderService(global_repo=uow.control_plane)
+        service = EdiHeaderService(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundEdiHeaderCmd(
@@ -133,7 +133,7 @@ async def delete_edi_header(
     Deletes an Outbound EDI Header for the current Tenant.
     """
     async with uow:
-        service = EdiHeaderService(global_repo=uow.control_plane)
+        service = EdiHeaderService(uow=uow)
         success = await service.delete_outbound_edi_header(tenant_id, header_id)
         if not success:
             raise HTTPException(

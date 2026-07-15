@@ -7,8 +7,8 @@ from transformer.domain.models import ParsedEdiPayload, TransactionSet
 pytestmark = pytest.mark.asyncio
 
 
-@patch("pipeline.adapters.transformer.BotsEDIAdapter.translate")
-async def test_bots_transformer_edi_to_json(mock_translate: AsyncMock) -> None:
+@patch("pipeline.adapters.transformer.BotsEDIAdapter.transform")
+async def test_bots_transformer_edi_to_json(mock_transform: AsyncMock) -> None:
     mock_payload = ParsedEdiPayload(
         sender_id="A",
         receiver_id="B",
@@ -23,10 +23,10 @@ async def test_bots_transformer_edi_to_json(mock_translate: AsyncMock) -> None:
             )
         ],
     )
-    mock_translate.return_value = mock_payload
+    mock_transform.return_value = mock_payload
 
     adapter = BotsTransformerAdapter()
-    result = await adapter.translate_edi_to_json(b"ISA*00*", "X12", "850")
+    result = await adapter.transform_edi_to_json(b"ISA*00*", "X12", "850")
 
     assert result is not None
     assert len(result) == 1
@@ -38,7 +38,7 @@ async def test_bots_transformer_edi_to_json(mock_translate: AsyncMock) -> None:
     assert txn.gs_receiver_id == "GS_RECEIVER"
     assert txn.control_number == "1"
     assert txn.payload == {"foo": "bar"}
-    mock_translate.assert_awaited_once_with(b"ISA*00*")
+    mock_transform.assert_awaited_once_with(b"ISA*00*")
 
 
 async def test_bots_transformer_json_to_edi_success() -> None:
@@ -47,5 +47,5 @@ async def test_bots_transformer_json_to_edi_success() -> None:
     adapter = BotsTransformerAdapter()
 
     with patch.object(adapter._adapter, "serialize_to_edi", return_value=("ISA*...~", [])):
-        result = await adapter.translate_json_to_edi({"foo": "bar"}, "X12", "850", {})
+        result = await adapter.transform_json_to_edi({"foo": "bar"}, "X12", "850", {})
         assert result == b"ISA*...~"

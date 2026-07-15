@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from transformer.application.ports import EDITranslatorPort
+from transformer.application.ports import EDITransformerPort
 from transformer.domain.models import ParsedEdiPayload
 
 
@@ -32,7 +32,7 @@ class ProcessInboundEdiUseCase:
     """
 
     storage_port: StoragePort
-    translator_port: EDITranslatorPort
+    transformer_port: EDITransformerPort
     repository_port: ParsedEdiRepositoryPort
 
     async def execute(self, trace_id: str, s3_uri: str) -> ParsedEdiPayload:
@@ -40,7 +40,7 @@ class ProcessInboundEdiUseCase:
         raw_edi_bytes = await self.storage_port.get_raw_payload(s3_uri)
 
         # 2. Execute translation via Anti-Corruption Layer (e.g. Bots EDI)
-        parsed_payload = await self.translator_port.translate(raw_edi_bytes)
+        parsed_payload = await self.transformer_port.transform(raw_edi_bytes)
 
         # 3. Save the parsed output to the database
         await self.repository_port.save_parsed_payload(trace_id, parsed_payload)

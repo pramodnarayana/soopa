@@ -6,9 +6,12 @@ import {
 } from '@tanstack/react-table';
 import { Network } from 'lucide-react';
 import type { EdiHeaderItem } from '../types';
-import { useEdiHeaders } from '../api/ediHeadersApi';
 import { EdiHeaderDetails } from './EdiHeaderDetails';
 import { DataTable } from '@/components/ui/data-table';
+import { useEdiHeaders, useDeleteEdiHeaderMutation } from '../api/ediHeadersApi';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
 
 const columnHelper = createColumnHelper<EdiHeaderItem>();
 
@@ -71,7 +74,53 @@ const columns = [
       </span>
     ),
   }),
+  columnHelper.display({
+    id: 'actions',
+    header: '',
+    cell: (info) => (
+      <div className="flex justify-end">
+        <EdiHeaderRowActions header={info.row.original} />
+      </div>
+    ),
+  }),
 ];
+
+function EdiHeaderRowActions({ header }: { header: EdiHeaderItem }) {
+  const deleteMutation = useDeleteEdiHeaderMutation();
+  const { toast } = useToast();
+
+  const handleDelete = () => {
+    if (!confirm(`Are you sure you want to delete this EDI Header?`)) return;
+    deleteMutation.mutate(header.id, {
+      onSuccess: () => {
+        toast({
+          title: 'EDI Header Deleted',
+          description: 'The EDI Header has been successfully deleted.',
+        });
+      },
+      onError: (err) => {
+        toast({
+          title: 'Error',
+          description: err.message || 'Failed to delete EDI Header',
+          variant: 'destructive',
+        });
+      }
+    });
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+      onClick={handleDelete}
+      disabled={deleteMutation.isPending}
+    >
+      <span className="sr-only">Delete</span>
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  );
+}
 
 export function EdiHeadersTable() {
   const { data: headers, isLoading } = useEdiHeaders();

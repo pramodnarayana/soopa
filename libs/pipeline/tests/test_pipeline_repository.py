@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from config.settings import AppSettings
 from database.models import ApiGateway
+from domain.direction import MessageDirection
+from domain.status import MessageStatus
 from fakes import InMemoryStorageAdapter
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
 
@@ -30,7 +32,7 @@ async def test_get_edi_message_success() -> None:
     mock_record.tenant_id = 1
     mock_record.trace_id = uuid.uuid4()
     mock_record.edi_data = "s3://foo"
-    mock_record.direction = "INBOUND"
+    mock_record.direction = MessageDirection.INBOUND
     mock_record.connection_type = "AS2"
     mock_record.sender_id = "SENDER_X"
     mock_record.receiver_id = "RECEIVER_X"
@@ -39,7 +41,7 @@ async def test_get_edi_message_success() -> None:
     mock_record.format_standard = "X12"
     mock_record.transaction_type = "850"
     mock_record.storage_uri = None
-    mock_record.status = "RECEIVED"
+    mock_record.status = MessageStatus.RECEIVED
     mock_record.trading_partner_id = "PARTNER_X"
     mock_record.created_at = datetime.now(UTC)
     mock_record.updated_at = datetime.now(UTC)
@@ -53,7 +55,7 @@ async def test_get_edi_message_success() -> None:
     assert result is not None
     assert result.edi_data == "s3://foo"
     assert result.format_standard == "X12"
-    assert result.status == "RECEIVED"
+    assert result.status == MessageStatus.RECEIVED
 
 
 async def test_update_edi_message_status() -> None:
@@ -61,7 +63,7 @@ async def test_update_edi_message_status() -> None:
     adapter = make_adapter(mock_session)
 
     trace_id = str(uuid.uuid4())
-    await adapter.update_edi_message_status(trace_id, "TRANSFORMED")
+    await adapter.update_edi_message_status(trace_id, MessageStatus.TRANSFORMED)
 
     mock_session.execute.assert_awaited_once()
 
@@ -75,7 +77,9 @@ async def test_save_api_payload() -> None:
     adapter = make_adapter(mock_session)
 
     trace_id = str(uuid.uuid4())
-    await adapter.save_api_payload(trace_id, "OUTBOUND", {"data": "foo"}, "PENDING_DELIVERY")
+    await adapter.save_api_payload(
+        trace_id, MessageDirection.OUTBOUND, {"data": "foo"}, MessageStatus.PENDING_DELIVERY
+    )
 
     mock_session.add.assert_called_once()
     added_obj = mock_session.add.call_args[0][0]
@@ -104,7 +108,7 @@ async def test_get_api_payload() -> None:
     mock_record = MagicMock(spec=ApiGateway)
     mock_record.trace_id = uuid.uuid4()
     mock_record.storage_uri = "s3://out"
-    mock_record.status = "PENDING_DELIVERY"
+    mock_record.status = MessageStatus.PENDING_DELIVERY
 
     # fake storage needs the uri
     adapter = make_adapter(mock_session)
@@ -116,7 +120,7 @@ async def test_get_api_payload() -> None:
     result = await adapter.get_api_payload(str(mock_record.trace_id))
 
     assert result is not None
-    assert result["status"] == "PENDING_DELIVERY"
+    assert result["status"] == MessageStatus.PENDING_DELIVERY
     assert result["payload"] == {"data": "foo"}
 
 
@@ -125,7 +129,7 @@ async def test_update_api_payload_status() -> None:
     adapter = make_adapter(mock_session)
 
     trace_id = str(uuid.uuid4())
-    await adapter.update_api_payload_status(trace_id, "DELIVERED")
+    await adapter.update_api_payload_status(trace_id, MessageStatus.DELIVERED)
 
     mock_session.execute.assert_awaited_once()
     mock_session.flush.assert_awaited_once()

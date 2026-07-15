@@ -57,7 +57,11 @@ Implement an Outbox Sweeper background worker that acts as a robust enterprise f
 
 ## 4. Domain Model Refactoring
 - **Decoupled Validation**: Validation logic should be extracted from `Transformer` into a dedicated step before translation.
-- **Domain Models for Configuration Entities**: We recently added true Domain Models (`EdiJsonDomainModel`, `EdiMessageDomainModel`) for Data Plane entities, but `APIPayload`, `Route`, `OutboundEdiHeader`, etc. are still returning hardcoded `dict[str, Any]` from repository adapters. These must be upgraded to full strongly-typed Pydantic Domain Models to resolve "Primitive Obsession" across the architecture.
+
+### 2. Audit for "Translate" terminology
+- **"Translate/Translation"**: Audit remaining files for legacy terminology and ensure consistency with "Transform/Transformation".
+
+### 3. Verify Inbound AS2 flow
 
 ## 5. Testing
 
@@ -67,14 +71,12 @@ Implement an Outbox Sweeper background worker that acts as a robust enterprise f
 `make test` skips frontend tests with a placeholder comment.
 React component tests and TanStack Query mutation tests are not covered.
 
-## 6. Database Schema
-
-### Missing `edi_headers` Table
-
-**Priority:** Medium
-**Description:** We currently lack an `edi_headers` table to store extracted EDI header metadata (e.g. ST/GS segments). This table needs to be created and linked via foreign key to the `outbound_route` table so that EDI messages can be properly tracked and correlated with their configured outbound routes.
 
 ## 7. EDI Translation vs Validation
 
 **Priority:** Medium
 Currently, the bots engine does not support a lightweight validation mode (e.g., dry-run JSON -> EDI without full transformation). Validation is inherently tied to transformation. As a result, the API does very basic JSON structure validation, but strict EDI grammar validation happens asynchronously in the Worker. Future Action: Investigate if we can separate validation (e.g. strict JSON Schema or X12 rules parser) from transformation so the API can quickly reject invalid transactions without full engine processing.
+
+### UnitOfWork Architecture (Control Plane vs Data Plane Naming)
+Currently, the `UnitOfWork` (and its underlying SQL Alchemy repositories) leak infrastructure/deployment boundaries ("Control Plane" and "Data Plane") into domain business logic. We have giant God-objects like `SqlAlchemyControlPlaneRepository` inheriting from 10+ distinct repositories, causing namespace collisions and violating SOLID principles (Single Responsibility Principle).
+**Future Action:** Refactor `UnitOfWork` to remove `control_plane` and `data_plane` concepts from class names and properties. Use Composition to expose distinct Bounded Contexts (e.g., `self.trading_partners`, `self.transactions`, `self.routes`) instead of lumping them into control/data plane buckets.

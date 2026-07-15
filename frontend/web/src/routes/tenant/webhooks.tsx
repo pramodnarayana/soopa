@@ -15,11 +15,11 @@ function WebhooksPage() {
   const { data: webhooks = [], isLoading } = useTenantWebhooksQuery()
 
   return (
-    <div className="flex flex-col gap-8 max-w-6xl mx-auto">
+    <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out p-8">
       {/* Header */}
-      <div className="flex flex-col gap-6">
-        <div className="flex justify-between items-start">
-          <div>
+      <section className="flex flex-col gap-2 pb-6 border-b border-slate-200/60">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3 mb-2">
             <h2 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
               <Network className="w-8 h-8 text-indigo-600" />
               Webhooks
@@ -29,9 +29,10 @@ function WebhooksPage() {
             <CreateWebhookModal />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6">
+      {/* Main Grid */}
+      <div className="space-y-8">
         <WebhooksTable data={webhooks} isLoading={isLoading} />
       </div>
     </div>

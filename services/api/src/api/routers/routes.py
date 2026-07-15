@@ -38,7 +38,7 @@ async def list_routes(
     List all Active Routes for the current Tenant.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
         routes = await service.list_routes(tenant_id)
         return _route_list_adapter.validate_python(routes)
 
@@ -53,7 +53,7 @@ async def create_inbound_route(
     Creates a new Inbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
 
         cmd = CreateInboundRouteCmd(
             name=request.name,
@@ -87,7 +87,7 @@ async def create_outbound_route(
     Creates a new Outbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
 
         cmd = CreateOutboundRouteCmd(
             trading_partner_id=request.trading_partner_id,
@@ -115,7 +115,7 @@ async def update_inbound_route(
     Updates an Inbound Route for the current Tenant.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateInboundRouteCmd(
@@ -150,7 +150,7 @@ async def delete_inbound_route(
     Deletes an Inbound Route for the current Tenant.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
         success = await service.delete_inbound_route(tenant_id, route_id)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
@@ -168,7 +168,7 @@ async def update_outbound_route(
     Updates an Outbound Route for the current Tenant.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundRouteCmd(
@@ -196,7 +196,7 @@ async def delete_outbound_route(
     Deletes an Outbound Route for the current Tenant.
     """
     async with uow:
-        service = RouteService(global_repo=uow.control_plane)
+        service = RouteService(uow=uow)
         success = await service.delete_outbound_route(tenant_id, route_id)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")

@@ -5,6 +5,7 @@ import {
   getCoreRowModel,
   getExpandedRowModel,
   useReactTable,
+  getSortedRowModel,
 } from '@tanstack/react-table';
 import type { RouteItem } from '../types';
 import { Network, ArrowRightLeft, ArrowLeftRight } from 'lucide-react';
@@ -17,6 +18,23 @@ import { RouteDetails } from './RouteDetails';
 const columnHelper = createColumnHelper<RouteItem>();
 
 const columns = [
+  columnHelper.accessor('trading_partner_id', {
+    header: 'Trading Partner',
+    cell: (info) => {
+      const val = info.getValue();
+      if (!val) {
+        return <span className="text-slate-500 italic">No Trading Partner Assigned</span>;
+      }
+      return (
+        <span className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded bg-indigo-100 flex items-center justify-center text-indigo-700">
+             <Network className="w-3.5 h-3.5" />
+          </span>
+          {val}
+        </span>
+      );
+    }
+  }),
   columnHelper.accessor('name', {
     header: 'Route Name',
     cell: (info) => (
@@ -24,11 +42,6 @@ const columns = [
         <span className="font-medium text-slate-900">
           {info.getValue()}
         </span>
-        {info.row.original.trading_partner_id && (
-          <div className="text-xs text-slate-400 mt-1">
-            Trading Partner ID: {info.row.original.trading_partner_id}
-          </div>
-        )}
       </div>
     ),
   }),
@@ -151,20 +164,26 @@ export function RoutesTable({ data, isLoading }: { data: RouteItem[]; isLoading:
   const table = useReactTable({
     data,
     columns,
+    initialState: {
+      sorting: [{ id: 'trading_partner_id', desc: false }],
+    },
     getCoreRowModel: getCoreRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     getRowCanExpand: () => true,
   });
 
   return (
     <DataTable
       table={table}
+      columnsLength={columns.length}
       isLoading={isLoading}
       dataLength={data.length}
-      emptyIcon={<Network className="w-8 h-8" />}
-      emptyTitle="No Active Routes"
-      columnsLength={columns.length}
+      emptyIcon={<ArrowLeftRight className="w-8 h-8" />}
+      emptyTitle="No Routes Configured"
+      emptyDescription="Get started by creating your first inbound or outbound route."
       renderExpandedRow={(row) => <RouteDetails route={row.original} onCancel={() => row.toggleExpanded()} />}
+      getGroupBoundary={(row, prevRow) => row.original.trading_partner_id !== prevRow.original.trading_partner_id}
     />
   );
 }

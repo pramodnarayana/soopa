@@ -22,7 +22,7 @@ router = APIRouter(tags=["Partners — AS2"])
 
 
 @router.get(
-    "/as2/trading-partners/{partner_id}/certificates/export",
+    "/as2/{partner_id}/certificates/export",
     response_model=CertificateExportResponse,
 )
 async def export_as2_certificates(
@@ -81,7 +81,7 @@ async def export_as2_certificates(
 
 
 @router.put(
-    "/as2/trading-partners/{partner_id}/certificates/rotate",
+    "/as2/{partner_id}/certificates/rotate",
     response_model=AS2TradingPartnerResponse,
 )
 async def rotate_as2_certificates(
@@ -101,6 +101,7 @@ async def rotate_as2_certificates(
             raise HTTPException(status_code=404, detail="Partner not found")
 
         actual_tenant_id = partner.tenant_id
+        assert actual_tenant_id is not None
 
         if partner.is_local and "certificates:rotate" not in profile["permissions"]:
             raise HTTPException(
@@ -137,7 +138,7 @@ async def rotate_as2_certificates(
                 )
 
         try:
-            svc = AS2PartnerService(global_repo=uow.control_plane)
+            svc = AS2PartnerService(uow=uow)
             updated_partner = await svc.rotate_certificates(
                 tenant_id=actual_tenant_id,
                 partner_id=partner_id,
