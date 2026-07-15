@@ -2,6 +2,7 @@ from datetime import UTC
 from typing import Any
 from uuid import UUID
 
+from api.ports.api_token_repository import ApiTokenRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     ApiToken,
@@ -9,7 +10,7 @@ from database.models.control_plane import (
 from sqlalchemy import delete, or_, select, update
 
 
-class SqlAlchemyApiTokenRepository:
+class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
     """Repository for managing platform API tokens in the global (control plane) DB."""
 
     def __init__(self, session: GlobalSession) -> None:

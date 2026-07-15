@@ -25,11 +25,10 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return
 
-        partner = await self.repository.get_sftp_partner(partner_id)
-        if not partner:
-            raise ValueError(f"SFTP partner {partner_id} not found.")
-
         try:
+            partner = await self.repository.get_sftp_partner(partner_id)
+            if not partner:
+                raise ValueError(f"SFTP partner {partner_id} not found.")
             if not edi_msg.edi_data:
                 raise ValueError("Empty EDI data")
             raw_payload = edi_msg.edi_data.encode("utf-8")

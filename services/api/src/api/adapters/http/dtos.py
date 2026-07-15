@@ -179,17 +179,6 @@ class CreateInboundRouteRequest(BaseModel):
     as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
     sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
 
-    @model_validator(mode="after")
-    def check_exactly_one_destination(self) -> "CreateInboundRouteRequest":
-        targets = [
-            self.webhook_id is not None,
-            self.as2_partner_id is not None,
-            self.sftp_partner_id is not None,
-        ]
-        if sum(targets) != 1:
-            raise ValueError("Exactly one destination partner must be specified")
-        return self
-
 
 class CreateOutboundRouteRequest(BaseModel):
     trading_partner_id: str = Field(

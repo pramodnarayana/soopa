@@ -2,15 +2,15 @@
 Domain service responsible for the lifecycle of Webhook delivery destinations.
 
 Follows Hexagonal Architecture:
-  - Depends on ControlPlaneRepositoryPort (port), never on SQLAlchemy.
+  - Depends on UnitOfWork (port), never on SQLAlchemy.
   - Pure Python: testable without a DB or framework.
 """
 
 import logging
 from uuid import UUID
 
+from api.core.uow import UnitOfWork
 from api.domain.models import CreateWebhookCmd, PartnerEntity
-from api.ports.repository import ControlPlaneRepositoryPort
 from domain.events import ProvisioningEventType
 
 logger = logging.getLogger(__name__)
@@ -20,20 +20,21 @@ class WebhookService:
     """
     Application service responsible for the lifecycle of Webhook delivery destinations.
 
-    Constructor receives ControlPlaneRepositoryPort — a pure interface.
+    Constructor receives UnitOfWork — a pure interface.
     No framework, no DB, no network dependency at construction time.
     """
 
-    def __init__(self, global_repo: ControlPlaneRepositoryPort) -> None:
-        self._repo = global_repo
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
 
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> PartnerEntity:
         logger.info("Webhook creating", extra={"tenant_id": tenant_id, "webhook_name": cmd.name})
-        partner_id = await self._repo.create_webhook(tenant_id=tenant_id, cmd=cmd)
-        await self._repo.publish_outbox_event(
+        partner_id = await self.uow.control_plane.create_webhook(tenant_id=tenant_id, cmd=cmd)
+        await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.WEBHOOK_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            idempotency_key=partner_id,
         )
         return PartnerEntity(
             partner_id=partner_id,
@@ -54,12 +55,15 @@ class WebhookService:
         logger.info(
             "Webhook updating", extra={"tenant_id": tenant_id, "webhook_id": str(webhook_id)}
         )
-        result = await self._repo.update_webhook(tenant_id, webhook_id, name, active, url)
+        result = await self.uow.control_plane.update_webhook(
+            tenant_id, webhook_id, name, active, url
+        )
         if result:
-            await self._repo.publish_outbox_event(
+            await self.uow.control_plane.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_UPDATED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
+                idempotency_key=webhook_id,
             )
         return result
 
@@ -67,11 +71,12 @@ class WebhookService:
         logger.info(
             "Webhook deleting", extra={"tenant_id": tenant_id, "webhook_id": str(webhook_id)}
         )
-        result = await self._repo.delete_webhook(tenant_id, webhook_id)
+        result = await self.uow.control_plane.delete_webhook(tenant_id, webhook_id)
         if result:
-            await self._repo.publish_outbox_event(
+            await self.uow.control_plane.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_DELETED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
+                idempotency_key=webhook_id,
             )
         return result

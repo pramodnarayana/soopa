@@ -12,7 +12,7 @@ TenantSession = NewType("TenantSession", AsyncSession)
 class BaseSqlAlchemyRepository:
     """Base repository providing basic SQLAlchemy functionality."""
 
-    pass
+    session: AsyncSession
 
 
 class GlobalSqlAlchemyRepository(BaseSqlAlchemyRepository):

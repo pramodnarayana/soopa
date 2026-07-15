@@ -52,10 +52,12 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 local_partner=local_partner,
                 remote_partner=remote_partner,
             )
-        except ValueError:
+        except Exception:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
+            logger.exception(
+                f"AS2 Delivery Adapter is misconfigured or failed to build for trace_id={trace_id}"
+            )
             return
 
         try:
@@ -78,50 +80,60 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         if 200 <= status_code < 300:
             from as2_core import parse_mdn
 
-            mdn = parse_mdn(response_headers, response_body)
-            disposition = mdn.disposition
-            received_mic = mdn.mic
+            try:
+                mdn = parse_mdn(response_headers, response_body)
+                disposition = mdn.disposition
+                received_mic = mdn.mic
 
-            is_success = False
-            if disposition:
-                disp_parts = disposition.split(";", 1)
-                if len(disp_parts) == 2:
-                    status_part = disp_parts[1].strip().lower()
-                    if (
-                        status_part.startswith("processed")
-                        and "error" not in status_part
-                        and "failed" not in status_part
-                    ):
-                        is_success = True
-                        if as2_msg.mic and (
-                            not received_mic
-                            or as2_msg.mic.replace(" ", "").lower()
-                            != received_mic.replace(" ", "").lower()
+                is_success = False
+                if disposition:
+                    disp_parts = disposition.split(";", 1)
+                    if len(disp_parts) == 2:
+                        status_part = disp_parts[1].strip().lower()
+                        if (
+                            status_part.startswith("processed")
+                            and "error" not in status_part
+                            and "failed" not in status_part
                         ):
-                            is_success = False
-                            logger.warning(
-                                f"MDN MIC mismatch for trace_id={trace_id}. "
-                                f"Expected {as2_msg.mic}, got {received_mic}"
-                            )
+                            is_success = True
+                            if as2_msg.mic and (
+                                not received_mic
+                                or as2_msg.mic.replace(" ", "").lower()
+                                != received_mic.replace(" ", "").lower()
+                            ):
+                                is_success = False
+                                logger.warning(
+                                    f"MDN MIC mismatch for trace_id={trace_id}. "
+                                    f"Expected {as2_msg.mic}, got {received_mic}"
+                                )
 
-            if is_success:
-                await self.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
-                await self._emit_delivery_completed(
-                    trace_id, edi_msg.direction, MessageStatus.DELIVERED
-                )
-                logger.info(
-                    f"Delivered trace_id={trace_id} → {remote_url} "
-                    f"(HTTP {status_code}). MIC={as2_msg.mic}"
-                )
-            else:
+                if is_success:
+                    await self.repository.update_edi_message_status(
+                        trace_id, MessageStatus.DELIVERED
+                    )
+                    await self._emit_delivery_completed(
+                        trace_id, edi_msg.direction, MessageStatus.DELIVERED
+                    )
+                    logger.info(
+                        f"Delivered trace_id={trace_id} → {remote_url} "
+                        f"(HTTP {status_code}). MIC={as2_msg.mic}"
+                    )
+                else:
+                    await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+                    await self._emit_delivery_completed(
+                        trace_id, edi_msg.direction, MessageStatus.FAILED
+                    )
+                    logger.error(
+                        f"Sync MDN indicates failure for trace_id={trace_id}. "
+                        f"Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
+                    )
+            except Exception:
                 await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
                 await self._emit_delivery_completed(
                     trace_id, edi_msg.direction, MessageStatus.FAILED
                 )
-                logger.error(
-                    f"Sync MDN indicates failure for trace_id={trace_id}. "
-                    f"Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
-                )
+                logger.exception(f"AS2 MDN parsing or processing failed for trace_id={trace_id}")
+                return
         else:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)

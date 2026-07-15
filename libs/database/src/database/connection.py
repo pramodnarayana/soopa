@@ -97,9 +97,10 @@ class DatabaseRouter:
         async with factory() as session:
             session.info["session_type"] = "tenant"
             # Enforce Row-Level Security isolation
-            # PostgreSQL does not support bind parameters for SET commands,
-            # so we must format the string directly. tenant_id is an integer so it's safe.
-            await session.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}'"))
+            await session.execute(
+                text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                {"tenant_id": str(tenant_id)},
+            )
             yield session  # type: ignore
 
     async def close_all(self) -> None:

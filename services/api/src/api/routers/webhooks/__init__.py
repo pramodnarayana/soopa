@@ -82,7 +82,7 @@ async def create_webhook(
     async with uow:
         if not uow.control_plane:
             raise HTTPException(status_code=500, detail="Control plane not initialized")
-        service = WebhookService(global_repo=uow.control_plane)
+        service = WebhookService(uow=uow)
         cmd = CreateWebhookCmd(
             name=request.name,
             url=str(request.url),
@@ -115,7 +115,7 @@ async def update_webhook(
     async with uow:
         if not uow.control_plane:
             raise HTTPException(status_code=500, detail="Control plane not initialized")
-        service = WebhookService(global_repo=uow.control_plane)
+        service = WebhookService(uow=uow)
         success = await service.update_webhook(
             tenant_id,
             webhook_id,
@@ -147,7 +147,7 @@ async def delete_webhook(
     async with uow:
         if not uow.control_plane:
             raise HTTPException(status_code=500, detail="Control plane not initialized")
-        service = WebhookService(global_repo=uow.control_plane)
+        service = WebhookService(uow=uow)
         success = await service.delete_webhook(tenant_id, webhook_id)
         if not success:
             raise HTTPException(status_code=404, detail="Webhook not found")

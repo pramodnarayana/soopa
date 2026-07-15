@@ -25,47 +25,52 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     # ------------------------------------------------------------------------
     # Routes (Now in Control Plane)
     # ------------------------------------------------------------------------
-    async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> UUID:
-        destinations = [
-            d for d in (cmd.webhook_id, cmd.as2_partner_id, cmd.sftp_partner_id) if d is not None
-        ]
+    async def _validate_inbound_destination(
+        self, tenant_id: int, webhook_id: UUID | None, as2_id: UUID | None, sftp_id: UUID | None
+    ) -> None:
+        destinations = [d for d in (webhook_id, as2_id, sftp_id) if d is not None]
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (webhook, as2, or sftp) must be provided")
 
-        if cmd.webhook_id:
+        if webhook_id:
             result = await self.session.execute(
                 select(Webhook.id).where(
-                    Webhook.id == cmd.webhook_id,
+                    Webhook.id == webhook_id,
                     Webhook.tenant_id == tenant_id,
                 )
             )
             if not result.scalar_one_or_none():
                 raise ValueError(
-                    f"Webhook partner {cmd.webhook_id} not found or does not belong to this tenant"
+                    f"Webhook partner {webhook_id} not found or does not belong to this tenant"
                 )
 
-        if cmd.as2_partner_id:
+        if as2_id:
             result = await self.session.execute(
                 select(AS2Partner.id).where(
-                    AS2Partner.id == cmd.as2_partner_id,
+                    AS2Partner.id == as2_id,
                     AS2Partner.tenant_id.in_([tenant_id, 0]),
                 )
             )
             if not result.scalar_one_or_none():
                 raise ValueError(
-                    f"AS2 partner {cmd.as2_partner_id} not found or does not belong to this tenant"
+                    f"AS2 partner {as2_id} not found or does not belong to this tenant"
                 )
 
-        if cmd.sftp_partner_id:
+        if sftp_id:
             result = await self.session.execute(
                 select(SFTPPartner.id).where(
-                    SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
+                    SFTPPartner.id == sftp_id, SFTPPartner.tenant_id == tenant_id
                 )
             )
             if not result.scalar_one_or_none():
                 raise ValueError(
-                    f"SFTP partner {cmd.sftp_partner_id} not found or does not belong to this tenant"
+                    f"SFTP partner {sftp_id} not found or does not belong to this tenant"
                 )
+
+    async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> UUID:
+        await self._validate_inbound_destination(
+            tenant_id, cmd.webhook_id, cmd.as2_partner_id, cmd.sftp_partner_id
+        )
 
         route_id = uuid.uuid4()
         record = InboundRoute(
@@ -115,46 +120,17 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         if not isinstance(cmd.processing_mode, UnsetType):
             record.processing_mode = cmd.processing_mode
         if not isinstance(cmd.webhook_id, UnsetType):
-            if cmd.webhook_id is not None:
-                r = await self.session.execute(
-                    select(Webhook.id).where(
-                        Webhook.id == cmd.webhook_id, Webhook.tenant_id == tenant_id
-                    )
-                )
-                if not r.scalar_one_or_none():
-                    raise ValueError("Webhook partner not found")
             record.webhook_id = cmd.webhook_id
         if not isinstance(cmd.as2_partner_id, UnsetType):
-            if cmd.as2_partner_id is not None:
-                r = await self.session.execute(
-                    select(AS2Partner.id).where(
-                        AS2Partner.id == cmd.as2_partner_id,
-                        AS2Partner.tenant_id.in_([tenant_id, 0]),
-                    )
-                )
-                if not r.scalar_one_or_none():
-                    raise ValueError("AS2 partner not found")
             record.as2_partner_id = cmd.as2_partner_id
         if not isinstance(cmd.sftp_partner_id, UnsetType):
-            if cmd.sftp_partner_id is not None:
-                r = await self.session.execute(
-                    select(SFTPPartner.id).where(
-                        SFTPPartner.id == cmd.sftp_partner_id, SFTPPartner.tenant_id == tenant_id
-                    )
-                )
-                if not r.scalar_one_or_none():
-                    raise ValueError("SFTP partner not found")
             record.sftp_partner_id = cmd.sftp_partner_id
         if not isinstance(cmd.active, UnsetType):
             record.active = cmd.active
 
-        destinations = [
-            d
-            for d in (record.webhook_id, record.as2_partner_id, record.sftp_partner_id)
-            if d is not None
-        ]
-        if len(destinations) != 1:
-            raise ValueError("Exactly one destination must be provided")
+        await self._validate_inbound_destination(
+            tenant_id, record.webhook_id, record.as2_partner_id, record.sftp_partner_id
+        )
 
         await self.session.flush()
         return True
@@ -177,7 +153,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     InboundRoute.transaction_type == transaction_type,
                     InboundRoute.transaction_type.is_(None),
                 )
-            ).order_by(InboundRoute.transaction_type.desc())
+            ).order_by(InboundRoute.transaction_type.desc().nullslast())
 
         result = await self.session.execute(stmt)
         record = result.scalars().first()

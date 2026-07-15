@@ -76,3 +76,7 @@ React component tests and TanStack Query mutation tests are not covered.
 
 **Priority:** Medium
 Currently, the bots engine does not support a lightweight validation mode (e.g., dry-run JSON -> EDI without full transformation). Validation is inherently tied to transformation. As a result, the API does very basic JSON structure validation, but strict EDI grammar validation happens asynchronously in the Worker. Future Action: Investigate if we can separate validation (e.g. strict JSON Schema or X12 rules parser) from transformation so the API can quickly reject invalid transactions without full engine processing.
+
+### UnitOfWork Architecture (Control Plane vs Data Plane Naming)
+Currently, the `UnitOfWork` (and its underlying SQL Alchemy repositories) leak infrastructure/deployment boundaries ("Control Plane" and "Data Plane") into domain business logic. We have giant God-objects like `SqlAlchemyControlPlaneRepository` inheriting from 10+ distinct repositories, causing namespace collisions and violating SOLID principles (Single Responsibility Principle).
+**Future Action:** Refactor `UnitOfWork` to remove `control_plane` and `data_plane` concepts from class names and properties. Use Composition to expose distinct Bounded Contexts (e.g., `self.trading_partners`, `self.transactions`, `self.routes`) instead of lumping them into control/data plane buckets.

@@ -73,7 +73,23 @@ class InboundTransformService:
 
         sender_id = edi_msg.sender_id
         receiver_id = edi_msg.receiver_id
-        partnership_id_str = None
+
+        sender_global = edi_msg.sender_id
+        receiver_global = edi_msg.receiver_id
+        transaction_type_global = (
+            transformed_txns[0].transaction_type if transformed_txns else edi_msg.transaction_type
+        )
+        route = (
+            await self.repository.get_route(
+                MessageDirection.INBOUND,
+                str(sender_global),
+                str(receiver_global),
+                str(transaction_type_global) if transaction_type_global else "",
+            )
+            if sender_global and receiver_global
+            else None
+        )
+        partnership_id_str = route.get("trading_partner_id") if route else None
 
         for txn in transformed_txns:
             txn_type = txn.transaction_type
@@ -115,22 +131,7 @@ class InboundTransformService:
         # 5. Build the complete EDI Webhook envelope
         from pipeline.core.models import EdiWebhookPayload
 
-        sender_global = edi_msg.sender_id
-        receiver_global = edi_msg.receiver_id
-        transaction_type_global = (
-            transformed_txns[0].transaction_type if transformed_txns else edi_msg.transaction_type
-        )
-        route = (
-            await self.repository.get_route(
-                MessageDirection.INBOUND,
-                str(sender_global),
-                str(receiver_global),
-                str(transaction_type_global) if transaction_type_global else "",
-            )
-            if sender_global and receiver_global
-            else None
-        )
-        trading_partner_id = route.get("trading_partner_id") if route else None
+        trading_partner_id = partnership_id_str
 
         webhook_url = None
         if route and route.get("webhook_id"):

@@ -69,11 +69,13 @@ async def create_platform_as2_partner(
             )
 
             # Use tenant_id=0 for global platform partners
-            svc = AS2PartnerService(global_repo=uow.control_plane)
+            svc = AS2PartnerService(uow=uow)
             entity = await svc.create_as2_partner(tenant_id=0, cmd=cmd)
 
             await uow.commit()
             p = await uow.control_plane.get_as2_partner(tenant_id=0, partner_id=entity.partner_id)
+            if not p:
+                raise HTTPException(status_code=500, detail="Partner creation failed")
 
             return AS2TradingPartnerResponse(
                 id=str(entity.partner_id),
@@ -127,7 +129,7 @@ async def update_platform_as2_partner(
             active=request.active,
         )
         try:
-            svc = AS2PartnerService(global_repo=uow.control_plane)
+            svc = AS2PartnerService(uow=uow)
             await svc.update_as2_partner(tenant_id=0, partner_id=partner_id, cmd=cmd)
             updated_partner = await uow.control_plane.get_as2_partner(
                 tenant_id=0, partner_id=partner_id
@@ -157,7 +159,7 @@ async def delete_platform_as2_partner(
 ) -> None:
     """Deletes an AS2 partner."""
     async with uow:
-        svc = AS2PartnerService(global_repo=uow.control_plane)
+        svc = AS2PartnerService(uow=uow)
         try:
             await svc.delete_as2_partner(tenant_id=0, partner_id=partner_id)
             await uow.commit()

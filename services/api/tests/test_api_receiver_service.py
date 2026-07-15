@@ -23,3 +23,4 @@ async def test_process_api_edi_json_success():
     from domain.events import PipelineEventType
 
     assert kwargs["event_type"] == PipelineEventType.TRANSFORM_EVENT
+    assert kwargs["idempotency_key"] == trace_id

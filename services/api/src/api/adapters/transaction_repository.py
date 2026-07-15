@@ -26,7 +26,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return msg.id
 
     async def publish_outbox_event(
-        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+        self, tenant_id: int, event_type: str, payload: dict[str, Any], idempotency_key: UUID
     ) -> UUID:
         from database.models.data_plane import Outbox
 
@@ -34,7 +34,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = Outbox(
             id=event_id,
             tenant_id=tenant_id,
-            idempotency_key=uuid.uuid4(),
+            idempotency_key=idempotency_key,
             event_type=event_type,
             payload=payload,
             status="PENDING",
@@ -146,15 +146,19 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                         stmt = stmt.where(and_(*conds))
 
                     elif operator == "contains":
+                        escaped_value = (
+                            str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                        )
+                        pattern = f"%{escaped_value}%"
                         conds = [
-                            model.sender_id.ilike(f"%{value}%"),
-                            model.receiver_id.ilike(f"%{value}%"),
+                            model.sender_id.ilike(pattern, escape="\\"),
+                            model.receiver_id.ilike(pattern, escape="\\"),
                         ]
                         if has_gs:
                             conds.extend(
                                 [
-                                    model.gs_sender_id.ilike(f"%{value}%"),
-                                    model.gs_receiver_id.ilike(f"%{value}%"),
+                                    model.gs_sender_id.ilike(pattern, escape="\\"),
+                                    model.gs_receiver_id.ilike(pattern, escape="\\"),
                                 ]
                             )
                         stmt = stmt.where(or_(*conds))
@@ -176,7 +180,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 elif operator == "neq":
                     stmt = stmt.where(column != str(value))
                 elif operator == "contains":
-                    stmt = stmt.where(column.ilike(f"%{value}%"))
+                    escaped_value = (
+                        str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    )
+                    stmt = stmt.where(column.ilike(f"%{escaped_value}%", escape="\\"))
                 elif operator == "in" and isinstance(value, list):
                     stmt = stmt.where(column.in_([str(v) for v in value]))
                 continue
@@ -190,7 +197,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             elif operator == "neq":
                 stmt = stmt.where(column != value)
             elif operator == "contains":
-                stmt = stmt.where(column.ilike(f"%{value}%"))
+                escaped_value = (
+                    str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                )
+                stmt = stmt.where(column.ilike(f"%{escaped_value}%", escape="\\"))
             elif operator == "in" and isinstance(value, list):
                 stmt = stmt.where(column.in_(value))
         return stmt

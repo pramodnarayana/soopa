@@ -110,16 +110,16 @@ class CreateSFTPPartnerCmd:
 
 @dataclass(frozen=True)
 class UpdateSFTPPartnerCmd:
-    name: str | None = None
-    host: str | None = None
-    port: int | None = None
-    username: str | None = None
-    credentials_vault_ref: str | None = None
-    inbound_remote_path: str | None = None
-    outbound_remote_path: str | None = None
-    active: bool | None = None
-    password: str | None = None
-    host_key: str | None = None
+    name: str | None | UnsetType = UNSET
+    host: str | None | UnsetType = UNSET
+    port: int | None | UnsetType = UNSET
+    username: str | None | UnsetType = UNSET
+    credentials_vault_ref: str | None | UnsetType = UNSET
+    inbound_remote_path: str | None | UnsetType = UNSET
+    outbound_remote_path: str | None | UnsetType = UNSET
+    active: bool | None | UnsetType = UNSET
+    password: str | None | UnsetType = UNSET
+    host_key: str | None | UnsetType = UNSET
 
 
 @dataclass(frozen=True)

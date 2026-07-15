@@ -23,47 +23,48 @@ class OutboundRouteService:
         logger.info(
             f"Creating Outbound Route for partner {cmd.as2_partner_id} in tenant {tenant_id}"
         )
-        route_id = await self.uow.outbound_routes.create_outbound_route(
-            tenant_id=tenant_id, cmd=cmd
-        )
-        await self.uow.outbox.publish_outbox_event(
+        route_id = await self.uow.control_plane.create_outbound_route(tenant_id=tenant_id, cmd=cmd)
+        await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.OUTBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
+            idempotency_key=route_id,
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction="OUTBOUND")
 
     async def update_outbound_route(
         self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
     ) -> bool:
-        res = await self.uow.outbound_routes.update_outbound_route(tenant_id, route_id, cmd)
+        res = await self.uow.control_plane.update_outbound_route(tenant_id, route_id, cmd)
         if res:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
+                idempotency_key=route_id,
             )
         return res
 
     async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
-        res = await self.uow.outbound_routes.delete_outbound_route(tenant_id, route_id)
+        res = await self.uow.control_plane.delete_outbound_route(tenant_id, route_id)
         if res:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
+                idempotency_key=route_id,
             )
         return res
 
     async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
-        return await self.uow.outbound_routes.get_all_routes(tenant_id)
+        return await self.uow.control_plane.get_all_routes(tenant_id)
 
     async def list_routes(self, tenant_id: int) -> list[dict[str, Any]]:
         """
         Returns a unified list of inbound and outbound routes enriched with
         partner/destination names. Batch-fetches names to avoid N+1 queries.
         """
-        routes_data = await self.uow.outbound_routes.get_all_routes(tenant_id)
+        routes_data = await self.uow.control_plane.get_all_routes(tenant_id)
         inbound: list[Any] = routes_data.get("inbound", [])
         outbound: list[Any] = routes_data.get("outbound", [])
 
@@ -86,17 +87,17 @@ class OutboundRouteService:
                 sftp_ids.add(r.sftp_partner_id)
 
         as2_names: dict[UUID, str] = (
-            await self.uow.as2_partnerships.get_as2_partners_by_ids(tenant_id, list(as2_ids))
+            await self.uow.control_plane.get_as2_partners_by_ids(tenant_id, list(as2_ids))
             if as2_ids
             else {}
         )
         sftp_names: dict[UUID, str] = (
-            await self.uow.sftp_partners.get_sftp_partners_by_ids(tenant_id, list(sftp_ids))
+            await self.uow.control_plane.get_sftp_partners_by_ids(tenant_id, list(sftp_ids))
             if sftp_ids
             else {}
         )
         webhook_names: dict[UUID, str] = (
-            await self.uow.webhooks.get_webhooks_by_ids(tenant_id, list(webhook_ids))
+            await self.uow.control_plane.get_webhooks_by_ids(tenant_id, list(webhook_ids))
             if webhook_ids
             else {}
         )
@@ -158,20 +159,20 @@ class OutboundRouteService:
 
         return results
 
-    async def get_trading_partner_name(self, route: Any) -> str | None:
+    async def get_trading_partner_name(self, tenant_id: int, route: Any) -> str | None:
         if getattr(route, "as2_partner_id", None):
-            partners = await self.uow.as2_partners.list_as2_partners(tenant_id=0)
-            for p in partners:
-                if p.id == route.as2_partner_id:
-                    return p.name  # type: ignore
+            as2_partners = await self.uow.control_plane.list_as2_partners(tenant_id=tenant_id)
+            for as2_p in as2_partners:
+                if as2_p.id == route.as2_partner_id:
+                    return str(as2_p.name) if as2_p.name else None
         elif getattr(route, "sftp_partner_id", None):
-            sftp = await self.uow.sftp_partners.list_sftp_partners(tenant_id=0)
-            for p in sftp:
-                if p.id == route.sftp_partner_id:
-                    return p.name  # type: ignore
+            sftp_partners = await self.uow.control_plane.list_sftp_partners(tenant_id=tenant_id)
+            for sftp_p in sftp_partners:
+                if sftp_p.id == route.sftp_partner_id:
+                    return str(sftp_p.name) if sftp_p.name else None
         elif getattr(route, "webhook_id", None):
-            webhooks = await self.uow.webhooks.list_webhooks(tenant_id=0)
-            for p in webhooks:
-                if p.id == route.webhook_id:
-                    return p.name  # type: ignore
+            webhooks = await self.uow.control_plane.list_webhooks(tenant_id=tenant_id)
+            for wh in webhooks:
+                if wh.id == route.webhook_id:
+                    return str(wh.name) if wh.name else None
         return None

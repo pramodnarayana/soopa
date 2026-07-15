@@ -10,6 +10,8 @@ echo "Initializing LocalStack SQS Queues..."
 
 
 # Create Data Plane CDC Queues and DLQs
+awslocal sqs create-queue --queue-name CDC-DLQ
+
 awslocal sqs create-queue --queue-name TransformOrchestrationQueue-DLQ
 TRANSFORM_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TransformOrchestrationQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 awslocal sqs create-queue --queue-name TransformOrchestrationQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSFORM_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"

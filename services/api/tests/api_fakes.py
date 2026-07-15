@@ -107,11 +107,22 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         return None
 
     async def publish_outbox_event(
-        self, tenant_id: int, event_type: str, payload: dict[str, Any]
-    ) -> None:
+        self,
+        tenant_id: int,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: uuid.UUID | None = None,
+    ) -> uuid.UUID:
+        key = idempotency_key or uuid.uuid4()
         self.outbox_events.append(
-            {"tenant_id": tenant_id, "event_type": event_type, "payload": payload}
+            {
+                "tenant_id": tenant_id,
+                "event_type": event_type,
+                "payload": payload,
+                "idempotency_key": key,
+            }
         )
+        return key
 
     async def update_partner_status(
         self, tenant_id: int, partner_id: uuid.UUID, status: str

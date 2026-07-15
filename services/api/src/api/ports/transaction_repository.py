@@ -14,6 +14,14 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
+    async def publish_outbox_event(
+        self, tenant_id: int, event_type: str, payload: dict[str, Any], idempotency_key: UUID
+    ) -> UUID:
+        """
+        Publishes an event to the outbox for background processing.
+        """
+        ...
+
     async def create_edi_json(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
         """
         Saves a new EdiJson record to the Data Plane.

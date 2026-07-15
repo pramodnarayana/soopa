@@ -14,13 +14,17 @@ class SqlAlchemyOutboxRepository(OutboxRepositoryPort, BaseSqlAlchemyRepository)
         self.model_class = model_class
 
     async def publish_outbox_event(
-        self, tenant_id: int, event_type: str, payload: dict[str, Any]
+        self,
+        tenant_id: int,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: UUID | None = None,
     ) -> UUID:
         event_id = uuid.uuid4()
         record = self.model_class(
             id=event_id,
             tenant_id=tenant_id,
-            idempotency_key=uuid.uuid4(),
+            idempotency_key=idempotency_key or uuid.uuid4(),
             event_type=event_type,
             payload=payload,
             status="PENDING",

@@ -19,6 +19,7 @@ export function CreateInboundRouteModal() {
       <DialogContent
         className="sm:max-w-[700px] rounded-2xl"
         onPointerDownOutside={(e) => e.preventDefault()}
+        aria-describedby={undefined}
       >
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">

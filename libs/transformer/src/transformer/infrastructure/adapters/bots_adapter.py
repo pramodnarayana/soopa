@@ -107,8 +107,12 @@ class BotsEDIAdapter(EDITransformerPort):
         if not raw_edi:
             raise TransformationError("Payload is completely empty, Bots engine aborted.")
 
+        import asyncio
+
         try:
-            ast_dict, errors = self.get_raw_ast(raw_edi, editype=editype, messagetype=messagetype)
+            ast_dict, errors = await asyncio.to_thread(
+                self.get_raw_ast, raw_edi, editype=editype, messagetype=messagetype
+            )
             if errors:
                 raise TransformationError(
                     f"Validation failed with {len(errors)} errors", errors=errors

@@ -35,6 +35,9 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
 
         values = {k: v for k, v in dataclasses.asdict(cmd).items() if v is not UNSET}
 
+        if not values:
+            return True
+
         stmt = (
             update(OutboundEdiHeader)
             .where(

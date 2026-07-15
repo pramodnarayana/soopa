@@ -74,28 +74,16 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         )
         partner = result.scalar_one_or_none()
         if partner:
-            if cmd.name is not None:
-                partner.name = cmd.name
-            if cmd.host is not None:
-                partner.host = cmd.host
-            if cmd.port is not None:
-                partner.port = cmd.port
-            if cmd.username is not None:
-                partner.username = cmd.username
-            if hasattr(cmd, "inbound_remote_path") and cmd.inbound_remote_path is not None:
-                partner.inbound_remote_path = cmd.inbound_remote_path
-            if hasattr(cmd, "outbound_remote_path") and cmd.outbound_remote_path is not None:
-                partner.outbound_remote_path = cmd.outbound_remote_path
-            if cmd.password is not None:
-                partner.password_encrypted = (
-                    db_encryption.encrypt(cmd.password) if cmd.password else None
-                )
-            if cmd.credentials_vault_ref is not None:
-                partner.credentials_vault_ref = cmd.credentials_vault_ref
-            if cmd.host_key is not None:
-                partner.host_key = cmd.host_key
-            if cmd.active is not None:
-                partner.active = cmd.active
+            import dataclasses
+
+            from api.domain.models import UNSET
+
+            update_data = {k: v for k, v in dataclasses.asdict(cmd).items() if v is not UNSET}
+            for key, value in update_data.items():
+                if key == "password":
+                    partner.password_encrypted = db_encryption.encrypt(value) if value else None
+                else:
+                    setattr(partner, key, value)
         await self.session.flush()
 
     async def delete_sftp_partner(self, tenant_id: int, partner_id: UUID) -> None:

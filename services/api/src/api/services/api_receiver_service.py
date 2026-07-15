@@ -98,6 +98,7 @@ class ApiReceiverService:
                     "trading_partner_id": trading_partner_id,
                     "direction": "OUTBOUND",
                 },
+                idempotency_key=trace_id,
             )
 
             await self.uow.commit()

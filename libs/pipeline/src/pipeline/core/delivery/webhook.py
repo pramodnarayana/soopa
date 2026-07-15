@@ -42,7 +42,11 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             raw_payload = json.dumps(payload_data).encode("utf-8")
 
             auth_token = None
-            if partner.get("auth_header_vault_ref") and self.vault:
+            if partner.get("auth_header_vault_ref"):
+                if not self.vault:
+                    raise ValueError(
+                        "Vault is not configured but webhook partner requires an auth token."
+                    )
                 auth_token = await self.vault.get_secret(partner["auth_header_vault_ref"])
 
             status_code, response_text = await self.http_delivery.deliver(

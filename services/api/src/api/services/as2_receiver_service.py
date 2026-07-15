@@ -388,6 +388,7 @@ class As2ReceiverService:
                 tenant_id=true_tenant_id,
                 event_type="edi_message.received",
                 payload=outbox_payload,
+                idempotency_key=msg_id,
             )
 
             await tenant_session.commit()

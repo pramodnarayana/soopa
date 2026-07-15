@@ -68,8 +68,12 @@ async def get_tenant_id_from_api_key(
         if hmac.compare_digest(cached_secret_hash, secret_hash):
             return cached_tenant_id
 
-    repo = SqlAlchemyApiTokenRepository(global_session)
-    tenant_id = await repo.get_tenant_id_by_credentials(client_id, secret_hash)
+    from typing import cast
+
+    from database.base_repository import GlobalSession
+
+    token_repo = SqlAlchemyApiTokenRepository(cast(GlobalSession, global_session))
+    tenant_id = await token_repo.get_tenant_id_by_credentials(client_id, secret_hash)
 
     if tenant_id is None:
         logger.warning(f"API key authentication failed for client_id={client_id!r}")

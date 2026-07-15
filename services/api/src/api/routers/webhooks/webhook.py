@@ -43,7 +43,7 @@ async def create_webhook(
         raise HTTPException(status_code=400, detail="Invalid webhook URL") from e
 
     async with uow:
-        service = WebhookService(global_repo=uow.control_plane)
+        service = WebhookService(uow=uow)
 
         cmd = CreateWebhookCmd(
             name=request.name,

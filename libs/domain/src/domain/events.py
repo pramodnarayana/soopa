@@ -38,3 +38,4 @@ class MessageQueueName(StrEnum):
     DELIVER_QUEUE = "DeliverQueue"
     PROVISIONING_QUEUE = "ProvisioningQueue"
     TRANSFORM_COMPUTE_QUEUE = "TransformComputeQueue"
+    CDC_DLQ_QUEUE = "CDC-DLQ"

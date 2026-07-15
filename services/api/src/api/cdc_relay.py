@@ -3,7 +3,7 @@ from typing import Any
 
 from domain.events import MessageQueueName, PipelineEventType
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api.dependencies import get_message_queue
 from api.ports.message_queue import MessageQueuePort
@@ -42,8 +42,7 @@ class DebeziumUnwrappedEvent(BaseModel):
     payload: dict[str, Any] | str | None = None
     tenant_id: int | None = None
 
-    class Config:
-        extra = "ignore"  # Debezium sends many extra metadata fields we don't need
+    model_config = ConfigDict(extra="ignore")  # Debezium sends many extra metadata fields
 
 
 @router.api_route("/relay", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], status_code=200)
@@ -84,7 +83,9 @@ async def relay_cdc_event(
                 f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )
             try:
-                await queue.send("CDC_DLQ_QUEUE", {"error": str(e), "payload": raw_event})
+                await queue.send(
+                    MessageQueueName.CDC_DLQ_QUEUE, {"error": str(e), "payload": raw_event}
+                )
             except Exception as dlq_err:
                 logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
                 from fastapi import HTTPException

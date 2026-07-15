@@ -233,4 +233,6 @@ async def test_save_to_data_plane_success(service):
         assert res == "msg-1"
         mock_repo.create_edi_message.assert_awaited_once()
         mock_repo.publish_outbox_event.assert_awaited_once()
+        args, kwargs = mock_repo.publish_outbox_event.call_args
+        assert kwargs["idempotency_key"] == "msg-1"
         mock_session.commit.assert_awaited_once()

@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from functools import lru_cache
 from typing import Any
 
+from database.base_repository import GlobalSession
 from database.session import get_global_session
 from fastapi import Depends, HTTPException, Request
 from identity.dependencies import (
@@ -69,47 +70,47 @@ from api.ports.webhook_repository import WebhookRepositoryPort  # noqa: E402
 
 
 def get_as2_partner_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> AS2TradingPartnerRepositoryPort:
     return SqlAlchemyAS2TradingPartnerRepository(session)
 
 
 def get_as2_partnership_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> AS2PartnershipRepositoryPort:
     return SqlAlchemyAS2PartnershipRepository(session)
 
 
 def get_inbound_route_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> InboundRouteRepositoryPort:
     return SqlAlchemyInboundRouteRepository(session)
 
 
 def get_outbound_route_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> OutboundRouteRepositoryPort:
     return SqlAlchemyOutboundRouteRepository(session)
 
 
 def get_sftp_partner_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> SFTPPartnerRepositoryPort:
     return SqlAlchemySFTPPartnerRepository(session)
 
 
-def get_webhook_repo(session: AsyncSession = Depends(get_global_session)) -> WebhookRepositoryPort:
+def get_webhook_repo(session: GlobalSession = Depends(get_global_session)) -> WebhookRepositoryPort:
     return SqlAlchemyWebhookRepository(session)
 
 
 def get_edi_header_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> EdiHeaderRepositoryPort:
     return SqlAlchemyEdiHeaderRepository(session)
 
 
 async def get_uow(
-    global_session: AsyncSession = Depends(get_global_session),
+    global_session: GlobalSession = Depends(get_global_session),
     # Optional tenant_session for platform admin routes
     # How to handle this? Best is to not inject tenant_session by default unless requested.
 ) -> UnitOfWork:
@@ -117,7 +118,7 @@ async def get_uow(
 
 
 async def get_tenant_uow(
-    global_session: AsyncSession = Depends(get_global_session),
+    global_session: GlobalSession = Depends(get_global_session),
     tenant_session: AsyncSession = Depends(get_tenant_session),
 ) -> UnitOfWork:
     return UnitOfWork(global_session=global_session, tenant_session=tenant_session)
@@ -126,7 +127,7 @@ async def get_tenant_uow(
 async def get_m2m_tenant_uow(
     request: Request,
     tenant_id: int = Depends(get_tenant_id_from_api_key),
-    global_session: AsyncSession = Depends(get_global_session),
+    global_session: GlobalSession = Depends(get_global_session),
 ) -> AsyncGenerator[UnitOfWork, None]:
     """
     Constructs a UnitOfWork dynamically without relying on Zitadel JWTs.
@@ -149,13 +150,13 @@ def require_platform_admin(tenant_id: int = Depends(get_current_tenant_id)) -> i
 
 
 def get_tenant_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> TenantRepositoryPort:
     return SqlAlchemyTenantRepository(session)
 
 
 def get_api_token_repo(
-    session: AsyncSession = Depends(get_global_session),
+    session: GlobalSession = Depends(get_global_session),
 ) -> ApiTokenRepositoryPort:
     """Yields the API token repository bound to the global (control plane) session."""
     return SqlAlchemyApiTokenRepository(session)

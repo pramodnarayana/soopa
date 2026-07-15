@@ -18,8 +18,16 @@ class UnitOfWork:
     ) -> None:
         self.global_session = global_session
         self.tenant_session = tenant_session
-        self.control_plane = SqlAlchemyControlPlaneRepository(global_session)
-        self.data_plane = SqlAlchemyDataPlaneRepository(tenant_session) if tenant_session else None
+        from typing import cast
+
+        from database.base_repository import GlobalSession, TenantSession
+
+        self.control_plane = SqlAlchemyControlPlaneRepository(cast(GlobalSession, global_session))
+        self.data_plane = (
+            SqlAlchemyDataPlaneRepository(cast(TenantSession, tenant_session))
+            if tenant_session
+            else None
+        )
 
     async def __aenter__(self) -> Self:
         return self

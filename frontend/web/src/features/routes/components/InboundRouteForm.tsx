@@ -55,9 +55,9 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
         gs_receiver_id: gsReceiver || undefined,
         transaction_type: transactionType,
         processing_mode: processingMode,
-        webhook_id: selectedEndpoint.type?.toUpperCase() === DestinationType.WEBHOOK ? targetId : undefined,
-        as2_partner_id: selectedEndpoint.type?.toUpperCase() === DestinationType.AS2 ? targetId : undefined,
-        sftp_partner_id: selectedEndpoint.type?.toUpperCase() === DestinationType.SFTP ? targetId : undefined,
+        webhook_id: selectedEndpoint.type === DestinationType.WEBHOOK ? targetId : undefined,
+        as2_partner_id: selectedEndpoint.type === DestinationType.AS2 ? targetId : undefined,
+        sftp_partner_id: selectedEndpoint.type === DestinationType.SFTP ? targetId : undefined,
       });
 
       toast({ title: 'Inbound route created successfully' });

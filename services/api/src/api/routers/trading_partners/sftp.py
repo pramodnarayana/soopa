@@ -137,7 +137,7 @@ async def create_sftp_partner(
         )
 
     async with uow:
-        service = SFTPPartnerService(global_repo=uow.control_plane)
+        service = SFTPPartnerService(uow=uow)
 
         cmd = CreateSFTPPartnerCmd(
             name=request.name,
@@ -191,19 +191,8 @@ async def update_sftp_partner(
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
     async with uow:
-        service = SFTPPartnerService(global_repo=uow.control_plane)
-        cmd = UpdateSFTPPartnerCmd(
-            name=request.name,
-            host=request.host,
-            port=request.port,
-            username=request.username,
-            inbound_remote_path=request.inbound_remote_path,
-            outbound_remote_path=request.outbound_remote_path,
-            password=request.password,
-            credentials_vault_ref=request.credentials_vault_ref,
-            host_key=request.host_key,
-            active=request.active,
-        )
+        service = SFTPPartnerService(uow=uow)
+        cmd = UpdateSFTPPartnerCmd(**request.model_dump(exclude_unset=True))
         try:
             _ = await service.update_sftp_partner(tenant_id, partner_id, cmd)
             await uow.commit()
