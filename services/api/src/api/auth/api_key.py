@@ -18,10 +18,10 @@ import hashlib
 import hmac
 import logging
 
+from database.base_repository import GlobalSession
 from database.session import get_global_session
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 
@@ -40,7 +40,7 @@ _MAX_CACHE_SIZE = 5000
 async def get_tenant_id_from_api_key(
     client_id: str | None = Security(_client_id_header),
     client_secret: str | None = Security(_client_secret_header),
-    global_session: AsyncSession = Depends(get_global_session),  # noqa: B008
+    global_session: GlobalSession = Depends(get_global_session),  # noqa: B008
 ) -> int:
     """
     Resolves a two-part API credential to a tenant_id.
@@ -68,11 +68,7 @@ async def get_tenant_id_from_api_key(
         if hmac.compare_digest(cached_secret_hash, secret_hash):
             return cached_tenant_id
 
-    from typing import cast
-
-    from database.base_repository import GlobalSession
-
-    token_repo = SqlAlchemyApiTokenRepository(cast(GlobalSession, global_session))
+    token_repo = SqlAlchemyApiTokenRepository(global_session)
     tenant_id = await token_repo.get_tenant_id_by_credentials(client_id, secret_hash)
 
     if tenant_id is None:

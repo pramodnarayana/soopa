@@ -46,7 +46,6 @@ class AS2PartnershipService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
         )
 
         return PartnerEntity(
@@ -83,7 +82,6 @@ class AS2PartnershipService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_UPDATED,
             payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
-            idempotency_key=partnership_id,
         )
         updated = await self.uow.control_plane.get_as2_partnership(tenant_id, partnership_id)
         if not updated:
@@ -104,5 +102,4 @@ class AS2PartnershipService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_DELETED,
             payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
-            idempotency_key=partnership_id,
         )

@@ -34,7 +34,6 @@ class WebhookService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.WEBHOOK_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
         )
         return PartnerEntity(
             partner_id=partner_id,
@@ -63,7 +62,6 @@ class WebhookService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_UPDATED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
-                idempotency_key=webhook_id,
             )
         return result
 
@@ -77,6 +75,5 @@ class WebhookService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_DELETED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
-                idempotency_key=webhook_id,
             )
         return result

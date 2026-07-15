@@ -78,7 +78,11 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
 
             from api.domain.models import UNSET
 
-            update_data = {k: v for k, v in dataclasses.asdict(cmd).items() if v is not UNSET}
+            update_data = {
+                f.name: getattr(cmd, f.name)
+                for f in dataclasses.fields(cmd)
+                if getattr(cmd, f.name) is not UNSET
+            }
             for key, value in update_data.items():
                 if key == "password":
                     partner.password_encrypted = db_encryption.encrypt(value) if value else None

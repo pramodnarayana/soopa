@@ -31,7 +31,6 @@ class AS2PartnerService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
         )
 
         return PartnerEntity(
@@ -56,7 +55,6 @@ class AS2PartnerService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
         )
 
         return PartnerEntity(
@@ -74,7 +72,6 @@ class AS2PartnerService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_DELETED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
         )
 
     async def rotate_certificates(
@@ -97,7 +94,6 @@ class AS2PartnerService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
         )
 
         return PartnerEntity(

@@ -28,7 +28,6 @@ class OutboundRouteService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.OUTBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
-            idempotency_key=route_id,
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction="OUTBOUND")
 
@@ -41,7 +40,6 @@ class OutboundRouteService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
-                idempotency_key=route_id,
             )
         return res
 
@@ -52,7 +50,6 @@ class OutboundRouteService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
-                idempotency_key=route_id,
             )
         return res
 
@@ -161,18 +158,19 @@ class OutboundRouteService:
 
     async def get_trading_partner_name(self, tenant_id: int, route: Any) -> str | None:
         if getattr(route, "as2_partner_id", None):
-            as2_partners = await self.uow.control_plane.list_as2_partners(tenant_id=tenant_id)
-            for as2_p in as2_partners:
-                if as2_p.id == route.as2_partner_id:
-                    return str(as2_p.name) if as2_p.name else None
+            partner = await self.uow.control_plane.get_as2_partner(tenant_id, route.as2_partner_id)
+            if not partner:
+                partner = await self.uow.control_plane.get_as2_partner(0, route.as2_partner_id)
+            if partner:
+                return str(partner.name) if partner.name else None
         elif getattr(route, "sftp_partner_id", None):
-            sftp_partners = await self.uow.control_plane.list_sftp_partners(tenant_id=tenant_id)
-            for sftp_p in sftp_partners:
-                if sftp_p.id == route.sftp_partner_id:
-                    return str(sftp_p.name) if sftp_p.name else None
+            sftp_partner = await self.uow.control_plane.get_sftp_partner(
+                tenant_id, route.sftp_partner_id
+            )
+            if sftp_partner:
+                return str(sftp_partner.name) if sftp_partner.name else None
         elif getattr(route, "webhook_id", None):
-            webhooks = await self.uow.control_plane.list_webhooks(tenant_id=tenant_id)
-            for wh in webhooks:
-                if wh.id == route.webhook_id:
-                    return str(wh.name) if wh.name else None
+            webhook = await self.uow.control_plane.get_webhook(tenant_id, route.webhook_id)
+            if webhook:
+                return str(webhook.name) if webhook.name else None
         return None

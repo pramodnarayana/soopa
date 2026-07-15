@@ -154,6 +154,8 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     InboundRoute.transaction_type.is_(None),
                 )
             ).order_by(InboundRoute.transaction_type.desc().nullslast())
+        else:
+            stmt = stmt.where(InboundRoute.transaction_type.is_(None)).order_by(InboundRoute.id)
 
         result = await self.session.execute(stmt)
         record = result.scalars().first()

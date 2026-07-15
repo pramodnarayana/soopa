@@ -94,8 +94,7 @@ async def test_get_tenant_session_enforces_rls(router: DatabaseRouter) -> None:
         assert "app.current_tenant" in sql_str
         # Verify tenant_id was passed as a parameter
         params = call_args[0][1] if len(call_args[0]) > 1 else call_args[1].get("params", {})
-        if isinstance(params, dict):
-            assert params.get("tenant_id") == "123"
+        assert params["tenant_id"] == "123"
 
 
 @pytest.mark.asyncio

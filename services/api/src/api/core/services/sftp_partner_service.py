@@ -1,4 +1,5 @@
 import logging
+import uuid
 from uuid import UUID
 
 from api.core.uow import UnitOfWork
@@ -28,7 +29,7 @@ class SFTPPartnerService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
+            idempotency_key=uuid.uuid5(partner_id, "SFTP_PARTNER_CREATED"),
         )
 
         return PartnerEntity(
@@ -43,14 +44,35 @@ class SFTPPartnerService:
         self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
+        existing = await self.uow.control_plane.get_sftp_partner(tenant_id, partner_id)
+        if not existing:
+            raise ValueError(f"SFTP partner {partner_id} not found")
+
+        has_password = (
+            bool(cmd.password) if cmd.password is not UNSET else bool(existing.password_encrypted)
+        )
+        has_vault = (
+            bool(cmd.credentials_vault_ref)
+            if cmd.credentials_vault_ref is not UNSET
+            else bool(existing.credentials_vault_ref)
+        )
+
+        if not has_password and not has_vault:
+            raise ValueError("SFTP partner must have either a password or a credentials_vault_ref")
+
+        if has_password and has_vault:
+            raise ValueError("SFTP partner cannot have both a password and a credentials_vault_ref")
+
         await self.uow.control_plane.update_sftp_partner(
             tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
         )
+
+        update_hash = str(hash(str(cmd)))
         await self.uow.control_plane.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
-            idempotency_key=partner_id,
+            idempotency_key=uuid.uuid5(partner_id, f"SFTP_PARTNER_UPDATED-{update_hash}"),
         )
         updated = await self.uow.control_plane.get_sftp_partner(tenant_id, partner_id)
         if not updated:

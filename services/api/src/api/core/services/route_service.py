@@ -31,7 +31,6 @@ class RouteService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.INBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
-            idempotency_key=route_id,
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction="INBOUND")
 
@@ -44,7 +43,6 @@ class RouteService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
-                idempotency_key=route_id,
             )
         return res
 
@@ -55,7 +53,6 @@ class RouteService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
-                idempotency_key=route_id,
             )
         return res
 
@@ -70,7 +67,6 @@ class RouteService:
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.OUTBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
-            idempotency_key=route_id,
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction="OUTBOUND")
 
@@ -83,7 +79,6 @@ class RouteService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
-                idempotency_key=route_id,
             )
         return res
 
@@ -94,7 +89,6 @@ class RouteService:
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
-                idempotency_key=route_id,
             )
         return res
 
