@@ -113,13 +113,13 @@ class HttpPartnersRepository implements IPartnersRepository {
   // ── Certificates ───────────────────────────
   exportCertificates(partnerId: string): Promise<CertificatesExport> {
     return this.request(
-      `/api/v1/trading-partners/as2/trading-partners/${partnerId}/certificates/export`,
+      `/api/v1/trading-partners/as2/${partnerId}/certificates/export`,
     );
   }
 
   rotateCertificates(partnerId: string, payload: RotateCertPayload): Promise<Partner> {
     return this.request(
-      `/api/v1/trading-partners/as2/trading-partners/${partnerId}/certificates/rotate`,
+      `/api/v1/trading-partners/as2/${partnerId}/certificates/rotate`,
       { method: 'PUT', body: JSON.stringify(payload) },
     );
   }

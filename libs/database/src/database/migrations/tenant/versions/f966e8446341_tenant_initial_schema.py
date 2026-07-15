@@ -305,7 +305,7 @@ def upgrade() -> None:
         sa.Column("gs_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=False),
         sa.Column(
-            "processing_mode", sa.String(length=50), server_default="TRANSLATE", nullable=False
+            "processing_mode", sa.String(length=50), server_default="TRANSFORM", nullable=False
         ),
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -456,6 +456,8 @@ def upgrade() -> None:
         sa.Column("state", sa.String(length=255), nullable=True),
         sa.Column("msg_headers", sa.Text(), nullable=True),
         sa.Column("outbound_route_id", sa.UUID(), nullable=True),
+        sa.Column("as2_sender_id", sa.String(length=255), nullable=True),
+        sa.Column("as2_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("interchange_control_no", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("format_standard", sa.String(length=50), nullable=True),

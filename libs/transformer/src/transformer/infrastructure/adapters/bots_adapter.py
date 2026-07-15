@@ -1,14 +1,14 @@
 import json
 import logging
 
-from transformer.application.ports import EDITranslatorPort
-from transformer.domain.exceptions import TranslationError
+from transformer.application.ports import EDITransformerPort
+from transformer.domain.exceptions import TransformationError
 from transformer.domain.models import JsonDict, ParsedEdiPayload, TransactionSet
 
 logger = logging.getLogger(__name__)
 
 
-class BotsEDIAdapter(EDITranslatorPort):
+class BotsEDIAdapter(EDITransformerPort):
     """
     Adapter to run the vendored BOTS EDI translation engine natively in-memory.
     No sub-processes, no external cron jobs.
@@ -66,7 +66,7 @@ class BotsEDIAdapter(EDITranslatorPort):
             if error_msg.startswith("[") or "Details:" in error_msg:
                 parsed_errors = [line.strip() for line in error_msg.split("\n") if line.strip()]
 
-            raise TranslationError(f"AST generation failed: {e}", errors=parsed_errors) from e
+            raise TransformationError(f"AST generation failed: {e}", errors=parsed_errors) from e
 
     def serialize_to_edi(self, ast_dict: JsonDict, standard: str = "x12") -> tuple[str, list[str]]:
         """
@@ -91,26 +91,26 @@ class BotsEDIAdapter(EDITranslatorPort):
             return edi_str, parsed_errors
         except Exception as e:
             logger.error(f"Bots error during EDI serialization: {e}")
-            raise TranslationError(f"EDI serialization failed: {e}") from e
+            raise TransformationError(f"EDI serialization failed: {e}") from e
 
-    async def translate(
+    async def transform(
         self, raw_edi: bytes, editype: str = "x12", messagetype: str = "envelope"
     ) -> ParsedEdiPayload:
         """
         Executes the Bots translation process.
 
-        This translates raw X12/EDIFACT bytes into our pristine domain model.
+        This transforms raw X12/EDIFACT bytes into our pristine domain model.
         """
         logger.info(f"Invoking stateless Bots adapter with {len(raw_edi)} bytes of payload")
 
         # Validate payload before attempting to load backend
         if not raw_edi:
-            raise TranslationError("Payload is completely empty, Bots engine aborted.")
+            raise TransformationError("Payload is completely empty, Bots engine aborted.")
 
         try:
             ast_dict, errors = self.get_raw_ast(raw_edi, editype=editype, messagetype=messagetype)
             if errors:
-                raise TranslationError(
+                raise TransformationError(
                     f"Validation failed with {len(errors)} errors", errors=errors
                 )
 
@@ -176,7 +176,7 @@ class BotsEDIAdapter(EDITranslatorPort):
                 interchange_control_number=interchange_control_number,
                 transactions=transactions,
             )
-        except TranslationError:
+        except TransformationError:
             raise
         except Exception as e:
-            raise TranslationError(f"Translation failed: {e}") from e
+            raise TransformationError(f"Translation failed: {e}") from e

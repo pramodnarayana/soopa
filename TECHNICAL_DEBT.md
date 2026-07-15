@@ -57,7 +57,11 @@ Implement an Outbox Sweeper background worker that acts as a robust enterprise f
 
 ## 4. Domain Model Refactoring
 - **Decoupled Validation**: Validation logic should be extracted from `Transformer` into a dedicated step before translation.
-- **Domain Models for Configuration Entities**: We recently added true Domain Models (`EdiJsonDomainModel`, `EdiMessageDomainModel`) for Data Plane entities, but `APIPayload`, `Route`, `OutboundEdiHeader`, etc. are still returning hardcoded `dict[str, Any]` from repository adapters. These must be upgraded to full strongly-typed Pydantic Domain Models to resolve "Primitive Obsession" across the architecture.
+
+### 2. Audit for "Translate" terminology
+- **"Translate/Translation"**: Audit remaining files for legacy terminology and ensure consistency with "Transform/Transformation".
+
+### 3. Verify Inbound AS2 flow
 
 ## 5. Testing
 
@@ -67,12 +71,6 @@ Implement an Outbox Sweeper background worker that acts as a robust enterprise f
 `make test` skips frontend tests with a placeholder comment.
 React component tests and TanStack Query mutation tests are not covered.
 
-## 6. Database Schema
-
-### Missing `edi_headers` Table
-
-**Priority:** Medium
-**Description:** We currently lack an `edi_headers` table to store extracted EDI header metadata (e.g. ST/GS segments). This table needs to be created and linked via foreign key to the `outbound_route` table so that EDI messages can be properly tracked and correlated with their configured outbound routes.
 
 ## 7. EDI Translation vs Validation
 

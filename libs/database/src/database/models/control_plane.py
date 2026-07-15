@@ -99,8 +99,8 @@ class ApiToken(GlobalBase, TimestampMixin):
     client_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     # secret_hash: SHA-256 of the raw client_secret; raw value is never stored
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 

@@ -4,7 +4,7 @@ class TransformerError(Exception):
     pass
 
 
-class TranslationError(TransformerError):
+class TransformationError(TransformerError):
     """Raised when the underlying EDI engine fails to parse the document."""
 
     def __init__(self, message: str, errors: list[str] | None = None):

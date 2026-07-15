@@ -170,8 +170,8 @@ class CreateInboundRouteRequest(BaseModel):
     transaction_type: str = Field(
         ..., max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
     )
-    processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] = Field(
-        "TRANSLATE", description="Processing Mode"
+    processing_mode: Literal["TRANSFORM", "PASSTHROUGH"] = Field(
+        "TRANSFORM", description="Processing Mode"
     )
     webhook_id: UUID | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
@@ -279,7 +279,7 @@ class UpdateRouteRequest(BaseModel):
     transaction_type: str | None = Field(
         None, max_length=50, description="EDI Transaction Type (e.g., '204', '990', or '*')"
     )
-    processing_mode: Literal["TRANSLATE", "PASSTHROUGH"] | None = Field(
+    processing_mode: Literal["TRANSFORM", "PASSTHROUGH"] | None = Field(
         None, description="Processing Mode"
     )
     webhook_id: UUID | None = Field(
@@ -388,7 +388,7 @@ class InboundRouteItem(BaseRouteItem):
     default_standard: str | None = None
     default_version: str | None = None
     transaction_type: str
-    processing_mode: str = "TRANSLATE"
+    processing_mode: str = "TRANSFORM"
 
 
 class OutboundRouteItem(BaseRouteItem):

@@ -38,7 +38,7 @@ async def test_rotate_certificates_success():
     assert result.status == "ACTIVE"
 
     mock_repo.rotate_as2_certificates.assert_awaited_once_with(1, partner_id, "cert", "ref")
-    mock_repo.create_outbox_event.assert_awaited_once()
+    mock_repo.publish_outbox_event.assert_awaited_once()
 
 
 @pytest.mark.asyncio

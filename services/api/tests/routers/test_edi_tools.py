@@ -45,7 +45,7 @@ def test_transform_json_to_edi_valid():
     ast_envelope = json.loads(res.json()["result"])
     ast_json = json.dumps(ast_envelope["data"])
 
-    # Then translate back
+    # Then transform back
     response = client.post(
         "/api/edi-tools/transform", json={"action": "JSON_TO_EDI", "payload": ast_json}
     )

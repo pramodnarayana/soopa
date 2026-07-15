@@ -21,7 +21,7 @@ class TraceLifecycleService:
 
     async def handle_transform_completed(self, payload: dict[str, Any]) -> None:
         """
-        Triggered when TranslationService finishes transforming a payload.
+        Triggered when TransformService finishes transforming a payload.
         """
         trace_id = payload["trace_id"]
         direction = payload.get("direction", MessageDirection.INBOUND)

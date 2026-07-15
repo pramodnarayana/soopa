@@ -36,7 +36,7 @@ class AS2PartnershipService:
             f"Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}"
         )
         partner_id = await self.global_repo.create_as2_partnership(tenant_id=tenant_id, cmd=cmd)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -70,7 +70,7 @@ class AS2PartnershipService:
         await self.global_repo.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_UPDATED,
             payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
@@ -90,7 +90,7 @@ class AS2PartnershipService:
     async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
         logger.info(f"Deleting AS2 partnership {partnership_id} for tenant {tenant_id}")
         await self.global_repo.delete_as2_partnership(tenant_id, partnership_id)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_DELETED,
             payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},

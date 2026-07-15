@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from database.base_repository import GlobalSession, TenantSession
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,9 +65,9 @@ class DatabaseRouter:
                     logger.info(f"Created new connection pool for database shard: {db_key}")
         return self._engines[db_key]
 
-    async def get_global_session(self) -> AsyncGenerator[AsyncSession, None]:
+    async def get_global_session(self) -> AsyncGenerator[GlobalSession, None]:
         """
-        Yields a session connected to the Global Control Plane DB.
+        Yields a session connected to the global control plane.
         """
         engine = await self.get_engine("global")
         factory = async_sessionmaker(
@@ -74,11 +76,12 @@ class DatabaseRouter:
             expire_on_commit=False,
         )
         async with factory() as session:
-            yield session
+            session.info["session_type"] = "global"
+            yield session  # type: ignore
 
     async def get_tenant_session(
         self, tenant_id: int, shard_key: str, shard_url: str
-    ) -> AsyncGenerator[AsyncSession, None]:
+    ) -> AsyncGenerator[TenantSession, None]:
         """
         Yields a session connected to a specific tenant's shard.
         Crucially, it sets the PostgreSQL Row-Level Security (RLS) variable
@@ -92,11 +95,12 @@ class DatabaseRouter:
         )
 
         async with factory() as session:
+            session.info["session_type"] = "tenant"
             # Enforce Row-Level Security isolation
             # PostgreSQL does not support bind parameters for SET commands,
             # so we must format the string directly. tenant_id is an integer so it's safe.
             await session.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}'"))
-            yield session
+            yield session  # type: ignore
 
     async def close_all(self) -> None:
         """

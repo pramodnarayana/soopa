@@ -177,12 +177,11 @@ async def get_tenant_session_for_id(
 
     from identity.tenant_context import _tenant_id
 
-    token = _tenant_id.set(tenant_id)
+    _tenant_id.set(tenant_id)
 
     try:
         yield tenant_session
     finally:
-        _tenant_id.reset(token)
         with contextlib.suppress(StopAsyncIteration):
             await async_gen_tenant.__anext__()
 

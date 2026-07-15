@@ -30,7 +30,7 @@ class WebhookService:
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> PartnerEntity:
         logger.info("Webhook creating", extra={"tenant_id": tenant_id, "webhook_name": cmd.name})
         partner_id = await self._repo.create_webhook(tenant_id=tenant_id, cmd=cmd)
-        await self._repo.create_outbox_event(
+        await self._repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.WEBHOOK_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -56,7 +56,7 @@ class WebhookService:
         )
         result = await self._repo.update_webhook(tenant_id, webhook_id, name, active, url)
         if result:
-            await self._repo.create_outbox_event(
+            await self._repo.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_UPDATED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
@@ -69,7 +69,7 @@ class WebhookService:
         )
         result = await self._repo.delete_webhook(tenant_id, webhook_id)
         if result:
-            await self._repo.create_outbox_event(
+            await self._repo.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_DELETED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},

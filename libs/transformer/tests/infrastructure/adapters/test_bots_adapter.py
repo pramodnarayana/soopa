@@ -1,5 +1,5 @@
 import pytest
-from transformer.domain.exceptions import TranslationError
+from transformer.domain.exceptions import TransformationError
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 # Sample X12 EDI payload (997 FA)
@@ -32,8 +32,8 @@ async def test_bots_adapter_get_raw_ast(adapter):
 
 
 @pytest.mark.asyncio
-async def test_bots_adapter_translate_x12(adapter):
-    payload = await adapter.translate(SAMPLE_X12)
+async def test_bots_adapter_transform_x12(adapter):
+    payload = await adapter.transform(SAMPLE_X12)
     assert payload.sender_id == "SENDER"
     assert payload.receiver_id == "RECEIVER"
     assert payload.interchange_control_number in ("1", "000000001")
@@ -45,10 +45,10 @@ async def test_bots_adapter_translate_x12(adapter):
 
 
 @pytest.mark.asyncio
-async def test_bots_adapter_translate_edifact(adapter):
+async def test_bots_adapter_transform_edifact(adapter):
     # Depending on our domain model extraction for EDIFACT, it might extract different fields
     # Default messagetype='envelope' allows parsing just the UNB/UNZ headers
-    payload = await adapter.translate(SAMPLE_EDIFACT, editype="edifact", messagetype="envelope")
+    payload = await adapter.transform(SAMPLE_EDIFACT, editype="edifact", messagetype="envelope")
     assert payload.sender_id == "SENDER"
     assert payload.receiver_id == "RECEIVER"
     assert payload.interchange_control_number == "1"
@@ -56,16 +56,16 @@ async def test_bots_adapter_translate_edifact(adapter):
 
 
 @pytest.mark.asyncio
-async def test_bots_adapter_translate_empty_payload(adapter):
-    with pytest.raises(TranslationError) as exc:
-        await adapter.translate(b"")
+async def test_bots_adapter_transform_empty_payload(adapter):
+    with pytest.raises(TransformationError) as exc:
+        await adapter.transform(b"")
     assert "empty" in str(exc.value)
 
 
 @pytest.mark.asyncio
-async def test_bots_adapter_translate_garbage_payload(adapter):
-    with pytest.raises(TranslationError) as exc:
-        await adapter.translate(b"GARBAGE")
+async def test_bots_adapter_transform_garbage_payload(adapter):
+    with pytest.raises(TransformationError) as exc:
+        await adapter.transform(b"GARBAGE")
     assert exc.value.errors is not None
     # Since parsing fails outright, it might just have 1 core error about format
     assert len(exc.value.errors) > 0

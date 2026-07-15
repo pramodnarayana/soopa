@@ -3,7 +3,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel
 
 
-class TranslatedTransaction(BaseModel):
+class TransformedTransaction(BaseModel):
     transaction_type: str
     isa_sender_id: str | None = None
     isa_receiver_id: str | None = None
@@ -15,22 +15,22 @@ class TranslatedTransaction(BaseModel):
 
 class TransformerPort(Protocol):
     """
-    Focused port for EDI/JSON payload translation.
-    Used by the translation worker.
+    Focused port for EDI/JSON payload transformation.
+    Used by the transformation worker.
     """
 
-    async def translate_edi_to_json(
+    async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TranslatedTransaction]:
-        """Translates raw EDI bytes into a Canonical JSON Dictionary."""
+    ) -> list[TransformedTransaction]:
+        """Transforms raw EDI bytes into a Canonical JSON Dictionary."""
         ...
 
-    async def translate_json_to_edi(
+    async def transform_json_to_edi(
         self,
         payload: dict[str, Any] | list[Any],
         standard: str,
         transaction_type: str,
         route_config: dict[str, Any],
     ) -> bytes:
-        """Translates a Canonical JSON Dictionary into raw EDI bytes."""
+        """Transforms a Canonical JSON Dictionary into raw EDI bytes."""
         ...

@@ -27,7 +27,7 @@ class RouteService:
     async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> RouteEntity:
         logger.info(f"Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
         route_id = await self.global_repo.create_inbound_route(tenant_id=tenant_id, cmd=cmd)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.INBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -39,7 +39,7 @@ class RouteService:
     ) -> bool:
         res = await self.global_repo.update_inbound_route(tenant_id, route_id, cmd)
         if res:
-            await self.global_repo.create_outbox_event(
+            await self.global_repo.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -49,7 +49,7 @@ class RouteService:
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         res = await self.global_repo.delete_inbound_route(tenant_id, route_id)
         if res:
-            await self.global_repo.create_outbox_event(
+            await self.global_repo.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -63,7 +63,7 @@ class RouteService:
             f"Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}"
         )
         route_id = await self.global_repo.create_outbound_route(tenant_id=tenant_id, cmd=cmd)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.OUTBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -75,7 +75,7 @@ class RouteService:
     ) -> bool:
         res = await self.global_repo.update_outbound_route(tenant_id, route_id, cmd)
         if res:
-            await self.global_repo.create_outbox_event(
+            await self.global_repo.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -85,7 +85,7 @@ class RouteService:
     async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         res = await self.global_repo.delete_outbound_route(tenant_id, route_id)
         if res:
-            await self.global_repo.create_outbox_event(
+            await self.global_repo.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},

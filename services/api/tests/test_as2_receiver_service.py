@@ -232,5 +232,5 @@ async def test_save_to_data_plane_success(service):
         )
         assert res == "msg-1"
         mock_repo.create_edi_message.assert_awaited_once()
-        mock_repo.create_outbox_event.assert_awaited_once()
+        mock_repo.publish_outbox_event.assert_awaited_once()
         mock_session.commit.assert_awaited_once()

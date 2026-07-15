@@ -23,7 +23,7 @@ from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.adapters.repository import SqlAlchemyApiTokenRepository
+from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 
 logger = logging.getLogger(__name__)
 

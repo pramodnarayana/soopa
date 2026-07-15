@@ -22,7 +22,7 @@ router = APIRouter(tags=["Partners — AS2"])
 
 
 @router.get(
-    "/as2/trading-partners/{partner_id}/certificates/export",
+    "/as2/{partner_id}/certificates/export",
     response_model=CertificateExportResponse,
 )
 async def export_as2_certificates(
@@ -81,7 +81,7 @@ async def export_as2_certificates(
 
 
 @router.put(
-    "/as2/trading-partners/{partner_id}/certificates/rotate",
+    "/as2/{partner_id}/certificates/rotate",
     response_model=AS2TradingPartnerResponse,
 )
 async def rotate_as2_certificates(

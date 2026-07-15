@@ -16,7 +16,12 @@ from fakes import (
     InMemoryStorageAdapter,
 )
 from pipeline.adapters.null_as2 import NullAS2DeliveryAdapter
-from pipeline.core.deliver import DeliveryService
+from pipeline.core.delivery import (
+    As2DeliveryStrategy,
+    DeliveryRouter,
+    SftpDeliveryStrategy,
+    WebhookDeliveryStrategy,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -47,13 +52,19 @@ _LOCAL_PARTNER = {
 def make_service(
     repo: InMemoryRepositoryAdapter | None = None,
     as2: FakeAS2DeliveryAdapter | NullAS2DeliveryAdapter | None = None,
-) -> DeliveryService:
-    return DeliveryService(
-        repository=repo or InMemoryRepositoryAdapter(),
-        http_delivery=FakeHttpDeliveryAdapter(),
-        sftp_delivery=FakeSftpDeliveryAdapter(),
-        as2_delivery=as2 or FakeAS2DeliveryAdapter(),
-        vault=None,
+) -> DeliveryRouter:
+    r = repo or InMemoryRepositoryAdapter()
+    a = as2 or FakeAS2DeliveryAdapter()
+    h = FakeHttpDeliveryAdapter()
+    s = FakeSftpDeliveryAdapter()
+    strategies = {
+        "webhook_id": WebhookDeliveryStrategy(r, h, None),
+        "sftp_partner_id": SftpDeliveryStrategy(r, s, None),
+        "as2_partner_id": As2DeliveryStrategy(r, a, None),
+    }
+    return DeliveryRouter(
+        repository=r,
+        strategies=strategies,
     )
 
 

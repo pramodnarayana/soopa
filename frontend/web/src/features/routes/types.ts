@@ -1,3 +1,25 @@
+export const Direction = {
+  INBOUND: 'INBOUND',
+  OUTBOUND: 'OUTBOUND',
+} as const;
+
+export type Direction = typeof Direction[keyof typeof Direction];
+
+export const ProcessingMode = {
+  TRANSFORM: 'TRANSFORM',
+  PASSTHROUGH: 'PASSTHROUGH',
+} as const;
+
+export type ProcessingMode = typeof ProcessingMode[keyof typeof ProcessingMode];
+
+export const DestinationType = {
+  WEBHOOK: 'WEBHOOK',
+  AS2: 'AS2',
+  SFTP: 'SFTP',
+} as const;
+
+export type DestinationType = typeof DestinationType[keyof typeof DestinationType];
+
 export interface BaseRouteItem {
   route_id: string;
   trading_partner_id?: string;
@@ -12,7 +34,7 @@ export interface BaseRouteItem {
 }
 
 export interface InboundRouteItem extends BaseRouteItem {
-  direction: 'INBOUND';
+  direction: typeof Direction.INBOUND;
   isa_sender_id: string;
   isa_sender_qualifier?: string;
   isa_receiver_id: string;
@@ -22,11 +44,11 @@ export interface InboundRouteItem extends BaseRouteItem {
   default_standard?: string;
   default_version?: string;
   transaction_type: string;
-  processing_mode: 'TRANSLATE' | 'PASSTHROUGH';
+  processing_mode: ProcessingMode;
 }
 
 export interface OutboundRouteItem extends BaseRouteItem {
-  direction: 'OUTBOUND';
+  direction: typeof Direction.OUTBOUND;
   transaction_type: string;
 }
 
@@ -40,7 +62,7 @@ export interface CreateInboundRoutePayload {
   gs_sender_id?: string;
   gs_receiver_id?: string;
   transaction_type: string;
-  processing_mode: 'TRANSLATE' | 'PASSTHROUGH';
+  processing_mode: ProcessingMode;
   webhook_id?: string;
   as2_partner_id?: string;
   sftp_partner_id?: string;
@@ -65,7 +87,7 @@ export interface UpdateRoutePayload {
   default_standard?: string;
   default_version?: string;
   transaction_type?: string;
-  processing_mode?: 'TRANSLATE' | 'PASSTHROUGH';
+  processing_mode?: ProcessingMode;
   webhook_id?: string;
   as2_partner_id?: string | null;
   sftp_partner_id?: string | null;

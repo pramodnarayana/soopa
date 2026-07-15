@@ -13,28 +13,20 @@ from identity.dependencies import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 from api.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
 from api.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
-from api.adapters.repository import (
-    SqlAlchemyApiTokenRepository,
-    SqlAlchemyControlPlaneRepository,
-    SqlAlchemyDataPlaneRepository,
-    SqlAlchemyTenantRepository,
-)
 from api.adapters.sqs_queue import SQSMessageQueueAdapter
+from api.adapters.tenant_repository import SqlAlchemyTenantRepository
 from api.adapters.vault import vault
 from api.auth.api_key import get_tenant_id_from_api_key
 from api.core.authorization import AuthorizationService
 from api.core.uow import UnitOfWork
+from api.ports.api_token_repository import ApiTokenRepositoryPort
 from api.ports.as2_tester import AS2TesterPort
 from api.ports.message_queue import MessageQueuePort
-from api.ports.repository import (
-    ApiTokenRepositoryPort,
-    ControlPlaneRepositoryPort,
-    DataPlaneRepositoryPort,
-    TenantRepositoryPort,
-)
 from api.ports.sftp_tester import SftpTesterPort
+from api.ports.tenant_repository import TenantRepositoryPort
 from api.ports.vault import VaultPort
 
 
@@ -60,16 +52,60 @@ def get_message_queue() -> MessageQueuePort:
     return SQSMessageQueueAdapter(endpoint_url=endpoint_url)
 
 
-def get_control_plane_repo(
+from api.adapters.as2_partner_repository import SqlAlchemyAS2TradingPartnerRepository  # noqa: E402
+from api.adapters.as2_partnership_repository import SqlAlchemyAS2PartnershipRepository  # noqa: E402
+from api.adapters.edi_header_repository import SqlAlchemyEdiHeaderRepository  # noqa: E402
+from api.adapters.inbound_route_repository import SqlAlchemyInboundRouteRepository  # noqa: E402
+from api.adapters.outbound_route_repository import SqlAlchemyOutboundRouteRepository  # noqa: E402
+from api.adapters.sftp_repository import SqlAlchemySFTPPartnerRepository  # noqa: E402
+from api.adapters.webhook_repository import SqlAlchemyWebhookRepository  # noqa: E402
+from api.ports.as2_partner_repository import AS2TradingPartnerRepositoryPort  # noqa: E402
+from api.ports.as2_partnership_repository import AS2PartnershipRepositoryPort  # noqa: E402
+from api.ports.edi_header_repository import EdiHeaderRepositoryPort  # noqa: E402
+from api.ports.inbound_route_repository import InboundRouteRepositoryPort  # noqa: E402
+from api.ports.outbound_route_repository import OutboundRouteRepositoryPort  # noqa: E402
+from api.ports.sftp_repository import SFTPPartnerRepositoryPort  # noqa: E402
+from api.ports.webhook_repository import WebhookRepositoryPort  # noqa: E402
+
+
+def get_as2_partner_repo(
     session: AsyncSession = Depends(get_global_session),
-) -> ControlPlaneRepositoryPort:
-    return SqlAlchemyControlPlaneRepository(session)
+) -> AS2TradingPartnerRepositoryPort:
+    return SqlAlchemyAS2TradingPartnerRepository(session)
 
 
-def get_data_plane_repo(
-    session: AsyncSession = Depends(get_tenant_session),
-) -> DataPlaneRepositoryPort:
-    return SqlAlchemyDataPlaneRepository(session)
+def get_as2_partnership_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> AS2PartnershipRepositoryPort:
+    return SqlAlchemyAS2PartnershipRepository(session)
+
+
+def get_inbound_route_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> InboundRouteRepositoryPort:
+    return SqlAlchemyInboundRouteRepository(session)
+
+
+def get_outbound_route_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> OutboundRouteRepositoryPort:
+    return SqlAlchemyOutboundRouteRepository(session)
+
+
+def get_sftp_partner_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> SFTPPartnerRepositoryPort:
+    return SqlAlchemySFTPPartnerRepository(session)
+
+
+def get_webhook_repo(session: AsyncSession = Depends(get_global_session)) -> WebhookRepositoryPort:
+    return SqlAlchemyWebhookRepository(session)
+
+
+def get_edi_header_repo(
+    session: AsyncSession = Depends(get_global_session),
+) -> EdiHeaderRepositoryPort:
+    return SqlAlchemyEdiHeaderRepository(session)
 
 
 async def get_uow(

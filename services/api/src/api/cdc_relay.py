@@ -84,9 +84,7 @@ async def relay_cdc_event(
                 f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )
             try:
-                await queue.send(
-                    MessageQueueName.CDC_DLQ_QUEUE, {"error": str(e), "payload": raw_event}
-                )
+                await queue.send("CDC_DLQ_QUEUE", {"error": str(e), "payload": raw_event})
             except Exception as dlq_err:
                 logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
                 from fastapi import HTTPException
@@ -125,7 +123,7 @@ async def relay_cdc_event(
                 _TRANSFORM_QUEUE_EVENT_TYPES | {PipelineEventType.DELIVER_EVENT}
             ):
                 queue_name = (
-                    MessageQueueName.TRANSFORM_QUEUE
+                    MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE
                     if event.event_type in _TRANSFORM_QUEUE_EVENT_TYPES
                     else MessageQueueName.DELIVER_QUEUE
                 )

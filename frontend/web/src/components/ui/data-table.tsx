@@ -11,6 +11,7 @@ interface DataTableProps<TData> {
   emptyTitle?: string;
   emptyDescription?: string;
   renderExpandedRow?: (row: import('@tanstack/react-table').Row<TData>) => React.ReactNode;
+  getGroupBoundary?: (row: import('@tanstack/react-table').Row<TData>, prevRow: import('@tanstack/react-table').Row<TData>) => boolean;
 }
 
 export function DataTable<TData>({
@@ -22,6 +23,7 @@ export function DataTable<TData>({
   emptyTitle = "No Data",
   emptyDescription,
   renderExpandedRow,
+  getGroupBoundary,
 }: DataTableProps<TData>) {
   if (isLoading) {
     return (
@@ -65,8 +67,17 @@ export function DataTable<TData>({
             ))}
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {table.getRowModel().rows.map((row) => (
+            {table.getRowModel().rows.map((row, index, rows) => {
+              const previousRow = index > 0 ? rows[index - 1] : null;
+              const isNewGroup = getGroupBoundary && previousRow ? getGroupBoundary(row, previousRow) : false;
+
+              return (
               <Fragment key={row.id}>
+                {isNewGroup && (
+                  <tr>
+                    <td colSpan={columnsLength} className="p-0 border-t-[6px] border-slate-100/50 bg-slate-50/20"></td>
+                  </tr>
+                )}
                 <tr
                   className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
                   onClick={renderExpandedRow ? () => row.toggleExpanded() : undefined}
@@ -94,7 +105,8 @@ export function DataTable<TData>({
                   </tr>
                 )}
               </Fragment>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

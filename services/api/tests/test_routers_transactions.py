@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from api.dependencies import get_current_tenant_id, get_current_user_profile, get_tenant_uow
+from api.domain.models import TransactionDetailDTO
 from api.main import app
 from fastapi.testclient import TestClient
 
@@ -71,11 +72,13 @@ def base_mock_uow():
 
     mock_repo = AsyncMock()
     mock_repo.list_transactions.return_value = [mock_msg]
-    mock_repo.get_transaction.return_value = {
-        "edi_message": mock_msg,
-        "edi_json": [mock_json],
-        "api_gateway": [mock_gw],
-    }
+    from api.domain.models import TransactionDetailDTO
+
+    mock_repo.get_transaction.return_value = TransactionDetailDTO(
+        edi_message=mock_msg,
+        edi_jsons=[mock_json],
+        api_gateways=[mock_gw],
+    )
     mock_repo.get_transaction_thread.return_value = [mock_json]
 
     mock_route = MagicMock()
@@ -139,11 +142,11 @@ def test_get_transaction_detail_sftp():
     mock_msg.created_at = None
 
     mock_repo = AsyncMock()
-    mock_repo.get_transaction.return_value = {
-        "edi_message": mock_msg,
-        "edi_json": [],
-        "api_gateway": [],
-    }
+    mock_repo.get_transaction.return_value = TransactionDetailDTO(
+        edi_message=mock_msg,
+        edi_jsons=[],
+        api_gateways=[],
+    )
 
     mock_route = MagicMock()
     mock_route.as2_partner_id = None
@@ -186,11 +189,11 @@ def test_get_transaction_detail_fallback():
     mock_json.business_metadata = {"_routing": {"trading_partner_id": str(uuid.uuid4())}}
 
     mock_repo = AsyncMock()
-    mock_repo.get_transaction.return_value = {
-        "edi_message": mock_msg,
-        "edi_json": [mock_json],
-        "api_gateway": [],
-    }
+    mock_repo.get_transaction.return_value = TransactionDetailDTO(
+        edi_message=mock_msg,
+        edi_jsons=[mock_json],
+        api_gateways=[],
+    )
 
     mock_db_result = MagicMock()
     # first call returns None (AS2Partner lookup misses), second returns "Fallback Partner" (SFTPPartner lookup hits)
@@ -253,11 +256,11 @@ def test_get_transaction_webhook_fallback():
     mock_json.id = uuid.uuid4()
     mock_json.transaction_type = "850"
 
-    mock_repo.get_transaction.return_value = {
-        "edi_message": mock_msg,
-        "edi_json": [mock_json],
-        "api_gateway": [],
-    }
+    mock_repo.get_transaction.return_value = TransactionDetailDTO(
+        edi_message=mock_msg,
+        edi_jsons=[mock_json],
+        api_gateways=[],
+    )
 
     mock_tenant_session = AsyncMock()
     mock_inbound_route = MagicMock()
@@ -285,4 +288,4 @@ def test_get_transaction_webhook_fallback():
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")
     assert response.status_code == 200
-    assert response.json()["trading_partner_name"] == "Webhook: https://webhook.soopa.com"
+    assert response.json()["trading_partner_name"] == "https://webhook.soopa.com"

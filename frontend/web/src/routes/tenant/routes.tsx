@@ -2,7 +2,8 @@ import { createRoute } from '@tanstack/react-router'
 import { Route as appRoute } from '../tenant'
 import { RoutesProvider, useRoutes } from '@/features/routes/context/RoutesContext'
 import { RoutesTable } from '@/features/routes/components/RoutesTable'
-import { CreateRouteModal } from '@/features/routes/components/CreateRouteModal'
+import { CreateInboundRouteModal } from '@/features/routes/components/CreateInboundRouteModal'
+import { CreateOutboundRouteModal } from '@/features/routes/components/CreateOutboundRouteModal'
 
 export const Route = createRoute({
   getParentRoute: () => appRoute,
@@ -30,8 +31,9 @@ function RoutesPage() {
             Routing
           </h2>
         </div>
-        <div className="shrink-0">
-          <CreateRouteModal />
+        <div className="flex shrink-0 items-center gap-3">
+          <CreateInboundRouteModal />
+          <CreateOutboundRouteModal />
         </div>
       </section>
 

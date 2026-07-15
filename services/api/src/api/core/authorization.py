@@ -1,6 +1,6 @@
 from typing import Any
 
-from api.ports.repository import TenantRepositoryPort
+from api.ports.tenant_repository import TenantRepositoryPort
 
 
 class AuthorizationService:

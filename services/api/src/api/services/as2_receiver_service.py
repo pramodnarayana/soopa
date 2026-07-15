@@ -348,6 +348,8 @@ class As2ReceiverService:
             "connection_type": "AS2",
             "sender_id": isa_sender,
             "receiver_id": isa_receiver,
+            "as2_sender_id": as2_msg.as2_from,
+            "as2_receiver_id": as2_msg.as2_to,
             "message_id": as2_msg.message_id,
             "mdn_mode": partnership.mdn_type,
             "signature_algorithm": partnership.signature_algorithm,
@@ -382,7 +384,7 @@ class As2ReceiverService:
                 "receiver_id": isa_receiver,
                 "status": "RECEIVED",
             }
-            await dp_repo.create_outbox_event(
+            await dp_repo.publish_outbox_event(
                 tenant_id=true_tenant_id,
                 event_type="edi_message.received",
                 payload=outbox_payload,

@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from transformer.domain.exceptions import TranslationError
+from transformer.domain.exceptions import TransformationError
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 logger = logging.getLogger(__name__)
@@ -87,11 +87,11 @@ async def transform_payload(request: TransformRequest) -> TransformResponse:
         adapter = BotsEDIAdapter()
         return await handler(request, adapter)
 
-    except TranslationError as e:
+    except TransformationError as e:
         logger.exception("Translation error in EDI tool")
 
         # If the AST generation completely crashed (e.g. fatal syntax error),
-        # get_raw_ast will still raise TranslationError
+        # get_raw_ast will still raise TransformationError
         if e.errors:
             structured_error = {"status": "fatal_validation_failed", "errors": e.errors}
             return TransformResponse(

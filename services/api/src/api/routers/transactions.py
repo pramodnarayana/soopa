@@ -121,7 +121,7 @@ async def get_transaction(
         if not result:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
-        msg = result["edi_message"]
+        msg = result.edi_message
         edi_msg_dict = {
             "id": str(msg.id),
             "trace_id": str(msg.trace_id),
@@ -137,7 +137,7 @@ async def get_transaction(
         }
 
         edi_jsons = []
-        for j in result["edi_json"]:
+        for j in result.edi_jsons:
             edi_jsons.append(
                 {
                     "id": str(j.id),
@@ -154,7 +154,7 @@ async def get_transaction(
             )
 
         apigws = []
-        for gw in result["api_gateway"]:
+        for gw in result.api_gateways:
             apigws.append(
                 {
                     "id": str(gw.id),
@@ -168,7 +168,7 @@ async def get_transaction(
             )
 
         trading_partner_name, new_conn_type = await uow.resolve_trading_partner_name(
-            msg, result["edi_json"]
+            msg, result.edi_jsons
         )
         if new_conn_type and edi_msg_dict.get("connection_type") in ("UNKNOWN", None):
             edi_msg_dict["connection_type"] = new_conn_type

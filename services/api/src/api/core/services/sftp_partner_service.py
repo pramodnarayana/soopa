@@ -23,7 +23,7 @@ class SFTPPartnerService:
     async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
         partner_id = await self.global_repo.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -44,7 +44,7 @@ class SFTPPartnerService:
         await self.global_repo.update_sftp_partner(
             tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
         )
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},

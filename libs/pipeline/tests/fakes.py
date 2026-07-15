@@ -1,9 +1,10 @@
 from typing import Any
 
 from domain.models import EdiMessageDomainModel
+from domain.status import MessageStatus
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.storage import StoragePort
-from pipeline.ports.transformer import TransformerPort, TranslatedTransaction
+from pipeline.ports.transformer import TransformedTransaction, TransformerPort
 
 
 class InMemoryStorageAdapter(StoragePort):
@@ -26,20 +27,20 @@ class InMemoryStorageAdapter(StoragePort):
 
 class FakeTransformerAdapter(TransformerPort):
     def __init__(self) -> None:
-        self.translate_edi_calls: list[dict[str, Any]] = []
-        self.translate_json_calls: list[dict[str, Any]] = []
-        self.mock_return_transactions: list[TranslatedTransaction] | None = None
+        self.transform_edi_calls: list[dict[str, Any]] = []
+        self.transform_json_calls: list[dict[str, Any]] = []
+        self.mock_return_transactions: list[TransformedTransaction] | None = None
 
-    async def translate_edi_to_json(
+    async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TranslatedTransaction]:
-        self.translate_edi_calls.append(
+    ) -> list[TransformedTransaction]:
+        self.transform_edi_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
         )
         if self.mock_return_transactions is not None:
             return self.mock_return_transactions
         return [
-            TranslatedTransaction(
+            TransformedTransaction(
                 transaction_type=transaction_type,
                 isa_sender_id="MOCK_ISA_SENDER",
                 isa_receiver_id="MOCK_ISA_RECEIVER",
@@ -50,14 +51,14 @@ class FakeTransformerAdapter(TransformerPort):
             )
         ]
 
-    async def translate_json_to_edi(
+    async def transform_json_to_edi(
         self,
         payload: dict[str, Any] | list[Any],
         standard: str,
         transaction_type: str,
         route_config: dict[str, Any],
     ) -> bytes:
-        self.translate_json_calls.append(
+        self.transform_json_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
         )
         return b"FAKE*EDI*DATA~"
@@ -80,7 +81,9 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             import uuid
             from datetime import UTC, datetime
 
+            from domain.direction import MessageDirection
             from domain.models import EdiMessageDomainModel
+            from domain.status import MessageStatus
 
             # Shallow-copy so mutations inside the domain model (or test assertions)
             # don't bleed back into the fake store and cause inter-test coupling.
@@ -96,9 +99,9 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             if "updated_at" not in msg:
                 msg["updated_at"] = datetime.now(UTC)
             if "status" not in msg:
-                msg["status"] = "RECEIVED"
+                msg["status"] = MessageStatus.RECEIVED
             if "direction" not in msg:
-                msg["direction"] = "INBOUND"
+                msg["direction"] = MessageDirection.INBOUND
 
             # Convert non-UUID trace_id to a valid UUID string (deterministic hash)
             try:
@@ -119,8 +122,8 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
     async def claim_edi_message(self, trace_id: str) -> bool:
         msg = self.edi_messages.get(trace_id)
-        if msg and msg["status"] == "PENDING_DELIVERY":
-            msg["status"] = "PROCESSING"
+        if msg and msg["status"] == MessageStatus.PENDING_DELIVERY:
+            msg["status"] = MessageStatus.PROCESSING
             return True
         return False
 
@@ -177,8 +180,8 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
     async def claim_api_payload(self, trace_id: str) -> bool:
         payload = self.api_gateway.get(trace_id)
-        if payload and payload["status"] == "PENDING_DELIVERY":
-            payload["status"] = "PROCESSING"
+        if payload and payload["status"] == MessageStatus.PENDING_DELIVERY:
+            payload["status"] = MessageStatus.PROCESSING
             return True
         return False
 

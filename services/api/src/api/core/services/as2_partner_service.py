@@ -27,7 +27,7 @@ class AS2PartnerService:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
         partner_id = await self.global_repo.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -51,7 +51,7 @@ class AS2PartnerService:
         if not updated_partner:
             raise ValueError("Partner not found after update")
 
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -68,7 +68,7 @@ class AS2PartnerService:
     async def delete_as2_partner(self, tenant_id: int, partner_id: UUID) -> None:
         logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
         await self.global_repo.delete_as2_identity(tenant_id, partner_id)
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_DELETED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -90,7 +90,7 @@ class AS2PartnerService:
         if not updated_partner:
             raise ValueError("Partner not found after certificate rotation")
 
-        await self.global_repo.create_outbox_event(
+        await self.global_repo.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
