@@ -32,33 +32,22 @@ class OutboundTransformService:
         if not edi_json:
             raise ValueError(f"No EdiJson record found for trace_id={trace_id}")
 
-        outbound_route_id = str(edi_json.outbound_route_id) if edi_json.outbound_route_id else None
+        trading_partner_id = edi_json.trading_partner_id
         tenant_id = edi_json.tenant_id
 
         business_metadata = edi_json.business_metadata or {}
         routing_meta = business_metadata.get("_routing") or {}
-        trading_partner_id = routing_meta.get("trading_partner_id")
+        # Prefer explicit trading_partner_id on the record; fall back to business_metadata routing hint
+        if not trading_partner_id:
+            trading_partner_id = routing_meta.get("trading_partner_id")
 
-        if outbound_route_id:
-            route_config = await self.repository.get_outbound_edi_header_by_route_or_partner(
-                route_id=outbound_route_id
-            )
-            # Also get the route to link to EdiMessage
-            outbound_route = await self.repository.get_outbound_route(outbound_route_id)
-        else:
-            if not trading_partner_id or not tenant_id:
-                raise ValueError(
-                    f"No routing info available (trading_partner_id/tenant_id) for trace_id={trace_id}"
-                )
+        if trading_partner_id:
             route_config = await self.repository.get_outbound_edi_header_by_route_or_partner(
                 trading_partner_id=trading_partner_id, tenant_id=tenant_id
             )
-            # Get the route to link to EdiMessage
             outbound_route = await self.repository.get_outbound_route_by_trading_partner_id(
                 trading_partner_id=trading_partner_id, tenant_id=tenant_id
             )
-            if outbound_route:
-                outbound_route_id = outbound_route.get("id")
 
         if not route_config or not outbound_route:
             raise ValueError(
@@ -131,7 +120,7 @@ class OutboundTransformService:
             receiver_id=route_config.get("isa_receiver_id"),
             gs_sender_id=route_config.get("gs_sender_id"),
             gs_receiver_id=route_config.get("gs_receiver_id"),
-            outbound_route_id=outbound_route_id,
+            trading_partner_id=trading_partner_id,
             tenant_id=edi_json.tenant_id,
         )
 
@@ -144,7 +133,7 @@ class OutboundTransformService:
             payload={
                 "trace_id": trace_id,
                 "direction": MessageDirection.OUTBOUND,
-                "outbound_route_id": outbound_route_id,
+                "trading_partner_id": trading_partner_id,
                 "standard": standard,
                 "isa_sender_id": route_config.get("isa_sender_id"),
                 "isa_receiver_id": route_config.get("isa_receiver_id"),

@@ -56,7 +56,7 @@ class EdiRecordBase(BaseModel):
 
 
 class EdiJsonDomainModel(EdiRecordBase):
-    outbound_route_id: UUID | None = None
+    trading_partner_id: str | None = None
     transaction_type: str | None = None
     standard: str | None = None
     sender_id: str | None = None
@@ -77,7 +77,7 @@ class EdiMessageDomainModel(EdiRecordBase):
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     inbound_route_id: UUID | None = None
-    outbound_route_id: UUID | None = None
+    trading_partner_id: str | None = None
     edi_data: str | None = None  # Populated from DB or S3
     storage_uri: str | None = None
 

@@ -8,7 +8,7 @@ Requires platform admin permissions.
 from fastapi import APIRouter, Depends
 
 from api.dependencies import require_platform_admin
-from api.routers.trading_partners.platform import as2_partners, as2_partnerships, config
+from api.routers.trading_partners.platform import as2_partners, as2_partnerships, settings
 
 _PREFIX = "/api/v1/platform/trading-partners"
 
@@ -20,4 +20,4 @@ router = APIRouter(
 
 router.include_router(as2_partners.router)
 router.include_router(as2_partnerships.router)
-router.include_router(config.router)
+router.include_router(settings.router)

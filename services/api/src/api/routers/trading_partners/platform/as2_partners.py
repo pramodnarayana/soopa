@@ -7,6 +7,8 @@ from sqlalchemy.exc import IntegrityError
 from api.adapters.http.dtos import (
     AS2TradingPartnerResponse,
     CreateAS2TradingPartnerRequest,
+    GenerateCertRequest,
+    GenerateCertResponse,
     UpdateAS2TradingPartnerRequest,
 )
 from api.core.services import AS2PartnerService
@@ -23,6 +25,32 @@ from api.domain.models import (
 from api.ports.vault import VaultPort
 
 router = APIRouter(tags=["Platform Partners - AS2"])
+
+
+@router.post(
+    "/as2/certificates/generate",
+    response_model=GenerateCertResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def generate_certificate(
+    request: GenerateCertRequest,
+    vault: VaultPort = Depends(get_vault),
+) -> Any:
+    """
+    Generates a new self-signed AS2 certificate and stores the private key in Vault.
+    Returns the public cert PEM and the vault reference for the private key.
+    """
+    private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=request.as2_id)
+
+    private_key_vault_ref = vault.store_private_key(
+        private_key_pem=private_key_bytes,
+        alias_prefix=request.as2_id.replace(" ", "_").lower(),
+    )
+
+    return GenerateCertResponse(
+        public_cert_pem=public_cert_bytes.decode("utf-8"),
+        private_key_vault_ref=private_key_vault_ref,
+    )
 
 
 @router.post(
@@ -44,8 +72,8 @@ async def create_platform_as2_partner(
             public_cert_pem = request.public_cert_pem
             private_key_vault_ref = request.private_key_vault_ref
 
-            if request.is_local:
-                # Auto-generate self-signed cert
+            if request.is_local and not private_key_vault_ref:
+                # Auto-generate self-signed cert if not already generated and provided
                 private_key_bytes, public_cert_bytes = generate_self_signed_cert(
                     common_name=request.as2_id
                 )

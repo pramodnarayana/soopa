@@ -384,7 +384,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("trace_id", sa.UUID(), nullable=False),
         sa.Column("direction", sa.String(length=50), nullable=False),
-        sa.Column("outbound_route_id", sa.UUID(), nullable=True),
+        sa.Column("trading_partner_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("standard", sa.String(length=50), nullable=True),
         sa.Column("sender_id", sa.String(length=255), nullable=True),
@@ -406,10 +406,6 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_edi_json_data_or_uri"
         ),
-        sa.ForeignKeyConstraint(
-            ["outbound_route_id"],
-            ["outbound_routes.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -420,7 +416,7 @@ def upgrade() -> None:
         postgresql_using="gin",
     )
     op.create_index(
-        op.f("ix_edi_json_outbound_route_id"), "edi_json", ["outbound_route_id"], unique=False
+        op.f("ix_edi_json_trading_partner_id"), "edi_json", ["trading_partner_id"], unique=False
     )
     op.create_index(
         "ix_edi_json_sender_recv",
@@ -455,7 +451,7 @@ def upgrade() -> None:
         sa.Column("status_message", sa.Text(), nullable=True),
         sa.Column("state", sa.String(length=255), nullable=True),
         sa.Column("msg_headers", sa.Text(), nullable=True),
-        sa.Column("outbound_route_id", sa.UUID(), nullable=True),
+        sa.Column("trading_partner_id", sa.String(length=255), nullable=True),
         sa.Column("as2_sender_id", sa.String(length=255), nullable=True),
         sa.Column("as2_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("interchange_control_no", sa.String(length=255), nullable=True),
@@ -476,16 +472,12 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "(edi_data IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_edi_msg_data_or_uri"
         ),
-        sa.ForeignKeyConstraint(
-            ["outbound_route_id"],
-            ["outbound_routes.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_edi_messages_outbound_route_id"),
+        op.f("ix_edi_messages_trading_partner_id"),
         "edi_messages",
-        ["outbound_route_id"],
+        ["trading_partner_id"],
         unique=False,
     )
     op.create_index(op.f("ix_edi_messages_tenant_id"), "edi_messages", ["tenant_id"], unique=False)
@@ -505,13 +497,13 @@ def downgrade() -> None:
     op.drop_index("ix_edi_msgs_sender_recv", table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_trace_id"), table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_tenant_id"), table_name="edi_messages")
-    op.drop_index(op.f("ix_edi_messages_outbound_route_id"), table_name="edi_messages")
+    op.drop_index(op.f("ix_edi_messages_trading_partner_id"), table_name="edi_messages")
     op.drop_table("edi_messages")
     op.drop_index(op.f("ix_edi_json_transaction_type"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_trace_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_tenant_id"), table_name="edi_json")
     op.drop_index("ix_edi_json_sender_recv", table_name="edi_json")
-    op.drop_index(op.f("ix_edi_json_outbound_route_id"), table_name="edi_json")
+    op.drop_index(op.f("ix_edi_json_trading_partner_id"), table_name="edi_json")
     op.drop_index("ix_edi_json_business_metadata", table_name="edi_json", postgresql_using="gin")
     op.drop_table("edi_json")
     op.drop_index(

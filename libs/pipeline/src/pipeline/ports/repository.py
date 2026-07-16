@@ -26,7 +26,7 @@ class EDIMessagePort(Protocol):
         receiver_id: str | None = None,
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
-        outbound_route_id: str | None = None,
+        trading_partner_id: str | None = None,
         tenant_id: int | None = None,
     ) -> None:
         """Stores a raw EDI message."""

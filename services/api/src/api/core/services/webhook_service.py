@@ -31,7 +31,7 @@ class WebhookService:
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> PartnerEntity:
         logger.info("Webhook creating", extra={"tenant_id": tenant_id, "webhook_name": cmd.name})
         partner_id = await self.uow.webhooks.create_webhook(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.WEBHOOK_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -57,7 +57,7 @@ class WebhookService:
         )
         result = await self.uow.webhooks.update_webhook(tenant_id, webhook_id, name, active, url)
         if result:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_UPDATED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
@@ -70,7 +70,7 @@ class WebhookService:
         )
         result = await self.uow.webhooks.delete_webhook(tenant_id, webhook_id)
         if result:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_DELETED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},

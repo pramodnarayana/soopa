@@ -28,10 +28,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: int, event_type: str, payload: dict[str, Any], idempotency_key: UUID
     ) -> UUID:
-        from database.models.data_plane import Outbox
+        from database.models.data_plane import DataPlaneOutbox
 
         event_id = uuid.uuid4()
-        record = Outbox(
+        record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tenant_id,
             idempotency_key=idempotency_key,
@@ -276,7 +276,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 encryption_algorithm=edi_msg.encryption_algorithm,
                 compression=getattr(edi_msg, "compression", None),
                 inbound_route_id=getattr(edi_msg, "inbound_route_id", None),
-                outbound_route_id=getattr(edi_msg, "outbound_route_id", None),
+                trading_partner_id=getattr(edi_msg, "trading_partner_id", None),
                 status=getattr(edi_msg, "status", "RECEIVED"),
                 edi_data=getattr(edi_msg, "edi_data", None),
                 interchange_control_no=getattr(edi_msg, "interchange_control_no", None),
@@ -296,6 +296,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     id=j.id,
                     trace_id=j.trace_id,
                     status=j.status,
+                    trading_partner_id=getattr(j, "trading_partner_id", None),
                     error_message=getattr(j, "error_message", None),
                     interchange_control_number=getattr(j, "interchange_control_number", None),
                     group_control_number=getattr(j, "group_control_number", None),

@@ -41,7 +41,7 @@ class AS2PartnershipService:
         partner_id = await self.uow.as2_partnerships.create_as2_partnership(
             tenant_id=tenant_id, cmd=cmd
         )
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -77,7 +77,7 @@ class AS2PartnershipService:
         await self.uow.as2_partnerships.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_UPDATED,
             payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
@@ -97,7 +97,7 @@ class AS2PartnershipService:
     async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
         logger.info(f"Deleting AS2 partnership {partnership_id} for tenant {tenant_id}")
         await self.uow.as2_partnerships.delete_as2_partnership(tenant_id, partnership_id)
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_DELETED,
             payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},

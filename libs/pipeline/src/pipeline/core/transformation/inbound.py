@@ -110,7 +110,7 @@ class InboundTransformService:
             await self.repository.save_edi_json(
                 trace_id=trace_id,
                 direction=MessageDirection.INBOUND,
-                partnership_id=partnership_id_str,
+                partnership_id=None,
                 transaction_type=txn_type,
                 standard=standard,
                 sender_id=sender_id,

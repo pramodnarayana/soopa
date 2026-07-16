@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -306,6 +306,17 @@ class PartnerResponse(BaseModel):
             object.__setattr__(self, "id", self.partner_id)
 
 
+class GenerateCertRequest(BaseModel):
+    as2_id: str = Field(..., max_length=255, description="AS2 ID to use as Common Name")
+
+
+class GenerateCertResponse(BaseModel):
+    public_cert_pem: str = Field(..., description="Public certificate in PEM format")
+    private_key_vault_ref: str = Field(
+        ..., description="Vault reference for the generated private key"
+    )
+
+
 class AS2TradingPartnerResponse(BaseModel):
     id: str
     name: str
@@ -354,6 +365,8 @@ class RouteResponse(BaseModel):
 
 
 class BaseRouteItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     route_id: UUID
     trading_partner_id: str | None = None
     name: str

@@ -339,6 +339,35 @@ def upgrade() -> None:
         unique=True,
         postgresql_where=sa.text("active = true"),
     )
+    op.create_table(
+        "platform_settings",
+        sa.Column("key", sa.String(), nullable=False),
+        sa.Column("value", sa.JSON(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("key"),
+    )
+    op.create_table(
+        "scheduled_jobs",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("payload", sa.JSON(), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("next_run_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("locked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("locked_by", sa.String(), nullable=True),
+        sa.Column("retry_count", sa.Integer(), nullable=False),
+        sa.Column("max_retries", sa.Integer(), nullable=False),
+        sa.Column("error_message", sa.String(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_scheduled_jobs_name"), "scheduled_jobs", ["name"], unique=False)
+    op.create_index(
+        op.f("ix_scheduled_jobs_next_run_at"), "scheduled_jobs", ["next_run_at"], unique=False
+    )
+    op.create_index(op.f("ix_scheduled_jobs_status"), "scheduled_jobs", ["status"], unique=False)
     # ### end Alembic commands ###
 
 

@@ -88,7 +88,7 @@ class ApiReceiverService:
             # 5. Drop Outbox event for Worker to transform
             from domain.events import PipelineEventType
 
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.data_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload={

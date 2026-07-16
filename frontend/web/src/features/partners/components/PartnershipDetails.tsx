@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Zap, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { usePlatformConfig } from '@/features/platform/api/configHooks';
+import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { Combobox } from '@/components/ui/combobox';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
@@ -24,7 +24,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
   const { toast } = useToast();
   const updatePartnership = useUpdatePlatformPartnershipMutation();
   const testConnection = useTestAs2PartnershipConnectionMutation();
-  const { data: platformConfig } = usePlatformConfig();
+  const { data: platformSettings } = usePlatformSettings();
   const isSubmitting = updatePartnership.isPending;
 
   // Custom Payload State
@@ -47,10 +47,10 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
   const mdnUrl = watch('mdn_url');
 
   useEffect(() => {
-    if (mdnType === 'ASYNC' && !mdnUrl && platformConfig?.available_as2_receive_urls?.length) {
-      setValue('mdn_url', platformConfig.available_as2_receive_urls[0], { shouldDirty: true });
+    if (mdnType === 'ASYNC' && !mdnUrl && platformSettings?.available_as2_receive_urls?.length) {
+      setValue('mdn_url', platformSettings.available_as2_receive_urls[0], { shouldDirty: true });
     }
-  }, [mdnType, mdnUrl, setValue, platformConfig]);
+  }, [mdnType, mdnUrl, setValue, platformSettings]);
   const onSubmit = (formData: any) => {
     const payload: any = {};
     if (formData.name !== partnership.name) payload.name = formData.name;
@@ -161,7 +161,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                 control={control}
                 render={({ field }) => (
                   <Combobox
-                    options={platformConfig?.available_as2_receive_urls || []}
+                    options={platformSettings?.available_as2_receive_urls || []}
                     value={field.value}
                     onChange={field.onChange}
                     placeholder="https://..."
@@ -180,7 +180,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(platformConfig?.supported_as2_encryption_algorithms || []).map(o => (
+                    {(platformSettings?.supported_as2_encryption_algorithms || []).map(o => (
                       <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -197,7 +197,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(platformConfig?.supported_as2_signature_algorithms || []).map(o => (
+                    {(platformSettings?.supported_as2_signature_algorithms || []).map(o => (
                       <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                     ))}
                   </SelectContent>

@@ -22,16 +22,17 @@ To achieve the long-term vision of completely merging and modernizing `bots_core
 ## 2. Outbox Sweeper (CDC Fallback Relay)
 
 **Description:**
-The system currently relies exclusively on Debezium (CDC) reading the PostgreSQL Write-Ahead Log (WAL) to route `Outbox` events to SQS. If Debezium crashes, loses offsets, or experiences network partitioning, `PENDING` outbox events will be permanently trapped in the database, breaking the asynchronous event pipeline.
+The Outbox Sweeper has been implemented as a fallback to Debezium (CDC). It iterates over all shards to relay `PENDING` outbox events to SQS. However, the current implementation iterates over shards sequentially (`for shard in shards: await self._sweep_shard(...)`). As the number of shards grows in the multi-tenant architecture, this sequential sweep will take longer and potentially exceed the polling interval, causing lag.
 
 **Proposed Resolution:**
-Implement an Outbox Sweeper background worker that acts as a robust enterprise fallback and garbage collector:
-1. **Fallback Poller:** A cron/scheduled task that periodically queries `SELECT * FROM outbox WHERE status = 'PENDING'` for events older than a configured threshold (e.g., 60 seconds) and manually relays them to SQS.
-2. **Garbage Collector:** A cleanup task that runs `DELETE FROM outbox WHERE status = 'COMPLETED'` for events older than 7 days to prevent unbounded database growth.
+Refactor the Outbox Sweeper to use Bounded Concurrency or Distributed Job Fan-out:
+1. **Bounded Concurrency:** Run sweeps concurrently using `asyncio.gather` bounded by an `asyncio.Semaphore` so multiple shards are swept at once without exhausting resources.
+2. **Distributed Job Fan-out:** Instead of a single job, spawn a `ScheduledJob` for each shard dynamically, allowing multiple orchestrator pods to load balance the shard sweeping.
+3. **Garbage Collector (Pending):** A cleanup task that runs `DELETE FROM outbox WHERE status = 'COMPLETED'` for events older than 7 days to prevent unbounded database growth is still needed.
 
-**Estimated Effort:** Low
+**Estimated Effort:** Low-Medium
 **Estimated Time:** 1 to 2 days
-**Impact:** Essential for enterprise-grade high availability. Guarantees no messages are ever lost due to CDC infrastructure failures and keeps the database optimized over time.
+**Impact:** Prevents the sweeper from falling behind as the number of database shards scales, ensuring enterprise-grade multi-tenant reliability.
 
 ## 3. AS2 Protocol
 
@@ -80,3 +81,19 @@ Currently, the bots engine does not support a lightweight validation mode (e.g.,
 ### UnitOfWork Architecture (Control Plane vs Data Plane Naming)
 Currently, the `UnitOfWork` (and its underlying SQL Alchemy repositories) leak infrastructure/deployment boundaries ("Control Plane" and "Data Plane") into domain business logic. We have giant God-objects like `SqlAlchemyControlPlaneRepository` inheriting from 10+ distinct repositories, causing namespace collisions and violating SOLID principles (Single Responsibility Principle).
 **Future Action:** Refactor `UnitOfWork` to remove `control_plane` and `data_plane` concepts from class names and properties. Use Composition to expose distinct Bounded Contexts (e.g., `self.trading_partners`, `self.transactions`, `self.routes`) instead of lumping them into control/data plane buckets.
+
+## 8. Hybrid SQS Tenancy (Dynamic Queue Resolution)
+
+**Description:**
+Currently, both inbound and outbound events are routed to a static, shared SQS queue (e.g., `TransformOrchestrationQueue`). In a multi-tenant environment, a massive batch of outbound events from one tenant can block critical inbound processing for all other tenants (the "noisy neighbor" problem).
+
+**Proposed Resolution:**
+Implement a Hybrid SQS routing model that dynamically resolves the target queue based on the tenant's tier and the event direction:
+1. **Dynamic Queue Resolver:** The CDC Relay and Outbox Sweeper should read the `tenant_id` from the outbox event and lookup the tenant's tier (cached in memory).
+2. **Standard Tenants:** Route inbound events to `standard-inbound-queue` and outbound events to `standard-outbound-queue`.
+3. **Enterprise Tenants:** Route events to dedicated queues (e.g., `enterprise-{tenant_name}-inbound-queue`).
+4. **Dedicated Workers:** Deploy separate worker pods for standard inbound, standard outbound, and dedicated enterprise queues to provide strict compute isolation.
+
+**Estimated Effort:** Medium
+**Estimated Time:** 3 to 5 days
+**Impact:** Essential for enterprise-grade SaaS scaling. Guarantees compute isolation for enterprise customers and bulkheads heavy outbound processing from blocking high-priority inbound traffic.

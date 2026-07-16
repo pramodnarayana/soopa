@@ -32,6 +32,7 @@ export interface IPartnersRepository {
   // Certificates
   exportCertificates(partnerId: string): Promise<CertificatesExport>;
   rotateCertificates(partnerId: string, payload: RotateCertPayload): Promise<Partner>;
+  generateCertificate(as2Id: string): Promise<{ public_cert_pem: string; private_key_vault_ref: string }>;
 
   // Tenant Partners
   getTenantPartners(): Promise<Partner[]>;

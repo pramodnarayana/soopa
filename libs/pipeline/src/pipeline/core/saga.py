@@ -47,12 +47,12 @@ class TraceLifecycleService:
             # For OUTBOUND, the input is EdiJson. Its terminal state is TRANSFORMED.
             import uuid
 
-            outbound_route_id = payload.get("outbound_route_id")
+            trading_partner_id = payload.get("trading_partner_id")
 
             # Pack update kwargs (omitting None values if not present)
             update_kwargs = {}
-            if outbound_route_id:
-                update_kwargs["outbound_route_id"] = uuid.UUID(outbound_route_id)
+            if trading_partner_id:
+                update_kwargs["trading_partner_id"] = trading_partner_id
             if "standard" in payload:
                 update_kwargs["standard"] = payload["standard"]
             if "isa_sender_id" in payload:

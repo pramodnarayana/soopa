@@ -11,6 +11,7 @@ from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
 from database.models.control_plane import DatabaseShard, Tenant
+from domain.events import PipelineEventType
 from security.smime import decrypt_payload, verify_signature
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -387,7 +388,7 @@ class As2ReceiverService:
             }
             await dp_repo.publish_outbox_event(
                 tenant_id=true_tenant_id,
-                event_type="edi_message.received",
+                event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload=outbox_payload,
                 idempotency_key=msg_id,
             )

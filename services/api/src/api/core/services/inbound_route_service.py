@@ -26,7 +26,7 @@ class InboundRouteService:
     async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> RouteEntity:
         logger.info(f"Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
         route_id = await self.uow.inbound_routes.create_inbound_route(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.INBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -38,7 +38,7 @@ class InboundRouteService:
     ) -> bool:
         res = await self.uow.inbound_routes.update_inbound_route(tenant_id, route_id, cmd)
         if res:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -48,7 +48,7 @@ class InboundRouteService:
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         res = await self.uow.inbound_routes.delete_inbound_route(tenant_id, route_id)
         if res:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},

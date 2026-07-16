@@ -322,7 +322,7 @@ class EdiMessageDTO:
     encryption_algorithm: str | None = None
     compression: str | None = None
     inbound_route_id: UUID | None = None
-    outbound_route_id: UUID | None = None
+    trading_partner_id: str | None = None
     status: str = "RECEIVED"
     edi_data: str | None = None
     interchange_control_no: str | None = None
@@ -343,6 +343,7 @@ class EdiJsonDTO:
     id: UUID
     trace_id: UUID
     status: str
+    trading_partner_id: str | None = None
     error_message: str | None = None
     interchange_control_number: str | None = None
     group_control_number: str | None = None

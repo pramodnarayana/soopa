@@ -29,6 +29,9 @@ from api.routers import (
     transactions,
     webhooks,
 )
+from api.routers import (
+    platform as platform_admin,
+)
 from api.routers.developers import api_tokens
 from api.routers.trading_partners import as2_receive, platform
 
@@ -97,6 +100,7 @@ app.include_router(cdc_relay.router)
 app.include_router(trading_partners.router)
 app.include_router(webhooks.router)
 app.include_router(platform.router)
+app.include_router(platform_admin.router)
 app.include_router(routes.router)
 app.include_router(edi_headers.router)
 app.include_router(edi_tools.router)

@@ -1,20 +1,21 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import type { AS2Partner } from '../types';
 import { useCertificatesExportQuery, useUpdatePlatformPartnerMutation, useRotateCertificatesMutation } from '../api/partnerHooks';
+import { pki } from 'node-forge';
 import { Copy, Download, Loader2, ChevronDown, ChevronRight, CheckCircle2, Clock, ClipboardPaste } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { usePlatformConfig } from '@/features/platform/api/configHooks';
+import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { Combobox } from '@/components/ui/combobox';
 import { CertificateInput } from './CertificateInput';
 
 export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, onCancel?: () => void }) {
   const { toast } = useToast();
-  const { data: platformConfig } = usePlatformConfig();
+  const { data: platformSettings } = usePlatformSettings();
 
   const updatePlatform = useUpdatePlatformPartnerMutation();
   const rotateCertificates = useRotateCertificatesMutation();
@@ -161,7 +162,7 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
                 control={control}
                 render={({ field }) => (
                   <Combobox
-                    options={platformConfig?.available_as2_receive_urls || []}
+                    options={platformSettings?.available_as2_receive_urls || []}
                     value={field.value}
                     onChange={field.onChange}
                     placeholder="https://..."
@@ -199,8 +200,11 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/60 bg-slate-50/50">
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Status</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Issued</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Expires</th>
+                    <th className="px-6 py-4 w-full"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -280,6 +284,19 @@ function CertificateRow({
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
 
+  const certInfo = React.useMemo(() => {
+    if (!publicPem || !publicPem.includes('-----BEGIN CERTIFICATE-----')) return null;
+    try {
+      const cert = pki.certificateFromPem(publicPem);
+      return {
+        notBefore: cert.validity.notBefore.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+        notAfter: cert.validity.notAfter.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+      };
+    } catch (e) {
+      return null;
+    }
+  }, [publicPem]);
+
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: 'Copied', description: `${label} copied to clipboard.` });
@@ -327,21 +344,35 @@ function CertificateRow({
             </span>
           )}
         </td>
-        <td className="px-6 py-4 text-sm text-slate-500 w-full">
-          <div className="flex items-center justify-between">
-            <span>{role === 'Active' ? 'Actively used for signing and decryption' : 'In grace period for legacy traffic'}</span>
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors">
-                {expanded ? 'Hide Details' : 'View Details'}
-              </span>
-              {expanded ? <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />}
-            </div>
+        <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">
+          <span>{role === 'Active' ? 'Actively used for signing and decryption' : 'In grace period for legacy traffic'}</span>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          {certInfo ? (
+            <span className="text-sm text-slate-600 font-medium">{certInfo.notBefore}</span>
+          ) : (
+            <span className="text-sm text-slate-400 italic">Unknown</span>
+          )}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          {certInfo ? (
+            <span className="text-sm text-slate-600 font-medium">{certInfo.notAfter}</span>
+          ) : (
+            <span className="text-sm text-slate-400 italic">Unknown</span>
+          )}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-right">
+          <div className="flex items-center justify-end gap-3">
+            <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors">
+              {expanded ? 'Hide Details' : 'View Details'}
+            </span>
+            {expanded ? <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />}
           </div>
         </td>
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={2} className="p-0 border-t-0">
+          <td colSpan={5} className="p-0 border-t-0">
             <div className="bg-slate-50 p-4 border-b border-slate-100 flex flex-col gap-4 shadow-inner">
 
               <div className="flex flex-col gap-2">

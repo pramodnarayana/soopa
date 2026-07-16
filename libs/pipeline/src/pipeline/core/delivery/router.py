@@ -32,12 +32,17 @@ class DeliveryRouter:
 
         direction = edi_msg.direction
 
-        if direction == "OUTBOUND" and edi_msg.outbound_route_id:
-            route = await self.repository.get_outbound_route(str(edi_msg.outbound_route_id))
+        if direction == "OUTBOUND" and edi_msg.trading_partner_id:
+            route = await self.repository.get_outbound_route_by_trading_partner_id(
+                trading_partner_id=edi_msg.trading_partner_id,
+                tenant_id=edi_msg.tenant_id,
+            )
             if not route:
-                logger.error(f"Configured outbound route for {edi_msg.outbound_route_id} not found")
+                logger.error(
+                    f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
+                )
                 raise ValueError(
-                    f"Configured outbound route for {edi_msg.outbound_route_id} not found"
+                    f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
                 )
         else:
             sender_id = edi_msg.sender_id

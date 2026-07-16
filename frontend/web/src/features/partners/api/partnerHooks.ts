@@ -228,6 +228,13 @@ export function useRotateCertificatesMutation() {
   );
 }
 
+export function useGenerateCertificateMutation() {
+  const repo = useRepository();
+  return useMutation({
+    mutationFn: (as2Id: string) => repo.generateCertificate(as2Id)
+  });
+}
+
 export function useTestSftpConnectionMutation() {
   const repo = useRepository();
   return useMutation({

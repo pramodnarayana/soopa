@@ -3,15 +3,54 @@ from typing import Any
 from uuid import UUID
 
 from api.ports.outbox_repository import OutboxRepositoryPort
-from database.base_repository import BaseSqlAlchemyRepository
-from database.models.control_plane import Outbox as GlobalOutbox
-from sqlalchemy.ext.asyncio import AsyncSession
+from database.base_repository import GlobalSqlAlchemyRepository, TenantSqlAlchemyRepository
+from database.models.control_plane import ControlPlaneOutbox
 
 
-class SqlAlchemyOutboxRepository(OutboxRepositoryPort, BaseSqlAlchemyRepository):
-    def __init__(self, session: AsyncSession, model_class: Any = GlobalOutbox) -> None:
-        self.session = session
+class SqlAlchemyControlPlaneOutboxRepository(GlobalSqlAlchemyRepository, OutboxRepositoryPort):
+    """
+    Outbox repository for the Control Plane (Global DB).
+    Writes provisioning events (AS2_PARTNER_CREATED, etc.) that are later
+    polled by the Provisioning Worker to replicate config to tenant shards.
+    """
+
+    def __init__(self, session: Any, model_class: Any = ControlPlaneOutbox) -> None:
+        super().__init__(session)
         self.model_class = model_class
+
+    async def publish_outbox_event(
+        self,
+        tenant_id: int,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: UUID | None = None,
+    ) -> UUID:
+        event_id = uuid.uuid4()
+        record = self.model_class(
+            id=event_id,
+            tenant_id=tenant_id,
+            idempotency_key=idempotency_key or uuid.uuid4(),
+            event_type=event_type,
+            payload=payload,
+            status="PENDING",
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return event_id
+
+
+class SqlAlchemyDataPlaneOutboxRepository(TenantSqlAlchemyRepository, OutboxRepositoryPort):
+    """
+    Outbox repository for the Data Plane (Tenant Shard).
+    Writes pipeline events (TRANSFORM_EVENT, DELIVER_EVENT, etc.) consumed
+    by the CDC Sweeper, which is configurable through the Scheduler UI.
+    """
+
+    def __init__(self, session: Any) -> None:
+        from database.models.data_plane import DataPlaneOutbox
+
+        super().__init__(session)
+        self.model_class = DataPlaneOutbox
 
     async def publish_outbox_event(
         self,

@@ -24,6 +24,7 @@ import { Route as TenantDevelopersRouteImport } from './routes/tenant/developers
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as PlatformUsersRouteImport } from './routes/platform/users'
 import { Route as PlatformTenantsRouteImport } from './routes/platform/tenants'
+import { Route as PlatformSchedulerRouteImport } from './routes/platform/scheduler'
 import { Route as PlatformPartnershipsRouteImport } from './routes/platform/partnerships'
 import { Route as PlatformPartnersRouteImport } from './routes/platform/partners'
 import { Route as PlatformDashboardRouteImport } from './routes/platform/dashboard'
@@ -104,6 +105,11 @@ const PlatformTenantsRoute = PlatformTenantsRouteImport.update({
   path: '/tenants',
   getParentRoute: () => PlatformRoute,
 } as any)
+const PlatformSchedulerRoute = PlatformSchedulerRouteImport.update({
+  id: '/scheduler',
+  path: '/scheduler',
+  getParentRoute: () => PlatformRoute,
+} as any)
 const PlatformPartnershipsRoute = PlatformPartnershipsRouteImport.update({
   id: '/partnerships',
   path: '/partnerships',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/platform/dashboard': typeof PlatformDashboardRoute
   '/platform/partners': typeof PlatformPartnersRoute
   '/platform/partnerships': typeof PlatformPartnershipsRoute
+  '/platform/scheduler': typeof PlatformSchedulerRoute
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/platform/dashboard': typeof PlatformDashboardRoute
   '/platform/partners': typeof PlatformPartnersRoute
   '/platform/partnerships': typeof PlatformPartnershipsRoute
+  '/platform/scheduler': typeof PlatformSchedulerRoute
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -179,6 +187,7 @@ export interface FileRoutesById {
   '/platform/dashboard': typeof PlatformDashboardRoute
   '/platform/partners': typeof PlatformPartnersRoute
   '/platform/partnerships': typeof PlatformPartnershipsRoute
+  '/platform/scheduler': typeof PlatformSchedulerRoute
   '/platform/tenants': typeof PlatformTenantsRoute
   '/platform/users': typeof PlatformUsersRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/platform/dashboard'
     | '/platform/partners'
     | '/platform/partnerships'
+    | '/platform/scheduler'
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
     | '/platform/dashboard'
     | '/platform/partners'
     | '/platform/partnerships'
+    | '/platform/scheduler'
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | '/platform/dashboard'
     | '/platform/partners'
     | '/platform/partnerships'
+    | '/platform/scheduler'
     | '/platform/tenants'
     | '/platform/users'
     | '/tenant/dashboard'
@@ -373,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformTenantsRouteImport
       parentRoute: typeof PlatformRoute
     }
+    '/platform/scheduler': {
+      id: '/platform/scheduler'
+      path: '/scheduler'
+      fullPath: '/platform/scheduler'
+      preLoaderRoute: typeof PlatformSchedulerRouteImport
+      parentRoute: typeof PlatformRoute
+    }
     '/platform/partnerships': {
       id: '/platform/partnerships'
       path: '/partnerships'
@@ -427,6 +446,7 @@ interface PlatformRouteChildren {
   PlatformDashboardRoute: typeof PlatformDashboardRoute
   PlatformPartnersRoute: typeof PlatformPartnersRoute
   PlatformPartnershipsRoute: typeof PlatformPartnershipsRoute
+  PlatformSchedulerRoute: typeof PlatformSchedulerRoute
   PlatformTenantsRoute: typeof PlatformTenantsRoute
   PlatformUsersRoute: typeof PlatformUsersRoute
 }
@@ -435,6 +455,7 @@ const PlatformRouteChildren: PlatformRouteChildren = {
   PlatformDashboardRoute: PlatformDashboardRoute,
   PlatformPartnersRoute: PlatformPartnersRoute,
   PlatformPartnershipsRoute: PlatformPartnershipsRoute,
+  PlatformSchedulerRoute: PlatformSchedulerRoute,
   PlatformTenantsRoute: PlatformTenantsRoute,
   PlatformUsersRoute: PlatformUsersRoute,
 }

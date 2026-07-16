@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label'
 import { FormModal } from '@/components/ui/form-modal'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCreatePlatformPartnershipMutation } from '../api/partnerHooks'
-import { usePlatformConfig } from '@/features/platform/api/configHooks'
+import { usePlatformSettings } from '@/features/platform/api/settingsHooks'
 import { Combobox } from '@/components/ui/combobox'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 
@@ -22,21 +22,21 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
   const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256')
   const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256')
 
-  const { data: platformConfig } = usePlatformConfig();
+  const { data: platformSettings } = usePlatformSettings();
   const createPartnership = useCreatePlatformPartnershipMutation();
 
   useEffect(() => {
-    if (mdnType === 'ASYNC' && !mdnUrl && platformConfig?.available_as2_receive_urls?.length) {
-      setMdnUrl(platformConfig.available_as2_receive_urls[0]);
+    if (mdnType === 'ASYNC' && !mdnUrl && platformSettings?.available_as2_receive_urls?.length) {
+      setMdnUrl(platformSettings.available_as2_receive_urls[0]);
     }
-  }, [platformConfig, mdnUrl, mdnType]);
+  }, [platformSettings, mdnUrl, mdnType]);
 
   const reset = () => {
     setName('')
     setLocalPartnerId('')
     setRemotePartnerId('')
     setMdnType('SYNC')
-    setMdnUrl(platformConfig?.available_as2_receive_urls?.[0] || '')
+    setMdnUrl(platformSettings?.available_as2_receive_urls?.[0] || '')
     setEncryptionAlgorithm('AES256')
     setSignatureAlgorithm('SHA256')
   }
@@ -133,7 +133,7 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
             <div className="grid gap-2">
               <Label className="text-slate-600 font-medium">Async MDN Receipt URL</Label>
               <Combobox
-                options={platformConfig?.available_as2_receive_urls || []}
+                options={platformSettings?.available_as2_receive_urls || []}
                 value={mdnUrl}
                 onChange={setMdnUrl}
                 placeholder="https://..."
@@ -152,7 +152,7 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 <SelectValue placeholder="Algorithm" />
               </SelectTrigger>
               <SelectContent>
-                {(platformConfig?.supported_as2_encryption_algorithms || []).map(o => (
+                {(platformSettings?.supported_as2_encryption_algorithms || []).map(o => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -166,7 +166,7 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 <SelectValue placeholder="Algorithm" />
               </SelectTrigger>
               <SelectContent>
-                {(platformConfig?.supported_as2_signature_algorithms || []).map(o => (
+                {(platformSettings?.supported_as2_signature_algorithms || []).map(o => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>

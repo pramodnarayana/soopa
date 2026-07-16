@@ -148,7 +148,7 @@ class AS2Partnership(GlobalBase, AS2PartnershipMixin, TimestampMixin):
     )
 
 
-class Outbox(GlobalBase, OutboxMixin):
+class ControlPlaneOutbox(GlobalBase, OutboxMixin):
     __tablename__ = "outbox"
 
     id: Mapped[PyUUID] = mapped_column(
