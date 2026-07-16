@@ -9,18 +9,18 @@ from api.domain.models import (
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookCmd,
+    UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
     UpdateInboundRouteCmd,
     UpdateOutboundRouteCmd,
+    UpdateSFTPPartnerCmd,
 )
 from api.ports.repository import (
-    ControlPlaneRepositoryPort,
-    DataPlaneRepositoryPort,
     TenantRepositoryPort,
 )
 
 
-class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
+class FakeGlobalStore:
     def __init__(self):
         self.partners = []
         self.partnerships = []
@@ -53,12 +53,41 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
             p for p in self.partners if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
         ]
 
+    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
+        p_id = uuid.uuid4()
+        self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
+        return p_id
+
+    async def update_sftp_partner(
+        self, tenant_id: int, partner_id: uuid.UUID, cmd: UpdateSFTPPartnerCmd
+    ) -> bool:
+        return True
+
+    async def delete_sftp_partner(self, tenant_id: int, partner_id: uuid.UUID) -> None:
+        self.sftp_partners = [
+            p
+            for p in self.sftp_partners
+            if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
+        ]
+
     async def create_as2_partnership(
         self, tenant_id: int, cmd: CreateAS2PartnershipCmd
     ) -> uuid.UUID:
         p_id = uuid.uuid4()
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
+
+    async def update_as2_partnership(
+        self, tenant_id: int, partnership_id: uuid.UUID, cmd: UpdateAS2PartnershipCmd
+    ) -> None:
+        pass
+
+    async def delete_as2_partnership(self, tenant_id: int, partnership_id: uuid.UUID) -> None:
+        self.partnerships = [
+            p
+            for p in self.partnerships
+            if not (p["id"] == partnership_id and p["tenant_id"] == tenant_id)
+        ]
 
     async def get_as2_partner(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
         for p in self.partners:
@@ -163,11 +192,6 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
-    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
-        self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
-        return p_id
-
     async def get_sftp_partners_by_ids(
         self, tenant_id: int, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
@@ -178,9 +202,25 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         }
 
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
-        self.webhooks.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
-        return p_id
+        wh_id = uuid.uuid4()
+        self.webhooks.append({"id": wh_id, "tenant_id": tenant_id, "cmd": cmd})
+        return wh_id
+
+    async def update_webhook(
+        self,
+        tenant_id: int,
+        webhook_id: uuid.UUID,
+        name: str | None = None,
+        active: bool | None = None,
+        url: str | None = None,
+    ) -> bool:
+        return True
+
+    async def delete_webhook(self, tenant_id: int, webhook_id: uuid.UUID) -> bool:
+        self.webhooks = [
+            w for w in self.webhooks if not (w["id"] == webhook_id and w["tenant_id"] == tenant_id)
+        ]
+        return True
 
     async def get_webhooks_by_ids(
         self, tenant_id: int, ids: list[uuid.UUID]
@@ -281,7 +321,7 @@ class FakeRoute:
         self.isa_receiver_id = getattr(cmd, "isa_receiver_id", "R1")
 
 
-class FakeDataPlaneRepository(DataPlaneRepositoryPort):
+class FakeTenantStore:
     def __init__(self):
         self.inbound_routes = []
         self.outbound_routes = []
@@ -377,8 +417,8 @@ class MockResult:
 
 
 class MockSession:
-    def __init__(self, control_plane):
-        self.control_plane = control_plane
+    def __init__(self, global_store):
+        self.global_store = global_store
 
     async def execute(self, statement):
         table_name = str(statement)
@@ -415,9 +455,21 @@ class MockSession:
 
 class FakeUnitOfWork:
     def __init__(self):
-        self.control_plane = FakeControlPlaneRepository()
-        self.data_plane = FakeDataPlaneRepository()
-        self.global_session = MockSession(self.control_plane)
+        repo = FakeGlobalStore()
+        self.api_tokens = repo
+        self.as2_partners = repo
+        self.as2_partnerships = repo
+        self.inbound_routes = repo
+        self.outbound_routes = repo
+        self.outbox = repo
+        self.sftp_partners = repo
+        self.tenants = repo
+        self.webhooks = repo
+        self.edi_headers = repo
+
+        self.transactions = FakeTenantStore()
+
+        self.global_session = MockSession(repo)
 
     async def __aenter__(self):
         return self

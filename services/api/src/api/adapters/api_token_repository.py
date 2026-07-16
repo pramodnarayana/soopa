@@ -2,6 +2,7 @@ from datetime import UTC
 from typing import Any
 from uuid import UUID
 
+from api.domain.models import ApiTokenListEntity
 from api.ports.api_token_repository import ApiTokenRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
@@ -40,7 +41,7 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         await self.session.flush()  # type: ignore
         return token_id
 
-    async def list_api_tokens(self, tenant_id: int) -> list[dict[str, Any]]:
+    async def list_api_tokens(self, tenant_id: int) -> list[ApiTokenListEntity]:
         result = await self.session.execute(  # type: ignore
             select(ApiToken)
             .where(ApiToken.tenant_id == tenant_id)
@@ -48,17 +49,31 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         )
         tokens = result.scalars().all()
         return [
-            {
-                "id": str(t.id),
-                "name": t.name,
-                "client_id": t.client_id,  # safe to return; secret_hash is never exposed
-                "active": t.active,
-                "last_used_at": t.last_used_at.isoformat() if t.last_used_at else None,
-                "expires_at": t.expires_at.isoformat() if t.expires_at else None,
-                "created_at": t.created_at.isoformat(),
-            }
+            ApiTokenListEntity(
+                id=str(t.id),
+                name=t.name,
+                client_id=t.client_id,  # safe to return; secret_hash is never exposed
+                active=t.active,
+                last_used_at=t.last_used_at.isoformat() if t.last_used_at else None,
+                expires_at=t.expires_at.isoformat() if t.expires_at else None,
+                created_at=t.created_at.isoformat(),
+            )
             for t in tokens
         ]
+
+    async def get_api_token(self, tenant_id: int, token_id: UUID) -> dict[str, Any] | None:
+        result = await self.session.execute(  # type: ignore
+            select(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
+        )
+        t = result.scalars().first()
+        if not t:
+            return None
+        return {
+            "id": str(t.id),
+            "name": t.name,
+            "client_id": t.client_id,
+            "active": t.active,
+        }
 
     async def update_api_token(
         self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None

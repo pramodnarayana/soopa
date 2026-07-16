@@ -26,17 +26,17 @@ class EdiHeaderService:
         logger.info(
             f"Creating Outbound EDI Header for trading partner {cmd.trading_partner_id} in tenant {tenant_id}"
         )
-        return await self.uow.control_plane.create_outbound_edi_header(tenant_id=tenant_id, cmd=cmd)
+        return await self.uow.edi_headers.create_outbound_edi_header(tenant_id=tenant_id, cmd=cmd)
 
     async def update_outbound_edi_header(
         self, tenant_id: int, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
     ) -> bool:
-        return await self.uow.control_plane.update_outbound_edi_header(tenant_id, header_id, cmd)
+        return await self.uow.edi_headers.update_outbound_edi_header(tenant_id, header_id, cmd)
 
     async def delete_outbound_edi_header(self, tenant_id: int, header_id: UUID) -> bool:
-        return await self.uow.control_plane.delete_outbound_edi_header(tenant_id, header_id)
+        return await self.uow.edi_headers.delete_outbound_edi_header(tenant_id, header_id)
 
     async def get_outbound_edi_headers(
         self, tenant_id: int
     ) -> Sequence[OutboundEdiHeaderDomainModel]:
-        return await self.uow.control_plane.get_outbound_edi_headers(tenant_id)
+        return await self.uow.edi_headers.get_outbound_edi_headers(tenant_id)

@@ -13,10 +13,10 @@ Two-part credential pattern (Stripe/AWS style):
 import hashlib
 import logging
 import secrets
-from typing import Any
 from uuid import UUID
 
-from api.domain.models import ApiTokenEntity, CreateApiTokenCmd
+from api.auth.api_key import invalidate_token_cache
+from api.domain.models import ApiTokenEntity, ApiTokenListEntity, CreateApiTokenCmd
 from api.ports.repository import ApiTokenRepositoryPort
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ class ApiTokenService:
             active=False,
         )
 
-    async def list_tokens(self, tenant_id: int) -> list[dict[str, Any]]:
+    async def list_tokens(self, tenant_id: int) -> list[ApiTokenListEntity]:
         """Returns all tokens for a tenant. client_id is safe; secret is never returned."""
         return await self._repo.list_api_tokens(tenant_id)
 
@@ -96,8 +96,16 @@ class ApiTokenService:
         self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None
     ) -> bool:
         """Updates token properties (e.g. name or active status)."""
+        token = await self._repo.get_api_token(tenant_id, token_id)
+        if not token:
+            return False
+
         result = await self._repo.update_api_token(tenant_id, token_id, name, active)
         if result:
+            # If the token is being deactivated, invalidate the cache
+            if active is False:
+                invalidate_token_cache(token["client_id"])
+
             logger.info(
                 "API token updated", extra={"tenant_id": tenant_id, "token_id": str(token_id)}
             )
@@ -105,8 +113,13 @@ class ApiTokenService:
 
     async def delete_token(self, tenant_id: int, token_id: UUID) -> bool:
         """Hard deletes a token record. Irreversible."""
+        token = await self._repo.get_api_token(tenant_id, token_id)
+        if not token:
+            return False
+
         result = await self._repo.delete_api_token(tenant_id, token_id)
         if result:
+            invalidate_token_cache(token["client_id"])
             logger.info(
                 "API token deleted", extra={"tenant_id": tenant_id, "token_id": str(token_id)}
             )

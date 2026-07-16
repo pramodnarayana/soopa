@@ -84,19 +84,32 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
       isPending={createPartner.isPending}
       submitDisabled={isDuplicate}
       submitText="Create Trading Partner"
+      maxWidth="sm:max-w-[780px]"
     >
       {/* Local / Remote toggle */}
-      <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-        <Input
-          type="checkbox"
-          id="is_local"
-          checked={isLocal}
-          onChange={(e) => setIsLocal(e.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
-        />
-        <Label htmlFor="is_local" className="text-slate-600 font-medium">
-          This is a Local Trading Partner (Generates Certificate automatically)
-        </Label>
+      <div className="flex items-center gap-3">
+        <Label className="text-slate-600 font-medium">Partner Type</Label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isLocal}
+          onClick={() => {
+            setIsLocal(!isLocal);
+            if (!isLocal) setCertPem('');
+          }}
+          className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 ${isLocal ? 'bg-indigo-50 border-indigo-200 focus:ring-indigo-200' : 'bg-violet-50 border-violet-200 focus:ring-violet-200'}`}
+        >
+          <span className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isLocal ? 'opacity-100 text-indigo-700' : 'opacity-0'}`}>
+            Local
+          </span>
+          <span className={`absolute right-1.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isLocal ? 'opacity-0' : 'opacity-100 text-violet-700'}`}>
+            Remote
+          </span>
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${isLocal ? 'translate-x-[62px] bg-indigo-600' : 'translate-x-0 bg-violet-600'}`}
+          />
+        </button>
       </div>
 
       {/* Name + AS2 ID */}
@@ -143,13 +156,25 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         )}
       </div>
 
-      {/* Certificate — remote partners only */}
-      {!isLocal && (
-        <div className="grid gap-2">
-          <Label className="text-slate-600 font-medium">Public Certificate</Label>
-          <CertificateInput value={certPem} onChange={setCertPem} />
-        </div>
-      )}
+      {/* Certificate for all partners */}
+      <div className="grid gap-2">
+        <Label className="text-slate-600 font-medium">Public Certificate</Label>
+        <CertificateInput
+          value={certPem}
+          onChange={setCertPem}
+          extraActions={isLocal && !certPem ? (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+              onClick={() => {
+                toast({ title: 'Info', description: 'Certificate will be generated upon saving.' });
+              }}
+            >
+              Generate Certificate
+            </button>
+          ) : undefined}
+        />
+      </div>
     </FormModal>
   );
 }

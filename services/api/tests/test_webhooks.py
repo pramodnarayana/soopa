@@ -10,8 +10,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def mock_uow():
     uow = AsyncMock()
-    uow.control_plane = AsyncMock()
-    uow.data_plane = AsyncMock()
+    uow.transactions = AsyncMock()
     return uow
 
 
@@ -28,7 +27,7 @@ def client(mock_uow):
 
 
 def test_list_webhooks(client, mock_uow):
-    mock_uow.control_plane.list_webhooks.return_value = []
+    mock_uow.webhooks.list_webhooks.return_value = []
     response = client.get("/api/v1/webhooks")
     assert response.status_code == 200
 
@@ -41,7 +40,7 @@ def test_create_webhook(client, mock_uow):
     mock_webhook.active = True
     mock_webhook.url = "http://locahost"
 
-    mock_uow.control_plane.create_webhook.return_value = mock_webhook
+    mock_uow.webhooks.create_webhook.return_value = mock_webhook
     response = client.post(
         "/api/v1/webhooks",
         json={"name": "wh1", "url": "http://localhost", "events": ["transaction.created"]},
@@ -58,8 +57,8 @@ def test_update_webhook(client, mock_uow):
     mock_webhook.name = "updated"
     mock_webhook.active = True
     mock_webhook.url = "http://localhost"
-    mock_uow.control_plane.get_webhook.return_value = mock_webhook
-    mock_uow.control_plane.update_webhook.return_value = mock_webhook
+    mock_uow.webhooks.get_webhook.return_value = mock_webhook
+    mock_uow.webhooks.update_webhook.return_value = mock_webhook
     response = client.patch(f"/api/v1/webhooks/{pid}", json={"name": "updated"})
     assert response.status_code in (200, 201, 500, 422)
 

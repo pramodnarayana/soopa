@@ -55,9 +55,9 @@ async def create_webhook(
         await uow.commit()
 
     async with uow:
-        if not uow.control_plane:
+        if not uow.global_session is not None:
             raise HTTPException(status_code=500, detail="Control plane not initialized")
-        partner = await uow.control_plane.get_webhook(tenant_id, _.partner_id)
+        partner = await uow.webhooks.get_webhook(tenant_id, _.partner_id)
         if not partner or partner.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="Webhook not found after creation")
 

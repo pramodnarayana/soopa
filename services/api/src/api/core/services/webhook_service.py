@@ -12,6 +12,7 @@ from uuid import UUID
 from api.core.uow import UnitOfWork
 from api.domain.models import CreateWebhookCmd, PartnerEntity
 from domain.events import ProvisioningEventType
+from domain.models import ConnectionType, PartnerStatus
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ class WebhookService:
 
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> PartnerEntity:
         logger.info("Webhook creating", extra={"tenant_id": tenant_id, "webhook_name": cmd.name})
-        partner_id = await self.uow.control_plane.create_webhook(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.control_plane.publish_outbox_event(
+        partner_id = await self.uow.webhooks.create_webhook(tenant_id=tenant_id, cmd=cmd)
+        await self.uow.outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.WEBHOOK_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -39,8 +40,8 @@ class WebhookService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             name=cmd.name,
-            type="WEBHOOK",
-            status="ACTIVE",
+            type=ConnectionType.WEBHOOK,
+            status=PartnerStatus.ACTIVE,
         )
 
     async def update_webhook(
@@ -54,11 +55,9 @@ class WebhookService:
         logger.info(
             "Webhook updating", extra={"tenant_id": tenant_id, "webhook_id": str(webhook_id)}
         )
-        result = await self.uow.control_plane.update_webhook(
-            tenant_id, webhook_id, name, active, url
-        )
+        result = await self.uow.webhooks.update_webhook(tenant_id, webhook_id, name, active, url)
         if result:
-            await self.uow.control_plane.publish_outbox_event(
+            await self.uow.outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_UPDATED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},
@@ -69,9 +68,9 @@ class WebhookService:
         logger.info(
             "Webhook deleting", extra={"tenant_id": tenant_id, "webhook_id": str(webhook_id)}
         )
-        result = await self.uow.control_plane.delete_webhook(tenant_id, webhook_id)
+        result = await self.uow.webhooks.delete_webhook(tenant_id, webhook_id)
         if result:
-            await self.uow.control_plane.publish_outbox_event(
+            await self.uow.outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.WEBHOOK_DELETED,
                 payload={"partner_id": str(webhook_id), "tenant_id": tenant_id},

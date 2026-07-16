@@ -53,62 +53,6 @@ def get_message_queue() -> MessageQueuePort:
     return SQSMessageQueueAdapter(endpoint_url=endpoint_url)
 
 
-from api.adapters.as2_partner_repository import SqlAlchemyAS2TradingPartnerRepository  # noqa: E402
-from api.adapters.as2_partnership_repository import SqlAlchemyAS2PartnershipRepository  # noqa: E402
-from api.adapters.edi_header_repository import SqlAlchemyEdiHeaderRepository  # noqa: E402
-from api.adapters.inbound_route_repository import SqlAlchemyInboundRouteRepository  # noqa: E402
-from api.adapters.outbound_route_repository import SqlAlchemyOutboundRouteRepository  # noqa: E402
-from api.adapters.sftp_repository import SqlAlchemySFTPPartnerRepository  # noqa: E402
-from api.adapters.webhook_repository import SqlAlchemyWebhookRepository  # noqa: E402
-from api.ports.as2_partner_repository import AS2TradingPartnerRepositoryPort  # noqa: E402
-from api.ports.as2_partnership_repository import AS2PartnershipRepositoryPort  # noqa: E402
-from api.ports.edi_header_repository import EdiHeaderRepositoryPort  # noqa: E402
-from api.ports.inbound_route_repository import InboundRouteRepositoryPort  # noqa: E402
-from api.ports.outbound_route_repository import OutboundRouteRepositoryPort  # noqa: E402
-from api.ports.sftp_repository import SFTPPartnerRepositoryPort  # noqa: E402
-from api.ports.webhook_repository import WebhookRepositoryPort  # noqa: E402
-
-
-def get_as2_partner_repo(
-    session: GlobalSession = Depends(get_global_session),
-) -> AS2TradingPartnerRepositoryPort:
-    return SqlAlchemyAS2TradingPartnerRepository(session)
-
-
-def get_as2_partnership_repo(
-    session: GlobalSession = Depends(get_global_session),
-) -> AS2PartnershipRepositoryPort:
-    return SqlAlchemyAS2PartnershipRepository(session)
-
-
-def get_inbound_route_repo(
-    session: GlobalSession = Depends(get_global_session),
-) -> InboundRouteRepositoryPort:
-    return SqlAlchemyInboundRouteRepository(session)
-
-
-def get_outbound_route_repo(
-    session: GlobalSession = Depends(get_global_session),
-) -> OutboundRouteRepositoryPort:
-    return SqlAlchemyOutboundRouteRepository(session)
-
-
-def get_sftp_partner_repo(
-    session: GlobalSession = Depends(get_global_session),
-) -> SFTPPartnerRepositoryPort:
-    return SqlAlchemySFTPPartnerRepository(session)
-
-
-def get_webhook_repo(session: GlobalSession = Depends(get_global_session)) -> WebhookRepositoryPort:
-    return SqlAlchemyWebhookRepository(session)
-
-
-def get_edi_header_repo(
-    session: GlobalSession = Depends(get_global_session),
-) -> EdiHeaderRepositoryPort:
-    return SqlAlchemyEdiHeaderRepository(session)
-
-
 async def get_uow(
     global_session: GlobalSession = Depends(get_global_session),
     # Optional tenant_session for platform admin routes

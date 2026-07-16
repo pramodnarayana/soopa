@@ -150,13 +150,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             OutboundRouteDomainModel.model_validate(r) for r in outbound_result.scalars().all()
         ]
 
-        from typing import cast
-
         return {
-            "inbound": cast(
-                "list[OutboundRouteDomainModel | InboundRouteDomainModel]", inbound_routes
-            ),
-            "outbound": cast(
-                "list[OutboundRouteDomainModel | InboundRouteDomainModel]", outbound_routes
-            ),
+            "inbound": inbound_routes,  # type: ignore
+            "outbound": outbound_routes,  # type: ignore
         }

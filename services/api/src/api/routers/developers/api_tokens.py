@@ -67,7 +67,7 @@ async def list_api_tokens(
     """List all API tokens for the current tenant."""
     service = ApiTokenService(repo)
     tokens = await service.list_tokens(tenant_id)
-    return ApiTokenListResponse(tokens=[ApiTokenListItem(**t) for t in tokens])
+    return ApiTokenListResponse(tokens=[ApiTokenListItem.model_validate(t) for t in tokens])
 
 
 @router.patch(

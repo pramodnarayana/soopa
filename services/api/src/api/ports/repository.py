@@ -22,25 +22,4 @@ __all__ = [
     "TenantRepositoryPort",
     "TransactionRepositoryPort",
     "WebhookRepositoryPort",
-    "ControlPlaneRepositoryPort",
-    "DataPlaneRepositoryPort",
 ]
-
-
-class ControlPlaneRepositoryPort(
-    AS2TradingPartnerRepositoryPort,
-    AS2PartnershipRepositoryPort,
-    InboundRouteRepositoryPort,
-    OutboundRouteRepositoryPort,
-    SFTPPartnerRepositoryPort,
-    WebhookRepositoryPort,
-    EdiHeaderRepositoryPort,
-    TenantRepositoryPort,
-    ApiTokenRepositoryPort,
-    OutboxRepositoryPort,
-):
-    pass
-
-
-class DataPlaneRepositoryPort(TransactionRepositoryPort):
-    pass

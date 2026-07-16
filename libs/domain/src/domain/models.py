@@ -11,6 +11,12 @@ class Direction(StrEnum):
     OUTBOUND = "OUTBOUND"
 
 
+class PartnerStatus(StrEnum):
+    PROVISIONING = "PROVISIONING"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
 class ConnectionType(StrEnum):
     AS2 = "AS2"
     SFTP = "SFTP"

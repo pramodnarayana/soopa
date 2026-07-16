@@ -5,15 +5,22 @@ from uuid import UUID
 from api.core.uow import UnitOfWork
 from api.domain.models import (
     CreateOutboundRouteCmd,
+    OutboundRouteListEntity,
     RouteEntity,
     UpdateOutboundRouteCmd,
 )
 from domain.events import ProvisioningEventType
+from domain.models import ConnectionType, Direction
 
 logger = logging.getLogger(__name__)
 
 
 class OutboundRouteService:
+    """
+    Domain service responsible for the lifecycle of Outbound EDI Routes,
+    including resolution of partner names for list operations.
+    """
+
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
@@ -21,22 +28,24 @@ class OutboundRouteService:
         self, tenant_id: int, cmd: CreateOutboundRouteCmd
     ) -> RouteEntity:
         logger.info(
-            f"Creating Outbound Route for partner {cmd.as2_partner_id} in tenant {tenant_id}"
+            f"Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}"
         )
-        route_id = await self.uow.control_plane.create_outbound_route(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.control_plane.publish_outbox_event(
+        route_id = await self.uow.outbound_routes.create_outbound_route(
+            tenant_id=tenant_id, cmd=cmd
+        )
+        await self.uow.outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.OUTBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
         )
-        return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction="OUTBOUND")
+        return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.OUTBOUND)
 
     async def update_outbound_route(
         self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
     ) -> bool:
-        res = await self.uow.control_plane.update_outbound_route(tenant_id, route_id, cmd)
+        res = await self.uow.outbound_routes.update_outbound_route(tenant_id, route_id, cmd)
         if res:
-            await self.uow.control_plane.publish_outbox_event(
+            await self.uow.outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -44,133 +53,71 @@ class OutboundRouteService:
         return res
 
     async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
-        res = await self.uow.control_plane.delete_outbound_route(tenant_id, route_id)
+        res = await self.uow.outbound_routes.delete_outbound_route(tenant_id, route_id)
         if res:
-            await self.uow.control_plane.publish_outbox_event(
+            await self.uow.outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
             )
         return res
 
-    async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
-        return await self.uow.control_plane.get_all_routes(tenant_id)
+    async def list_outbound_routes(self, tenant_id: int) -> list[OutboundRouteListEntity]:
+        from domain.models import OutboundRouteDomainModel
 
-    async def list_routes(self, tenant_id: int) -> list[dict[str, Any]]:
-        """
-        Returns a unified list of inbound and outbound routes enriched with
-        partner/destination names. Batch-fetches names to avoid N+1 queries.
-        """
-        routes_data = await self.uow.control_plane.get_all_routes(tenant_id)
-        inbound: list[Any] = routes_data.get("inbound", [])
-        outbound: list[Any] = routes_data.get("outbound", [])
+        routes_dict = await self.uow.outbound_routes.get_all_routes(tenant_id)
+        outbound: list[OutboundRouteDomainModel] = routes_dict.get("outbound", [])  # type: ignore
 
         as2_ids: set[UUID] = set()
         sftp_ids: set[UUID] = set()
-        webhook_ids: set[UUID] = set()
 
-        for r in inbound:
-            if getattr(r, "as2_partner_id", None):
-                as2_ids.add(r.as2_partner_id)
-            if getattr(r, "sftp_partner_id", None):
-                sftp_ids.add(r.sftp_partner_id)
-            if getattr(r, "webhook_id", None):
-                webhook_ids.add(r.webhook_id)
+        for out_r in outbound:
+            if out_r.as2_partner_id:
+                as2_ids.add(out_r.as2_partner_id)
+            if out_r.sftp_partner_id:
+                sftp_ids.add(out_r.sftp_partner_id)
 
-        for r in outbound:
-            if getattr(r, "as2_partner_id", None):
-                as2_ids.add(r.as2_partner_id)
-            if getattr(r, "sftp_partner_id", None):
-                sftp_ids.add(r.sftp_partner_id)
-
-        as2_names: dict[UUID, str] = (
-            await self.uow.control_plane.get_as2_partners_by_ids(tenant_id, list(as2_ids))
+        as2_names = (
+            await self.uow.as2_partners.get_as2_partners_by_ids(tenant_id, list(as2_ids))
             if as2_ids
             else {}
         )
-        sftp_names: dict[UUID, str] = (
-            await self.uow.control_plane.get_sftp_partners_by_ids(tenant_id, list(sftp_ids))
+        sftp_names = (
+            await self.uow.sftp_partners.get_sftp_partners_by_ids(tenant_id, list(sftp_ids))
             if sftp_ids
             else {}
         )
-        webhook_names: dict[UUID, str] = (
-            await self.uow.control_plane.get_webhooks_by_ids(tenant_id, list(webhook_ids))
-            if webhook_ids
-            else {}
-        )
 
-        def _resolve_destination(r: Any) -> tuple[str, str]:
-            if getattr(r, "as2_partner_id", None):
-                return "AS2", as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
-            if getattr(r, "sftp_partner_id", None):
-                return "SFTP", sftp_names.get(r.sftp_partner_id, str(r.sftp_partner_id))
-            if getattr(r, "webhook_id", None):
-                return "WEBHOOK", webhook_names.get(r.webhook_id, str(r.webhook_id))
+        results: list[OutboundRouteListEntity] = []
+
+        def _resolve_destination(r: Any) -> tuple[ConnectionType | str, str]:
+            if r.as2_partner_id:
+                return ConnectionType.AS2, as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
+            if r.sftp_partner_id:
+                return ConnectionType.SFTP, sftp_names.get(
+                    r.sftp_partner_id, str(r.sftp_partner_id)
+                )
             return "UNKNOWN", "Unknown"
 
-        results: list[dict[str, Any]] = []
+        for out_r in outbound:
+            dest_type, dest_name = _resolve_destination(out_r)
 
-        for r in inbound:
-            dest_type, dest_name = _resolve_destination(r)
             results.append(
-                {
-                    "route_id": r.id,
-                    "name": r.name,
-                    "direction": "INBOUND",
-                    "trading_partner_id": r.trading_partner_id,
-                    "isa_sender_id": r.isa_sender_id,
-                    "isa_receiver_id": r.isa_receiver_id,
-                    "gs_sender_id": r.gs_sender_id,
-                    "gs_receiver_id": r.gs_receiver_id,
-                    "transaction_type": r.transaction_type,
-                    "destination_type": dest_type,
-                    "destination_name": dest_name,
-                    "webhook_id": getattr(r, "webhook_id", None),
-                    "as2_partner_id": getattr(r, "as2_partner_id", None),
-                    "sftp_partner_id": getattr(r, "sftp_partner_id", None),
-                    "active": r.active,
-                }
-            )
-
-        for r in outbound:
-            dest_type, dest_name = _resolve_destination(r)
-            results.append(
-                {
-                    "route_id": r.id,
-                    "name": r.name,
-                    "direction": "OUTBOUND",
-                    "trading_partner_id": r.trading_partner_id,
-                    "transaction_type": "*",
-                    "isa_sender_id": None,
-                    "isa_receiver_id": None,
-                    "gs_sender_id": None,
-                    "gs_receiver_id": None,
-                    "destination_type": dest_type,
-                    "destination_name": dest_name,
-                    "webhook_id": None,
-                    "as2_partner_id": getattr(r, "as2_partner_id", None),
-                    "sftp_partner_id": getattr(r, "sftp_partner_id", None),
-                    "active": r.active,
-                }
+                OutboundRouteListEntity(
+                    route_id=out_r.id,
+                    name=out_r.name,
+                    direction=Direction.OUTBOUND,
+                    trading_partner_id=out_r.trading_partner_id,
+                    transaction_type="*",
+                    isa_sender_id=None,
+                    isa_receiver_id=None,
+                    destination_type=dest_type,
+                    destination_name=dest_name,
+                    webhook_id=None,
+                    as2_partner_id=out_r.as2_partner_id,
+                    sftp_partner_id=out_r.sftp_partner_id,
+                    active=out_r.active,
+                )
             )
 
         return results
-
-    async def get_trading_partner_name(self, tenant_id: int, route: Any) -> str | None:
-        if getattr(route, "as2_partner_id", None):
-            partner = await self.uow.control_plane.get_as2_partner(tenant_id, route.as2_partner_id)
-            if not partner:
-                partner = await self.uow.control_plane.get_as2_partner(0, route.as2_partner_id)
-            if partner:
-                return str(partner.name) if partner.name else None
-        elif getattr(route, "sftp_partner_id", None):
-            sftp_partner = await self.uow.control_plane.get_sftp_partner(
-                tenant_id, route.sftp_partner_id
-            )
-            if sftp_partner:
-                return str(sftp_partner.name) if sftp_partner.name else None
-        elif getattr(route, "webhook_id", None):
-            webhook = await self.uow.control_plane.get_webhook(tenant_id, route.webhook_id)
-            if webhook:
-                return str(webhook.name) if webhook.name else None
-        return None

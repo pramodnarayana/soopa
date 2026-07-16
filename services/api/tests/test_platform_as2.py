@@ -17,8 +17,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def mock_uow():
     uow = AsyncMock()
-    uow.control_plane = AsyncMock()
-    uow.data_plane = AsyncMock()
+    uow.transactions = AsyncMock()
 
     # Mock for list_platform_as2_partnerships
     mock_result = Mock()
@@ -64,7 +63,7 @@ def test_create_as2_partnership(client, mock_uow):
 
 def test_update_as2_partnership(client, mock_uow):
     pid = uuid4()
-    mock_uow.control_plane.get_as2_partnership.return_value = {"id": str(pid)}
+    mock_uow.as2_partnerships.get_as2_partnership.return_value = {"id": str(pid)}
     client.put(
         f"/api/v1/platform/trading-partners/as2/partnerships/{pid}",
         json={"trading_partner_id": "tp1"},

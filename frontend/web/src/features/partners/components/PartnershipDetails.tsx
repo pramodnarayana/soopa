@@ -247,18 +247,16 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
           <EdiEditorPane
             value={customPayload}
             onChange={(val) => setCustomPayload(val)}
-            placeholder="Paste custom EDI payload here, or drag & drop a file..."
           />
         </div>
 
         {/* Results Panel */}
         {testConnection.data && (
           <div className="space-y-3">
-            <div className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm border ${
-              testConnection.data.success
+            <div className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm border ${testConnection.data.success
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                 : 'bg-red-50 border-red-200 text-red-800'
-            }`}>
+              }`}>
               {testConnection.data.success
                 ? <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
                 : <XCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />}

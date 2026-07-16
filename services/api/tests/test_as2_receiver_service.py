@@ -51,7 +51,7 @@ async def test_process_inbound_message_partnership_not_found(service):
         mock_msg.as2_to = "unknown2"
         mock_parse.return_value = mock_msg
 
-        service.uow.control_plane.get_partnership_by_as2_ids.return_value = None
+        service.uow.as2_partnerships.get_partnership_by_as2_ids.return_value = None
 
         with pytest.raises(ValueError, match="Partnership not configured"):
             await service.process_inbound_message(headers, body_bytes)
@@ -73,7 +73,7 @@ async def test_process_inbound_message_success(service):
         mock_local_partner = MagicMock()
         mock_remote_partner = MagicMock()
 
-        service.uow.control_plane.get_partnership_by_as2_ids.return_value = (
+        service.uow.as2_partnerships.get_partnership_by_as2_ids.return_value = (
             mock_partnership,
             mock_local_partner,
             mock_remote_partner,
@@ -83,7 +83,7 @@ async def test_process_inbound_message_success(service):
             patch.object(service, "_retrieve_keys") as mock_keys,
             patch.object(service, "_unbox_payload") as mock_unbox,
             patch.object(service, "_extract_pure_edi") as mock_extract,
-            patch.object(service, "_save_to_data_plane") as mock_save,
+            patch.object(service, "_save_transaction") as mock_save,
         ):
             mock_keys.return_value = (None, None, None)
             mock_unbox.return_value = (b"unboxed_payload", "mic123")
@@ -119,12 +119,12 @@ async def test_private_methods_coverage(service):
     assert b"Content-Type: application/pkcs7-mime" in smime_hdr
     assert b"Content-Transfer-Encoding: binary" in smime_hdr
 
-    # Test _save_to_data_plane (failure path)
+    # Test _save_transaction (failure path)
     service.global_session.execute = AsyncMock(
         return_value=MagicMock(first=MagicMock(return_value=None))
     )
     with pytest.raises(ValueError, match="Tenant routing failed"):
-        await service._save_to_data_plane(
+        await service._save_transaction(
             MagicMock(tenant_id=1),
             MagicMock(),
             b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *210101*1200*^*00501*000000001*0*P*>~",
@@ -195,8 +195,8 @@ async def test_crypto_pipeline_coverage(service):
 
 
 @pytest.mark.asyncio
-async def test_save_to_data_plane_success(service):
-    # Test _save_to_data_plane success path
+async def test_save_transaction_success(service):
+    # Test _save_transaction success path
     mock_tenant = MagicMock(id=1)
     mock_shard = MagicMock(dsn="sqlite:///:memory:")
     mock_shard.name = "shard1"
@@ -212,7 +212,9 @@ async def test_save_to_data_plane_success(service):
 
     service.db_router.get_tenant_session = MagicMock(return_value=mock_async_gen())
 
-    with patch("api.services.as2_receiver_service.SqlAlchemyDataPlaneRepository") as mock_repo_cls:
+    with patch(
+        "api.adapters.transaction_repository.SqlAlchemyTransactionRepository"
+    ) as mock_repo_cls:
         mock_repo = AsyncMock()
         mock_repo.create_edi_message.return_value = "msg-1"
         mock_repo_cls.return_value = mock_repo
@@ -225,7 +227,7 @@ async def test_save_to_data_plane_success(service):
         )
         mock_as2_msg = MagicMock(as2_from="ME", as2_to="YOU", message_id="msg-1")
 
-        res = await service._save_to_data_plane(
+        res = await service._save_transaction(
             mock_partnership,
             mock_as2_msg,
             b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *210101*1200*^*00501*000000001*0*P*>~",

@@ -8,6 +8,8 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
+from domain.models import ConnectionType, Direction, PartnerStatus
+
 
 class MDNType(StrEnum):
     SYNC = "SYNC"
@@ -222,20 +224,62 @@ class PartnerEntity:
     partner_id: UUID
     tenant_id: int
     name: str
-    type: str  # AS2, SFTP, WEBHOOK
-    status: str
+    type: ConnectionType
+    status: PartnerStatus
 
 
 @dataclass(frozen=True)
 class RouteEntity:
     route_id: UUID
     tenant_id: int
-    direction: str  # INBOUND, OUTBOUND
+    direction: Direction
+
+
+@dataclass(frozen=True)
+class BaseRouteListEntity:
+    route_id: UUID
+    name: str
+    trading_partner_id: str | None
+    destination_type: str
+    destination_name: str
+    webhook_id: UUID | None
+    as2_partner_id: UUID | None
+    sftp_partner_id: UUID | None
+    active: bool
+
+
+@dataclass(frozen=True)
+class InboundRouteListEntity(BaseRouteListEntity):
+    direction: Direction
+    isa_sender_id: str
+    isa_receiver_id: str
+    gs_sender_id: str | None
+    gs_receiver_id: str | None
+    transaction_type: str | None
+
+
+@dataclass(frozen=True)
+class OutboundRouteListEntity(BaseRouteListEntity):
+    direction: Direction
+    transaction_type: str
+    isa_sender_id: str | None
+    isa_receiver_id: str | None
 
 
 # ---------------------------------------------------------------------------
 # API Token Commands & Entities
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ApiTokenListEntity:
+    id: str
+    name: str
+    client_id: str
+    active: bool
+    last_used_at: str | None
+    expires_at: str | None
+    created_at: str
 
 
 @dataclass(frozen=True)

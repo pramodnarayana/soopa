@@ -1,6 +1,8 @@
 from typing import Any, Protocol
 from uuid import UUID
 
+from api.domain.models import ApiTokenListEntity
+
 
 class ApiTokenRepositoryPort(Protocol):
     """
@@ -18,7 +20,9 @@ class ApiTokenRepositoryPort(Protocol):
         expires_at: Any | None,
     ) -> UUID: ...
 
-    async def list_api_tokens(self, tenant_id: int) -> list[dict[str, Any]]: ...
+    async def list_api_tokens(self, tenant_id: int) -> list[ApiTokenListEntity]: ...
+
+    async def get_api_token(self, tenant_id: int, token_id: UUID) -> dict[str, Any] | None: ...
 
     async def update_api_token(
         self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None
