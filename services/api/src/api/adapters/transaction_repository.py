@@ -129,12 +129,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 if hasattr(model, "sender_id") and hasattr(model, "receiver_id"):
                     has_gs = hasattr(model, "gs_sender_id") and hasattr(model, "gs_receiver_id")
 
+                    has_tp = hasattr(model, "trading_partner_id")
+
                     if operator == "eq":
                         conds = [model.sender_id == value, model.receiver_id == value]
                         if has_gs:
                             conds.extend(
                                 [model.gs_sender_id == value, model.gs_receiver_id == value]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id == value)
                         stmt = stmt.where(or_(*conds))
 
                     elif operator == "neq":
@@ -143,6 +147,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                             conds.extend(
                                 [model.gs_sender_id != value, model.gs_receiver_id != value]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id != value)
                         stmt = stmt.where(and_(*conds))
 
                     elif operator == "contains":
@@ -161,6 +167,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                                     model.gs_receiver_id.ilike(pattern, escape="\\"),
                                 ]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id.ilike(pattern, escape="\\"))
                         stmt = stmt.where(or_(*conds))
 
                     elif operator == "in" and isinstance(value, list):
@@ -169,6 +177,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                             conds.extend(
                                 [model.gs_sender_id.in_(value), model.gs_receiver_id.in_(value)]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id.in_(value))
                         stmt = stmt.where(or_(*conds))
                 continue
 

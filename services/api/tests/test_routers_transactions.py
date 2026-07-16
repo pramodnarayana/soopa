@@ -30,7 +30,7 @@ def _make_mock_msg() -> MagicMock:
     m.status = "SUCCESS"
     m.edi_data = "TEST"
     m.created_at = datetime.now(UTC)
-    m.outbound_route_id = uuid.uuid4()
+    m.trading_partner_id = "TEST_PARTNER_01"
     return m
 
 
@@ -137,7 +137,7 @@ def test_get_transaction_detail_sftp():
     mock_msg = MagicMock()
     mock_msg.id = uuid.uuid4()
     mock_msg.trace_id = uuid.uuid4()
-    mock_msg.outbound_route_id = uuid.uuid4()
+    mock_msg.trading_partner_id = "TEST_PARTNER_01"
     mock_msg.created_at = None
 
     mock_repo = AsyncMock()
@@ -178,7 +178,7 @@ def test_get_transaction_detail_fallback():
     mock_msg = MagicMock()
     mock_msg.id = uuid.uuid4()
     mock_msg.trace_id = uuid.uuid4()
-    mock_msg.outbound_route_id = None
+    mock_msg.trading_partner_id = None
     mock_msg.created_at = None
 
     mock_json = MagicMock()
@@ -246,7 +246,7 @@ def test_get_transaction_webhook_fallback():
     mock_msg.status = "RECEIVED"
     mock_msg.edi_data = "raw edi payload"
     mock_msg.created_at = None
-    mock_msg.outbound_route_id = None
+    mock_msg.trading_partner_id = None
 
     mock_json = MagicMock()
     mock_json.id = uuid.uuid4()

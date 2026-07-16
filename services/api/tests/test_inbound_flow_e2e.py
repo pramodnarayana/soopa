@@ -192,6 +192,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         from unittest.mock import MagicMock
 
         from database.models.data_plane import EdiMessage
+        from domain.events import PipelineEventType
         from pipeline.adapters.http import HttpxDeliveryAdapter
         from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
         from pipeline.adapters.storage import S3StorageAdapter
@@ -209,7 +210,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         trace_id = str(edi_msg.trace_id)
 
         try:
-            await translate_svc.translate(trace_id, event_type="edi_message.received")
+            await translate_svc.translate(trace_id, event_type=PipelineEventType.TRANSFORM_EVENT)
         except Exception as e:
             # If bots is not running, we mock it for the test
             if "Connection" in str(e):
@@ -243,7 +244,9 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
                         return b""
 
                 translate_svc.transformer = MockTransformer()
-                await translate_svc.translate(trace_id, event_type="edi_message.received")
+                await translate_svc.translate(
+                    trace_id, event_type=PipelineEventType.TRANSFORM_EVENT
+                )
 
         # 2. Manually run Deliver
         deliver_svc = DeliveryService(

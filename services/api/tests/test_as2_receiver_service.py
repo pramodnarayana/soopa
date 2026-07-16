@@ -212,12 +212,20 @@ async def test_save_transaction_success(service):
 
     service.db_router.get_tenant_session = MagicMock(return_value=mock_async_gen())
 
-    with patch(
-        "api.adapters.transaction_repository.SqlAlchemyTransactionRepository"
-    ) as mock_repo_cls:
+    with (
+        patch(
+            "api.adapters.transaction_repository.SqlAlchemyTransactionRepository"
+        ) as mock_repo_cls,
+        patch(
+            "api.adapters.outbox_repository.SqlAlchemyDataPlaneOutboxRepository"
+        ) as mock_outbox_cls,
+    ):
         mock_repo = AsyncMock()
         mock_repo.create_edi_message.return_value = "msg-1"
         mock_repo_cls.return_value = mock_repo
+
+        mock_outbox = AsyncMock()
+        mock_outbox_cls.return_value = mock_outbox
 
         mock_partnership = MagicMock(
             tenant_id=1,
@@ -234,7 +242,7 @@ async def test_save_transaction_success(service):
         )
         assert res == "msg-1"
         mock_repo.create_edi_message.assert_awaited_once()
-        mock_repo.publish_outbox_event.assert_awaited_once()
-        args, kwargs = mock_repo.publish_outbox_event.call_args
+        mock_outbox.publish_outbox_event.assert_awaited_once()
+        args, kwargs = mock_outbox.publish_outbox_event.call_args
         assert kwargs["idempotency_key"] == "msg-1"
         mock_session.commit.assert_awaited_once()

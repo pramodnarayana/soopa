@@ -498,7 +498,7 @@ class FakeUnitOfWork:
         self.as2_partnerships = repo
         self.inbound_routes = repo
         self.outbound_routes = repo
-        self.outbox = repo
+        self.control_plane_outbox = repo
         self.sftp_partners = repo
         self.tenants = repo
         self.webhooks = repo
@@ -517,6 +517,10 @@ class FakeUnitOfWork:
 
     async def commit(self):
         pass
+
+    @property
+    def data_plane_outbox(self):
+        return self.transactions
 
     async def rollback(self):
         pass

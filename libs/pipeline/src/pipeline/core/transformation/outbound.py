@@ -41,6 +41,8 @@ class OutboundTransformService:
         if not trading_partner_id:
             trading_partner_id = routing_meta.get("trading_partner_id")
 
+        route_config = None
+        outbound_route = None
         if trading_partner_id:
             route_config = await self.repository.get_outbound_edi_header_by_route_or_partner(
                 trading_partner_id=trading_partner_id, tenant_id=tenant_id

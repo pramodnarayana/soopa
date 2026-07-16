@@ -53,6 +53,18 @@ async def generate_certificate(
     )
 
 
+@router.delete(
+    "/as2/certificates/secret",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_certificate_secret(
+    vault_ref: str,
+    vault: VaultPort = Depends(get_vault),
+) -> None:
+    """Deletes an orphaned private key from Vault if the UI discards it before saving."""
+    vault.delete_secret(vault_ref)
+
+
 @router.post(
     "/as2/trading-partners",
     response_model=AS2TradingPartnerResponse,
@@ -72,7 +84,9 @@ async def create_platform_as2_partner(
             public_cert_pem = request.public_cert_pem
             private_key_vault_ref = request.private_key_vault_ref
 
+            auto_generated = False
             if request.is_local and not private_key_vault_ref:
+                auto_generated = True
                 # Auto-generate self-signed cert if not already generated and provided
                 private_key_bytes, public_cert_bytes = generate_self_signed_cert(
                     common_name=request.as2_id
@@ -114,7 +128,7 @@ async def create_platform_as2_partner(
                 active=p.active,
             )
     except IntegrityError as e:
-        if request.is_local and private_key_vault_ref:
+        if auto_generated and private_key_vault_ref:
             vault.delete_secret(private_key_vault_ref)
         raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
 

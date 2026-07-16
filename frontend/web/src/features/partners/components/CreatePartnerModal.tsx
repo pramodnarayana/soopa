@@ -3,17 +3,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormModal } from '@/components/ui/form-modal';
 import { CertificateInput } from './CertificateInput';
-import { useCreatePlatformPartnerMutation, useGenerateCertificateMutation } from '../api/partnerHooks';
+import { useCreatePlatformPartnerMutation, useGenerateCertificateMutation, useDeleteCertificateSecretMutation } from '../api/partnerHooks';
 import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { useToast } from '@/hooks/use-toast';
 import { Combobox } from '@/components/ui/combobox';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+
 export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: string[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLocal, setIsLocal] = useState(false);
   const [certPem, setCertPem] = useState('');
   const [privateKeyVaultRef, setPrivateKeyVaultRef] = useState<string | null>(null);
+  const [generatedForAs2Id, setGeneratedForAs2Id] = useState<string | null>(null);
   const [as2Id, setAs2Id] = useState('');
   const [url, setUrl] = useState('');
 
@@ -23,23 +25,41 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
   const { toast } = useToast();
   const createPartner = useCreatePlatformPartnerMutation();
   const generateCert = useGenerateCertificateMutation();
+  const deleteCertSecret = useDeleteCertificateSecretMutation();
+
+  const handleCleanup = async () => {
+    if (privateKeyVaultRef) {
+      try {
+        await deleteCertSecret.mutateAsync(privateKeyVaultRef);
+      } catch (e) {
+        console.error("Failed to cleanup orphaned secret", e);
+      }
+    }
+  };
 
   const reset = () => {
-    setIsLocal(false);
-    setCertPem('');
-    setPrivateKeyVaultRef(null);
-    setAs2Id('');
-    setUrl('');
+    // Only cleanup if we are abandoning an unsaved draft
+    handleCleanup().then(() => {
+      setIsLocal(false);
+      setCertPem('');
+      setPrivateKeyVaultRef(null);
+      setGeneratedForAs2Id(null);
+      setAs2Id('');
+      setUrl('');
+    });
   };
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    if (!open) reset();
+    if (!open) {
+      reset();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
+    const submittedAs2Id = data.get('as2_id') as string;
 
     if (!url || url.trim() === '') {
       toast({ title: 'Error', description: 'Receiving URL is required.', variant: 'destructive' });
@@ -53,20 +73,42 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
       return;
     }
 
+    // Check if AS2 ID changed after generating cert
+    let finalCertPem = certPem;
+    let finalVaultRef = privateKeyVaultRef;
+
+    if (isLocal && privateKeyVaultRef && generatedForAs2Id && submittedAs2Id !== generatedForAs2Id) {
+      // Invalidate existing if AS2 ID changed
+      await handleCleanup();
+      finalCertPem = '';
+      finalVaultRef = null;
+      setCertPem('');
+      setPrivateKeyVaultRef(null);
+      setGeneratedForAs2Id(null);
+      toast({ title: 'Warning', description: 'AS2 ID changed. Please regenerate the certificate.', variant: 'destructive' });
+      return;
+    }
+
     createPartner.mutate(
       {
         name: data.get('name') as string,
         type: 'AS2',
-        as2_id: data.get('as2_id') as string,
+        as2_id: submittedAs2Id,
         is_local: isLocal,
         url: url,
-        public_cert_pem: isLocal && privateKeyVaultRef ? certPem : isLocal ? undefined : certPem,
-        vault_key_ref: privateKeyVaultRef || undefined,
+        public_cert_pem: isLocal && finalVaultRef ? finalCertPem : isLocal ? undefined : finalCertPem,
+        private_key_vault_ref: finalVaultRef || undefined,
       },
       {
         onSuccess: () => {
           setIsOpen(false);
-          reset();
+          // Don't call reset() here because we don't want to delete the saved secret
+          setIsLocal(false);
+          setCertPem('');
+          setPrivateKeyVaultRef(null);
+          setGeneratedForAs2Id(null);
+          setAs2Id('');
+          setUrl('');
         },
       },
     );
@@ -91,16 +133,22 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
           type="button"
           role="switch"
           aria-checked={isLocal}
-          onClick={() => {
+          onClick={async () => {
             const nextIsLocal = !isLocal;
             setIsLocal(nextIsLocal);
             if (nextIsLocal) {
+              await handleCleanup();
               setCertPem('');
               setPrivateKeyVaultRef(null);
+              setGeneratedForAs2Id(null);
               if (!url && platformSettings?.available_as2_receive_urls?.length) {
                 setUrl(platformSettings.available_as2_receive_urls[0]);
               }
             } else {
+              await handleCleanup();
+              setCertPem('');
+              setPrivateKeyVaultRef(null);
+              setGeneratedForAs2Id(null);
               if (platformSettings?.available_as2_receive_urls?.includes(url)) {
                 setUrl('');
               }
@@ -179,15 +227,19 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                 size="sm"
                 className="gap-2"
                 disabled={generateCert.isPending}
-                onClick={() => {
+                onClick={async () => {
                   if (!as2Id.trim()) {
                     toast({ title: 'Error', description: 'Please enter an AS2 ID first to use as the Common Name.', variant: 'destructive' });
                     return;
+                  }
+                  if (privateKeyVaultRef) {
+                    await handleCleanup();
                   }
                   generateCert.mutate(as2Id, {
                     onSuccess: (res) => {
                       setCertPem(res.public_cert_pem);
                       setPrivateKeyVaultRef(res.private_key_vault_ref);
+                      setGeneratedForAs2Id(as2Id);
                       toast({ title: 'Certificate Generated', description: 'The certificate has been generated and populated.' });
                     },
                     onError: () => {

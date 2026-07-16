@@ -84,7 +84,7 @@ def test_list_platform_as2_partners(client, fake_uow):
     assert export_resp.status_code in (200, 403, 404, 501)
 
 
-def test_get_platform_config(client, fake_uow):
+def test_get_platform_settings(client, fake_uow):
     response = client.get("/api/v1/platform/trading-partners/config")
     assert response.status_code == 200
 

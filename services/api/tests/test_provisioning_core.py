@@ -35,7 +35,7 @@ def mock_uow(global_repo):
     uow.as2_partnerships = global_repo
     uow.inbound_routes = global_repo
     uow.outbound_routes = global_repo
-    uow.outbox = global_repo
+    uow.control_plane_outbox = global_repo
     uow.sftp_partners = global_repo
     uow.tenants = global_repo
     uow.webhooks = global_repo

@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from database.connection import DatabaseRouter
-from database.models.control_plane import Outbox as GlobalOutbox
+from database.models.control_plane import ControlPlaneOutbox
 from domain.events import ProvisioningEventType
 from sqlalchemy import select
 
@@ -25,10 +25,10 @@ class SqlAlchemyOutboxAdapter(OutboxPort):
 
         try:
             stmt = (
-                select(GlobalOutbox)
+                select(ControlPlaneOutbox)
                 .where(
-                    GlobalOutbox.status == "PENDING",
-                    GlobalOutbox.event_type.in_(list(ProvisioningEventType)),
+                    ControlPlaneOutbox.status == "PENDING",
+                    ControlPlaneOutbox.event_type.in_(list(ProvisioningEventType)),
                 )
                 .limit(1)
                 .with_for_update(skip_locked=True)

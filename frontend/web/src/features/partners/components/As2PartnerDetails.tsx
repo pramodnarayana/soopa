@@ -292,7 +292,7 @@ function CertificateRow({
         notBefore: cert.validity.notBefore.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
         notAfter: cert.validity.notAfter.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
       };
-    } catch (e) {
+    } catch (_e) {
       return null;
     }
   }, [publicPem]);

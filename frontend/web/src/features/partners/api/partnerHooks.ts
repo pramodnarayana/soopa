@@ -127,13 +127,20 @@ export function useUpdatePlatformPartnerMutation() {
   );
 }
 
-export function useDeletePlatformPartner() {
+export function useDeletePlatformPartnerMutation() {
   const repo = useRepository();
-
   return useToastMutation(
     (id: string) => repo.deletePlatformPartner(id),
     'Partner deleted.',
     [partnersKeys.platformPartners()]
+  );
+}
+
+export function useDeleteCertificateSecretMutation() {
+  const repo = useRepository();
+  return useToastMutation(
+    (vaultRef: string) => repo.deleteCertificateSecret(vaultRef),
+    'Orphaned certificate deleted successfully.'
   );
 }
 

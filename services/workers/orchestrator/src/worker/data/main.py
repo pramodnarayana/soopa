@@ -27,8 +27,11 @@ from pipeline.core.delivery import (
     WebhookDeliveryStrategy,
 )
 from pipeline.core.transformation import InboundTransformService, OutboundTransformService
+from scheduler.adapters.repository import SqlAlchemyJobRepository
+from scheduler.core.service import SchedulerWorkerService
 from sqlalchemy import select
 from worker.adapters.vault import WorkerVaultAdapter
+from worker.jobs.outbox_sweeper import DataPlaneOutboxSweeperJobHandler
 
 load_dotenv()
 
@@ -361,6 +364,21 @@ async def main() -> None:
             aws_endpoint,
         )
     )
+
+    # Start Scheduler worker
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(settings.database.global_url)
+    scheduler_repo = SqlAlchemyJobRepository(engine)
+    scheduler_service = SchedulerWorkerService(
+        scheduler_repo, worker_id=f"orchestrator-{os.getpid()}"
+    )
+    scheduler_service.register_handler(
+        "outbox_sweeper", DataPlaneOutboxSweeperJobHandler(db_router)
+    )
+
+    # Run the scheduler loop in the background
+    await scheduler_service.start(poll_interval_seconds=10.0)
 
     await asyncio.gather(transform_task, deliver_task)
 

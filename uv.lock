@@ -25,6 +25,7 @@ members = [
     "orchestrator-worker",
     "patches",
     "pipeline",
+    "scheduler",
     "security",
     "transformer",
 ]
@@ -2134,6 +2135,7 @@ dependencies = [
     { name = "database" },
     { name = "domain" },
     { name = "pipeline" },
+    { name = "scheduler" },
     { name = "sqlalchemy" },
 ]
 
@@ -2145,6 +2147,7 @@ requires-dist = [
     { name = "database", editable = "libs/database" },
     { name = "domain", editable = "libs/domain" },
     { name = "pipeline", editable = "libs/pipeline" },
+    { name = "scheduler", editable = "libs/scheduler" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
 ]
 
@@ -2912,6 +2915,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/62/74/8d69dcb7a9efe8baa2046891735e5dfe433ad558ae23d9e3c14c633d1d58/s3transfer-0.14.0.tar.gz", hash = "sha256:eff12264e7c8b4985074ccce27a3b38a485bb7f7422cc8046fee9be4983e4125", size = 151547, upload-time = "2025-09-09T19:23:31.089Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/f0/ae7ca09223a81a1d890b2557186ea015f6e0502e9b8cb8e1813f1d8cfa4e/s3transfer-0.14.0-py3-none-any.whl", hash = "sha256:ea3b790c7077558ed1f02a3072fb3cb992bbbd253392f4b6e9e8976941c7d456", size = 85712, upload-time = "2025-09-09T19:23:30.041Z" },
+]
+
+[[package]]
+name = "scheduler"
+version = "0.1.0"
+source = { editable = "libs/scheduler" }
+dependencies = [
+    { name = "database" },
+    { name = "pydantic" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "database", editable = "libs/database" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
 ]
 
 [[package]]

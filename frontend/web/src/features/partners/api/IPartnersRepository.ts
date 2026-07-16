@@ -17,6 +17,7 @@ import type {
  */
 export interface IPartnersRepository {
   // Platform Trading Partners
+  deleteCertificateSecret(vaultRef: string): Promise<void>;
   getPlatformPartners(): Promise<Partner[]>;
   createPlatformPartner(payload: CreatePartnerPayload): Promise<Partner>;
   updatePlatformPartner(id: string, payload: UpdatePartnerPayload): Promise<Partner>;

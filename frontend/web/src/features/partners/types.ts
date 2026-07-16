@@ -68,7 +68,7 @@ export interface CreatePartnerPayload {
   is_local: boolean;
   url?: string;
   public_cert_pem?: string;
-  vault_key_ref?: string;
+  private_key_vault_ref?: string;
 }
 
 export interface UpdatePartnerPayload {

@@ -54,6 +54,10 @@ class HttpPartnersRepository implements IPartnersRepository {
   }
 
   // ── Platform Trading Partners ──────────────
+  deleteCertificateSecret(vaultRef: string): Promise<void> {
+    return this.request(`/api/v1/platform/trading-partners/as2/certificates/secret?vault_ref=${encodeURIComponent(vaultRef)}`, { method: 'DELETE' });
+  }
+
   getPlatformPartners(): Promise<Partner[]> {
     return this.request('/api/v1/platform/trading-partners/as2/trading-partners');
   }

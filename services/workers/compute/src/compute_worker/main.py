@@ -1,6 +1,11 @@
+# ruff: noqa: E402
 import asyncio
 import logging
 import sys
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from transformer.application.use_cases import ProcessInboundEdiUseCase
 from transformer.domain.models import ParsedEdiPayload
