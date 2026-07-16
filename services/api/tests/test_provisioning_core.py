@@ -4,7 +4,8 @@ import pytest
 from api.core.services import (
     AS2PartnerService,
     AS2PartnershipService,
-    RouteService,
+    InboundRouteService,
+    OutboundRouteService,
     SFTPPartnerService,
     WebhookService,
 )
@@ -16,12 +17,12 @@ from api.domain.models import (
     CreateWebhookCmd,
     UpdateAS2TradingPartnerCmd,
 )
-from api_fakes import FakeControlPlaneRepository
+from api_fakes import FakeGlobalStore
 
 
 @pytest.fixture
 def global_repo():
-    return FakeControlPlaneRepository()
+    return FakeGlobalStore()
 
 
 @pytest.fixture
@@ -29,7 +30,16 @@ def mock_uow(global_repo):
     from unittest.mock import MagicMock
 
     uow = MagicMock()
-    uow.control_plane = global_repo
+    uow.api_tokens = global_repo
+    uow.as2_partners = global_repo
+    uow.as2_partnerships = global_repo
+    uow.inbound_routes = global_repo
+    uow.outbound_routes = global_repo
+    uow.outbox = global_repo
+    uow.sftp_partners = global_repo
+    uow.tenants = global_repo
+    uow.webhooks = global_repo
+    uow.edi_headers = global_repo
     return uow
 
 
@@ -51,11 +61,6 @@ def sftp_partner_service(mock_uow):
 @pytest.fixture
 def webhook_service(mock_uow):
     return WebhookService(uow=mock_uow)
-
-
-@pytest.fixture
-def route_service(mock_uow):
-    return RouteService(uow=mock_uow)
 
 
 @pytest.mark.asyncio
@@ -118,7 +123,7 @@ async def test_create_webhook(webhook_service: WebhookService, global_repo):
 
 
 @pytest.mark.asyncio
-async def test_list_routes(route_service: RouteService, global_repo):
+async def test_list_routes(mock_uow, global_repo):
     as2_id = await global_repo.create_as2_identity(
         tenant_id=1, cmd=CreateAS2TradingPartnerCmd(name="Walmart", as2_id="WM")
     )
@@ -135,6 +140,7 @@ async def test_list_routes(route_service: RouteService, global_repo):
     class FakeRoute:
         def __init__(self, id, as2_partner_id, sftp_partner_id, webhook_id):
             self.id = id
+            self.tenant_id = 1
             self.name = "Test Route"
             self.processing_mode = "TRANSLATE"
             self.active = True
@@ -155,32 +161,41 @@ async def test_list_routes(route_service: RouteService, global_repo):
     global_repo.inbound_routes = [FakeRoute(uuid.uuid4(), as2_id, sftp_id, None)]
     global_repo.outbound_routes = [FakeRoute(uuid.uuid4(), as2_id, None, None)]
 
-    routes = await route_service.list_routes(1)
+    inbound_service = InboundRouteService(uow=mock_uow)
+    outbound_service = OutboundRouteService(uow=mock_uow)
 
-    assert len(routes) == 2
-    inbound_res = next(r for r in routes if r["direction"] == "INBOUND")
-    outbound_res = next(r for r in routes if r["direction"] == "OUTBOUND")
+    inbound_routes = await inbound_service.list_inbound_routes(1)
+    outbound_routes = await outbound_service.list_outbound_routes(1)
 
-    assert inbound_res["destination_name"] == "Walmart"
-    assert outbound_res["destination_name"] == "Walmart"
+    assert len(inbound_routes) == 1
+    assert len(outbound_routes) == 1
+
+    inbound_res = inbound_routes[0]
+    outbound_res = outbound_routes[0]
+
+    assert inbound_res.destination_name == "Walmart"
+    assert outbound_res.destination_name == "Walmart"
 
 
 @pytest.mark.asyncio
-async def test_create_inbound_route(route_service: RouteService, global_repo):
+async def test_create_inbound_route(mock_uow, global_repo):
+    service = InboundRouteService(uow=mock_uow)
     cmd = CreateInboundRouteCmd(
         name="test route",
         isa_sender_id="sender",
         isa_receiver_id="receiver",
         transaction_type="850",
     )
-    route = await route_service.create_inbound_route(tenant_id=1, cmd=cmd)
+    route = await service.create_inbound_route(tenant_id=1, cmd=cmd)
     assert route.direction == "INBOUND"
     assert len(global_repo.inbound_routes) == 1
 
 
 @pytest.mark.asyncio
-async def test_update_inbound_route(route_service: RouteService, global_repo):
+async def test_update_inbound_route(mock_uow, global_repo):
     from api.domain.models import UNSET, UpdateInboundRouteCmd
+
+    service = InboundRouteService(uow=mock_uow)
 
     cmd = UpdateInboundRouteCmd(
         name="updated name",
@@ -188,24 +203,25 @@ async def test_update_inbound_route(route_service: RouteService, global_repo):
         isa_sender_id="new sender",
     )
     route_id = uuid.uuid4()
-    # Mocking or depending on FakeControlPlaneRepository to have an update method
-    # Actually FakeControlPlaneRepository probably doesn't implement update_inbound_route properly if it was missing.
+    # Mocking or depending on FakeGlobalStore to have an update method
+    # Actually FakeGlobalStore probably doesn't implement update_inbound_route properly if it was missing.
     # We will just pass because it's a fake
     try:
-        res = await route_service.update_inbound_route(tenant_id=1, route_id=route_id, cmd=cmd)
+        res = await service.update_inbound_route(tenant_id=1, route_id=route_id, cmd=cmd)
         assert res is not None
     except NotImplementedError:
         pass
 
 
 @pytest.mark.asyncio
-async def test_create_outbound_route(route_service: RouteService, global_repo):
+async def test_create_outbound_route(mock_uow, global_repo):
+    service = OutboundRouteService(uow=mock_uow)
     cmd = CreateOutboundRouteCmd(
         trading_partner_id="PARTNER_123",
         name="Outbound Route",
         as2_partner_id=uuid.uuid4(),
     )
-    route = await route_service.create_outbound_route(tenant_id=1, cmd=cmd)
+    route = await service.create_outbound_route(tenant_id=1, cmd=cmd)
 
     assert route.direction == "OUTBOUND"
     assert len(global_repo.outbound_routes) == 1

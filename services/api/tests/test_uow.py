@@ -12,8 +12,10 @@ async def test_sqlalchemy_uow():
     uow = UnitOfWork(global_session=mock_global_session, tenant_session=mock_tenant_session)
 
     async with uow:
-        assert uow.control_plane is not None
-        assert uow.data_plane is not None
+        assert uow.global_session == mock_global_session
+        assert uow.tenant_session == mock_tenant_session
+        assert uow.as2_partners is not None
+        assert uow.transactions is not None
 
         await uow.commit()
 

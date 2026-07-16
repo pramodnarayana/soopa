@@ -1,10 +1,9 @@
 import logging
 import uuid
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from api.core.uow import UnitOfWork
-from api.ports.repository import DataPlaneRepositoryPort
 from pipeline.core.metadata_extractor import MetadataExtractorService
 
 logger = logging.getLogger(__name__)
@@ -38,8 +37,6 @@ class ApiReceiverService:
             UUID: The generated trace_id for tracking.
         """
         async with self.uow:
-            data_plane = cast(DataPlaneRepositoryPort, self.uow.data_plane)
-
             logger.info(f"Received outbound JSON for partner: {trading_partner_id}")
 
             # 1. Resolve transaction_type from payload if not provided explicitly
@@ -84,12 +81,14 @@ class ApiReceiverService:
                 "payload": payload,
                 "status": "RECEIVED",
             }
-            await data_plane.create_edi_json(tenant_id=tenant_id, payload=edi_json_payload)
+            await self.uow.transactions.create_edi_json(
+                tenant_id=tenant_id, payload=edi_json_payload
+            )
 
             # 5. Drop Outbox event for Worker to transform
             from domain.events import PipelineEventType
 
-            await data_plane.publish_outbox_event(
+            await self.uow.outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload={

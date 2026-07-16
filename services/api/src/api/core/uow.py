@@ -1,6 +1,16 @@
 from typing import Any, Self
 
-from api.adapters.repository import SqlAlchemyControlPlaneRepository, SqlAlchemyDataPlaneRepository
+from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
+from api.adapters.as2_partner_repository import SqlAlchemyAS2TradingPartnerRepository
+from api.adapters.as2_partnership_repository import SqlAlchemyAS2PartnershipRepository
+from api.adapters.edi_header_repository import SqlAlchemyEdiHeaderRepository
+from api.adapters.inbound_route_repository import SqlAlchemyInboundRouteRepository
+from api.adapters.outbound_route_repository import SqlAlchemyOutboundRouteRepository
+from api.adapters.outbox_repository import SqlAlchemyOutboxRepository
+from api.adapters.sftp_repository import SqlAlchemySFTPPartnerRepository
+from api.adapters.tenant_repository import SqlAlchemyTenantRepository
+from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
+from api.adapters.webhook_repository import SqlAlchemyWebhookRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -22,12 +32,27 @@ class UnitOfWork:
 
         from database.base_repository import GlobalSession, TenantSession
 
-        self.control_plane = SqlAlchemyControlPlaneRepository(cast(GlobalSession, global_session))
-        self.data_plane = (
-            SqlAlchemyDataPlaneRepository(cast(TenantSession, tenant_session))
-            if tenant_session
-            else None
-        )
+        gs = cast(GlobalSession, global_session)
+        ts = cast(TenantSession, tenant_session) if tenant_session else None
+
+        self.api_tokens = SqlAlchemyApiTokenRepository(gs)
+        self.as2_partners = SqlAlchemyAS2TradingPartnerRepository(gs)
+        self.as2_partnerships = SqlAlchemyAS2PartnershipRepository(gs)
+        self.inbound_routes = SqlAlchemyInboundRouteRepository(gs)
+        self.outbound_routes = SqlAlchemyOutboundRouteRepository(gs)
+        self.outbox = SqlAlchemyOutboxRepository(gs)
+        self.sftp_partners = SqlAlchemySFTPPartnerRepository(gs)
+        self.tenants = SqlAlchemyTenantRepository(gs)
+        self.webhooks = SqlAlchemyWebhookRepository(gs)
+        self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
+
+        self._transactions = SqlAlchemyTransactionRepository(ts) if ts else None
+
+    @property
+    def transactions(self) -> SqlAlchemyTransactionRepository:
+        if not self._transactions:
+            raise RuntimeError("Transaction repository requires an active tenant session.")
+        return self._transactions
 
     async def __aenter__(self) -> Self:
         return self

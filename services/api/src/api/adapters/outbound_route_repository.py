@@ -11,11 +11,10 @@ from api.ports.outbound_route_repository import OutboundRouteRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     AS2Partner,
-    InboundRoute,
     OutboundRoute,
     SFTPPartner,
 )
-from domain.models import InboundRouteDomainModel, OutboundRouteDomainModel
+from domain.models import OutboundRouteDomainModel
 from sqlalchemy import delete, select
 
 
@@ -133,30 +132,8 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)
 
-    async def get_all_routes(
-        self, tenant_id: int
-    ) -> dict[str, list[OutboundRouteDomainModel | InboundRouteDomainModel]]:
-        inbound_result = await self.session.execute(
-            select(InboundRoute).where(InboundRoute.tenant_id == tenant_id)
-        )
+    async def list_outbound_routes(self, tenant_id: int) -> list[OutboundRouteDomainModel]:
         outbound_result = await self.session.execute(
             select(OutboundRoute).where(OutboundRoute.tenant_id == tenant_id)
         )
-
-        inbound_routes = [
-            InboundRouteDomainModel.model_validate(r) for r in inbound_result.scalars().all()
-        ]
-        outbound_routes = [
-            OutboundRouteDomainModel.model_validate(r) for r in outbound_result.scalars().all()
-        ]
-
-        from typing import cast
-
-        return {
-            "inbound": cast(
-                "list[OutboundRouteDomainModel | InboundRouteDomainModel]", inbound_routes
-            ),
-            "outbound": cast(
-                "list[OutboundRouteDomainModel | InboundRouteDomainModel]", outbound_routes
-            ),
-        }
+        return [OutboundRouteDomainModel.model_validate(r) for r in outbound_result.scalars().all()]

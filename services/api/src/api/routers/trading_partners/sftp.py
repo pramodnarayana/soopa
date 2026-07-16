@@ -84,8 +84,8 @@ async def test_existing_sftp_connection(
 
     if not request.password and not request.credentials_vault_ref:
         async with uow:
-            if uow.control_plane:
-                partner = await uow.control_plane.get_sftp_partner(tenant_id, partner_id)
+            if uow.global_session is not None:
+                partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
                 if partner:
                     if partner.password_encrypted:
                         try:
@@ -160,9 +160,9 @@ async def create_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if not uow.control_plane:
+            if uow.tenant_session is None:
                 raise HTTPException(status_code=500, detail="Data plane not initialized")
-            partner = await uow.control_plane.get_sftp_partner(tenant_id, _.partner_id)
+            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.partner_id)
             if not partner:
                 raise HTTPException(status_code=404, detail="Partner not found after creation")
 
@@ -202,9 +202,9 @@ async def update_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if not uow.control_plane:
+            if uow.tenant_session is None:
                 raise HTTPException(status_code=500, detail="Data plane not initialized")
-            partner = await uow.control_plane.get_sftp_partner(tenant_id, partner_id)
+            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
             if not partner:
                 raise HTTPException(status_code=404, detail="Partner not found after update")
 
@@ -233,9 +233,9 @@ async def delete_sftp_partner(
     """Deletes an SFTP partner."""
     async with uow:
         try:
-            if uow.control_plane is None:
+            if uow.tenant_session is None:
                 raise HTTPException(status_code=500, detail="Tenant data plane not available")
-            await uow.control_plane.delete_sftp_partner(tenant_id, partner_id)
+            await uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
             await uow.commit()
         except IntegrityError as e:
             raise HTTPException(

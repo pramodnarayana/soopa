@@ -63,7 +63,7 @@ def test_create_platform_as2_partner(client, fake_uow):
     data = response.json()
     assert "id" in data
     assert data["type"] == "AS2"
-    assert len(fake_uow.control_plane.partners) == 1
+    assert len(fake_uow.as2_partners.partners) == 1
 
 
 def test_list_platform_as2_partners(client, fake_uow):
@@ -144,7 +144,7 @@ def test_create_platform_as2_partnership(client, fake_uow):
     assert response.status_code == 201
     data = response.json()
     assert "id" in data
-    assert len(fake_uow.control_plane.partnerships) == 1
+    assert len(fake_uow.as2_partnerships.partnerships) == 1
 
 
 def test_list_platform_as2_partnerships(client):
@@ -272,11 +272,11 @@ def test_existing_sftp_connection_failures(client, fake_uow):
 
     from unittest.mock import AsyncMock
 
-    fake_uow.control_plane.delete_sftp_partner = AsyncMock(side_effect=ValueError("Not found"))
+    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(side_effect=ValueError("Not found"))
     resp = client.delete(f"/api/v1/trading-partners/sftp/{random_id}")
     assert resp.status_code == 400
 
-    fake_uow.control_plane.delete_sftp_partner = AsyncMock(side_effect=Exception("DB Error"))
+    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(side_effect=Exception("DB Error"))
     resp = client.delete(f"/api/v1/trading-partners/sftp/{random_id}")
     assert resp.status_code == 500
 
@@ -370,7 +370,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.status_code == 400
 
     # Delete integrity error
-    fake_uow.control_plane.delete_sftp_partner = AsyncMock(
+    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(
         side_effect=IntegrityError("x", "y", "z")
     )
     resp = client.delete(f"/api/v1/trading-partners/sftp/{p_id}")

@@ -1,26 +1,28 @@
 import uuid
 from collections.abc import Sequence
+from dataclasses import asdict, replace
 from typing import Any
 
 from api.domain.models import (
+    UNSET,
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
     CreateWebhookCmd,
+    UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
     UpdateInboundRouteCmd,
     UpdateOutboundRouteCmd,
+    UpdateSFTPPartnerCmd,
 )
 from api.ports.repository import (
-    ControlPlaneRepositoryPort,
-    DataPlaneRepositoryPort,
     TenantRepositoryPort,
 )
 
 
-class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
+class FakeGlobalStore:
     def __init__(self):
         self.partners = []
         self.partnerships = []
@@ -53,12 +55,57 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
             p for p in self.partners if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
         ]
 
+    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
+        p_id = uuid.uuid4()
+        self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
+        return p_id
+
+    async def update_sftp_partner(
+        self, tenant_id: int, partner_id: uuid.UUID, cmd: UpdateSFTPPartnerCmd
+    ) -> bool:
+        for p in self.sftp_partners:
+            if p["id"] == partner_id and p["tenant_id"] == tenant_id:
+                updates = {k: v for k, v in asdict(cmd).items() if not isinstance(v, type(UNSET))}
+                active_val = updates.pop("active", None)
+                if active_val is not None:
+                    p["status"] = "ACTIVE" if active_val else "INACTIVE"
+                p["cmd"] = replace(p["cmd"], **updates)
+                return True
+        return False
+
+    async def delete_sftp_partner(self, tenant_id: int, partner_id: uuid.UUID) -> None:
+        self.sftp_partners = [
+            p
+            for p in self.sftp_partners
+            if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
+        ]
+
     async def create_as2_partnership(
         self, tenant_id: int, cmd: CreateAS2PartnershipCmd
     ) -> uuid.UUID:
         p_id = uuid.uuid4()
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
+
+    async def update_as2_partnership(
+        self, tenant_id: int, partnership_id: uuid.UUID, cmd: UpdateAS2PartnershipCmd
+    ) -> bool:
+        for p in self.partnerships:
+            if p["id"] == partnership_id and p["tenant_id"] == tenant_id:
+                updates = {k: v for k, v in asdict(cmd).items() if not isinstance(v, type(UNSET))}
+                active_val = updates.pop("active", None)
+                if active_val is not None:
+                    p["status"] = "ACTIVE" if active_val else "INACTIVE"
+                p["cmd"] = replace(p["cmd"], **updates)
+                return True
+        return False
+
+    async def delete_as2_partnership(self, tenant_id: int, partnership_id: uuid.UUID) -> None:
+        self.partnerships = [
+            p
+            for p in self.partnerships
+            if not (p["id"] == partnership_id and p["tenant_id"] == tenant_id)
+        ]
 
     async def get_as2_partner(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
         for p in self.partners:
@@ -163,11 +210,6 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
-    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
-        self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
-        return p_id
-
     async def get_sftp_partners_by_ids(
         self, tenant_id: int, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
@@ -178,9 +220,38 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         }
 
     async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
-        self.webhooks.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
-        return p_id
+        wh_id = uuid.uuid4()
+        self.webhooks.append({"id": wh_id, "tenant_id": tenant_id, "cmd": cmd})
+        return wh_id
+
+    async def update_webhook(
+        self,
+        tenant_id: int,
+        webhook_id: uuid.UUID,
+        name: str | None = None,
+        active: bool | None = None,
+        url: str | None = None,
+    ) -> bool:
+        from dataclasses import replace
+
+        for w in self.webhooks:
+            if w["id"] == webhook_id and w["tenant_id"] == tenant_id:
+                updates = {}
+                if name is not None:
+                    updates["name"] = name
+                if url is not None:
+                    updates["url"] = url
+                w["cmd"] = replace(w["cmd"], **updates)
+                if active is not None:
+                    w["status"] = "ACTIVE" if active else "INACTIVE"
+                return True
+        return False
+
+    async def delete_webhook(self, tenant_id: int, webhook_id: uuid.UUID) -> bool:
+        self.webhooks = [
+            w for w in self.webhooks if not (w["id"] == webhook_id and w["tenant_id"] == tenant_id)
+        ]
+        return True
 
     async def get_webhooks_by_ids(
         self, tenant_id: int, ids: list[uuid.UUID]
@@ -195,14 +266,14 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
         r_id = uuid.uuid4()
         if not hasattr(self, "inbound_routes"):
             self.inbound_routes = []
-        self.inbound_routes.append(FakeRoute(r_id, cmd))
+        self.inbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
     async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
         if not hasattr(self, "outbound_routes"):
             self.outbound_routes = []
-        self.outbound_routes.append(FakeRoute(r_id, cmd))
+        self.outbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
     async def update_inbound_route(
@@ -221,10 +292,11 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
     async def delete_outbound_route(self, tenant_id: int, route_id: uuid.UUID) -> bool:
         return True
 
-    async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
-        inbound = getattr(self, "inbound_routes", [])
-        outbound = getattr(self, "outbound_routes", [])
-        return {"inbound": inbound, "outbound": outbound}
+    async def list_inbound_routes(self, tenant_id: int) -> list[Any]:
+        return [r for r in getattr(self, "inbound_routes", []) if r.tenant_id == tenant_id]
+
+    async def list_outbound_routes(self, tenant_id: int) -> list[Any]:
+        return [r for r in getattr(self, "outbound_routes", []) if r.tenant_id == tenant_id]
 
     async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]:
         return [p for p in getattr(self, "sftp_partners", []) if p["tenant_id"] == tenant_id]
@@ -269,8 +341,9 @@ class FakeControlPlaneRepository(ControlPlaneRepositoryPort):
 
 
 class FakeRoute:
-    def __init__(self, id, cmd):
+    def __init__(self, id, tenant_id, cmd):
         self.id = id
+        self.tenant_id = tenant_id
         self.name = getattr(cmd, "name", "Test Route")
         self.processing_mode = getattr(cmd, "processing_mode", "TRANSFORM")
         self.active = True
@@ -279,9 +352,13 @@ class FakeRoute:
         self.webhook_id = getattr(cmd, "webhook_id", None)
         self.isa_sender_id = getattr(cmd, "isa_sender_id", "S1")
         self.isa_receiver_id = getattr(cmd, "isa_receiver_id", "R1")
+        self.gs_sender_id = getattr(cmd, "gs_sender_id", "S1")
+        self.gs_receiver_id = getattr(cmd, "gs_receiver_id", "R1")
+        self.transaction_type = getattr(cmd, "transaction_type", "*")
+        self.trading_partner_id = getattr(cmd, "trading_partner_id", None)
 
 
-class FakeDataPlaneRepository(DataPlaneRepositoryPort):
+class FakeTenantStore:
     def __init__(self):
         self.inbound_routes = []
         self.outbound_routes = []
@@ -290,12 +367,12 @@ class FakeDataPlaneRepository(DataPlaneRepositoryPort):
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
-        self.inbound_routes.append(FakeRoute(r_id, cmd))
+        self.inbound_routes.append(FakeRoute(r_id, 1, cmd))
         return r_id
 
     async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
-        self.outbound_routes.append(FakeRoute(r_id, cmd))
+        self.outbound_routes.append(FakeRoute(r_id, 1, cmd))
         return r_id
 
     async def get_all_routes(self) -> dict[str, list[Any]]:
@@ -377,8 +454,8 @@ class MockResult:
 
 
 class MockSession:
-    def __init__(self, control_plane):
-        self.control_plane = control_plane
+    def __init__(self, global_store):
+        self.global_store = global_store
 
     async def execute(self, statement):
         table_name = str(statement)
@@ -415,9 +492,22 @@ class MockSession:
 
 class FakeUnitOfWork:
     def __init__(self):
-        self.control_plane = FakeControlPlaneRepository()
-        self.data_plane = FakeDataPlaneRepository()
-        self.global_session = MockSession(self.control_plane)
+        repo = FakeGlobalStore()
+        self.api_tokens = repo
+        self.as2_partners = repo
+        self.as2_partnerships = repo
+        self.inbound_routes = repo
+        self.outbound_routes = repo
+        self.outbox = repo
+        self.sftp_partners = repo
+        self.tenants = repo
+        self.webhooks = repo
+        self.edi_headers = repo
+
+        self.transactions = FakeTenantStore()
+
+        self.global_session = MockSession(repo)
+        self.tenant_session = MockSession(repo)
 
     async def __aenter__(self):
         return self

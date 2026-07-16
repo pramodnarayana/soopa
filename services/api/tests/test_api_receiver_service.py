@@ -16,10 +16,10 @@ async def test_process_api_edi_json_success():
     )
 
     assert trace_id is not None
-    mock_uow.data_plane.create_edi_json.assert_awaited_once()
-    mock_uow.data_plane.publish_outbox_event.assert_awaited_once()
+    mock_uow.transactions.create_edi_json.assert_awaited_once()
+    mock_uow.outbox.publish_outbox_event.assert_awaited_once()
 
-    args, kwargs = mock_uow.data_plane.publish_outbox_event.call_args
+    args, kwargs = mock_uow.outbox.publish_outbox_event.call_args
     from domain.events import PipelineEventType
 
     assert kwargs["event_type"] == PipelineEventType.TRANSFORM_EVENT

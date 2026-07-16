@@ -22,7 +22,7 @@ def mock_uow():
     _mock_repo.explorer_list_edi_json.return_value = []
 
     _mock_uow = AsyncMock()
-    _mock_uow.data_plane = _mock_repo
+    _mock_uow.transactions = _mock_repo
     _mock_uow.__aenter__.return_value = _mock_uow
     return _mock_uow
 
@@ -42,7 +42,7 @@ client = TestClient(app)
 def test_explorer_edi_messages(mock_uow):
     response = client.post("/api/v1/explorer/edi-messages", json={"filters": []})
     assert response.status_code == 200
-    mock_uow.data_plane.explorer_list_edi_messages.assert_called_once_with(
+    mock_uow.transactions.explorer_list_edi_messages.assert_called_once_with(
         tenant_id=1, filters=[], limit=50, offset=0
     )
 
@@ -50,7 +50,7 @@ def test_explorer_edi_messages(mock_uow):
 def test_explorer_edi_json(mock_uow):
     response = client.post("/api/v1/explorer/edi-json", json={"filters": []})
     assert response.status_code == 200
-    mock_uow.data_plane.explorer_list_edi_json.assert_called_once_with(
+    mock_uow.transactions.explorer_list_edi_json.assert_called_once_with(
         tenant_id=1, filters=[], limit=50, offset=0
     )
 

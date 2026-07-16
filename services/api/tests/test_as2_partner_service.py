@@ -6,9 +6,11 @@ from api.core.services.as2_partner_service import AS2PartnerService
 from api.domain.models import UpdateAS2TradingPartnerCmd
 
 
-def make_mock_uow(control_plane: AsyncMock) -> MagicMock:
+def make_mock_uow(mock_repo: AsyncMock) -> MagicMock:
     uow = MagicMock()
-    uow.control_plane = control_plane
+    uow.as2_partners = mock_repo
+    uow.outbox = mock_repo
+    uow.global_session = mock_repo
     return uow
 
 

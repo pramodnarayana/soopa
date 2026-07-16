@@ -50,7 +50,7 @@ async def list_transactions(
     List EDI transactions for the current tenant.
     """
     async with uow:
-        messages = await uow.data_plane.list_transactions(  # type: ignore
+        messages = await uow.transactions.list_transactions(
             tenant_id=tenant_id,
             limit=limit,
             offset=offset,
@@ -88,7 +88,7 @@ async def get_transaction_thread(
     Get a chronological thread of documents sharing a specific business metadata key/value.
     """
     async with uow:
-        json_records = await uow.data_plane.get_transaction_thread(tenant_id, key, value)  # type: ignore
+        json_records = await uow.transactions.get_transaction_thread(tenant_id, key, value)
         items = []
         for r in json_records:
             items.append(
@@ -117,7 +117,7 @@ async def get_transaction(
     Get the full deep-dive payload for a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
     """
     async with uow:
-        result = await uow.data_plane.get_transaction(tenant_id, trace_id)  # type: ignore
+        result = await uow.transactions.get_transaction(tenant_id, trace_id)
         if not result or not result.edi_message:
             raise HTTPException(status_code=404, detail="Transaction not found")
 

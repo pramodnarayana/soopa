@@ -1,16 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
 import type { AS2Partner } from '../types';
 import { useCertificatesExportQuery, useUpdatePlatformPartnerMutation, useRotateCertificatesMutation } from '../api/partnerHooks';
-import { Copy, Download, Loader2, ChevronDown, ChevronRight, CheckCircle2, Clock, Upload, RefreshCw, ClipboardPaste } from 'lucide-react';
+import { Copy, Download, Loader2, ChevronDown, ChevronRight, CheckCircle2, Clock, ClipboardPaste } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { usePlatformConfig } from '@/features/platform/api/configHooks';
 import { Combobox } from '@/components/ui/combobox';
+import { CertificateInput } from './CertificateInput';
 
 export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, onCancel?: () => void }) {
   const { toast } = useToast();
@@ -24,7 +24,7 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
   const [pasteValue, setPasteValue] = useState('');
 
   const { data: certs, isLoading: certsLoading, error: certsError } = useCertificatesExportQuery(partner.id);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   const { register, handleSubmit, reset, control, formState: { isDirty } } = useForm({
     defaultValues: {
@@ -56,45 +56,17 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
   };
 
   const handleGenerateCertificate = () => {
-    rotateCertificates.mutate({ id: partner.id, payload: { action: 'generate' } });
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    try {
-      let publicCert = '';
-      let privateKey = '';
-
-      for (let i = 0; i < files.length; i++) {
-        const text = await files[i].text();
-        if (text.includes('-----BEGIN CERTIFICATE-----')) {
-          const match = text.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g);
-          if (match && match.length > 0) publicCert += match.join('\n') + '\n';
-        }
-        if (text.includes('-----BEGIN PRIVATE KEY-----') || text.includes('-----BEGIN RSA PRIVATE KEY-----')) {
-          const match = text.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
-          if (match && match.length > 0) privateKey += match.join('\n') + '\n';
+    rotateCertificates.mutate(
+      { id: partner.id, payload: { action: 'generate' } },
+      {
+        onSuccess: () => {
+          setPasteDialogOpen(false);
+          setPasteValue('');
         }
       }
-
-      rotateCertificates.mutate({
-        id: partner.id,
-        payload: {
-          action: 'upload',
-          public_cert_pem: publicCert.trim() || undefined as any,
-          private_key_pem: (partner.is_local && privateKey.trim()) ? privateKey.trim() : undefined
-        }
-      });
-    } catch { // eslint-disable-line no-unused-vars
-      toast({ title: 'Error', description: 'Failed to read uploaded files.', variant: 'destructive' });
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
+    );
   };
+
 
   const handlePasteSubmit = () => {
     if (!pasteValue.trim()) return;
@@ -208,28 +180,10 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
         <div className="flex justify-between items-center pb-2">
           <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Certificates</h4>
           <div className="flex items-center gap-3">
-            {partner.is_local && (
-              <Button variant="outline" size="sm" onClick={handleGenerateCertificate} disabled={rotateCertificates.isPending}>
-                {rotateCertificates.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Generate Certificate
-              </Button>
-            )}
             <Button variant="outline" size="sm" onClick={() => setPasteDialogOpen(true)} disabled={rotateCertificates.isPending}>
               <ClipboardPaste className="w-4 h-4 mr-2" />
-              Paste
+              New Certificate
             </Button>
-            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={rotateCertificates.isPending}>
-              <Upload className="w-4 h-4 mr-2" />
-              Upload
-            </Button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              multiple
-              accept=".pem,.crt,.cer,.key"
-              className="hidden"
-            />
           </div>
         </div>
 
@@ -277,16 +231,25 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
         setPasteDialogOpen(open);
         if (!open) setPasteValue('');
       }}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-[780px]">
           <DialogHeader>
-            <DialogTitle>Paste Certificate</DialogTitle>
+            <DialogTitle>Update Certificate</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <Textarea
-              className="min-h-[200px] font-mono text-xs p-4 bg-slate-50 border-slate-200"
-              placeholder={"-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----"}
+            <CertificateInput
               value={pasteValue}
-              onChange={(e) => setPasteValue(e.target.value)}
+              onChange={setPasteValue}
+              extraActions={partner.is_local && !pasteValue ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                  onClick={handleGenerateCertificate}
+                  disabled={rotateCertificates.isPending}
+                >
+                  {rotateCertificates.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Generate Certificate
+                </button>
+              ) : undefined}
             />
           </div>
           <DialogFooter>

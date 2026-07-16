@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import uuid
 from uuid import UUID
@@ -10,6 +11,7 @@ from api.domain.models import (
     UpdateSFTPPartnerCmd,
 )
 from domain.events import ProvisioningEventType
+from domain.models import ConnectionType, PartnerStatus
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +26,8 @@ class SFTPPartnerService:
 
     async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
-        partner_id = await self.uow.control_plane.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.control_plane.publish_outbox_event(
+        partner_id = await self.uow.sftp_partners.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
+        await self.uow.outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -36,15 +38,15 @@ class SFTPPartnerService:
             partner_id=partner_id,
             tenant_id=tenant_id,
             name=cmd.name,
-            type="SFTP",
-            status="INACTIVE",
+            type=ConnectionType.SFTP,
+            status=PartnerStatus.INACTIVE,
         )
 
     async def update_sftp_partner(
         self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
-        existing = await self.uow.control_plane.get_sftp_partner(tenant_id, partner_id)
+        existing = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
         if not existing:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
@@ -63,25 +65,27 @@ class SFTPPartnerService:
         if has_password and has_vault:
             raise ValueError("SFTP partner cannot have both a password and a credentials_vault_ref")
 
-        await self.uow.control_plane.update_sftp_partner(
+        await self.uow.sftp_partners.update_sftp_partner(
             tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
         )
 
-        update_hash = str(hash(str(cmd)))
-        await self.uow.control_plane.publish_outbox_event(
+        update_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
+        await self.uow.outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
             idempotency_key=uuid.uuid5(partner_id, f"SFTP_PARTNER_UPDATED-{update_hash}"),
         )
-        updated = await self.uow.control_plane.get_sftp_partner(tenant_id, partner_id)
-        if not updated:
+        updated_partner = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
+        if not updated_partner:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
         return PartnerEntity(
             partner_id=partner_id,
             tenant_id=tenant_id,
-            name=str(cmd.name) if (cmd.name is not UNSET and cmd.name) else str(updated.name),
-            type="SFTP",
-            status="ACTIVE" if updated.active else "INACTIVE",
+            name=str(cmd.name)
+            if (cmd.name is not UNSET and cmd.name)
+            else str(updated_partner.name),
+            type=ConnectionType.SFTP,
+            status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
         )

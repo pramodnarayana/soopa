@@ -9,8 +9,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def mock_uow():
     uow = AsyncMock()
-    uow.control_plane = AsyncMock()
-    uow.data_plane = AsyncMock()
+    uow.transactions = AsyncMock()
     return uow
 
 
@@ -33,7 +32,7 @@ def client(mock_uow, mock_mq):
 
 
 def test_as2_receive(client, mock_uow, mock_mq):
-    mock_uow.control_plane.get_inbound_routes.return_value = []
+    mock_uow.inbound_routes.get_inbound_routes.return_value = []
     client.post(
         "/api/v1/trading-partners/as2/receive/tp1",
         headers={"as2-to": "receiver", "as2-from": "sender", "message-id": "1234"},

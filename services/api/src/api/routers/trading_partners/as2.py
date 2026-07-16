@@ -35,9 +35,9 @@ async def export_as2_certificates(
 ) -> Any:
     """Exports current and previous certificates for an AS2 partner."""
     async with uow:
-        partner = await uow.control_plane.get_as2_partner(tenant_id, partner_id)
+        partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            partner = await uow.control_plane.get_as2_partner(0, partner_id)
+            partner = await uow.as2_partners.get_as2_partner(0, partner_id)
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
@@ -94,9 +94,9 @@ async def rotate_as2_certificates(
 ) -> Any:
     """Rotates certificates for an AS2 partner."""
     async with uow:
-        partner = await uow.control_plane.get_as2_partner(tenant_id, partner_id)
+        partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            partner = await uow.control_plane.get_as2_partner(0, partner_id)
+            partner = await uow.as2_partners.get_as2_partner(0, partner_id)
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 

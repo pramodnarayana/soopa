@@ -5,7 +5,6 @@ import uuid
 from email import policy
 from typing import Any
 
-from api.adapters.repository import SqlAlchemyDataPlaneRepository
 from api.core.uow import UnitOfWork
 from api.ports.vault import VaultPort
 from as2_core.mdn import build_mdn, calculate_mic
@@ -66,7 +65,7 @@ class As2ReceiverService:
         pure_edi_bytes = self._extract_pure_edi(final_payload)
 
         # 6. Save to DB
-        await self._save_to_data_plane(
+        await self._save_transaction(
             partnership=partnership, as2_msg=as2_msg, pure_edi_bytes=pure_edi_bytes
         )
 
@@ -113,7 +112,7 @@ class As2ReceiverService:
 
     async def _lookup_partnership(self, as2_from: str, as2_to: str):  # type: ignore
         async with self.uow:
-            match = await self.uow.control_plane.get_partnership_by_as2_ids(
+            match = await self.uow.as2_partnerships.get_partnership_by_as2_ids(
                 as2_from=as2_from, as2_to=as2_to
             )
             if not match:
@@ -316,7 +315,7 @@ class As2ReceiverService:
 
         return isa_sender, isa_receiver, transaction_type
 
-    async def _save_to_data_plane(  # type: ignore
+    async def _save_transaction(  # type: ignore
         self, partnership, as2_msg: AS2Message, pure_edi_bytes: bytes
     ) -> str:
 
@@ -330,7 +329,7 @@ class As2ReceiverService:
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
-        true_tenant_id = await self.uow.control_plane.get_tenant_by_isa(isa_sender, isa_receiver)
+        true_tenant_id = await self.uow.inbound_routes.get_tenant_by_isa(isa_sender, isa_receiver)
         if not true_tenant_id:
             true_tenant_id = partnership.tenant_id
 
@@ -374,7 +373,9 @@ class As2ReceiverService:
         async_gen_tenant = self.db_router.get_tenant_session(true_tenant_id, shard.name, shard.dsn)
         tenant_session = await anext(async_gen_tenant)
         try:
-            dp_repo = SqlAlchemyDataPlaneRepository(tenant_session)
+            from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
+
+            dp_repo = SqlAlchemyTransactionRepository(tenant_session)
             msg_id = await dp_repo.create_edi_message(tenant_id=true_tenant_id, payload=edi_record)
 
             outbox_payload = {

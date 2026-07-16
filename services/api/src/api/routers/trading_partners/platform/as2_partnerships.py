@@ -55,16 +55,16 @@ async def test_as2_partnership_connection(
     using the partnership's configured cryptographic material.
     """
     async with uow:
-        partnership = await uow.control_plane.get_as2_partnership(
+        partnership = await uow.as2_partnerships.get_as2_partnership(
             tenant_id=0, partnership_id=partnership_id
         )
         if not partnership:
             raise HTTPException(status_code=404, detail="Partnership not found")
 
-        local_partner = await uow.control_plane.get_as2_partner(
+        local_partner = await uow.as2_partners.get_as2_partner(
             tenant_id=0, partner_id=partnership.local_partner_id
         )
-        remote_partner = await uow.control_plane.get_as2_partner(
+        remote_partner = await uow.as2_partners.get_as2_partner(
             tenant_id=0, partner_id=partnership.remote_partner_id
         )
 
@@ -163,7 +163,7 @@ async def create_platform_as2_partnership(
             svc = AS2PartnershipService(uow=uow)
             entity = await svc.create_as2_partnership(tenant_id=0, cmd=cmd)
             await uow.commit()
-            p = await uow.control_plane.get_as2_partnership(
+            p = await uow.as2_partnerships.get_as2_partnership(
                 tenant_id=0, partnership_id=entity.partner_id
             )
             if not p:
@@ -225,7 +225,7 @@ async def update_platform_as2_partnership(
             await svc.update_as2_partnership(tenant_id=0, partnership_id=partnership_id, cmd=cmd)
             await uow.commit()
 
-            p = await uow.control_plane.get_as2_partnership(
+            p = await uow.as2_partnerships.get_as2_partnership(
                 tenant_id=0, partnership_id=partnership_id
             )
             if not p:

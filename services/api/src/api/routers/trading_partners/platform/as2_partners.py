@@ -73,7 +73,7 @@ async def create_platform_as2_partner(
             entity = await svc.create_as2_partner(tenant_id=0, cmd=cmd)
 
             await uow.commit()
-            p = await uow.control_plane.get_as2_partner(tenant_id=0, partner_id=entity.partner_id)
+            p = await uow.as2_partners.get_as2_partner(tenant_id=0, partner_id=entity.partner_id)
             if not p:
                 raise HTTPException(status_code=500, detail="Partner creation failed")
 
@@ -99,7 +99,7 @@ async def list_platform_as2_partners(
     Returns all global AS2 partners (tenant_id = 0).
     """
     async with uow:
-        partners = await uow.control_plane.list_as2_partners(tenant_id=0)
+        partners = await uow.as2_partners.list_as2_partners(tenant_id=0)
         return [
             AS2TradingPartnerResponse(
                 id=str(p.id),
@@ -131,7 +131,7 @@ async def update_platform_as2_partner(
         try:
             svc = AS2PartnerService(uow=uow)
             await svc.update_as2_partner(tenant_id=0, partner_id=partner_id, cmd=cmd)
-            updated_partner = await uow.control_plane.get_as2_partner(
+            updated_partner = await uow.as2_partners.get_as2_partner(
                 tenant_id=0, partner_id=partner_id
             )
             if not updated_partner:
