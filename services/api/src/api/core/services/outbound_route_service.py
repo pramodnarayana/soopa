@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 from uuid import UUID
 
 from api.core.uow import UnitOfWork
@@ -10,7 +9,7 @@ from api.domain.models import (
     UpdateOutboundRouteCmd,
 )
 from domain.events import ProvisioningEventType
-from domain.models import ConnectionType, Direction
+from domain.models import ConnectionType, Direction, OutboundRouteDomainModel
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +62,7 @@ class OutboundRouteService:
         return res
 
     async def list_outbound_routes(self, tenant_id: int) -> list[OutboundRouteListEntity]:
-        from domain.models import OutboundRouteDomainModel
-
-        outbound: list[
-            OutboundRouteDomainModel
-        ] = await self.uow.outbound_routes.list_outbound_routes(tenant_id)
+        outbound = await self.uow.outbound_routes.list_outbound_routes(tenant_id)
 
         as2_ids: set[UUID] = set()
         sftp_ids: set[UUID] = set()
@@ -91,7 +86,7 @@ class OutboundRouteService:
 
         results: list[OutboundRouteListEntity] = []
 
-        def _resolve_destination(r: Any) -> tuple[ConnectionType | str, str]:
+        def _resolve_destination(r: OutboundRouteDomainModel) -> tuple[ConnectionType | str, str]:
             if r.as2_partner_id:
                 return ConnectionType.AS2, as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
             if r.sftp_partner_id:

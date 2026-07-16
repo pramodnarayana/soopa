@@ -140,6 +140,7 @@ async def test_list_routes(mock_uow, global_repo):
     class FakeRoute:
         def __init__(self, id, as2_partner_id, sftp_partner_id, webhook_id):
             self.id = id
+            self.tenant_id = 1
             self.name = "Test Route"
             self.processing_mode = "TRANSLATE"
             self.active = True

@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 from uuid import UUID
 
 from api.core.uow import UnitOfWork
@@ -10,7 +9,7 @@ from api.domain.models import (
     UpdateInboundRouteCmd,
 )
 from domain.events import ProvisioningEventType
-from domain.models import ConnectionType, Direction
+from domain.models import ConnectionType, Direction, InboundRouteDomainModel
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +56,7 @@ class InboundRouteService:
         return res
 
     async def list_inbound_routes(self, tenant_id: int) -> list[InboundRouteListEntity]:
-        from domain.models import InboundRouteDomainModel
-
-        inbound: list[InboundRouteDomainModel] = await self.uow.inbound_routes.list_inbound_routes(
-            tenant_id
-        )
+        inbound = await self.uow.inbound_routes.list_inbound_routes(tenant_id)
 
         as2_ids: set[UUID] = set()
         sftp_ids: set[UUID] = set()
@@ -93,14 +88,14 @@ class InboundRouteService:
 
         results: list[InboundRouteListEntity] = []
 
-        def _resolve_destination(r: Any) -> tuple[ConnectionType | str, str]:
+        def _resolve_destination(r: InboundRouteDomainModel) -> tuple[ConnectionType | str, str]:
             if r.as2_partner_id:
                 return ConnectionType.AS2, as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
             if r.sftp_partner_id:
                 return ConnectionType.SFTP, sftp_names.get(
                     r.sftp_partner_id, str(r.sftp_partner_id)
                 )
-            if getattr(r, "webhook_id", None):
+            if r.webhook_id:
                 return ConnectionType.WEBHOOK, webhook_names.get(r.webhook_id, str(r.webhook_id))
             return "UNKNOWN", "Unknown"
 

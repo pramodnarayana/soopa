@@ -135,7 +135,7 @@ export function EdiEditorPane({
 
       {/* Drag-over full-screen overlay */}
       {isDragging && (
-        <div className="absolute inset-0 bg-indigo-50/90 z-20 flex flex-col items-center justify-center border-2 border-indigo-400 border-dashed m-2 rounded-lg backdrop-blur-sm transition-all duration-200">
+        <div className="absolute inset-0 bg-indigo-50/90 z-20 flex flex-col items-center justify-center border-2 border-indigo-400 border-dashed m-2 rounded-lg backdrop-blur-sm transition-all duration-200 pointer-events-none">
           <UploadCloud className="w-10 h-10 text-indigo-500 mb-3 animate-bounce" />
           <span className="text-indigo-700 font-semibold text-lg tracking-tight">Drop file to load</span>
         </div>

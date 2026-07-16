@@ -160,7 +160,7 @@ async def create_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if uow.global_session is None:
+            if uow.tenant_session is None:
                 raise HTTPException(status_code=500, detail="Data plane not initialized")
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.partner_id)
             if not partner:
@@ -202,7 +202,7 @@ async def update_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if uow.global_session is None:
+            if uow.tenant_session is None:
                 raise HTTPException(status_code=500, detail="Data plane not initialized")
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
             if not partner:
@@ -233,7 +233,7 @@ async def delete_sftp_partner(
     """Deletes an SFTP partner."""
     async with uow:
         try:
-            if uow.global_session is None:
+            if uow.tenant_session is None:
                 raise HTTPException(status_code=500, detail="Tenant data plane not available")
             await uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
             await uow.commit()

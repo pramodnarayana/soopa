@@ -1,8 +1,10 @@
 import uuid
 from collections.abc import Sequence
+from dataclasses import asdict, replace
 from typing import Any
 
 from api.domain.models import (
+    UNSET,
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
@@ -61,7 +63,15 @@ class FakeGlobalStore:
     async def update_sftp_partner(
         self, tenant_id: int, partner_id: uuid.UUID, cmd: UpdateSFTPPartnerCmd
     ) -> bool:
-        return True
+        for p in self.sftp_partners:
+            if p["id"] == partner_id and p["tenant_id"] == tenant_id:
+                updates = {k: v for k, v in asdict(cmd).items() if not isinstance(v, type(UNSET))}
+                active_val = updates.pop("active", None)
+                if active_val is not None:
+                    p["status"] = "ACTIVE" if active_val else "INACTIVE"
+                p["cmd"] = replace(p["cmd"], **updates)
+                return True
+        return False
 
     async def delete_sftp_partner(self, tenant_id: int, partner_id: uuid.UUID) -> None:
         self.sftp_partners = [
@@ -79,8 +89,16 @@ class FakeGlobalStore:
 
     async def update_as2_partnership(
         self, tenant_id: int, partnership_id: uuid.UUID, cmd: UpdateAS2PartnershipCmd
-    ) -> None:
-        pass
+    ) -> bool:
+        for p in self.partnerships:
+            if p["id"] == partnership_id and p["tenant_id"] == tenant_id:
+                updates = {k: v for k, v in asdict(cmd).items() if not isinstance(v, type(UNSET))}
+                active_val = updates.pop("active", None)
+                if active_val is not None:
+                    p["status"] = "ACTIVE" if active_val else "INACTIVE"
+                p["cmd"] = replace(p["cmd"], **updates)
+                return True
+        return False
 
     async def delete_as2_partnership(self, tenant_id: int, partnership_id: uuid.UUID) -> None:
         self.partnerships = [
@@ -214,7 +232,20 @@ class FakeGlobalStore:
         active: bool | None = None,
         url: str | None = None,
     ) -> bool:
-        return True
+        from dataclasses import replace
+
+        for w in self.webhooks:
+            if w["id"] == webhook_id and w["tenant_id"] == tenant_id:
+                updates = {}
+                if name is not None:
+                    updates["name"] = name
+                if url is not None:
+                    updates["url"] = url
+                w["cmd"] = replace(w["cmd"], **updates)
+                if active is not None:
+                    w["status"] = "ACTIVE" if active else "INACTIVE"
+                return True
+        return False
 
     async def delete_webhook(self, tenant_id: int, webhook_id: uuid.UUID) -> bool:
         self.webhooks = [
@@ -235,14 +266,14 @@ class FakeGlobalStore:
         r_id = uuid.uuid4()
         if not hasattr(self, "inbound_routes"):
             self.inbound_routes = []
-        self.inbound_routes.append(FakeRoute(r_id, cmd))
+        self.inbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
     async def create_outbound_route(self, tenant_id: int, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
         if not hasattr(self, "outbound_routes"):
             self.outbound_routes = []
-        self.outbound_routes.append(FakeRoute(r_id, cmd))
+        self.outbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
     async def update_inbound_route(
@@ -262,10 +293,10 @@ class FakeGlobalStore:
         return True
 
     async def list_inbound_routes(self, tenant_id: int) -> list[Any]:
-        return getattr(self, "inbound_routes", [])
+        return [r for r in getattr(self, "inbound_routes", []) if r.tenant_id == tenant_id]
 
     async def list_outbound_routes(self, tenant_id: int) -> list[Any]:
-        return getattr(self, "outbound_routes", [])
+        return [r for r in getattr(self, "outbound_routes", []) if r.tenant_id == tenant_id]
 
     async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]:
         return [p for p in getattr(self, "sftp_partners", []) if p["tenant_id"] == tenant_id]
@@ -310,8 +341,9 @@ class FakeGlobalStore:
 
 
 class FakeRoute:
-    def __init__(self, id, cmd):
+    def __init__(self, id, tenant_id, cmd):
         self.id = id
+        self.tenant_id = tenant_id
         self.name = getattr(cmd, "name", "Test Route")
         self.processing_mode = getattr(cmd, "processing_mode", "TRANSFORM")
         self.active = True
@@ -320,6 +352,10 @@ class FakeRoute:
         self.webhook_id = getattr(cmd, "webhook_id", None)
         self.isa_sender_id = getattr(cmd, "isa_sender_id", "S1")
         self.isa_receiver_id = getattr(cmd, "isa_receiver_id", "R1")
+        self.gs_sender_id = getattr(cmd, "gs_sender_id", "S1")
+        self.gs_receiver_id = getattr(cmd, "gs_receiver_id", "R1")
+        self.transaction_type = getattr(cmd, "transaction_type", "*")
+        self.trading_partner_id = getattr(cmd, "trading_partner_id", None)
 
 
 class FakeTenantStore:
@@ -331,12 +367,12 @@ class FakeTenantStore:
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
-        self.inbound_routes.append(FakeRoute(r_id, cmd))
+        self.inbound_routes.append(FakeRoute(r_id, 1, cmd))
         return r_id
 
     async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
         r_id = uuid.uuid4()
-        self.outbound_routes.append(FakeRoute(r_id, cmd))
+        self.outbound_routes.append(FakeRoute(r_id, 1, cmd))
         return r_id
 
     async def get_all_routes(self) -> dict[str, list[Any]]:
@@ -471,6 +507,7 @@ class FakeUnitOfWork:
         self.transactions = FakeTenantStore()
 
         self.global_session = MockSession(repo)
+        self.tenant_session = MockSession(repo)
 
     async def __aenter__(self):
         return self
