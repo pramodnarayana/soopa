@@ -161,6 +161,12 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         record = result.scalars().first()
         return InboundRouteDomainModel.model_validate(record) if record else None
 
+    async def list_inbound_routes(self, tenant_id: int) -> list[InboundRouteDomainModel]:
+        result = await self.session.execute(
+            select(InboundRoute).where(InboundRoute.tenant_id == tenant_id)
+        )
+        return [InboundRouteDomainModel.model_validate(r) for r in result.scalars().all()]
+
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> int | None:
         result = await self.session.execute(
             select(InboundRoute.tenant_id).where(

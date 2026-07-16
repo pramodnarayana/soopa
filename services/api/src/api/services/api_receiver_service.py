@@ -81,8 +81,6 @@ class ApiReceiverService:
                 "payload": payload,
                 "status": "RECEIVED",
             }
-            if not self.uow.transactions:
-                raise ValueError("Tenant session required to save EDI JSON")
             await self.uow.transactions.create_edi_json(
                 tenant_id=tenant_id, payload=edi_json_payload
             )

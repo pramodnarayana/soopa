@@ -261,10 +261,11 @@ class FakeGlobalStore:
     async def delete_outbound_route(self, tenant_id: int, route_id: uuid.UUID) -> bool:
         return True
 
-    async def get_all_routes(self, tenant_id: int) -> dict[str, list[Any]]:
-        inbound = getattr(self, "inbound_routes", [])
-        outbound = getattr(self, "outbound_routes", [])
-        return {"inbound": inbound, "outbound": outbound}
+    async def list_inbound_routes(self, tenant_id: int) -> list[Any]:
+        return getattr(self, "inbound_routes", [])
+
+    async def list_outbound_routes(self, tenant_id: int) -> list[Any]:
+        return getattr(self, "outbound_routes", [])
 
     async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]:
         return [p for p in getattr(self, "sftp_partners", []) if p["tenant_id"] == tenant_id]

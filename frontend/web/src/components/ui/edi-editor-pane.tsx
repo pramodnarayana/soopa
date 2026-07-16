@@ -87,6 +87,7 @@ export function EdiEditorPane({
     const onDragLeave = (e: DragEvent) => { e.preventDefault(); setIsDragging(false); };
     const onDrop = async (e: DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       setIsDragging(false);
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         await applyFile(e.dataTransfer.files[0]);
@@ -123,7 +124,7 @@ export function EdiEditorPane({
       )}
 
       {/* Certificate detected — bottom status bar (when value present) */}
-      {!error && value && showCertDetected && value.trim().startsWith('-----BEGIN') && value.trim().includes('-----END') && (
+      {!error && value && showCertDetected && value.includes('-----BEGIN CERTIFICATE-----') && value.includes('-----END CERTIFICATE-----') && (
         <div className="absolute bottom-0 left-0 right-0 z-30 px-4 py-2 bg-green-50 border-t border-green-200 text-green-700 text-xs font-semibold flex items-center gap-2 pointer-events-none">
           <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

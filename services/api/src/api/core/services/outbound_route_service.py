@@ -65,8 +65,9 @@ class OutboundRouteService:
     async def list_outbound_routes(self, tenant_id: int) -> list[OutboundRouteListEntity]:
         from domain.models import OutboundRouteDomainModel
 
-        routes_dict = await self.uow.outbound_routes.get_all_routes(tenant_id)
-        outbound: list[OutboundRouteDomainModel] = routes_dict.get("outbound", [])  # type: ignore
+        outbound: list[
+            OutboundRouteDomainModel
+        ] = await self.uow.outbound_routes.list_outbound_routes(tenant_id)
 
         as2_ids: set[UUID] = set()
         sftp_ids: set[UUID] = set()

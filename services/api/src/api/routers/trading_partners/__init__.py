@@ -38,7 +38,7 @@ async def list_trading_partners(
             as2_partners_global = await uow.as2_partners.list_as2_partners(0)
             as2_partners = list(as2_partners) + list(as2_partners_global)
 
-            sftp_partners = await uow.sftp_partners.list_sftp_partners(tenant_id)
+        sftp_partners = await uow.sftp_partners.list_sftp_partners(tenant_id)
 
         partners = []
         for p in as2_partners:

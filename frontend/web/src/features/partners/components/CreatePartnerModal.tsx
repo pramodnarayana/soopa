@@ -156,24 +156,21 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         )}
       </div>
 
-      {/* Certificate for all partners */}
+      {/* Certificate */}
       <div className="grid gap-2">
         <Label className="text-slate-600 font-medium">Public Certificate</Label>
-        <CertificateInput
-          value={certPem}
-          onChange={setCertPem}
-          extraActions={isLocal && !certPem ? (
-            <button
-              type="button"
-              className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-              onClick={() => {
-                toast({ title: 'Info', description: 'Certificate will be generated upon saving.' });
-              }}
-            >
-              Generate Certificate
-            </button>
-          ) : undefined}
-        />
+        {isLocal ? (
+          <div className="border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-center p-8 text-center flex-col gap-3 h-[180px]">
+            <p className="text-sm text-slate-500 max-w-[250px]">
+              A new certificate will be automatically generated and assigned when you save this local station.
+            </p>
+          </div>
+        ) : (
+          <CertificateInput
+            value={certPem}
+            onChange={setCertPem}
+          />
+        )}
       </div>
     </FormModal>
   );

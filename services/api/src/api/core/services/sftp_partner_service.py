@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import uuid
 from uuid import UUID
@@ -68,7 +69,7 @@ class SFTPPartnerService:
             tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
         )
 
-        update_hash = str(hash(str(cmd)))
+        update_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
         await self.uow.outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_UPDATED,

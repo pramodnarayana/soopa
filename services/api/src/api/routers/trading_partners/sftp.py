@@ -160,7 +160,7 @@ async def create_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if not uow.global_session is not None:
+            if uow.global_session is None:
                 raise HTTPException(status_code=500, detail="Data plane not initialized")
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.partner_id)
             if not partner:
@@ -202,7 +202,7 @@ async def update_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if not uow.global_session is not None:
+            if uow.global_session is None:
                 raise HTTPException(status_code=500, detail="Data plane not initialized")
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
             if not partner:

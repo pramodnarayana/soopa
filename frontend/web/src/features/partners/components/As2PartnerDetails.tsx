@@ -56,7 +56,15 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
   };
 
   const handleGenerateCertificate = () => {
-    rotateCertificates.mutate({ id: partner.id, payload: { action: 'generate' } });
+    rotateCertificates.mutate(
+      { id: partner.id, payload: { action: 'generate' } },
+      {
+        onSuccess: () => {
+          setPasteDialogOpen(false);
+          setPasteValue('');
+        }
+      }
+    );
   };
 
 

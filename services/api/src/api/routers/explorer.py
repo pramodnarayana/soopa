@@ -113,7 +113,7 @@ async def explore_edi_messages(
 ) -> Any:
     async with uow:
         filters_list = [f.model_dump() for f in req.filters]
-        messages = await uow.transactions.explorer_list_edi_messages(  # type: ignore
+        messages = await uow.transactions.explorer_list_edi_messages(
             tenant_id=tenant_id,
             filters=filters_list,
             limit=limit,
@@ -132,7 +132,7 @@ async def explore_edi_json(
 ) -> Any:
     async with uow:
         filters_list = [f.model_dump() for f in req.filters]
-        jsons = await uow.transactions.explorer_list_edi_json(  # type: ignore
+        jsons = await uow.transactions.explorer_list_edi_json(
             tenant_id=tenant_id,
             filters=filters_list,
             limit=limit,

@@ -98,7 +98,7 @@ def base_mock_uow():
     mock_global.execute.return_value = mock_db_result
 
     uow = UnitOfWork(global_session=mock_global, tenant_session=mock_tenant)
-    uow.transactions = mock_repo
+    uow._transactions = mock_repo
     return uow
 
 
@@ -163,7 +163,7 @@ def test_get_transaction_detail_sftp():
     mock_global.execute.return_value = mock_db_result
 
     mock_uow = UnitOfWork(global_session=mock_global, tenant_session=mock_tenant)
-    mock_uow.transactions = mock_repo
+    mock_uow._transactions = mock_repo
 
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")
@@ -206,7 +206,7 @@ def test_get_transaction_detail_fallback():
     mock_global.execute.return_value = mock_db_result
 
     mock_uow = UnitOfWork(global_session=mock_global, tenant_session=mock_tenant)
-    mock_uow.transactions = mock_repo
+    mock_uow._transactions = mock_repo
 
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")
@@ -222,7 +222,7 @@ def test_get_transaction_not_found():
 
     mock_repo = AsyncMock()
     mock_repo.get_transaction.return_value = None
-    mock_uow.transactions = mock_repo
+    mock_uow._transactions = mock_repo
 
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     uid = str(uuid.uuid4())
@@ -278,7 +278,7 @@ def test_get_transaction_webhook_fallback():
     mock_global_session.execute.return_value = mock_global_execute
 
     mock_uow = UnitOfWork(global_session=mock_global_session, tenant_session=mock_tenant_session)
-    mock_uow.transactions = mock_repo
+    mock_uow._transactions = mock_repo
 
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")

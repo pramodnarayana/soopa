@@ -23,7 +23,6 @@ export function CertificateInput({ value, onChange, extraActions }: CertificateI
         extraActions={extraActions}
         fontSize={14}
         showCertDetected
-        showEmptyState={false}
         acceptedFileExtensions=".pem,.crt,.cer,.cert,.key,.txt"
       />
     </div>

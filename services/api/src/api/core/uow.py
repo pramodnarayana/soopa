@@ -46,7 +46,13 @@ class UnitOfWork:
         self.webhooks = SqlAlchemyWebhookRepository(gs)
         self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
 
-        self.transactions = SqlAlchemyTransactionRepository(ts) if ts else None
+        self._transactions = SqlAlchemyTransactionRepository(ts) if ts else None
+
+    @property
+    def transactions(self) -> SqlAlchemyTransactionRepository:
+        if not self._transactions:
+            raise RuntimeError("Transaction repository requires an active tenant session.")
+        return self._transactions
 
     async def __aenter__(self) -> Self:
         return self
