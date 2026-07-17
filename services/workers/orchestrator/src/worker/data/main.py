@@ -121,10 +121,26 @@ async def main() -> None:
         )
     )
 
-    # Run the scheduler loop in the background
-    await scheduler_service.start(poll_interval_seconds=10.0)
+    try:
+        # Run the scheduler loop in the background
+        await scheduler_service.start(poll_interval_seconds=10.0)
 
-    await asyncio.gather(transform_task, deliver_task, scheduled_jobs_task)
+        await asyncio.gather(transform_task, deliver_task, scheduled_jobs_task)
+    finally:
+        logger.info("Shutting down data worker tasks gracefully...")
+        transform_task.cancel()
+        deliver_task.cancel()
+        scheduled_jobs_task.cancel()
+
+        if hasattr(scheduler_service, "stop"):
+            await scheduler_service.stop()
+
+        import contextlib
+
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(
+                transform_task, deliver_task, scheduled_jobs_task, return_exceptions=True
+            )
 
 
 if __name__ == "__main__":

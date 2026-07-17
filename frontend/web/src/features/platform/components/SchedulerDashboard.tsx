@@ -69,11 +69,11 @@ export const SchedulerDashboard = () => {
 
     try {
       if (scheduleType === 'interval') {
-        const val = parseInt(intervalValue, 10);
-        if (isNaN(val) || val <= 0) {
+        if (!/^\d+$/.test(intervalValue) || parseInt(intervalValue, 10) <= 0) {
           setIntervalError('Interval must be a positive integer.');
           return;
         }
+        const val = parseInt(intervalValue, 10);
 
         let multiplier = 1;
         if (intervalUnit === 'minutes') multiplier = 60;

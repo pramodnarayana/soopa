@@ -1,6 +1,6 @@
 import abc
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from scheduler.domain.models import Job
@@ -9,6 +9,10 @@ from scheduler.domain.models import Job
 class JobRepositoryPort(abc.ABC):
     @abc.abstractmethod
     async def claim_next_jobs(self, worker_id: str, limit: int) -> list[Job]:
+        pass
+
+    @abc.abstractmethod
+    async def sweep_stuck_jobs(self, timeout: timedelta) -> int:
         pass
 
     @abc.abstractmethod

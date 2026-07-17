@@ -135,8 +135,6 @@ async def seed_database() -> None:
                 # ensuring existing rows stay consistent after schema migrations.
                 job.target_queue = job_def.target_queue
                 job.app_namespace = job_def.app_namespace
-                job.cron_expression = job_def.default_cron_expression
-                job.timezone = job_def.default_timezone
                 job.min_interval_seconds = job_def.min_interval_seconds
                 job.max_interval_seconds = job_def.max_interval_seconds
                 logger.info(f"Synced config for system job: {job_def.name}.")

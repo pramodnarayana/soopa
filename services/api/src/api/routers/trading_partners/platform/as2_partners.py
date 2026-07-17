@@ -96,13 +96,12 @@ async def create_platform_as2_partner(
     Creates a new Global AS2 Trading Partner (Local or Remote) in the Control Plane.
     If is_local is True, automatically generates a self-signed cert and stores private key in Vault.
     """
+    public_cert_pem = request.public_cert_pem
+    private_key_vault_ref = request.private_key_vault_ref
+    auto_generated = False
+
     try:
         async with uow:
-            public_cert_pem = request.public_cert_pem
-            private_key_vault_ref = request.private_key_vault_ref
-
-            auto_generated = False
-
             if request.is_local:
                 if private_key_vault_ref:
                     # Pre-stored vault ref (from generate cert flow) — use as-is

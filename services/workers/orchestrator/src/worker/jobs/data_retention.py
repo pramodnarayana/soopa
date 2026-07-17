@@ -39,7 +39,7 @@ class DataRetentionCleanupJobHandler(JobHandlerPort):
                     return await self._cleanup_shard(shard_name, shard_dsn)
                 except Exception as e:
                     logger.error(f"[DataRetentionCleanup] Failed cleaning shard {shard_name}: {e}")
-                    return 0, 0
+                    raise
 
         results = await asyncio.gather(
             *[_bounded_cleanup(shard.name, shard.dsn) for shard in shards]

@@ -74,9 +74,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
     tenant_name = f"Test Tenant_{suffix}"
 
     # 1. Insert a shard and a tenant into the real DB
-    shard = DatabaseShard(
-        name=shard_name, dsn="postgresql+asyncpg://test:pass@localhost:5433/test_shard"
-    )
+    shard = DatabaseShard(name=shard_name, dsn=SHARD_1_URL)
     global_session.add(shard)
     await global_session.commit()
 
@@ -96,7 +94,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
         # Resolving once should hit DB
         resolved_shard_name, shard_dsn = await resolver.resolve(tenant_id)
         assert resolved_shard_name == shard_name
-        assert shard_dsn == "postgresql+asyncpg://test:pass@localhost:5433/test_shard"
+        assert shard_dsn == SHARD_1_URL
 
         # Resolving again should hit cache
         resolved_shard_name2, shard_dsn2 = await resolver.resolve(tenant_id)
@@ -203,3 +201,27 @@ async def test_poll_sqs_queue():
 
     # Ensure all 3 messages were deleted (1 success, 2 poison)
     assert mock_sqs.delete_message.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_main_execution_loop():
+    from worker.data.main import main
+
+    with (
+        patch("worker.data.main.asyncio.create_task") as mock_create_task,
+        patch("worker.data.main.asyncio.gather", new_callable=AsyncMock) as mock_gather,
+        patch("worker.data.main.DatabaseRouter"),
+        patch("worker.data.main.TenantResolver"),
+        patch("worker.data.main.SqsPublisherAdapter"),
+        patch("worker.data.main.poll_sqs_queue", new_callable=AsyncMock),
+        patch("worker.data.main.SchedulerWorkerService") as mock_scheduler_cls,
+    ):
+        mock_scheduler = MagicMock()
+        mock_scheduler.start = AsyncMock()
+        mock_scheduler.stop = AsyncMock()
+        mock_scheduler_cls.return_value = mock_scheduler
+
+        await main()
+
+        assert mock_create_task.call_count >= 3
+        mock_gather.assert_awaited()

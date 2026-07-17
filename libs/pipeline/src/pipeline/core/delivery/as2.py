@@ -22,7 +22,13 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         self.as2_delivery = as2_delivery
         self._as2_orchestrator = AS2MessageOrchestrator(vault=vault)
 
-    async def deliver(self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel) -> None:
+    async def deliver(
+        self,
+        trace_id: str,
+        partner_id: str,
+        edi_msg: EdiMessageDomainModel,
+        idempotency_key: str | None = None,
+    ) -> None:
         if not await self.repository.claim_edi_message(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return

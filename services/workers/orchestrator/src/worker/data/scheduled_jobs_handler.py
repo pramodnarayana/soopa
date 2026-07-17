@@ -30,7 +30,7 @@ async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
     handler = registry.get(job_name)
     if not handler:
         logger.error(f"Unknown scheduled job name: {job_name}")
-        return
+        raise ValueError(f"Unknown scheduled job name: {job_name}")
 
     # Reconstruct a dummy Job object just enough for the handler to execute it
     job = Job(id=uuid.UUID(job_id), name=job_name, payload=job_payload)

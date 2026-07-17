@@ -21,7 +21,13 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         super().__init__(repository, vault)
         self.http_delivery = http_delivery
 
-    async def deliver(self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel) -> None:
+    async def deliver(
+        self,
+        trace_id: str,
+        partner_id: str,
+        edi_msg: EdiMessageDomainModel,
+        idempotency_key: str | None = None,
+    ) -> None:
         if not await self.repository.claim_api_payload(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return
@@ -49,8 +55,12 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                     )
                 auth_token = await self.vault.get_secret(partner["auth_header_vault_ref"])
 
+            # Pass idempotency_key down to the http_delivery if it supports it, or add it to headers manually
             status_code, response_text = await self.http_delivery.deliver(
-                url=partner["url"], payload=raw_payload, auth_token=auth_token
+                url=partner["url"],
+                payload=raw_payload,
+                auth_token=auth_token,
+                idempotency_key=idempotency_key,
             )
         except Exception as e:
             await self.repository.update_api_payload_status(

@@ -19,7 +19,7 @@ class DeliveryRouter:
         self.repository = repository
         self.strategies = strategies
 
-    async def deliver(self, trace_id: str) -> None:
+    async def deliver(self, trace_id: str, idempotency_key: str | None = None) -> None:
         """
         Looks up the route for the given trace_id and dispatches to the
         correct delivery handler via the strategy registry.
@@ -65,7 +65,7 @@ class DeliveryRouter:
         for route_key, strategy in self.strategies.items():
             partner_id = route.get(route_key)
             if partner_id:
-                await strategy.deliver(trace_id, partner_id, edi_msg)
+                await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
                 return
 
         raise ValueError(

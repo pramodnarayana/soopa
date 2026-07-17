@@ -89,8 +89,18 @@ class SchedulerWorkerService:
                 await self.repository.mark_failed(job.id, error=str(e))
 
     async def _poll_loop(self, poll_interval_seconds: float) -> None:
+        import datetime
+
+        last_sweep = datetime.datetime.now(datetime.UTC)
         while self._is_running:
             try:
+                now = datetime.datetime.now(datetime.UTC)
+                if (now - last_sweep).total_seconds() > 60:
+                    swept = await self.repository.sweep_stuck_jobs(datetime.timedelta(seconds=300))
+                    if swept > 0:
+                        logger.info(f"Swept {swept} stuck jobs back to PENDING.")
+                    last_sweep = now
+
                 # Remove completed tasks from active set
                 self._active_jobs = {task for task in self._active_jobs if not task.done()}
 

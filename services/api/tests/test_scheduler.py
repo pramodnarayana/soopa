@@ -91,11 +91,11 @@ def test_scheduler_update_job_invalid_interval(client, mock_uow):
 def test_scheduler_create_job(client, mock_uow):
     resp = client.post(
         "/api/v1/platform/scheduler/jobs",
-        json={"name": "test_job", "interval_seconds": 60, "payload": {}},
+        json={"name": "outbox_sweeper", "interval_seconds": 60, "payload": {}},
     )
     assert resp.status_code == 200
     assert mock_uow.global_session.add.called
-    assert resp.json()["name"] == "test_job"
+    assert resp.json()["name"] == "outbox_sweeper"
 
 
 def test_scheduler_create_job_already_exists(client, mock_uow):
@@ -105,7 +105,7 @@ def test_scheduler_create_job_already_exists(client, mock_uow):
 
     resp = client.post(
         "/api/v1/platform/scheduler/jobs",
-        json={"name": "test_job"},
+        json={"name": "outbox_sweeper"},
     )
     assert resp.status_code == 409
 

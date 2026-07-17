@@ -97,7 +97,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
                     self._queue_url_cache[queue_name] = resp["QueueUrl"]
             except Exception:
                 logger.exception(f"Failed to get queue url for {queue_name}")
-                return
+                raise
 
         queue_url = self._queue_url_cache[queue_name]
 
@@ -108,3 +108,4 @@ class SqsPublisherAdapter(MessagePublisherPort):
                 await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(payload))
         except Exception:
             logger.exception(f"Failed to send single message to {queue_name}")
+            raise

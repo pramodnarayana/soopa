@@ -127,6 +127,6 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Required 75% coverage
+# Required 80% coverage
 show_missing = true
-fail_under = 75
+fail_under = 80

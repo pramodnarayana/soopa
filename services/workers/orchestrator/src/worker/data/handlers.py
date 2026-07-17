@@ -18,7 +18,7 @@ from pipeline.core.delivery import (
 )
 from pipeline.core.transformation import InboundTransformService, OutboundTransformService
 from worker.adapters.vault import WorkerVaultAdapter
-from worker.core.security import validate_target_url
+from worker.core.security import ssrf_safe_context
 from worker.core.tenant_resolver import TenantResolver
 
 logger = logging.getLogger(__name__)
@@ -142,10 +142,10 @@ async def process_delivery(
             settings=get_settings(),
             storage=storage_adapter,
         )
-        http_adapter = HttpxDeliveryAdapter(validator=validate_target_url)
+        http_adapter = HttpxDeliveryAdapter(validator=ssrf_safe_context)
         sftp_adapter = ParamikoSftpDeliveryAdapter()
         vault_adapter = WorkerVaultAdapter()
-        as2_adapter = HttpxAS2DeliveryAdapter()
+        as2_adapter = HttpxAS2DeliveryAdapter(validator=ssrf_safe_context)
 
         if idempotency_key:
             import uuid
@@ -165,13 +165,25 @@ async def process_delivery(
                 await session.commit()
                 return
 
-            # Mark as processed in same transaction
-            session.add(ProcessedEvent(idempotency_key=key_uuid))
+            # Check Outbox status
+            stmt = select(DataPlaneOutbox).where(DataPlaneOutbox.idempotency_key == key_uuid)
+            outbox_record = (await session.execute(stmt)).scalar_one_or_none()
+            if outbox_record:
+                if outbox_record.status == "DELIVERING":
+                    logger.warning(
+                        f"Delivery {key_uuid} is in DELIVERING state (crash/timeout). Proceeding with retry downstream..."
+                    )
+                elif outbox_record.status == "PROCESSED":
+                    await session.commit()
+                    return
+
+            # Persist "DELIVERING" state
             await session.execute(
                 update(DataPlaneOutbox)
                 .where(DataPlaneOutbox.idempotency_key == key_uuid)
-                .values(status="PROCESSED")
+                .values(status="DELIVERING")
             )
+            await session.commit()
 
         # Instantiate Domain Service
         strategies = {
@@ -184,11 +196,32 @@ async def process_delivery(
             strategies=strategies,
         )
 
-        # Execute pure domain logic
-        await service.deliver(trace_id)
+        try:
+            # Execute pure domain logic
+            await service.deliver(
+                trace_id, idempotency_key=str(key_uuid) if idempotency_key else None
+            )
 
-        # Commit transaction
-        await session.commit()
+            if idempotency_key:
+                session.add(ProcessedEvent(idempotency_key=key_uuid))
+                await session.execute(
+                    update(DataPlaneOutbox)
+                    .where(DataPlaneOutbox.idempotency_key == key_uuid)
+                    .values(status="PROCESSED")
+                )
+            # Commit transaction
+            await session.commit()
+        except Exception:
+            if idempotency_key:
+                await session.rollback()
+                await session.execute(
+                    update(DataPlaneOutbox)
+                    .where(DataPlaneOutbox.idempotency_key == key_uuid)
+                    .values(status="FAILED")
+                )
+                await session.commit()
+            raise
+
     except Exception:
         await session.rollback()
         raise

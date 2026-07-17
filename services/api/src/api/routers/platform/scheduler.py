@@ -77,6 +77,20 @@ async def create_job(request: JobCreateRequest, uow: UnitOfWork = Depends(get_uo
     from sqlalchemy.exc import IntegrityError
 
     now = datetime.now(UTC)
+
+    from scheduler.registry import SYSTEM_JOB_REGISTRY
+
+    job_def = next((j for j in SYSTEM_JOB_REGISTRY if j.name.value == request.name), None)
+    if not job_def:
+        raise HTTPException(
+            status_code=422, detail=f"Job '{request.name}' is not a registered system job."
+        )
+
+    if not job_def.target_queue:
+        raise HTTPException(
+            status_code=422, detail=f"Job '{request.name}' has no configured target queue."
+        )
+
     async with uow:
         try:
             async with uow.global_session.begin_nested():
@@ -87,8 +101,12 @@ async def create_job(request: JobCreateRequest, uow: UnitOfWork = Depends(get_uo
                     interval_seconds=request.interval_seconds,
                     status=JobStatus.PENDING.value,
                     next_run_at=now,
+                    target_queue=job_def.target_queue,
+                    app_namespace=job_def.app_namespace,
+                    min_interval_seconds=job_def.min_interval_seconds,
+                    max_interval_seconds=job_def.max_interval_seconds,
                     retry_count=0,
-                    max_retries=3,
+                    max_retries=job_def.max_retries,
                     created_at=now,
                     updated_at=now,
                 )

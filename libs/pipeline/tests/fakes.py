@@ -233,9 +233,20 @@ class FakeHttpDeliveryAdapter:
         self.status_code = status_code
 
     async def deliver(
-        self, url: str, payload: bytes, auth_token: str | None = None
+        self,
+        url: str,
+        payload: bytes,
+        auth_token: str | None = None,
+        idempotency_key: str | None = None,
     ) -> tuple[int, str]:
-        self.delivered.append({"url": url, "payload": payload, "auth_token": auth_token})
+        self.delivered.append(
+            {
+                "url": url,
+                "payload": payload,
+                "auth_token": auth_token,
+                "idempotency_key": idempotency_key,
+            }
+        )
         return self.status_code, "Mock response body"
 
 

@@ -14,7 +14,16 @@ async def main() -> None:
     data_task = asyncio.create_task(data_main())
     provision_task = asyncio.create_task(provision_main())
 
-    await asyncio.gather(data_task, provision_task)
+    try:
+        await asyncio.gather(data_task, provision_task)
+    finally:
+        logger.info("Shutting down top-level worker tasks gracefully...")
+        data_task.cancel()
+        provision_task.cancel()
+        import contextlib
+
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(data_task, provision_task, return_exceptions=True)
 
 
 if __name__ == "__main__":
