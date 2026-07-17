@@ -1,0 +1,110 @@
+import json
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+
+import aioboto3  # type: ignore[import-untyped]
+
+from worker.ports.message_publisher import MessagePublisherPort
+
+logger = logging.getLogger(__name__)
+
+
+class SqsPublisherAdapter(MessagePublisherPort):
+    def __init__(self, endpoint_url: str | None = None, region: str = "us-east-1"):
+        self.endpoint_url = endpoint_url
+        self.region = region
+        self.session = aioboto3.Session()
+        self._queue_url_cache: dict[str, str] = {}
+        self._sqs_client = None
+
+    @asynccontextmanager
+    async def connect(self) -> AsyncIterator["MessagePublisherPort"]:
+        async with self.session.client(
+            "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+        ) as sqs:
+            self._sqs_client = sqs
+            try:
+                yield self
+            finally:
+                self._sqs_client = None
+
+    async def publish_batch(self, queue_name: str, messages: list[dict[str, Any]]) -> list[str]:
+        if not messages:
+            return []
+
+        if self._sqs_client is None:
+            raise RuntimeError("publish_batch must be called within the connect() context manager")
+
+        sqs = self._sqs_client
+        successful_ids = []
+
+        if queue_name not in self._queue_url_cache:
+            try:
+                resp = await sqs.get_queue_url(QueueName=queue_name)
+                self._queue_url_cache[queue_name] = resp["QueueUrl"]
+            except Exception:
+                logger.exception(f"Failed to get queue url for {queue_name}")
+                return []
+
+        queue_url = self._queue_url_cache[queue_name]
+
+        # SQS allows max 10 messages per batch
+        for i in range(0, len(messages), 10):
+            batch = messages[i : i + 10]
+            entries = []
+            for msg in batch:
+                # 'Id' is required and used to correlate success/failure responses.
+                # We pass the full message dict (which must contain 'Id').
+                if "Id" not in msg:
+                    logger.warning("Message missing 'Id' key, skipping.")
+                    continue
+
+                entries.append(
+                    {
+                        "Id": msg["Id"],
+                        "MessageBody": json.dumps(msg["MessageBody"]),
+                    }
+                )
+
+            if not entries:
+                continue
+
+            try:
+                resp = await sqs.send_message_batch(QueueUrl=queue_url, Entries=entries)
+
+                for success in resp.get("Successful", []):
+                    successful_ids.append(success["Id"])
+
+                for failed in resp.get("Failed", []):
+                    logger.error(
+                        f"Failed to forward message id={failed['Id']}: {failed['Message']}"
+                    )
+            except Exception:
+                logger.exception(f"Failed to send batch to {queue_name}")
+
+        return successful_ids
+
+    async def publish(self, queue_name: str, payload: dict) -> None:
+        """Publishes a single message without requiring the connect context manager."""
+        if queue_name not in self._queue_url_cache:
+            try:
+                async with self.session.client(
+                    "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+                ) as sqs:
+                    resp = await sqs.get_queue_url(QueueName=queue_name)
+                    self._queue_url_cache[queue_name] = resp["QueueUrl"]
+            except Exception:
+                logger.exception(f"Failed to get queue url for {queue_name}")
+                return
+
+        queue_url = self._queue_url_cache[queue_name]
+
+        try:
+            async with self.session.client(
+                "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+            ) as sqs:
+                await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(payload))
+        except Exception:
+            logger.exception(f"Failed to send single message to {queue_name}")

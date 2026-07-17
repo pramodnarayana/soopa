@@ -69,6 +69,7 @@ export interface CreatePartnerPayload {
   url?: string;
   public_cert_pem?: string;
   private_key_vault_ref?: string;
+  private_key_pem?: string;
 }
 
 export interface UpdatePartnerPayload {

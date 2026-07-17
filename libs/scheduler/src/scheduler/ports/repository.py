@@ -8,7 +8,7 @@ from scheduler.domain.models import Job
 
 class JobRepositoryPort(abc.ABC):
     @abc.abstractmethod
-    async def claim_next_job(self, worker_id: str) -> Job | None:
+    async def claim_next_jobs(self, worker_id: str, limit: int) -> list[Job]:
         pass
 
     @abc.abstractmethod
@@ -21,10 +21,18 @@ class JobRepositoryPort(abc.ABC):
 
     @abc.abstractmethod
     async def schedule_job(
-        self, name: str, payload: dict[str, Any], next_run_at: datetime | None = None
+        self,
+        name: str,
+        payload: dict[str, Any],
+        next_run_at: datetime | None = None,
+        interval_seconds: int | None = None,
     ) -> Job:
         pass
 
     @abc.abstractmethod
     async def reschedule(self, job_id: uuid.UUID, next_run_at: datetime) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def schedule_retry(self, job_id: uuid.UUID, next_run_at: datetime) -> None:
         pass

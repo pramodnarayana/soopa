@@ -60,8 +60,25 @@ async def generate_certificate(
 async def delete_certificate_secret(
     vault_ref: str,
     vault: VaultPort = Depends(get_vault),
+    uow: UnitOfWork = Depends(get_uow),
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
+    async with uow:
+        from database.models.control_plane import AS2Partner
+        from sqlalchemy import or_, select
+
+        stmt = select(AS2Partner).where(
+            or_(
+                AS2Partner.private_key_vault_ref == vault_ref,
+                AS2Partner.prev_private_key_vault_ref == vault_ref,
+            )
+        )
+        res = await uow.global_session.execute(stmt)
+        if res.scalars().first() is not None:
+            raise HTTPException(
+                status_code=400, detail="Cannot delete a private key that is currently in use."
+            )
+
     vault.delete_secret(vault_ref)
 
 
@@ -85,20 +102,29 @@ async def create_platform_as2_partner(
             private_key_vault_ref = request.private_key_vault_ref
 
             auto_generated = False
-            if request.is_local and not private_key_vault_ref:
-                auto_generated = True
-                # Auto-generate self-signed cert if not already generated and provided
-                private_key_bytes, public_cert_bytes = generate_self_signed_cert(
-                    common_name=request.as2_id
-                )
 
-                # Store in Vault
-                private_key_vault_ref = vault.store_private_key(
-                    private_key_pem=private_key_bytes,
-                    alias_prefix=request.name.replace(" ", "_").lower(),
-                )
-
-                public_cert_pem = public_cert_bytes.decode("utf-8")
+            if request.is_local:
+                if private_key_vault_ref:
+                    # Pre-stored vault ref (from generate cert flow) — use as-is
+                    pass
+                elif request.private_key_pem:
+                    # User uploaded their own cert+key — store the private key in Vault
+                    auto_generated = True
+                    private_key_vault_ref = vault.store_private_key(
+                        private_key_pem=request.private_key_pem.encode(),
+                        alias_prefix=request.name.replace(" ", "_").lower(),
+                    )
+                else:
+                    # No cert material provided at all — auto-generate a self-signed cert
+                    auto_generated = True
+                    private_key_bytes, public_cert_bytes = generate_self_signed_cert(
+                        common_name=request.as2_id
+                    )
+                    private_key_vault_ref = vault.store_private_key(
+                        private_key_pem=private_key_bytes,
+                        alias_prefix=request.name.replace(" ", "_").lower(),
+                    )
+                    public_cert_pem = public_cert_bytes.decode("utf-8")
 
             cmd = CreateAS2TradingPartnerCmd(
                 name=request.name,
@@ -127,10 +153,14 @@ async def create_platform_as2_partner(
                 url=p.url,
                 active=p.active,
             )
-    except IntegrityError as e:
+    except Exception as e:
         if auto_generated and private_key_vault_ref:
             vault.delete_secret(private_key_vault_ref)
-        raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
+        if isinstance(e, IntegrityError):
+            raise HTTPException(
+                status_code=400, detail="AS2 ID already exists for this tenant."
+            ) from e
+        raise
 
 
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])

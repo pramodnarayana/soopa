@@ -21,6 +21,9 @@ class CreateAS2TradingPartnerRequest(BaseModel):
     private_key_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for private key (Local only)"
     )
+    private_key_pem: str | None = Field(
+        None, description="Raw private key PEM to store in Vault on creation (Local only)"
+    )
 
 
 class CreateAS2PartnershipRequest(BaseModel):

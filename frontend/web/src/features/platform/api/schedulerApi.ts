@@ -2,10 +2,17 @@ export interface JobResponse {
   id: string;
   name: string;
   status: string;
+  target_queue: string | null;
+  app_namespace: string | null;
+  cron_expression: string | null;
+  timezone: string | null;
   next_run_at: string | null;
   locked_at: string | null;
   locked_by: string | null;
   retry_count: number;
+  interval_seconds: number | null;
+  min_interval_seconds: number | null;
+  max_interval_seconds: number | null;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -20,6 +27,7 @@ export interface ISchedulerRepository {
   getJobs(): Promise<JobResponse[]>;
   getConfig(): Promise<ConfigResponse[]>;
   updateConfig(key: string, value: any): Promise<ConfigResponse>;
+  updateJob(name: string, data: { interval_seconds?: number | null; cron_expression?: string | null; timezone?: string | null; status?: string }): Promise<JobResponse>;
 }
 
 class HttpSchedulerRepository implements ISchedulerRepository {
@@ -59,6 +67,13 @@ class HttpSchedulerRepository implements ISchedulerRepository {
     return this.request(`/api/v1/platform/scheduler/config/${key}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
+    });
+  }
+
+  updateJob(name: string, data: { interval_seconds?: number | null; cron_expression?: string | null; timezone?: string | null; status?: string }): Promise<JobResponse> {
+    return this.request(`/api/v1/platform/scheduler/jobs/${name}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     });
   }
 }

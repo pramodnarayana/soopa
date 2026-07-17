@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Combobox } from '@/components/ui/combobox';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import { extractCertificateMaterial } from '../utils/certificate';
 
 export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: string[] }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -76,6 +77,13 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
     // Check if AS2 ID changed after generating cert
     let finalCertPem = certPem;
     let finalVaultRef = privateKeyVaultRef;
+    let extractedPrivateKey = '';
+
+    if (isLocal && !privateKeyVaultRef && certPem) {
+      const { publicCert, privateKey } = extractCertificateMaterial(certPem);
+      finalCertPem = publicCert;
+      extractedPrivateKey = privateKey;
+    }
 
     if (isLocal && privateKeyVaultRef && generatedForAs2Id && submittedAs2Id !== generatedForAs2Id) {
       // Invalidate existing if AS2 ID changed
@@ -96,8 +104,12 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         as2_id: submittedAs2Id,
         is_local: isLocal,
         url: url,
-        public_cert_pem: isLocal && finalVaultRef ? finalCertPem : isLocal ? undefined : finalCertPem,
+        // Always pass the cert PEM if the user provided one
+        public_cert_pem: finalCertPem || undefined,
+        // If user went through the generate flow, send vault ref
+        // If user uploaded their own key, send the raw PEM so backend stores it
         private_key_vault_ref: finalVaultRef || undefined,
+        private_key_pem: (isLocal && !finalVaultRef && extractedPrivateKey) ? extractedPrivateKey : undefined,
       },
       {
         onSuccess: () => {

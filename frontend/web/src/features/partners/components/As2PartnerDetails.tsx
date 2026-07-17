@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { Combobox } from '@/components/ui/combobox';
 import { CertificateInput } from './CertificateInput';
+import { extractCertificateMaterial } from '../utils/certificate';
 
 export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, onCancel?: () => void }) {
   const { toast } = useToast();
@@ -72,18 +73,7 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
   const handlePasteSubmit = () => {
     if (!pasteValue.trim()) return;
 
-    let publicCert = '';
-    let privateKey = '';
-
-    const text = pasteValue;
-    if (text.includes('-----BEGIN CERTIFICATE-----')) {
-      const match = text.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g);
-      if (match && match.length > 0) publicCert += match.join('\n') + '\n';
-    }
-    if (text.includes('-----BEGIN PRIVATE KEY-----') || text.includes('-----BEGIN RSA PRIVATE KEY-----')) {
-      const match = text.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
-      if (match && match.length > 0) privateKey += match.join('\n') + '\n';
-    }
+    const { publicCert, privateKey } = extractCertificateMaterial(pasteValue);
 
     rotateCertificates.mutate({
       id: partner.id,
@@ -292,7 +282,7 @@ function CertificateRow({
         notBefore: cert.validity.notBefore.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
         notAfter: cert.validity.notAfter.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
       };
-    } catch (_e) {
+    } catch {
       return null;
     }
   }, [publicPem]);

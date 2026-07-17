@@ -37,6 +37,18 @@ class S3Settings(BaseSettings):
     secret_access_key: str | None = Field(default=None)
 
 
+class AwsSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AWS_", env_file=".env", extra="ignore")
+
+    endpoint_url: str | None = Field(default=None)
+    region: str | None = Field(default=None)
+    default_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
+
+    @property
+    def resolved_region(self) -> str:
+        return self.region or self.default_region
+
+
 class OtelSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OTEL_", env_file=".env", extra="ignore")
 
@@ -106,6 +118,7 @@ class AppSettings(BaseSettings):
 
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     s3: S3Settings = Field(default_factory=S3Settings)
+    aws: AwsSettings = Field(default_factory=AwsSettings)
     otel: OtelSettings = Field(default_factory=OtelSettings)
     identity: IdentitySettings = Field(default_factory=IdentitySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)

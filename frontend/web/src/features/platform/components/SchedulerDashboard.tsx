@@ -1,52 +1,100 @@
-import { useState, useEffect } from 'react';
-import { useJobsQuery, useConfigQuery, useUpdateConfigMutation } from '../api/schedulerHooks';
+import { useState } from 'react';
+import { useJobsQuery, useUpdateJobMutation } from '../api/schedulerHooks';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Power } from 'lucide-react';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Pause, Play, Clock } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CronBuilder } from './CronBuilder';
 
 export const SchedulerDashboard = () => {
-  const { data: jobs = [], isLoading: jobsLoading } = useJobsQuery();
-  const { data: configs = [], isLoading: configLoading } = useConfigQuery();
-  const { mutateAsync: updateConfig } = useUpdateConfigMutation();
-  const getSweeperEnabled = () => {
-    const cfg = configs.find((c: any) => c.key === 'outbox_sweeper_enabled');
-    return cfg ? !!cfg.value : false;
-  };
+  const { data: jobs = [], isLoading: jobsLoading, refetch: refetchJobs } = useJobsQuery();
+  const { mutateAsync: updateJob } = useUpdateJobMutation();
 
-  const getSweeperInterval = () => {
-    const cfg = configs.find((c: any) => c.key === 'outbox_sweeper_interval_seconds');
-    return cfg ? cfg.value : 60;
-  };
+  const [editingJob, setEditingJob] = useState<any | null>(null);
+  const [scheduleType, setScheduleType] = useState<'interval' | 'cron'>('interval');
+  const [intervalValue, setIntervalValue] = useState<string>('1');
+  const [intervalUnit, setIntervalUnit] = useState<string>('minutes');
+  const [newCron, setNewCron] = useState<string>('0 * * * *');
 
-  const [localEnabled, setLocalEnabled] = useState<boolean>(false);
-  const [localInterval, setLocalInterval] = useState<string>('');
-
-  useEffect(() => {
-    if (configs.length > 0) {
-      setLocalEnabled(getSweeperEnabled());
-      setLocalInterval(String(getSweeperInterval()));
-    }
-  }, [configs, getSweeperEnabled, getSweeperInterval]);
-
-  const handleSave = async () => {
+  const handleTogglePause = async (job: any) => {
+    const newStatus = job.status === 'PAUSED' ? 'PENDING' : 'PAUSED';
     try {
-      if (localInterval) {
-        await updateConfig({ key: 'outbox_sweeper_interval_seconds', value: parseInt(localInterval, 10) });
-      }
-      await updateConfig({ key: 'outbox_sweeper_enabled', value: localEnabled });
+      await updateJob({ name: job.name, data: { status: newStatus } });
     } catch (e) {
-      console.error('Failed to update config', e);
+      console.error('Failed to toggle job status', e);
     }
   };
 
-  const isDirty = localEnabled !== getSweeperEnabled() || localInterval !== String(getSweeperInterval());
-  const isValid = localInterval.trim() !== '';
-  const canSave = isDirty && isValid;
+  const [intervalError, setIntervalError] = useState<string | null>(null);
 
-  if (jobsLoading || configLoading) return <div>Loading Scheduler Dashboard...</div>;
+  const getIntervalParts = (seconds: number) => {
+    if (seconds % (30 * 24 * 3600) === 0) return { val: seconds / (30 * 24 * 3600), unit: 'months' };
+    if (seconds % (24 * 3600) === 0) return { val: seconds / (24 * 3600), unit: 'days' };
+    if (seconds % 3600 === 0) return { val: seconds / 3600, unit: 'hours' };
+    if (seconds % 60 === 0) return { val: seconds / 60, unit: 'minutes' };
+    return { val: seconds, unit: 'seconds' };
+  };
+
+  const handleEditIntervalClick = (job: any) => {
+    setEditingJob(job);
+    if (job.cron_expression) {
+      setScheduleType('cron');
+      setNewCron(job.cron_expression);
+      const parts = getIntervalParts(job.interval_seconds || 60);
+      setIntervalValue(String(parts.val));
+      setIntervalUnit(parts.unit);
+    } else {
+      setScheduleType('interval');
+      const parts = getIntervalParts(job.interval_seconds || 60);
+      setIntervalValue(String(parts.val));
+      setIntervalUnit(parts.unit);
+      setNewCron('0 * * * *');
+    }
+    setIntervalError(null);
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!editingJob) return;
+
+    try {
+      if (scheduleType === 'interval') {
+        const val = parseInt(intervalValue, 10);
+        if (isNaN(val) || val <= 0) {
+          setIntervalError('Interval must be a positive integer.');
+          return;
+        }
+
+        let multiplier = 1;
+        if (intervalUnit === 'minutes') multiplier = 60;
+        else if (intervalUnit === 'hours') multiplier = 3600;
+        else if (intervalUnit === 'days') multiplier = 86400;
+        else if (intervalUnit === 'months') multiplier = 2592000;
+
+        const totalSeconds = val * multiplier;
+
+        await updateJob({ name: editingJob.name, data: { interval_seconds: totalSeconds, cron_expression: null, timezone: null } });
+      } else {
+        await updateJob({ name: editingJob.name, data: { cron_expression: newCron, timezone: 'UTC', interval_seconds: null } });
+      }
+      setEditingJob(null);
+      setIntervalError(null);
+    } catch (e: any) {
+      setIntervalError(e.message || 'Failed to update job schedule');
+    }
+  };
+
+  if (jobsLoading) return <div>Loading Scheduler Dashboard...</div>;
 
   return (
     <div className="space-y-6">
@@ -56,61 +104,12 @@ export const SchedulerDashboard = () => {
         <CardHeader className="flex flex-row items-center justify-between pb-4">
           <div className="space-y-1">
             <CardTitle>Scheduled Jobs</CardTitle>
-            {getSweeperEnabled() ? (
-              <p className="text-sm font-medium text-emerald-600">
-                {(() => {
-                  const secs = getSweeperInterval();
-                  return secs < 60
-                    ? `Outbox Sweeper is scheduled to run every ${secs}s.`
-                    : `Outbox Sweeper is scheduled to run every ${Math.round(secs / 60)} min${Math.round(secs / 60) !== 1 ? 's' : ''}.`;
-                })()}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Outbox Sweeper is not currently scheduled.
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Overview of all background jobs running in the platform.
+            </p>
           </div>
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Label>Outbox Sweeper</Label>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={localEnabled}
-                onClick={() => setLocalEnabled(!localEnabled)}
-                className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${localEnabled ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-300'}`}
-              >
-                <span className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${localEnabled ? 'opacity-100 text-emerald-700' : 'opacity-0'}`}>
-                  Enable
-                </span>
-                <span className={`absolute right-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${localEnabled ? 'opacity-0' : 'opacity-100 text-slate-500'}`}>
-                  Disable
-                </span>
-                <span aria-hidden="true" className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${localEnabled ? 'translate-x-[62px] bg-emerald-600 text-white' : 'translate-x-0 bg-white text-slate-400'}`}>
-                  <Power className="w-3 h-3" />
-                </span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Label>Interval (s)</Label>
-              <Input
-                type="number"
-                placeholder={String(getSweeperInterval())}
-                value={localInterval}
-                onChange={(e) => setLocalInterval(e.target.value)}
-                disabled={!localEnabled}
-                className="w-20 h-8"
-              />
-              <Button size="sm" onClick={handleSave} disabled={!canSave}>
-                Save
-              </Button>
-            </div>
-
-            <Button variant="outline" size="sm" onClick={() => {
-              // Refresh is handled by tanstack query
-            }}>
+            <Button variant="outline" size="sm" onClick={() => refetchJobs()}>
               Refresh
             </Button>
           </div>
@@ -119,38 +118,50 @@ export const SchedulerDashboard = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Job ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Error Message</TableHead>
+                <TableHead>Schedule</TableHead>
                 <TableHead>Next Run At</TableHead>
-                <TableHead>Locked By</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {jobs.map((job: any) => (
                 <TableRow key={job.id}>
-                  <TableCell className="font-medium text-xs">{job.id}</TableCell>
-                  <TableCell>{job.name}</TableCell>
+                  <TableCell className="font-medium">{job.name}</TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${job.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
                         job.status === 'FAILED' ? 'bg-red-100 text-red-800' :
                           job.status === 'RUNNING' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
+                            job.status === 'PAUSED' ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-100 text-gray-800'
                       }`}>
                       {job.status}
                     </span>
                   </TableCell>
-                  <TableCell className="text-red-600 max-w-xs truncate" title={job.error_message || ''}>
-                    {job.error_message || '-'}
+                  <TableCell>
+                    {job.cron_expression
+                      ? <span className="font-mono bg-muted px-1 rounded">{job.cron_expression}</span>
+                      : job.interval_seconds ? `${job.interval_seconds}s` : '-'}
                   </TableCell>
                   <TableCell>{job.next_run_at ? new Date(job.next_run_at).toLocaleString() : 'Immediate'}</TableCell>
-                  <TableCell>{job.locked_by || '-'}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleTogglePause(job)}>
+                        {job.status === 'PAUSED' ? <Play className="w-4 h-4 mr-1" /> : <Pause className="w-4 h-4 mr-1" />}
+                        {job.status === 'PAUSED' ? 'Resume' : 'Pause'}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleEditIntervalClick(job)}>
+                        <Clock className="w-4 h-4 mr-1" />
+                        Schedule
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {jobs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
                     No background jobs found.
                   </TableCell>
                 </TableRow>
@@ -159,6 +170,69 @@ export const SchedulerDashboard = () => {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingJob} onOpenChange={(open) => !open && setEditingJob(null)}>
+        <DialogContent className="sm:max-w-[900px]">
+          <DialogHeader>
+            <DialogTitle>Edit Job Schedule</DialogTitle>
+            <DialogDescription>
+              Set how often the {editingJob?.name} job runs.
+              {editingJob?.min_interval_seconds && editingJob?.max_interval_seconds && (
+                <span className="block mt-1 text-orange-600">
+                  Allowed range (if using interval): {editingJob.min_interval_seconds}s - {editingJob.max_interval_seconds}s
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs defaultValue="interval" value={scheduleType} onValueChange={(v) => setScheduleType(v as any)}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="interval">Interval</TabsTrigger>
+              <TabsTrigger value="cron">Cron Expression</TabsTrigger>
+            </TabsList>
+            <TabsContent value="interval" className="py-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <Label htmlFor="interval" className="shrink-0">
+                  Every
+                </Label>
+                <Input
+                  id="interval"
+                  type="number"
+                  value={intervalValue}
+                  onChange={(e) => { setIntervalValue(e.target.value); setIntervalError(null); }}
+                  className={`w-24 ${intervalError ? 'border-red-500' : ''}`}
+                />
+                <select
+                  className="flex h-10 w-32 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={intervalUnit}
+                  onChange={(e) => setIntervalUnit(e.target.value)}
+                >
+                  <option value="seconds">Seconds</option>
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                  <option value="months">Months</option>
+                </select>
+              </div>
+            </TabsContent>
+            <TabsContent value="cron" className="py-4">
+              <CronBuilder value={newCron} onChange={(val) => { setNewCron(val); setIntervalError(null); }} />
+              <div className="mt-4 p-3 bg-muted rounded-md text-sm">
+                <span className="font-semibold block mb-1">Generated Cron:</span>
+                <span className="font-mono">{newCron}</span>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {intervalError && (
+            <p className="text-sm text-red-600 -mt-2 mb-2">{intervalError}</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingJob(null)}>Cancel</Button>
+            <Button onClick={handleSaveSchedule}>Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

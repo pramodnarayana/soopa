@@ -37,3 +37,16 @@ export function useUpdateConfigMutation() {
     },
   });
 }
+
+export function useUpdateJobMutation() {
+  const repo = useRepo();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ name, data }: { name: string; data: { interval_seconds?: number | null; cron_expression?: string | null; timezone?: string | null; status?: string } }) =>
+      repo.updateJob(name, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduler', 'jobs'] });
+    },
+  });
+}

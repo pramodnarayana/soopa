@@ -9,6 +9,7 @@ dependencies = [
     "SQLAlchemy>=2.0.0",
     # Local dependencies
     "database",
+    "croniter>=6.2.4",
 ]
 
 [tool.uv.sources]

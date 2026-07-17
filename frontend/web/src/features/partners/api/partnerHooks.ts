@@ -138,10 +138,9 @@ export function useDeletePlatformPartnerMutation() {
 
 export function useDeleteCertificateSecretMutation() {
   const repo = useRepository();
-  return useToastMutation(
-    (vaultRef: string) => repo.deleteCertificateSecret(vaultRef),
-    'Orphaned certificate deleted successfully.'
-  );
+  return useMutation({
+    mutationFn: (vaultRef: string) => repo.deleteCertificateSecret(vaultRef),
+  });
 }
 
 // ─────────────────────────────────────────────

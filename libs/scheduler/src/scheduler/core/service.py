@@ -1,27 +1,35 @@
 import asyncio
 import contextlib
 import logging
+from typing import Any
 
-from scheduler.ports.handler import JobHandlerPort
+from scheduler.ports.publisher import MessagePublisherPort
 from scheduler.ports.repository import JobRepositoryPort
 
 logger = logging.getLogger(__name__)
 
 
 class SchedulerWorkerService:
-    def __init__(self, repository: JobRepositoryPort, worker_id: str):
+    def __init__(
+        self,
+        repository: JobRepositoryPort,
+        publisher: MessagePublisherPort,
+        worker_id: str,
+        max_concurrent_jobs: int = 10,
+    ):
         self.repository = repository
+        self.publisher = publisher
         self.worker_id = worker_id
-        self.handlers: dict[str, JobHandlerPort] = {}
+        self.max_concurrent_jobs = max_concurrent_jobs
         self._is_running = False
         self._task: asyncio.Task[None] | None = None
-
-    def register_handler(self, job_name: str, handler: JobHandlerPort) -> None:
-        self.handlers[job_name] = handler
+        self._active_jobs: set[asyncio.Task[None]] = set()
 
     async def start(self, poll_interval_seconds: float = 5.0) -> None:
         self._is_running = True
-        logger.info(f"Starting scheduler worker {self.worker_id}")
+        logger.info(
+            f"Starting scheduler worker {self.worker_id} with concurrency {self.max_concurrent_jobs}"
+        )
         self._task = asyncio.create_task(self._poll_loop(poll_interval_seconds))
 
     async def stop(self) -> None:
@@ -30,36 +38,78 @@ class SchedulerWorkerService:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+
+        if self._active_jobs:
+            logger.info(f"Waiting for {len(self._active_jobs)} active jobs to complete...")
+            await asyncio.gather(*self._active_jobs, return_exceptions=True)
+
         logger.info(f"Stopped scheduler worker {self.worker_id}")
+
+    async def _execute_job(self, job: Any) -> None:
+        try:
+            if not job.target_queue:
+                error_msg = f"No target_queue defined for job {job.name}"
+                logger.error(error_msg)
+                await self.repository.mark_failed(job.id, error=error_msg)
+                return
+
+            logger.info(f"Dispatching job {job.name} ({job.id}) to queue {job.target_queue}")
+            payload = {
+                "job_id": str(job.id),
+                "job_name": job.name,
+                "payload": job.payload,
+            }
+            await self.publisher.publish(job.target_queue, payload)
+
+            # Successfully dispatched. Reschedule
+            import datetime
+
+            now = datetime.datetime.now(datetime.UTC)
+            next_run_at = job.calculate_next_run_at(now)
+
+            if next_run_at:
+                await self.repository.reschedule(job.id, next_run_at)
+                logger.info(f"Successfully rescheduled job {job.name} ({job.id}) for {next_run_at}")
+            else:
+                await self.repository.mark_completed(job.id)
+                logger.info(f"Successfully completed job {job.name} ({job.id})")
+
+        except Exception as e:
+            logger.exception(f"Job {job.name} ({job.id}) dispatch failed: {e}")
+            if job.retry_count < job.max_retries:
+                import datetime
+
+                backoff_seconds = 60 * (2**job.retry_count)
+                next_run_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+                    seconds=backoff_seconds
+                )
+                await self.repository.schedule_retry(job.id, next_run_at)
+                logger.info(f"Scheduled retry for job {job.name} ({job.id}) at {next_run_at}")
+            else:
+                await self.repository.mark_failed(job.id, error=str(e))
 
     async def _poll_loop(self, poll_interval_seconds: float) -> None:
         while self._is_running:
             try:
-                job = await self.repository.claim_next_job(worker_id=self.worker_id)
-                if job:
-                    handler = self.handlers.get(job.name)
-                    if not handler:
-                        error_msg = f"No handler registered for job {job.name}"
-                        logger.error(error_msg)
-                        await self.repository.mark_failed(job.id, error=error_msg)
-                        continue
+                # Remove completed tasks from active set
+                self._active_jobs = {task for task in self._active_jobs if not task.done()}
 
-                    try:
-                        logger.info(f"Executing job {job.name} ({job.id})")
-                        next_run_at = await handler.execute(job)
-                        if next_run_at:
-                            await self.repository.reschedule(job.id, next_run_at)
-                            logger.info(
-                                f"Successfully rescheduled job {job.name} ({job.id}) for {next_run_at}"
-                            )
-                        else:
-                            await self.repository.mark_completed(job.id)
-                            logger.info(f"Successfully completed job {job.name} ({job.id})")
-                    except Exception as e:
-                        logger.exception(f"Job {job.name} ({job.id}) failed: {e}")
-                        await self.repository.mark_failed(job.id, error=str(e))
+                available_slots = self.max_concurrent_jobs - len(self._active_jobs)
+
+                if available_slots > 0:
+                    jobs = await self.repository.claim_next_jobs(
+                        worker_id=self.worker_id, limit=available_slots
+                    )
+
+                    for job in jobs:
+                        task = asyncio.create_task(self._execute_job(job))
+                        self._active_jobs.add(task)
+
+                    if not jobs:
+                        await asyncio.sleep(poll_interval_seconds)
                 else:
                     await asyncio.sleep(poll_interval_seconds)
+
             except asyncio.CancelledError:
                 break
             except Exception as e:

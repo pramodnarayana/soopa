@@ -184,18 +184,30 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
             if field.startswith("business_metadata.") and hasattr(model, "business_metadata"):
                 json_key = field.split("business_metadata.")[1]
-                column = model.business_metadata[json_key].astext
+                column = model.business_metadata[json_key]
+                column_astext = column.astext
                 if operator == "eq":
-                    stmt = stmt.where(column == str(value))
+                    from sqlalchemy import or_
+
+                    stmt = stmt.where(or_(column_astext == str(value), column.contains(value)))
                 elif operator == "neq":
-                    stmt = stmt.where(column != str(value))
+                    from sqlalchemy import and_
+
+                    stmt = stmt.where(and_(column_astext != str(value), ~column.contains(value)))
                 elif operator == "contains":
                     escaped_value = (
                         str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                     )
-                    stmt = stmt.where(column.ilike(f"%{escaped_value}%", escape="\\"))
+                    stmt = stmt.where(column_astext.ilike(f"%{escaped_value}%", escape="\\"))
                 elif operator == "in" and isinstance(value, list):
-                    stmt = stmt.where(column.in_([str(v) for v in value]))
+                    from sqlalchemy import or_
+
+                    stmt = stmt.where(
+                        or_(
+                            column_astext.in_([str(v) for v in value]),
+                            *[column.contains(v) for v in value],
+                        )
+                    )
                 continue
 
             if not hasattr(model, field):

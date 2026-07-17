@@ -23,6 +23,11 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
             payload=record.payload,
             status=JobStatus(record.status),
             next_run_at=record.next_run_at,
+            target_queue=record.target_queue,
+            app_namespace=record.app_namespace,
+            cron_expression=record.cron_expression,
+            timezone=record.timezone,
+            interval_seconds=record.interval_seconds,
             retry_count=record.retry_count,
             max_retries=record.max_retries,
             locked_at=record.locked_at,
@@ -31,9 +36,9 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
             updated_at=record.updated_at,
         )
 
-    async def claim_next_job(self, worker_id: str) -> Job | None:
+    async def claim_next_jobs(self, worker_id: str, limit: int) -> list[Job]:
         """
-        Uses SKIP LOCKED to safely claim the next PENDING or ready job.
+        Uses SKIP LOCKED to safely claim the next PENDING or ready jobs.
         """
         now = datetime.datetime.now(datetime.UTC)
 
@@ -45,24 +50,28 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
                     (ScheduledJob.status == JobStatus.PENDING.value)
                     & (ScheduledJob.next_run_at.is_(None) | (ScheduledJob.next_run_at <= now))
                 )
-                .order_by(ScheduledJob.created_at.asc())
-                .limit(1)
+                .order_by(
+                    ScheduledJob.next_run_at.asc().nulls_first(), ScheduledJob.created_at.asc()
+                )
+                .limit(limit)
                 .with_for_update(skip_locked=True)
             )
 
             result = await session.execute(stmt)
-            record = result.scalar_one_or_none()
+            records = result.scalars().all()
 
-            if not record:
-                return None
+            if not records:
+                return []
 
-            # Claim it
-            record.status = JobStatus.RUNNING.value
-            record.locked_at = now
-            record.locked_by = worker_id
+            claimed = []
+            for record in records:
+                record.status = JobStatus.RUNNING.value
+                record.locked_at = now
+                record.locked_by = worker_id
+                claimed.append(self._to_domain(record))
 
             await session.flush()
-            return self._to_domain(record)
+            return claimed
 
     async def mark_completed(self, job_id: uuid.UUID) -> None:
         async with self.session_factory() as session, session.begin():
@@ -92,7 +101,11 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
             await session.execute(stmt)
 
     async def schedule_job(
-        self, name: str, payload: dict[str, Any], next_run_at: datetime.datetime | None = None
+        self,
+        name: str,
+        payload: dict[str, Any],
+        next_run_at: datetime.datetime | None = None,
+        interval_seconds: int | None = None,
     ) -> Job:
         async with self.session_factory() as session, session.begin():
             record = ScheduledJob(
@@ -100,6 +113,7 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
                 payload=payload,
                 status=JobStatus.PENDING.value,
                 next_run_at=next_run_at,
+                interval_seconds=interval_seconds,
             )
             session.add(record)
             await session.flush()
@@ -116,6 +130,21 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
                     locked_at=None,
                     locked_by=None,
                     retry_count=0,
+                )
+            )
+            await session.execute(stmt)
+
+    async def schedule_retry(self, job_id: uuid.UUID, next_run_at: datetime.datetime) -> None:
+        async with self.session_factory() as session, session.begin():
+            stmt = (
+                update(ScheduledJob)
+                .where(ScheduledJob.id == job_id)
+                .values(
+                    status=JobStatus.PENDING.value,
+                    next_run_at=next_run_at,
+                    locked_at=None,
+                    locked_by=None,
+                    retry_count=ScheduledJob.retry_count + 1,
                 )
             )
             await session.execute(stmt)
