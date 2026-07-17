@@ -90,6 +90,20 @@ async def create_job(request: JobCreateRequest, uow: UnitOfWork = Depends(get_uo
         raise HTTPException(
             status_code=422, detail=f"Job '{request.name}' has no configured target queue."
         )
+    if (
+        job_def.min_interval_seconds is not None
+        and request.interval_seconds < job_def.min_interval_seconds
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Interval ({request.interval_seconds}s) is below minimum allowed ({job_def.min_interval_seconds}s).",
+        )
+
+    if job_def.max_interval_seconds and request.interval_seconds > job_def.max_interval_seconds:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Interval ({request.interval_seconds}s) exceeds maximum allowed ({job_def.max_interval_seconds}s).",
+        )
 
     async with uow:
         try:

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormModal } from '@/components/ui/form-modal';
@@ -19,6 +19,12 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
   const [generatedForAs2Id, setGeneratedForAs2Id] = useState<string | null>(null);
   const [as2Id, setAs2Id] = useState('');
   const [url, setUrl] = useState('');
+
+  const isOpenRef = useRef(isOpen);
+  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
+
+  const isLocalRef = useRef(isLocal);
+  useEffect(() => { isLocalRef.current = isLocal; }, [isLocal]);
 
   const isDuplicate = existingAs2Ids.includes(as2Id);
 
@@ -272,6 +278,12 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                   }
                   generateCert.mutate(as2Id, {
                     onSuccess: (res) => {
+                      if (!isOpenRef.current || !isLocalRef.current) {
+                        // The modal was closed or switched to remote while the mutation was inflight.
+                        // Cleanup the newly created orphaned secret immediately.
+                        deleteCertSecret.mutate(res.private_key_vault_ref);
+                        return;
+                      }
                       setCertPem(res.public_cert_pem);
                       setPrivateKeyVaultRef(res.private_key_vault_ref);
                       setGeneratedForAs2Id(as2Id);

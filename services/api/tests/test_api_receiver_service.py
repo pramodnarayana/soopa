@@ -16,7 +16,11 @@ async def test_process_api_edi_json_success():
     )
 
     assert trace_id is not None
+
     mock_uow.transactions.create_edi_json.assert_awaited_once()
+    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    assert create_kwargs["payload"]["transaction_type"] == "850"
+
     mock_uow.data_plane_outbox.publish_outbox_event.assert_awaited_once()
 
     args, kwargs = mock_uow.data_plane_outbox.publish_outbox_event.call_args
@@ -39,6 +43,8 @@ async def test_process_api_edi_json_heading():
     )
     assert trace_id is not None
     mock_uow.transactions.create_edi_json.assert_awaited_once()
+    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    assert create_kwargs["payload"]["transaction_type"] == "850"
 
 
 @pytest.mark.asyncio
@@ -50,16 +56,28 @@ async def test_process_api_edi_json_st_segment():
     )
     assert trace_id is not None
     mock_uow.transactions.create_edi_json.assert_awaited_once()
+    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    assert create_kwargs["payload"]["transaction_type"] == "855"
 
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_list_extraction():
     mock_uow = AsyncMock()
     svc = ApiReceiverService(mock_uow)
-    # Give a list payload to hit the extraction logic for lists
-    payload = [{"transaction_type": "850", "foo": "bar"}, {"transaction_type": "850", "foo": "baz"}]
+    payload = [
+        {"ST": {"ST01": "850"}, "BEG": {"BEG03": "123"}, "foo": "bar"},
+        {"ST": {"ST01": "850"}, "BEG": {"BEG03": "456"}, "foo": "baz"},
+    ]
     trace_id = await svc.process_api_edi_json(
         tenant_id=1, trading_partner_id="PARTNER_X", payload=payload
     )
     assert trace_id is not None
     mock_uow.transactions.create_edi_json.assert_awaited_once()
+    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+
+    # Assert business_metadata aggregation for lists
+    assert create_kwargs["payload"]["business_metadata"] == {
+        "po_number": ["123", "456"],
+        "business_reference": ["123", "456"],
+        "_routing": {"trading_partner_id": "PARTNER_X"},
+    }

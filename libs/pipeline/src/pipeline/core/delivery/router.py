@@ -32,7 +32,12 @@ class DeliveryRouter:
 
         direction = edi_msg.direction
 
-        if direction == "OUTBOUND" and edi_msg.trading_partner_id:
+        if direction == "OUTBOUND":
+            if not edi_msg.trading_partner_id:
+                raise ValueError(
+                    f"EDI Message {trace_id} is missing trading_partner_id for OUTBOUND routing."
+                )
+
             route = await self.repository.get_outbound_route_by_trading_partner_id(
                 trading_partner_id=edi_msg.trading_partner_id,
                 tenant_id=edi_msg.tenant_id,
@@ -61,11 +66,13 @@ class DeliveryRouter:
                 logger.error(f"No {direction} route found for {sender_id}->{receiver_id}")
                 raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
 
-        # ── Dispatch via registry (OCP) ───────────────────────────────────────
         for route_key, strategy in self.strategies.items():
             partner_id = route.get(route_key)
             if partner_id:
-                await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
+                try:
+                    await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
+                except Exception as e:
+                    raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e
                 return
 
         raise ValueError(

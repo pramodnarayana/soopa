@@ -207,6 +207,23 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         wildcard_match = next((r for r in candidates if r.get("transaction_type") == "*"), None)
         return wildcard_match
 
+    async def get_outbound_route_by_trading_partner_id(
+        self, trading_partner_id: str, tenant_id: int
+    ) -> dict[str, Any] | None:
+        candidates = [
+            r
+            for r in self.routes
+            if r.get("direction") == "OUTBOUND"
+            and (
+                r.get("sftp_partner_id") == trading_partner_id
+                or r.get("as2_partner_id") == trading_partner_id
+                or r.get("webhook_partner_id") == trading_partner_id
+            )
+        ]
+        if candidates:
+            return candidates[0]
+        return None
+
     async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
         return self.sftp_partners.get(partner_id)
 

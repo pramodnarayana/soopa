@@ -43,7 +43,7 @@ def test_get_safe_ip_private(mock_getaddrinfo):
     assert get_safe_ip("example.com") is None
 
 
-@patch("socket.getaddrinfo")
+@patch("worker.core.security._orig_getaddrinfo")
 def test_ssrf_safe_context_valid(mock_getaddrinfo):
     mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
     with ssrf_safe_context("http://example.com"):
@@ -51,6 +51,7 @@ def test_ssrf_safe_context_valid(mock_getaddrinfo):
 
         res = socket.getaddrinfo("example.com", 80)
         assert res == [(2, 1, 6, "", ("93.184.216.34", 80))]
+        mock_getaddrinfo.assert_called_with("93.184.216.34", 80, 0, 0, 0, 0)
 
 
 def test_ssrf_safe_context_invalid_url():

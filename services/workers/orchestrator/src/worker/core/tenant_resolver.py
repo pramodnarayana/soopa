@@ -28,7 +28,7 @@ class TenantResolver:
     async def resolve(self, tenant_id: int) -> tuple[str, str]:
         import time
 
-        now = time.time()
+        now = time.monotonic()
         self._sweep(now)
 
         if tenant_id in self._cache:

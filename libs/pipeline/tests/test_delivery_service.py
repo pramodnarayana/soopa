@@ -114,6 +114,7 @@ async def test_delivery_service_outbound_sftp() -> None:
         "direction": MessageDirection.OUTBOUND,
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
+        "trading_partner_id": "sftp1",
         "transaction_type": "855",
         "edi_data": "FAKE*EDI*DATA~",
         "status": MessageStatus.PENDING_DELIVERY,

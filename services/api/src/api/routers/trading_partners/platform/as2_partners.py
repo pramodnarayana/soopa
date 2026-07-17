@@ -99,6 +99,7 @@ async def create_platform_as2_partner(
     public_cert_pem = request.public_cert_pem
     private_key_vault_ref = request.private_key_vault_ref
     auto_generated = False
+    commit_success = False
 
     try:
         async with uow:
@@ -140,6 +141,8 @@ async def create_platform_as2_partner(
             entity = await svc.create_as2_partner(tenant_id=0, cmd=cmd)
 
             await uow.commit()
+            commit_success = True
+
             p = await uow.as2_partners.get_as2_partner(tenant_id=0, partner_id=entity.partner_id)
             if not p:
                 raise HTTPException(status_code=500, detail="Partner creation failed")
@@ -153,7 +156,7 @@ async def create_platform_as2_partner(
                 active=p.active,
             )
     except Exception as e:
-        if auto_generated and private_key_vault_ref:
+        if auto_generated and private_key_vault_ref and not commit_success:
             vault.delete_secret(private_key_vault_ref)
         if isinstance(e, IntegrityError):
             raise HTTPException(
