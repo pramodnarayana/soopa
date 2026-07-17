@@ -59,13 +59,27 @@ class ApiReceiverService:
                     if st:
                         transaction_type = st.get("ST01")
 
-            business_metadata = {}
+            business_metadata: dict[str, Any] = {}
             if isinstance(payload, dict):
                 business_metadata = self.extractor.extract(transaction_type or "", payload)
             elif isinstance(payload, list) and len(payload) > 0:
-                business_metadata = self.extractor.extract(transaction_type or "", payload[0])
+                extracted_list = [
+                    self.extractor.extract(transaction_type or "", item) for item in payload
+                ]
+                for extracted in extracted_list:
+                    for k, v in extracted.items():
+                        if k not in business_metadata:
+                            business_metadata[k] = []
+                        # Avoid duplicates
+                        if v not in business_metadata[k]:
+                            business_metadata[k].append(v)
 
-            business_metadata["_routing"] = {"trading_partner_id": trading_partner_id}  # type: ignore
+                # Flatten single-item lists for backward compatibility
+                for k, v in business_metadata.items():
+                    if isinstance(v, list) and len(v) == 1:
+                        business_metadata[k] = v[0]
+
+            business_metadata["_routing"] = {"trading_partner_id": trading_partner_id}
 
             # 2. Create Trace ID
             trace_id = uuid.uuid4()
@@ -88,7 +102,7 @@ class ApiReceiverService:
             # 5. Drop Outbox event for Worker to transform
             from domain.events import PipelineEventType
 
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.data_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload={

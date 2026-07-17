@@ -31,7 +31,7 @@ class SQSComputeWorker:
         self._running = True
         logger.info(f"Starting SQS worker polling against {self.queue_url}")
 
-        client_kwargs = {}
+        client_kwargs = {"region_name": "us-east-1"}
         if self.endpoint_url:
             client_kwargs["endpoint_url"] = self.endpoint_url
 

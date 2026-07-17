@@ -97,6 +97,50 @@ async def seed_database() -> None:
         else:
             logger.info("SYSTEM_ADMIN_EMAIL not provided. Skipping default admin creation.")
 
+        # 4. Seed Core System Jobs
+        logger.info("Seeding Core System Jobs...")
+        from datetime import UTC, datetime
+
+        from database.models.scheduled_job import ScheduledJob
+        from scheduler.domain.models import JobStatus
+        from scheduler.registry import SYSTEM_JOB_REGISTRY
+
+        now = datetime.now(UTC)
+        for job_def in SYSTEM_JOB_REGISTRY:
+            job_result = await session.execute(select(ScheduledJob).filter_by(name=job_def.name))
+            job = job_result.scalar_one_or_none()
+
+            if not job:
+                job = ScheduledJob(
+                    name=job_def.name,
+                    payload={},
+                    status=JobStatus.PENDING.value,
+                    target_queue=job_def.target_queue,
+                    app_namespace=job_def.app_namespace,
+                    interval_seconds=job_def.default_interval_seconds,
+                    cron_expression=job_def.default_cron_expression,
+                    timezone=job_def.default_timezone,
+                    min_interval_seconds=job_def.min_interval_seconds,
+                    max_interval_seconds=job_def.max_interval_seconds,
+                    retry_count=0,
+                    max_retries=job_def.max_retries,
+                    created_at=now,
+                    updated_at=now,
+                    next_run_at=now,
+                )
+                session.add(job)
+                logger.info(f"Created system job: {job_def.name}.")
+            else:
+                # Always sync canonical config bounds from the registry,
+                # ensuring existing rows stay consistent after schema migrations.
+                job.target_queue = job_def.target_queue
+                job.app_namespace = job_def.app_namespace
+                job.min_interval_seconds = job_def.min_interval_seconds
+                job.max_interval_seconds = job_def.max_interval_seconds
+                logger.info(f"Synced config for system job: {job_def.name}.")
+
+            await session.flush()
+
         await session.commit()
         logger.info("Database seed completed successfully.")
 

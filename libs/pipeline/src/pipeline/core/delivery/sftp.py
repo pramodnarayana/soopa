@@ -20,7 +20,13 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         super().__init__(repository, vault)
         self.sftp_delivery = sftp_delivery
 
-    async def deliver(self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel) -> None:
+    async def deliver(
+        self,
+        trace_id: str,
+        partner_id: str,
+        edi_msg: EdiMessageDomainModel,
+        idempotency_key: str | None = None,
+    ) -> None:
         if not await self.repository.claim_edi_message(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return

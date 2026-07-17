@@ -27,7 +27,7 @@ class RoutingResolutionService:
         self, msg: Any, edi_jsons: list[Any]
     ) -> tuple[str | None, str | None]:
         if (
-            getattr(msg, "outbound_route_id", None)
+            getattr(msg, "trading_partner_id", None)
             or getattr(msg, "direction", None) == Direction.OUTBOUND
         ):
             return await self._resolve_outbound_routing(msg, edi_jsons)
@@ -40,12 +40,15 @@ class RoutingResolutionService:
         Resolves outbound routing by first checking explicit route overrides,
         then falling back to business_metadata from the EDI JSON.
         """
-        # 1. Try to resolve via outbound_route_id
-        if getattr(msg, "outbound_route_id", None) and self.tenant_session:
+        # 1. Try to resolve via trading_partner_id on the message
+        if getattr(msg, "trading_partner_id", None) and self.tenant_session:
             try:
                 route = (
                     await self.tenant_session.execute(
-                        select(OutboundRoute).where(OutboundRoute.id == msg.outbound_route_id)
+                        select(OutboundRoute).where(
+                            OutboundRoute.trading_partner_id == msg.trading_partner_id,
+                            OutboundRoute.active.is_(True),
+                        )
                     )
                 ).scalar_one_or_none()
 

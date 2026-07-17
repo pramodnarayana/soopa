@@ -202,9 +202,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     msg_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
-    outbound_route_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True, index=True
-    )
+    trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     as2_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     as2_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
@@ -236,9 +234,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
-    outbound_route_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("outbound_routes.id"), nullable=True, index=True
-    )
+    trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
     sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -304,7 +300,7 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class Outbox(TenantBase, TenantAwareMixin, OutboxMixin):
+class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
     __tablename__ = "outbox"
 
     id: Mapped[PyUUID] = mapped_column(

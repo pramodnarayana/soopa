@@ -14,7 +14,11 @@ awslocal sqs create-queue --queue-name CDC-DLQ
 
 awslocal sqs create-queue --queue-name TransformOrchestrationQueue-DLQ
 TRANSFORM_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TransformOrchestrationQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-awslocal sqs create-queue --queue-name TransformOrchestrationQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSFORM_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
+    awslocal sqs create-queue --queue-name TransformOrchestrationQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$TRANSFORM_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
+
+    awslocal sqs create-queue --queue-name TransformComputeQueue-DLQ
+    COMPUTE_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/TransformComputeQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+    awslocal sqs create-queue --queue-name TransformComputeQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$COMPUTE_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 awslocal sqs create-queue --queue-name DeliverQueue-DLQ
 DELIVER_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/DeliverQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
@@ -24,5 +28,9 @@ awslocal sqs create-queue --queue-name DeliverQueue --attributes "{\"RedrivePoli
 awslocal sqs create-queue --queue-name ProvisioningQueue-DLQ
 PROVISIONING_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/ProvisioningQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 awslocal sqs create-queue --queue-name ProvisioningQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$PROVISIONING_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
+
+awslocal sqs create-queue --queue-name edi-orchestrator-jobs-DLQ
+JOBS_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/edi-orchestrator-jobs-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+awslocal sqs create-queue --queue-name edi-orchestrator-jobs --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$JOBS_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 echo "LocalStack Initialization Complete."

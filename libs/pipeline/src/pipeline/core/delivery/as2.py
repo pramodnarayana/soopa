@@ -22,7 +22,13 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         self.as2_delivery = as2_delivery
         self._as2_orchestrator = AS2MessageOrchestrator(vault=vault)
 
-    async def deliver(self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel) -> None:
+    async def deliver(
+        self,
+        trace_id: str,
+        partner_id: str,
+        edi_msg: EdiMessageDomainModel,
+        idempotency_key: str | None = None,
+    ) -> None:
         if not await self.repository.claim_edi_message(trace_id):
             logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
             return
@@ -51,14 +57,17 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 raw_payload=raw_payload,
                 local_partner=local_partner,
                 remote_partner=remote_partner,
+                idempotency_key=idempotency_key,
             )
-        except Exception:
+        except Exception as e:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
                 f"AS2 Delivery Adapter is misconfigured or failed to build for trace_id={trace_id}"
             )
-            return
+            raise RuntimeError(
+                f"AS2 Delivery Adapter failed to build for trace_id={trace_id}"
+            ) from e
 
         try:
             status_code, response_headers, response_body = await self.as2_delivery.deliver(
@@ -66,16 +75,18 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 body=as2_msg.body,
                 headers=as2_msg.headers,
             )
-        except RuntimeError:
+        except RuntimeError as e:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
-            return
-        except Exception:
+            raise RuntimeError(
+                f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}"
+            ) from e
+        except Exception as e:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(f"AS2 HTTP transmission failed for trace_id={trace_id}")
-            return
+            raise RuntimeError(f"AS2 HTTP transmission failed for trace_id={trace_id}") from e
 
         if 200 <= status_code < 300:
             from as2_core import parse_mdn

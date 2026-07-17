@@ -28,10 +28,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: int, event_type: str, payload: dict[str, Any], idempotency_key: UUID
     ) -> UUID:
-        from database.models.data_plane import Outbox
+        from database.models.data_plane import DataPlaneOutbox
 
         event_id = uuid.uuid4()
-        record = Outbox(
+        record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tenant_id,
             idempotency_key=idempotency_key,
@@ -129,12 +129,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 if hasattr(model, "sender_id") and hasattr(model, "receiver_id"):
                     has_gs = hasattr(model, "gs_sender_id") and hasattr(model, "gs_receiver_id")
 
+                    has_tp = hasattr(model, "trading_partner_id")
+
                     if operator == "eq":
                         conds = [model.sender_id == value, model.receiver_id == value]
                         if has_gs:
                             conds.extend(
                                 [model.gs_sender_id == value, model.gs_receiver_id == value]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id == value)
                         stmt = stmt.where(or_(*conds))
 
                     elif operator == "neq":
@@ -143,6 +147,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                             conds.extend(
                                 [model.gs_sender_id != value, model.gs_receiver_id != value]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id != value)
                         stmt = stmt.where(and_(*conds))
 
                     elif operator == "contains":
@@ -161,6 +167,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                                     model.gs_receiver_id.ilike(pattern, escape="\\"),
                                 ]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id.ilike(pattern, escape="\\"))
                         stmt = stmt.where(or_(*conds))
 
                     elif operator == "in" and isinstance(value, list):
@@ -169,23 +177,37 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                             conds.extend(
                                 [model.gs_sender_id.in_(value), model.gs_receiver_id.in_(value)]
                             )
+                        if has_tp:
+                            conds.append(model.trading_partner_id.in_(value))
                         stmt = stmt.where(or_(*conds))
                 continue
 
             if field.startswith("business_metadata.") and hasattr(model, "business_metadata"):
                 json_key = field.split("business_metadata.")[1]
-                column = model.business_metadata[json_key].astext
+                column = model.business_metadata[json_key]
+                column_astext = column.astext
                 if operator == "eq":
-                    stmt = stmt.where(column == str(value))
+                    from sqlalchemy import or_
+
+                    stmt = stmt.where(or_(column_astext == str(value), column.contains(value)))
                 elif operator == "neq":
-                    stmt = stmt.where(column != str(value))
+                    from sqlalchemy import and_
+
+                    stmt = stmt.where(and_(column_astext != str(value), ~column.contains(value)))
                 elif operator == "contains":
                     escaped_value = (
                         str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                     )
-                    stmt = stmt.where(column.ilike(f"%{escaped_value}%", escape="\\"))
+                    stmt = stmt.where(column_astext.ilike(f"%{escaped_value}%", escape="\\"))
                 elif operator == "in" and isinstance(value, list):
-                    stmt = stmt.where(column.in_([str(v) for v in value]))
+                    from sqlalchemy import or_
+
+                    stmt = stmt.where(
+                        or_(
+                            column_astext.in_([str(v) for v in value]),
+                            *[column.contains(v) for v in value],
+                        )
+                    )
                 continue
 
             if not hasattr(model, field):
@@ -276,7 +298,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 encryption_algorithm=edi_msg.encryption_algorithm,
                 compression=getattr(edi_msg, "compression", None),
                 inbound_route_id=getattr(edi_msg, "inbound_route_id", None),
-                outbound_route_id=getattr(edi_msg, "outbound_route_id", None),
+                trading_partner_id=getattr(edi_msg, "trading_partner_id", None),
                 status=getattr(edi_msg, "status", "RECEIVED"),
                 edi_data=getattr(edi_msg, "edi_data", None),
                 interchange_control_no=getattr(edi_msg, "interchange_control_no", None),
@@ -296,6 +318,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     id=j.id,
                     trace_id=j.trace_id,
                     status=j.status,
+                    trading_partner_id=getattr(j, "trading_partner_id", None),
                     error_message=getattr(j, "error_message", None),
                     interchange_control_number=getattr(j, "interchange_control_number", None),
                     group_control_number=getattr(j, "group_control_number", None),

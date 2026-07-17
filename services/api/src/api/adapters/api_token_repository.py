@@ -115,7 +115,7 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
 
         from sqlalchemy import update
 
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = datetime.now(UTC)
         result = await self.session.execute(  # type: ignore
             select(ApiToken).where(
                 ApiToken.client_id == client_id,

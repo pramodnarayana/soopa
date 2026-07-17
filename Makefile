@@ -57,7 +57,7 @@ dev-web:
 
 dev-worker-orchestrator:
 	@echo "Starting Orchestrator Worker for local development..."
-	ENVIRONMENT=development PYTHONPATH=services/workers/orchestrator/src:libs/database/src:libs/config/src:libs/pipeline/src:libs/domain/src:libs/transformer/src uv run python services/workers/orchestrator/src/worker/main.py
+	ENVIRONMENT=development PYTHONPATH=services/workers/orchestrator/src:libs/database/src:libs/config/src:libs/pipeline/src:libs/domain/src:libs/transformer/src:libs/scheduler/src uv run python services/workers/orchestrator/src/worker/main.py
 
 dev-worker-compute:
 	@echo "Starting Compute Worker for local development..."
@@ -92,7 +92,7 @@ db-sqs-reset: db-reset sqs-purge
 
 clear-data:
 	@echo "Clearing data plane tables (edi_message, edi_json, api_gateway, outbox) and purging SQS..."
-	uv run python scripts/clear_data.py
+	uv run python scripts/clear_data.py --i-am-sure
 
 seed: db-init
 

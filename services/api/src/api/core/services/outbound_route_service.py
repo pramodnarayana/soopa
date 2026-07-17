@@ -32,7 +32,7 @@ class OutboundRouteService:
         route_id = await self.uow.outbound_routes.create_outbound_route(
             tenant_id=tenant_id, cmd=cmd
         )
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.OUTBOUND_ROUTE_CREATED,
             payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -44,7 +44,7 @@ class OutboundRouteService:
     ) -> bool:
         res = await self.uow.outbound_routes.update_outbound_route(tenant_id, route_id, cmd)
         if res:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_UPDATED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},
@@ -54,7 +54,7 @@ class OutboundRouteService:
     async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         res = await self.uow.outbound_routes.delete_outbound_route(tenant_id, route_id)
         if res:
-            await self.uow.outbox.publish_outbox_event(
+            await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.OUTBOUND_ROUTE_DELETED,
                 payload={"route_id": str(route_id), "tenant_id": tenant_id},

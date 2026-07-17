@@ -9,13 +9,13 @@ import {
 } from '@tanstack/react-table';
 
 import type { AS2Partner } from '../types';
-import { useDeletePlatformPartner, useUpdatePlatformPartnerMutation } from '../api/partnerHooks';
+import { useDeletePlatformPartnerMutation, useUpdatePlatformPartnerMutation } from '../api/partnerHooks';
 import { Server, CheckCircle2 } from 'lucide-react';
 import { As2PartnerDetails } from './As2PartnerDetails';
 import { SharedRowActions } from './SharedRowActions';
 
 function As2PartnerRowActions({ partner }: { partner: AS2Partner }) {
-  const deletePlatform = useDeletePlatformPartner();
+  const deletePlatform = useDeletePlatformPartnerMutation();
   const updatePlatform = useUpdatePlatformPartnerMutation();
 
   const isDeleting = deletePlatform.isPending;

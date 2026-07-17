@@ -52,6 +52,7 @@ def build_outbound_message(
     encrypt_fn: object | None = None,
     mdn_url: str | None = None,
     mic_alg: str = "sha256",
+    message_id: str | None = None,
 ) -> OutboundAS2Message:
     """
     Builds a fully-wrapped, optionally signed, optionally encrypted AS2
@@ -131,13 +132,12 @@ def build_outbound_message(
 
         is_encrypted = True
 
-    # ── Step 5: Build HTTP Headers ────────────────────────────────────────────
-    message_id = f"<{uuid.uuid4()}@soopaedi>"
+    message_id_str = f"<{message_id}@soopaedi>" if message_id else f"<{uuid.uuid4()}@soopaedi>"
     headers: dict[str, str] = {
         "AS2-Version": "1.2",
         "AS2-From": as2_from,
         "AS2-To": as2_to,
-        "Message-ID": message_id,
+        "Message-ID": message_id_str,
         "Content-Type": current_content_type,
         "MIME-Version": "1.0",
         "Disposition-Notification-To": as2_from,

@@ -9,7 +9,8 @@ import {
   Network,
   ChevronRight,
   Server,
-  LogOut
+  LogOut,
+  Clock,
 } from 'lucide-react'
 
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
@@ -99,6 +100,7 @@ export function AppLayout() {
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">System Admin</div>
           <NavItem icon={Network} label="Tenants" to="/platform/tenants" />
           <NavItem icon={Users} label="Platform Users" to="/platform/users" />
+          <NavItem icon={Clock} label="Scheduler" to="/platform/scheduler" />
 
         </nav>
 

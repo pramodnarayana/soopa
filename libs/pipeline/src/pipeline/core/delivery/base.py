@@ -28,5 +28,11 @@ class BaseDeliveryStrategy:
             },
         )
 
-    async def deliver(self, trace_id: str, partner_id: str, edi_msg: EdiMessageDomainModel) -> None:
+    async def deliver(
+        self,
+        trace_id: str,
+        partner_id: str,
+        edi_msg: EdiMessageDomainModel,
+        idempotency_key: str | None = None,
+    ) -> None:
         raise NotImplementedError

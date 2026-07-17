@@ -81,6 +81,7 @@ def _seed_as2_route(
         "direction": "OUTBOUND",
         "sender_id": "SENDER",
         "receiver_id": "RECEIVER",
+        "trading_partner_id": partner_id,
         "transaction_type": transaction_type,
         "edi_data": edi_data,
         "status": "PENDING_DELIVERY",
@@ -156,6 +157,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
         "direction": "OUTBOUND",
         "sender_id": "S1",
         "receiver_id": "R1",
+        "trading_partner_id": "p-fail",
         "transaction_type": "856",
         "edi_data": "FAKE*EDI~",
         "status": "PENDING_DELIVERY",
@@ -202,9 +204,12 @@ async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
 
     # ── Act / Assert ───────────────────────────────────────────────────────────
     service = make_service(repo=repo, as2=NullAS2DeliveryAdapter())
-    await service.deliver(trace_id)
+    # It should catch the RuntimeError and mark the message as FAILED, but bubble up the error
+    import pytest
 
-    # It should catch the RuntimeError and mark the message as FAILED
+    with pytest.raises(RuntimeError):
+        await service.deliver(trace_id)
+
     assert len(repo.outbox) == 1
     outbox_event = repo.outbox[0]
     assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
@@ -231,6 +236,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
         "direction": "OUTBOUND",
         "sender_id": "A",
         "receiver_id": "B",
+        "trading_partner_id": "p-idem",
         "transaction_type": "810",
         "edi_data": "EDI~",
         "status": "PROCESSING",
@@ -276,6 +282,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
         "direction": "OUTBOUND",
         "sender_id": "X",
         "receiver_id": "Y",
+        "trading_partner_id": "p-nolocal",
         "transaction_type": "850",
         "edi_data": "EDI~",
         "status": "PENDING_DELIVERY",
@@ -295,7 +302,10 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     # Do NOT seed local_as2_partners["missing-local"]
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(repo.outbox) == 1

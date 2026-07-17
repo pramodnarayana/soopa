@@ -1,11 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from config.settings import AppSettings
 from database.encryption import db_encryption
 from database.models import ApiGateway, EdiMessage
-from database.models import TenantOutbox as Outbox
+from database.models import DataPlaneOutbox as Outbox
 from database.models.data_plane import (
     AS2Partner,
     AS2Partnership,
@@ -65,7 +65,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                     .scalar_subquery()
                 )
             )
-            .values(status=status, updated_at=datetime.utcnow())
+            .values(status=status, updated_at=datetime.now(UTC))
         )
         await self.session.execute(stmt)
 
@@ -109,7 +109,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         receiver_id: str | None = None,
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
-        outbound_route_id: str | None = None,
+        trading_partner_id: str | None = None,
         tenant_id: int | None = None,
     ) -> None:
         storage_uri = None
@@ -135,7 +135,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             "gs_receiver_id": gs_receiver_id,
             "storage_uri": storage_uri,
             "status": status,
-            "outbound_route_id": uuid.UUID(outbound_route_id) if outbound_route_id else None,
+            "trading_partner_id": trading_partner_id,
         }
         if tenant_id is not None:
             record_kwargs["tenant_id"] = tenant_id
@@ -192,7 +192,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         record_kwargs = {
             "trace_id": uuid.UUID(trace_id),
             "direction": direction,
-            "outbound_route_id": uuid.UUID(partnership_id) if partnership_id else None,
+            "trading_partner_id": partnership_id,
             "transaction_type": transaction_type,
             "standard": standard,
             "sender_id": sender_id,

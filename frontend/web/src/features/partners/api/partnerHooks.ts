@@ -127,14 +127,20 @@ export function useUpdatePlatformPartnerMutation() {
   );
 }
 
-export function useDeletePlatformPartner() {
+export function useDeletePlatformPartnerMutation() {
   const repo = useRepository();
-
   return useToastMutation(
     (id: string) => repo.deletePlatformPartner(id),
     'Partner deleted.',
     [partnersKeys.platformPartners()]
   );
+}
+
+export function useDeleteCertificateSecretMutation() {
+  const repo = useRepository();
+  return useMutation({
+    mutationFn: (vaultRef: string) => repo.deleteCertificateSecret(vaultRef),
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -226,6 +232,13 @@ export function useRotateCertificatesMutation() {
       partnersKeys.all,
     ]
   );
+}
+
+export function useGenerateCertificateMutation() {
+  const repo = useRepository();
+  return useMutation({
+    mutationFn: (as2Id: string) => repo.generateCertificate(as2Id)
+  });
 }
 
 export function useTestSftpConnectionMutation() {

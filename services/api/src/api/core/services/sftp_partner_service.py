@@ -27,7 +27,7 @@ class SFTPPartnerService:
     async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
         partner_id = await self.uow.sftp_partners.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_CREATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
@@ -70,7 +70,7 @@ class SFTPPartnerService:
         )
 
         update_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
-        await self.uow.outbox.publish_outbox_event(
+        await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_UPDATED,
             payload={"partner_id": str(partner_id), "tenant_id": tenant_id},

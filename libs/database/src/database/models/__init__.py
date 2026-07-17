@@ -1,6 +1,7 @@
 from .control_plane import (
     AS2Partner,
     AS2Partnership,
+    ControlPlaneOutbox,
     DatabaseShard,
     GlobalBase,
     SystemAuditLog,
@@ -14,13 +15,11 @@ from .control_plane import (
 from .control_plane import (
     OutboundRoute as GlobalOutboundRoute,
 )
-from .control_plane import (
-    Outbox as GlobalOutbox,
-)
 from .data_plane import (
     AckReceipt,
     ApiGateway,
     AuditLog,
+    DataPlaneOutbox,
     EdiMessage,
     InboundRoute,
     Job,
@@ -32,9 +31,8 @@ from .data_plane import (
     TenantBase,
     Webhook,
 )
-from .data_plane import (
-    Outbox as TenantOutbox,
-)
+from .platform_settings import PlatformSettings
+from .scheduled_job import ScheduledJob
 
 __all__ = [
     # Global
@@ -45,7 +43,7 @@ __all__ = [
     "TenantUser",
     "AS2Partner",
     "AS2Partnership",
-    "GlobalOutbox",
+    "ControlPlaneOutbox",
     "SystemAuditLog",
     "GlobalOutboundEdiHeader",
     "GlobalOutboundRoute",
@@ -60,8 +58,11 @@ __all__ = [
     "EdiMessage",
     "ApiGateway",
     "Job",
-    "TenantOutbox",
+    "DataPlaneOutbox",
     "ProcessedEvent",
     "AuditLog",
     "AckReceipt",
+    # Scheduler
+    "ScheduledJob",
+    "PlatformSettings",
 ]

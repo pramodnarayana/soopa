@@ -59,6 +59,7 @@ class AS2MessageOrchestrator:
         raw_payload: bytes,
         local_partner: dict[str, Any] | None,
         remote_partner: dict[str, Any],
+        idempotency_key: str | None = None,
     ) -> OutboundAS2Message:
         """
         Builds the fully-wrapped AS2 HTTP message for transmission.
@@ -136,4 +137,5 @@ class AS2MessageOrchestrator:
             sign_fn=sign_fn,
             encrypt_fn=encrypt_fn,
             mdn_url=mdn_url,
+            message_id=idempotency_key,
         )

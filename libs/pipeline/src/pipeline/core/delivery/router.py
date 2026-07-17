@@ -19,7 +19,7 @@ class DeliveryRouter:
         self.repository = repository
         self.strategies = strategies
 
-    async def deliver(self, trace_id: str) -> None:
+    async def deliver(self, trace_id: str, idempotency_key: str | None = None) -> None:
         """
         Looks up the route for the given trace_id and dispatches to the
         correct delivery handler via the strategy registry.
@@ -32,12 +32,22 @@ class DeliveryRouter:
 
         direction = edi_msg.direction
 
-        if direction == "OUTBOUND" and edi_msg.outbound_route_id:
-            route = await self.repository.get_outbound_route(str(edi_msg.outbound_route_id))
-            if not route:
-                logger.error(f"Configured outbound route for {edi_msg.outbound_route_id} not found")
+        if direction == "OUTBOUND":
+            if not edi_msg.trading_partner_id:
                 raise ValueError(
-                    f"Configured outbound route for {edi_msg.outbound_route_id} not found"
+                    f"EDI Message {trace_id} is missing trading_partner_id for OUTBOUND routing."
+                )
+
+            route = await self.repository.get_outbound_route_by_trading_partner_id(
+                trading_partner_id=edi_msg.trading_partner_id,
+                tenant_id=edi_msg.tenant_id,
+            )
+            if not route:
+                logger.error(
+                    f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
+                )
+                raise ValueError(
+                    f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
                 )
         else:
             sender_id = edi_msg.sender_id
@@ -56,11 +66,13 @@ class DeliveryRouter:
                 logger.error(f"No {direction} route found for {sender_id}->{receiver_id}")
                 raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
 
-        # ── Dispatch via registry (OCP) ───────────────────────────────────────
         for route_key, strategy in self.strategies.items():
             partner_id = route.get(route_key)
             if partner_id:
-                await strategy.deliver(trace_id, partner_id, edi_msg)
+                try:
+                    await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
+                except Exception as e:
+                    raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e
                 return
 
         raise ValueError(

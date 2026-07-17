@@ -11,6 +11,7 @@ from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
 from database.models.control_plane import DatabaseShard, Tenant
+from domain.events import PipelineEventType
 from security.smime import decrypt_payload, verify_signature
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -373,9 +374,11 @@ class As2ReceiverService:
         async_gen_tenant = self.db_router.get_tenant_session(true_tenant_id, shard.name, shard.dsn)
         tenant_session = await anext(async_gen_tenant)
         try:
+            from api.adapters.outbox_repository import SqlAlchemyDataPlaneOutboxRepository
             from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
 
             dp_repo = SqlAlchemyTransactionRepository(tenant_session)
+            outbox_repo = SqlAlchemyDataPlaneOutboxRepository(tenant_session)
             msg_id = await dp_repo.create_edi_message(tenant_id=true_tenant_id, payload=edi_record)
 
             outbox_payload = {
@@ -385,9 +388,9 @@ class As2ReceiverService:
                 "receiver_id": isa_receiver,
                 "status": "RECEIVED",
             }
-            await dp_repo.publish_outbox_event(
+            await outbox_repo.publish_outbox_event(
                 tenant_id=true_tenant_id,
-                event_type="edi_message.received",
+                event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload=outbox_payload,
                 idempotency_key=msg_id,
             )

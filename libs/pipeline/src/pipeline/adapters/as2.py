@@ -4,6 +4,7 @@ Implements AS2DeliveryPort using an async HTTP client.
 """
 
 import logging
+import typing
 
 import httpx
 from pipeline.ports.as2 import AS2DeliveryPort
@@ -20,8 +21,11 @@ class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
     connection errors. MDN parsing is delegated to the caller (DeliveryService).
     """
 
-    def __init__(self, timeout_secs: int = 30) -> None:
+    def __init__(
+        self, timeout_secs: int = 30, validator: typing.Callable[[str], typing.Any] | None = None
+    ) -> None:
         self.timeout = timeout_secs
+        self.validator = validator
 
     async def deliver(
         self,
@@ -38,11 +42,22 @@ class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
         """
         logger.debug(f"AS2 HTTP POST → {url}, Content-Length={len(body)}")
 
-        async with httpx.AsyncClient(
-            timeout=self.timeout,
-            follow_redirects=False,  # AS2 spec does not permit redirect following
-        ) as client:
-            response = await client.post(url, content=body, headers=headers)
+        import contextlib
+
+        ctx = self.validator(url) if self.validator else contextlib.nullcontext()
+
+        # If validator returns a boolean (legacy), handle it
+        if isinstance(ctx, bool):
+            if not ctx:
+                raise ValueError("URL validation failed for provided destination.")
+            ctx = contextlib.nullcontext()
+
+        with ctx:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=False,  # AS2 spec does not permit redirect following
+            ) as client:
+                response = await client.post(url, content=body, headers=headers)
 
         # Convert httpx headers to a standard dict
         resp_headers = {k.lower(): v for k, v in response.headers.items()}

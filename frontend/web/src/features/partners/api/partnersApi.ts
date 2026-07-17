@@ -54,6 +54,10 @@ class HttpPartnersRepository implements IPartnersRepository {
   }
 
   // ── Platform Trading Partners ──────────────
+  deleteCertificateSecret(vaultRef: string): Promise<void> {
+    return this.request(`/api/v1/platform/trading-partners/as2/certificates/secret?vault_ref=${encodeURIComponent(vaultRef)}`, { method: 'DELETE' });
+  }
+
   getPlatformPartners(): Promise<Partner[]> {
     return this.request('/api/v1/platform/trading-partners/as2/trading-partners');
   }
@@ -121,6 +125,13 @@ class HttpPartnersRepository implements IPartnersRepository {
     return this.request(
       `/api/v1/trading-partners/as2/${partnerId}/certificates/rotate`,
       { method: 'PUT', body: JSON.stringify(payload) },
+    );
+  }
+
+  generateCertificate(as2Id: string): Promise<{ public_cert_pem: string; private_key_vault_ref: string }> {
+    return this.request(
+      `/api/v1/platform/trading-partners/as2/certificates/generate`,
+      { method: 'POST', body: JSON.stringify({ as2_id: as2Id }) },
     );
   }
 

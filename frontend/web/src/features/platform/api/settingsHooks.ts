@@ -6,17 +6,17 @@ export interface SupportedAlgorithm {
   label: string;
 }
 
-export interface PlatformConfig {
+export interface PlatformSettings {
   available_as2_receive_urls: string[];
   supported_as2_encryption_algorithms: SupportedAlgorithm[];
   supported_as2_signature_algorithms: SupportedAlgorithm[];
 }
 
-export const usePlatformConfig = () => {
+export const usePlatformSettings = () => {
   const auth = useAuth();
   return useQuery({
-    queryKey: ['platform-config'],
-    queryFn: async (): Promise<PlatformConfig> => {
+    queryKey: ['platform-settings'],
+    queryFn: async (): Promise<PlatformSettings> => {
       const response = await fetch('/api/v1/platform/trading-partners/config', {
         headers: {
           Authorization: `Bearer ${auth.user?.access_token}`,

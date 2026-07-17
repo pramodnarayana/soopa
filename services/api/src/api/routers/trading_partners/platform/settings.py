@@ -4,7 +4,7 @@ from config.settings import get_settings
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(tags=["Platform Config"])
+router = APIRouter(tags=["Platform Settings"])
 
 
 class SupportedAlgorithm(BaseModel):
@@ -12,20 +12,20 @@ class SupportedAlgorithm(BaseModel):
     label: str
 
 
-class PlatformConfigResponse(BaseModel):
+class PlatformSettingsResponse(BaseModel):
     available_as2_receive_urls: list[str]
     supported_as2_encryption_algorithms: list[SupportedAlgorithm]
     supported_as2_signature_algorithms: list[SupportedAlgorithm]
 
 
-@router.get("/config", response_model=PlatformConfigResponse)
-async def get_platform_config() -> Any:
+@router.get("/config", response_model=PlatformSettingsResponse)
+async def get_platform_settings() -> Any:
     settings = get_settings()
 
     # We strip trailing slashes to ensure consistent path appending
     base_url = settings.server.external_url.rstrip("/")
 
-    return PlatformConfigResponse(
+    return PlatformSettingsResponse(
         available_as2_receive_urls=[f"{base_url}/api/v1/as2/receive"],
         supported_as2_encryption_algorithms=[
             SupportedAlgorithm(value="AES256", label="AES-256-CBC"),

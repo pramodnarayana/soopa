@@ -6,7 +6,11 @@ from api.adapters.as2_partnership_repository import SqlAlchemyAS2PartnershipRepo
 from api.adapters.edi_header_repository import SqlAlchemyEdiHeaderRepository
 from api.adapters.inbound_route_repository import SqlAlchemyInboundRouteRepository
 from api.adapters.outbound_route_repository import SqlAlchemyOutboundRouteRepository
-from api.adapters.outbox_repository import SqlAlchemyOutboxRepository
+from api.adapters.outbox_repository import (
+    SqlAlchemyControlPlaneOutboxRepository,
+    SqlAlchemyDataPlaneOutboxRepository,
+)
+from api.adapters.platform_settings_repository import SqlAlchemyPlatformSettingsRepository
 from api.adapters.sftp_repository import SqlAlchemySFTPPartnerRepository
 from api.adapters.tenant_repository import SqlAlchemyTenantRepository
 from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
@@ -40,11 +44,13 @@ class UnitOfWork:
         self.as2_partnerships = SqlAlchemyAS2PartnershipRepository(gs)
         self.inbound_routes = SqlAlchemyInboundRouteRepository(gs)
         self.outbound_routes = SqlAlchemyOutboundRouteRepository(gs)
-        self.outbox = SqlAlchemyOutboxRepository(gs)
+        self.control_plane_outbox = SqlAlchemyControlPlaneOutboxRepository(gs)
+        self._data_plane_outbox = SqlAlchemyDataPlaneOutboxRepository(ts) if ts else None
         self.sftp_partners = SqlAlchemySFTPPartnerRepository(gs)
         self.tenants = SqlAlchemyTenantRepository(gs)
         self.webhooks = SqlAlchemyWebhookRepository(gs)
         self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
+        self.platform_settings = SqlAlchemyPlatformSettingsRepository(gs)
 
         self._transactions = SqlAlchemyTransactionRepository(ts) if ts else None
 
@@ -53,6 +59,12 @@ class UnitOfWork:
         if not self._transactions:
             raise RuntimeError("Transaction repository requires an active tenant session.")
         return self._transactions
+
+    @property
+    def data_plane_outbox(self) -> SqlAlchemyDataPlaneOutboxRepository:
+        if not self._data_plane_outbox:
+            raise RuntimeError("Tenant outbox repository requires an active tenant session.")
+        return self._data_plane_outbox
 
     async def __aenter__(self) -> Self:
         return self

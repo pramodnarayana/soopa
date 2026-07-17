@@ -20,10 +20,9 @@ router = APIRouter(prefix="/internal/cdc", tags=["CDC Relay"])
 _TRANSFORM_QUEUE_EVENT_TYPES: frozenset[str] = frozenset(
     {
         PipelineEventType.TRANSFORM_EVENT,
+        PipelineEventType.COMPUTE_TRANSFORM_EVENT,
         PipelineEventType.TRANSFORM_COMPLETED,
         PipelineEventType.DELIVERY_COMPLETED,
-        "json.received",
-        "edi_message.received",
     }
 )
 
