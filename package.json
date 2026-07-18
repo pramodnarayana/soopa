@@ -1,0 +1,26 @@
+{
+  "name": "soopaucp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Soopa Unified Control Plane",
+  "scripts": {
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "prepare": "husky"
+  },
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "typescript": "^5.4.0",
+    "turbo": "^2.7.2",
+    "vitest": "^4.0.18",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "@changesets/cli": "^2.31.0"
+  }
+}
