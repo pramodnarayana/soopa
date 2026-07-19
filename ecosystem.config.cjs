@@ -2,8 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'notification-engine',
-      script: 'pnpm',
-      args: '--filter @soopa/notification-engine start',
+      script: 'server/notification_engine/dist/index.js',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -11,8 +10,7 @@ module.exports = {
     },
     {
       name: 'scheduler-engine',
-      script: 'pnpm',
-      args: '--filter @soopa/scheduler-engine start',
+      script: 'server/scheduler_engine/dist/index.js',
       instances: 1,
       autorestart: true,
       watch: false,

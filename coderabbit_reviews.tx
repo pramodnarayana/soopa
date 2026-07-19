@@ -1,0 +1,136 @@
+In @.agents/skills/architect/SKILL.md:
+- Around line 11-13: Update the “Stateful vs. Stateless Segregation” guidance to
+distinguish stateless JWKS/token verification, which remains in the native
+in-process SDK, from stateful identity data and mutations such as tenant
+provisioning, persistence, and tenant resolution. Explicitly require tenant
+state to be centralized behind a language-agnostic service or port so
+implementations cannot maintain divergent tenant mappings.
+
+In @.agents/skills/cloud-architect/SKILL.md:
+- Line 12: Update the “Compute Isolation & Queuing” guidance to avoid implying
+that choosing SQS or RabbitMQ alone prevents data loss. State that burst
+absorption and delivery guarantees additionally depend on durable configuration,
+producer confirmations, retention, dead-letter replay, retry/backoff, and
+idempotent consumers.
+
+In @.agents/skills/reviewer/SKILL.md:
+- Line 21: Update the review feedback format in SKILL.md to define a complete
+severity taxonomy including blocker/critical, major, and minor levels. Replace
+the current BLOCKER/MINOR-only guidance while preserving the structured file
+path, line number, severity, and feedback format.
+
+In `@ecosystem.config.cjs`:
+- Around line 3-20: Update the PM2 entries for notification-engine and
+scheduler-engine to point script directly at their compiled Node.js entry points
+under each app’s dist directory, replacing the pnpm executable and removing the
+package-manager-specific args while preserving the existing process settings.
+
+In `@packages/database/package.json`:
+- Line 5: Update the package manifest’s main entry from src/index.ts to the
+compiled dist output, and add a types field pointing to the generated
+declaration file so consumers resolve JavaScript and TypeScript metadata
+correctly.
+
+In `@packages/database/src/seed.ts`:
+- Around line 19-37: Make the notification template seeding operation in the
+seed script idempotent by preventing duplicate rows on repeated runs. Add a
+unique constraint covering tenantId, eventType, and channel in the
+notificationTemplates schema, then use the corresponding conflict-resolution
+method on the insert; alternatively, delete the existing seed records before
+insertion.
+
+In
+`@packages/identity/node/src/adapters/outbound/database/DrizzleTenantRepository.ts`:
+- Around line 20-39: Update provisionUserAndTenant to execute the user, tenant,
+and tenantUsers inserts through a single this.db.transaction callback, using the
+transaction handle for all three mutations. Preserve the existing returned IDs
+and IdentityInfrastructureError wrapping so any failure rolls back every insert.
+
+In `@packages/identity/node/tests/DrizzleTenantRepository.spec.ts`:
+- Around line 9-24: Resolve strict-mode mock typing across the affected tests:
+in packages/identity/node/tests/DrizzleTenantRepository.spec.ts lines 9-24,
+change the db variable from unknown to any; in lines 59-79, cast each badDb stub
+passed to DrizzleTenantRepository as any; in
+packages/identity/node/tests/ZitadelJwksVerifier.spec.ts lines 14-16, replace
+the never cast on jose.jwtVerify with vi.mocked(jose.jwtVerify) or any before
+calling mockResolvedValue; and in
+packages/identity/node/tests/fastifyPlugin.spec.ts lines 37-39, cast fastify as
+any before accessing the dynamically decorated verifyTenant property.
+
+In `@packages/identity/python/.coverage`:
+- Around line 1-69: Remove the tracked .coverage artifact from version control
+and add .coverage to the repository’s .gitignore so future coverage.py SQLite
+databases remain untracked.
+- Around line 1-69: Remove the tracked .coverage SQLite artifact from version
+control and add .coverage to the repository’s .gitignore so future coverage.py
+output remains untracked.
+
+In
+`@packages/identity/python/soopa_identity/adapters/outbound/zitadel/jwks_token_verifier.py`:
+- Around line 36-40: Update _get_signing_key to remove the unused
+httpx.AsyncClient request and invoke
+self._jwks_client.get_signing_key_from_jwt(token) via asyncio.to_thread.
+Preserve PyJWKClient’s caching behavior while ensuring its synchronous network
+fetch runs off the event loop.
+- Around line 36-40: Update _get_signing_key to remove the unused
+httpx.AsyncClient request and invoke
+self._jwks_client.get_signing_key_from_jwt(token) via asyncio.to_thread,
+preserving PyJWKClient caching while preventing its synchronous network call
+from blocking the event loop.
+
+In `@Dockerfile`:
+- Around line 32-34: Update the Dockerfile runtime configuration near the PM2
+CMD to switch execution to the unprivileged node user provided by the base
+image, ensuring the application starts as that user rather than root.
+
+---
+
+Nitpick comments:
+In @.husky/pre-commit:
+- Around line 8-22: Update the status messages in the pre-commit script to avoid
+echoing embedded "\n" sequences under POSIX sh: print a separate empty line with
+echo "" before each numbered message, then echo the message itself. Apply this
+consistently to all five steps while preserving their existing commands and
+failure handling.
+
+In `@eslint.config.mjs`:
+- Line 34: Remove the '**/tests/**' pattern from the ESLint ignores
+configuration so test files remain linted. If test-specific relaxation is
+required, configure it through a separate override ruleset rather than globally
+excluding the files.
+
+In `@packages/database/src/index.ts`:
+- Around line 8-11: Update createDbClient to expose the underlying Pool
+alongside the Drizzle database instance, allowing callers to invoke pool.end()
+during shutdown. Preserve the existing connectionString-based pool creation and
+schema configuration while returning both usable objects.
+
+In `@packages/database/src/schema/identity.ts`:
+- Around line 21-30: Update the tenantUsers table definition to add a composite
+primary key over tenantId and userId using Drizzle’s primaryKey helper. Replace
+the redundant tenantUserIdx unique index while preserving the existing column
+definitions and uniqueness constraint.
+
+In `@packages/database/src/schema/scheduler.ts`:
+- Around line 21-26: Update the scheduler table index definitions in the table
+configuration callback to replace the separate statusIdx and nextRunIdx indexes
+with a single composite index covering table.status and table.nextRunAt,
+preserving the existing index naming conventions where appropriate.
+
+In `@packages/identity/node/src/middleware/fastifyPlugin.ts`:
+- Around line 16-21: Update the FastifyRequest identity augmentation to
+explicitly allow null, matching the null default assigned by
+fastify.decorateRequest('identity', null), while preserving the existing
+optional/undefined behavior if required by the runtime.
+
+In `@packages/identity/python/soopa_identity/decorators/requires_permission.py`:
+- Around line 12-25: Update the wrapper in requires_permission to resolve the
+identity parameter through the decorated function’s inspect.signature binding,
+supporting both positional and keyword invocation while preserving the existing
+IdentityContext validation and require_permission call.
+- Around line 12-25: Update the wrapper inside requires_permission to resolve
+the identity parameter from either positional or keyword arguments using
+inspect.signature, while preserving the existing IdentityContext validation and
+require_permission call. Ensure direct positional invocations such as
+my_endpoint(mock_identity) are supported without changing the wrapped function’s
+arguments.

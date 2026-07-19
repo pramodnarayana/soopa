@@ -4,23 +4,46 @@
   "private": true,
   "description": "Soopa Unified Control Plane",
   "scripts": {
-    "build": "turbo build",
-    "test": "turbo test",
-    "lint": "turbo lint",
-    "typecheck": "turbo typecheck",
-    "prepare": "husky"
+    "dev": "pm2 start ecosystem.config.cjs --no-daemon",
+    "build": "turbo run build",
+    "typecheck": "pnpm typecheck:node && pnpm typecheck:python",
+    "typecheck:node": "turbo typecheck",
+    "typecheck:python": "for d in packages/*/python; do if [ -d \"$d\" ]; then (cd \"$d\" && poetry run mypy .); fi; done",
+    "lint": "pnpm lint:node && pnpm lint:python",
+    "lint:node": "eslint .",
+    "lint:python": "for d in packages/*/python; do if [ -d \"$d\" ]; then (cd \"$d\" && poetry run ruff check .); fi; done",
+    "test": "pnpm test:node && pnpm test:python",
+    "test:node": "turbo test",
+    "test:python": "for d in packages/*/python; do if [ -d \"$d\" ]; then (cd \"$d\" && domain=$(basename $(dirname \"$d\")) && poetry run pytest --cov=\"soopa_${domain}\" --cov-fail-under=80); fi; done",
+    "knip": "knip",
+    "db:generate": "pnpm --filter @soopa/database db:generate",
+    "db:migrate": "pnpm --filter @soopa/database db:migrate",
+    "db:seed": "tsx packages/database/src/seed.ts",
+    "infra-reset": "docker compose down && docker compose up -d --wait && pnpm db:migrate && pnpm db:seed",
+    "clean": "turbo clean && rm -rf node_modules",
+    "prepare": "husky",
+    "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
+    "deadcode:node": "knip",
+    "deadcode:python": "for d in packages/*/python; do if [ -d \"$d\" ]; then (cd \"$d\" && poetry add --group dev vulture deptry && poetry run vulture --exclude .venv . --min-confidence 80 && poetry run deptry .); fi; done"
   },
   "packageManager": "pnpm@10.27.0",
   "engines": {
     "node": ">=20.18.1"
   },
   "devDependencies": {
-    "@types/node": "^20.14.9",
-    "typescript": "^5.4.0",
-    "turbo": "^2.7.2",
-    "vitest": "^4.0.18",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^20.19.43",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "@changesets/cli": "^2.31.0"
+    "knip": "^6.27.0",
+    "turbo": "^2.7.2",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "pm2": "^7.0.3"
   }
 }

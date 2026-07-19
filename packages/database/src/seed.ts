@@ -11,7 +11,7 @@ if (!dbUrl) {
   process.exit(1);
 }
 
-const db = createDbClient(dbUrl);
+const { db, pool } = createDbClient(dbUrl);
 
 async function seed() {
   console.log('Seeding Notification Templates...');
@@ -33,9 +33,10 @@ async function seed() {
       bodyTemplate: '🚨 *EDI Processing Failed*\nPartner: {{partnerName}}\nFile: `{{fileName}}`\nError: {{errorMessage}}',
       isActive: true
     }
-  ]);
+  ]).onConflictDoNothing();
   
   console.log('Seeding Complete!');
+  await pool.end();
   process.exit(0);
 }
 

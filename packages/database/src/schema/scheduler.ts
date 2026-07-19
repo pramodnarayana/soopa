@@ -20,7 +20,6 @@ export const scheduledJobs = pgTable('scheduled_jobs', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => {
   return {
-    statusIdx: index('job_status_idx').on(table.status),
-    nextRunIdx: index('job_next_run_idx').on(table.nextRunAt),
+    statusNextRunIdx: index('job_status_next_run_idx').on(table.status, table.nextRunAt),
   };
 });

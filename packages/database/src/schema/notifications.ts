@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { NotificationChannelType } from '../constants.js';
 
 export const notificationTemplates = pgTable('notification_templates', {
@@ -9,4 +9,8 @@ export const notificationTemplates = pgTable('notification_templates', {
   subjectTemplate: text('subject_template').notNull(),
   bodyTemplate: text('body_template').notNull(),
   isActive: boolean('is_active').default(true).notNull(),
+}, (table) => {
+  return {
+    notificationTemplateIdx: uniqueIndex('notification_template_idx').on(table.tenantId, table.eventType, table.channel),
+  };
 });

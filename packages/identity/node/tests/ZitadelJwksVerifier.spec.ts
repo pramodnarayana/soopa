@@ -11,7 +11,7 @@ describe('ZitadelJwksVerifier', () => {
   it('should verify token using jose', async () => {
     const verifier = new ZitadelJwksVerifier({ issuer: 'https://iss.com', audience: 'aud' });
     
-    (jose.jwtVerify as never).mockResolvedValue({
+    vi.mocked(jose.jwtVerify).mockResolvedValue({
       payload: { sub: 'test-user', email: 'test@test.com' }
     });
 

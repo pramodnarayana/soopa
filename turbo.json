@@ -5,6 +5,12 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "db:generate": {
+      "cache": false
+    },
+    "db:migrate": {
+      "cache": false
+    },
     "test": {
       "dependsOn": ["build"],
       "outputs": []

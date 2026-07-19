@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { IdentityInfrastructureError } from '../../../domain/Errors.js';
 
 export class DrizzleTenantRepository implements TenantRepository {
-  constructor(private readonly db: ReturnType<typeof createDbClient>) {} // Inject Drizzle instance
+  constructor(private readonly db: ReturnType<typeof createDbClient>['db']) {} // Inject Drizzle instance
 
   async findUserByEmail(email: string): Promise<UserData | null> {
     try {
@@ -19,19 +19,21 @@ export class DrizzleTenantRepository implements TenantRepository {
 
   async provisionUserAndTenant(email: string, name: string, zitadelOrgId?: string): Promise<{ userId: string; tenantId: string; }> {
     try {
-      const [newUser] = await this.db.insert(users).values({ email, name }).returning();
-      const [newTenant] = await this.db.insert(tenants).values({
-        name: `${name}'s Organization`,
-        zitadelOrgId: zitadelOrgId || null
-      }).returning();
-      
-      await this.db.insert(tenantUsers).values({
-        tenantId: newTenant.id,
-        userId: newUser.id,
-        role: UserRoles.ADMIN
-      });
+      return await this.db.transaction(async (tx: any) => {
+        const [newUser] = await tx.insert(users).values({ email, name }).returning();
+        const [newTenant] = await tx.insert(tenants).values({
+          name: `${name}'s Organization`,
+          zitadelOrgId: zitadelOrgId || null
+        }).returning();
+        
+        await tx.insert(tenantUsers).values({
+          tenantId: newTenant.id,
+          userId: newUser.id,
+          role: UserRoles.ADMIN
+        });
 
-      return { userId: newUser.id, tenantId: newTenant.id };
+        return { userId: newUser.id, tenantId: newTenant.id };
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new IdentityInfrastructureError(`Failed to provision user and tenant: ${msg}`);

@@ -1,3 +1,5 @@
 packages:
   - 'server/*'
   - 'sdks/node/*'
+  - 'packages/*'
+  - 'packages/*/node'

@@ -6,12 +6,12 @@ import { sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('DrizzleTenantRepository', () => {
-  let db: unknown;
+  let db: any;
   let repo: DrizzleTenantRepository;
   const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
 
   beforeAll(async () => {
-    db = createDbClient(dbConnectionString);
+    db = createDbClient(dbConnectionString).db;
     repo = new DrizzleTenantRepository(db);
   });
   
@@ -58,21 +58,21 @@ describe('DrizzleTenantRepository', () => {
 
   it('should throw IdentityInfrastructureError on DB failure for findUserByEmail', async () => {
     const badDb = { select: () => { throw new Error('DB Error'); } };
-    const badRepo = new DrizzleTenantRepository(badDb);
+    const badRepo = new DrizzleTenantRepository(badDb as any);
 
     await expect(badRepo.findUserByEmail('test@example.com')).rejects.toThrow('Failed to fetch user by email: DB Error');
   });
 
   it('should throw IdentityInfrastructureError on DB failure for provision', async () => {
     const badDb = { insert: () => { throw new Error('DB Error'); } };
-    const badRepo = new DrizzleTenantRepository(badDb);
+    const badRepo = new DrizzleTenantRepository(badDb as any);
 
     await expect(badRepo.provisionUserAndTenant('test@example.com', 'Test')).rejects.toThrow('Failed to provision user and tenant: DB Error');
   });
 
   it('should throw IdentityInfrastructureError on DB failure for get mapping', async () => {
     const badDb = { select: () => { throw new Error('DB Error'); } };
-    const badRepo = new DrizzleTenantRepository(badDb);
+    const badRepo = new DrizzleTenantRepository(badDb as any);
 
     await expect(badRepo.getTenantMappingForUser('123')).rejects.toThrow('Failed to fetch tenant mapping: DB Error');
   });

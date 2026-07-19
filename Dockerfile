@@ -30,4 +30,5 @@ EXPOSE 3002
 COPY ecosystem.config.cjs ./
 
 # By default, use pm2 to run the engines specified in the config
+USER node
 CMD ["pm2-runtime", "start", "ecosystem.config.cjs"]

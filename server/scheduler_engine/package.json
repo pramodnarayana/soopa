@@ -1,0 +1,26 @@
+{
+  "name": "@soopa/scheduler-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@soopa/database": "workspace:*",
+    "cron-parser": "^4.9.0",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^4.26.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.10"
+  }
+}

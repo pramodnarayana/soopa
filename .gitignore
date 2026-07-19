@@ -5,3 +5,9 @@ build/
 .env
 .env.*
 .DS_Store
+coverage/
+__pycache__/
+*.pyc
+.pytest_cache/
+uv.lock
+tsconfig.tsbuildinfo

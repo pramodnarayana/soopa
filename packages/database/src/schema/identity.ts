@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, varchar, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, varchar, primaryKey } from 'drizzle-orm/pg-core';
 import { createId } from '@paralleldrive/cuid2';
 import { UserRoles, type UserRoleType } from '../constants.js';
 
@@ -25,6 +25,6 @@ export const tenantUsers = pgTable('tenant_users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => {
   return {
-    tenantUserIdx: uniqueIndex('tenant_user_idx').on(table.tenantId, table.userId),
+    pk: primaryKey({ columns: [table.tenantId, table.userId] }),
   };
 });

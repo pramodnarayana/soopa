@@ -8,7 +8,7 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        project: true,
+        project: 'tsconfig.eslint.json',
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
@@ -31,6 +31,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/vitest.config.ts', 'vitest.workspace.ts', 'eslint.config.mjs', 'ecosystem.config.cjs', '**/drizzle.config.ts', '**/tests/**', '**/coverage/**', '**/.venv/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/vitest.config.ts', 'vitest.workspace.ts', 'eslint.config.mjs', 'ecosystem.config.cjs', '**/drizzle.config.ts', '**/coverage/**', '**/.venv/**'],
   }
 );

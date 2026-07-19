@@ -22,7 +22,7 @@ declare module 'fastify' {
 }
 
 export const identityPlugin: FastifyPluginAsync<IdentityPluginOptions> = async (fastify, options) => {
-  const db = createDbClient(options.dbConnectionString);
+  const { db } = createDbClient(options.dbConnectionString);
   const tokenVerifier = new ZitadelJwksVerifier({
     issuer: options.zitadelIssuer,
     audience: options.zitadelAudience
