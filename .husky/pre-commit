@@ -1,0 +1,24 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "========================================="
+echo "🔒 UCP Enterprise CI Simulator Running..."
+echo "========================================="
+
+echo "\n1. Typechecking (Node & Python)..."
+pnpm typecheck || exit 1
+
+echo "\n2. Linting (Node & Python)..."
+pnpm lint || exit 1
+
+echo "\n3. Testing (Node & Python)..."
+CI=true pnpm test || exit 1
+
+echo "\n4. Dead Code Analysis (knip)..."
+pnpm knip || exit 1
+
+echo "\n5. Building Node Packages..."
+pnpm build || exit 1
+
+echo "\n✅ All CI checks passed. Commit allowed."
+echo "========================================="

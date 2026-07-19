@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  ucp_postgres:
+    image: postgres:16-alpine
+    container_name: soopaucp-postgres
+    environment:
+      POSTGRES_USER: ucp_admin
+      POSTGRES_PASSWORD: ucp_password
+      POSTGRES_DB: ucp_platform
+    ports:
+      - "5434:5432" # Bound to 5434 to avoid colliding with EDI App on 5432
+    volumes:
+      - ucp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ucp_admin -d ucp_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ucp_engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soopaucp-engine
+    env_file: .env
+    ports:
+      - "3001:3001"
+      - "3002:3002"
+    depends_on:
+      ucp_postgres:
+        condition: service_healthy
+
+volumes:
+  ucp_pgdata:
