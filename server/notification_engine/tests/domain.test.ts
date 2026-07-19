@@ -17,7 +17,7 @@ test('NotificationRendererService pure domain logic', () => {
 
   const template = new NotificationTemplate(
     EventTypes.TEST,
-    NotificationChannel.EMAIL as Channel,
+    NotificationChannel.EMAIL,
     'Hello {{name}}',
     'Welcome {{name}} to Soopa!'
   );

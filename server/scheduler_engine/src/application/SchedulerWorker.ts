@@ -106,7 +106,16 @@ export class SchedulerWorker {
         await this.repository.scheduleRetry(job.id, job.retry_count + 1, nextRunAt);
         console.log(`Scheduled retry for job ${job.name} (${job.id}) at ${nextRunAt.toISOString()}`);
       } else {
-        const msg = err instanceof Error ? err.message : (typeof err === 'object' && err !== null ? JSON.stringify(err, Object.getOwnPropertyNames(err)) : String(err));
+        let msg = String(err);
+        if (err instanceof Error) {
+          msg = err.message;
+        } else if (typeof err === 'object' && err !== null) {
+          try {
+            msg = JSON.stringify(err, Object.getOwnPropertyNames(err));
+          } catch {
+            msg = '[Unserializable Error Object]';
+          }
+        }
         await this.repository.markFailed(job.id, msg);
       }
     }
