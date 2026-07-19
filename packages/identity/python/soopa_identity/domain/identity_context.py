@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices, field_validator
 
 
 class TokenClaims(BaseModel):
@@ -9,12 +9,19 @@ class TokenClaims(BaseModel):
     aud: str | list[str]
     exp: int
     iat: int | None = None
-    tenant_id: str
+    tenant_id: str = Field(validation_alias=AliasChoices("urn:zitadel:iam:org:id", "tenant_id"))
     organization_id: str | None = None
-    roles: list[str] = Field(default_factory=list)
+    roles: list[str] = Field(default_factory=list, validation_alias=AliasChoices("urn:zitadel:iam:org:project:roles", "roles"))
     permissions: list[str] = Field(default_factory=list)
 
-    model_config = {"extra": "allow"}
+    @field_validator("roles", mode="before")
+    @classmethod
+    def parse_roles(cls, v: Any) -> list[str]:
+        if isinstance(v, dict):
+            return list(v.keys())
+        return v
+
+    model_config = {"extra": "allow", "populate_by_name": True}
 
 
 class IdentityContext(BaseModel):

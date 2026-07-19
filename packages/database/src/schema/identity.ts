@@ -30,3 +30,12 @@ export const tenantUsers = pgTable('tenant_users', {
     pk: primaryKey({ columns: [table.tenantId, table.userId] }),
   };
 });
+
+export const apiKeys = pgTable('api_keys', {
+  id: varchar('id', { length: 128 }).primaryKey().$defaultFn(() => createId()),
+  tenantId: varchar('tenant_id', { length: 128 }).notNull().references(() => tenants.id),
+  keyHash: text('key_hash').notNull().unique(),
+  name: text('name').notNull(),
+  scopes: text('scopes').array().notNull().default([]),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});

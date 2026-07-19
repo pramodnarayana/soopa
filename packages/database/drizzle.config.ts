@@ -5,9 +5,7 @@ dotenv.config();
 
 export default defineConfig({
   schema: [
-    './src/schema/identity.ts',
-    './src/schema/notifications.ts',
-    './src/schema/scheduler.ts',
+    './src/schema/index.ts'
   ],
   out: './migrations',
   dialect: 'postgresql',
