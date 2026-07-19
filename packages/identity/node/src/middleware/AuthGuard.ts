@@ -3,6 +3,7 @@ import { Request } from 'express';
 import { AuthenticateUseCase } from '../application/Authenticate.js';
 import { TenantMappingDomainError, IdentityInfrastructureError } from '../domain/Errors.js';
 import type { IdentityContext as Identity } from '../domain/IdentityContext.js';
+import { identityContextStorage } from '../domain/IdentityContextStorage.js';
 
 export interface AuthenticatedRequest extends Request {
   identity: Identity;
@@ -38,6 +39,12 @@ export class AuthGuard implements CanActivate {
       request.identity = identity;
       request.tenantId = identity.tenantId;
       request.userId = identity.userId;
+      
+      const state = identityContextStorage.getStore();
+      if (state) {
+        state.identity = identity;
+        state.token = token;
+      }
       
       return true;
     } catch (err: unknown) {

@@ -1,40 +1,43 @@
 export type Channel = 'EMAIL' | 'SLACK' | 'IN_APP';
 
 export interface NotificationEvent {
-  tenantId: string;
   eventType: string;
   channels: Channel[];
   data: Record<string, unknown>;
 }
 
-export interface NotificationConfig {
-  baseUrl: string;
-}
+import { identityContextStorage } from '@soopa/identity';
 
-export class NotificationClient {
-  private baseUrl: string;
+/**
+ * Dispatches a notification via the Central Control Plane.
+ * The base URL is automatically resolved from the NOTIFICATION_ENGINE_URL environment variable,
+ * falling back to http://localhost:3001 for local development.
+ * 
+ * It automatically extracts the tenantId and auth token from the current async context.
+ */
+export async function notify(event: NotificationEvent): Promise<void> {
+  const baseUrl = process.env.NOTIFICATION_ENGINE_URL || 'http://localhost:3001';
+  const url = `${baseUrl}/api/v1/notifications/send`;
+  
+  const state = identityContextStorage.getStore();
+  const tenantId = state?.identity?.tenantId;
+  const token = state?.token;
 
-  constructor(config: NotificationConfig) {
-    this.baseUrl = config.baseUrl;
+  if (!tenantId) {
+    throw new Error('notify() must be called within an authenticated Identity context (missing tenantId)');
   }
 
-  /**
-   * Dispatches a notification via the Central Control Plane.
-   */
-  public async dispatch(event: NotificationEvent): Promise<void> {
-    const url = `${this.baseUrl}/api/v1/notifications/send`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(event)
-    });
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({ ...event, tenantId })
+  });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Failed to dispatch notification: ${response.status} - ${err}`);
-    }
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Failed to dispatch notification: ${response.status} - ${err}`);
   }
 }

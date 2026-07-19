@@ -1,4 +1,5 @@
-import { Module, DynamicModule, Provider, Global } from '@nestjs/common';
+import { Module, DynamicModule, Provider, Global, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { identityContextStorage } from './domain/IdentityContextStorage.js';
 import { createDbClient } from '@soopa/database';
 import { AuthenticateUseCase } from './application/Authenticate.js';
 import { ZitadelJwksVerifier } from './adapters/outbound/zitadel/ZitadelJwksVerifier.js';
@@ -13,7 +14,15 @@ export interface IdentityModuleOptions {
 
 @Global()
 @Module({})
-export class IdentityModule {
+export class IdentityModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply((req: any, res: any, next: () => void) => {
+        identityContextStorage.run({}, next);
+      })
+      .forRoutes('*');
+  }
+
   static register(options: IdentityModuleOptions): DynamicModule {
     const dbProvider: Provider = {
       provide: 'DATABASE_CONNECTION',

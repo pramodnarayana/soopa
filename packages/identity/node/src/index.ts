@@ -1,4 +1,5 @@
 export * from './domain/IdentityContext.js';
+export * from './domain/IdentityContextStorage.js';
 export * from './domain/Errors.js';
 export * from './ports/TokenVerifier.js';
 export * from './ports/TenantRepository.js';
