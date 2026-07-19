@@ -1,15 +1,26 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, InternalServerErrorException, Logger, ValidationPipe, UsePipes } from '@nestjs/common';
+import { IsString, IsNotEmpty, IsArray, IsObject } from 'class-validator';
 import { DispatchNotificationUseCase } from '../application/DispatchNotificationUseCase.js';
 import { NotificationEvent, Channel } from '../domain/models.js';
 
-export interface NotificationEventPayload {
-  tenantId: string;
-  eventType: string;
-  channels: Channel[];
-  data: Record<string, unknown>;
+export class NotificationEventPayload {
+  @IsString()
+  @IsNotEmpty()
+  tenantId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  eventType!: string;
+
+  @IsArray()
+  channels!: Channel[];
+
+  @IsObject()
+  data!: Record<string, unknown>;
 }
 
 @Controller('api/v1/notifications')
+@UsePipes(new ValidationPipe({ whitelist: true }))
 export class NotificationController {
   private readonly logger = new Logger(NotificationController.name);
 

@@ -42,7 +42,7 @@ describe('SchedulerWorker', () => {
     worker.start();
     await vi.runOnlyPendingTimersAsync();
 
-    expect(mockRepo.markCompleted).toHaveBeenCalledWith('j1');
+    expect(mockRepo.markCompleted).toHaveBeenCalledWith('j1', 'test-worker');
   });
 
   it('should reschedule recurring job', async () => {
@@ -53,7 +53,7 @@ describe('SchedulerWorker', () => {
     worker.start();
     await vi.runOnlyPendingTimersAsync();
 
-    expect(mockRepo.reschedule).toHaveBeenCalledWith('j2', expect.any(Date));
+    expect(mockRepo.reschedule).toHaveBeenCalledWith('j2', 'test-worker', expect.any(Date));
   });
 
   it('should fail if no target queue', async () => {
@@ -64,7 +64,7 @@ describe('SchedulerWorker', () => {
     worker.start();
     await vi.runOnlyPendingTimersAsync();
 
-    expect(mockRepo.scheduleRetry).toHaveBeenCalledWith('j3', 1, expect.any(Date));
+    expect(mockRepo.scheduleRetry).toHaveBeenCalledWith('j3', 'test-worker', 1, expect.any(Date));
   });
 
   it('should mark failed if max retries exceeded', async () => {
@@ -75,6 +75,6 @@ describe('SchedulerWorker', () => {
     worker.start();
     await vi.runOnlyPendingTimersAsync();
 
-    expect(mockRepo.markFailed).toHaveBeenCalledWith('j4', expect.any(String));
+    expect(mockRepo.markFailed).toHaveBeenCalledWith('j4', 'test-worker', expect.any(String));
   });
 });

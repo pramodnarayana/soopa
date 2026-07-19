@@ -16,6 +16,8 @@
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "@soopa/database": "workspace:*",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.45.2",
     "handlebars": "^4.7.8",
