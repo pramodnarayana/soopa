@@ -1,6 +1,6 @@
 import { NotificationChannel, EventTypes } from "@soopa/database";
 import { test, expect } from 'vitest';
-import { NotificationEvent, NotificationTemplate, Channel } from '../src/domain/models.js';
+import { NotificationTemplate } from '../src/domain/models.js';
 import { NotificationRendererService } from '../src/domain/services.js';
 import { ITemplateRenderer } from '../src/domain/services.js';
 

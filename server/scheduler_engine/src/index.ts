@@ -1,45 +1,28 @@
-import Fastify from 'fastify';
-import { createDbClient } from '@soopa/database';
-import { PostgresJobRepository } from './adapters/outbound/PostgresJobRepository.js';
-import { SchedulerWorker } from './application/SchedulerWorker.js';
+import * as dotenv from 'dotenv';
+dotenv.config();
+import { NestFactory } from '@nestjs/core';
+import { SchedulerModule } from './SchedulerModule.js';
+import { Logger } from '@nestjs/common';
 
-// Setup DB
-const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
-const { db, pool } = createDbClient(dbConnectionString);
-const jobRepository = new PostgresJobRepository(db);
+const logger = new Logger('Bootstrap');
 
-// Instantiate Application Logic
-const worker = new SchedulerWorker(jobRepository, 'scheduler-engine', 5000, 10);
+async function bootstrap() {
+  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
+  
+  const app = await NestFactory.create(SchedulerModule.register({
+    dbConnectionString,
+    engineId: 'scheduler-engine',
+    pollIntervalMs: 5000,
+    batchSize: 10,
+  }));
+  
+  app.enableShutdownHooks();
+  
+  await app.listen(3001, '0.0.0.0');
+  logger.log(`Scheduler Engine listening on ${await app.getUrl()}`);
+}
 
-const app = Fastify({ logger: true });
-
-app.get('/health', async (_request, _reply) => {
-  return { status: 'healthy', activeJobs: 0 }; // We can wire this to stats later
+bootstrap().catch(err => {
+  logger.error('Failed to start Scheduler Engine', err);
+  process.exit(1);
 });
-
-const start = async () => {
-  try {
-    await app.listen({ port: 3001, host: '0.0.0.0' });
-    app.log.info('Scheduler Engine API listening on port 3001');
-
-    // Start background loop
-    app.log.info('Starting background worker loop...');
-    void worker.start();
-  } catch (err) {
-    app.log.error(err);
-    process.exit(1);
-  }
-};
-
-const stop = async () => {
-  app.log.info('Shutting down scheduler engine...');
-  await worker.stop();
-  await pool.end();
-  await app.close();
-  process.exit(0);
-};
-
-process.on('SIGINT', () => void stop());
-process.on('SIGTERM', () => void stop());
-
-void start();

@@ -1,4 +1,4 @@
-import { NotificationChannel, EventTypes } from "@soopa/database";
+import { NotificationChannel } from "@soopa/database";
 import { describe, it, expect } from 'vitest';
 import { EmailDeliveryStrategy } from '../src/adapters/outbound/channels/EmailDeliveryStrategy.js';
 import { SlackDeliveryStrategy } from '../src/adapters/outbound/channels/SlackDeliveryStrategy.js';

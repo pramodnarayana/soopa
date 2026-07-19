@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
 import { TenantMappingDomainError } from '../src/domain/Errors.js';
 import type { TokenVerifier } from '../src/ports/TokenVerifier.js';
@@ -22,7 +22,7 @@ class FakeTenantRepository implements TenantRepository {
     return this.users[email] || null;
   }
 
-  async provisionUserAndTenant(email: string, name: string, zitadelOrgId?: string) {
+  async provisionUserAndTenant(_email: string, _name: string, _zitadelOrgId?: string) {
     if (!this.provisioned) throw new Error('provisioned stub not set');
     return this.provisioned;
   }

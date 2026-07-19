@@ -1,13 +1,13 @@
 import { NotificationChannel, EventTypes } from "@soopa/database";
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { DispatchNotificationUseCase } from '../src/application/DispatchNotificationUseCase.js';
-import { NotificationEvent, NotificationTemplate, RenderedNotification, ChannelType } from '../src/domain/models.js';
+import { NotificationEvent, NotificationTemplate, RenderedNotification, Channel } from '../src/domain/models.js';
 import { NotificationRendererService, ITemplateRenderer } from '../src/domain/services.js';
 import { ITemplateRepository, IDeliveryService } from '../src/ports/index.js';
 
 class FakeTemplateRepository implements ITemplateRepository {
   public templates: NotificationTemplate[] = [];
-  async getTemplates(tenantId: string, eventType: string): Promise<NotificationTemplate[]> {
+  async getTemplates(_tenantId: string, _eventType: string): Promise<NotificationTemplate[]> {
     return this.templates;
   }
 }
@@ -20,7 +20,7 @@ class FakeDeliveryService implements IDeliveryService {
 }
 
 class FakeTemplateRenderer implements ITemplateRenderer {
-  render(template: string, payload: Record<string, unknown>): string {
+  render(template: string, _payload: Record<string, unknown>): string {
     return template + ' rendered';
   }
 }
@@ -42,7 +42,7 @@ describe('DispatchNotificationUseCase', () => {
     const event: NotificationEvent = {
       tenantId: 't1',
       eventType: EventTypes.TEST,
-      channels: [NotificationChannel.EMAIL, NotificationChannel.SLACK] as ChannelType[],
+      channels: [NotificationChannel.EMAIL, NotificationChannel.SLACK] as Channel[],
       payload: { x: 1 }
     };
 
@@ -68,7 +68,7 @@ describe('DispatchNotificationUseCase', () => {
     const event: NotificationEvent = {
       tenantId: 't1',
       eventType: EventTypes.TEST,
-      channels: [NotificationChannel.EMAIL] as ChannelType[],
+      channels: [NotificationChannel.EMAIL] as Channel[],
       payload: { x: 1 }
     };
 

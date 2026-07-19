@@ -2,11 +2,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { DrizzleTenantRepository } from '../src/adapters/outbound/database/DrizzleTenantRepository.js';
 import { createDbClient } from '@soopa/database';
 import { users, tenants, tenantUsers } from '@soopa/database';
-import { sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('DrizzleTenantRepository', () => {
-  let db: any;
+  let db: ReturnType<typeof createDbClient>['db'];
   let repo: DrizzleTenantRepository;
   const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
 
@@ -57,22 +56,22 @@ describe('DrizzleTenantRepository', () => {
   });
 
   it('should throw IdentityInfrastructureError on DB failure for findUserByEmail', async () => {
-    const badDb = { select: () => { throw new Error('DB Error'); } };
-    const badRepo = new DrizzleTenantRepository(badDb as any);
+    const badDb = { select: () => { throw new Error('DB Error'); } } as unknown as ReturnType<typeof createDbClient>['db'];
+    const badRepo = new DrizzleTenantRepository(badDb);
 
     await expect(badRepo.findUserByEmail('test@example.com')).rejects.toThrow('Failed to fetch user by email: DB Error');
   });
 
   it('should throw IdentityInfrastructureError on DB failure for provision', async () => {
-    const badDb = { insert: () => { throw new Error('DB Error'); } };
-    const badRepo = new DrizzleTenantRepository(badDb as any);
+    const badDb = { transaction: () => { throw new Error('DB Error'); } } as unknown as ReturnType<typeof createDbClient>['db'];
+    const badRepo = new DrizzleTenantRepository(badDb);
 
     await expect(badRepo.provisionUserAndTenant('test@example.com', 'Test')).rejects.toThrow('Failed to provision user and tenant: DB Error');
   });
 
   it('should throw IdentityInfrastructureError on DB failure for get mapping', async () => {
-    const badDb = { select: () => { throw new Error('DB Error'); } };
-    const badRepo = new DrizzleTenantRepository(badDb as any);
+    const badDb = { select: () => { throw new Error('DB Error'); } } as unknown as ReturnType<typeof createDbClient>['db'];
+    const badRepo = new DrizzleTenantRepository(badDb);
 
     await expect(badRepo.getTenantMappingForUser('123')).rejects.toThrow('Failed to fetch tenant mapping: DB Error');
   });

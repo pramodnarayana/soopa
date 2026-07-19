@@ -12,14 +12,20 @@ export class DrizzleTenantRepository implements TenantRepository {
       const existingUser = await this.db.select().from(users).where(eq(users.email as never, email)).limit(1);
       return existingUser.length > 0 ? existingUser[0] : null;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      let msg = typeof e === 'string' ? e : 'Unknown Error';
+      if (e instanceof Error) msg = e.message;
+      else if (typeof e === 'object' && e !== null) {
+        try { msg = JSON.stringify(e, Object.getOwnPropertyNames(e)); } catch { msg = '[Unserializable Error Object]'; }
+      }
       throw new IdentityInfrastructureError(`Failed to fetch user by email: ${msg}`);
     }
   }
 
   async provisionUserAndTenant(email: string, name: string, zitadelOrgId?: string): Promise<{ userId: string; tenantId: string; }> {
     try {
-      return await this.db.transaction(async (tx: any) => {
+      type DbType = ReturnType<typeof createDbClient>['db'];
+      type TxType = Parameters<Parameters<DbType['transaction']>[0]>[0];
+      return await this.db.transaction(async (tx: TxType) => {
         const [newUser] = await tx.insert(users).values({ email, name }).returning();
         const [newTenant] = await tx.insert(tenants).values({
           name: `${name}'s Organization`,
@@ -35,7 +41,11 @@ export class DrizzleTenantRepository implements TenantRepository {
         return { userId: newUser.id, tenantId: newTenant.id };
       });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      let msg = typeof e === 'string' ? e : 'Unknown Error';
+      if (e instanceof Error) msg = e.message;
+      else if (typeof e === 'object' && e !== null) {
+        try { msg = JSON.stringify(e, Object.getOwnPropertyNames(e)); } catch { msg = '[Unserializable Error Object]'; }
+      }
       throw new IdentityInfrastructureError(`Failed to provision user and tenant: ${msg}`);
     }
   }
@@ -46,7 +56,11 @@ export class DrizzleTenantRepository implements TenantRepository {
       const mapping = await this.db.select().from(tenantUsers).where(eq(tenantUsers.userId as never, userId)).limit(1);
       return mapping.length > 0 ? mapping[0].tenantId : null;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      let msg = typeof e === 'string' ? e : 'Unknown Error';
+      if (e instanceof Error) msg = e.message;
+      else if (typeof e === 'object' && e !== null) {
+        try { msg = JSON.stringify(e, Object.getOwnPropertyNames(e)); } catch { msg = '[Unserializable Error Object]'; }
+      }
       throw new IdentityInfrastructureError(`Failed to fetch tenant mapping: ${msg}`);
     }
   }

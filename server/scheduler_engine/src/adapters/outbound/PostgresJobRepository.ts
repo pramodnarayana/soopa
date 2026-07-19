@@ -1,6 +1,5 @@
 import { JobStatus } from "@soopa/database";
-import { eq, sql, and, lte } from 'drizzle-orm';
-import { scheduledJobs, createDbClient } from '@soopa/database';
+import { scheduledJobs, createDbClient, eq, sql, and, lte } from '@soopa/database';
 
 export class PostgresJobRepository {
   constructor(private db: ReturnType<typeof createDbClient>['db'], private lockLeaseMs: number = 300000) {}
@@ -25,7 +24,7 @@ export class PostgresJobRepository {
       RETURNING *;
     `;
     
-    // @ts-expect-error - Drizzle monorepo type mismatch
+
     const result = await this.db.execute(query);
     return result.rows;
   }
@@ -33,25 +32,25 @@ export class PostgresJobRepository {
   async markCompleted(jobId: string) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.COMPLETED, lockedAt: null, lockedBy: null })
-      .where(eq(scheduledJobs.id as never, jobId) as never);
+      .where(eq(scheduledJobs.id as never, jobId));
   }
 
   async markFailed(jobId: string, error: string) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.FAILED, lockedAt: null, lockedBy: null, errorMessage: error })
-      .where(eq(scheduledJobs.id as never, jobId) as never);
+      .where(eq(scheduledJobs.id as never, jobId));
   }
 
   async reschedule(jobId: string, nextRunAt: Date) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null, retryCount: 0, nextRunAt })
-      .where(eq(scheduledJobs.id as never, jobId) as never);
+      .where(eq(scheduledJobs.id as never, jobId));
   }
 
   async scheduleRetry(jobId: string, retryCount: number, nextRunAt: Date) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null, retryCount, nextRunAt })
-      .where(eq(scheduledJobs.id as never, jobId) as never);
+      .where(eq(scheduledJobs.id as never, jobId));
   }
 
   async sweepStuckJobs() {
@@ -63,7 +62,7 @@ export class PostgresJobRepository {
         and(
           eq(scheduledJobs.status as never, JobStatus.RUNNING),
           lte(scheduledJobs.lockedAt as never, threshold)
-        ) as never
+        )
       );
     return result.rowCount;
   }

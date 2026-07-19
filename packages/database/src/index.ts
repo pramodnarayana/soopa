@@ -1,5 +1,6 @@
 export * from './schema/index.js';
 export * from './constants.js';
+export { eq, and, sql, lte } from 'drizzle-orm';
 
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';

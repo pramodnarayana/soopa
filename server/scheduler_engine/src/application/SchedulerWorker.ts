@@ -106,7 +106,7 @@ export class SchedulerWorker {
         await this.repository.scheduleRetry(job.id, job.retry_count + 1, nextRunAt);
         console.log(`Scheduled retry for job ${job.name} (${job.id}) at ${nextRunAt.toISOString()}`);
       } else {
-        let msg = String(err);
+        let msg = typeof err === 'string' ? err : 'Unknown error';
         if (err instanceof Error) {
           msg = err.message;
         } else if (typeof err === 'object' && err !== null) {

@@ -1,4 +1,4 @@
-import Handlebars from 'handlebars';
+import * as Handlebars from 'handlebars';
 import { ITemplateRenderer } from '../../domain/services.js';
 
 export class HandlebarsTemplateRenderer implements ITemplateRenderer {

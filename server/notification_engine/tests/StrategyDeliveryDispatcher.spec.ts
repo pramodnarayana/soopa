@@ -1,5 +1,5 @@
-import { NotificationChannel, EventTypes } from "@soopa/database";
-import { describe, it, expect, vi } from 'vitest';
+import { NotificationChannel } from "@soopa/database";
+import { describe, it, expect } from 'vitest';
 import { StrategyDeliveryDispatcher } from '../src/adapters/outbound/StrategyDeliveryDispatcher.js';
 import { IDeliveryService } from '../src/ports/index.js';
 import { ChannelType, RenderedNotification } from '../src/domain/models.js';
