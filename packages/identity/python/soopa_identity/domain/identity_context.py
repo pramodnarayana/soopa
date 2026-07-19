@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, AliasChoices, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class TokenClaims(BaseModel):
@@ -16,10 +16,12 @@ class TokenClaims(BaseModel):
 
     @field_validator("roles", mode="before")
     @classmethod
-    def parse_roles(cls, v: Any) -> list[str]:
+    def parse_roles(_cls, v: Any) -> list[str]:
         if isinstance(v, dict):
             return list(v.keys())
-        return v
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [str(v)]
 
     model_config = {"extra": "allow", "populate_by_name": True}
 

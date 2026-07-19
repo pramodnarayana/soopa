@@ -3,10 +3,11 @@ import { IApiKeyRepository } from '../../../ports/outbound/api-key.repository';
 import { ApiKey } from '../../../domain/models/api-key.model';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
 import { apiKeys, eq } from '@soopa/database';
+import type { DbClient } from '@soopa/database';
 
 @Injectable()
 export class ApiKeyDrizzleRepository implements IApiKeyRepository {
-  constructor(@Inject(DATABASE_CLIENT) private readonly db: any) {}
+  constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
   private mapToDomain(row: typeof apiKeys.$inferSelect): ApiKey {
     return new ApiKey(
@@ -14,7 +15,7 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
       row.tenantId,
       row.name,
       row.keyHash,
-      row.scopes as string[],
+      row.scopes,
       row.createdAt,
     );
   }
@@ -32,7 +33,7 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
       .select()
       .from(apiKeys)
       .where(eq(apiKeys.tenantId, tenantId));
-    return rows.map(this.mapToDomain);
+    return rows.map((row) => this.mapToDomain(row));
   }
 
   async save(apiKey: ApiKey): Promise<ApiKey> {

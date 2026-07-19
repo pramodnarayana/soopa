@@ -50,12 +50,11 @@ export class OutboxSweeperService {
         await this.outboxRepo.markAsProcessed(event.id);
 
         this.logger.log(`Event ${event.id} marked as PROCESSED.`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         this.logger.error(`Failed to process event ${event.id}`, error);
-        await this.outboxRepo.markAsFailed(
-          event.id,
-          error?.message || 'Unknown error',
-        );
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        await this.outboxRepo.markAsFailed(event.id, errorMessage);
       }
     }
   }

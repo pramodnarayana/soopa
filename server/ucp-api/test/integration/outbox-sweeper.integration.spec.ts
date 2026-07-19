@@ -2,10 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { OutboxSweeperService } from '../../src/application/services/outbox-sweeper.service';
 import {
   OUTBOX_REPOSITORY,
-  IOutboxRepository,
   OutboxEvent,
 } from '../../src/ports/outbound/outbox.repository';
-import { MESSAGE_BUS, IMessageBus } from '../../src/ports/outbound/message.bus';
+import { MESSAGE_BUS } from '../../src/ports/outbound/message.bus';
 
 describe('OutboxSweeperService (Integration)', () => {
   let service: OutboxSweeperService;
@@ -24,7 +23,13 @@ describe('OutboxSweeperService (Integration)', () => {
     },
   ];
 
-  let publishedMessages: any[] = [];
+  interface PublishedMessage {
+    topic: string;
+    message: unknown;
+    groupId?: string;
+    deduplicationId?: string;
+  }
+  let publishedMessages: PublishedMessage[] = [];
   let processedEventIds: string[] = [];
 
   beforeEach(async () => {
@@ -37,21 +42,23 @@ describe('OutboxSweeperService (Integration)', () => {
         {
           provide: OUTBOX_REPOSITORY,
           useValue: {
-            fetchPendingEvents: async () => mockEvents.filter((e) => e.status === 'PENDING'),
-            markAsProcessed: async (id: string) => {
+            fetchPendingEvents: () =>
+              Promise.resolve(mockEvents.filter((e) => e.status === 'PENDING')),
+            markAsProcessed: (id: string) => {
               processedEventIds.push(id);
               const event = mockEvents.find((e) => e.id === id);
               if (event) event.status = 'PROCESSED';
+              return Promise.resolve();
             },
-            markAsFailed: async () => {},
-          } as IOutboxRepository,
+            markAsFailed: () => Promise.resolve(),
+          },
         },
         {
           provide: MESSAGE_BUS,
           useValue: {
             publish: async (
               topic: string,
-              message: any,
+              message: unknown,
               groupId?: string,
               deduplicationId?: string,
             ) => {
@@ -61,8 +68,9 @@ describe('OutboxSweeperService (Integration)', () => {
                 groupId,
                 deduplicationId,
               });
+              return Promise.resolve();
             },
-          } as IMessageBus,
+          },
         },
       ],
     }).compile();

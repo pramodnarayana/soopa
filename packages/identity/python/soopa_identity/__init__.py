@@ -8,9 +8,9 @@ from soopa_identity.domain.permissions import (
     require_permission,
 )
 from soopa_identity.middleware.fastapi import (
-    require_identity,
-    identity_dependency,
     attach_identity_to_request,
+    identity_dependency,
+    require_identity,
 )
 
 __all__ = [

@@ -8,7 +8,7 @@ RUN corepack enable pnpm
 RUN npm install -g pm2
 
 # Copy monorepo config files
-COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml tsconfig.base.json ./
 
 # Copy all packages and apps
 # In a real enterprise setup, you would use `turbo prune` to optimize this,

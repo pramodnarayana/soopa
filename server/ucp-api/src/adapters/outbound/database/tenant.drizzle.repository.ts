@@ -9,12 +9,13 @@ import {
   controlPlaneOutbox,
   eq,
 } from '@soopa/database';
+import type { DbClient } from '@soopa/database';
 import { inArray } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class TenantDrizzleRepository implements ITenantRepository {
-  constructor(@Inject(DATABASE_CLIENT) private readonly db: any) {}
+  constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
   private mapToDomain(
     row: typeof tenants.$inferSelect,
@@ -40,11 +41,11 @@ export class TenantDrizzleRepository implements ITenantRepository {
 
   async findAll(): Promise<Tenant[]> {
     const rows = await this.db.select().from(tenants);
-    return rows.map(this.mapToDomain);
+    return rows.map((row) => this.mapToDomain(row));
   }
 
   async save(tenant: Tenant): Promise<Tenant> {
-    return await this.db.transaction(async (tx: any) => {
+    return await this.db.transaction(async (tx) => {
       // 1. Save Tenant
       const [row] = await tx
         .insert(tenants)
@@ -72,7 +73,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           .from(apps)
           .where(inArray(apps.slug, tenant.subscriptions));
         if (dbApps.length > 0) {
-          const subs = dbApps.map((app: any) => ({
+          const subs = dbApps.map((app) => ({
             tenantId: tenant.id,
             appId: app.id,
             tier: 'standard',

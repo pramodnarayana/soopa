@@ -1,6 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { controlPlaneOutbox } from '@soopa/database';
+import type { DbClient } from '@soopa/database';
 import {
   IOutboxRepository,
   OutboxEvent,
@@ -8,7 +9,7 @@ import {
 
 @Injectable()
 export class OutboxDrizzleRepository implements IOutboxRepository {
-  constructor(@Inject('DATABASE_CLIENT') private readonly db: any) {}
+  constructor(@Inject('DATABASE_CLIENT') private readonly db: DbClient) {}
 
   async fetchPendingEvents(limit: number): Promise<OutboxEvent[]> {
     const rows = await this.db
@@ -17,12 +18,12 @@ export class OutboxDrizzleRepository implements IOutboxRepository {
       .where(eq(controlPlaneOutbox.status, 'PENDING'))
       .limit(limit);
 
-    return rows.map((row: any) => ({
+    return rows.map((row) => ({
       id: row.id,
       idempotencyKey: row.idempotencyKey,
-      tenantId: row.tenantId,
+      tenantId: row.tenantId ?? '',
       eventType: row.eventType,
-      payload: row.payload,
+      payload: row.payload as Record<string, any>,
       status: row.status,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -36,7 +37,7 @@ export class OutboxDrizzleRepository implements IOutboxRepository {
       .where(eq(controlPlaneOutbox.id, id));
   }
 
-  async markAsFailed(id: string, error?: string): Promise<void> {
+  async markAsFailed(id: string): Promise<void> {
     await this.db
       .update(controlPlaneOutbox)
       .set({ status: 'FAILED', updatedAt: new Date() }) // we don't have an error column yet, so just update status

@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
   Inject,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import type { IApiKeyRepository } from '../../../ports/outbound/api-key.repository';
 import { API_KEY_REPOSITORY } from '../../../ports/outbound/api-key.repository';
 import { ApiKey } from '../../../domain/models/api-key.model';
@@ -16,7 +17,9 @@ export class ApiKeyGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { apiKey?: ApiKey }>();
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
