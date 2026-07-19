@@ -1,0 +1,9 @@
+{
+  "ignoreDependencies": [
+    "@nestjs/core",
+    "@nestjs/platform-express",
+    "@nestjs/testing"
+  ],
+  "ignoreBinaries": ["poetry"],
+  "ignore": ["**/node_modules/**", "**/.venv/**"]
+}

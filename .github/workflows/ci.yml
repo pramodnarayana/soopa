@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master", "notification" ]
+  pull_request:
+    branches: [ "main", "master", "notification" ]
+
+jobs:
+  build-lint-test:
+    name: Build, Lint, and Test
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5434/ucp_platform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 2.4.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'poetry'
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Install Python dependencies
+        run: |
+          for d in packages/*/python; do
+            if [ -d "$d" ]; then
+              (cd "$d" && poetry install)
+            fi
+          done
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Start Database
+        run: |
+          docker compose up -d ucp_postgres --wait
+          pnpm db:migrate
+
+      - name: Test
+        run: CI=true pnpm test
+
+      - name: Deadcode Check
+        run: pnpm deadcode
+
+      - name: Build
+        run: pnpm build
