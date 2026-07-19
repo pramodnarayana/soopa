@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,7 +35,4 @@ class ZitadelTokenVerifier(TokenVerifier):
         return TokenClaims.model_validate(payload)
 
     async def _get_signing_key(self, token: str) -> Any:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(self._jwks_url)
-            response.raise_for_status()
-        return self._jwks_client.get_signing_key_from_jwt(token)
+        return await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)

@@ -33,7 +33,7 @@ const start = async () => {
 
 const stop = async () => {
   app.log.info('Shutting down scheduler engine...');
-  worker.stop();
+  await worker.stop();
   await pool.end();
   await app.close();
   process.exit(0);

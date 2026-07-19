@@ -20,8 +20,8 @@ describe('Notification API Routes', () => {
       url: '/api/v1/notifications/send',
       payload: {
         tenantId: 't1',
-        eventType: 'EventTypes.TEST',
-        channels: ['NotificationChannel.EMAIL'],
+        eventType: EventTypes.TEST,
+        channels: [NotificationChannel.EMAIL],
         data: { a: 1 }
       }
     });
@@ -31,8 +31,8 @@ describe('Notification API Routes', () => {
     expect(mockUseCase.execute).toHaveBeenCalled();
     const event = (mockUseCase.execute as never).mock.calls[0][0] as NotificationEvent;
     expect(event.tenantId).toBe('t1');
-    expect(event.eventType).toBe('EventTypes.TEST');
-    expect(event.channels).toEqual(['NotificationChannel.EMAIL']);
+    expect(event.eventType).toBe(EventTypes.TEST);
+    expect(event.channels).toEqual([NotificationChannel.EMAIL]);
     expect(event.payload).toEqual({ a: 1 });
   });
 
@@ -50,8 +50,8 @@ describe('Notification API Routes', () => {
       url: '/api/v1/notifications/send',
       payload: {
         tenantId: 't1',
-        eventType: 'EventTypes.TEST',
-        channels: ['NotificationChannel.EMAIL'],
+        eventType: EventTypes.TEST,
+        channels: [NotificationChannel.EMAIL],
         data: {}
       }
     });

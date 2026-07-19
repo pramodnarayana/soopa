@@ -15,6 +15,7 @@ export interface ScheduledJob {
 export class SchedulerWorker {
   private isRunning = false;
   private timer: NodeJS.Timeout | null = null;
+  private activeExecution: Promise<void> | null = null;
 
   constructor(
     private repository: PostgresJobRepository,
@@ -29,10 +30,13 @@ export class SchedulerWorker {
     void this.pollLoop();
   }
 
-  stop() {
+  async stop() {
     this.isRunning = false;
     if (this.timer) {
       clearTimeout(this.timer);
+    }
+    if (this.activeExecution) {
+      await this.activeExecution;
     }
     console.log(`Stopped scheduler worker ${this.workerId}`);
   }
@@ -40,26 +44,31 @@ export class SchedulerWorker {
   private async pollLoop() {
     if (!this.isRunning) return;
 
-    try {
-      // 1. Sweep stuck jobs (could be optimized to run less frequently)
-      const swept = (await this.repository.sweepStuckJobs()) || 0;
-      if (swept > 0) {
-        console.log(`Swept ${swept} stuck jobs back to JobStatus.PENDING.`);
-      }
+    const executionPromise = (async () => {
+      try {
+        // 1. Sweep stuck jobs (could be optimized to run less frequently)
+        const swept = (await this.repository.sweepStuckJobs()) || 0;
+        if (swept > 0) {
+          console.log(`Swept ${swept} stuck jobs back to JobStatus.PENDING.`);
+        }
 
-      // 2. Claim next jobs using SKIP LOCKED
-      const jobs = await this.repository.claimNextJobs(this.workerId, this.maxConcurrentJobs);
-      
-      if (jobs.length > 0) {
-        console.log(`Worker ${this.workerId} claimed ${jobs.length} jobs.`);
-        
-        // 3. Execute jobs concurrently without blocking the loop entirely
-        const promises = jobs.map((job: unknown) => this.executeJob(job as ScheduledJob));
-        await Promise.allSettled(promises);
+        // 2. Claim next jobs using SKIP LOCKED
+        const jobs = await this.repository.claimNextJobs(this.workerId, this.maxConcurrentJobs);
+
+        if (jobs.length > 0) {
+          console.log(`Worker ${this.workerId} claimed ${jobs.length} jobs.`);
+
+          // 3. Execute jobs concurrently without blocking the loop entirely
+          const promises = jobs.map((job: unknown) => this.executeJob(job as ScheduledJob));
+          await Promise.allSettled(promises);
+        }
+      } catch (err: unknown) {
+        console.error(`Error in scheduler poll loop:`, err);
       }
-    } catch (err: unknown) {
-      console.error(`Error in scheduler poll loop:`, err);
-    }
+    })();
+
+    this.activeExecution = executionPromise;
+    await executionPromise;
 
     // 4. Schedule next iteration
     if (this.isRunning) {

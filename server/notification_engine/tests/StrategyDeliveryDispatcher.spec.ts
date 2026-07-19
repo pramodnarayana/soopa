@@ -18,14 +18,14 @@ describe('StrategyDeliveryDispatcher', () => {
     const slackStrategy = new FakeStrategy();
 
     const strategies = new Map<ChannelType, IDeliveryService>([
-      ['NotificationChannel.EMAIL', emailStrategy],
-      ['NotificationChannel.SLACK', slackStrategy]
+      [NotificationChannel.EMAIL, emailStrategy],
+      [NotificationChannel.SLACK, slackStrategy]
     ]);
 
     const dispatcher = new StrategyDeliveryDispatcher(strategies);
-    
-    await dispatcher.dispatch({ channel: 'NotificationChannel.EMAIL' } as never);
-    await dispatcher.dispatch({ channel: 'NotificationChannel.SLACK' } as never);
+
+    await dispatcher.dispatch({ channel: NotificationChannel.EMAIL } as never);
+    await dispatcher.dispatch({ channel: NotificationChannel.SLACK } as never);
 
     expect(emailStrategy.dispatched.length).toBe(1);
     expect(slackStrategy.dispatched.length).toBe(1);
@@ -35,6 +35,6 @@ describe('StrategyDeliveryDispatcher', () => {
     const strategies = new Map<ChannelType, IDeliveryService>();
     const dispatcher = new StrategyDeliveryDispatcher(strategies);
 
-    await expect(dispatcher.dispatch({ channel: 'NotificationChannel.IN_APP' } as never)).rejects.toThrow(InfrastructureError);
+    await expect(dispatcher.dispatch({ channel: NotificationChannel.IN_APP } as never)).rejects.toThrow(InfrastructureError);
   });
 });

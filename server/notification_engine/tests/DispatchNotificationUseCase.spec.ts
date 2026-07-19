@@ -32,24 +32,24 @@ describe('DispatchNotificationUseCase', () => {
     const renderer = new NotificationRendererService(new FakeTemplateRenderer());
 
     repo.templates = [
-      { id: '1', tenantId: 't1', eventType: 'EventTypes.TEST', channel: 'NotificationChannel.EMAIL', subjectTemplate: 'Sub1', bodyTemplate: 'Body1' },
-      { id: '2', tenantId: 't1', eventType: 'EventTypes.TEST', channel: 'NotificationChannel.SLACK', subjectTemplate: 'Sub2', bodyTemplate: 'Body2' },
-      { id: '3', tenantId: 't1', eventType: 'EventTypes.TEST', channel: 'NotificationChannel.IN_APP', subjectTemplate: 'Sub3', bodyTemplate: 'Body3' }
+      { id: '1', tenantId: 't1', eventType: EventTypes.TEST, channel: NotificationChannel.EMAIL, subjectTemplate: 'Sub1', bodyTemplate: 'Body1' },
+      { id: '2', tenantId: 't1', eventType: EventTypes.TEST, channel: NotificationChannel.SLACK, subjectTemplate: 'Sub2', bodyTemplate: 'Body2' },
+      { id: '3', tenantId: 't1', eventType: EventTypes.TEST, channel: NotificationChannel.IN_APP, subjectTemplate: 'Sub3', bodyTemplate: 'Body3' }
     ] as NotificationTemplate[];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 
     const event: NotificationEvent = {
       tenantId: 't1',
-      eventType: 'EventTypes.TEST',
-      channels: ['NotificationChannel.EMAIL', 'NotificationChannel.SLACK'] as ChannelType[],
+      eventType: EventTypes.TEST,
+      channels: [NotificationChannel.EMAIL, NotificationChannel.SLACK] as ChannelType[],
       payload: { x: 1 }
     };
 
     await useCase.execute(event);
 
     expect(delivery.dispatched.length).toBe(2);
-    expect(delivery.dispatched.map(d => d.channel)).toEqual(['NotificationChannel.EMAIL', 'NotificationChannel.SLACK']);
+    expect(delivery.dispatched.map(d => d.channel)).toEqual([NotificationChannel.EMAIL, NotificationChannel.SLACK]);
     expect(delivery.dispatched[0].subject).toBe('Sub1 rendered');
     expect(delivery.dispatched[0].body).toBe('Body1 rendered');
   });
@@ -60,15 +60,15 @@ describe('DispatchNotificationUseCase', () => {
     const renderer = new NotificationRendererService(new FakeTemplateRenderer());
 
     repo.templates = [
-      { id: '3', tenantId: 't1', eventType: 'EventTypes.TEST', channel: 'NotificationChannel.IN_APP', subjectTemplate: 'Sub3', bodyTemplate: 'Body3' }
+      { id: '3', tenantId: 't1', eventType: EventTypes.TEST, channel: NotificationChannel.IN_APP, subjectTemplate: 'Sub3', bodyTemplate: 'Body3' }
     ] as NotificationTemplate[];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 
     const event: NotificationEvent = {
       tenantId: 't1',
-      eventType: 'EventTypes.TEST',
-      channels: ['NotificationChannel.EMAIL'] as ChannelType[],
+      eventType: EventTypes.TEST,
+      channels: [NotificationChannel.EMAIL] as ChannelType[],
       payload: { x: 1 }
     };
 

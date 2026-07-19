@@ -9,7 +9,6 @@ export interface NotificationEvent {
 
 export interface NotificationConfig {
   baseUrl: string;
-  apiKey?: string;
 }
 
 export class NotificationClient {

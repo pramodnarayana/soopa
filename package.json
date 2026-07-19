@@ -24,7 +24,7 @@
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
     "deadcode:node": "knip",
-    "deadcode:python": "for d in packages/*/python; do if [ -d \"$d\" ]; then (cd \"$d\" && poetry add --group dev vulture deptry && poetry run vulture --exclude .venv . --min-confidence 80 && poetry run deptry .); fi; done"
+    "deadcode:python": "for d in packages/*/python; do if [ -d \"$d\" ]; then (cd \"$d\" && poetry run vulture --exclude .venv . --min-confidence 80 && poetry run deptry .); fi; done"
   },
   "packageManager": "pnpm@10.27.0",
   "engines": {
@@ -38,6 +38,7 @@
     "globals": "^17.7.0",
     "husky": "^9.1.7",
     "knip": "^6.27.0",
+    "tsx": "^4.19.2",
     "turbo": "^2.7.2",
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.64.0",

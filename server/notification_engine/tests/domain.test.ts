@@ -16,8 +16,8 @@ test('NotificationRendererService pure domain logic', () => {
   const service = new NotificationRendererService(fakeRenderer);
 
   const template = new NotificationTemplate(
-    'TEST_EVENT',
-    'NotificationChannel.EMAIL' as Channel,
+    EventTypes.TEST,
+    NotificationChannel.EMAIL as Channel,
     'Hello {{name}}',
     'Welcome {{name}} to Soopa!'
   );
@@ -26,7 +26,7 @@ test('NotificationRendererService pure domain logic', () => {
 
   const result = service.render(template, payload);
 
-  expect(result.channel).toBe('NotificationChannel.EMAIL');
+  expect(result.channel).toBe(NotificationChannel.EMAIL);
   expect(result.subject).toBe('Hello Alice');
   expect(result.body).toBe('Welcome Alice to Soopa!');
 });
