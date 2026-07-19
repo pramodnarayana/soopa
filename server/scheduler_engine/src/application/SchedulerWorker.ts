@@ -91,10 +91,10 @@ export class SchedulerWorker {
       if (job.cron_expression) {
         const interval = cronParser.parseExpression(job.cron_expression);
         const nextRunAt = interval.next().toDate();
-        await this.repository.reschedule(job.id, nextRunAt);
+        await this.repository.reschedule(job.id, this.workerId, nextRunAt);
         console.log(`Successfully rescheduled job ${job.name} (${job.id}) for ${nextRunAt.toISOString()}`);
       } else {
-        await this.repository.markCompleted(job.id);
+        await this.repository.markCompleted(job.id, this.workerId);
         console.log(`Successfully completed job ${job.name} (${job.id})`);
       }
     } catch (err: unknown) {
@@ -103,7 +103,7 @@ export class SchedulerWorker {
       if (job.retry_count < job.max_retries) {
         const backoffSeconds = 60 * Math.pow(2, job.retry_count);
         const nextRunAt = new Date(Date.now() + backoffSeconds * 1000);
-        await this.repository.scheduleRetry(job.id, job.retry_count + 1, nextRunAt);
+        await this.repository.scheduleRetry(job.id, this.workerId, job.retry_count + 1, nextRunAt);
         console.log(`Scheduled retry for job ${job.name} (${job.id}) at ${nextRunAt.toISOString()}`);
       } else {
         let msg = typeof err === 'string' ? err : 'Unknown error';
@@ -116,7 +116,7 @@ export class SchedulerWorker {
             msg = '[Unserializable Error Object]';
           }
         }
-        await this.repository.markFailed(job.id, msg);
+        await this.repository.markFailed(job.id, this.workerId, msg);
       }
     }
   }

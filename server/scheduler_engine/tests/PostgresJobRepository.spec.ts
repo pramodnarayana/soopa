@@ -39,7 +39,7 @@ describe('PostgresJobRepository', () => {
     const jobId = crypto.randomUUID();
     await db.insert(scheduledJobs).values({ id: jobId, name: 'Job', targetQueue: 'q1', payload: {}, status: JobStatus.RUNNING, lockedBy: 'worker' });
 
-    await repo.markCompleted(jobId);
+    await repo.markCompleted(jobId, 'worker');
 
     // @ts-expect-error - Drizzle monorepo type mismatch
     const result = await db.query.scheduledJobs.findFirst({ where: (jobs, { eq }) => eq(jobs.id as never, jobId) });
@@ -51,7 +51,7 @@ describe('PostgresJobRepository', () => {
     const jobId = crypto.randomUUID();
     await db.insert(scheduledJobs).values({ id: jobId, name: 'Job', targetQueue: 'q1', payload: {}, status: JobStatus.RUNNING, lockedBy: 'worker' });
 
-    await repo.markFailed(jobId, 'some error');
+    await repo.markFailed(jobId, 'worker', 'some error');
 
     // @ts-expect-error - Drizzle monorepo type mismatch
     const result = await db.query.scheduledJobs.findFirst({ where: (jobs, { eq }) => eq(jobs.id as never, jobId) });
@@ -65,7 +65,7 @@ describe('PostgresJobRepository', () => {
     await db.insert(scheduledJobs).values({ id: jobId, name: 'Job', targetQueue: 'q1', payload: {}, status: JobStatus.RUNNING, lockedBy: 'worker' });
 
     const nextRun = new Date(Date.now() + 10000);
-    await repo.reschedule(jobId, nextRun);
+    await repo.reschedule(jobId, 'worker', nextRun);
 
     // @ts-expect-error - Drizzle monorepo type mismatch
     const result = await db.query.scheduledJobs.findFirst({ where: (jobs, { eq }) => eq(jobs.id as never, jobId) });

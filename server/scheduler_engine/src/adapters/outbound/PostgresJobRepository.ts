@@ -29,28 +29,52 @@ export class PostgresJobRepository {
     return result.rows;
   }
 
-  async markCompleted(jobId: string) {
+  async markCompleted(jobId: string, workerId: string) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.COMPLETED, lockedAt: null, lockedBy: null })
-      .where(eq(scheduledJobs.id as never, jobId));
+      .where(
+        and(
+          eq(scheduledJobs.id, jobId),
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          eq(scheduledJobs.lockedBy, workerId)
+        )
+      );
   }
 
-  async markFailed(jobId: string, error: string) {
+  async markFailed(jobId: string, workerId: string, error: string) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.FAILED, lockedAt: null, lockedBy: null, errorMessage: error })
-      .where(eq(scheduledJobs.id as never, jobId));
+      .where(
+        and(
+          eq(scheduledJobs.id, jobId),
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          eq(scheduledJobs.lockedBy, workerId)
+        )
+      );
   }
 
-  async reschedule(jobId: string, nextRunAt: Date) {
+  async reschedule(jobId: string, workerId: string, nextRunAt: Date) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null, retryCount: 0, nextRunAt })
-      .where(eq(scheduledJobs.id as never, jobId));
+      .where(
+        and(
+          eq(scheduledJobs.id, jobId),
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          eq(scheduledJobs.lockedBy, workerId)
+        )
+      );
   }
 
-  async scheduleRetry(jobId: string, retryCount: number, nextRunAt: Date) {
+  async scheduleRetry(jobId: string, workerId: string, retryCount: number, nextRunAt: Date) {
     await this.db.update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null, retryCount, nextRunAt })
-      .where(eq(scheduledJobs.id as never, jobId));
+      .where(
+        and(
+          eq(scheduledJobs.id, jobId),
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          eq(scheduledJobs.lockedBy, workerId)
+        )
+      );
   }
 
   async sweepStuckJobs() {
@@ -60,8 +84,8 @@ export class PostgresJobRepository {
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null })
       .where(
         and(
-          eq(scheduledJobs.status as never, JobStatus.RUNNING),
-          lte(scheduledJobs.lockedAt as never, threshold)
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          lte(scheduledJobs.lockedAt, threshold)
         )
       );
     return result.rowCount;
