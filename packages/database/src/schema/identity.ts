@@ -1,6 +1,8 @@
 import { pgTable, text, timestamp, varchar, primaryKey } from 'drizzle-orm/pg-core';
 import { createId } from '@paralleldrive/cuid2';
-import { UserRoles, type UserRoleType } from '../constants.js';
+
+const UserRoles = { ADMIN: 'admin', MEMBER: 'member' } as const;
+export type UserRoleType = typeof UserRoles[keyof typeof UserRoles];
 
 export const tenants = pgTable('tenants', {
   id: varchar('id', { length: 128 }).primaryKey().$defaultFn(() => createId()),

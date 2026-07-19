@@ -1,6 +1,8 @@
 import { pgTable, text, timestamp, varchar, integer, jsonb, index } from 'drizzle-orm/pg-core';
 import { createId } from '@paralleldrive/cuid2';
-import { JobStatus, type JobStatusType } from '../constants.js';
+
+const JobStatus = { PENDING: 'PENDING', RUNNING: 'RUNNING', COMPLETED: 'COMPLETED', FAILED: 'FAILED' } as const;
+type JobStatusType = typeof JobStatus[keyof typeof JobStatus];
 
 export const scheduledJobs = pgTable('scheduled_jobs', {
   id: varchar('id', { length: 128 }).primaryKey().$defaultFn(() => createId()),

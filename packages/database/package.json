@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit push",
+    "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/seed.ts",
     "build": "tsc",
     "clean": "rm -rf dist",

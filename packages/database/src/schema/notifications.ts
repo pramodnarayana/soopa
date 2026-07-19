@@ -1,5 +1,6 @@
 import { pgTable, serial, varchar, text, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
-import type { NotificationChannelType } from '../constants.js';
+
+export type NotificationChannelType = 'EMAIL' | 'SLACK' | 'IN_APP';
 
 export const notificationTemplates = pgTable('notification_templates', {
   id: serial('id').primaryKey(),
