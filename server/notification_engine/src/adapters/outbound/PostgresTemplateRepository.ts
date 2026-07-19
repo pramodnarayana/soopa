@@ -25,7 +25,7 @@ export class PostgresTemplateRepository implements ITemplateRepository {
           )
         );
 
-      return results.map((row: any) => new NotificationTemplate(
+      return results.map(row => new NotificationTemplate(
         eventType,
         row.channel,
         row.subjectTemplate,

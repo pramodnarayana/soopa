@@ -34,7 +34,7 @@ describe('fastifyPlugin', () => {
       dbConnectionString: 'postgres://db'
     });
 
-    fastify.get('/test', { preHandler: [(fastify as any).verifyTenant] }, (req, reply) => {
+    fastify.get('/test', { preHandler: [fastify.verifyTenant] }, (req, reply) => {
       reply.send({ userId: req.userId, tenantId: req.tenantId });
     });
   });

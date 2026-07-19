@@ -11,7 +11,7 @@ export default defineConfig({
         branches: 80,
         statements: 80
       },
-      include: ['server/**/src/**/*.ts', 'packages/**/src/**/*.ts', 'packages/**/node/src/**/*.ts']
+      include: ['server/**/src/**/*.ts', 'packages/**/src/**/*.ts']
     }
   }
 });

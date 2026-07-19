@@ -15,9 +15,12 @@ export interface IdentityPluginOptions {
 
 declare module 'fastify' {
   interface FastifyRequest {
-    identity?: IdentityContext;
+    identity?: IdentityContext | null;
     tenantId: string;
     userId: string;
+  }
+  interface FastifyInstance {
+    verifyTenant: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
