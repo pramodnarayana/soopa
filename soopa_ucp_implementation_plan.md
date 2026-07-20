@@ -31,32 +31,33 @@ soopaplatform/
 ├── server/                       # The Stateful Central Engines
 │   ├── scheduler_engine/         # Evaluates cron rules, manages DB locks, fires webhooks
 │   ├── notification_engine/      # Renders templates, routes outbox events to SES/Slack
+│   ├── ucp-api/                  # (New) Management API for Tenants and API Keys
 │   ├── metering_engine/          # Aggregates usage data for billing quotas (Stripe)
 │   └── audit_engine/             # High-throughput sink for compliance activity logs
 │
 ├── apps/                         # Platform User Interfaces
 │   └── developer-portal/         # React/Next.js UI for tenants to manage keys, webhooks, and logs
 │
-├── sdks/                         # Polyglot Libraries (Consumed by Business Apps)
+├── packages/                     # Internal Shared Modules (Turborepo)
+│   ├── database/                 # Drizzle ORM schemas shared across all Node servers
+│   └── identity/                 # Stateless Identity SDKs (Python, Node) for JWT/RBAC checks
+│
+├── sdks/                         # Polyglot Libraries (Consumed by External Business Apps)
 │   ├── node/                     # Published to internal npm
-│   │   ├── @soopa/identity       # Native middleware for JWT and Role checks
 │   │   ├── @soopa/observability  # Standardized OTel wrappers
 │   │   ├── @soopa/scheduler      # API Client to talk to `server/scheduler_engine`
 │   │   └── @soopa/notification   # API Client to talk to `server/notification_engine`
 │   │
 │   ├── python/                   # Published to internal PyPI
-│   │   ├── soopa-identity        # FastAPI/Starlette dependencies for Zitadel
 │   │   ├── soopa-scheduler       # HTTP client for Python apps
 │   │   └── ...
 │   │
 │   └── rust/                     # Published to internal Cargo registry
-│       ├── soopa_identity
 │       └── ...
 │
 ├── specification/                # Language-Agnostic Contracts
 │   ├── openapi/                  # REST API schemas defining how SDKs talk to the `server/`
-│   ├── grpc/                     # Protobufs (if gRPC is used for low-latency engine comms)
-│   └── database/                 # Centralized control plane DB migrations (SQLAlchemy/Prisma)
+│   └── grpc/                     # Protobufs (if gRPC is used for low-latency engine comms)
 │
 └── infrastructure/               # Platform DevOps (IaC)
     └── docker-compose.yml        # Local dev stack (Zitadel, Postgres, Platform Server, Redis)

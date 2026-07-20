@@ -19,7 +19,7 @@
     "db:generate": "pnpm --filter @soopa/database db:generate",
     "db:migrate": "pnpm --filter @soopa/database db:migrate",
     "db:seed": "tsx packages/database/src/seed.ts",
-    "infra-reset": "docker compose down && docker compose up -d --wait && pnpm db:migrate && pnpm db:seed",
+    "infra-reset": "docker compose down -v && docker compose up -d --wait && pnpm db:migrate && pnpm db:seed",
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",

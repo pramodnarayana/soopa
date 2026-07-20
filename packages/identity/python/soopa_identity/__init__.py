@@ -7,6 +7,11 @@ from soopa_identity.domain.permissions import (
     require_any_permission,
     require_permission,
 )
+from soopa_identity.middleware.fastapi import (
+    attach_identity_to_request,
+    identity_dependency,
+    require_identity,
+)
 
 __all__ = [
     "AuthenticationError",
@@ -18,4 +23,7 @@ __all__ = [
     "has_role",
     "require_any_permission",
     "require_permission",
+    "require_identity",
+    "identity_dependency",
+    "attach_identity_to_request",
 ]

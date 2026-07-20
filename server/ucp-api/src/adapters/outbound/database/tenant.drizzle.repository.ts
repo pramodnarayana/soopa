@@ -1,0 +1,103 @@
+import { Injectable, Inject } from '@nestjs/common';
+import { ITenantRepository } from '../../../ports/outbound/tenant.repository';
+import { Tenant } from '../../../domain/models/tenant.model';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
+import {
+  tenants,
+  tenantSubscriptions,
+  apps,
+  controlPlaneOutbox,
+  eq,
+} from '@soopa/database';
+import type { DbClient } from '@soopa/database';
+import { inArray } from 'drizzle-orm';
+import { createId } from '@paralleldrive/cuid2';
+
+@Injectable()
+export class TenantDrizzleRepository implements ITenantRepository {
+  constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
+
+  private mapToDomain(
+    row: typeof tenants.$inferSelect,
+    subscriptions: string[] = [],
+  ): Tenant {
+    return new Tenant(
+      row.id,
+      row.name,
+      row.zitadelOrgId,
+      row.createdAt,
+      row.updatedAt,
+      subscriptions,
+    );
+  }
+
+  async findById(id: string): Promise<Tenant | null> {
+    const [row] = await this.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, id));
+    return row ? this.mapToDomain(row) : null;
+  }
+
+  async findAll(): Promise<Tenant[]> {
+    const rows = await this.db.select().from(tenants);
+    return rows.map((row) => this.mapToDomain(row));
+  }
+
+  async save(tenant: Tenant): Promise<Tenant> {
+    return await this.db.transaction(async (tx) => {
+      // 1. Save Tenant
+      const [row] = await tx
+        .insert(tenants)
+        .values({
+          id: tenant.id,
+          name: tenant.name,
+          zitadelOrgId: tenant.zitadelOrgId,
+          createdAt: tenant.createdAt,
+          updatedAt: tenant.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: tenants.id,
+          set: {
+            name: tenant.name,
+            zitadelOrgId: tenant.zitadelOrgId,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      // 2. Save Subscriptions
+      if (tenant.subscriptions && tenant.subscriptions.length > 0) {
+        const dbApps = await tx
+          .select()
+          .from(apps)
+          .where(inArray(apps.slug, tenant.subscriptions));
+        if (dbApps.length > 0) {
+          const subs = dbApps.map((app) => ({
+            tenantId: tenant.id,
+            appId: app.id,
+            tier: 'standard',
+          }));
+          await tx
+            .insert(tenantSubscriptions)
+            .values(subs)
+            .onConflictDoNothing();
+        }
+      }
+
+      // 3. Process Outbox Events (Domain Events)
+      for (const event of tenant.domainEvents) {
+        await tx.insert(controlPlaneOutbox).values({
+          id: createId(),
+          idempotencyKey: `${event.eventName}_${tenant.id}_${event.occurredOn.getTime()}`,
+          tenantId: tenant.id,
+          eventType: event.eventName,
+          payload: event.payload,
+        });
+      }
+
+      tenant.clearEvents();
+      return this.mapToDomain(row, tenant.subscriptions);
+    });
+  }
+}
