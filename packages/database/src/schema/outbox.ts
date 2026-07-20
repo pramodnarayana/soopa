@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, varchar, jsonb } from 'drizzle-orm/pg-core';
 import { createId } from '@paralleldrive/cuid2';
 import { tenants } from './identity';
 
-const OutboxStatus = { PENDING: 'PENDING', PROCESSED: 'PROCESSED', FAILED: 'FAILED' } as const;
+const OutboxStatus = { PENDING: 'PENDING', PROCESSING: 'PROCESSING', PROCESSED: 'PROCESSED', FAILED: 'FAILED' } as const;
 export type OutboxStatusType = typeof OutboxStatus[keyof typeof OutboxStatus];
 
 export const controlPlaneOutbox = pgTable('outbox_events', {

@@ -6,7 +6,7 @@ export interface OutboxEvent {
   tenantId: string;
   eventType: string;
   payload: Record<string, unknown>;
-  status: 'PENDING' | 'PROCESSED' | 'FAILED';
+  status: 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
   createdAt: Date;
   updatedAt: Date;
 }
