@@ -17,6 +17,8 @@ class TokenClaims(BaseModel):
     @field_validator("roles", mode="before")
     @classmethod
     def parse_roles(_cls, v: Any) -> list[str]:
+        if v is None:
+            return []
         if isinstance(v, dict):
             return list(v.keys())
         if isinstance(v, list):

@@ -1,8 +1,17 @@
 import { Controller, Post, Body, Param } from '@nestjs/common';
-import {
-  GenerateApiKeyUseCase,
-  GenerateApiKeyDto,
-} from '../../../application/use-cases/generate-api-key.use-case';
+import { GenerateApiKeyUseCase } from '../../../application/use-cases/generate-api-key.use-case';
+import { IsString, IsArray, IsNotEmpty } from 'class-validator';
+
+export class CreateApiKeyRequestDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
+  scopes: string[];
+}
 
 @Controller('tenants/:tenantId/keys')
 export class ApiKeysController {
@@ -11,7 +20,7 @@ export class ApiKeysController {
   @Post()
   async generate(
     @Param('tenantId') tenantId: string,
-    @Body() dto: Omit<GenerateApiKeyDto, 'tenantId'>,
+    @Body() dto: CreateApiKeyRequestDto,
   ) {
     const result = await this.generateApiKeyUseCase.execute({
       tenantId,

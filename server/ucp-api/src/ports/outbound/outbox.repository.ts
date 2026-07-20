@@ -5,7 +5,7 @@ export interface OutboxEvent {
   idempotencyKey: string;
   tenantId: string;
   eventType: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   status: 'PENDING' | 'PROCESSED' | 'FAILED';
   createdAt: Date;
   updatedAt: Date;

@@ -6,9 +6,21 @@ import { IDENTITY_PROVIDER } from '../../ports/outbound/identity.provider';
 import { Tenant } from '../../domain/models/tenant.model';
 import * as crypto from 'crypto';
 
+import { IsString, IsArray, IsNotEmpty, IsEmail } from 'class-validator';
+
 export class ProvisionTenantDto {
+  @IsString()
+  @IsNotEmpty()
   name: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
   appSlugs: string[];
+
+  @IsString()
+  @IsEmail()
+  @IsNotEmpty()
   adminEmail: string;
 }
 

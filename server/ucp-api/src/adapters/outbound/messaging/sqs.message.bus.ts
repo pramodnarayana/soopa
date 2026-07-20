@@ -19,7 +19,7 @@ export class SqsMessageBusAdapter implements IMessageBus {
 
   async publish(
     topic: string,
-    message: any,
+    message: unknown,
     groupId?: string,
     deduplicationId?: string,
   ): Promise<void> {

@@ -30,6 +30,8 @@ services:
     depends_on:
       ucp_postgres:
         condition: service_healthy
+      localstack:
+        condition: service_started
 
   localstack:
     image: localstack/localstack:3.5.0

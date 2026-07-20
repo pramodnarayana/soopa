@@ -16,14 +16,15 @@ export class OutboxDrizzleRepository implements IOutboxRepository {
       .select()
       .from(controlPlaneOutbox)
       .where(eq(controlPlaneOutbox.status, 'PENDING'))
-      .limit(limit);
+      .limit(limit)
+      .for('update', { skipLocked: true });
 
     return rows.map((row) => ({
       id: row.id,
       idempotencyKey: row.idempotencyKey,
       tenantId: row.tenantId ?? '',
       eventType: row.eventType,
-      payload: row.payload as Record<string, any>,
+      payload: row.payload as Record<string, unknown>,
       status: row.status,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -37,10 +38,10 @@ export class OutboxDrizzleRepository implements IOutboxRepository {
       .where(eq(controlPlaneOutbox.id, id));
   }
 
-  async markAsFailed(id: string): Promise<void> {
+  async markAsFailed(id: string, errorReason?: string): Promise<void> {
     await this.db
       .update(controlPlaneOutbox)
-      .set({ status: 'FAILED', updatedAt: new Date() }) // we don't have an error column yet, so just update status
+      .set({ status: 'FAILED', updatedAt: new Date(), errorReason })
       .where(eq(controlPlaneOutbox.id, id));
   }
 }

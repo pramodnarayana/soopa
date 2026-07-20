@@ -8,6 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchTenants, provisionTenant } from '@/lib/api';
 
+interface Tenant {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export const Route = createFileRoute('/_authenticated/tenants')({
   component: TenantsPage,
 });
@@ -106,7 +112,7 @@ function TenantsPage() {
             {isLoading ? (
               <TableRow><TableCell colSpan={4} className="text-center h-24">Loading...</TableCell></TableRow>
             ) : (
-              tenants?.map((tenant: any) => (
+              tenants?.map((tenant: Tenant) => (
                 <TableRow key={tenant.id}>
                   <TableCell className="font-medium">{tenant.name}</TableCell>
                   <TableCell className="font-mono text-sm text-gray-500">{tenant.id}</TableCell>

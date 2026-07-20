@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Outlet, Link } from '@tanstack/react-router';
 import { useAuth } from 'react-oidc-context';
 
 export const Route = createFileRoute('/_authenticated')({
@@ -33,8 +33,8 @@ function AuthenticatedLayout() {
       <aside className="w-64 bg-black text-white p-6 flex flex-col">
         <h2 className="text-xl font-bold mb-8">Soopa UCP</h2>
         <nav className="flex-1 space-y-4">
-          <a href="/" className="block text-gray-300 hover:text-white transition">Dashboard</a>
-          <a href="/tenants" className="block text-gray-300 hover:text-white transition">Tenants</a>
+          <Link to="/" className="block text-gray-300 hover:text-white transition">Dashboard</Link>
+          <Link to="/tenants" className="block text-gray-300 hover:text-white transition">Tenants</Link>
           <a href="/scheduler" className="block text-gray-300 hover:text-white transition">Scheduler</a>
         </nav>
         <div className="mt-auto">

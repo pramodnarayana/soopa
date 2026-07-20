@@ -28,7 +28,7 @@ export class ApiKeyGuard implements CanActivate {
       );
     }
 
-    const rawSecret = authHeader.substring(7);
+    const rawSecret = authHeader.substring(7).trim();
     const keyHash = ApiKey.hashSecret(rawSecret);
 
     const apiKey = await this.apiKeyRepo.findByKeyHash(keyHash);

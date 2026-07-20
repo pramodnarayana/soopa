@@ -5,9 +5,20 @@ import type { ITenantRepository } from '../../ports/outbound/tenant.repository';
 import { TENANT_REPOSITORY } from '../../ports/outbound/tenant.repository';
 import { ApiKey } from '../../domain/models/api-key.model';
 
+import { IsString, IsArray, IsNotEmpty } from 'class-validator';
+
 export class GenerateApiKeyDto {
+  @IsString()
+  @IsNotEmpty()
   tenantId: string;
+
+  @IsString()
+  @IsNotEmpty()
   name: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
   scopes: string[];
 }
 
