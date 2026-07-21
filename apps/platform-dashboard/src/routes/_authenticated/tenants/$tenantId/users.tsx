@@ -12,18 +12,9 @@ import { createColumnHelper, getCoreRowModel, useReactTable, getExpandedRowModel
 import { DataTable } from '@/components/ui/data-table';
 import { toast } from 'sonner';
 
-interface User {
-  id: string;
-  email: string;
-  displayName?: string;
-  firstName?: string;
-  lastName?: string;
-  state: string;
-  role: string;
-  createdAt?: string;
-}
+import { TenantUser } from '@/domains/users/api/queries';
 
-const columnHelper = createColumnHelper<User>();
+const columnHelper = createColumnHelper<TenantUser>();
 
 export const Route = createFileRoute('/_authenticated/tenants/$tenantId/users')({
   component: TenantUsersPage,

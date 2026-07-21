@@ -6,7 +6,7 @@ export class Tenant extends AggregateRoot {
     public readonly id: string,
     public name: string,
     public readonly zitadelOrgId: string | null,
-    public status: string,
+    public status: 'active' | 'inactive',
     public readonly createdAt: Date,
     public updatedAt: Date,
     public readonly subscriptions: string[] = [],
@@ -38,7 +38,7 @@ export class Tenant extends AggregateRoot {
 
   rename(newName: string) {
     if (!newName || newName.trim() === '') {
-      throw new Error('Tenant name cannot be empty');
+      throw new Error('DomainException: Tenant name cannot be empty');
     }
     this.name = newName.trim();
     this.updatedAt = new Date();

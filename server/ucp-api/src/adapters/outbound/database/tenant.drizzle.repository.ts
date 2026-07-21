@@ -116,10 +116,14 @@ export class TenantDrizzleRepository implements ITenantRepository {
       await tx.delete(apiKeys).where(eq(apiKeys.tenantId, id));
 
       // Delete tenant_subscriptions
-      await tx.delete(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, id));
+      await tx
+        .delete(tenantSubscriptions)
+        .where(eq(tenantSubscriptions.tenantId, id));
 
       // Delete outbox events for this tenant
-      await tx.delete(controlPlaneOutbox).where(eq(controlPlaneOutbox.tenantId, id));
+      await tx
+        .delete(controlPlaneOutbox)
+        .where(eq(controlPlaneOutbox.tenantId, id));
 
       // Finally, delete the tenant itself
       await tx.delete(tenants).where(eq(tenants.id, id));

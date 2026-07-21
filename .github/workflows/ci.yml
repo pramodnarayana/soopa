@@ -62,7 +62,7 @@ jobs:
 
       - name: Start Database
         run: |
-          docker compose up -d ucp_postgres --wait
+          docker compose up -d ucp_postgres_global ucp_postgres_shard_1 --wait
           pnpm db:migrate
 
       - name: Test

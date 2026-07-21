@@ -1,10 +1,10 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Try loading .env from current directory, else fallback
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Try loading .env from package root
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 // Also try loading root .env if running from workspace
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const token = process.env.ZITADEL_API_TOKEN;
 const apiUrl = process.env.ZITADEL_API_URL;

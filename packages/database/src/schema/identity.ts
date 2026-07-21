@@ -8,7 +8,7 @@ export const tenants = pgTable('tenants', {
   id: varchar('id', { length: 128 }).primaryKey().$defaultFn(() => createId()),
   name: text('name').notNull(),
   zitadelOrgId: varchar('zitadel_org_id', { length: 255 }), // Nullable if JIT provisioned without explicit org ID
-  status: varchar('status', { length: 50 }).notNull().default('active'),
+  status: varchar('status', { length: 50 }).notNull().default('active').$type<'active' | 'inactive'>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -17,7 +17,7 @@ export const users = pgTable('users', {
   id: varchar('id', { length: 128 }).primaryKey().$defaultFn(() => createId()),
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: text('name').notNull(),
-  status: varchar('status', { length: 50 }).notNull().default('active'),
+  status: varchar('status', { length: 50 }).notNull().default('active').$type<'active' | 'inactive'>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

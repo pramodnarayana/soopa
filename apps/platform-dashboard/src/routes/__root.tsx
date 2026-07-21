@@ -7,7 +7,7 @@ const queryClient = new QueryClient();
 
 const oidcConfig = {
   authority: import.meta.env.VITE_ZITADEL_AUTHORITY || "http://localhost:8080",
-  client_id: import.meta.env.VITE_ZITADEL_CLIENT_ID,
+  client_id: import.meta.env.VITE_ZITADEL_CLIENT_ID || "dev-client-id",
   redirect_uri: `${window.location.origin}/callback`,
   response_type: "code",
   scope: "openid profile email",

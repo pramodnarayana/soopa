@@ -54,26 +54,26 @@ function TenantLayout() {
         </div>
         <div className="max-w-7xl mx-auto px-8">
           <nav className="flex items-center gap-6" aria-label="Tabs">
-            {/* @ts-expect-error: IDE complains about params, so omitting and suppressing build error */}
             <Link
               to="/tenants/$tenantId"
+              params={{ tenantId }}
               activeOptions={{ exact: true }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
             >
               <Building2 className="w-4 h-4" />
               Overview
             </Link>
-            {/* @ts-expect-error: IDE complains about params, so omitting and suppressing build error */}
             <Link
               to="/tenants/$tenantId/users"
+              params={{ tenantId }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
             >
               <Users className="w-4 h-4" />
               Users
             </Link>
-            {/* @ts-expect-error: IDE complains about params, so omitting and suppressing build error */}
             <Link
               to="/tenants/$tenantId/apps"
+              params={{ tenantId }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
             >
               <Box className="w-4 h-4" />

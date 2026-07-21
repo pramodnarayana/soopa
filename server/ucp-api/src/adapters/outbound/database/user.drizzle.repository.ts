@@ -14,11 +14,15 @@ export class UserDrizzleRepository implements IUserRepository {
     email?: string;
     name: string;
   }): Promise<void> {
+    if (!user.email) {
+      throw new Error(`Email is required for user ${user.id}`);
+    }
+
     await this.db
       .insert(users)
       .values({
         id: user.id,
-        email: user.email || `unknown-${user.id}@placeholder.com`, // Fallback for insert
+        email: user.email,
         name: user.name,
         updatedAt: new Date(),
       })
@@ -37,6 +41,11 @@ export class UserDrizzleRepository implements IUserRepository {
     userId: string;
     role: string;
   }): Promise<void> {
+    const validRoles: UserRoleType[] = ['admin', 'member'];
+    if (!validRoles.includes(tenantUser.role as UserRoleType)) {
+      throw new Error(`Invalid role: ${tenantUser.role}`);
+    }
+
     await this.db
       .insert(tenantUsers)
       .values({

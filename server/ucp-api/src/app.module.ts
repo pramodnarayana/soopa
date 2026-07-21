@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import * as path from 'path';
 import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './infrastructure/database.module';
 import { TenantsController } from './adapters/inbound/http/tenants.controller';
@@ -32,7 +33,14 @@ import { ApiKeyGuard } from './adapters/inbound/http/api-key.guard';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [
+        path.resolve(process.cwd(), '.env'),
+        path.resolve(__dirname, '../../../.env'),
+        path.resolve(process.cwd(), '../../.env'),
+      ],
+    }),
     DatabaseModule,
     ScheduleModule.forRoot(),
   ],

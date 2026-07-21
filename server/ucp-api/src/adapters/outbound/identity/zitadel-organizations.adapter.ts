@@ -23,7 +23,9 @@ export class ZitadelOrganizationsAdapter
     super();
   }
 
-  async createOrganization(name: string): Promise<{ orgId: string; grantSucceeded?: boolean }> {
+  async createOrganization(
+    name: string,
+  ): Promise<{ orgId: string; grantSucceeded?: boolean }> {
     this.logger.log(`Provisioning Organization in Zitadel: ${name}`);
 
     try {

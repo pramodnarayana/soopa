@@ -13,7 +13,9 @@ const ZitadelProjectGrantSchema = z.object({
   grantedOrgId: z.string().optional(),
   projectId: z.string().optional(),
   roleKeys: z.array(z.string()).optional(),
+  userId: z.string().optional(),
 });
+export type ZitadelProjectGrant = z.infer<typeof ZitadelProjectGrantSchema>;
 
 export const ZitadelUserSchema = z.object({
   userId: z.string().optional(),
@@ -48,6 +50,7 @@ const ZitadelRawUserSchema = z
     details: z.object({ creationDate: z.string().optional() }).optional(),
   })
   .passthrough();
+export type ZitadelRawUser = z.infer<typeof ZitadelRawUserSchema>;
 
 export const ZitadelRawUserSearchResponseSchema = z.object({
   result: z.array(ZitadelRawUserSchema).optional().default([]),

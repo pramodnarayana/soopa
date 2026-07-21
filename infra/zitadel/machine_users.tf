@@ -9,7 +9,12 @@ resource "zitadel_machine_user" "ucp_backend_service" {
 resource "zitadel_personal_access_token" "ucp_backend_pat" {
   org_id          = zitadel_org.platform_org.id
   user_id         = zitadel_machine_user.ucp_backend_service.id
-  expiration_date = "9999-12-31T23:59:59Z"
+  expiration_date = "2029-12-31T23:59:59Z"
+}
+
+resource "random_password" "platform_admin_password" {
+  length  = 16
+  special = true
 }
 
 resource "zitadel_human_user" "platform_admin" {
@@ -20,7 +25,7 @@ resource "zitadel_human_user" "platform_admin" {
   display_name = "${var.company_name} Platform Admin"
   email        = "platform.admin@${var.company_domain}"
   is_email_verified = true
-  initial_password  = "Admin123!"
+  initial_password  = random_password.platform_admin_password.result
 }
 
 resource "zitadel_user_grant" "platform_admin_grant" {

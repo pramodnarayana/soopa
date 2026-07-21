@@ -144,7 +144,7 @@ export class UsersController {
 
     // Verify user belongs to this tenant
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some(u => u.id === userId);
+    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
     if (!userBelongsToTenant) {
       throw new NotFoundException('User not found in this tenant');
     }
@@ -187,7 +187,7 @@ export class UsersController {
 
     // Verify user belongs to this tenant
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some(u => u.id === userId);
+    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
     if (!userBelongsToTenant) {
       throw new NotFoundException('User not found in this tenant');
     }
@@ -207,7 +207,7 @@ export class UsersController {
   ) {
     // Verify user belongs to this tenant
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some(u => u.id === userId);
+    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
     if (!userBelongsToTenant) {
       throw new NotFoundException('User not found in this tenant');
     }

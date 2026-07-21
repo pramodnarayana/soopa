@@ -2,6 +2,7 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import {
   ZitadelProjectGrantsResponseSchema,
   ZitadelUserSchema,
+  ZitadelProjectGrant,
 } from '../../../domain/dtos/zitadel.dto';
 import { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider';
 import { ZitadelBaseClient } from './zitadel-base.client';
@@ -20,6 +21,10 @@ export class ZitadelUsersAdapter
     return `${randomPass}!A1`;
   }
 
+  private maskEmail(email: string): string {
+    return email.replace(/(.{2}).*(@.*)/, '$1***$2');
+  }
+
   async inviteUser(
     orgId: string,
     email: string,
@@ -27,7 +32,9 @@ export class ZitadelUsersAdapter
     firstName: string,
     lastName: string,
   ): Promise<{ userId: string }> {
-    this.logger.log(`Creating user ${email} in org ${orgId} with role ${role}`);
+    this.logger.log(
+      `Creating user ${this.maskEmail(email)} in org ${orgId} with role ${role}`,
+    );
 
     try {
       // Generate a secure random password for initial setup
@@ -82,7 +89,7 @@ export class ZitadelUsersAdapter
       const parsedGrantData =
         ZitadelProjectGrantsResponseSchema.parse(grantSearchData);
       const projectGrant = parsedGrantData.result?.find(
-        (g: any) => g.grantedOrgId === orgId,
+        (g: ZitadelProjectGrant) => g.grantedOrgId === orgId,
       );
 
       if (!projectGrant) {
@@ -120,7 +127,10 @@ export class ZitadelUsersAdapter
 
       return { userId };
     } catch (error) {
-      this.logger.error(`Error creating user ${email} in org ${orgId}`, error);
+      this.logger.error(
+        `Error creating user ${this.maskEmail(email)} in org ${orgId}`,
+        error,
+      );
       throw error;
     }
   }
@@ -180,7 +190,7 @@ export class ZitadelUsersAdapter
         const parsedGrantsData =
           ZitadelProjectGrantsResponseSchema.parse(grantsData);
         const grant = parsedGrantsData.result?.find(
-          (g: any) => g.projectId === this.ucpProjectId,
+          (g: ZitadelProjectGrant) => g.projectId === this.ucpProjectId,
         );
         if (grant) {
           const updateGrantRes = await this.fetchWithAuth(
@@ -215,7 +225,7 @@ export class ZitadelUsersAdapter
           const parsedGrantSearchData =
             ZitadelProjectGrantsResponseSchema.parse(grantSearchData);
           const projectGrant = parsedGrantSearchData.result?.find(
-            (g: any) => g.grantedOrgId === orgId,
+            (g: ZitadelProjectGrant) => g.grantedOrgId === orgId,
           );
 
           if (projectGrant) {

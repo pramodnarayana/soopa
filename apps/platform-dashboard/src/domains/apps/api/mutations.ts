@@ -7,7 +7,7 @@ export const useSubscribeTenant = () => {
     mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) => 
       apiClient.post(`/tenants/${tenantId}/subscriptions`, { appId }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'subscriptions'] });
+      return queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'subscriptions'] });
     },
   });
 };
@@ -18,7 +18,7 @@ export const useUnsubscribeTenant = () => {
     mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) => 
       apiClient.delete(`/tenants/${tenantId}/subscriptions/${appId}`),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'subscriptions'] });
+      return queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'subscriptions'] });
     },
   });
 };

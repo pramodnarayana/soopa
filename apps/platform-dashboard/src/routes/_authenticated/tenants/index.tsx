@@ -174,11 +174,9 @@ function TenantsPage() {
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm gap-2 rounded-xl h-10 px-5">
+          <DialogTrigger render={<Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm gap-2 rounded-xl h-10 px-5" />}>
               <Plus className="w-4 h-4" />
               Provision Tenant
-            </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <form onSubmit={handleSubmit}>

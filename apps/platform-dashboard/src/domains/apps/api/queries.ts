@@ -19,6 +19,7 @@ export interface Subscription {
   id: string;
   appId: string;
   tenantId: string;
+  status: 'active' | 'inactive';
 }
 
 export const useGetTenantSubscriptions = (tenantId: string) => {

@@ -60,6 +60,17 @@ export class SubscriptionsController {
     if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
     const tenant = tenantRecords[0];
 
+    // Basic implementation to insert or ignore if exists
+    await this.db
+      .insert(tenantSubscriptions)
+      .values({
+        tenantId,
+        appId: dto.appId,
+        tier: 'standard',
+        status: 'active',
+      })
+      .onConflictDoNothing();
+
     // Enterprise Grade B2B Project Grant Wiring
     let zitadelProjectId: string | undefined;
     if (app.slug === 'edi') {
@@ -74,17 +85,6 @@ export class SubscriptionsController {
         [],
       );
     }
-
-    // Basic implementation to insert or ignore if exists
-    await this.db
-      .insert(tenantSubscriptions)
-      .values({
-        tenantId,
-        appId: dto.appId,
-        tier: 'standard',
-        status: 'active',
-      })
-      .onConflictDoNothing();
 
     return { success: true };
   }

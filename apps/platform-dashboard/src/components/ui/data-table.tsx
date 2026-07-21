@@ -83,6 +83,7 @@ export function DataTable<TData>({
                 <tr
                   className={`hover:bg-slate-50/50 transition-colors group ${(renderExpandedRow || onRowClick) ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
                   onClick={renderExpandedRow ? () => row.toggleExpanded() : (onRowClick ? () => onRowClick(row) : undefined)}
+                  role={(renderExpandedRow || onRowClick) ? 'button' : undefined}
                   onKeyDown={(renderExpandedRow || onRowClick) ? (e) => {
                     const target = e.target as HTMLElement;
                     if (target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'INPUT') return;

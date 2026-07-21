@@ -6,31 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 
-export interface User {
-  id: string;
-  email: string;
-  displayName?: string;
-  firstName?: string;
-  lastName?: string;
-  state: string;
-  role: string;
-  createdAt?: string;
-}
+import { TenantUser } from '@/domains/users/api/queries';
+
+const normalizeRole = (role?: string) => role === 'Unknown' ? '' : (role || '');
 
 export function UserDetailPanel({ user, tenantId, tenantRoles }: {
-  user: User;
+  user: TenantUser;
   tenantId: string;
   tenantRoles: any[];
 }) {
   const [editFirst, setEditFirst] = useState(user.firstName || '');
   const [editLast, setEditLast] = useState(user.lastName || '');
-  const [editRole, setEditRole] = useState(user.role || '');
-  const isDirty = editFirst !== (user.firstName || '') || editLast !== (user.lastName || '') || editRole !== (user.role !== 'Unknown' ? user.role : '');
+  const [editRole, setEditRole] = useState(normalizeRole(user.role));
+  const isDirty = editFirst !== (user.firstName || '') || editLast !== (user.lastName || '') || editRole !== normalizeRole(user.role);
 
   useEffect(() => {
     setEditFirst(user.firstName || '');
     setEditLast(user.lastName || '');
-    setEditRole(user.role !== 'Unknown' ? user.role : '');
+    setEditRole(normalizeRole(user.role));
   }, [user.id, user.firstName, user.lastName, user.role]);
 
   const updateMutationObj = useUpdateTenantUser();
@@ -52,7 +45,7 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
   const handleCancel = () => {
     setEditFirst(user.firstName || '');
     setEditLast(user.lastName || '');
-    setEditRole(user.role !== 'Unknown' ? user.role : '');
+    setEditRole(normalizeRole(user.role));
   };
 
   return (

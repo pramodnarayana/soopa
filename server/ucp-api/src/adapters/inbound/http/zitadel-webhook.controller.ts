@@ -39,15 +39,21 @@ export class ZitadelWebhookController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  async handleWebhook(@Body() payload: ZitadelWebhookPayload, @Req() request: Request) {
+  async handleWebhook(
+    @Body() payload: ZitadelWebhookPayload,
+    @Req() request: Request,
+  ) {
     // Verify webhook authenticity
     // TODO: Implement proper webhook signature verification based on Zitadel's webhook security mechanism
     // For now, we validate that the webhook secret token is present in the header
     const webhookSecret = process.env.ZITADEL_WEBHOOK_SECRET;
     if (webhookSecret) {
-      const authHeader = request.headers['authorization'] || request.headers['x-webhook-secret'];
+      const authHeader =
+        request.headers['authorization'] || request.headers['x-webhook-secret'];
       if (!authHeader || authHeader !== `Bearer ${webhookSecret}`) {
-        this.logger.warn('Webhook request rejected: Invalid or missing authentication');
+        this.logger.warn(
+          'Webhook request rejected: Invalid or missing authentication',
+        );
         throw new UnauthorizedException('Invalid webhook authentication');
       }
     } else {

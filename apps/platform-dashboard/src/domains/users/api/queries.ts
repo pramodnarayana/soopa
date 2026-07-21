@@ -5,6 +5,7 @@ export interface TenantUser {
   id: string;
   firstName?: string;
   lastName?: string;
+  displayName?: string;
   email: string;
   role: string;
   createdAt?: string;

@@ -7,14 +7,11 @@
     "axios",
     "postcss",
     "node-cron",
-    "@eslint/eslintrc",
-    "@types/express",
     "@types/node-cron",
     "@types/supertest",
     "source-map-support",
     "supertest",
     "ts-loader",
-    "next-themes",
     "@fontsource-variable/geist"
   ],
   "ignoreBinaries": ["poetry"],
@@ -22,7 +19,6 @@
     "**/.venv/**",
     "apps/platform-dashboard/src/components/ui/**",
     "ecosystem.config.cjs",
-    "server/ucp-api/test/**",
-    "server/ucp-api/src/adapters/inbound/http/api-key.guard.ts"
+    "server/ucp-api/test/**"
   ]
 }
