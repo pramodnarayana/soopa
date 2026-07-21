@@ -6,10 +6,11 @@ import {
   IOutboxRepository,
   OutboxEvent,
 } from '../../../ports/outbound/outbox.repository';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
 
 @Injectable()
 export class OutboxDrizzleRepository implements IOutboxRepository {
-  constructor(@Inject('DATABASE_CLIENT') private readonly db: DbClient) {}
+  constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
   async fetchPendingEvents(limit: number): Promise<OutboxEvent[]> {
     const rows = await this.db.transaction(async (tx) => {

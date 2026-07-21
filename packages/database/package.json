@@ -8,6 +8,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/seed.ts",
+    "db:clear-zitadel": "tsx src/clear-zitadel-tenants.ts",
     "build": "tsc",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit"

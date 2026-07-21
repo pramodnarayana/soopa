@@ -7,22 +7,18 @@
     "axios",
     "postcss",
     "node-cron",
-    "@eslint/eslintrc",
-    "@types/express",
     "@types/node-cron",
     "@types/supertest",
     "source-map-support",
     "supertest",
-    "ts-loader"
+    "ts-loader",
+    "@fontsource-variable/geist"
   ],
   "ignoreBinaries": ["poetry"],
   "ignore": [
     "**/.venv/**",
     "apps/platform-dashboard/src/components/ui/**",
-    "apps/platform-dashboard/@/components/ui/**",
-    "apps/platform-dashboard/@/lib/**",
-    "server/ucp-api/test/**",
-    "server/ucp-api/src/adapters/inbound/http/api-key.guard.ts",
-    "apps/platform-dashboard/src/lib/api.ts"
+    "ecosystem.config.cjs",
+    "server/ucp-api/test/**"
   ]
 }

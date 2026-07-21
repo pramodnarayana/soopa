@@ -10,6 +10,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 uv.lock
-tsconfig.tsbuildinfo
+*.tsbuildinfo
 
 .coverage
+
+# Zitadel machine keys - should be retrieved from container volume
+infra/zitadel/machinekey.json

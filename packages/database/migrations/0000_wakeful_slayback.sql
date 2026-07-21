@@ -12,6 +12,7 @@ CREATE TABLE "tenant_users" (
 	"tenant_id" varchar(128) NOT NULL,
 	"user_id" varchar(128) NOT NULL,
 	"role" varchar(50) DEFAULT 'member' NOT NULL,
+	"metadata" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "tenant_users_tenant_id_user_id_pk" PRIMARY KEY("tenant_id","user_id")
 );
@@ -20,6 +21,7 @@ CREATE TABLE "tenants" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"zitadel_org_id" varchar(255),
+	"status" varchar(50) DEFAULT 'active' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -28,6 +30,7 @@ CREATE TABLE "users" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"email" varchar(255) NOT NULL,
 	"name" text NOT NULL,
+	"status" varchar(50) DEFAULT 'active' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
@@ -100,5 +103,6 @@ ALTER TABLE "tenant_users" ADD CONSTRAINT "tenant_users_user_id_users_id_fk" FOR
 ALTER TABLE "tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "tenant_users_user_id_idx" ON "tenant_users" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_template_idx" ON "notification_templates" USING btree ("tenant_id","event_type","channel");--> statement-breakpoint
 CREATE INDEX "job_status_next_run_idx" ON "scheduled_jobs" USING btree ("status","next_run_at");

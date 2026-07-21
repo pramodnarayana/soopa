@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common';
 const logger = new Logger('Bootstrap');
 
 async function bootstrap() {
-  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
+  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
   
   const app = await NestFactory.create(SchedulerModule.register({
     dbConnectionString,

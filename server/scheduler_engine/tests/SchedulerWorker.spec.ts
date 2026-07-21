@@ -19,8 +19,8 @@ describe('SchedulerWorker', () => {
     worker = new SchedulerWorker(mockRepo, 'test-worker', 1000, 10);
   });
 
-  afterEach(() => {
-    worker.stop();
+  afterEach(async () => {
+    await worker.stop();
     vi.useRealTimers();
   });
 
