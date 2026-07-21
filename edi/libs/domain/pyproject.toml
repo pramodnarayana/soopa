@@ -1,0 +1,11 @@
+[project]
+name = "domain"
+version = "0.1.0"
+description = "Core domain models and events"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

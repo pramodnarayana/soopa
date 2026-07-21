@@ -1,0 +1,18 @@
+[project]
+name = "as2-core"
+version = "0.1.0"
+description = "Pure AS2 protocol logic, S/MIME, MDN generation"
+authors = [
+    {name = "EDI AS2 Team", email = "team@edi.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "security",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+security = { workspace = true }

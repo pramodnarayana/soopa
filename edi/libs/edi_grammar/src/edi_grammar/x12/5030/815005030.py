@@ -1,0 +1,28 @@
+from bots_core.infrastructure.config.botsconfig import *
+from .records005030 import recorddefs
+
+syntax = {
+    "version": "00503",
+    "functionalgroup": "CS",
+}
+
+structure = [
+    {
+        ID: "ST",
+        MIN: 1,
+        MAX: 1,
+        LEVEL: [
+            {ID: "CSM", MIN: 1, MAX: 1},
+            {ID: "CSB", MIN: 0, MAX: 99999},
+            {
+                ID: "CSC",
+                MIN: 0,
+                MAX: 99999,
+                LEVEL: [
+                    {ID: "DTP", MIN: 0, MAX: 9},
+                ],
+            },
+            {ID: "SE", MIN: 1, MAX: 1},
+        ],
+    }
+]

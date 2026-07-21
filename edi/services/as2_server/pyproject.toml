@@ -1,0 +1,32 @@
+[project]
+name = "as2_server"
+version = "0.1.0"
+description = "FastAPI HTTP Listener for incoming AS2 messages"
+authors = [
+    {name = "EDI AS2 Team", email = "team@edi.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "gunicorn>=22.0.0",
+    "prometheus-client>=0.20.0",
+    "python-dotenv>=1.0.0",
+    "as2-core",
+    "security",
+    "database",
+    "config",
+    "observability",
+]
+
+[tool.uv.sources]
+as2-core = { workspace = true }
+security = { workspace = true }
+database = { workspace = true }
+config = { workspace = true }
+observability = { workspace = true }
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

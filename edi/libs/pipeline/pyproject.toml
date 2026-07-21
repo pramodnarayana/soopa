@@ -1,0 +1,39 @@
+[project]
+name = "pipeline"
+version = "0.1.0"
+description = "Core business logic for orchestrating EDI translation and delivery"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0.0",
+    "aioboto3>=13.1.1",
+    "httpx>=0.27.0",
+    "jsonpath-ng>=1.6.1",
+    # Local dependencies
+    "as2-core",
+    "security",
+    "bots-core",
+    "transformer",
+    "database",
+    "identity",
+    "paramiko>=5.0.0",
+    "types-paramiko>=3.0.0",
+    "patches",
+]
+
+[tool.uv.sources]
+bots-core = { workspace = true }
+transformer = { workspace = true }
+database = { workspace = true }
+identity = { workspace = true }
+as2-core = { workspace = true }
+security = { workspace = true }
+patches = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
