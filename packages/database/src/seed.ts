@@ -1,4 +1,4 @@
-import { createDbClient, notificationTemplates, DefaultTenants, EventTypes, NotificationChannel } from './index.js';
+import { createDbClient, notificationTemplates, DefaultTenants, EventTypes, NotificationChannel, apps } from './index.js';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -35,6 +35,22 @@ async function seed() {
     }
   ]).onConflictDoNothing();
   
+  console.log('Seeding Apps...');
+  await db.insert(apps).values([
+    {
+      id: 'app_edi_123',
+      name: 'EDI App',
+      slug: 'edi',
+      description: 'B2B EDI Network',
+    },
+    {
+      id: 'app_idp_123',
+      name: 'IDP App',
+      slug: 'idp',
+      description: 'Document Processing',
+    }
+  ]).onConflictDoNothing();
+
   console.log('Seeding Complete!');
   await pool.end();
   process.exit(0);

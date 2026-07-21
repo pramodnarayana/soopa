@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { DrizzleTenantRepository } from '../src/adapters/outbound/database/DrizzleTenantRepository.js';
 import { createDbClient } from '@soopa/database';
-import { users, tenants, tenantUsers } from '@soopa/database';
+import { users, tenants, tenantUsers, tenantSubscriptions, controlPlaneOutbox } from '@soopa/database';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('DrizzleTenantRepository', () => {
   let db: ReturnType<typeof createDbClient>['db'];
   let repo: DrizzleTenantRepository;
-  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
+  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
 
   beforeAll(async () => {
     db = createDbClient(dbConnectionString).db;
@@ -17,6 +17,8 @@ describe('DrizzleTenantRepository', () => {
   beforeEach(async () => {
     // Clear out data to keep tests isolated. 
     // We only clear tenantUsers, users, tenants to avoid deleting other table data
+    await db.delete(controlPlaneOutbox);
+    await db.delete(tenantSubscriptions);
     await db.delete(tenantUsers);
     await db.delete(tenants);
     await db.delete(users);

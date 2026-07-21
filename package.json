@@ -4,7 +4,7 @@
   "private": true,
   "description": "Soopa Unified Control Plane",
   "scripts": {
-    "dev": "pm2 start ecosystem.config.cjs --no-daemon",
+    "dev": "turbo run dev start:dev",
     "build": "turbo run build",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:python",
     "typecheck:node": "turbo typecheck",
@@ -19,7 +19,9 @@
     "db:generate": "pnpm --filter @soopa/database db:generate",
     "db:migrate": "pnpm --filter @soopa/database db:migrate",
     "db:seed": "tsx packages/database/src/seed.ts",
+    "db:clear-zitadel": "pnpm --filter @soopa/database db:clear-zitadel",
     "infra-reset": "docker compose down -v && docker compose up -d --wait && pnpm db:migrate && pnpm db:seed",
+    "ucp-reset": "(pnpm db:clear-zitadel || true) && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f soopaucp_ucp_pgdata_global soopaucp_ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed",
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
@@ -43,8 +45,5 @@
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.0.18"
-  },
-  "dependencies": {
-    "pm2": "^7.0.3"
   }
 }

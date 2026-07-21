@@ -13,16 +13,16 @@
     "@types/supertest",
     "source-map-support",
     "supertest",
-    "ts-loader"
+    "ts-loader",
+    "next-themes",
+    "@fontsource-variable/geist"
   ],
   "ignoreBinaries": ["poetry"],
   "ignore": [
     "**/.venv/**",
     "apps/platform-dashboard/src/components/ui/**",
-    "apps/platform-dashboard/@/components/ui/**",
-    "apps/platform-dashboard/@/lib/**",
+    "ecosystem.config.cjs",
     "server/ucp-api/test/**",
-    "server/ucp-api/src/adapters/inbound/http/api-key.guard.ts",
-    "apps/platform-dashboard/src/lib/api.ts"
+    "server/ucp-api/src/adapters/inbound/http/api-key.guard.ts"
   ]
 }

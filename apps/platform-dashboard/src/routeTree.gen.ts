@@ -10,13 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedTenantsRouteImport } from './routes/_authenticated/tenants'
-import { Route as AuthenticatedTenantsIdKeysRouteImport } from './routes/_authenticated/tenants.$id.keys'
-import { Route as AuthenticatedTenantsIdWebhooksRouteImport } from './routes/_authenticated/tenants.$id.webhooks'
+import { Route as AuthenticatedTenantsIndexRouteImport } from './routes/_authenticated/tenants/index'
+import { Route as AuthenticatedTenantsTenantIdRouteImport } from './routes/_authenticated/tenants/$tenantId'
+import { Route as AuthenticatedTenantsTenantIdIndexRouteImport } from './routes/_authenticated/tenants/$tenantId/index'
+import { Route as AuthenticatedTenantsTenantIdAppsRouteImport } from './routes/_authenticated/tenants/$tenantId/apps'
+import { Route as AuthenticatedTenantsTenantIdUsersRouteImport } from './routes/_authenticated/tenants/$tenantId/users'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CallbackRoute = CallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
@@ -24,60 +32,98 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedTenantsRoute = AuthenticatedTenantsRouteImport.update({
-  id: '/tenants',
-  path: '/tenants',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedTenantsIdKeysRoute =
-  AuthenticatedTenantsIdKeysRouteImport.update({
-    id: '/$id/keys',
-    path: '/$id/keys',
-    getParentRoute: () => AuthenticatedTenantsRoute,
+const AuthenticatedTenantsIndexRoute =
+  AuthenticatedTenantsIndexRouteImport.update({
+    id: '/tenants/',
+    path: '/tenants/',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedTenantsIdWebhooksRoute =
-  AuthenticatedTenantsIdWebhooksRouteImport.update({
-    id: '/$id/webhooks',
-    path: '/$id/webhooks',
-    getParentRoute: () => AuthenticatedTenantsRoute,
+const AuthenticatedTenantsTenantIdRoute =
+  AuthenticatedTenantsTenantIdRouteImport.update({
+    id: '/tenants/$tenantId',
+    path: '/tenants/$tenantId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedTenantsTenantIdIndexRoute =
+  AuthenticatedTenantsTenantIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedTenantsTenantIdRoute,
+  } as any)
+const AuthenticatedTenantsTenantIdAppsRoute =
+  AuthenticatedTenantsTenantIdAppsRouteImport.update({
+    id: '/apps',
+    path: '/apps',
+    getParentRoute: () => AuthenticatedTenantsTenantIdRoute,
+  } as any)
+const AuthenticatedTenantsTenantIdUsersRoute =
+  AuthenticatedTenantsTenantIdUsersRouteImport.update({
+    id: '/users',
+    path: '/users',
+    getParentRoute: () => AuthenticatedTenantsTenantIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
-  '/tenants': typeof AuthenticatedTenantsRouteWithChildren
-  '/tenants/$id/keys': typeof AuthenticatedTenantsIdKeysRoute
-  '/tenants/$id/webhooks': typeof AuthenticatedTenantsIdWebhooksRoute
+  '/callback': typeof CallbackRoute
+  '/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRouteWithChildren
+  '/tenants/': typeof AuthenticatedTenantsIndexRoute
+  '/tenants/$tenantId/apps': typeof AuthenticatedTenantsTenantIdAppsRoute
+  '/tenants/$tenantId/users': typeof AuthenticatedTenantsTenantIdUsersRoute
+  '/tenants/$tenantId/': typeof AuthenticatedTenantsTenantIdIndexRoute
 }
 export interface FileRoutesByTo {
-  '/tenants': typeof AuthenticatedTenantsRouteWithChildren
+  '/callback': typeof CallbackRoute
   '/': typeof AuthenticatedIndexRoute
-  '/tenants/$id/keys': typeof AuthenticatedTenantsIdKeysRoute
-  '/tenants/$id/webhooks': typeof AuthenticatedTenantsIdWebhooksRoute
+  '/tenants': typeof AuthenticatedTenantsIndexRoute
+  '/tenants/$tenantId/apps': typeof AuthenticatedTenantsTenantIdAppsRoute
+  '/tenants/$tenantId/users': typeof AuthenticatedTenantsTenantIdUsersRoute
+  '/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/_authenticated/tenants': typeof AuthenticatedTenantsRouteWithChildren
+  '/callback': typeof CallbackRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/tenants/$id/keys': typeof AuthenticatedTenantsIdKeysRoute
-  '/_authenticated/tenants/$id/webhooks': typeof AuthenticatedTenantsIdWebhooksRoute
+  '/_authenticated/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRouteWithChildren
+  '/_authenticated/tenants/': typeof AuthenticatedTenantsIndexRoute
+  '/_authenticated/tenants/$tenantId/apps': typeof AuthenticatedTenantsTenantIdAppsRoute
+  '/_authenticated/tenants/$tenantId/users': typeof AuthenticatedTenantsTenantIdUsersRoute
+  '/_authenticated/tenants/$tenantId/': typeof AuthenticatedTenantsTenantIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/tenants' | '/tenants/$id/keys' | '/tenants/$id/webhooks'
+  fullPaths:
+    | '/'
+    | '/callback'
+    | '/tenants/$tenantId'
+    | '/tenants/'
+    | '/tenants/$tenantId/apps'
+    | '/tenants/$tenantId/users'
+    | '/tenants/$tenantId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/tenants' | '/' | '/tenants/$id/keys' | '/tenants/$id/webhooks'
+  to:
+    | '/callback'
+    | '/'
+    | '/tenants'
+    | '/tenants/$tenantId/apps'
+    | '/tenants/$tenantId/users'
+    | '/tenants/$tenantId'
   id:
     | '__root__'
     | '/_authenticated'
-    | '/_authenticated/tenants'
+    | '/callback'
     | '/_authenticated/'
-    | '/_authenticated/tenants/$id/keys'
-    | '/_authenticated/tenants/$id/webhooks'
+    | '/_authenticated/tenants/$tenantId'
+    | '/_authenticated/tenants/'
+    | '/_authenticated/tenants/$tenantId/apps'
+    | '/_authenticated/tenants/$tenantId/users'
+    | '/_authenticated/tenants/$tenantId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  CallbackRoute: typeof CallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -89,6 +135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/callback': {
+      id: '/callback'
+      path: '/callback'
+      fullPath: '/callback'
+      preLoaderRoute: typeof CallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/': {
       id: '/_authenticated/'
       path: '/'
@@ -96,51 +149,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/tenants': {
-      id: '/_authenticated/tenants'
+    '/_authenticated/tenants/': {
+      id: '/_authenticated/tenants/'
       path: '/tenants'
-      fullPath: '/tenants'
-      preLoaderRoute: typeof AuthenticatedTenantsRouteImport
+      fullPath: '/tenants/'
+      preLoaderRoute: typeof AuthenticatedTenantsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/tenants/$id/keys': {
-      id: '/_authenticated/tenants/$id/keys'
-      path: '/$id/keys'
-      fullPath: '/tenants/$id/keys'
-      preLoaderRoute: typeof AuthenticatedTenantsIdKeysRouteImport
-      parentRoute: typeof AuthenticatedTenantsRoute
+    '/_authenticated/tenants/$tenantId': {
+      id: '/_authenticated/tenants/$tenantId'
+      path: '/tenants/$tenantId'
+      fullPath: '/tenants/$tenantId'
+      preLoaderRoute: typeof AuthenticatedTenantsTenantIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/tenants/$id/webhooks': {
-      id: '/_authenticated/tenants/$id/webhooks'
-      path: '/$id/webhooks'
-      fullPath: '/tenants/$id/webhooks'
-      preLoaderRoute: typeof AuthenticatedTenantsIdWebhooksRouteImport
-      parentRoute: typeof AuthenticatedTenantsRoute
+    '/_authenticated/tenants/$tenantId/': {
+      id: '/_authenticated/tenants/$tenantId/'
+      path: '/'
+      fullPath: '/tenants/$tenantId/'
+      preLoaderRoute: typeof AuthenticatedTenantsTenantIdIndexRouteImport
+      parentRoute: typeof AuthenticatedTenantsTenantIdRoute
+    }
+    '/_authenticated/tenants/$tenantId/apps': {
+      id: '/_authenticated/tenants/$tenantId/apps'
+      path: '/apps'
+      fullPath: '/tenants/$tenantId/apps'
+      preLoaderRoute: typeof AuthenticatedTenantsTenantIdAppsRouteImport
+      parentRoute: typeof AuthenticatedTenantsTenantIdRoute
+    }
+    '/_authenticated/tenants/$tenantId/users': {
+      id: '/_authenticated/tenants/$tenantId/users'
+      path: '/users'
+      fullPath: '/tenants/$tenantId/users'
+      preLoaderRoute: typeof AuthenticatedTenantsTenantIdUsersRouteImport
+      parentRoute: typeof AuthenticatedTenantsTenantIdRoute
     }
   }
 }
 
-interface AuthenticatedTenantsRouteChildren {
-  AuthenticatedTenantsIdKeysRoute: typeof AuthenticatedTenantsIdKeysRoute
-  AuthenticatedTenantsIdWebhooksRoute: typeof AuthenticatedTenantsIdWebhooksRoute
+interface AuthenticatedTenantsTenantIdRouteChildren {
+  AuthenticatedTenantsTenantIdAppsRoute: typeof AuthenticatedTenantsTenantIdAppsRoute
+  AuthenticatedTenantsTenantIdUsersRoute: typeof AuthenticatedTenantsTenantIdUsersRoute
+  AuthenticatedTenantsTenantIdIndexRoute: typeof AuthenticatedTenantsTenantIdIndexRoute
 }
 
-const AuthenticatedTenantsRouteChildren: AuthenticatedTenantsRouteChildren = {
-  AuthenticatedTenantsIdKeysRoute: AuthenticatedTenantsIdKeysRoute,
-  AuthenticatedTenantsIdWebhooksRoute: AuthenticatedTenantsIdWebhooksRoute,
-}
+const AuthenticatedTenantsTenantIdRouteChildren: AuthenticatedTenantsTenantIdRouteChildren =
+  {
+    AuthenticatedTenantsTenantIdAppsRoute:
+      AuthenticatedTenantsTenantIdAppsRoute,
+    AuthenticatedTenantsTenantIdUsersRoute:
+      AuthenticatedTenantsTenantIdUsersRoute,
+    AuthenticatedTenantsTenantIdIndexRoute:
+      AuthenticatedTenantsTenantIdIndexRoute,
+  }
 
-const AuthenticatedTenantsRouteWithChildren =
-  AuthenticatedTenantsRoute._addFileChildren(AuthenticatedTenantsRouteChildren)
+const AuthenticatedTenantsTenantIdRouteWithChildren =
+  AuthenticatedTenantsTenantIdRoute._addFileChildren(
+    AuthenticatedTenantsTenantIdRouteChildren,
+  )
 
 interface AuthenticatedRouteChildren {
-  AuthenticatedTenantsRoute: typeof AuthenticatedTenantsRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedTenantsTenantIdRoute: typeof AuthenticatedTenantsTenantIdRouteWithChildren
+  AuthenticatedTenantsIndexRoute: typeof AuthenticatedTenantsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedTenantsRoute: AuthenticatedTenantsRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedTenantsTenantIdRoute:
+    AuthenticatedTenantsTenantIdRouteWithChildren,
+  AuthenticatedTenantsIndexRoute: AuthenticatedTenantsIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -149,6 +227,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  CallbackRoute: CallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -6,7 +6,7 @@ import { InfrastructureError } from '../src/domain/errors.js';
 import crypto from 'crypto';
 
 describe('PostgresTemplateRepository', () => {
-  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_platform';
+  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
   let repo: PostgresTemplateRepository;
   let db: ReturnType<typeof createDbClient>['db'];
 

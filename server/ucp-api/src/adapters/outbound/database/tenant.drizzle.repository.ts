@@ -25,6 +25,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
       row.id,
       row.name,
       row.zitadelOrgId,
+      row.status,
       row.createdAt,
       row.updatedAt,
       subscriptions,
@@ -53,6 +54,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           id: tenant.id,
           name: tenant.name,
           zitadelOrgId: tenant.zitadelOrgId,
+          status: tenant.status,
           createdAt: tenant.createdAt,
           updatedAt: tenant.updatedAt,
         })
@@ -61,6 +63,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           set: {
             name: tenant.name,
             zitadelOrgId: tenant.zitadelOrgId,
+            status: tenant.status,
             updatedAt: new Date(),
           },
         })
@@ -99,5 +102,9 @@ export class TenantDrizzleRepository implements ITenantRepository {
       tenant.clearEvents();
       return this.mapToDomain(row, tenant.subscriptions);
     });
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.delete(tenants).where(eq(tenants.id, id));
   }
 }
