@@ -1,0 +1,7 @@
+{
+    "type": "serviceaccount",
+    "keyId": "REPLACE_WITH_YOUR_KEY_ID",
+    "key": "REPLACE_WITH_YOUR_RSA_PRIVATE_KEY",
+    "expirationDate": "REPLACE_WITH_EXPIRATION_DATE",
+    "userId": "REPLACE_WITH_YOUR_USER_ID"
+}

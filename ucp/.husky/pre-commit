@@ -1,0 +1,30 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "========================================="
+echo "🔒 Build, Lint, and Test (Local)"
+echo "========================================="
+
+echo ""
+echo "1. Typechecking (Node & Python)..."
+pnpm typecheck || exit 1
+
+echo ""
+echo "2. Linting (Node & Python)..."
+pnpm lint || exit 1
+
+echo ""
+echo "3. Testing (Node & Python)..."
+CI=true pnpm test || exit 1
+
+echo ""
+echo "4. Dead Code Analysis (knip & vulture/deptry)..."
+pnpm deadcode || exit 1
+
+echo ""
+echo "5. Building Node Packages..."
+pnpm build || exit 1
+
+echo ""
+echo "✅ All CI checks passed. Commit allowed."
+echo "========================================="

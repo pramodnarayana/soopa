@@ -1,0 +1,18 @@
+{
+  "name": "@soopa/notification",
+  "version": "1.0.0",
+  "description": "Soopa Notification SDK Client",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@soopa/identity": "workspace:*"
+  }
+}

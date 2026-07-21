@@ -1,0 +1,24 @@
+{
+  "ignoreDependencies": [
+    "@nestjs/core",
+    "@nestjs/platform-express",
+    "@nestjs/testing",
+    "autoprefixer",
+    "axios",
+    "postcss",
+    "node-cron",
+    "@types/node-cron",
+    "@types/supertest",
+    "source-map-support",
+    "supertest",
+    "ts-loader",
+    "@fontsource-variable/geist"
+  ],
+  "ignoreBinaries": ["poetry"],
+  "ignore": [
+    "**/.venv/**",
+    "apps/platform-dashboard/src/components/ui/**",
+    "ecosystem.config.cjs",
+    "server/ucp-api/test/**"
+  ]
+}
