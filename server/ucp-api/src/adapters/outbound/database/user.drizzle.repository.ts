@@ -29,7 +29,7 @@ export class UserDrizzleRepository implements IUserRepository {
       .onConflictDoUpdate({
         target: users.id,
         set: {
-          ...(user.email ? { email: user.email } : {}),
+          email: user.email,
           name: user.name,
           updatedAt: new Date(),
         },

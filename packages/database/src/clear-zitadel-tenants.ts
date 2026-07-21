@@ -38,7 +38,7 @@ async function clearZitadelTenants() {
 
   // Safety check: ensure we're running against a local/development environment
   const url = new URL(apiUrl);
-  const isApprovedHost = APPROVED_HOSTS.some(host => url.hostname === host || url.hostname.includes(host));
+  const isApprovedHost = APPROVED_HOSTS.some(host => url.hostname === host || url.hostname.endsWith('.' + host));
 
   if (!isApprovedHost && !force) {
     console.error(`ERROR: Safety check failed. API URL ${apiUrl} does not match an approved local/development host.`);

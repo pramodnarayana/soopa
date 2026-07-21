@@ -47,20 +47,31 @@ export class ZitadelWebhookController {
     // TODO: Implement proper webhook signature verification based on Zitadel's webhook security mechanism
     // For now, we validate that the webhook secret token is present in the header
     const webhookSecret = process.env.ZITADEL_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const authHeader =
-        request.headers['authorization'] || request.headers['x-webhook-secret'];
-      if (!authHeader || authHeader !== `Bearer ${webhookSecret}`) {
+
+    if (!webhookSecret) {
+      if (process.env.NODE_ENV === 'development') {
+        this.logger.warn(
+          'ZITADEL_WEBHOOK_SECRET not configured - webhook authentication is disabled. This should only happen in development.',
+        );
+      } else {
+        throw new UnauthorizedException(
+          'Webhook secret is not configured in production environment',
+        );
+      }
+    } else {
+      const authHeader = request.headers['authorization'];
+      const xWebhookSecret = request.headers['x-webhook-secret'];
+
+      const isValid =
+        authHeader === `Bearer ${webhookSecret}` ||
+        xWebhookSecret === webhookSecret;
+
+      if (!isValid) {
         this.logger.warn(
           'Webhook request rejected: Invalid or missing authentication',
         );
         throw new UnauthorizedException('Invalid webhook authentication');
       }
-    } else {
-      // In development, log a warning if webhook secret is not configured
-      this.logger.warn(
-        'ZITADEL_WEBHOOK_SECRET not configured - webhook authentication is disabled. This should only happen in development.',
-      );
     }
 
     this.logger.log(

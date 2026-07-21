@@ -162,15 +162,12 @@ export class ZitadelProjectsAdapter
     }
 
     // 3. Map grants to users in memory
-    const usersWithRoles = users.map((u: ZitadelRawUser) => {
-      let role = 'Unknown';
-      const userGrant = grants.find(
-        (g: ZitadelProjectGrant) => g.userId === u.id,
-      );
-      if (userGrant?.roleKeys?.length) {
-        role = userGrant.roleKeys[0];
-      }
+    const orgGrant = grants.find(
+      (g: ZitadelProjectGrant) => g.grantedOrgId === orgId,
+    );
+    const role = orgGrant?.roleKeys?.length ? orgGrant.roleKeys[0] : 'Unknown';
 
+    const usersWithRoles = users.map((u: ZitadelRawUser) => {
       return {
         id: u.id,
         email: u.human?.email?.email || u.userName,

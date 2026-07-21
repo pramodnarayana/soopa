@@ -6,23 +6,20 @@ import {
 } from '../../../domain/dtos/zitadel.dto';
 import { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider';
 import { ZitadelBaseClient } from './zitadel-base.client';
-import { randomBytes } from 'crypto';
 
 @Injectable()
 export class ZitadelUsersAdapter
   extends ZitadelBaseClient
   implements IUserIdentityProvider
 {
-  private generateSecurePassword(): string {
-    // Generate a cryptographically secure random password
-    // 20 bytes = 40 hex characters, meets most password complexity requirements
-    const randomPass = randomBytes(20).toString('hex');
-    // Add special characters to ensure complexity requirements are met
-    return `${randomPass}!A1`;
-  }
-
   private maskEmail(email: string): string {
-    return email.replace(/(.{2}).*(@.*)/, '$1***$2');
+    const parts = email.split('@');
+    if (parts.length !== 2) return email;
+    const [local, domain] = parts;
+    if (local.length < 2) {
+      return `*@${domain}`;
+    }
+    return `${local.substring(0, 2)}***@${domain}`;
   }
 
   async inviteUser(
@@ -37,10 +34,6 @@ export class ZitadelUsersAdapter
     );
 
     try {
-      // Generate a secure random password for initial setup
-      // User will be required to change this on first login or can use password reset
-      const randomPassword = this.generateSecurePassword();
-
       // 1. Create Human User in the specific Organization
       const userRes = await this.fetchWithAuth('/management/v1/users/human', {
         method: 'POST',
@@ -57,9 +50,8 @@ export class ZitadelUsersAdapter
           },
           email: {
             email: email,
-            isEmailVerified: true,
+            isEmailVerified: false,
           },
-          initialPassword: randomPassword,
         }),
       });
 
@@ -285,7 +277,7 @@ export class ZitadelUsersAdapter
   ): Promise<void> {
     this.logger.log(`Toggling user ${userId} status: ${action}`);
 
-    const endpoint = action === 'activate' ? 'activate' : 'deactivate';
+    const endpoint = action === 'activate' ? '_activate' : '_deactivate';
     const response = await this.fetchWithAuth(
       `/management/v1/users/${userId}/${endpoint}`,
       {

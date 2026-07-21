@@ -1,5 +1,6 @@
 const UCP_API_URL = import.meta.env.VITE_UCP_API_URL || 'http://localhost:3000';
 
+let globalToken: string | null = null;
 class ApiError extends Error {
   public statusCode: number;
   public details?: any;
@@ -17,6 +18,10 @@ interface FetchOptions extends RequestInit {
 }
 
 export const apiClient = {
+  setToken(token: string | null) {
+    globalToken = token;
+  },
+
   async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const { params, headers, ...customConfig } = options;
     
@@ -31,6 +36,7 @@ export const apiClient = {
       ...customConfig,
       headers: {
         'Content-Type': 'application/json',
+        ...(globalToken ? { Authorization: `Bearer ${globalToken}` } : {}),
         ...headers,
       },
     };

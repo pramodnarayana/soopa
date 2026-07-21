@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, Link, useLocation } from '@tanstack/react-router';
 import { useAuth } from 'react-oidc-context';
+import { apiClient } from '@/lib/api-client';
 import { LayoutDashboard, Users, Network, ChevronRight, LogOut, Clock } from 'lucide-react';
 
 export const Route = createFileRoute('/_authenticated')({
@@ -19,6 +20,13 @@ const NavItem = ({ icon: Icon, label, to }: { icon: any, label: string, to: stri
 
 function AuthenticatedLayout() {
   const auth = useAuth();
+  
+  // Keep apiClient in sync with auth state
+  if (auth.user?.access_token) {
+    apiClient.setToken(auth.user.access_token);
+  } else {
+    apiClient.setToken(null);
+  }
 
   if (auth.isLoading) {
     return (
