@@ -8,6 +8,8 @@ import {
   Delete,
   Param,
   NotFoundException,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 
 import {
@@ -20,6 +22,20 @@ import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider';
 import type { IProjectProvider } from '../../../ports/outbound/project.provider';
 import { ORGANIZATION_PROVIDER } from '../../../ports/outbound/organization.provider';
 import type { IOrganizationProvider } from '../../../ports/outbound/organization.provider';
+import { IsString, IsNotEmpty, IsIn } from 'class-validator';
+
+export class UpdateTenantNameDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+}
+
+export class UpdateTenantStatusDto {
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['active', 'inactive'])
+  status: 'active' | 'inactive';
+}
 
 @Controller('tenants')
 export class TenantsController {
@@ -53,22 +69,24 @@ export class TenantsController {
   }
 
   @Patch(':id/name')
-  async updateName(@Param('id') id: string, @Body('name') name: string) {
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async updateName(@Param('id') id: string, @Body() dto: UpdateTenantNameDto) {
     const tenant = await this.tenantRepo.findById(id);
     if (!tenant) throw new NotFoundException('Tenant not found');
-    tenant.rename(name);
+    tenant.rename(dto.name);
     await this.tenantRepo.save(tenant);
     return tenant;
   }
 
   @Patch(':id/status')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async updateStatus(
     @Param('id') id: string,
-    @Body('status') status: 'active' | 'inactive',
+    @Body() dto: UpdateTenantStatusDto,
   ) {
     const tenant = await this.tenantRepo.findById(id);
     if (!tenant) throw new NotFoundException('Tenant not found');
-    tenant.changeStatus(status);
+    tenant.changeStatus(dto.status);
     await this.tenantRepo.save(tenant);
     return tenant;
   }
@@ -78,12 +96,16 @@ export class TenantsController {
     const tenant = await this.tenantRepo.findById(id);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    // Delete from Identity Provider first to ensure we don't leave orphaned organizations
+    // Delete from database first (includes cascading deletion of dependent records)
+    // This is done transactionally in the repository layer
+    await this.tenantRepo.delete(id);
+
+    // Then delete from Zitadel as best-effort cleanup
     if (tenant.zitadelOrgId) {
       try {
         await this.organizationProvider.deleteOrganization(tenant.zitadelOrgId);
       } catch (err) {
-        // Log the error but proceed with deleting from DB if Zitadel fails (e.g. if already deleted)
+        // Log the error but don't fail the request since DB is already cleaned up
         console.error(
           `Warning: Failed to delete organization ${tenant.zitadelOrgId} from Zitadel`,
           err,
@@ -91,7 +113,6 @@ export class TenantsController {
       }
     }
 
-    await this.tenantRepo.delete(id);
     return { success: true };
   }
 }

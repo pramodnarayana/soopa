@@ -94,6 +94,43 @@ export class SubscriptionsController {
     @Param('tenantId') tenantId: string,
     @Param('appId') appId: string,
   ) {
+    // Fetch the app and tenant to determine if we need to revoke Zitadel grant
+    const appRecords = await this.db
+      .select()
+      .from(apps)
+      .where(eq(apps.id, appId))
+      .limit(1);
+    if (!appRecords.length) throw new NotFoundException('App not found');
+    const app = appRecords[0];
+
+    const tenantRecords = await this.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
+    const tenant = tenantRecords[0];
+
+    // Revoke the project grant for EDI app
+    if (app.slug === 'edi' && tenant.zitadelOrgId) {
+      const zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
+      if (zitadelProjectId) {
+        try {
+          await this.projectProvider.deleteProjectGrant(
+            tenant.zitadelOrgId,
+            zitadelProjectId,
+          );
+        } catch (err) {
+          // Log the error but continue with database deletion
+          console.error(
+            `Warning: Failed to revoke project grant for tenant ${tenantId}`,
+            err,
+          );
+        }
+      }
+    }
+
+    // Delete the subscription from database
     await this.db
       .delete(tenantSubscriptions)
       .where(

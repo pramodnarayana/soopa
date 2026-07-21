@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './infrastructure/database.module';
 import { TenantsController } from './adapters/inbound/http/tenants.controller';
 import { ApiKeysController } from './adapters/inbound/http/api-keys.controller';
@@ -27,6 +28,7 @@ import { UsersController } from './adapters/inbound/http/users.controller';
 import { ZitadelWebhookController } from './adapters/inbound/http/zitadel-webhook.controller';
 import { AppsController } from './adapters/inbound/http/apps.controller';
 import { SubscriptionsController } from './adapters/inbound/http/subscriptions.controller';
+import { ApiKeyGuard } from './adapters/inbound/http/api-key.guard';
 
 @Module({
   imports: [
@@ -46,6 +48,10 @@ import { SubscriptionsController } from './adapters/inbound/http/subscriptions.c
     ProvisionTenantUseCase,
     GenerateApiKeyUseCase,
     OutboxSweeperService,
+    {
+      provide: APP_GUARD,
+      useClass: ApiKeyGuard,
+    },
     {
       provide: TENANT_REPOSITORY,
       useClass: TenantDrizzleRepository,

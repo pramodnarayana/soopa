@@ -9,7 +9,26 @@ dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 const token = process.env.ZITADEL_API_TOKEN;
 const apiUrl = process.env.ZITADEL_API_URL;
 
-const PROTECTED_ORGS = ['ZITADEL', 'Soopa'];
+// Protected organization IDs (stable identifiers)
+const PROTECTED_ORG_IDS = new Set<string>([
+  // Add your protected organization IDs here
+]);
+
+// Protected organization names (for logging/fallback only)
+const PROTECTED_ORG_NAMES = ['ZITADEL', 'Soopa'];
+
+// Approved local/development hosts
+const APPROVED_HOSTS = [
+  'localhost',
+  '127.0.0.1',
+  'ucp.localhost',
+  'zitadel.localhost',
+];
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+const dryRun = args.includes('--dry-run');
+const force = args.includes('--force') || process.env.ZITADEL_CLEANUP_FORCE === 'true';
 
 async function clearZitadelTenants() {
   if (!token || !apiUrl) {
@@ -17,7 +36,22 @@ async function clearZitadelTenants() {
     process.exit(1);
   }
 
-  console.log('Fetching organizations from Zitadel...');
+  // Safety check: ensure we're running against a local/development environment
+  const url = new URL(apiUrl);
+  const isApprovedHost = APPROVED_HOSTS.some(host => url.hostname === host || url.hostname.includes(host));
+
+  if (!isApprovedHost && !force) {
+    console.error(`ERROR: Safety check failed. API URL ${apiUrl} does not match an approved local/development host.`);
+    console.error(`Approved hosts: ${APPROVED_HOSTS.join(', ')}`);
+    console.error('To bypass this check, use --force flag or set ZITADEL_CLEANUP_FORCE=true environment variable.');
+    process.exit(1);
+  }
+
+  if (dryRun) {
+    console.log('DRY RUN MODE: No deletions will be performed.');
+  }
+
+  console.log(`Fetching organizations from Zitadel (${apiUrl})...`);
   
   let orgs: any[] = [];
   try {
@@ -46,8 +80,16 @@ async function clearZitadelTenants() {
   console.log(`Found ${orgs.length} organizations in total.`);
 
   for (const org of orgs) {
-    if (PROTECTED_ORGS.includes(org.name)) {
+    // Check stable ID first, then fall back to name matching
+    const isProtected = PROTECTED_ORG_IDS.has(org.id) || PROTECTED_ORG_NAMES.includes(org.name);
+
+    if (isProtected) {
       console.log(`Skipping protected organization: ${org.name} (${org.id})`);
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(`[DRY RUN] Would delete organization: ${org.name} (${org.id})`);
       continue;
     }
 
@@ -71,7 +113,7 @@ async function clearZitadelTenants() {
     }
   }
 
-  console.log('Zitadel cleanup complete!');
+  console.log(dryRun ? 'Zitadel cleanup dry run complete!' : 'Zitadel cleanup complete!');
 }
 
 clearZitadelTenants().catch(err => {

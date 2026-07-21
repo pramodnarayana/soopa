@@ -5,6 +5,8 @@ import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
 import {
   tenants,
   tenantSubscriptions,
+  tenantUsers,
+  apiKeys,
   apps,
   controlPlaneOutbox,
   eq,
@@ -105,6 +107,22 @@ export class TenantDrizzleRepository implements ITenantRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.db.delete(tenants).where(eq(tenants.id, id));
+    // Delete tenant and all dependent records in a transaction
+    await this.db.transaction(async (tx) => {
+      // Delete tenant_users associations
+      await tx.delete(tenantUsers).where(eq(tenantUsers.tenantId, id));
+
+      // Delete api_keys
+      await tx.delete(apiKeys).where(eq(apiKeys.tenantId, id));
+
+      // Delete tenant_subscriptions
+      await tx.delete(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, id));
+
+      // Delete outbox events for this tenant
+      await tx.delete(controlPlaneOutbox).where(eq(controlPlaneOutbox.tenantId, id));
+
+      // Finally, delete the tenant itself
+      await tx.delete(tenants).where(eq(tenants.id, id));
+    });
   }
 }

@@ -6,7 +6,10 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  UnauthorizedException,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { USER_REPOSITORY } from '../../../ports/outbound/user.repository';
 import type { IUserRepository } from '../../../ports/outbound/user.repository';
 
@@ -36,7 +39,24 @@ export class ZitadelWebhookController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  async handleWebhook(@Body() payload: ZitadelWebhookPayload) {
+  async handleWebhook(@Body() payload: ZitadelWebhookPayload, @Req() request: Request) {
+    // Verify webhook authenticity
+    // TODO: Implement proper webhook signature verification based on Zitadel's webhook security mechanism
+    // For now, we validate that the webhook secret token is present in the header
+    const webhookSecret = process.env.ZITADEL_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const authHeader = request.headers['authorization'] || request.headers['x-webhook-secret'];
+      if (!authHeader || authHeader !== `Bearer ${webhookSecret}`) {
+        this.logger.warn('Webhook request rejected: Invalid or missing authentication');
+        throw new UnauthorizedException('Invalid webhook authentication');
+      }
+    } else {
+      // In development, log a warning if webhook secret is not configured
+      this.logger.warn(
+        'ZITADEL_WEBHOOK_SECRET not configured - webhook authentication is disabled. This should only happen in development.',
+      );
+    }
+
     this.logger.log(
       `Received Zitadel Webhook: ${payload.eventType} for user ${payload.userId}`,
     );

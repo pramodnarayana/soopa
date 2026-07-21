@@ -8,6 +8,7 @@ import {
   Param,
   Inject,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { USER_IDENTITY_PROVIDER } from '../../../ports/outbound/user-identity.provider';
 import type { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider';
@@ -99,8 +100,13 @@ export class UsersController {
   ) {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
+
+    if (!tenant.zitadelOrgId) {
+      throw new BadRequestException('Tenant has no associated organization');
+    }
+
     const result = await this.userIdentityProvider.inviteUser(
-      tenant.zitadelOrgId as string,
+      tenant.zitadelOrgId,
       dto.email,
       dto.role,
       dto.firstName,
@@ -132,9 +138,20 @@ export class UsersController {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    if (!tenant.zitadelOrgId) {
+      throw new BadRequestException('Tenant has no associated organization');
+    }
+
+    // Verify user belongs to this tenant
+    const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
+    const userBelongsToTenant = tenantUsers.some(u => u.id === userId);
+    if (!userBelongsToTenant) {
+      throw new NotFoundException('User not found in this tenant');
+    }
+
     await this.userIdentityProvider.updateUser(
       userId,
-      tenant.zitadelOrgId as string,
+      tenant.zitadelOrgId,
       dto.firstName,
       dto.lastName,
       dto.role,
@@ -163,9 +180,21 @@ export class UsersController {
   ) {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
+
+    if (!tenant.zitadelOrgId) {
+      throw new BadRequestException('Tenant has no associated organization');
+    }
+
+    // Verify user belongs to this tenant
+    const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
+    const userBelongsToTenant = tenantUsers.some(u => u.id === userId);
+    if (!userBelongsToTenant) {
+      throw new NotFoundException('User not found in this tenant');
+    }
+
     await this.userIdentityProvider.toggleUserStatus(
       userId,
-      tenant.zitadelOrgId as string,
+      tenant.zitadelOrgId,
       dto.action,
     );
     return { success: true };
@@ -176,10 +205,13 @@ export class UsersController {
     @Param('tenantId') tenantId: string,
     @Param('userId') userId: string,
   ) {
-    // We could verify the user belongs to the tenant here first,
-    // but the Zitadel token is scoped (or we are using admin).
-    // The safest way is to ensure the user actually exists in the org.
-    // For now, just delete the user.
+    // Verify user belongs to this tenant
+    const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
+    const userBelongsToTenant = tenantUsers.some(u => u.id === userId);
+    if (!userBelongsToTenant) {
+      throw new NotFoundException('User not found in this tenant');
+    }
+
     await this.userIdentityProvider.deleteUser(userId);
 
     // Update local read model

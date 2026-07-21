@@ -23,7 +23,7 @@ export class ZitadelOrganizationsAdapter
     super();
   }
 
-  async createOrganization(name: string): Promise<{ orgId: string }> {
+  async createOrganization(name: string): Promise<{ orgId: string; grantSucceeded?: boolean }> {
     this.logger.log(`Provisioning Organization in Zitadel: ${name}`);
 
     try {
@@ -43,6 +43,7 @@ export class ZitadelOrganizationsAdapter
       if (!orgId) throw new Error('Org ID not returned from Zitadel');
       this.logger.log(`Created Organization in Zitadel with ID: ${orgId}`);
 
+      let grantSucceeded = false;
       if (this.ucpProjectId) {
         // Enterprise Grade: Dynamically query the source of truth (Zitadel Project)
         // for all roles assigned to the configured tenant group so we never have to hardcode role additions.
@@ -58,13 +59,18 @@ export class ZitadelOrganizationsAdapter
             this.ucpProjectId,
             tenantRoleKeys,
           );
+          grantSucceeded = true;
         } catch (error) {
-          this.logger.error(`Failed to grant UCP project to org:`, error);
+          this.logger.error(
+            `Failed to grant UCP project to org ${orgId}. The organization was created successfully but project grant failed. Manual intervention or retry may be required.`,
+            error,
+          );
           // Don't throw, let org creation succeed even if grant fails
+          // Caller should check grantSucceeded and handle accordingly
         }
       }
 
-      return { orgId };
+      return { orgId, grantSucceeded };
     } catch (error) {
       this.logger.error('Error creating organization in Zitadel', error);
       throw error;

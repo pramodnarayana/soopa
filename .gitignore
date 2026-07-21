@@ -13,3 +13,6 @@ uv.lock
 *.tsbuildinfo
 
 .coverage
+
+# Zitadel machine keys - should be retrieved from container volume
+infra/zitadel/machinekey.json

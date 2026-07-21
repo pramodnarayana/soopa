@@ -8,6 +8,10 @@ export interface IProjectProvider {
     projectId: string,
     roleKeys: string[],
   ): Promise<unknown>;
+  deleteProjectGrant(
+    orgId: string,
+    projectId: string,
+  ): Promise<void>;
   getRoles(): Promise<ZitadelRole[]>;
   getUsers(orgId: string): Promise<ZitadelUser[]>;
 }

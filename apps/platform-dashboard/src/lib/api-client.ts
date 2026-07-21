@@ -41,14 +41,15 @@ export const apiClient = {
       let errorMessage = 'An unexpected error occurred';
       let errorDetails: any = null;
 
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
-        errorDetails = errorData.details || errorData;
-      } catch {
-        // Fallback if response is not JSON
-        const textData = await response.text();
-        if (textData) {
+      const textData = await response.text();
+
+      if (textData) {
+        try {
+          const errorData = JSON.parse(textData);
+          errorMessage = errorData.message || errorMessage;
+          errorDetails = errorData.details || errorData;
+        } catch {
+          // Fallback if response is not valid JSON
           errorMessage = textData;
         }
       }
