@@ -14,32 +14,33 @@ dependencies = [
 
 [tool.uv.workspace]
 members = [
-    "platform/packages/*/python",
-    "edi/apps/edi-api",
-    "edi/apps/edi-as2-server",
-    "edi/apps/edi-worker/*",
-    "edi/packages/*",
-    "edi/legacy_libs/*"
+    "core/platform/packages/*/python",
+    "core/platform/packages/schemas/python",
+    "apps/edi/apps/edi-api",
+    "apps/edi/apps/edi-as2-server",
+    "apps/edi/apps/edi-worker/*",
+    "apps/edi/packages/*"
 ]
+exclude = ["apps/edi/packages/ui"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 norecursedirs = ["node_modules", "frontend"]
 
 pythonpath = [
-    "platform/packages/identity/python/src",
-    "platform/packages/observability/python/src",
-    "edi/packages/as2_core/src",
-    "edi/packages/bots_core/src",
-    "edi/packages/grammar/src",
-    "edi/packages/patches/src",
-    "edi/packages/domain/src",
-    "edi/packages/pipeline/src",
-    "edi/packages/transformer/src",
-    "edi/apps/edi-api/src",
-    "edi/apps/edi-as2-server/src",
-    "edi/apps/edi-worker/orchestrator/src",
-    "edi/apps/edi-worker/compute/src",
+    "core/platform/packages/identity/python/src",
+    "core/platform/packages/observability/python/src",
+    "apps/edi/packages/as2_core/src",
+    "apps/edi/packages/bots_core/src",
+    "apps/edi/packages/grammar/src",
+    "apps/edi/packages/patches/src",
+    "apps/edi/packages/domain/src",
+    "apps/edi/packages/pipeline/src",
+    "apps/edi/packages/transformer/src",
+    "apps/edi/apps/edi-api/src",
+    "apps/edi/apps/edi-as2-server/src",
+    "apps/edi/apps/edi-worker/orchestrator/src",
+    "apps/edi/apps/edi-worker/compute/src",
 ]
 addopts = "-v --tb=short --ignore=services/worker --ignore=libs/transformer/tests/test_worker.py --ignore=libs/transformer/scripts"
 markers = [
