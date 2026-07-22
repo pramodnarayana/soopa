@@ -1,0 +1,129 @@
+[project]
+name = "edi"
+version = "0.1.0"
+description = "EDI AS2 Integration Platform"
+authors = [
+    {name = "EDI AS2 Team", email = "team@edi.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=49.0.0",
+    "endesive>=2.19.3",
+    "jsonpath-ng>=1.8.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "platform/packages/*/python",
+    "edi/apps/edi-api",
+    "edi/apps/edi-as2-server",
+    "edi/apps/edi-worker/*",
+    "edi/packages/*",
+    "edi/legacy_libs/*"
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+norecursedirs = ["node_modules", "frontend"]
+
+pythonpath = [
+    "platform/packages/identity/python/src",
+    "platform/packages/observability/python/src",
+    "edi/packages/as2_core/src",
+    "edi/packages/bots_core/src",
+    "edi/packages/grammar/src",
+    "edi/packages/patches/src",
+    "edi/packages/domain/src",
+    "edi/packages/pipeline/src",
+    "edi/packages/transformer/src",
+    "edi/apps/edi-api/src",
+    "edi/apps/edi-as2-server/src",
+    "edi/apps/edi-worker/orchestrator/src",
+    "edi/apps/edi-worker/compute/src",
+]
+addopts = "-v --tb=short --ignore=services/worker --ignore=libs/transformer/tests/test_worker.py --ignore=libs/transformer/scripts"
+markers = [
+    "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.27.0",
+    "ruff>=0.4.0",
+    "mypy>=1.9.0",
+    "pre-commit>=3.7.0",
+]
+
+[tool.mypy]
+strict = true
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core", "libs/edi_grammar", "services/worker"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "hvac.*"
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["libs/edi_grammar/src/edi_grammar/x12", "libs/edi_grammar/src/edi_grammar/edifact"]
+exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+ignore = ["E501"] # Handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI dependencies use default arguments
+"edi/apps/edi-api/src/api/main.py" = ["B008", "E402"]
+"edi/apps/edi-api/src/api/cdc_relay.py" = ["B008"]
+"edi/apps/edi-api/src/api/routers/**/*.py" = ["B008"]
+"edi/apps/edi-api/src/api/dependencies.py" = ["B008"]
+"edi/apps/edi-as2-server/src/as2_server/main.py" = ["B008"]
+"edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
+"platform/packages/identity/python/identity/**/*.py" = ["B008"]
+# Legacy BOTS engine formatting ignores
+"edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038"]
+"edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.coverage.run]
+source = ["libs", "services"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
+    # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
+    "services/api/src/api/adapters/edi_header_repository.py",
+    "services/api/src/api/adapters/outbound_route_repository.py",
+    "services/api/src/api/adapters/as2_partnership_repository.py",
+    "services/api/src/api/adapters/transaction_repository.py",
+    "services/api/src/api/adapters/api_token_repository.py",
+    "services/api/src/api/adapters/webhook_repository.py",
+    "services/api/src/api/adapters/outbox_repository.py",
+    "services/api/src/api/adapters/as2_partner_repository.py",
+    "services/api/src/api/adapters/tenant_repository.py",
+    "services/api/src/api/adapters/sftp_repository.py",
+    "services/api/src/api/adapters/data_plane_as2_repository.py",
+    "services/api/src/api/adapters/inbound_route_repository.py",
+    "*/adapters/sftp.py",
+    "*/adapters/paramiko_sftp_tester.py",
+    "*/adapters/vault.py",
+    "*/adapters/sqs_queue.py",
+    # AS2 server main (ASGI lifespan wiring — integration only)
+    "services/as2_server/src/as2_server/main.py",
+    # Transformer worker entrypoint (subprocess runner, not business logic)
+    "services/workers/compute/src/compute_worker/worker.py",
+    "services/workers/compute/src/compute_worker/main.py",
+]
+
+[tool.coverage.report]
+# Required 80% coverage
+show_missing = true
+fail_under = 80

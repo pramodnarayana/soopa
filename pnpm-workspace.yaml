@@ -1,0 +1,6 @@
+packages:
+  - 'core/*/apps/*'
+  - 'core/*/packages/*'
+  - 'core/*/packages/*/node'
+  - 'apps/*/apps/*'
+  - 'apps/*/packages/*'

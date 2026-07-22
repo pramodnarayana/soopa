@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_users" ALTER COLUMN "role" SET DEFAULT 'TenantMember';

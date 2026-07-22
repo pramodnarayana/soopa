@@ -1,6 +1,0 @@
-packages:
-  - 'apps/*'
-  - 'server/*'
-  - 'sdks/node/*'
-  - 'packages/*'
-  - 'packages/*/node'
