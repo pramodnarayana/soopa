@@ -76,7 +76,7 @@ jobs:
       - name: Start Database
         run: |
           docker compose -f apps/edi/docker-compose.yml up -d postgres_global postgres_shard_1 --wait
-          pnpm db:migrate
+          uv run --directory apps/edi/packages/database python -m database.run_migrations
 
       - name: Test (Node)
         run: CI=true pnpm turbo test --filter="./apps/edi/**"

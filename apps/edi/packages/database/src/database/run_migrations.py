@@ -48,8 +48,8 @@ def run_migrations():
 
     # 1. Run Global Migrations
     logger.info("--- Applying GLOBAL DB Migrations ---")
-    global_cfg = Config("libs/database/alembic.global.ini")
-    global_cfg.set_main_option("script_location", "libs/database/src/database/migrations/global")
+    global_cfg = Config("alembic.global.ini")
+    global_cfg.set_main_option("script_location", "src/database/migrations/global")
     command.upgrade(global_cfg, "head")
 
     # 2. Fetch Shards dynamically
@@ -70,9 +70,9 @@ def run_migrations():
                 masked_url = "***redacted***"
 
         logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
-        tenant_cfg = Config("libs/database/alembic.tenant.ini")
+        tenant_cfg = Config("alembic.tenant.ini")
         tenant_cfg.set_main_option(
-            "script_location", "libs/database/src/database/migrations/tenant"
+            "script_location", "src/database/migrations/tenant"
         )
         tenant_cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(tenant_cfg, "head")
