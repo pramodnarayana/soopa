@@ -34,6 +34,11 @@ export class DataPlaneReplicationService {
 
     this.logger.log(`Found ${pendingEvents.length} pending events.`);
 
+    // Resolve SNS topic ARN once before processing events
+    const topicArn = this.configService.getOrThrow<string>(
+      ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN,
+    );
+
     for (const event of pendingEvents) {
       try {
         // 2. Dispatch to Message Bus
@@ -42,9 +47,6 @@ export class DataPlaneReplicationService {
         );
 
         // Dispatch to the SNS fan-out topic for all Data Planes
-        const topicArn = this.configService.getOrThrow<string>(
-          ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN,
-        );
         await this.messageBus.publish(
           topicArn,
           event.payload,

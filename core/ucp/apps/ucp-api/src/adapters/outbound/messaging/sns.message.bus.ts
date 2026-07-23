@@ -8,14 +8,23 @@ export class SnsMessageBusAdapter implements IMessageBus {
   private readonly logger = new Logger(SnsMessageBusAdapter.name);
 
   constructor() {
-    this.snsClient = new SNSClient({
-      endpoint: process.env.AWS_ENDPOINT_URL || 'http://localhost:4566',
+    const config: any = {
       region: process.env.AWS_REGION || 'us-east-1',
-      credentials: {
+    };
+
+    // Only set LocalStack endpoint/credentials if explicitly configured
+    if (process.env.AWS_ENDPOINT_URL) {
+      config.endpoint = process.env.AWS_ENDPOINT_URL;
+    }
+
+    if (process.env.AWS_ACCESS_KEY_ID || process.env.AWS_SECRET_ACCESS_KEY) {
+      config.credentials = {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test',
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test',
-      },
-    });
+      };
+    }
+
+    this.snsClient = new SNSClient(config);
   }
 
   async publish(

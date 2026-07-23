@@ -38,7 +38,7 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
   }
 
   async save(apiKey: ApiKey): Promise<ApiKey> {
-    return await this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(apiKeys)
         .values({
@@ -58,13 +58,18 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
           idempotencyKey: `${event.eventName}_${apiKey.id}_${event.occurredOn.getTime()}`,
           tenantId: apiKey.tenantId,
           eventType: event.eventName,
-          payload: event.payload,
+          payload: {
+            eventName: event.eventName,
+            payload: event.payload,
+          },
         });
       }
 
-      apiKey.clearEvents();
       return this.mapToDomain(row);
     });
+
+    apiKey.clearEvents();
+    return result;
   }
 
   async delete(id: string): Promise<void> {

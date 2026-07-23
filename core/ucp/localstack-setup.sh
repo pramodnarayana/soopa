@@ -9,7 +9,16 @@ awslocal sns create-topic --name ucp.user.events.fifo --attributes FifoTopic=tru
 awslocal sqs create-queue --queue-name edi.tenant.sync.fifo --attributes FifoQueue=true,ContentBasedDeduplication=true
 awslocal sqs create-queue --queue-name edi.user.sync.fifo --attributes FifoQueue=true,ContentBasedDeduplication=true
 
-# 3. Subscribe SQS Queues to SNS Topics
+# 3. Set Queue Policies to allow SNS to send messages
+awslocal sqs set-queue-attributes \
+    --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi.tenant.sync.fifo \
+    --attributes Policy='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sns.amazonaws.com"},"Action":"sqs:SendMessage","Resource":"arn:aws:sqs:us-east-1:000000000000:edi.tenant.sync.fifo","Condition":{"ArnEquals":{"aws:SourceArn":"arn:aws:sns:us-east-1:000000000000:ucp.tenant.events.fifo"}}}]}'
+
+awslocal sqs set-queue-attributes \
+    --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi.user.sync.fifo \
+    --attributes Policy='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sns.amazonaws.com"},"Action":"sqs:SendMessage","Resource":"arn:aws:sqs:us-east-1:000000000000:edi.user.sync.fifo","Condition":{"ArnEquals":{"aws:SourceArn":"arn:aws:sns:us-east-1:000000000000:ucp.user.events.fifo"}}}]}'
+
+# 4. Subscribe SQS Queues to SNS Topics
 awslocal sns subscribe \
     --topic-arn arn:aws:sns:us-east-1:000000000000:ucp.tenant.events.fifo \
     --protocol sqs \

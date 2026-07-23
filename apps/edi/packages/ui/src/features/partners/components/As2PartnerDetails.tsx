@@ -369,10 +369,10 @@ function CertificateRow({
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-600 uppercase">Public Certificate</span>
                   <div className="flex gap-2">
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleCopy(publicPem, 'Public Certificate')}>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => publicPem && handleCopy(publicPem, 'Public Certificate')} disabled={!publicPem}>
                       <Copy className="w-3 h-3" /> Copy
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleDownload(publicPem, `${partnerName}_${role.toLowerCase()}_public.pem`)}>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => publicPem && handleDownload(publicPem, `${partnerName}_${role.toLowerCase()}_public.pem`)} disabled={!publicPem}>
                       <Download className="w-3 h-3" /> Download
                     </Button>
                   </div>

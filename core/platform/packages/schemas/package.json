@@ -7,7 +7,7 @@
   "types": "src/index.ts",
   "scripts": {
     "generate": "pnpm generate:ts && pnpm generate:py",
-    "generate:ts": "json2ts -i 'events/*.json' -o src/generated --cwd events && sed -i '' 's/export const enum/export enum/g' src/generated/*.ts",
+    "generate:ts": "json2ts -i 'events/*.json' -o src/generated --cwd events && sed -i.bak 's/export const enum/export enum/g' src/generated/*.ts && rm -f src/generated/*.bak",
     "generate:py": "mkdir -p python && uv run --with datamodel-code-generator datamodel-codegen --input events --output python --input-file-type jsonschema"
   },
   "devDependencies": {

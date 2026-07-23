@@ -16,18 +16,19 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CronBuilder } from './CronBuilder';
+import type { JobResponse } from '../api/schedulerApi';
 
 export const SchedulerDashboard = () => {
   const { data: jobs = [], isLoading: jobsLoading, refetch: refetchJobs } = useJobsQuery();
   const { mutateAsync: updateJob } = useUpdateJobMutation();
 
-  const [editingJob, setEditingJob] = useState<Record<string, unknown> | null>(null);
+  const [editingJob, setEditingJob] = useState<JobResponse | null>(null);
   const [scheduleType, setScheduleType] = useState<'interval' | 'cron'>('interval');
   const [intervalValue, setIntervalValue] = useState<string>('1');
   const [intervalUnit, setIntervalUnit] = useState<string>('minutes');
   const [newCron, setNewCron] = useState<string>('0 * * * *');
 
-  const handleTogglePause = async (job: Record<string, unknown>) => {
+  const handleTogglePause = async (job: JobResponse) => {
     const newStatus = job.status === 'PAUSED' ? 'PENDING' : 'PAUSED';
     try {
       await updateJob({ name: job.name, data: { status: newStatus } });
