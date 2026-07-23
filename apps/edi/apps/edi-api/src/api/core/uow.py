@@ -72,8 +72,8 @@ class UnitOfWork:
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: Any | None,
+        _exc_val: BaseException | None,
+        _exc_tb: Any | None,
     ) -> None:
         if exc_type is not None:
             await self.rollback()

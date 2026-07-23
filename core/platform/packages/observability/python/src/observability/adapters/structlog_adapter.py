@@ -14,7 +14,7 @@ from opentelemetry import trace
 from ..ports.logger import ILogger
 
 
-def _inject_trace_context(logger: Any, method: Any, event_dict: dict[str, Any]) -> dict[str, Any]:
+def _inject_trace_context(_logger: Any, _method: Any, event_dict: dict[str, Any]) -> dict[str, Any]:
     """structlog processor: injects OTel trace_id/span_id for log-trace correlation."""
     span = trace.get_current_span()
     if span and span.is_recording():

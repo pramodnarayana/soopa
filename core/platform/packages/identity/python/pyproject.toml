@@ -46,3 +46,9 @@ indent-style = "space"
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[tool.deptry]
+known_first_party = ["identity"]
+
+[tool.deptry.package_module_name_map]
+pyjwt = ["jwt"]

@@ -8,13 +8,13 @@
     "build": "turbo run build",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:python",
     "typecheck:node": "turbo typecheck",
-    "typecheck:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run mypy --strict .); fi; done",
+    "typecheck:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run mypy --strict .) || failed=1; fi; done; exit $failed",
     "lint": "pnpm lint:node && pnpm lint:python",
     "lint:node": "eslint .",
-    "lint:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run ruff check .); fi; done",
+    "lint:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run ruff check .) || failed=1; fi; done; exit $failed",
     "test": "pnpm test:node && pnpm test:python",
     "test:node": "turbo test",
-    "test:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run pytest); fi; done",
+    "test:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && { uv run pytest; ret=$?; [ $ret -eq 0 ] || [ $ret -eq 5 ]; }) || failed=1; fi; done; exit $failed",
     "knip": "knip",
     "db:generate": "pnpm --filter @soopa/database db:generate",
     "db:migrate": "pnpm --filter @soopa/database db:migrate",
@@ -26,7 +26,7 @@
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
     "deadcode:node": "knip",
-    "deadcode:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry .); fi; done"
+    "deadcode:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uvx vulture --exclude .venv . --min-confidence 80 && uvx deptry .) || failed=1; fi; done; exit $failed"
   },
   "packageManager": "pnpm@10.27.0",
   "engines": {

@@ -22,7 +22,7 @@
     "zod",
     "@aws-sdk/client-sqs"
   ],
-  "ignoreBinaries": ["uv", "make"],
+  "ignoreBinaries": ["uv", "uvx", "make"],
   "ignore": [
     "core/ucp/apps/dashboard/src/components/ui/**",
     "ecosystem.config.cjs",
