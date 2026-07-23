@@ -217,12 +217,7 @@ async def test_main_execution_loop():
         patch("worker.data.main.TenantResolver"),
         patch("worker.data.main.SqsPublisherAdapter"),
         patch("worker.data.main.poll_sqs_queue", new_callable=AsyncMock),
-        patch("worker.data.main.SchedulerWorkerService") as mock_scheduler_cls,
     ):
-        mock_scheduler = MagicMock()
-        mock_scheduler.start = AsyncMock()
-        mock_scheduler.stop = AsyncMock()
-        mock_scheduler_cls.return_value = mock_scheduler
 
         await main()
 

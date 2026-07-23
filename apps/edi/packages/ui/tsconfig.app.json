@@ -22,7 +22,9 @@
     "noFallthroughCasesInSwitch": true,
     "strict": true,
     "strictNullChecks": true,
+    "ignoreDeprecations": "5.0",
 
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }

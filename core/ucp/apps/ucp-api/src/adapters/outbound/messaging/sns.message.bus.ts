@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+import {
+  SNSClient,
+  PublishCommand,
+  SNSClientConfig,
+} from '@aws-sdk/client-sns';
 import { IMessageBus } from '../../../ports/outbound/message.bus';
 
 @Injectable()
@@ -8,7 +12,7 @@ export class SnsMessageBusAdapter implements IMessageBus {
   private readonly logger = new Logger(SnsMessageBusAdapter.name);
 
   constructor() {
-    const config: any = {
+    const config: SNSClientConfig = {
       region: process.env.AWS_REGION || 'us-east-1',
     };
 

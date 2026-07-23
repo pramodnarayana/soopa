@@ -6,7 +6,8 @@ import { SchedulerWorker } from '../src/application/SchedulerWorker.js';
 
 // Mock dependencies
 vi.mock('@soopa/database', () => ({
-  createDbClient: vi.fn().mockReturnValue({ db: {}, pool: { end: vi.fn() } })
+  createDbClient: vi.fn().mockReturnValue({ db: {}, pool: { end: vi.fn() } }),
+  scheduledJobs: {}
 }));
 
 describe('SchedulerModule', () => {
