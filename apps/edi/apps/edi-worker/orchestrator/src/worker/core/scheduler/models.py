@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+
 class JobStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"

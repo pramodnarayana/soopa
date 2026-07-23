@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
+import { AggregateRoot } from './aggregate-root';
+import { ApiKeyCreatedEvent } from '../events/api-key-created.event';
 
-export class ApiKey {
+export class ApiKey extends AggregateRoot {
   constructor(
     public readonly id: string,
     public readonly tenantId: string,
@@ -8,7 +10,9 @@ export class ApiKey {
     public readonly keyHash: string,
     public readonly scopes: string[],
     public readonly createdAt: Date,
-  ) {}
+  ) {
+    super();
+  }
 
   static generate(
     tenantId: string,
@@ -22,6 +26,11 @@ export class ApiKey {
     const id = `apk_${crypto.randomBytes(12).toString('hex')}`;
 
     const apiKey = new ApiKey(id, tenantId, name, keyHash, scopes, new Date());
+
+    apiKey.addDomainEvent(
+      new ApiKeyCreatedEvent(id, tenantId, name, keyHash, scopes),
+    );
+
     return { apiKey, rawSecret };
   }
 

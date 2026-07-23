@@ -13,12 +13,9 @@ from api.adapters.http.dtos import (
 )
 from api.core.services import SFTPPartnerService
 from api.core.uow import UnitOfWork
-from api.dependencies import (
-    get_current_tenant_id,
-    get_sftp_tester,
-    get_tenant_uow,
-    get_vault,
-)
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.database import get_tenant_uow
+from api.dependencies.services import get_sftp_tester, get_vault
 from api.domain.models import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,

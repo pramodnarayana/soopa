@@ -31,7 +31,7 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/vitest.config.ts', 'vitest.workspace.ts', '**/eslint.config.mjs', 'eslint.config.mjs', 'ecosystem.config.cjs', '**/drizzle.config.ts', '**/coverage/**', '**/.venv/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/vitest.config.ts', 'vitest.workspace.ts', '**/eslint.config.mjs', 'eslint.config.mjs', 'ecosystem.config.cjs', '**/drizzle.config.ts', '**/coverage/**', '**/.venv/**', '**/postcss.config.js', '**/tailwind.config.js'],
   },
   {
     files: ['apps/platform-dashboard/src/components/ui/**/*.tsx', 'apps/platform-dashboard/src/components/ui/**/*.ts'],

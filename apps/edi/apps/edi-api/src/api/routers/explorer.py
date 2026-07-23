@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, field_validator
 
 from api.core.uow import UnitOfWork
-from api.dependencies import get_current_tenant_id, get_tenant_uow
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.database import get_tenant_uow
 
 router = APIRouter(prefix="/api/v1/explorer", tags=["Explorer"])
 

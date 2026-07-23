@@ -1,8 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from api.dependencies import get_global_session, get_vault
+from api.dependencies.services import get_vault
 from api.main import app
+from database.session import get_global_session
 from fastapi.testclient import TestClient
 
 

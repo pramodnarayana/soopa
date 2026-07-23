@@ -16,7 +16,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.0",
     "aioboto3>=12.0.0",
     "database",
-    "soopa-identity",
+    "identity",
     "config",
     "observability",
     "security",
@@ -29,7 +29,7 @@ dependencies = [
 
 [tool.uv.sources]
 database = { workspace = true }
-soopa-identity = { workspace = true }
+identity = { workspace = true }
 config = { workspace = true }
 observability = { workspace = true }
 security = { workspace = true }

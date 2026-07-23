@@ -1,7 +1,8 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from api.dependencies import get_message_queue, get_tenant_uow, get_uow
+from api.dependencies.database import get_tenant_uow, get_uow
+from api.dependencies.services import get_message_queue
 from api.main import app
 from fastapi.testclient import TestClient
 

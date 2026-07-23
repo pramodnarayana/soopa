@@ -2,8 +2,9 @@ import { Injectable, Inject } from '@nestjs/common';
 import { IApiKeyRepository } from '../../../ports/outbound/api-key.repository';
 import { ApiKey } from '../../../domain/models/api-key.model';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
-import { apiKeys, eq } from '@soopa/database';
+import { apiKeys, controlPlaneOutbox, eq } from '@soopa/database';
 import type { DbClient } from '@soopa/database';
+import { createId } from '@paralleldrive/cuid2';
 
 @Injectable()
 export class ApiKeyDrizzleRepository implements IApiKeyRepository {
@@ -37,18 +38,38 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
   }
 
   async save(apiKey: ApiKey): Promise<ApiKey> {
-    const [row] = await this.db
-      .insert(apiKeys)
-      .values({
-        id: apiKey.id,
-        tenantId: apiKey.tenantId,
-        name: apiKey.name,
-        keyHash: apiKey.keyHash,
-        scopes: apiKey.scopes,
-        createdAt: apiKey.createdAt,
-      })
-      .returning();
-    return this.mapToDomain(row);
+    const result = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(apiKeys)
+        .values({
+          id: apiKey.id,
+          tenantId: apiKey.tenantId,
+          name: apiKey.name,
+          keyHash: apiKey.keyHash,
+          scopes: apiKey.scopes,
+          createdAt: apiKey.createdAt,
+        })
+        .returning();
+
+      // Process Outbox Events
+      for (const event of apiKey.domainEvents) {
+        await tx.insert(controlPlaneOutbox).values({
+          id: createId(),
+          idempotencyKey: `${event.eventName}_${apiKey.id}_${event.occurredOn.getTime()}`,
+          tenantId: apiKey.tenantId,
+          eventType: event.eventName,
+          payload: {
+            eventName: event.eventName,
+            payload: event.payload,
+          },
+        });
+      }
+
+      return this.mapToDomain(row);
+    });
+
+    apiKey.clearEvents();
+    return result;
   }
 
   async delete(id: string): Promise<void> {

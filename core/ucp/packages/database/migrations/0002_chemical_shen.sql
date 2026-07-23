@@ -1,1 +1,0 @@
-ALTER TABLE "tenant_users" ALTER COLUMN "role" DROP DEFAULT;

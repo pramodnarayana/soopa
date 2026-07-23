@@ -63,7 +63,7 @@ const columns = [
     header: 'AS2 ID',
     cell: (info) => (
       <span className="font-mono text-sm px-2 py-1 bg-slate-100 rounded-md text-slate-600 border border-slate-200">
-        {info.getValue() as string}
+        {info.getValue()}
       </span>
     ),
   }),
@@ -79,7 +79,7 @@ const columns = [
   columnHelper.accessor('is_local', {
     header: 'Role',
     cell: (info) => {
-      const isLocal = info.getValue() as boolean | undefined;
+      const isLocal = info.getValue();
       if (isLocal === undefined) return null;
       return (
         <span className="text-sm font-medium text-slate-500">

@@ -2,9 +2,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from soopa_identity.application.authenticate import AuthenticationError, authenticate_bearer_token
-from soopa_identity.domain.identity_context import IdentityContext, TokenClaims
-from soopa_identity.ports.token_verifier import TokenVerifier
+from identity.application.authenticate import AuthenticationError, authenticate_bearer_token
+from identity.domain.identity_context import IdentityContext, TokenClaims
+from identity.ports.token_verifier import TokenVerifier
 
 
 @pytest.fixture

@@ -49,7 +49,7 @@ export function parseBotsError(errStr: string): ParsedEdiError {
   return { code, segment, element, globalMessage, localMessage, raw: errStr };
 }
 
-export function groupValidationErrors(validationErrors: (string | any)[]): {
+export function groupValidationErrors(validationErrors: (string | Record<string, unknown>)[]): {
   parsedErrors: ParsedEdiError[];
   errorMap: Map<string, ParsedEdiError[]>;
 } {

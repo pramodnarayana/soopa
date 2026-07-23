@@ -127,7 +127,6 @@ export function EdiToolPage() {
       setValidationErrors([]);
       setIsValid(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedPayload, inputFormat]);
 
   const handleCopy = async (text: string, paneName: string) => {

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from soopa_identity.adapters.outbound.zitadel.jwks_token_verifier import (
+from identity.adapters.outbound.zitadel.jwks_token_verifier import (
     ZitadelTokenVerifier,
     ZitadelTokenVerifierOptions,
 )
@@ -23,13 +23,13 @@ def verifier(options: ZitadelTokenVerifierOptions) -> ZitadelTokenVerifier:
 
 @pytest.mark.asyncio
 
-@patch("soopa_identity.adapters.outbound.zitadel.jwks_token_verifier.jwt.decode")
+@patch("identity.adapters.outbound.zitadel.jwks_token_verifier.jwt.decode")
 async def test_verify_valid_token(
     mock_jwt_decode: MagicMock,
     options: ZitadelTokenVerifierOptions,
 ) -> None:
     # We patch PyJWKClient on the module level before instantiating
-    with patch("soopa_identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient") as mock_jwk_client_cls:
+    with patch("identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient") as mock_jwk_client_cls:
 
         mock_jwk_client = mock_jwk_client_cls.return_value
         mock_signing_key = MagicMock()

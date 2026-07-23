@@ -62,7 +62,7 @@ const columns = [
   columnHelper.accessor('host', {
     header: 'Host',
     cell: (info) => {
-      const host = info.getValue() as string | undefined;
+      const host = info.getValue();
       if (!host) return null;
       return (
         <span className="font-mono text-sm px-2 py-1 bg-slate-100 rounded-md text-slate-600 border border-slate-200">
@@ -74,7 +74,7 @@ const columns = [
   columnHelper.accessor('username', {
     header: 'Username',
     cell: (info) => {
-      const username = info.getValue() as string | undefined;
+      const username = info.getValue();
       if (!username) return null;
       return (
         <span className="text-sm font-medium text-slate-500">

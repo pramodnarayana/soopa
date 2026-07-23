@@ -60,6 +60,7 @@ async def test_process_pipeline_event_no_message(router: DatabaseRouter):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.integration
 async def test_tenant_resolver_integration(router: DatabaseRouter):
     """
     Real narrow integration test. Connects to the database and tests real behavior.
@@ -118,6 +119,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.integration
 async def test_tenant_resolver_not_found(router: DatabaseRouter):
     """
@@ -204,6 +206,7 @@ async def test_poll_sqs_queue():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_main_execution_loop():
     from worker.data.main import main
 
@@ -214,12 +217,7 @@ async def test_main_execution_loop():
         patch("worker.data.main.TenantResolver"),
         patch("worker.data.main.SqsPublisherAdapter"),
         patch("worker.data.main.poll_sqs_queue", new_callable=AsyncMock),
-        patch("worker.data.main.SchedulerWorkerService") as mock_scheduler_cls,
     ):
-        mock_scheduler = MagicMock()
-        mock_scheduler.start = AsyncMock()
-        mock_scheduler.stop = AsyncMock()
-        mock_scheduler_cls.return_value = mock_scheduler
 
         await main()
 

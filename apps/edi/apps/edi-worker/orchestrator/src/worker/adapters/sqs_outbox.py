@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import aioboto3  # type: ignore[import-untyped]
-from domain.events import MessageQueueName
 
 from worker.core.errors import PermanentProvisioningError
 from worker.ports.outbox import OutboxEvent, OutboxPort
@@ -36,9 +35,9 @@ class SqsEvent(OutboxEvent):
 
 
 class SqsOutboxAdapter(OutboxPort):
-    def __init__(self, queue_name: str = MessageQueueName.PROVISIONING_QUEUE):
+    def __init__(self, queue_name: str = "edi.tenant.sync.fifo"):
         self.queue_name = queue_name
-        self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
+        self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
         self.region = "us-east-1"
         self.session = aioboto3.Session()
 
@@ -72,7 +71,12 @@ class SqsOutboxAdapter(OutboxPort):
             body_str = msg.get("Body", "{}")
 
             try:
-                body = json.loads(body_str)
+                raw_body = json.loads(body_str)
+                # Handle SNS Envelope
+                if "Type" in raw_body and raw_body["Type"] == "Notification" and "Message" in raw_body:
+                    body = json.loads(raw_body["Message"])
+                else:
+                    body = raw_body
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse JSON body from SQS message {message_id}")
                 await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
@@ -97,3 +101,34 @@ class SqsOutboxAdapter(OutboxPort):
                         f"Transient error processing event {event.id}: {e}. Leaving on queue."
                     )
                 raise
+
+    async def publish_event(
+        self,
+        event_type: str,
+        payload: dict[str, object],
+        idempotency_key: str,
+        tenant_id: int,
+    ) -> None:
+        """Publishes an event to the outbox queue."""
+        async with self.session.client(
+            "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+        ) as sqs:
+            try:
+                queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
+                queue_url = queue_url_response["QueueUrl"]
+            except Exception as e:
+                logger.error(f"Failed to get queue URL for {self.queue_name}: {e}")
+                raise
+
+            message_body = json.dumps({
+                "event_type": event_type,
+                "payload": payload,
+            })
+
+            await sqs.send_message(
+                QueueUrl=queue_url,
+                MessageBody=message_body,
+                MessageGroupId=str(tenant_id),
+                MessageDeduplicationId=idempotency_key,
+            )
+            logger.info(f"Published event {event_type} for tenant {tenant_id} to {self.queue_name}")

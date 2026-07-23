@@ -47,7 +47,7 @@ class HttpSchedulerRepository implements ISchedulerRepository {
       try {
         const data = await res.json();
         errorMessage = data.detail || JSON.stringify(data);
-      } catch {}
+      } catch { /* ignore */ }
       throw new Error(errorMessage || 'API request failed');
     }
     const text = await res.text();

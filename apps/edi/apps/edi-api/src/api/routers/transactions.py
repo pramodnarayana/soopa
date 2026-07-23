@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from api.core.uow import UnitOfWork
-from api.dependencies import get_current_tenant_id, get_tenant_uow
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.database import get_tenant_uow
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,24 @@
+{
+  "$id": "https://soopa.com/schemas/events/tenant-provisioned.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TenantProvisioned",
+  "type": "object",
+  "required": ["tenantId", "name", "appSlugs"],
+  "properties": {
+    "tenantId": {
+      "type": "string",
+      "description": "The unique identifier of the tenant"
+    },
+    "name": {
+      "type": "string",
+      "description": "The name of the tenant"
+    },
+    "appSlugs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of app slugs the tenant is subscribed to"
+    }
+  }
+}

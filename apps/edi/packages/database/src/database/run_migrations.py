@@ -6,6 +6,7 @@ from alembic.config import Config
 from config.settings import get_settings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,10 +47,15 @@ def run_migrations():
 
     # We assume the runner is executed from the repo root
 
+    # Dynamically resolve paths relative to this script's location
+    # __file__ is run_migrations.py, so parent is src/database/
+    base_dir = Path(__file__).resolve().parent
+    package_root = base_dir.parent.parent  # Go up to apps/edi/packages/database/
+
     # 1. Run Global Migrations
     logger.info("--- Applying GLOBAL DB Migrations ---")
-    global_cfg = Config("libs/database/alembic.global.ini")
-    global_cfg.set_main_option("script_location", "libs/database/src/database/migrations/global")
+    global_cfg = Config(str(package_root / "alembic.global.ini"))
+    global_cfg.set_main_option("script_location", str(base_dir / "migrations" / "global"))
     command.upgrade(global_cfg, "head")
 
     # 2. Fetch Shards dynamically
@@ -70,10 +76,8 @@ def run_migrations():
                 masked_url = "***redacted***"
 
         logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
-        tenant_cfg = Config("libs/database/alembic.tenant.ini")
-        tenant_cfg.set_main_option(
-            "script_location", "libs/database/src/database/migrations/tenant"
-        )
+        tenant_cfg = Config(str(package_root / "alembic.tenant.ini"))
+        tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
         tenant_cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(tenant_cfg, "head")
 

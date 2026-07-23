@@ -12,7 +12,8 @@ from api.adapters.http.dtos import (
     UpdateApiTokenRequest,
 )
 from api.core.services.api_token_service import ApiTokenService
-from api.dependencies import get_api_token_repo, get_current_tenant_id
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.services import get_api_token_repo
 from api.domain.models import CreateApiTokenCmd
 from api.ports.repository import ApiTokenRepositoryPort
 

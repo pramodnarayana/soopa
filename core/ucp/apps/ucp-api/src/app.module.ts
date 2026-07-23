@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import * as path from 'path';
-import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './infrastructure/database.module';
 import { TenantsController } from './adapters/inbound/http/tenants.controller';
 import { ApiKeysController } from './adapters/inbound/http/api-keys.controller';
@@ -18,19 +17,17 @@ import { ZitadelOrganizationsAdapter } from './adapters/outbound/identity/zitade
 import { ZitadelUsersAdapter } from './adapters/outbound/identity/zitadel-users.adapter';
 import { ZitadelProjectsAdapter } from './adapters/outbound/identity/zitadel-projects.adapter';
 import { ScheduleModule } from '@nestjs/schedule';
-import { OutboxSweeperService } from './application/services/outbox-sweeper.service';
+import { DataPlaneReplicationService } from './application/services/data-plane-replication.service';
 import { OUTBOX_REPOSITORY } from './ports/outbound/outbox.repository';
 import { USER_REPOSITORY } from './ports/outbound/user.repository';
 import { UserDrizzleRepository } from './adapters/outbound/database/user.drizzle.repository';
 import { OutboxDrizzleRepository } from './adapters/outbound/database/outbox.drizzle.repository';
 import { MESSAGE_BUS } from './ports/outbound/message.bus';
-import { SqsMessageBusAdapter } from './adapters/outbound/messaging/sqs.message.bus';
+import { SnsMessageBusAdapter } from './adapters/outbound/messaging/sns.message.bus';
 import { UsersController } from './adapters/inbound/http/users.controller';
 import { ZitadelWebhookController } from './adapters/inbound/http/zitadel-webhook.controller';
 import { AppsController } from './adapters/inbound/http/apps.controller';
 import { SubscriptionsController } from './adapters/inbound/http/subscriptions.controller';
-import { ApiKeyGuard } from './adapters/inbound/http/api-key.guard';
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -55,7 +52,7 @@ import { ApiKeyGuard } from './adapters/inbound/http/api-key.guard';
   providers: [
     ProvisionTenantUseCase,
     GenerateApiKeyUseCase,
-    OutboxSweeperService,
+    DataPlaneReplicationService,
     {
       provide: TENANT_REPOSITORY,
       useClass: TenantDrizzleRepository,
@@ -86,7 +83,7 @@ import { ApiKeyGuard } from './adapters/inbound/http/api-key.guard';
     },
     {
       provide: MESSAGE_BUS,
-      useClass: SqsMessageBusAdapter,
+      useClass: SnsMessageBusAdapter,
     },
   ],
 })

@@ -3,6 +3,7 @@ import contextlib
 from database.connection import DatabaseRouter
 from database.models import DatabaseShard, Tenant
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from worker.ports.tenant import TenantPort
 
@@ -38,6 +39,24 @@ class SqlAlchemyTenantAdapter(TenantPort):
             _, shard_obj = row
             self._cache[tenant_id] = (str(shard_obj.name), str(shard_obj.dsn))
             return self._cache[tenant_id]
+        finally:
+            with contextlib.suppress(StopAsyncIteration):
+                await global_gen.__anext__()
+
+    async def upsert_tenant(self, tenant_id: int, name: str) -> None:
+        global_gen = self.db_router.get_global_session()
+        global_session = await global_gen.__anext__()
+        try:
+            stmt = insert(Tenant).values(
+                id=tenant_id,
+                name=name,
+                status="active"
+            ).on_conflict_do_update(
+                index_elements=['id'],
+                set_={"name": name}
+            )
+            await global_session.execute(stmt)
+            await global_session.commit()
         finally:
             with contextlib.suppress(StopAsyncIteration):
                 await global_gen.__anext__()
