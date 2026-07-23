@@ -21,6 +21,6 @@ export const controlPlaneOutbox = pgTable('outbox_events', {
     as: 'permissive',
     for: 'all',
     to: 'public',
-    using: sql`${table.tenantId} IS NULL OR ${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+    using: sql`${table.tenantId} IS NULL OR ${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`
   })
 ]);

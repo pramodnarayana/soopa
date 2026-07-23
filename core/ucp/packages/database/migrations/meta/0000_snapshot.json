@@ -81,7 +81,7 @@
           "to": [
             "public"
           ],
-          "using": "\"api_keys\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+          "using": "\"api_keys\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
@@ -186,7 +186,7 @@
           "to": [
             "public"
           ],
-          "using": "\"tenant_users\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+          "using": "\"tenant_users\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
@@ -392,7 +392,7 @@
           "to": [
             "public"
           ],
-          "using": "\"notification_templates\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+          "using": "\"notification_templates\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
@@ -679,7 +679,7 @@
           "to": [
             "public"
           ],
-          "using": "\"tenant_subscriptions\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+          "using": "\"tenant_subscriptions\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
@@ -781,7 +781,7 @@
           "to": [
             "public"
           ],
-          "using": "\"outbox_events\".\"tenant_id\" IS NULL OR \"outbox_events\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+          "using": "\"outbox_events\".\"tenant_id\" IS NULL OR \"outbox_events\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},

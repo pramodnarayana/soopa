@@ -26,7 +26,7 @@
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
     "deadcode:node": "knip",
-    "deadcode:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uvx vulture --exclude .venv . --min-confidence 80 && uvx deptry .) || failed=1; fi; done; exit $failed"
+    "deadcode:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry .) || failed=1; fi; done; exit $failed"
   },
   "packageManager": "pnpm@10.27.0",
   "engines": {

@@ -29,7 +29,7 @@ export const tenantSubscriptions = pgTable('tenant_subscriptions', {
       as: 'permissive',
       for: 'all',
       to: 'public',
-      using: sql`${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+      using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`
     })
   };
 });

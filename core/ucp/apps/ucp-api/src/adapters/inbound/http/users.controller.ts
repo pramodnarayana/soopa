@@ -22,40 +22,40 @@ import { ZitadelUserState } from '../../../domain/enums/zitadel-user-state.enum'
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
-  firstName: string;
+  firstName!: string;
 
   @IsString()
   @IsNotEmpty()
-  lastName: string;
+  lastName!: string;
 
   @IsString()
   @IsEmail()
   @IsNotEmpty()
-  email: string;
+  email!: string;
 
   @IsString()
   @IsNotEmpty()
-  role: string;
+  role!: string;
 }
 
 export class ToggleUserStatusDto {
   @IsString()
   @IsNotEmpty()
-  action: 'activate' | 'deactivate';
+  action!: 'activate' | 'deactivate';
 }
 
 export class UpdateUserDto {
   @IsString()
   @IsNotEmpty()
-  firstName: string;
+  firstName!: string;
 
   @IsString()
   @IsNotEmpty()
-  lastName: string;
+  lastName!: string;
 
   @IsString()
   @IsNotEmpty()
-  role: string;
+  role!: string;
 }
 
 @Controller('tenants/:tenantId/users')

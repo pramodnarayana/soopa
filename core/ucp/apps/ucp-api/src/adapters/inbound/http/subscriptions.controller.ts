@@ -19,7 +19,7 @@ import type { IProjectProvider } from '../../../ports/outbound/project.provider'
 export class SubscribeDto {
   @IsString()
   @IsNotEmpty()
-  appId: string;
+  appId!: string;
 }
 
 @Controller('tenants/:tenantId/subscriptions')

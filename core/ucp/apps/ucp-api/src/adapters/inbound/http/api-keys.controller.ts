@@ -5,12 +5,12 @@ import { IsString, IsArray, IsNotEmpty } from 'class-validator';
 export class CreateApiKeyRequestDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsArray()
   @IsString({ each: true })
   @IsNotEmpty()
-  scopes: string[];
+  scopes!: string[];
 }
 
 @Controller('tenants/:tenantId/keys')

@@ -14,14 +14,14 @@ import { USER_REPOSITORY } from '../../../ports/outbound/user.repository';
 import type { IUserRepository } from '../../../ports/outbound/user.repository';
 
 export class ZitadelWebhookPayload {
-  eventType:
+  eventType!:
     | 'user.added'
     | 'user.changed'
     | 'user.removed'
     | 'user.membership.added'
     | 'user.membership.removed'
     | 'user.membership.changed';
-  userId: string;
+  userId!: string;
   email?: string;
   firstName?: string;
   lastName?: string;

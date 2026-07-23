@@ -1,3 +1,4 @@
+CREATE SCHEMA IF NOT EXISTS app;--> statement-breakpoint
 CREATE TABLE "api_keys" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"tenant_id" varchar(128) NOT NULL,
@@ -111,8 +112,20 @@ ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_tenant_id_tenants_id_f
 CREATE INDEX "tenant_users_user_id_idx" ON "tenant_users" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_template_idx" ON "notification_templates" USING btree ("tenant_id","event_type","channel");--> statement-breakpoint
 CREATE INDEX "job_status_next_run_idx" ON "scheduled_jobs" USING btree ("status","next_run_at");--> statement-breakpoint
-CREATE POLICY "api_keys_isolation" ON "api_keys" AS PERMISSIVE FOR ALL TO public USING ("api_keys"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
-CREATE POLICY "tenant_users_isolation" ON "tenant_users" AS PERMISSIVE FOR ALL TO public USING ("tenant_users"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
-CREATE POLICY "notification_templates_isolation" ON "notification_templates" AS PERMISSIVE FOR ALL TO public USING ("notification_templates"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
-CREATE POLICY "tenant_subscriptions_isolation" ON "tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("tenant_subscriptions"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
-CREATE POLICY "outbox_events_isolation" ON "outbox_events" AS PERMISSIVE FOR ALL TO public USING ("outbox_events"."tenant_id" IS NULL OR "outbox_events"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');
+CREATE OR REPLACE FUNCTION app.current_tenant_id() RETURNS VARCHAR(128) AS $$
+BEGIN
+  RETURN current_setting('app.current_tenant_id', true);
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;--> statement-breakpoint
+CREATE OR REPLACE FUNCTION app.bypass_rls() RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN COALESCE(current_setting('app.bypass_rls', true) = 'on', false);
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.current_tenant_id() TO public;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.bypass_rls() TO public;--> statement-breakpoint
+CREATE POLICY "api_keys_isolation" ON "api_keys" AS PERMISSIVE FOR ALL TO public USING ("api_keys"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "tenant_users_isolation" ON "tenant_users" AS PERMISSIVE FOR ALL TO public USING ("tenant_users"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "notification_templates_isolation" ON "notification_templates" AS PERMISSIVE FOR ALL TO public USING ("notification_templates"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "tenant_subscriptions_isolation" ON "tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("tenant_subscriptions"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "outbox_events_isolation" ON "outbox_events" AS PERMISSIVE FOR ALL TO public USING ("outbox_events"."tenant_id" IS NULL OR "outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());

@@ -13,7 +13,7 @@ import { IsString, IsNotEmpty } from 'class-validator';
 export class ProvisionTenantDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 }
 
 @Injectable()

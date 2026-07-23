@@ -10,16 +10,16 @@ import { IsString, IsArray, IsNotEmpty } from 'class-validator';
 export class GenerateApiKeyDto {
   @IsString()
   @IsNotEmpty()
-  tenantId: string;
+  tenantId!: string;
 
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsArray()
   @IsString({ each: true })
   @IsNotEmpty()
-  scopes: string[];
+  scopes!: string[];
 }
 
 @Injectable()

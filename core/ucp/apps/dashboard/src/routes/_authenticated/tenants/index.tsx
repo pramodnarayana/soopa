@@ -42,6 +42,14 @@ const STATUS_THEME = {
     toggleText: 'text-slate-500',
     toggleSwitch: 'translate-x-0 bg-white text-slate-400',
     icon: 'text-slate-400'
+  },
+  unknown: {
+    badge: 'bg-amber-50 text-amber-700 border-amber-200',
+    dot: 'bg-amber-500',
+    toggleBg: 'bg-slate-100 border-slate-300',
+    toggleText: 'text-slate-500',
+    toggleSwitch: 'translate-x-0 bg-white text-slate-400',
+    icon: 'text-slate-400'
   }
 } as const;
 
@@ -94,11 +102,12 @@ function TenantsPage() {
       cell: (info) => {
         const status = info.getValue();
         const isActive = status === TENANT_STATUS.ACTIVE;
-        const theme = STATUS_THEME[status];
+        const theme = STATUS_THEME[status as keyof typeof STATUS_THEME] ?? STATUS_THEME.unknown;
+        const displayText = isActive ? 'Active' : status === TENANT_STATUS.INACTIVE ? 'Inactive' : 'Unknown';
         return (
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${theme.badge}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${theme.dot}`} />
-            {isActive ? 'Active' : 'Inactive'}
+            {displayText}
           </span>
         );
       },
@@ -121,8 +130,10 @@ function TenantsPage() {
         const tenant = info.row.original;
         const status = tenant.status;
         const isActive = status === TENANT_STATUS.ACTIVE;
-        const theme = STATUS_THEME[status];
-        
+        const isInactive = status === TENANT_STATUS.INACTIVE;
+        const isKnownStatus = isActive || isInactive;
+        const theme = STATUS_THEME[status as keyof typeof STATUS_THEME] ?? STATUS_THEME.unknown;
+
         return (
           <div className="flex justify-end pr-4">
             <Button
@@ -143,12 +154,14 @@ function TenantsPage() {
                 aria-checked={isActive}
                 onClick={(e) => {
                   e.stopPropagation();
-                  statusMutation.mutate({ id: tenant.id, status: isActive ? TENANT_STATUS.INACTIVE : TENANT_STATUS.ACTIVE })
+                  if (isKnownStatus) {
+                    statusMutation.mutate({ id: tenant.id, status: isActive ? TENANT_STATUS.INACTIVE : TENANT_STATUS.ACTIVE })
+                  }
                 }}
-                disabled={statusMutation.isPending}
-                title={isActive ? 'Deactivate Tenant' : 'Activate Tenant'}
-                aria-label={isActive ? 'Deactivate Tenant' : 'Activate Tenant'}
-                className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${theme.toggleBg} ${statusMutation.isPending ? 'opacity-50 cursor-wait' : ''}`}
+                disabled={statusMutation.isPending || !isKnownStatus}
+                title={!isKnownStatus ? 'Unknown status - toggle disabled' : isActive ? 'Deactivate Tenant' : 'Activate Tenant'}
+                aria-label={!isKnownStatus ? 'Unknown status - toggle disabled' : isActive ? 'Deactivate Tenant' : 'Activate Tenant'}
+                className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${theme.toggleBg} ${statusMutation.isPending || !isKnownStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <span
                   className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isActive ? 'opacity-100 ' + theme.toggleText : 'opacity-0'}`}

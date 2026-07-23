@@ -27,14 +27,14 @@ import { IsString, IsNotEmpty, IsIn } from 'class-validator';
 export class UpdateTenantNameDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 }
 
 export class UpdateTenantStatusDto {
   @IsString()
   @IsNotEmpty()
   @IsIn(['active', 'inactive'])
-  status: 'active' | 'inactive';
+  status!: 'active' | 'inactive';
 }
 
 @Controller('tenants')
