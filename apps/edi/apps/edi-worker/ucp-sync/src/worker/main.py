@@ -46,7 +46,10 @@ class UcpSyncWorkerService:
         try:
             await self.sqs_client.send_message(
                 QueueUrl=self.sync_queue_url,
-                MessageBody=json.dumps({"tenant_id": tenant_id}),
+                MessageBody=json.dumps({
+                    "event_type": "tenant.sync",
+                    "payload": {"tenant_id": tenant_id}
+                }),
                 MessageGroupId=str(tenant_id),
                 MessageDeduplicationId=f"sync_{tenant_id}_{asyncio.get_event_loop().time()}"
             )
@@ -115,6 +118,7 @@ class UcpSyncWorkerService:
                     # Don't delete, let it go to DLQ
         except ClientError as e:
             logger.error(f"SQS ClientError: {e}")
+            raise
 
 async def run_worker(service: UcpSyncWorkerService) -> None:
     logger.info("Started UCP Sync Worker")

@@ -22,6 +22,7 @@
 - NEVER use destructive terminal commands like `git checkout`, `git restore`, `git reset`, `git clean`, or `rm -rf` without explicitly asking for and receiving the user's permission first. Always prefer precise code-editing tools for reverting changes.
 
 ## Development Phase Policy
+
 - **Phase:** Active Development
 - **Backward Compatibility:** NOT a concern. Do NOT prioritize backwards compatibility, legacy facade patterns, or minimizing code churn when refactoring.
 - **Enterprise Grade:** Always prioritize true enterprise-grade software architecture, explicit imports, separation of concerns, and clean architectural principles over 'quick fixes'. If a 'god file' needs to be split, update all dependent files explicitly rather than relying on re-exports/facades.

@@ -37,7 +37,7 @@ class SqsEvent(OutboxEvent):
 class SqsOutboxAdapter(OutboxPort):
     def __init__(self, queue_name: str = "edi.tenant.sync.fifo"):
         self.queue_name = queue_name
-        self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
+        self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
         self.region = "us-east-1"
         self.session = aioboto3.Session()
 
@@ -101,3 +101,34 @@ class SqsOutboxAdapter(OutboxPort):
                         f"Transient error processing event {event.id}: {e}. Leaving on queue."
                     )
                 raise
+
+    async def publish_event(
+        self,
+        event_type: str,
+        payload: dict[str, object],
+        idempotency_key: str,
+        tenant_id: int,
+    ) -> None:
+        """Publishes an event to the outbox queue."""
+        async with self.session.client(
+            "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+        ) as sqs:
+            try:
+                queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
+                queue_url = queue_url_response["QueueUrl"]
+            except Exception as e:
+                logger.error(f"Failed to get queue URL for {self.queue_name}: {e}")
+                raise
+
+            message_body = json.dumps({
+                "event_type": event_type,
+                "payload": payload,
+            })
+
+            await sqs.send_message(
+                QueueUrl=queue_url,
+                MessageBody=message_body,
+                MessageGroupId=str(tenant_id),
+                MessageDeduplicationId=idempotency_key,
+            )
+            logger.info(f"Published event {event_type} for tenant {tenant_id} to {self.queue_name}")

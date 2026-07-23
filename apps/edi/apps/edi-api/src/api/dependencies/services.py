@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+from typing import Annotated
 
 from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 from api.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
@@ -41,13 +42,13 @@ def get_message_queue() -> MessageQueuePort:
 
 
 def get_tenant_repo(
-    session: GlobalSession = Depends(get_global_session),
+    session: Annotated[GlobalSession, Depends(get_global_session)],
 ) -> TenantRepositoryPort:
     return SqlAlchemyTenantRepository(session)
 
 
 def get_api_token_repo(
-    session: GlobalSession = Depends(get_global_session),
+    session: Annotated[GlobalSession, Depends(get_global_session)],
 ) -> ApiTokenRepositoryPort:
     """Yields the API token repository bound to the global (control plane) session."""
     return SqlAlchemyApiTokenRepository(session)

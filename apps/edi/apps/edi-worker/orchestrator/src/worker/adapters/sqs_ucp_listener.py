@@ -63,4 +63,4 @@ class SqsUcpListenerAdapter(UcpEventListenerPort):
 
             except ClientError as e:
                 logger.error(f"SQS ClientError in UCP listener: {e}")
-                yield None
+                raise

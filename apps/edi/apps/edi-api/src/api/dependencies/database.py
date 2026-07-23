@@ -32,7 +32,7 @@ async def get_tenant_session_for_id(
     if not row:
         raise RuntimeError(f"Tenant {tenant_id} not found in global database")
 
-    tenant, shard = row
+    _, shard = row
     async_gen_tenant = db_router.get_tenant_session(tenant_id, shard.name, shard.dsn)
     tenant_session: AsyncSession = await async_gen_tenant.__anext__()
 

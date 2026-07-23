@@ -27,10 +27,17 @@ def client(fake_uow):
     from api.dependencies.services import get_sftp_tester
 
     class FakeSftpTester:
-        async def test_connection(self, **kwargs):
+        async def test_connection(
+            self,
+            host: str,
+            port: int,
+            username: str,
+            password: str | None = None,
+            client_key_string: str | None = None,
+        ) -> tuple[bool, str | None]:
             return True, "Success"
 
-    app.dependency_overrides[get_sftp_tester] = lambda: FakeSftpTester()
+    app.dependency_overrides[get_sftp_tester] = FakeSftpTester
 
     from api.dependencies.services import get_vault
 

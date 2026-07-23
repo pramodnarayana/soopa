@@ -90,8 +90,8 @@ ignore = ["E501"] # Handled by formatter
 "edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
 "platform/packages/identity/python/identity/**/*.py" = ["B008"]
 # Legacy BOTS engine formatting ignores
-"edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405"]
-"edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405"]
+"apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405"]
+"apps/edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405"]
 "apps/edi/packages/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]
