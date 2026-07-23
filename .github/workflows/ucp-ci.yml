@@ -6,15 +6,28 @@ on:
     paths:
       - 'core/ucp/**'
       - 'core/platform/**'
+      - '.github/workflows/ucp-ci.yml'
+      - 'pnpm-lock.yaml'
+      - 'uv.lock'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
   pull_request:
     paths:
       - 'core/ucp/**'
       - 'core/platform/**'
+      - '.github/workflows/ucp-ci.yml'
+      - 'pnpm-lock.yaml'
+      - 'uv.lock'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
 
 jobs:
   build-lint-test:
     name: Build, Lint, and Test
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
     env:

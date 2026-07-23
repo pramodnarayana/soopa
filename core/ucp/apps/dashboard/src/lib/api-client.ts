@@ -32,13 +32,17 @@ export const apiClient = {
       });
     }
 
+    const normalizedHeaders = new Headers(headers);
+    if (!normalizedHeaders.has('Content-Type')) {
+      normalizedHeaders.set('Content-Type', 'application/json');
+    }
+    if (globalToken && !normalizedHeaders.has('Authorization')) {
+      normalizedHeaders.set('Authorization', `Bearer ${globalToken}`);
+    }
+
     const config: RequestInit = {
       ...customConfig,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(globalToken ? { Authorization: `Bearer ${globalToken}` } : {}),
-        ...headers,
-      },
+      headers: normalizedHeaders,
     };
 
     const response = await fetch(url.toString(), config);
@@ -82,7 +86,7 @@ export const apiClient = {
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   },
 
@@ -90,7 +94,7 @@ export const apiClient = {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PATCH',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   },
 

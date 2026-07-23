@@ -6,15 +6,26 @@ on:
     paths:
       - 'core/platform/**'
       - '.github/workflows/platform-ci.yml'
+      - 'pnpm-lock.yaml'
+      - 'uv.lock'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
   pull_request:
     paths:
       - 'core/platform/**'
       - '.github/workflows/platform-ci.yml'
+      - 'pnpm-lock.yaml'
+      - 'uv.lock'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
 
 jobs:
   build-lint-test:
     name: Build, Lint, and Test
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     env:
       DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5434/ucp_global
       POSTGRES_PASSWORD: zitadel_password
@@ -22,15 +33,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: '20'
           cache: 'pnpm'
