@@ -1,4 +1,5 @@
 from bots_core.infrastructure.config.botsconfig import *
+
 from .records006010 import recorddefs
 
 syntax = {
