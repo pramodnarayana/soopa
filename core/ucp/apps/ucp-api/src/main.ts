@@ -1,15 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // Add HTTP Request Logging
-  app.use((req: any, res: any, next: any) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     res.on('finish', () => {
       const duration = Date.now() - start;
-      console.log(`[HTTP] ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+      console.log(
+        `[HTTP] ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`,
+      );
     });
     next();
   });

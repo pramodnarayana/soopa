@@ -1,13 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { OutboxSweeperService } from '../../src/application/services/outbox-sweeper.service';
+import { ConfigService } from '@nestjs/config';
+import { ConfigKey } from '../../src/domain/enums/config-keys.enum';
+import { DataPlaneReplicationService } from '../../src/application/services/data-plane-replication.service';
 import {
   OUTBOX_REPOSITORY,
   OutboxEvent,
 } from '../../src/ports/outbound/outbox.repository';
 import { MESSAGE_BUS } from '../../src/ports/outbound/message.bus';
 
-describe('OutboxSweeperService (Integration)', () => {
-  let service: OutboxSweeperService;
+describe('DataPlaneReplicationService (Integration)', () => {
+  let service: DataPlaneReplicationService;
 
   // In-memory test doubles
   const mockEvents: OutboxEvent[] = [
@@ -38,7 +40,7 @@ describe('OutboxSweeperService (Integration)', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        OutboxSweeperService,
+        DataPlaneReplicationService,
         {
           provide: OUTBOX_REPOSITORY,
           useValue: {
@@ -72,10 +74,22 @@ describe('OutboxSweeperService (Integration)', () => {
             },
           },
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: (key: ConfigKey | string) => {
+              if (key === (ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN as string))
+                return 'ucp.tenant.events.fifo';
+              throw new Error(`Config key ${key} not found`);
+            },
+          },
+        },
       ],
     }).compile();
 
-    service = module.get<OutboxSweeperService>(OutboxSweeperService);
+    service = module.get<DataPlaneReplicationService>(
+      DataPlaneReplicationService,
+    );
 
     // Reset mock data status for isolation
     mockEvents[0].status = 'PENDING';
@@ -87,7 +101,7 @@ describe('OutboxSweeperService (Integration)', () => {
 
     // Assert
     expect(publishedMessages.length).toBe(1);
-    expect(publishedMessages[0].topic).toBe('edi-provisioning');
+    expect(publishedMessages[0].topic).toBe('ucp.tenant.events.fifo');
     expect(publishedMessages[0].message).toEqual({ foo: 'bar' });
     expect(publishedMessages[0].groupId).toBe('tenant_123');
     expect(publishedMessages[0].deduplicationId).toBe('idemp_123');

@@ -27,6 +27,7 @@ async def router() -> AsyncGenerator[DatabaseRouter, None]:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.integration
 async def test_global_session_connection(router: DatabaseRouter) -> None:
     """
     Test that the DatabaseRouter can successfully yield a session
@@ -44,6 +45,7 @@ async def test_global_session_connection(router: DatabaseRouter) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.integration
 async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     """

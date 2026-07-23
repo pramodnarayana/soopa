@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from soopa_identity.application.authenticate import AuthenticationError
-from soopa_identity.domain.identity_context import IdentityContext
-from soopa_identity.middleware.fastapi import (
+from identity.application.authenticate import AuthenticationError
+from identity.domain.identity_context import IdentityContext
+from identity.middleware.fastapi import (
     attach_identity_to_request,
     identity_dependency,
     require_identity,
@@ -18,7 +18,7 @@ def mock_verifier() -> AsyncMock:
 
 
 @pytest.mark.asyncio
-@patch("soopa_identity.middleware.fastapi.authenticate_bearer_token")
+@patch("identity.middleware.fastapi.authenticate_bearer_token")
 async def test_identity_dependency_success(
     mock_authenticate: AsyncMock, mock_verifier: AsyncMock
 ) -> None:
@@ -39,7 +39,7 @@ async def test_identity_dependency_success(
 
 
 @pytest.mark.asyncio
-@patch("soopa_identity.middleware.fastapi.authenticate_bearer_token")
+@patch("identity.middleware.fastapi.authenticate_bearer_token")
 async def test_identity_dependency_error(
     mock_authenticate: AsyncMock, mock_verifier: AsyncMock
 ) -> None:
@@ -61,7 +61,7 @@ def test_require_identity(mock_verifier: AsyncMock) -> None:
 
 
 @pytest.mark.asyncio
-@patch("soopa_identity.middleware.fastapi.authenticate_bearer_token")
+@patch("identity.middleware.fastapi.authenticate_bearer_token")
 async def test_attach_identity_to_request(
     mock_authenticate: AsyncMock, mock_verifier: AsyncMock
 ) -> None:

@@ -87,7 +87,7 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={setTargetId}
             placeholder={isLoadingDestinations ? "Loading..." : "Select remote partner"}
             options={(destinations || [])
-              .filter(d => !(d.type === 'AS2' && (d as any).is_local))
+              .filter(d => !(d.type === 'AS2' && (d).is_local))
               .map(d => ({
                 value: d.id,
                 label: (

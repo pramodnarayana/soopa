@@ -21,13 +21,13 @@ export const SchedulerDashboard = () => {
   const { data: jobs = [], isLoading: jobsLoading, refetch: refetchJobs } = useJobsQuery();
   const { mutateAsync: updateJob } = useUpdateJobMutation();
 
-  const [editingJob, setEditingJob] = useState<any | null>(null);
+  const [editingJob, setEditingJob] = useState<Record<string, unknown> | null>(null);
   const [scheduleType, setScheduleType] = useState<'interval' | 'cron'>('interval');
   const [intervalValue, setIntervalValue] = useState<string>('1');
   const [intervalUnit, setIntervalUnit] = useState<string>('minutes');
   const [newCron, setNewCron] = useState<string>('0 * * * *');
 
-  const handleTogglePause = async (job: any) => {
+  const handleTogglePause = async (job: Record<string, unknown>) => {
     const newStatus = job.status === 'PAUSED' ? 'PENDING' : 'PAUSED';
     try {
       await updateJob({ name: job.name, data: { status: newStatus } });
@@ -185,7 +185,7 @@ export const SchedulerDashboard = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="interval" value={scheduleType} onValueChange={(v) => setScheduleType(v as any)}>
+          <Tabs defaultValue="interval" value={scheduleType} onValueChange={(v) => setScheduleType(v)}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="interval">Interval</TabsTrigger>
               <TabsTrigger value="cron">Cron Expression</TabsTrigger>

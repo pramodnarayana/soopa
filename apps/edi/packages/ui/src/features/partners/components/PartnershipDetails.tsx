@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import type { Partnership } from '../context/PlatformPartnersContext';
-import type { AS2Partner, Partner } from '../types';
+import type { Partner } from '../types';
 import { useUpdatePlatformPartnershipMutation, useTestAs2PartnershipConnectionMutation } from '../api/partnerHooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,7 +109,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                   value={field.value}
                   onChange={field.onChange}
                   options={availablePartners
-                    .filter(p => p.type === 'AS2' && (p as AS2Partner).is_local === true)
+                    .filter(p => p.type === 'AS2' && (p).is_local === true)
                     .map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
                 />
               )}
@@ -125,7 +125,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                   value={field.value}
                   onChange={field.onChange}
                   options={availablePartners
-                    .filter(p => p.type === 'AS2' && !(p as AS2Partner).is_local)
+                    .filter(p => p.type === 'AS2' && !(p).is_local)
                     .map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
                 />
               )}

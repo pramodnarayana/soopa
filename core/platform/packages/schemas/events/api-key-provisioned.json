@@ -1,0 +1,32 @@
+{
+  "$id": "https://soopa.com/schemas/events/api-key-provisioned.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ApiKeyProvisioned",
+  "type": "object",
+  "required": ["id", "tenantId", "name", "keyHash"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "The unique identifier of the API Key (also used as client_id)"
+    },
+    "tenantId": {
+      "type": "string",
+      "description": "The ID of the tenant that owns this key"
+    },
+    "name": {
+      "type": "string",
+      "description": "The human-readable name of the API key"
+    },
+    "keyHash": {
+      "type": "string",
+      "description": "The SHA-256 hashed secret of the API key"
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of authorized scopes for this API key"
+    }
+  }
+}

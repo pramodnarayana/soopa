@@ -11,7 +11,7 @@ CREATE TABLE "api_keys" (
 CREATE TABLE "tenant_users" (
 	"tenant_id" varchar(128) NOT NULL,
 	"user_id" varchar(128) NOT NULL,
-	"role" varchar(50) DEFAULT 'member' NOT NULL,
+	"role" varchar(50) NOT NULL,
 	"metadata" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "tenant_users_tenant_id_user_id_pk" PRIMARY KEY("tenant_id","user_id")

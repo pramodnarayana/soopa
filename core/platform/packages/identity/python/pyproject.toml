@@ -1,5 +1,5 @@
 [project]
-name = "soopa-identity"
+name = "identity"
 version = "0.1.0"
 description = "Soopa identity contracts, authorization, and middleware for Python services."
 authors = [{name = "Admin", email = "admin@example.com"}]

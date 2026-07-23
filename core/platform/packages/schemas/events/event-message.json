@@ -1,0 +1,24 @@
+{
+  "$id": "https://soopa.com/schemas/events/event-message.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EventMessage",
+  "type": "object",
+  "required": ["idempotencyKey", "eventType", "payload"],
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+      "description": "Unique key for idempotency"
+    },
+    "tenantId": {
+      "type": "string",
+      "description": "The tenant ID this event belongs to"
+    },
+    "eventType": {
+      "$ref": "event-type.json"
+    },
+    "payload": {
+      "type": "object",
+      "description": "The event payload, which varies by eventType"
+    }
+  }
+}

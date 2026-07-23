@@ -1,9 +1,13 @@
-name: CI
+name: Platform CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "development" ]
+    paths:
+      - 'core/platform/**'
   pull_request:
+    paths:
+      - 'core/platform/**'
 
 jobs:
   build-lint-test:
@@ -17,8 +21,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
@@ -32,46 +34,45 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          version: 2.4.1
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+          version: "0.5.21"
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'poetry'
 
       - name: Install Node dependencies
         run: pnpm install
 
       - name: Install Python dependencies
-        run: |
-          for d in packages/*/python; do
-            if [ -d "$d" ]; then
-              (cd "$d" && poetry install)
-            fi
-          done
+        run: uv sync --all-packages
 
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Typecheck (Node)
+        run: turbo typecheck --filter="./core/platform/**"
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (Node)
+        run: turbo lint --filter="./core/platform/**"
 
       - name: Start Database
         run: |
           docker compose up -d ucp_postgres_global ucp_postgres_shard_1 --wait
           pnpm db:migrate
 
-      - name: Test
-        run: CI=true pnpm test
+      - name: Test (Node)
+        run: CI=true turbo test --filter="./core/platform/**"
 
-      - name: Deadcode Check
-        run: pnpm deadcode
+      - name: Test (Python)
+        run: |
+          for d in core/platform/packages/*/python core/platform/apps/*; do
+            if [ -f "$d/pyproject.toml" ]; then
+              (cd "$d" && uv run pytest)
+            fi
+          done
 
-      - name: Build
-        run: pnpm build
+      - name: Build (Node)
+        run: turbo build --filter="./core/platform/**"

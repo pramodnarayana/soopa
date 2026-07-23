@@ -81,7 +81,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
 
     // Check if AS2 ID changed after generating cert
     let finalCertPem = certPem;
-    let finalVaultRef = privateKeyVaultRef;
+    const finalVaultRef = privateKeyVaultRef;
     let extractedPrivateKey = '';
 
     if (isLocal && !privateKeyVaultRef && certPem) {
@@ -97,12 +97,10 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         setPrivateKeyVaultRef(null);
         setCertPem('');
         setGeneratedForAs2Id(null);
-      } catch (e) {
+      } catch {
         toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
         return;
       }
-      finalCertPem = '';
-      finalVaultRef = null;
       toast({ title: 'Warning', description: 'AS2 ID changed. Please regenerate the certificate.', variant: 'destructive' });
       return;
     }
@@ -163,7 +161,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                 setPrivateKeyVaultRef(null);
                 setCertPem('');
                 setGeneratedForAs2Id(null);
-              } catch (e) {
+              } catch {
                 toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
                 return;
               }
@@ -177,7 +175,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                 setPrivateKeyVaultRef(null);
                 setCertPem('');
                 setGeneratedForAs2Id(null);
-              } catch (e) {
+              } catch {
                 toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
                 return;
               }
@@ -271,7 +269,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                       setPrivateKeyVaultRef(null);
                       setCertPem('');
                       setGeneratedForAs2Id(null);
-                    } catch (e) {
+                    } catch {
                       toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
                       return;
                     }

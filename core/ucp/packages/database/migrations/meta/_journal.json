@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1784611515561,
-      "tag": "0000_wakeful_slayback",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1784702255823,
-      "tag": "0001_nifty_smiling_tiger",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1784702358733,
-      "tag": "0002_chemical_shen",
+      "when": 1784736659294,
+      "tag": "0000_yellow_daimon_hellstrom",
       "breakpoints": true
     }
   ]

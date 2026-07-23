@@ -369,10 +369,10 @@ function CertificateRow({
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-600 uppercase">Public Certificate</span>
                   <div className="flex gap-2">
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleCopy(publicPem!, 'Public Certificate')}>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleCopy(publicPem, 'Public Certificate')}>
                       <Copy className="w-3 h-3" /> Copy
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleDownload(publicPem!, `${partnerName}_${role.toLowerCase()}_public.pem`)}>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleDownload(publicPem, `${partnerName}_${role.toLowerCase()}_public.pem`)}>
                       <Download className="w-3 h-3" /> Download
                     </Button>
                   </div>
@@ -387,10 +387,10 @@ function CertificateRow({
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-semibold text-slate-600 uppercase">Complete Identity (Public + Private)</span>
                     <div className="flex gap-2">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => handleCopy(completePem!, 'Complete Identity')}>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => handleCopy(completePem, 'Complete Identity')}>
                         <Copy className="w-3 h-3" /> Copy Complete
                       </Button>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => handleDownload(completePem!, `${partnerName}_${role.toLowerCase()}_complete.pem`)}>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => handleDownload(completePem, `${partnerName}_${role.toLowerCase()}_complete.pem`)}>
                         <Download className="w-3 h-3" /> Download Complete
                       </Button>
                     </div>

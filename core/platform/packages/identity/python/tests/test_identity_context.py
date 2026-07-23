@@ -1,4 +1,4 @@
-from soopa_identity.domain.identity_context import TokenClaims, identity_context_from_claims
+from identity.domain.identity_context import TokenClaims, identity_context_from_claims
 
 
 def test_identity_context_from_claims_creates_valid_context() -> None:

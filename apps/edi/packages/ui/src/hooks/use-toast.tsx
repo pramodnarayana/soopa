@@ -2,29 +2,22 @@ import * as React from "react"
 import { toast as sonnerToast, type ExternalToast } from "sonner"
 import { Copy } from "lucide-react"
 
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
+import type { ToastActionElement } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 3000
 
-type ToasterToast = ToastProps & {
+type ToasterToast = {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  variant?: "default" | "destructive"
 }
 
-const actionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const
+
 
 let count = 0
 
@@ -33,23 +26,21 @@ function genId() {
   return count.toString()
 }
 
-type ActionType = typeof actionTypes
-
 type Action =
   | {
-      type: ActionType["ADD_TOAST"]
+      type: "ADD_TOAST"
       toast: ToasterToast
     }
   | {
-      type: ActionType["UPDATE_TOAST"]
+      type: "UPDATE_TOAST"
       toast: Partial<ToasterToast>
     }
   | {
-      type: ActionType["DISMISS_TOAST"]
+      type: "DISMISS_TOAST"
       toastId?: ToasterToast["id"]
     }
   | {
-      type: ActionType["REMOVE_TOAST"]
+      type: "REMOVE_TOAST"
       toastId?: ToasterToast["id"]
     }
 
@@ -170,7 +161,7 @@ function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
           onClick={async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const textToCopy = [props.title, props.description].filter(Boolean).join('\n');
+            const textToCopy = `${typeof props.title === 'string' ? props.title : ''}\n${typeof props.description === 'string' ? props.description : ''}`.trim();
             try {
               await navigator.clipboard.writeText(textToCopy);
               sonnerToast.success("Copied to clipboard", { duration: 2000 });
@@ -188,7 +179,7 @@ function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
 
     sonnerToast.error(<ToastContent />, sonnerOpts)
   } else {
-    sonnerToast(props.title as React.ReactNode, sonnerOpts)
+    sonnerToast(props.title, sonnerOpts)
   }
 }
 

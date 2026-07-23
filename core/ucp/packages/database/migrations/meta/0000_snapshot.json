@@ -1,5 +1,5 @@
 {
-  "id": "26abcd3a-b6a5-44bb-b440-b45576af174e",
+  "id": "f03dceff-635d-4edd-8456-a3003bf4a110",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -97,8 +97,7 @@
           "name": "role",
           "type": "varchar(50)",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'member'"
+          "notNull": true
         },
         "metadata": {
           "name": "metadata",

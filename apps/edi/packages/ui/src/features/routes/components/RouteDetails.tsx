@@ -125,7 +125,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
               <Select
                 disabled={isSubmitting}
                 value={processingMode}
-                onValueChange={(val) => setValue('processing_mode', val as any, { shouldDirty: true })}
+                onValueChange={(val) => setValue('processing_mode', val, { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select mode" />
@@ -173,7 +173,7 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem, onCancel?:
               onChange={setTargetId}
               placeholder="Select destination"
               options={(destinations || [])
-                .filter(d => route.direction === 'INBOUND' || !(d.type === 'AS2' && (d as any).is_local))
+                .filter(d => route.direction === 'INBOUND' || !(d.type === 'AS2' && (d).is_local))
                 .map(d => ({
                   value: d.id,
                   label: (

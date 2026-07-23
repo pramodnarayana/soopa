@@ -46,7 +46,7 @@ class HttpPartnersRepository implements IPartnersRepository {
         }
         throw new Error(errorMessage || `HTTP ${res.status}`);
       }
-      if (res.status === 204) return undefined as unknown as T;
+      if (res.status === 204) return undefined;
       return res.json() as Promise<T>;
     } finally {
       clearTimeout(timeoutId);
