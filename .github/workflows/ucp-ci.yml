@@ -75,7 +75,7 @@ jobs:
         run: |
           for d in core/ucp/packages/*/python core/ucp/apps/* core/platform/packages/*/python core/platform/apps/*; do
             if [ -f "$d/pyproject.toml" ]; then
-              (cd "$d" && uv run pytest)
+              (cd "$d" && uv run pytest || [ $? -eq 5 ])
             fi
           done
 

@@ -85,7 +85,7 @@ jobs:
         run: |
           for d in apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
             if [ -f "$d/pyproject.toml" ]; then
-              (cd "$d" && uv run pytest)
+              (cd "$d" && uv run pytest || [ $? -eq 5 ])
             fi
           done
 
