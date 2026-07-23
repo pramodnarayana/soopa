@@ -1,6 +1,6 @@
 version: '3.9'
-include:
-- libs/identity/docker/docker-compose.yml
+# include:
+# - libs/identity/docker/docker-compose.yml
 services:
   postgres_global:
     image: postgres:15-alpine

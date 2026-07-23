@@ -1,3 +1,5 @@
+from api.dependencies.auth import require_platform_admin
+
 """
 Platform Trading Partners router package.
 
@@ -7,7 +9,6 @@ Requires platform admin permissions.
 
 from fastapi import APIRouter, Depends
 
-from api.dependencies import require_platform_admin
 from api.routers.trading_partners.platform import as2_partners, as2_partnerships, settings
 
 _PREFIX = "/api/v1/platform/trading-partners"

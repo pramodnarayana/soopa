@@ -4,9 +4,9 @@ import logging
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from dotenv import load_dotenv
-from worker.adapters.db_outbox import SqlAlchemyOutboxAdapter
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
+from worker.adapters.sqs_outbox import SqsOutboxAdapter
 from worker.core.service import ProvisioningWorkerService
 
 load_dotenv()
@@ -33,7 +33,7 @@ async def main() -> None:
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
 
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
-    outbox_adapter = SqlAlchemyOutboxAdapter(db_router)
+    outbox_adapter = SqsOutboxAdapter(queue_name="edi.tenant.sync.fifo")
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
     service = ProvisioningWorkerService(tenant_adapter, outbox_adapter, replication_adapter)

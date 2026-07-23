@@ -1,5 +1,6 @@
 import pytest
-from api.dependencies import get_current_tenant_id, get_tenant_uow, get_uow, require_platform_admin
+from api.dependencies.auth import get_current_tenant_id, require_platform_admin
+from api.dependencies.database import get_tenant_uow, get_uow
 from api.main import app
 from api_fakes import FakeUnitOfWork
 from fastapi.testclient import TestClient
@@ -12,7 +13,7 @@ def fake_uow():
 
 @pytest.fixture
 def client(fake_uow):
-    from api.dependencies import get_current_user_profile, get_raw_jwt
+    from api.dependencies.auth import get_current_user_profile, get_raw_jwt
 
     app.dependency_overrides[get_uow] = lambda: fake_uow
     app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
@@ -23,7 +24,7 @@ def client(fake_uow):
         "permissions": ["certificates:export_private"]
     }
 
-    from api.dependencies import get_sftp_tester
+    from api.dependencies.services import get_sftp_tester
 
     class FakeSftpTester:
         async def test_connection(self, **kwargs):
@@ -31,7 +32,7 @@ def client(fake_uow):
 
     app.dependency_overrides[get_sftp_tester] = lambda: FakeSftpTester()
 
-    from api.dependencies import get_vault
+    from api.dependencies.services import get_vault
 
     class FakeVault:
         def store_private_key(self, private_key_pem: bytes, alias_prefix: str = "as2_key") -> str:

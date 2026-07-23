@@ -1,3 +1,6 @@
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.database import get_tenant_uow
+
 """
 Webhooks router package.
 
@@ -19,7 +22,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from api.adapters.http.dtos import CreateWebhookRequest, PartnerResponse, UpdateWebhookRequest
 from api.core.services import WebhookService
 from api.core.uow import UnitOfWork
-from api.dependencies import get_current_tenant_id, get_tenant_uow
 from api.domain.models import CreateWebhookCmd
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])

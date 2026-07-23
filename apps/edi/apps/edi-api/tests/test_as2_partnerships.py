@@ -1,3 +1,7 @@
+from api.dependencies.auth import get_current_tenant_id, require_platform_admin
+from api.dependencies.database import get_uow
+from api.dependencies.services import get_as2_tester, get_vault
+
 """
 Tests for the AS2 Partnership connection test endpoint.
 
@@ -11,13 +15,6 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-from api.dependencies import (
-    get_as2_tester,
-    get_current_tenant_id,
-    get_uow,
-    get_vault,
-    require_platform_admin,
-)
 from api.main import app
 from api_fakes import FakeUnitOfWork
 from fastapi.testclient import TestClient

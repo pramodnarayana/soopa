@@ -7,9 +7,9 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 from domain.events import MessageQueueName
 from dotenv import load_dotenv
-from worker.core.scheduler.models import JobName
 from worker.adapters.sqs_poller import poll_sqs_queue
 from worker.adapters.sqs_publisher import SqsPublisherAdapter
+from worker.core.scheduler.models import JobName
 from worker.core.tenant_resolver import TenantResolver
 from worker.data.handlers import process_delivery, process_pipeline_event
 
@@ -112,7 +112,7 @@ async def main() -> None:
     )
 
     try:
-        # We only need to gather the SQS listeners! 
+        # We only need to gather the SQS listeners!
         # UCP's scheduler engine will push scheduled jobs to the edi-orchestrator-jobs queue automatically.
         await asyncio.gather(transform_task, deliver_task, scheduled_jobs_task)
     finally:

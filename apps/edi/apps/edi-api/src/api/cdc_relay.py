@@ -5,7 +5,7 @@ from domain.events import MessageQueueName, PipelineEventType
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from api.dependencies import get_message_queue
+from api.dependencies.services import get_message_queue
 from api.ports.message_queue import MessageQueuePort
 
 logger = logging.getLogger(__name__)

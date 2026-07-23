@@ -13,10 +13,8 @@ from api.adapters.http.dtos import (
 )
 from api.core.services import AS2PartnerService
 from api.core.uow import UnitOfWork
-from api.dependencies import (
-    get_uow,
-    get_vault,
-)
+from api.dependencies.database import get_uow
+from api.dependencies.services import get_vault
 from api.domain.certificate import generate_self_signed_cert
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,

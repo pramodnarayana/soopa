@@ -1,3 +1,6 @@
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.database import get_tenant_uow
+
 """
 Trading Partners router package.
 
@@ -14,7 +17,6 @@ from fastapi import APIRouter, Depends
 
 from api.adapters.http.dtos import PartnerResponse
 from api.core.uow import UnitOfWork
-from api.dependencies import get_current_tenant_id, get_tenant_uow
 from api.routers.trading_partners import as2, sftp
 
 _PREFIX = "/api/v1/trading-partners"

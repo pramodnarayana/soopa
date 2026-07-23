@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from api.dependencies import get_current_tenant_id, get_current_user_profile, get_tenant_uow
+from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
+from api.dependencies.database import get_tenant_uow
 from api.domain.models import TransactionDetailDTO
 from api.main import app
 from fastapi.testclient import TestClient
@@ -132,7 +133,7 @@ def test_get_transaction_thread():
 
 def test_get_transaction_detail_sftp():
     from api.core.uow import UnitOfWork
-    from api.dependencies import get_tenant_uow
+    from api.dependencies.database import get_tenant_uow
 
     mock_msg = MagicMock()
     mock_msg.id = uuid.uuid4()
@@ -173,7 +174,7 @@ def test_get_transaction_detail_sftp():
 
 def test_get_transaction_detail_fallback():
     from api.core.uow import UnitOfWork
-    from api.dependencies import get_tenant_uow
+    from api.dependencies.database import get_tenant_uow
 
     mock_msg = MagicMock()
     mock_msg.id = uuid.uuid4()
@@ -216,7 +217,7 @@ def test_get_transaction_detail_fallback():
 
 def test_get_transaction_not_found():
     from api.core.uow import UnitOfWork
-    from api.dependencies import get_tenant_uow
+    from api.dependencies.database import get_tenant_uow
 
     mock_uow = UnitOfWork(global_session=AsyncMock(), tenant_session=AsyncMock())
 
@@ -232,7 +233,7 @@ def test_get_transaction_not_found():
 
 def test_get_transaction_webhook_fallback():
     from api.core.uow import UnitOfWork
-    from api.dependencies import get_tenant_uow
+    from api.dependencies.database import get_tenant_uow
 
     mock_repo = AsyncMock()
 

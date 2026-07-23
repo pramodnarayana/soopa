@@ -1,27 +1,24 @@
 [project]
-name = "orchestrator_worker"
+name = "ucp_sync_worker"
 version = "0.1.0"
-description = "Worker service for handling provisioning and data orchestration"
+description = "Worker service for synchronizing Identity events from UCP"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "aioboto3>=13.1.1",
     "sqlalchemy>=2.0.29",
     "asyncpg>=0.29.0",
+    "pydantic>=2.7.0",
     # Local dependencies
     "database",
-    "pipeline",
     "config",
     "domain",
-    "soopa_schemas",
 ]
 
 [tool.uv.sources]
 database = { workspace = true }
-pipeline = { workspace = true }
 config = { workspace = true }
 domain = { workspace = true }
-soopa_schemas = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

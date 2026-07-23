@@ -1,7 +1,8 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from api.dependencies import get_current_tenant_id, get_current_user_profile, get_tenant_uow
+from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
+from api.dependencies.database import get_tenant_uow
 from api.main import app
 from fastapi.testclient import TestClient
 

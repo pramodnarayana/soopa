@@ -32,17 +32,21 @@ pythonpath = [
     "core/platform/packages/observability/python/src",
     "apps/edi/packages/as2_core/src",
     "apps/edi/packages/bots_core/src",
-    "apps/edi/packages/grammar/src",
-    "apps/edi/packages/patches/src",
+    "apps/edi/packages/config/src",
+    "apps/edi/packages/database/src",
     "apps/edi/packages/domain/src",
+    "apps/edi/packages/grammar/src",
+    "apps/edi/packages/identity/src",
+    "apps/edi/packages/patches/src",
     "apps/edi/packages/pipeline/src",
+    "apps/edi/packages/security/src",
     "apps/edi/packages/transformer/src",
     "apps/edi/apps/edi-api/src",
     "apps/edi/apps/edi-as2-server/src",
     "apps/edi/apps/edi-worker/orchestrator/src",
     "apps/edi/apps/edi-worker/compute/src",
 ]
-addopts = "-v --tb=short --ignore=services/worker --ignore=libs/transformer/tests/test_worker.py --ignore=libs/transformer/scripts"
+addopts = "-v --tb=short --ignore=services/worker --ignore=apps/edi/packages/transformer/tests/test_worker.py --ignore=apps/edi/packages/transformer/scripts"
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
 ]
@@ -60,7 +64,7 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "libs/bots_core/src/bots_core", "libs/edi_grammar", "services/worker"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "apps/edi/packages/bots_core/src/bots_core", "apps/edi/packages/grammar", "services/worker"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -70,7 +74,6 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["libs/edi_grammar/src/edi_grammar/x12", "libs/edi_grammar/src/edi_grammar/edifact"]
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
@@ -87,41 +90,42 @@ ignore = ["E501"] # Handled by formatter
 "edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
 "platform/packages/identity/python/identity/**/*.py" = ["B008"]
 # Legacy BOTS engine formatting ignores
-"edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038"]
-"edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038"]
+"edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405"]
+"edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405"]
+"apps/edi/packages/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
 [tool.coverage.run]
-source = ["libs", "services"]
+source = ["apps", "core"]
 omit = [
     "*/tests/*",
     "*/migrations/*",
     # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
-    "services/api/src/api/adapters/edi_header_repository.py",
-    "services/api/src/api/adapters/outbound_route_repository.py",
-    "services/api/src/api/adapters/as2_partnership_repository.py",
-    "services/api/src/api/adapters/transaction_repository.py",
-    "services/api/src/api/adapters/api_token_repository.py",
-    "services/api/src/api/adapters/webhook_repository.py",
-    "services/api/src/api/adapters/outbox_repository.py",
-    "services/api/src/api/adapters/as2_partner_repository.py",
-    "services/api/src/api/adapters/tenant_repository.py",
-    "services/api/src/api/adapters/sftp_repository.py",
-    "services/api/src/api/adapters/data_plane_as2_repository.py",
-    "services/api/src/api/adapters/inbound_route_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/edi_header_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/outbound_route_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/as2_partnership_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/transaction_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/api_token_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/webhook_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/outbox_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/as2_partner_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/tenant_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/sftp_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/data_plane_as2_repository.py",
+    "apps/edi/apps/edi-api/src/api/adapters/inbound_route_repository.py",
     "*/adapters/sftp.py",
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
     "*/adapters/sqs_queue.py",
     # AS2 server main (ASGI lifespan wiring — integration only)
-    "services/as2_server/src/as2_server/main.py",
+    "apps/edi/apps/edi-as2-server/src/as2_server/main.py",
     # Transformer worker entrypoint (subprocess runner, not business logic)
-    "services/workers/compute/src/compute_worker/worker.py",
-    "services/workers/compute/src/compute_worker/main.py",
+    "apps/edi/apps/edi-worker/compute/src/compute_worker/worker.py",
+    "apps/edi/apps/edi-worker/compute/src/compute_worker/main.py",
 ]
 
 [tool.coverage.report]

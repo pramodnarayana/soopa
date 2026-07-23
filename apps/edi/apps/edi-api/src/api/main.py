@@ -4,6 +4,9 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
+from api.dependencies.database import get_tenant_session
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
@@ -17,7 +20,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import cdc_relay
-from api.dependencies import get_current_tenant_id, get_current_user_profile, get_tenant_session
 from api.routers import (
     edi_headers,
     edi_json,

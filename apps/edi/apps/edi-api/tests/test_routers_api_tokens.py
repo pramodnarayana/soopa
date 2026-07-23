@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from api.dependencies import get_api_token_repo, get_current_tenant_id
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.services import get_api_token_repo
 from api.routers.developers.api_tokens import router
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

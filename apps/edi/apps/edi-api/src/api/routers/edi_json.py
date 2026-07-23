@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 from api.adapters.http.dtos import OutboundMessageRequest, OutboundMessageResponse
 from api.auth.api_key import get_tenant_id_from_api_key
 from api.core.uow import UnitOfWork
-from api.dependencies import get_m2m_tenant_uow
+from api.dependencies.database import get_m2m_tenant_uow
 from api.services.api_receiver_service import ApiReceiverService
 
 router = APIRouter(prefix="/api/v1/edi_json", tags=["EDI JSON"])

@@ -4,7 +4,7 @@ from database.session import get_global_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import get_vault
+from api.dependencies.services import get_vault
 from api.ports.vault import VaultPort
 from api.services.as2_receiver_service import As2ReceiverService
 
