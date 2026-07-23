@@ -27,7 +27,6 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 10
           run_install: false
 
       - name: Setup Node.js
@@ -55,10 +54,10 @@ jobs:
         run: uv sync --all-packages
 
       - name: Typecheck (Node)
-        run: turbo typecheck --filter="./core/platform/**"
+        run: pnpm turbo typecheck --filter="./core/platform/**"
 
       - name: Lint (Node)
-        run: turbo lint --filter="./core/platform/**"
+        run: pnpm turbo lint --filter="./core/platform/**"
 
       - name: Start Database
         run: |
@@ -66,7 +65,7 @@ jobs:
           pnpm db:migrate
 
       - name: Test (Node)
-        run: CI=true turbo test --filter="./core/platform/**"
+        run: CI=true pnpm turbo test --filter="./core/platform/**"
 
       - name: Test (Python)
         run: |
@@ -77,4 +76,4 @@ jobs:
           done
 
       - name: Build (Node)
-        run: turbo build --filter="./core/platform/**"
+        run: pnpm turbo build --filter="./core/platform/**"
