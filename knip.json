@@ -19,12 +19,10 @@
     "@radix-ui/react-dropdown-menu",
     "@radix-ui/react-switch",
     "@radix-ui/react-toast",
-    "clsx",
-    "tailwind-merge",
     "zod",
     "@aws-sdk/client-sqs"
   ],
-  "ignoreBinaries": ["uv"],
+  "ignoreBinaries": ["uv", "make"],
   "ignore": [
     "core/ucp/apps/dashboard/src/components/ui/**",
     "ecosystem.config.cjs",

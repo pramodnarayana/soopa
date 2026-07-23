@@ -53,7 +53,7 @@ function TenantUsersPage() {
     );
   };
 
-  const handleDeleteUser = (userId: string, email: string) => {
+  const handleDeleteUser = React.useCallback((userId: string, email: string) => {
     if (confirm(`Delete user ${email}? This cannot be undone.`)) {
       deleteMutationObj.mutate(
         { tenantId, userId },
@@ -63,9 +63,9 @@ function TenantUsersPage() {
         }
       );
     }
-  };
+  }, [tenantId, deleteMutationObj]);
 
-  const handleToggleStatus = (userId: string, isActive: boolean) => {
+  const handleToggleStatus = React.useCallback((userId: string, isActive: boolean) => {
     toggleStatusMutationObj.mutate(
       { tenantId, userId, action: isActive ? 'deactivate' : 'activate' },
       {
@@ -75,7 +75,7 @@ function TenantUsersPage() {
         onError: (error: any) => toast.error(`Error toggling status: ${error.message}`)
       }
     );
-  };
+  }, [tenantId, toggleStatusMutationObj]);
 
   const resetModal = () => {
     setShowModal(false);
@@ -203,7 +203,7 @@ function TenantUsersPage() {
         );
       },
     }),
-  ], [roles, deleteMutationObj, toggleStatusMutationObj, tenantId]);
+  ], [roles, handleDeleteUser, handleToggleStatus, deleteMutationObj, toggleStatusMutationObj]);
 
   const table = useReactTable({
     data: users,

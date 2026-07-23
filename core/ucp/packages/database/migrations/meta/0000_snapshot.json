@@ -1,5 +1,5 @@
 {
-  "id": "f03dceff-635d-4edd-8456-a3003bf4a110",
+  "id": "11afaa33-b88e-4042-9809-c70ea803633f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -73,7 +73,17 @@
           ]
         }
       },
-      "policies": {},
+      "policies": {
+        "api_keys_isolation": {
+          "name": "api_keys_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "\"api_keys\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -168,7 +178,17 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
+      "policies": {
+        "tenant_users_isolation": {
+          "name": "tenant_users_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "\"tenant_users\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -364,7 +384,17 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
+      "policies": {
+        "notification_templates_isolation": {
+          "name": "notification_templates_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "\"notification_templates\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -641,7 +671,17 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
+      "policies": {
+        "tenant_subscriptions_isolation": {
+          "name": "tenant_subscriptions_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "\"tenant_subscriptions\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -733,7 +773,17 @@
           ]
         }
       },
-      "policies": {},
+      "policies": {
+        "outbox_events_isolation": {
+          "name": "outbox_events_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "\"outbox_events\".\"tenant_id\" IS NULL OR \"outbox_events\".\"tenant_id\" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     }

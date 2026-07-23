@@ -99,20 +99,56 @@ async def seed_database() -> None:
 
         # 4. Seed Core System Jobs
         logger.info("Seeding Core System Jobs...")
+        from dataclasses import dataclass
         from datetime import UTC, datetime
 
         from database.models.scheduled_job import ScheduledJob
-        from scheduler.domain.models import JobStatus
-        from scheduler.registry import SYSTEM_JOB_REGISTRY
+        from worker.core.scheduler.models import (
+            AppNamespace,
+            JobName,
+            JobStatus,
+            TargetQueue,
+            Timezone,
+        )
+
+        @dataclass(frozen=True)
+        class JobDefinition:
+            name: JobName
+            target_queue: str | None = None
+            app_namespace: str | None = None
+            default_interval_seconds: int | None = None
+            min_interval_seconds: int | None = None
+            max_interval_seconds: int | None = None
+            default_cron_expression: str | None = None
+            default_timezone: str | None = None
+            max_retries: int = 3
+
+        SYSTEM_JOB_REGISTRY: list[JobDefinition] = [
+            JobDefinition(
+                name=JobName.OUTBOX_SWEEPER,
+                target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
+                app_namespace=AppNamespace.EDI.value,
+                default_interval_seconds=60,
+                min_interval_seconds=10,
+                max_interval_seconds=300,
+            ),
+            JobDefinition(
+                name=JobName.DATA_RETENTION_CLEANUP,
+                target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
+                app_namespace=AppNamespace.EDI.value,
+                default_cron_expression="0 2 * * *",
+                default_timezone=Timezone.UTC.value,
+            ),
+        ]
 
         now = datetime.now(UTC)
         for job_def in SYSTEM_JOB_REGISTRY:
-            job_result = await session.execute(select(ScheduledJob).filter_by(name=job_def.name))
+            job_result = await session.execute(select(ScheduledJob).filter_by(name=job_def.name.value))
             job = job_result.scalar_one_or_none()
 
             if not job:
                 job = ScheduledJob(
-                    name=job_def.name,
+                    name=job_def.name.value,
                     payload={},
                     status=JobStatus.PENDING.value,
                     target_queue=job_def.target_queue,
@@ -129,15 +165,17 @@ async def seed_database() -> None:
                     next_run_at=now,
                 )
                 session.add(job)
-                logger.info(f"Created system job: {job_def.name}.")
+                logger.info(f"Created system job: {job_def.name.value}.")
             else:
                 # Always sync canonical config bounds from the registry,
                 # ensuring existing rows stay consistent after schema migrations.
                 job.target_queue = job_def.target_queue
                 job.app_namespace = job_def.app_namespace
+                job.cron_expression = job_def.default_cron_expression
+                job.timezone = job_def.default_timezone
                 job.min_interval_seconds = job_def.min_interval_seconds
                 job.max_interval_seconds = job_def.max_interval_seconds
-                logger.info(f"Synced config for system job: {job_def.name}.")
+                logger.info(f"Synced config for system job: {job_def.name.value}.")
 
             await session.flush()
 

@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, varchar, primaryKey, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, varchar, primaryKey, jsonb, index, pgPolicy } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 // User roles are dynamically managed in Zitadel; we store the raw string keys here.
@@ -31,6 +32,12 @@ export const tenantUsers = pgTable('tenant_users', {
   return {
     pk: primaryKey({ columns: [table.tenantId, table.userId] }),
     userIdIdx: index('tenant_users_user_id_idx').on(table.userId),
+    rlsPolicy: pgPolicy('tenant_users_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: sql`${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+    })
   };
 });
 
@@ -41,4 +48,11 @@ export const apiKeys = pgTable('api_keys', {
   name: text('name').notNull(),
   scopes: text('scopes').array().notNull().default([]),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  pgPolicy('api_keys_isolation', {
+    as: 'permissive',
+    for: 'all',
+    to: 'public',
+    using: sql`${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+  })
+]);

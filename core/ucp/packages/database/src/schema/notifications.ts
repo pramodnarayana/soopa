@@ -1,4 +1,5 @@
-import { pgTable, serial, varchar, text, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, boolean, uniqueIndex, pgPolicy } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export type NotificationChannelType = 'EMAIL' | 'SLACK' | 'IN_APP';
 
@@ -13,5 +14,11 @@ export const notificationTemplates = pgTable('notification_templates', {
 }, (table) => {
   return {
     notificationTemplateIdx: uniqueIndex('notification_template_idx').on(table.tenantId, table.eventType, table.channel),
+    rlsPolicy: pgPolicy('notification_templates_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: sql`${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+    })
   };
 });

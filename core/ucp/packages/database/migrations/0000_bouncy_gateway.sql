@@ -8,6 +8,7 @@ CREATE TABLE "api_keys" (
 	CONSTRAINT "api_keys_key_hash_unique" UNIQUE("key_hash")
 );
 --> statement-breakpoint
+ALTER TABLE "api_keys" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "tenant_users" (
 	"tenant_id" varchar(128) NOT NULL,
 	"user_id" varchar(128) NOT NULL,
@@ -17,6 +18,7 @@ CREATE TABLE "tenant_users" (
 	CONSTRAINT "tenant_users_tenant_id_user_id_pk" PRIMARY KEY("tenant_id","user_id")
 );
 --> statement-breakpoint
+ALTER TABLE "tenant_users" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "tenants" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
@@ -46,6 +48,7 @@ CREATE TABLE "notification_templates" (
 	"is_active" boolean DEFAULT true NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "notification_templates" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "scheduled_jobs" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"name" varchar(255) NOT NULL,
@@ -84,6 +87,7 @@ CREATE TABLE "tenant_subscriptions" (
 	CONSTRAINT "tenant_subscriptions_tenant_id_app_id_pk" PRIMARY KEY("tenant_id","app_id")
 );
 --> statement-breakpoint
+ALTER TABLE "tenant_subscriptions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "outbox_events" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"idempotency_key" varchar(255) NOT NULL,
@@ -97,6 +101,7 @@ CREATE TABLE "outbox_events" (
 	CONSTRAINT "outbox_events_idempotency_key_unique" UNIQUE("idempotency_key")
 );
 --> statement-breakpoint
+ALTER TABLE "outbox_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_users" ADD CONSTRAINT "tenant_users_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_users" ADD CONSTRAINT "tenant_users_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -105,4 +110,9 @@ ALTER TABLE "tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_app_id_a
 ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "tenant_users_user_id_idx" ON "tenant_users" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_template_idx" ON "notification_templates" USING btree ("tenant_id","event_type","channel");--> statement-breakpoint
-CREATE INDEX "job_status_next_run_idx" ON "scheduled_jobs" USING btree ("status","next_run_at");
+CREATE INDEX "job_status_next_run_idx" ON "scheduled_jobs" USING btree ("status","next_run_at");--> statement-breakpoint
+CREATE POLICY "api_keys_isolation" ON "api_keys" AS PERMISSIVE FOR ALL TO public USING ("api_keys"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
+CREATE POLICY "tenant_users_isolation" ON "tenant_users" AS PERMISSIVE FOR ALL TO public USING ("tenant_users"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
+CREATE POLICY "notification_templates_isolation" ON "notification_templates" AS PERMISSIVE FOR ALL TO public USING ("notification_templates"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
+CREATE POLICY "tenant_subscriptions_isolation" ON "tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("tenant_subscriptions"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');--> statement-breakpoint
+CREATE POLICY "outbox_events_isolation" ON "outbox_events" AS PERMISSIVE FOR ALL TO public USING ("outbox_events"."tenant_id" IS NULL OR "outbox_events"."tenant_id" = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on');

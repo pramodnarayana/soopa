@@ -1,12 +1,12 @@
 import asyncio
 import logging
+from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
 from config.settings import get_settings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

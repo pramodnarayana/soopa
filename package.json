@@ -8,7 +8,7 @@
     "build": "turbo run build",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:python",
     "typecheck:node": "turbo typecheck",
-    "typecheck:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run mypy .); fi; done",
+    "typecheck:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run mypy --strict .); fi; done",
     "lint": "pnpm lint:node && pnpm lint:python",
     "lint:node": "eslint .",
     "lint:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run ruff check .); fi; done",
@@ -20,8 +20,8 @@
     "db:migrate": "pnpm --filter @soopa/database db:migrate",
     "db:seed": "pnpm --filter @soopa/database db:seed",
     "db:clear-zitadel": "pnpm --filter @soopa/database db:clear-zitadel",
-    "infra-reset": "docker compose down -v && docker compose up -d --wait && pnpm db:migrate && pnpm db:seed",
-    "ucp-reset": "(pnpm db:clear-zitadel || true) && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f ucp_pgdata_global ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed",
+    "infra-reset": "pnpm db:clear-zitadel && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f ucp_pgdata_global ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed && cd apps/edi && make db-sqs-reset",
+    "ucp-reset": "pnpm db:clear-zitadel && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f ucp_pgdata_global ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed",
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^20.19.43",
+    "@types/node": "^24.13.2",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
@@ -42,8 +42,8 @@
     "knip": "^6.27.0",
     "tsx": "^4.19.2",
     "turbo": "^2.7.2",
-    "typescript": "^5.4.0",
+    "typescript": "~6.0.2",
     "typescript-eslint": "^8.64.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.10"
   }
 }

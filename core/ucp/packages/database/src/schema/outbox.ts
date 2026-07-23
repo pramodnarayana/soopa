@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, varchar, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, varchar, jsonb, pgPolicy } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 import { tenants } from './identity';
 
@@ -15,4 +16,11 @@ export const controlPlaneOutbox = pgTable('outbox_events', {
   errorReason: text('error_reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => [
+  pgPolicy('outbox_events_isolation', {
+    as: 'permissive',
+    for: 'all',
+    to: 'public',
+    using: sql`${table.tenantId} IS NULL OR ${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+  })
+]);

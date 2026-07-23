@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, varchar, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, varchar, primaryKey, pgPolicy } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 import { tenants } from './identity';
 
@@ -24,5 +25,11 @@ export const tenantSubscriptions = pgTable('tenant_subscriptions', {
 }, (table) => {
   return {
     pk: primaryKey({ columns: [table.tenantId, table.appId] }),
+    rlsPolicy: pgPolicy('tenant_subscriptions_isolation', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: sql`${table.tenantId} = current_setting('app.current_tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on'`
+    })
   };
 });

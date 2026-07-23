@@ -18,7 +18,7 @@
     "@soopa/database": "workspace:*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "handlebars": "^4.7.8",
     "pg": "^8.22.0",
@@ -27,11 +27,11 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.28",
-    "@types/node": "^20.0.0",
+    "@types/node": "^24.13.2",
     "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "^4.1.10",
-    "tsx": "^4.7.0",
-    "typescript": "^5.4.0",
+    "tsx": "^4.19.2",
+    "typescript": "~6.0.2",
     "vitest": "^4.1.10"
   }
 }
