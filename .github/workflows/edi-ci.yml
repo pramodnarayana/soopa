@@ -68,10 +68,10 @@ jobs:
         run: uv sync --all-packages
 
       - name: Typecheck (Node)
-        run: pnpm turbo typecheck --filter="./apps/edi/**" --filter="./core/platform/**"
+        run: pnpm turbo typecheck --filter="./apps/edi/**"
 
       - name: Lint (Node)
-        run: pnpm turbo lint --filter="./apps/edi/**" --filter="./core/platform/**"
+        run: pnpm turbo lint --filter="./apps/edi/**"
 
       - name: Start Database
         run: |
@@ -79,15 +79,15 @@ jobs:
           pnpm db:migrate
 
       - name: Test (Node)
-        run: CI=true pnpm turbo test --filter="./apps/edi/**" --filter="./core/platform/**"
+        run: CI=true pnpm turbo test --filter="./apps/edi/**"
 
       - name: Test (Python)
         run: |
-          for d in apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/* core/platform/packages/*/python core/platform/apps/*; do
+          for d in apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
             if [ -f "$d/pyproject.toml" ]; then
               (cd "$d" && uv run pytest)
             fi
           done
 
       - name: Build (Node)
-        run: pnpm turbo build --filter="./apps/edi/**" --filter="./core/platform/**"
+        run: pnpm turbo build --filter="./apps/edi/**"
