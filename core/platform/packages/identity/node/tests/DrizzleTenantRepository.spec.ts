@@ -1,21 +1,28 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { DrizzleTenantRepository } from '../src/adapters/outbound/database/DrizzleTenantRepository.js';
-import { createDbClient } from '@soopa/database';
-import { users, tenants, tenantUsers, tenantSubscriptions, controlPlaneOutbox } from '@soopa/database';
+import {
+  controlPlaneOutbox,
+  createDbClient,
+  tenantSubscriptions,
+  tenants,
+  tenantUsers,
+  users,
+} from '@soopa/database';
 import { v4 as uuidv4 } from 'uuid';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { DrizzleTenantRepository } from '../src/adapters/outbound/database/DrizzleTenantRepository.js';
 
 describe('DrizzleTenantRepository', () => {
   let db: ReturnType<typeof createDbClient>['db'];
   let repo: DrizzleTenantRepository;
-  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
+  const dbConnectionString =
+    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
 
   beforeAll(async () => {
     db = createDbClient(dbConnectionString).db;
     repo = new DrizzleTenantRepository(db);
   });
-  
+
   beforeEach(async () => {
-    // Clear out data to keep tests isolated. 
+    // Clear out data to keep tests isolated.
     // We only clear tenantUsers, users, tenants to avoid deleting other table data
     await db.delete(controlPlaneOutbox);
     await db.delete(tenantSubscriptions);
@@ -25,14 +32,14 @@ describe('DrizzleTenantRepository', () => {
   });
 
   afterAll(async () => {
-    // Close connection if needed (pg-postgres doesn't expose a close on the drizzle instance directly, 
+    // Close connection if needed (pg-postgres doesn't expose a close on the drizzle instance directly,
     // but the node process will exit when tests finish)
   });
 
   it('should provision user and tenant correctly', async () => {
     const email = `test-${uuidv4()}@example.com`;
     const result = await repo.provisionUserAndTenant(email, 'Test Org', 'zitadel-org-1');
-    
+
     expect(result.userId).toBeDefined();
     expect(result.tenantId).toBeDefined();
 
@@ -52,29 +59,47 @@ describe('DrizzleTenantRepository', () => {
   it('should handle getTenantMappingForUser for user with no mapping', async () => {
     const email = `test-${uuidv4()}@example.com`;
     const [newUser] = await db.insert(users).values({ email, name: 'No Mapping User' }).returning();
-    
+
     const tenantId = await repo.getTenantMappingForUser(newUser.id);
     expect(tenantId).toBeNull();
   });
 
   it('should throw IdentityInfrastructureError on DB failure for findUserByEmail', async () => {
-    const badDb = { select: () => { throw new Error('DB Error'); } } as unknown as ReturnType<typeof createDbClient>['db'];
+    const badDb = {
+      select: () => {
+        throw new Error('DB Error');
+      },
+    } as unknown as ReturnType<typeof createDbClient>['db'];
     const badRepo = new DrizzleTenantRepository(badDb);
 
-    await expect(badRepo.findUserByEmail('test@example.com')).rejects.toThrow('Failed to fetch user by email: DB Error');
+    await expect(badRepo.findUserByEmail('test@example.com')).rejects.toThrow(
+      'Failed to fetch user by email: DB Error',
+    );
   });
 
   it('should throw IdentityInfrastructureError on DB failure for provision', async () => {
-    const badDb = { transaction: () => { throw new Error('DB Error'); } } as unknown as ReturnType<typeof createDbClient>['db'];
+    const badDb = {
+      transaction: () => {
+        throw new Error('DB Error');
+      },
+    } as unknown as ReturnType<typeof createDbClient>['db'];
     const badRepo = new DrizzleTenantRepository(badDb);
 
-    await expect(badRepo.provisionUserAndTenant('test@example.com', 'Test')).rejects.toThrow('Failed to provision user and tenant: DB Error');
+    await expect(badRepo.provisionUserAndTenant('test@example.com', 'Test')).rejects.toThrow(
+      'Failed to provision user and tenant: DB Error',
+    );
   });
 
   it('should throw IdentityInfrastructureError on DB failure for get mapping', async () => {
-    const badDb = { select: () => { throw new Error('DB Error'); } } as unknown as ReturnType<typeof createDbClient>['db'];
+    const badDb = {
+      select: () => {
+        throw new Error('DB Error');
+      },
+    } as unknown as ReturnType<typeof createDbClient>['db'];
     const badRepo = new DrizzleTenantRepository(badDb);
 
-    await expect(badRepo.getTenantMappingForUser('123')).rejects.toThrow('Failed to fetch tenant mapping: DB Error');
+    await expect(badRepo.getTenantMappingForUser('123')).rejects.toThrow(
+      'Failed to fetch tenant mapping: DB Error',
+    );
   });
 });

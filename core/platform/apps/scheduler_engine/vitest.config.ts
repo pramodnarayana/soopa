@@ -10,6 +10,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
     },
     exclude: ['dist/**', 'node_modules/**'],
-    include: ['tests/**/*.ts']
-  }
+    include: ['tests/**/*.ts'],
+  },
 });

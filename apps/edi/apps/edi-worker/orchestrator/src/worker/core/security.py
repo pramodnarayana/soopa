@@ -3,6 +3,7 @@ import logging
 import socket
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any, Iterator
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -55,11 +56,18 @@ def validate_target_url(url: str) -> bool:
         return False
 
 
-_override_dns = ContextVar("override_dns", default=None)
+_override_dns: ContextVar[tuple[str, str] | None] = ContextVar("override_dns", default=None)
 _orig_getaddrinfo = socket.getaddrinfo
 
 
-def _patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+def _patched_getaddrinfo(
+    host: bytes | str | None,
+    port: bytes | str | int | None,
+    family: int = 0,
+    type: int = 0,
+    proto: int = 0,
+    flags: int = 0,
+) -> list[tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int] | tuple[str, int, int, int] | tuple[int, bytes]]]:
     override = _override_dns.get()
     if override and host == override[0]:
         return _orig_getaddrinfo(override[1], port, family, type, proto, flags)
@@ -75,7 +83,8 @@ def get_safe_ip(hostname: str) -> str | None:
     except socket.gaierror:
         return None
     for addr in addr_info:
-        ip_str = addr[4][0]
+        sockaddr = addr[4]
+        ip_str = str(sockaddr[0])
         ip = ipaddress.ip_address(ip_str)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             return None
@@ -84,7 +93,7 @@ def get_safe_ip(hostname: str) -> str | None:
 
 
 @contextmanager
-def ssrf_safe_context(url: str):
+def ssrf_safe_context(url: str) -> Iterator[None]:
     """
     Context manager that pins the validated IP address for the given URL's hostname
     to prevent DNS rebinding SSRF attacks.

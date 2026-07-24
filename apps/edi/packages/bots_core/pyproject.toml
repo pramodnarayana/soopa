@@ -19,3 +19,19 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bots_core"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+
+# The following modules are vendored legacy code from the BOTS Open Source EDI Translator.
+# They pre-date Python typing and cannot be strictly type-checked without a full rewrite.
+# They are excluded from strict mode while the application layer (facade, application) is typed.
+[[tool.mypy.overrides]]
+module = [
+    "bots_core.domain.*",
+    "bots_core.utils.*",
+    "bots_core.infrastructure.config.*",
+    "bots_core.usersys.*",
+]
+ignore_errors = true

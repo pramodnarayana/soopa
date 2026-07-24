@@ -1,10 +1,10 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { IApiKeyRepository } from '../../../ports/outbound/api-key.repository';
-import { ApiKey } from '../../../domain/models/api-key.model';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
-import { apiKeys, controlPlaneOutbox, eq } from '@soopa/database';
-import type { DbClient } from '@soopa/database';
+import { Inject, Injectable } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
+import type { DbClient } from '@soopa/database';
+import { apiKeys, controlPlaneOutbox, eq } from '@soopa/database';
+import { ApiKey } from '../../../domain/models/api-key.model.js';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { IApiKeyRepository } from '../../../ports/outbound/api-key.repository.js';
 
 @Injectable()
 export class ApiKeyDrizzleRepository implements IApiKeyRepository {

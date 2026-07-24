@@ -1,20 +1,20 @@
 import {
-  Controller,
-  Post,
   Body,
-  Param,
-  Inject,
-  Get,
-  NotFoundException,
+  Controller,
   Delete,
+  Get,
+  Inject,
+  NotFoundException,
+  Param,
+  Post,
 } from '@nestjs/common';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
-import { tenantSubscriptions, apps, tenants } from '@soopa/database';
 import type { DbClient } from '@soopa/database';
-import { eq, and } from 'drizzle-orm';
-import { IsString, IsNotEmpty } from 'class-validator';
-import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider';
-import type { IProjectProvider } from '../../../ports/outbound/project.provider';
+import { apps, tenantSubscriptions, tenants } from '@soopa/database';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { and, eq } from 'drizzle-orm';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import type { IProjectProvider } from '../../../ports/outbound/project.provider.js';
+import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider.js';
 
 export class SubscribeDto {
   @IsString()

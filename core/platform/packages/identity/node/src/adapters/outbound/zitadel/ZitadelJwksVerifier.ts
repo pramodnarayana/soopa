@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { IdentityInfrastructureError } from '../../../domain/Errors.js';
 import type { TokenClaims } from '../../../domain/IdentityContext.js';
 import type { TokenVerifier } from '../../../ports/TokenVerifier.js';
-import { IdentityInfrastructureError } from '../../../domain/Errors.js';
 
 export interface ZitadelTokenVerifierOptions {
   issuer: string;
@@ -20,11 +20,11 @@ export class ZitadelJwksVerifier implements TokenVerifier {
   async verify(token: string): Promise<TokenClaims> {
     const result = await jwtVerify(token, this.jwks, {
       audience: this.options.audience,
-      issuer: this.options.issuer
+      issuer: this.options.issuer,
     });
 
     const claims = result.payload as Record<string, unknown>;
-    
+
     if (typeof claims.sub !== 'string') {
       throw new IdentityInfrastructureError('Token is missing required sub claim.');
     }

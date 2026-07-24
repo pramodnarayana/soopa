@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from 'react-oidc-context';
 import { useEffect } from 'react';
+import { useAuth } from 'react-oidc-context';
 
 export const Route = createFileRoute('/callback')({
   component: CallbackComponent,
@@ -12,10 +12,10 @@ function CallbackComponent() {
 
   useEffect(() => {
     if (auth.isAuthenticated) {
-      navigate({ to: '/tenants', replace: true });
+      void navigate({ to: '/tenants', replace: true });
     } else if (auth.error) {
       console.error('OIDC Auth Error:', auth.error);
-      navigate({ to: '/', replace: true });
+      void navigate({ to: '/', replace: true });
     }
   }, [auth.isAuthenticated, auth.error, navigate]);
 

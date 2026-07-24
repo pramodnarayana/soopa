@@ -1,8 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AuthGuard } from '../src/middleware/AuthGuard.js';
-import { ExecutionContext, UnauthorizedException, ForbiddenException, InternalServerErrorException } from '@nestjs/common';
-import { TenantMappingDomainError, IdentityInfrastructureError } from '../src/domain/Errors.js';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
+import { IdentityInfrastructureError, TenantMappingDomainError } from '../src/domain/Errors.js';
+import { AuthGuard } from '../src/middleware/AuthGuard.js';
 
 describe('AuthGuard', () => {
   let guard: AuthGuard;
@@ -18,8 +23,8 @@ describe('AuthGuard', () => {
   function createMockContext(headers: Record<string, string>): ExecutionContext {
     return {
       switchToHttp: () => ({
-        getRequest: () => ({ headers })
-      })
+        getRequest: () => ({ headers }),
+      }),
     } as unknown as ExecutionContext;
   }
 
@@ -39,12 +44,12 @@ describe('AuthGuard', () => {
       tenantId: 't1',
       email: 'test@test.com',
       name: 'Test',
-      roles: []
+      roles: [],
     });
 
     const req = { headers: { authorization: 'Bearer valid-token' } };
     const context = {
-      switchToHttp: () => ({ getRequest: () => req })
+      switchToHttp: () => ({ getRequest: () => req }),
     } as unknown as ExecutionContext;
 
     const result = await guard.canActivate(context);
@@ -63,7 +68,9 @@ describe('AuthGuard', () => {
   });
 
   it('should throw InternalServerErrorException on IdentityInfrastructureError', async () => {
-    vi.spyOn(useCase, 'execute').mockRejectedValueOnce(new IdentityInfrastructureError('db failed'));
+    vi.spyOn(useCase, 'execute').mockRejectedValueOnce(
+      new IdentityInfrastructureError('db failed'),
+    );
 
     const context = createMockContext({ authorization: 'Bearer token' });
     await expect(guard.canActivate(context)).rejects.toThrow(InternalServerErrorException);

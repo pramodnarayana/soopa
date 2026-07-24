@@ -1,11 +1,13 @@
-const UCP_API_URL = import.meta.env.VITE_UCP_API_URL || 'http://localhost:3000';
+const UCP_API_URL =
+  (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
+  'http://localhost:3000';
 
 let globalToken: string | null = null;
 class ApiError extends Error {
   public statusCode: number;
-  public details?: any;
+  public details?: unknown;
 
-  constructor(message: string, statusCode: number, details?: any) {
+  constructor(message: string, statusCode: number, details?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
@@ -24,7 +26,7 @@ export const apiClient = {
 
   async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const { params, headers, ...customConfig } = options;
-    
+
     const url = new URL(`${UCP_API_URL}${endpoint}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -49,14 +51,16 @@ export const apiClient = {
 
     if (!response.ok) {
       let errorMessage = 'An unexpected error occurred';
-      let errorDetails: any = null;
+      let errorDetails: unknown = null;
 
       const textData = await response.text();
 
       if (textData) {
         try {
-          const errorData = JSON.parse(textData);
-          errorMessage = errorData.message || errorMessage;
+          const errorData = JSON.parse(textData) as Record<string, unknown>;
+          if (typeof errorData.message === 'string') {
+            errorMessage = errorData.message;
+          }
           errorDetails = errorData.details || errorData;
         } catch {
           // Fallback if response is not valid JSON
@@ -72,7 +76,7 @@ export const apiClient = {
     }
 
     try {
-      return await response.json();
+      return (await response.json()) as T;
     } catch {
       return {} as T;
     }
@@ -82,7 +86,7 @@ export const apiClient = {
     return this.request<T>(endpoint, { ...options, method: 'GET' });
   },
 
-  post<T>(endpoint: string, body?: any, options?: Omit<FetchOptions, 'method' | 'body'>) {
+  post<T>(endpoint: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) {
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',
@@ -90,7 +94,7 @@ export const apiClient = {
     });
   },
 
-  patch<T>(endpoint: string, body?: any, options?: Omit<FetchOptions, 'method' | 'body'>) {
+  patch<T>(endpoint: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PATCH',
@@ -100,5 +104,5 @@ export const apiClient = {
 
   delete<T>(endpoint: string, options?: Omit<FetchOptions, 'method'>) {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
-  }
+  },
 };

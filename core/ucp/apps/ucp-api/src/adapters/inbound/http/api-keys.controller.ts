@@ -1,6 +1,6 @@
-import { Controller, Post, Body, Param } from '@nestjs/common';
-import { GenerateApiKeyUseCase } from '../../../application/use-cases/generate-api-key.use-case';
-import { IsString, IsArray, IsNotEmpty } from 'class-validator';
+import { Body, Controller, Param, Post } from '@nestjs/common';
+import { IsArray, IsNotEmpty, IsString } from 'class-validator';
+import { GenerateApiKeyUseCase } from '../../../application/use-cases/generate-api-key.use-case.js';
 
 export class CreateApiKeyRequestDto {
   @IsString()

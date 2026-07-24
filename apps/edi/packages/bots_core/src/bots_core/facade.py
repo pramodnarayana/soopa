@@ -1,5 +1,6 @@
 import json
 import re
+from typing import Any, cast
 
 from bots_core.domain import inmessage, outmessage
 from bots_core.domain.node import Node
@@ -41,11 +42,11 @@ def edi_to_json(
     )
 
     if raw_edi is not None:
-        ta_info["raw_edi"] = raw_edi
+        ta_info["raw_edi"] = cast(str, raw_edi)  # vendored domain accepts bytes|str; annotated as str
     else:
-        ta_info["filename"] = edi_file_path
+        ta_info["filename"] = cast(str, edi_file_path)  # narrowed: edi_file_path is str here
 
-    edifile = inmessage.parse_edi_file(**ta_info)
+    edifile = inmessage.parse_edi_file(**ta_info)  # type: ignore[no-untyped-call]
 
     if edifile.root is None:
         error_msg = (
@@ -99,7 +100,7 @@ def json_to_edi(
         ta_info["return_string"] = True
 
     try:
-        out = outmessage.outmessage_init(**ta_info)
+        out = outmessage.outmessage_init(**ta_info)  # type: ignore[no-untyped-call]
         out.root = root_node
         out.writeall()
 
@@ -149,7 +150,7 @@ def json_to_edi(
                     )
                     inbound_errors = json.loads(validation_result).get("errors", [])
 
-                    def normalize_error(err_str):
+                    def normalize_error(err_str: str) -> str:
                         # Strip " line X" and " pos Y" from the error to allow deduplication
                         err_str = re.sub(r" line \d+", "", err_str)
                         err_str = re.sub(r" pos \d+", "", err_str)
@@ -194,5 +195,5 @@ def generate_997_ast(inmessage_ast: str, error_list: list[str] | None = None) ->
     data = json.loads(inmessage_ast)
     root_node = Node.from_dict(data)
 
-    ack_node = internal_generate_997(root_node, error_list)
+    ack_node = internal_generate_997(root_node, list(error_list) if error_list is not None else [])
     return json.dumps(ack_node.to_dict(), indent=2)

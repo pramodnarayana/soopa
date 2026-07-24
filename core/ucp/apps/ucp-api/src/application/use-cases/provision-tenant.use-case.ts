@@ -1,14 +1,13 @@
-import { Injectable, Inject } from '@nestjs/common';
-import type { ITenantRepository } from '../../ports/outbound/tenant.repository';
-import { TENANT_REPOSITORY } from '../../ports/outbound/tenant.repository';
-import { ORGANIZATION_PROVIDER } from '../../ports/outbound/organization.provider';
-import type { IOrganizationProvider } from '../../ports/outbound/organization.provider';
-import { USER_IDENTITY_PROVIDER } from '../../ports/outbound/user-identity.provider';
-import type { IUserIdentityProvider } from '../../ports/outbound/user-identity.provider';
-import { Tenant } from '../../domain/models/tenant.model';
+import { Inject, Injectable } from '@nestjs/common';
+import { IsNotEmpty, IsString } from 'class-validator';
 import * as crypto from 'crypto';
-
-import { IsString, IsNotEmpty } from 'class-validator';
+import { Tenant } from '../../domain/models/tenant.model.js';
+import type { IOrganizationProvider } from '../../ports/outbound/organization.provider.js';
+import { ORGANIZATION_PROVIDER } from '../../ports/outbound/organization.provider.js';
+import type { ITenantRepository } from '../../ports/outbound/tenant.repository.js';
+import { TENANT_REPOSITORY } from '../../ports/outbound/tenant.repository.js';
+import type { IUserIdentityProvider } from '../../ports/outbound/user-identity.provider.js';
+import { USER_IDENTITY_PROVIDER } from '../../ports/outbound/user-identity.provider.js';
 
 export class ProvisionTenantDto {
   @IsString()

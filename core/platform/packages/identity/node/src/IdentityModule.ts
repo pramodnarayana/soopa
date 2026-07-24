@@ -1,9 +1,16 @@
-import { Module, DynamicModule, Provider, Global, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { identityContextStorage } from './domain/IdentityContextStorage.js';
+import {
+  DynamicModule,
+  Global,
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  Provider,
+} from '@nestjs/common';
 import { createDbClient } from '@soopa/database';
-import { AuthenticateUseCase } from './application/Authenticate.js';
-import { ZitadelJwksVerifier } from './adapters/outbound/zitadel/ZitadelJwksVerifier.js';
 import { DrizzleTenantRepository } from './adapters/outbound/database/DrizzleTenantRepository.js';
+import { ZitadelJwksVerifier } from './adapters/outbound/zitadel/ZitadelJwksVerifier.js';
+import { AuthenticateUseCase } from './application/Authenticate.js';
+import { identityContextStorage } from './domain/IdentityContextStorage.js';
 import { AuthGuard } from './middleware/AuthGuard.js';
 
 export interface IdentityModuleOptions {
@@ -34,7 +41,10 @@ export class IdentityModule implements NestModule {
     const verifierProvider: Provider = {
       provide: ZitadelJwksVerifier,
       useFactory: () => {
-        return new ZitadelJwksVerifier({ issuer: options.zitadelIssuer, audience: options.zitadelAudience });
+        return new ZitadelJwksVerifier({
+          issuer: options.zitadelIssuer,
+          audience: options.zitadelAudience,
+        });
       },
     };
 
@@ -56,17 +66,8 @@ export class IdentityModule implements NestModule {
 
     return {
       module: IdentityModule,
-      providers: [
-        dbProvider,
-        verifierProvider,
-        repoProvider,
-        useCaseProvider,
-        AuthGuard,
-      ],
-      exports: [
-        AuthenticateUseCase,
-        AuthGuard,
-      ],
+      providers: [dbProvider, verifierProvider, repoProvider, useCaseProvider, AuthGuard],
+      exports: [AuthenticateUseCase, AuthGuard],
     };
   }
 }

@@ -1,12 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { ConfigKey } from '../../src/domain/enums/config-keys.enum';
-import { DataPlaneReplicationService } from '../../src/application/services/data-plane-replication.service';
+import { Test, TestingModule } from '@nestjs/testing';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { DataPlaneReplicationService } from '../../src/application/services/data-plane-replication.service.js';
+import { ConfigKey } from '../../src/domain/enums/config-keys.enum.js';
+import { MESSAGE_BUS } from '../../src/ports/outbound/message.bus.js';
 import {
   OUTBOX_REPOSITORY,
   OutboxEvent,
-} from '../../src/ports/outbound/outbox.repository';
-import { MESSAGE_BUS } from '../../src/ports/outbound/message.bus';
+} from '../../src/ports/outbound/outbox.repository.js';
 
 describe('DataPlaneReplicationService (Integration)', () => {
   let service: DataPlaneReplicationService;

@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { ZitadelBaseClient } from './zitadel-base.client';
-import { IProjectProvider } from '../../../ports/outbound/project.provider';
 import {
-  ZitadelRolesResponseSchema,
-  ZitadelProjectGrantsResponseSchema,
-  ZitadelRawUserSearchResponseSchema,
   ZitadelProjectGrant,
+  ZitadelProjectGrantsResponseSchema,
   ZitadelRawUser,
-} from '../../../domain/dtos/zitadel.dto';
+  ZitadelRawUserSearchResponseSchema,
+  ZitadelRolesResponseSchema,
+} from '../../../domain/dtos/zitadel.dto.js';
+import { IProjectProvider } from '../../../ports/outbound/project.provider.js';
+import { ZitadelBaseClient } from './zitadel-base.client.js';
 
 @Injectable()
 export class ZitadelProjectsAdapter
@@ -102,7 +102,7 @@ export class ZitadelProjectsAdapter
   }
 
   async getRoles(): Promise<
-    import('../../../domain/dtos/zitadel.dto').ZitadelRole[]
+    import('../../../domain/dtos/zitadel.dto.js').ZitadelRole[]
   > {
     this.logger.log('Fetching roles for UCP Project');
 
@@ -123,7 +123,7 @@ export class ZitadelProjectsAdapter
 
   async getUsers(
     orgId: string,
-  ): Promise<import('../../../domain/dtos/zitadel.dto').ZitadelUser[]> {
+  ): Promise<import('../../../domain/dtos/zitadel.dto.js').ZitadelUser[]> {
     this.logger.log(`Fetching users for org ${orgId}`);
 
     // 1. Fetch all users in the org

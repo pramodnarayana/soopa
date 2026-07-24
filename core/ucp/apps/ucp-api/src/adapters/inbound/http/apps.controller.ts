@@ -1,7 +1,7 @@
 import { Controller, Get, Inject } from '@nestjs/common';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
-import { apps } from '@soopa/database';
 import type { DbClient } from '@soopa/database';
+import { apps } from '@soopa/database';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
 
 @Controller('apps')
 export class AppsController {

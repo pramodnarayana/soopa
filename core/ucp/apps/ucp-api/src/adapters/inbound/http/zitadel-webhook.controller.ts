@@ -1,17 +1,17 @@
 import {
-  Controller,
-  Post,
   Body,
-  Inject,
+  Controller,
   HttpCode,
   HttpStatus,
+  Inject,
   Logger,
-  UnauthorizedException,
+  Post,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { USER_REPOSITORY } from '../../../ports/outbound/user.repository';
-import type { IUserRepository } from '../../../ports/outbound/user.repository';
+import type { IUserRepository } from '../../../ports/outbound/user.repository.js';
+import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
 
 export class ZitadelWebhookPayload {
   eventType!:

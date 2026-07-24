@@ -4,7 +4,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3
 
 from worker.core.errors import PermanentProvisioningError
 from worker.ports.outbox import OutboxEvent, OutboxPort

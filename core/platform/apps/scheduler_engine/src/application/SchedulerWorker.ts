@@ -1,5 +1,5 @@
-import { PostgresJobRepository } from '../adapters/outbound/PostgresJobRepository.js';
 import cronParser from 'cron-parser';
+import { PostgresJobRepository } from '../adapters/outbound/PostgresJobRepository.js';
 
 export interface ScheduledJob {
   id: string;
@@ -21,12 +21,14 @@ export class SchedulerWorker {
     private repository: PostgresJobRepository,
     private workerId: string,
     private pollIntervalMs: number = 5000,
-    private maxConcurrentJobs: number = 10
+    private maxConcurrentJobs: number = 10,
   ) {}
 
   start() {
     this.isRunning = true;
-    console.log(`Starting scheduler worker ${this.workerId} with concurrency ${this.maxConcurrentJobs}`);
+    console.log(
+      `Starting scheduler worker ${this.workerId} with concurrency ${this.maxConcurrentJobs}`,
+    );
     void this.pollLoop();
   }
 
@@ -72,7 +74,9 @@ export class SchedulerWorker {
 
     // 4. Schedule next iteration
     if (this.isRunning) {
-      this.timer = setTimeout(() => { void this.pollLoop(); }, this.pollIntervalMs);
+      this.timer = setTimeout(() => {
+        void this.pollLoop();
+      }, this.pollIntervalMs);
     }
   }
 
@@ -83,28 +87,32 @@ export class SchedulerWorker {
       }
 
       console.log(`Dispatching job ${job.name} (${job.id}) to queue ${job.target_queue}`);
-      
+
       // TODO: Actually dispatch to SQS / Webhook here using a Publisher port
       // For now, we simulate success
-      
+
       // Calculate next run if recurring
       if (job.cron_expression) {
         const interval = cronParser.parseExpression(job.cron_expression);
         const nextRunAt = interval.next().toDate();
         await this.repository.reschedule(job.id, this.workerId, nextRunAt);
-        console.log(`Successfully rescheduled job ${job.name} (${job.id}) for ${nextRunAt.toISOString()}`);
+        console.log(
+          `Successfully rescheduled job ${job.name} (${job.id}) for ${nextRunAt.toISOString()}`,
+        );
       } else {
         await this.repository.markCompleted(job.id, this.workerId);
         console.log(`Successfully completed job ${job.name} (${job.id})`);
       }
     } catch (err: unknown) {
       console.error(`Job ${job.name} (${job.id}) execution failed:`, err);
-      
+
       if (job.retry_count < job.max_retries) {
         const backoffSeconds = 60 * Math.pow(2, job.retry_count);
         const nextRunAt = new Date(Date.now() + backoffSeconds * 1000);
         await this.repository.scheduleRetry(job.id, this.workerId, job.retry_count + 1, nextRunAt);
-        console.log(`Scheduled retry for job ${job.name} (${job.id}) at ${nextRunAt.toISOString()}`);
+        console.log(
+          `Scheduled retry for job ${job.name} (${job.id}) at ${nextRunAt.toISOString()}`,
+        );
       } else {
         let msg = typeof err === 'string' ? err : 'Unknown error';
         if (err instanceof Error) {

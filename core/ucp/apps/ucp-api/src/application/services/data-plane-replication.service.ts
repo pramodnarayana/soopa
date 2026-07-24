@@ -1,15 +1,15 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConfigKey } from '../../domain/enums/config-keys.enum';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { ConfigKey } from '../../domain/enums/config-keys.enum.js';
 import {
-  OUTBOX_REPOSITORY,
-  type IOutboxRepository,
-} from '../../ports/outbound/outbox.repository';
-import {
-  MESSAGE_BUS,
   type IMessageBus,
-} from '../../ports/outbound/message.bus';
+  MESSAGE_BUS,
+} from '../../ports/outbound/message.bus.js';
+import {
+  type IOutboxRepository,
+  OUTBOX_REPOSITORY,
+} from '../../ports/outbound/outbox.repository.js';
 
 @Injectable()
 export class DataPlaneReplicationService {

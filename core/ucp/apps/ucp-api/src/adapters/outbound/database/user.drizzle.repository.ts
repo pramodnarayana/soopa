@@ -1,9 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { users, tenantUsers } from '@soopa/database';
+import { Inject, Injectable } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
-import { eq, and } from 'drizzle-orm';
-import { IUserRepository } from '../../../ports/outbound/user.repository';
+import { tenantUsers, users } from '@soopa/database';
+import { and, eq } from 'drizzle-orm';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { IUserRepository } from '../../../ports/outbound/user.repository.js';
 
 @Injectable()
 export class UserDrizzleRepository implements IUserRepository {

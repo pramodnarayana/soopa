@@ -1,23 +1,23 @@
 import {
-  Controller,
-  Post,
-  Get,
-  Delete,
-  Patch,
+  BadRequestException,
   Body,
-  Param,
+  Controller,
+  Delete,
+  Get,
   Inject,
   NotFoundException,
-  BadRequestException,
+  Param,
+  Patch,
+  Post,
 } from '@nestjs/common';
-import { USER_IDENTITY_PROVIDER } from '../../../ports/outbound/user-identity.provider';
-import type { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider';
-import { TENANT_REPOSITORY } from '../../../ports/outbound/tenant.repository';
-import type { ITenantRepository } from '../../../ports/outbound/tenant.repository';
-import { USER_REPOSITORY } from '../../../ports/outbound/user.repository';
-import type { IUserRepository } from '../../../ports/outbound/user.repository';
-import { IsString, IsEmail, IsNotEmpty } from 'class-validator';
-import { ZitadelUserState } from '../../../domain/enums/zitadel-user-state.enum';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { ZitadelUserState } from '../../../domain/enums/zitadel-user-state.enum.js';
+import type { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
+import { TENANT_REPOSITORY } from '../../../ports/outbound/tenant.repository.js';
+import type { IUserRepository } from '../../../ports/outbound/user.repository.js';
+import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
+import type { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider.js';
+import { USER_IDENTITY_PROVIDER } from '../../../ports/outbound/user-identity.provider.js';
 
 export class CreateUserDto {
   @IsString()

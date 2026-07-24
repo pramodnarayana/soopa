@@ -1,4 +1,4 @@
-import { Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 
 export abstract class ZitadelBaseClient {
   protected readonly logger = new Logger(this.constructor.name);

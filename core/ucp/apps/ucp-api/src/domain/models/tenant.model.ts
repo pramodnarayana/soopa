@@ -1,5 +1,5 @@
-import { AggregateRoot } from './aggregate-root';
-import { TenantProvisionedEvent } from '../events/tenant-provisioned.event';
+import { TenantProvisionedEvent } from '../events/tenant-provisioned.event.js';
+import { AggregateRoot } from './aggregate-root.js';
 
 export class Tenant extends AggregateRoot {
   constructor(

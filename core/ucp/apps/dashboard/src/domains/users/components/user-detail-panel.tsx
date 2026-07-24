@@ -1,16 +1,26 @@
-import { useState, useEffect } from 'react';
-import { useUpdateTenantUser } from '@/domains/users/api/mutations';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
 import { Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useUpdateTenantUser } from '@/domains/users/api/mutations';
 
 import { TenantUser } from '@/domains/users/api/queries';
 
-const normalizeRole = (role?: string) => role === 'Unknown' ? '' : (role || '');
+const normalizeRole = (role?: string) => (role === 'Unknown' ? '' : role || '');
 
-export function UserDetailPanel({ user, tenantId, tenantRoles }: {
+export function UserDetailPanel({
+  user,
+  tenantId,
+  tenantRoles,
+}: {
   user: TenantUser;
   tenantId: string;
   tenantRoles: { key: string; displayName: string }[];
@@ -18,7 +28,10 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
   const [editFirst, setEditFirst] = useState(user.firstName || '');
   const [editLast, setEditLast] = useState(user.lastName || '');
   const [editRole, setEditRole] = useState(normalizeRole(user.role));
-  const isDirty = editFirst !== (user.firstName || '') || editLast !== (user.lastName || '') || editRole !== normalizeRole(user.role);
+  const isDirty =
+    editFirst !== (user.firstName || '') ||
+    editLast !== (user.lastName || '') ||
+    editRole !== normalizeRole(user.role);
 
   useEffect(() => {
     setEditFirst(user.firstName || '');
@@ -35,10 +48,10 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
         onSuccess: () => {
           toast.success('User updated successfully.');
         },
-        onError: (error: any) => {
+        onError: (error: Error) => {
           toast.error(`Error updating user: ${error.message}`);
-        }
-      }
+        },
+      },
     );
   };
 
@@ -51,7 +64,9 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
   return (
     <div className="bg-slate-50/70 border-t border-slate-100 px-6 py-5">
       <div className="max-w-2xl space-y-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">User Details</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          User Details
+        </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">First Name</label>
@@ -87,7 +102,9 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
               </SelectTrigger>
               <SelectContent>
                 {tenantRoles.map((r: { key: string; displayName: string }) => (
-                  <SelectItem key={r.key} value={r.key}>{r.displayName}</SelectItem>
+                  <SelectItem key={r.key} value={r.key}>
+                    {r.displayName}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -96,7 +113,11 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600">Created At</label>
               <Input
-                value={new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                value={new Date(user.createdAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
                 disabled
                 className="h-9 rounded-lg text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
               />
@@ -114,7 +135,9 @@ export function UserDetailPanel({ user, tenantId, tenantRoles }: {
           >
             {updateMutationObj.isPending ? (
               <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : <Save className="w-3.5 h-3.5" />}
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
             Save Changes
           </Button>
           <Button

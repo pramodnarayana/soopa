@@ -1,7 +1,15 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { AuthenticateUseCase } from '../application/Authenticate.js';
-import { TenantMappingDomainError, IdentityInfrastructureError } from '../domain/Errors.js';
+import { IdentityInfrastructureError, TenantMappingDomainError } from '../domain/Errors.js';
 import type { IdentityContext as Identity } from '../domain/IdentityContext.js';
 import { identityContextStorage } from '../domain/IdentityContextStorage.js';
 
@@ -34,18 +42,18 @@ export class AuthGuard implements CanActivate {
 
     try {
       const identity = await this.authenticateUseCase.execute(token);
-      
+
       // Inject into request safely
       request.identity = identity;
       request.tenantId = identity.tenantId;
       request.userId = identity.userId;
-      
+
       const state = identityContextStorage.getStore();
       if (state) {
         state.identity = identity;
         state.token = token;
       }
-      
+
       return true;
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -60,7 +68,7 @@ export class AuthGuard implements CanActivate {
       } else if (err instanceof IdentityInfrastructureError) {
         throw new InternalServerErrorException('An internal identity error occurred.');
       }
-      
+
       throw new UnauthorizedException('Invalid or expired token.');
     }
   }

@@ -1,28 +1,27 @@
 import {
-  Controller,
-  Post,
   Body,
+  Controller,
+  Delete,
   Get,
   Inject,
-  Patch,
-  Delete,
-  Param,
   NotFoundException,
+  Param,
+  Patch,
+  Post,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-
+import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 import {
-  ProvisionTenantUseCase,
   ProvisionTenantDto,
-} from '../../../application/use-cases/provision-tenant.use-case';
-import { TENANT_REPOSITORY } from '../../../ports/outbound/tenant.repository';
-import type { ITenantRepository } from '../../../ports/outbound/tenant.repository';
-import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider';
-import type { IProjectProvider } from '../../../ports/outbound/project.provider';
-import { ORGANIZATION_PROVIDER } from '../../../ports/outbound/organization.provider';
-import type { IOrganizationProvider } from '../../../ports/outbound/organization.provider';
-import { IsString, IsNotEmpty, IsIn } from 'class-validator';
+  ProvisionTenantUseCase,
+} from '../../../application/use-cases/provision-tenant.use-case.js';
+import type { IOrganizationProvider } from '../../../ports/outbound/organization.provider.js';
+import { ORGANIZATION_PROVIDER } from '../../../ports/outbound/organization.provider.js';
+import type { IProjectProvider } from '../../../ports/outbound/project.provider.js';
+import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider.js';
+import type { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
+import { TENANT_REPOSITORY } from '../../../ports/outbound/tenant.repository.js';
 
 export class UpdateTenantNameDto {
   @IsString()

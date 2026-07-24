@@ -4,10 +4,12 @@ import { apiClient } from '@/lib/api-client';
 export const useSubscribeTenant = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) => 
+    mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) =>
       apiClient.post(`/tenants/${tenantId}/subscriptions`, { appId }),
     onSuccess: (_, variables) => {
-      return queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'subscriptions'] });
+      return queryClient.invalidateQueries({
+        queryKey: ['tenants', variables.tenantId, 'subscriptions'],
+      });
     },
   });
 };
@@ -15,10 +17,12 @@ export const useSubscribeTenant = () => {
 export const useUnsubscribeTenant = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) => 
+    mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) =>
       apiClient.delete(`/tenants/${tenantId}/subscriptions/${appId}`),
     onSuccess: (_, variables) => {
-      return queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'subscriptions'] });
+      return queryClient.invalidateQueries({
+        queryKey: ['tenants', variables.tenantId, 'subscriptions'],
+      });
     },
   });
 };

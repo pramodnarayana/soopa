@@ -1,5 +1,1 @@
-export default [
-  'packages/*/node',
-  'packages/*',
-  'server/*'
-];
+export default ['packages/*/node', 'packages/*', 'server/*'];
