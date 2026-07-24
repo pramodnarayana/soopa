@@ -1,26 +1,32 @@
-import { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { FormModal } from '@/components/ui/form-modal'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useCreatePlatformPartnershipMutation } from '../api/partnerHooks'
-import { usePlatformSettings } from '@/features/platform/api/settingsHooks'
-import { Combobox } from '@/components/ui/combobox'
-import { SearchableSelect } from '@/components/ui/searchable-select'
+import { useEffect, useState } from 'react';
+import { Combobox } from '@/components/ui/combobox';
+import { FormModal } from '@/components/ui/form-modal';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
+import { useCreatePlatformPartnershipMutation } from '../api/partnerHooks';
 
 export interface CreatePartnershipModalProps {
   availablePartners: { id: string; name: string; type: string; is_local?: boolean }[];
 }
 
 export function CreatePartnershipModal({ availablePartners }: CreatePartnershipModalProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [localPartnerId, setLocalPartnerId] = useState('')
-  const [remotePartnerId, setRemotePartnerId] = useState('')
-  const [mdnType, setMdnType] = useState('SYNC')
-  const [mdnUrl, setMdnUrl] = useState('')
-  const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256')
-  const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256')
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [localPartnerId, setLocalPartnerId] = useState('');
+  const [remotePartnerId, setRemotePartnerId] = useState('');
+  const [mdnType, setMdnType] = useState('SYNC');
+  const [mdnUrl, setMdnUrl] = useState('');
+  const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256');
+  const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256');
 
   const { data: platformSettings } = usePlatformSettings();
   const createPartnership = useCreatePlatformPartnershipMutation();
@@ -32,22 +38,22 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
   }, [platformSettings, mdnUrl, mdnType]);
 
   const reset = () => {
-    setName('')
-    setLocalPartnerId('')
-    setRemotePartnerId('')
-    setMdnType('SYNC')
-    setMdnUrl(platformSettings?.available_as2_receive_urls?.[0] || '')
-    setEncryptionAlgorithm('AES256')
-    setSignatureAlgorithm('SHA256')
-  }
+    setName('');
+    setLocalPartnerId('');
+    setRemotePartnerId('');
+    setMdnType('SYNC');
+    setMdnUrl(platformSettings?.available_as2_receive_urls?.[0] || '');
+    setEncryptionAlgorithm('AES256');
+    setSignatureAlgorithm('SHA256');
+  };
 
   const handleOpenChange = (open: boolean) => {
-    setIsOpen(open)
-    if (!open) reset()
-  }
+    setIsOpen(open);
+    if (!open) reset();
+  };
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+    e.preventDefault();
 
     createPartnership.mutate(
       {
@@ -55,21 +61,21 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
         local_partner_id: localPartnerId,
         remote_partner_id: remotePartnerId,
         mdn_type: mdnType,
-        mdn_url: mdnType === 'ASYNC' ? (mdnUrl || undefined) : undefined,
+        mdn_url: mdnType === 'ASYNC' ? mdnUrl || undefined : undefined,
         encryption_algorithm: encryptionAlgorithm,
         signature_algorithm: signatureAlgorithm,
       },
       {
         onSuccess: () => {
-          setIsOpen(false)
-          reset()
+          setIsOpen(false);
+          reset();
         },
-      }
-    )
-  }
+      },
+    );
+  };
 
-  const localIdentities = availablePartners.filter(p => p.type === 'AS2' && p.is_local === true)
-  const remoteIdentities = availablePartners.filter(p => p.type === 'AS2' && !p.is_local)
+  const localIdentities = availablePartners.filter((p) => p.type === 'AS2' && p.is_local === true);
+  const remoteIdentities = availablePartners.filter((p) => p.type === 'AS2' && !p.is_local);
 
   return (
     <FormModal
@@ -83,8 +89,18 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
       maxWidth="sm:max-w-[800px]"
     >
       <div className="grid gap-2">
-        <Label htmlFor="name" className="text-slate-600 font-medium">Partnership Name</Label>
-        <Input id="name" name="name" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Acme Corp X12 Exchange" className="h-10 rounded-xl" />
+        <Label htmlFor="name" className="text-slate-600 font-medium">
+          Partnership Name
+        </Label>
+        <Input
+          id="name"
+          name="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          placeholder="e.g. Acme Corp X12 Exchange"
+          className="h-10 rounded-xl"
+        />
       </div>
 
       {/* Identities Section */}
@@ -95,7 +111,11 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
             value={localPartnerId}
             onChange={setLocalPartnerId}
             placeholder="Select local Trading Partner"
-            options={localIdentities.map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+            options={localIdentities.map((p) => ({
+              label: p.name,
+              value: p.id,
+              searchString: p.name,
+            }))}
             emptyText="No local stations found"
           />
         </div>
@@ -106,7 +126,11 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
             value={remotePartnerId}
             onChange={setRemotePartnerId}
             placeholder="Select remote Trading Partner"
-            options={remoteIdentities.map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+            options={remoteIdentities.map((p) => ({
+              label: p.name,
+              value: p.id,
+              searchString: p.name,
+            }))}
             emptyText="No remote stations found"
           />
         </div>
@@ -139,7 +163,10 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 placeholder="https://..."
                 emptyText="Type custom URL..."
               />
-              <p className="text-xs text-slate-500">This is where the remote partner will send asynchronous MDN receipts back to your server.</p>
+              <p className="text-xs text-slate-500">
+                This is where the remote partner will send asynchronous MDN receipts back to your
+                server.
+              </p>
             </div>
           )}
         </div>
@@ -152,8 +179,10 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 <SelectValue placeholder="Algorithm" />
               </SelectTrigger>
               <SelectContent>
-                {(platformSettings?.supported_as2_encryption_algorithms || []).map(o => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                {(platformSettings?.supported_as2_encryption_algorithms || []).map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -166,8 +195,10 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
                 <SelectValue placeholder="Algorithm" />
               </SelectTrigger>
               <SelectContent>
-                {(platformSettings?.supported_as2_signature_algorithms || []).map(o => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                {(platformSettings?.supported_as2_signature_algorithms || []).map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -175,5 +206,5 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
         </div>
       </div>
     </FormModal>
-  )
+  );
 }

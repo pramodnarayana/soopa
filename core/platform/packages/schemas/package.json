@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "description": "Shared JSON Schemas and Contracts",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
+    "build": "tsc",
     "generate": "pnpm generate:ts && pnpm generate:py",
-    "generate:ts": "json2ts -i 'events/*.json' -o src/generated --cwd events && sed -i.bak 's/export const enum/export enum/g' src/generated/*.ts && rm -f src/generated/*.bak",
+    "generate:ts": "json2ts -i 'events/*.json' -o src/generated --cwd events && for file in src/generated/*.d.ts; do mv \"$file\" \"${file%.d.ts}.ts\"; done && sed -i.bak 's/export const enum/export enum/g' src/generated/*.ts && rm -f src/generated/*.bak",
     "generate:py": "mkdir -p python && uv run --with datamodel-code-generator datamodel-codegen --input events --output python --input-file-type jsonschema"
   },
   "devDependencies": {
-    "json-schema-to-typescript": "^15.0.3"
+    "json-schema-to-typescript": "^15.0.3",
+    "typescript": "~6.0.2"
   }
 }

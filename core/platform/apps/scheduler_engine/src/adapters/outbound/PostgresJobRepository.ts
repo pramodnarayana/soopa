@@ -1,13 +1,15 @@
-import { JobStatus } from "@soopa/database";
-import { scheduledJobs, createDbClient, eq, sql, and, lte } from '@soopa/database';
+import { and, createDbClient, eq, JobStatus, lte, scheduledJobs, sql } from '@soopa/database';
 
 export class PostgresJobRepository {
-  constructor(private db: ReturnType<typeof createDbClient>['db'], private lockLeaseMs: number = 300000) {}
+  constructor(
+    private db: ReturnType<typeof createDbClient>['db'],
+    private lockLeaseMs: number = 300000,
+  ) {}
 
   async claimNextJobs(workerId: string, limit: number) {
     const threshold = new Date(Date.now() - this.lockLeaseMs);
     const now = new Date();
-    
+
     // In Drizzle, doing SKIP LOCKED requires raw SQL for now, or a very specific Query Builder sequence.
     // For simplicity, we use raw SQL to ensure exact SKIP LOCKED behavior identical to Python.
     const query = sql`
@@ -23,70 +25,71 @@ export class PostgresJobRepository {
       )
       RETURNING *;
     `;
-    
 
     const result = await this.db.execute(query);
     return result.rows;
   }
 
   async markCompleted(jobId: string, workerId: string) {
-    await this.db.update(scheduledJobs)
+    await this.db
+      .update(scheduledJobs)
       .set({ status: JobStatus.COMPLETED, lockedAt: null, lockedBy: null })
       .where(
         and(
           eq(scheduledJobs.id, jobId),
           eq(scheduledJobs.status, JobStatus.RUNNING),
-          eq(scheduledJobs.lockedBy, workerId)
-        )
+          eq(scheduledJobs.lockedBy, workerId),
+        ),
       );
   }
 
   async markFailed(jobId: string, workerId: string, error: string) {
-    await this.db.update(scheduledJobs)
+    await this.db
+      .update(scheduledJobs)
       .set({ status: JobStatus.FAILED, lockedAt: null, lockedBy: null, errorMessage: error })
       .where(
         and(
           eq(scheduledJobs.id, jobId),
           eq(scheduledJobs.status, JobStatus.RUNNING),
-          eq(scheduledJobs.lockedBy, workerId)
-        )
+          eq(scheduledJobs.lockedBy, workerId),
+        ),
       );
   }
 
   async reschedule(jobId: string, workerId: string, nextRunAt: Date) {
-    await this.db.update(scheduledJobs)
+    await this.db
+      .update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null, retryCount: 0, nextRunAt })
       .where(
         and(
           eq(scheduledJobs.id, jobId),
           eq(scheduledJobs.status, JobStatus.RUNNING),
-          eq(scheduledJobs.lockedBy, workerId)
-        )
+          eq(scheduledJobs.lockedBy, workerId),
+        ),
       );
   }
 
   async scheduleRetry(jobId: string, workerId: string, retryCount: number, nextRunAt: Date) {
-    await this.db.update(scheduledJobs)
+    await this.db
+      .update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null, retryCount, nextRunAt })
       .where(
         and(
           eq(scheduledJobs.id, jobId),
           eq(scheduledJobs.status, JobStatus.RUNNING),
-          eq(scheduledJobs.lockedBy, workerId)
-        )
+          eq(scheduledJobs.lockedBy, workerId),
+        ),
       );
   }
 
   async sweepStuckJobs() {
     const threshold = new Date(Date.now() - this.lockLeaseMs);
-    
-    const result = await this.db.update(scheduledJobs)
+
+    const result = await this.db
+      .update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null })
       .where(
-        and(
-          eq(scheduledJobs.status, JobStatus.RUNNING),
-          lte(scheduledJobs.lockedAt, threshold)
-        )
+        and(eq(scheduledJobs.status, JobStatus.RUNNING), lte(scheduledJobs.lockedAt, threshold)),
       );
     return result.rowCount;
   }

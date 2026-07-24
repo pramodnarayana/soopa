@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { CheckCircle2, Copy, Network, Play, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { FormModal } from '@/components/ui/form-modal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FormModal } from '@/components/ui/form-modal';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useCreateSftpPartnerMutation, useTestSftpConnectionMutation } from '../api/partnerHooks';
 import { useToast } from '@/hooks/use-toast';
-import { Network, Play, CheckCircle2, XCircle, Copy } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useCreateSftpPartnerMutation, useTestSftpConnectionMutation } from '../api/partnerHooks';
 
 export function CreateSftpPartnerModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -51,7 +51,11 @@ export function CreateSftpPartnerModal() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!host || !port || !username) {
-      toast({ title: 'Error', description: 'Host, port, and username are required for SFTP', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Host, port, and username are required for SFTP',
+        variant: 'destructive',
+      });
       return;
     }
     const portNum = parseInt(port, 10);
@@ -69,7 +73,7 @@ export function CreateSftpPartnerModal() {
         inbound_remote_path: inboundRemotePath || undefined,
         outbound_remote_path: outboundRemotePath || undefined,
         password: authMethod === 'password' ? password : undefined,
-        credentials_vault_ref: authMethod === 'key' ? sftpCredsVault : undefined
+        credentials_vault_ref: authMethod === 'key' ? sftpCredsVault : undefined,
       });
       setIsOpen(false);
       reset();
@@ -97,7 +101,7 @@ export function CreateSftpPartnerModal() {
         port: portNum,
         username,
         password: authMethod === 'password' ? password : undefined,
-        credentials_vault_ref: authMethod === 'key' ? sftpCredsVault : undefined
+        credentials_vault_ref: authMethod === 'key' ? sftpCredsVault : undefined,
       });
 
       if (result.success) {
@@ -105,9 +109,18 @@ export function CreateSftpPartnerModal() {
       } else {
         setTestResult({ success: false, message: result.reason || 'Connection failed' });
       }
-    } catch (err: any) {
-      const serverError = err.response?.data?.detail || err.response?.data?.message;
-      const errorMessage = typeof serverError === 'string' ? serverError : (Array.isArray(serverError) ? JSON.stringify(serverError) : err.message);
+    } catch (err: unknown) {
+      const e = err as {
+        response?: { data?: { detail?: string; message?: string } };
+        message?: string;
+      };
+      const serverError = e.response?.data?.detail || e.response?.data?.message;
+      const errorMessage =
+        typeof serverError === 'string'
+          ? serverError
+          : Array.isArray(serverError)
+            ? JSON.stringify(serverError)
+            : e.message;
       setTestResult({ success: false, message: errorMessage || 'Failed to test connection' });
     }
   };
@@ -122,7 +135,13 @@ export function CreateSftpPartnerModal() {
       onSubmit={handleSubmit}
       isPending={createSftp.isPending}
       submitText="Save SFTP Partner"
-      submitDisabled={!host || !port || !username || (authMethod === 'password' && !password) || (authMethod === 'key' && !sftpCredsVault)}
+      submitDisabled={
+        !host ||
+        !port ||
+        !username ||
+        (authMethod === 'password' && !password) ||
+        (authMethod === 'key' && !sftpCredsVault)
+      }
       footerContent={
         <Button
           type="button"
@@ -138,7 +157,9 @@ export function CreateSftpPartnerModal() {
     >
       <div className="grid gap-6 max-h-[60vh] overflow-y-auto pr-2">
         <div className="grid gap-2">
-          <Label htmlFor="name" className="text-slate-600 font-medium">Partner Name</Label>
+          <Label htmlFor="name" className="text-slate-600 font-medium">
+            Partner Name
+          </Label>
           <Input
             id="name"
             value={name}
@@ -154,7 +175,7 @@ export function CreateSftpPartnerModal() {
             <Label className="text-slate-600 font-medium">SFTP Host</Label>
             <Input
               value={host}
-              onChange={e => setHost(e.target.value)}
+              onChange={(e) => setHost(e.target.value)}
               placeholder="sftp.partner.com"
               className="h-10 rounded-xl font-mono text-sm"
               required
@@ -165,7 +186,7 @@ export function CreateSftpPartnerModal() {
             <Input
               type="number"
               value={port}
-              onChange={e => setPort(e.target.value)}
+              onChange={(e) => setPort(e.target.value)}
               className="h-10 rounded-xl font-mono text-sm"
               required
             />
@@ -176,7 +197,7 @@ export function CreateSftpPartnerModal() {
           <Label className="text-slate-600 font-medium">Username</Label>
           <Input
             value={username}
-            onChange={e => setUsername(e.target.value)}
+            onChange={(e) => setUsername(e.target.value)}
             placeholder="tenant_user"
             className="h-10 rounded-xl font-mono text-sm"
             required
@@ -193,11 +214,15 @@ export function CreateSftpPartnerModal() {
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="password" id="r-password" />
-                <Label htmlFor="r-password" className="font-medium text-slate-700 cursor-pointer">Password</Label>
+                <Label htmlFor="r-password" className="font-medium text-slate-700 cursor-pointer">
+                  Password
+                </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="key" id="r-key" />
-                <Label htmlFor="r-key" className="font-medium text-slate-700 cursor-pointer">SSH Key</Label>
+                <Label htmlFor="r-key" className="font-medium text-slate-700 cursor-pointer">
+                  SSH Key
+                </Label>
               </div>
             </RadioGroup>
           </div>
@@ -210,7 +235,7 @@ export function CreateSftpPartnerModal() {
               <Input
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter SFTP Password"
                 className="h-10 rounded-xl font-mono text-sm"
                 required
@@ -218,7 +243,7 @@ export function CreateSftpPartnerModal() {
             ) : (
               <Input
                 value={sftpCredsVault}
-                onChange={e => setSftpCredsVault(e.target.value)}
+                onChange={(e) => setSftpCredsVault(e.target.value)}
                 placeholder="e.g. vault:secret/sftp-key"
                 className="h-10 rounded-xl font-mono text-sm"
                 required
@@ -232,7 +257,7 @@ export function CreateSftpPartnerModal() {
             <Label className="text-slate-600 font-medium">From Trading Partner Path</Label>
             <Input
               value={inboundRemotePath}
-              onChange={e => setInboundRemotePath(e.target.value)}
+              onChange={(e) => setInboundRemotePath(e.target.value)}
               placeholder="/inbound"
               className="h-10 rounded-xl font-mono text-sm"
             />
@@ -241,7 +266,7 @@ export function CreateSftpPartnerModal() {
             <Label className="text-slate-600 font-medium">To Trading Partner Path</Label>
             <Input
               value={outboundRemotePath}
-              onChange={e => setOutboundRemotePath(e.target.value)}
+              onChange={(e) => setOutboundRemotePath(e.target.value)}
               placeholder="/outbound"
               className="h-10 rounded-xl font-mono text-sm"
             />
@@ -249,12 +274,22 @@ export function CreateSftpPartnerModal() {
         </div>
 
         {testResult && (
-          <div className={`flex items-start justify-between p-4 rounded-xl border ${testResult.success ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}>
+          <div
+            className={`flex items-start justify-between p-4 rounded-xl border ${testResult.success ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}
+          >
             <div className="flex gap-3">
-              {testResult.success ? <CheckCircle2 className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 mt-0.5 text-red-600 shrink-0" />}
+              {testResult.success ? (
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0" />
+              ) : (
+                <XCircle className="w-5 h-5 mt-0.5 text-red-600 shrink-0" />
+              )}
               <div className="flex flex-col gap-1">
-                <span className="font-semibold text-sm">{testResult.success ? 'Success' : 'Connection Failed'}</span>
-                <span className="font-mono text-xs whitespace-pre-wrap break-all select-text">{testResult.message}</span>
+                <span className="font-semibold text-sm">
+                  {testResult.success ? 'Success' : 'Connection Failed'}
+                </span>
+                <span className="font-mono text-xs whitespace-pre-wrap break-all select-text">
+                  {testResult.message}
+                </span>
               </div>
             </div>
             {!testResult.success && (

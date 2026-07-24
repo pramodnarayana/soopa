@@ -5,45 +5,64 @@
   "description": "Soopa Enterprise Unified Platform",
   "scripts": {
     "dev": "turbo run dev start:dev",
+    "start:prd": "turbo run build && turbo run start",
     "build": "turbo run build",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:python",
     "typecheck:node": "turbo typecheck",
-    "typecheck:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run mypy .); fi; done",
+    "typecheck:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run mypy --strict .) || failed=1; fi; done; exit $failed",
     "lint": "pnpm lint:node && pnpm lint:python",
     "lint:node": "eslint .",
-    "lint:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run ruff check .); fi; done",
+    "lint:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run ruff check .) || failed=1; fi; done; exit $failed",
     "test": "pnpm test:node && pnpm test:python",
     "test:node": "turbo test",
-    "test:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run pytest); fi; done",
+    "test:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && { uv run pytest; ret=$?; [ $ret -eq 0 ] || [ $ret -eq 5 ]; }) || failed=1; fi; done; exit $failed",
     "knip": "knip",
     "db:generate": "pnpm --filter @soopa/database db:generate",
     "db:migrate": "pnpm --filter @soopa/database db:migrate",
     "db:seed": "pnpm --filter @soopa/database db:seed",
     "db:clear-zitadel": "pnpm --filter @soopa/database db:clear-zitadel",
-    "infra-reset": "docker compose down -v && docker compose up -d --wait && pnpm db:migrate && pnpm db:seed",
-    "ucp-reset": "(pnpm db:clear-zitadel || true) && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f ucp_pgdata_global ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed",
+    "infra-reset": "pnpm db:clear-zitadel && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f ucp_pgdata_global ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed && cd apps/edi && make db-sqs-reset",
+    "ucp-reset": "pnpm db:clear-zitadel && docker compose rm -s -v -f ucp_postgres_global ucp_postgres_shard_1 localstack && docker volume rm -f ucp_pgdata_global ucp_pgdata_shard_1 && docker compose up -d --wait ucp_postgres_global ucp_postgres_shard_1 localstack && pnpm db:migrate && pnpm db:seed",
+    "soft-reset": "pnpm db:clear-zitadel && cd apps/edi && make sqs-purge",
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
     "deadcode:node": "knip",
-    "deadcode:python": "for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry .); fi; done"
+    "deadcode:python": "failed=0; for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/*; do if [ -f \"$d/pyproject.toml\" ]; then (cd \"$d\" && uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry .) || failed=1; fi; done; exit $failed",
+    "syncpack:format": "syncpack format",
+    "syncpack:lint": "syncpack lint",
+    "syncpack:fix": "syncpack fix"
+  },
+  "lint-staged": {
+    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   },
   "packageManager": "pnpm@10.27.0",
   "engines": {
     "node": ">=20.18.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@changesets/cli": "^2.31.1",
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^20.19.43",
+    "@types/node": "^24.13.2",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "husky": "^9.1.7",
     "knip": "^6.27.0",
-    "tsx": "^4.19.2",
+    "lint-staged": "^17.2.0",
+    "syncpack": "^15.3.2",
+    "tsx": "^4.23.1",
     "turbo": "^2.7.2",
-    "typescript": "^5.4.0",
+    "typescript": "~6.0.2",
     "typescript-eslint": "^8.64.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "ts-morph": "^28.0.0"
   }
 }

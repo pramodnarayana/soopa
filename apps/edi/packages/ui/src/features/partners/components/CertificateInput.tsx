@@ -18,7 +18,7 @@ export function CertificateInput({ value, onChange, extraActions }: CertificateI
         value={value}
         onChange={onChange}
         language="plaintext"
-        cornerPlaceholder={"-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----"}
+        cornerPlaceholder={'-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----'}
         showEmptyState={false}
         extraActions={extraActions}
         fontSize={14}

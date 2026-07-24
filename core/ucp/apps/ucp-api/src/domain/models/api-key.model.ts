@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
-import { AggregateRoot } from './aggregate-root';
-import { ApiKeyCreatedEvent } from '../events/api-key-created.event';
+import { ApiKeyCreatedEvent } from '../events/api-key-created.event.js';
+import { AggregateRoot } from './aggregate-root.js';
 
 export class ApiKey extends AggregateRoot {
   constructor(

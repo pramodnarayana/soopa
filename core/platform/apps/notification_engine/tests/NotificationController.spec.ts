@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { InternalServerErrorException } from '@nestjs/common';
+import { NotificationChannel } from '@soopa/database';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationController } from '../src/api/NotificationController.js';
 import { DispatchNotificationUseCase } from '../src/application/DispatchNotificationUseCase.js';
-import { InternalServerErrorException } from '@nestjs/common';
 import { NotificationEvent } from '../src/domain/models.js';
-import { NotificationChannel } from '@soopa/database';
 
 describe('NotificationController', () => {
   let controller: NotificationController;
@@ -42,6 +42,8 @@ describe('NotificationController', () => {
       data: { userId: '123' },
     };
 
-    await expect(controller.sendNotification(payload)).rejects.toThrow(InternalServerErrorException);
+    await expect(controller.sendNotification(payload)).rejects.toThrow(
+      InternalServerErrorException,
+    );
   });
 });

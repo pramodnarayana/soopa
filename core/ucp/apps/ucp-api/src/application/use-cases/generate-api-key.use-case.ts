@@ -1,25 +1,24 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import type { IApiKeyRepository } from '../../ports/outbound/api-key.repository';
-import { API_KEY_REPOSITORY } from '../../ports/outbound/api-key.repository';
-import type { ITenantRepository } from '../../ports/outbound/tenant.repository';
-import { TENANT_REPOSITORY } from '../../ports/outbound/tenant.repository';
-import { ApiKey } from '../../domain/models/api-key.model';
-
-import { IsString, IsArray, IsNotEmpty } from 'class-validator';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { IsArray, IsNotEmpty, IsString } from 'class-validator';
+import { ApiKey } from '../../domain/models/api-key.model.js';
+import type { IApiKeyRepository } from '../../ports/outbound/api-key.repository.js';
+import { API_KEY_REPOSITORY } from '../../ports/outbound/api-key.repository.js';
+import type { ITenantRepository } from '../../ports/outbound/tenant.repository.js';
+import { TENANT_REPOSITORY } from '../../ports/outbound/tenant.repository.js';
 
 export class GenerateApiKeyDto {
   @IsString()
   @IsNotEmpty()
-  tenantId: string;
+  tenantId!: string;
 
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsArray()
   @IsString({ each: true })
   @IsNotEmpty()
-  scopes: string[];
+  scopes!: string[];
 }
 
 @Injectable()

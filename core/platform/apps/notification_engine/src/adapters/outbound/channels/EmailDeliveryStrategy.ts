@@ -1,5 +1,5 @@
-import { IDeliveryService } from '../../../ports/index.js';
 import { RenderedNotification } from '../../../domain/models.js';
+import { IDeliveryService } from '../../../ports/index.js';
 
 export class EmailDeliveryStrategy implements IDeliveryService {
   public async dispatch(notification: RenderedNotification): Promise<void> {

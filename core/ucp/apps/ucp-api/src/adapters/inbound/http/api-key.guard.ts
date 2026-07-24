@@ -1,14 +1,14 @@
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
-  UnauthorizedException,
   Inject,
+  Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type { IApiKeyRepository } from '../../../ports/outbound/api-key.repository';
-import { API_KEY_REPOSITORY } from '../../../ports/outbound/api-key.repository';
-import { ApiKey } from '../../../domain/models/api-key.model';
+import { ApiKey } from '../../../domain/models/api-key.model.js';
+import type { IApiKeyRepository } from '../../../ports/outbound/api-key.repository.js';
+import { API_KEY_REPOSITORY } from '../../../ports/outbound/api-key.repository.js';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {

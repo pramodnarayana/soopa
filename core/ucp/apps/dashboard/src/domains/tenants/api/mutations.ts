@@ -11,7 +11,7 @@ export const useProvisionTenant = () => {
   return useMutation({
     mutationFn: (data: ProvisionTenantDto) => apiClient.post<Tenant>('/tenants', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      void queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 };
@@ -19,10 +19,10 @@ export const useProvisionTenant = () => {
 export const useUpdateTenantName = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => 
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
       apiClient.patch<Tenant>(`/tenants/${id}/name`, { name }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      void queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 };
@@ -30,10 +30,10 @@ export const useUpdateTenantName = () => {
 export const useUpdateTenantStatus = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'active' | 'inactive' }) => 
+    mutationFn: ({ id, status }: { id: string; status: 'active' | 'inactive' }) =>
       apiClient.patch<Tenant>(`/tenants/${id}/status`, { status }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      void queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 };
@@ -43,7 +43,7 @@ export const useDeleteTenant = () => {
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(`/tenants/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      void queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 };

@@ -1,9 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { ZitadelBaseClient } from './zitadel-base.client';
-import type { IOrganizationProvider } from '../../../ports/outbound/organization.provider';
-import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider';
-import type { IProjectProvider } from '../../../ports/outbound/project.provider';
+import type { IOrganizationProvider } from '../../../ports/outbound/organization.provider.js';
+import type { IProjectProvider } from '../../../ports/outbound/project.provider.js';
+import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider.js';
+import { ZitadelBaseClient } from './zitadel-base.client.js';
 
 const CreateOrgResponseSchema = z.object({
   id: z.string().optional(),

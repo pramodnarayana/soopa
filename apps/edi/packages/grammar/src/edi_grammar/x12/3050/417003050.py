@@ -113,4 +113,5 @@ structure = [
     {ID: 'GA', MIN: 0, MAX: 1},
     {ID: 'SE', MIN: 1, MAX: 1},
 
+    ]}
 ]

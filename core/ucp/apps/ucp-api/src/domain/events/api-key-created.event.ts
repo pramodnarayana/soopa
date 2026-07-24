@@ -1,5 +1,5 @@
-import { DomainEvent } from './domain.event';
 import { EventType } from '@soopa/schemas';
+import { DomainEvent } from './domain.event.js';
 
 export class ApiKeyCreatedEvent implements DomainEvent {
   public readonly eventName = EventType.API_KEY_CREATED;

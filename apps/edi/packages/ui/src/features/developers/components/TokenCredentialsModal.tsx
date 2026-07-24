@@ -1,5 +1,6 @@
+import { AlertTriangle, Check, Copy } from 'lucide-react';
 import { useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -9,10 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Check, Copy, AlertTriangle } from 'lucide-react';
-import type { ApiTokenCreated } from '../types';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import type { ApiTokenCreated } from '../types';
 
 interface Props {
   token: ApiTokenCreated;
@@ -35,7 +35,11 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
         setTimeout(() => setCopiedId(false), 2000);
       }
     } catch {
-      toast({ title: 'Error', description: 'Failed to copy to clipboard.', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Failed to copy to clipboard.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -53,7 +57,8 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertTitle className="text-amber-800">Store this secret securely</AlertTitle>
           <AlertDescription className="text-amber-700">
-            If you lose this secret, you will need to generate a new token. We do not store the raw secret in our database.
+            If you lose this secret, you will need to generate a new token. We do not store the raw
+            secret in our database.
           </AlertDescription>
         </Alert>
 
@@ -68,7 +73,11 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
                 onClick={() => copyToClipboard(token.client_id, false)}
                 className="shrink-0"
               >
-                {copiedId ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                {copiedId ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>
@@ -76,14 +85,22 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
           <div className="grid gap-2">
             <span className="text-sm font-medium text-slate-700">Client Secret</span>
             <div className="flex gap-2">
-              <Input value={token.client_secret} readOnly className="font-mono text-sm bg-slate-50" />
+              <Input
+                value={token.client_secret}
+                readOnly
+                className="font-mono text-sm bg-slate-50"
+              />
               <Button
                 variant="outline"
                 size="icon"
                 onClick={() => copyToClipboard(token.client_secret, true)}
                 className="shrink-0"
               >
-                {copiedSecret ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                {copiedSecret ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>

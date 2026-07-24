@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { HandlebarsTemplateRenderer } from '../src/adapters/outbound/HandlebarsTemplateRenderer.js';
 
 describe('HandlebarsTemplateRenderer', () => {

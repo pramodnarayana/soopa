@@ -1,8 +1,7 @@
-import { NotificationChannel, EventTypes } from "@soopa/database";
-import { test, expect } from 'vitest';
+import { EventTypes, NotificationChannel } from '@soopa/database';
+import { expect, test } from 'vitest';
 import { NotificationTemplate } from '../src/domain/models.js';
-import { NotificationRendererService } from '../src/domain/services.js';
-import { ITemplateRenderer } from '../src/domain/services.js';
+import { ITemplateRenderer, NotificationRendererService } from '../src/domain/services.js';
 
 // Fake Renderer for Pure Logic (Zero Mocks for Pure Logic)
 class FakeTemplateRenderer implements ITemplateRenderer {
@@ -19,7 +18,7 @@ test('NotificationRendererService pure domain logic', () => {
     EventTypes.TEST,
     NotificationChannel.EMAIL,
     'Hello {{name}}',
-    'Welcome {{name}} to Soopa!'
+    'Welcome {{name}} to Soopa!',
   );
 
   const payload = { name: 'Alice' };

@@ -1,4 +1,4 @@
-import { ZitadelRole, ZitadelUser } from '../../domain/dtos/zitadel.dto';
+import { ZitadelRole, ZitadelUser } from '../../domain/dtos/zitadel.dto.js';
 
 export const PROJECT_PROVIDER = Symbol('PROJECT_PROVIDER');
 

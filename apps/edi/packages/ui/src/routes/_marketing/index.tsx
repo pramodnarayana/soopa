@@ -1,11 +1,11 @@
-import { createRoute } from '@tanstack/react-router'
-import { Route as marketingRoute } from '../_marketing'
+import { createRoute } from '@tanstack/react-router';
+import { Route as marketingRoute } from '../_marketing';
 
 export const Route = createRoute({
   getParentRoute: () => marketingRoute,
   path: '/',
   component: LandingPage,
-})
+});
 
 export function LandingPage() {
   return (
@@ -20,5 +20,5 @@ export function LandingPage() {
         </h1>
       </div>
     </div>
-  )
+  );
 }

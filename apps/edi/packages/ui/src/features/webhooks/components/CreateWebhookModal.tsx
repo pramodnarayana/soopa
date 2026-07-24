@@ -1,10 +1,10 @@
+import { Webhook } from 'lucide-react';
 import { useState } from 'react';
+import { FormModal } from '@/components/ui/form-modal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FormModal } from '@/components/ui/form-modal';
-import { useCreateWebhookMutation } from '../api/webhookHooks';
 import { useToast } from '@/hooks/use-toast';
-import { Webhook } from 'lucide-react';
+import { useCreateWebhookMutation } from '../api/webhookHooks';
 
 export function CreateWebhookModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,7 +52,9 @@ export function CreateWebhookModal() {
     >
       <div className="grid gap-6">
         <div className="grid gap-2">
-          <Label htmlFor="webhook-name" className="text-slate-600 font-medium">Name</Label>
+          <Label htmlFor="webhook-name" className="text-slate-600 font-medium">
+            Name
+          </Label>
           <Input
             id="webhook-name"
             value={name}
@@ -64,11 +66,13 @@ export function CreateWebhookModal() {
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="webhook-url" className="text-slate-600 font-medium">Webhook URL</Label>
+          <Label htmlFor="webhook-url" className="text-slate-600 font-medium">
+            Webhook URL
+          </Label>
           <Input
             id="webhook-url"
             value={url}
-            onChange={e => setUrl(e.target.value)}
+            onChange={(e) => setUrl(e.target.value)}
             placeholder="https://api.your-erp.com/edi-inbox"
             className="h-10 rounded-xl font-mono text-sm"
             required

@@ -20,14 +20,22 @@ export interface JobResponse {
 
 export interface ConfigResponse {
   key: string;
-  value: any;
+  value: unknown;
 }
 
 export interface ISchedulerRepository {
   getJobs(): Promise<JobResponse[]>;
   getConfig(): Promise<ConfigResponse[]>;
-  updateConfig(key: string, value: any): Promise<ConfigResponse>;
-  updateJob(name: string, data: { interval_seconds?: number | null; cron_expression?: string | null; timezone?: string | null; status?: string }): Promise<JobResponse>;
+  updateConfig(key: string, value: unknown): Promise<ConfigResponse>;
+  updateJob(
+    name: string,
+    data: {
+      interval_seconds?: number | null;
+      cron_expression?: string | null;
+      timezone?: string | null;
+      status?: string;
+    },
+  ): Promise<JobResponse>;
 }
 
 class HttpSchedulerRepository implements ISchedulerRepository {
@@ -45,14 +53,16 @@ class HttpSchedulerRepository implements ISchedulerRepository {
     if (!res.ok) {
       let errorMessage = res.statusText;
       try {
-        const data = await res.json();
+        const data = (await res.json()) as { detail?: string };
         errorMessage = data.detail || JSON.stringify(data);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       throw new Error(errorMessage || 'API request failed');
     }
     const text = await res.text();
     if (!text) return {} as T;
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   }
 
   getJobs(): Promise<JobResponse[]> {
@@ -63,14 +73,22 @@ class HttpSchedulerRepository implements ISchedulerRepository {
     return this.request('/api/v1/platform/scheduler/config');
   }
 
-  updateConfig(key: string, value: any): Promise<ConfigResponse> {
+  updateConfig(key: string, value: unknown): Promise<ConfigResponse> {
     return this.request(`/api/v1/platform/scheduler/config/${key}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
     });
   }
 
-  updateJob(name: string, data: { interval_seconds?: number | null; cron_expression?: string | null; timezone?: string | null; status?: string }): Promise<JobResponse> {
+  updateJob(
+    name: string,
+    data: {
+      interval_seconds?: number | null;
+      cron_expression?: string | null;
+      timezone?: string | null;
+      status?: string;
+    },
+  ): Promise<JobResponse> {
     return this.request(`/api/v1/platform/scheduler/jobs/${name}`, {
       method: 'PUT',
       body: JSON.stringify(data),

@@ -1,7 +1,7 @@
-import { createFileRoute, Outlet, Link } from '@tanstack/react-router';
-import { useGetTenants } from '@/domains/tenants/api/queries';
-import { Building2, Users, Box, ArrowLeft } from 'lucide-react';
+import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import { ArrowLeft, Box, Building2, Users } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useGetTenants } from '@/domains/tenants/api/queries';
 
 export const Route = createFileRoute('/_authenticated/tenants/$tenantId')({
   component: TenantLayout,
@@ -12,7 +12,9 @@ function TenantLayout() {
 
   const { data: tenants = [], isLoading } = useGetTenants();
 
-  const tenant = tenants.find((t: { id: string; name: string; status: string }) => t.id === tenantId);
+  const tenant = tenants.find(
+    (t: { id: string; name: string; status: string }) => t.id === tenantId,
+  );
 
   if (isLoading) {
     return (
@@ -32,7 +34,10 @@ function TenantLayout() {
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-8 py-6">
           <div className="mb-4">
-            <Link to="/tenants" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+            <Link
+              to="/tenants"
+              className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
+            >
               <ArrowLeft className="w-4 h-4 mr-1" />
               Back to Tenants
             </Link>
@@ -44,8 +49,12 @@ function TenantLayout() {
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{tenant.name}</h1>
               <div className="flex items-center gap-2 mt-1">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${tenant.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${tenant.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                  />
                   {tenant.status === 'active' ? 'Active' : 'Inactive'}
                 </span>
               </div>

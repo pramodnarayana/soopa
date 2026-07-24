@@ -33,7 +33,9 @@ export function extractCertificateMaterial(pemText: string): ParsedCertificateMa
     pemText.includes('-----BEGIN PRIVATE KEY-----') ||
     pemText.includes('-----BEGIN RSA PRIVATE KEY-----')
   ) {
-    const match = pemText.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g);
+    const match = pemText.match(
+      /-----BEGIN (?:RSA )?PRIVATE KEY-----[^-]+-----END (?:RSA )?PRIVATE KEY-----/g,
+    );
     if (match && match.length > 0) {
       privateKey = match.join('\n') + '\n';
     }

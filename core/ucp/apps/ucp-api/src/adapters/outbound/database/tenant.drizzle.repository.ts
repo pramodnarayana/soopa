@@ -1,19 +1,19 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { ITenantRepository } from '../../../ports/outbound/tenant.repository';
-import { Tenant } from '../../../domain/models/tenant.model';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
+import { Inject, Injectable } from '@nestjs/common';
+import { createId } from '@paralleldrive/cuid2';
+import type { DbClient } from '@soopa/database';
 import {
-  tenants,
-  tenantSubscriptions,
-  tenantUsers,
   apiKeys,
   apps,
   controlPlaneOutbox,
   eq,
+  tenantSubscriptions,
+  tenants,
+  tenantUsers,
 } from '@soopa/database';
-import type { DbClient } from '@soopa/database';
 import { inArray } from 'drizzle-orm';
-import { createId } from '@paralleldrive/cuid2';
+import { Tenant } from '../../../domain/models/tenant.model.js';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
 
 @Injectable()
 export class TenantDrizzleRepository implements ITenantRepository {

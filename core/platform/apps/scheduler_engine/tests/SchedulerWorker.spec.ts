@@ -1,5 +1,4 @@
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SchedulerWorker } from '../src/application/SchedulerWorker.js';
 
 describe('SchedulerWorker', () => {
@@ -14,7 +13,7 @@ describe('SchedulerWorker', () => {
       markCompleted: vi.fn().mockResolvedValue(undefined),
       markFailed: vi.fn().mockResolvedValue(undefined),
       reschedule: vi.fn().mockResolvedValue(undefined),
-      scheduleRetry: vi.fn().mockResolvedValue(undefined)
+      scheduleRetry: vi.fn().mockResolvedValue(undefined),
     };
     worker = new SchedulerWorker(mockRepo, 'test-worker', 1000, 10);
   });
@@ -26,17 +25,17 @@ describe('SchedulerWorker', () => {
 
   it('should start and poll', async () => {
     worker.start();
-    
+
     // Fast forward to trigger the next poll
     await vi.runOnlyPendingTimersAsync();
-    
+
     expect(mockRepo.sweepStuckJobs).toHaveBeenCalled();
     expect(mockRepo.claimNextJobs).toHaveBeenCalledWith('test-worker', 10);
   });
 
   it('should process job and mark completed', async () => {
     mockRepo.claimNextJobs.mockResolvedValueOnce([
-      { id: 'j1', name: 'Job 1', target_queue: 'q1', payload: {} }
+      { id: 'j1', name: 'Job 1', target_queue: 'q1', payload: {} },
     ]);
 
     worker.start();
@@ -47,7 +46,7 @@ describe('SchedulerWorker', () => {
 
   it('should reschedule recurring job', async () => {
     mockRepo.claimNextJobs.mockResolvedValueOnce([
-      { id: 'j2', name: 'Job 2', target_queue: 'q1', payload: {}, cron_expression: '* * * * *' }
+      { id: 'j2', name: 'Job 2', target_queue: 'q1', payload: {}, cron_expression: '* * * * *' },
     ]);
 
     worker.start();
@@ -58,7 +57,7 @@ describe('SchedulerWorker', () => {
 
   it('should fail if no target queue', async () => {
     mockRepo.claimNextJobs.mockResolvedValueOnce([
-      { id: 'j3', name: 'Job 3', target_queue: null, payload: {}, retry_count: 0, max_retries: 3 }
+      { id: 'j3', name: 'Job 3', target_queue: null, payload: {}, retry_count: 0, max_retries: 3 },
     ]);
 
     worker.start();
@@ -69,7 +68,7 @@ describe('SchedulerWorker', () => {
 
   it('should mark failed if max retries exceeded', async () => {
     mockRepo.claimNextJobs.mockResolvedValueOnce([
-      { id: 'j4', name: 'Job 4', target_queue: null, payload: {}, retry_count: 3, max_retries: 3 }
+      { id: 'j4', name: 'Job 4', target_queue: null, payload: {}, retry_count: 3, max_retries: 3 },
     ]);
 
     worker.start();

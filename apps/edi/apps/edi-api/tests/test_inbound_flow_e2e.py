@@ -239,7 +239,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
                         payload: dict,
                         standard: str,
                         transaction_type: str,
-                        route_config: dict,
+                        _route_config: dict,
                     ) -> bytes:
                         return b""
 
@@ -252,7 +252,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         deliver_svc = DeliveryService(
             repository=repo,
             http_delivery=HttpxDeliveryAdapter(
-                validator=lambda x: True
+                validator=lambda _x: True
             ),  # disable SSRF for 127.0.0.1
             sftp_delivery=MagicMock(),
             as2_delivery=MagicMock(),

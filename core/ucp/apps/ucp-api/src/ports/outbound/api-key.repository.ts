@@ -1,4 +1,4 @@
-import { ApiKey } from '../../domain/models/api-key.model';
+import { ApiKey } from '../../domain/models/api-key.model.js';
 
 export const API_KEY_REPOSITORY = Symbol('API_KEY_REPOSITORY');
 

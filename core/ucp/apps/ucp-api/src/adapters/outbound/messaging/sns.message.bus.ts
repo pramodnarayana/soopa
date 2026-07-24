@@ -1,10 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
 import {
-  SNSClient,
   PublishCommand,
+  SNSClient,
   SNSClientConfig,
 } from '@aws-sdk/client-sns';
-import { IMessageBus } from '../../../ports/outbound/message.bus';
+import { Injectable, Logger } from '@nestjs/common';
+import { IMessageBus } from '../../../ports/outbound/message.bus.js';
 
 @Injectable()
 export class SnsMessageBusAdapter implements IMessageBus {

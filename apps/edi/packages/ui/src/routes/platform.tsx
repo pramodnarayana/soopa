@@ -1,49 +1,38 @@
-import { Outlet, createRoute, Link, useLocation } from '@tanstack/react-router'
-import { Route as rootRoute } from './__root'
-import { useAuth } from 'react-oidc-context'
-import { Button } from '@/components/ui/button'
-import { useEffect, useRef } from 'react'
-import {
-  LayoutDashboard,
-  Users,
-  Network,
-  ChevronRight,
-  Server,
-  LogOut,
-  Clock,
-} from 'lucide-react'
-
-import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
+import { createRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
+import { ChevronRight, Clock, LayoutDashboard, LogOut, Network, Server, Users } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { useAuth } from 'react-oidc-context';
+import { Button } from '@/components/ui/button';
+import { useDashboardData } from '@/features/dashboard/api/useDashboardData';
+import { Route as rootRoute } from './__root';
 
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
   component: AppWrapper,
-})
+});
 
 export function AppWrapper() {
-  return (
-    <AppLayout />
-  )
+  return <AppLayout />;
 }
 
 export function AppLayout() {
-  const auth = useAuth()
-  const redirectTriggered = useRef(false)
-  const location = useLocation()
+  const auth = useAuth();
+  const redirectTriggered = useRef(false);
+  const location = useLocation();
   // 1. Fetch user data (role, features)
-  const { data: userProfile, isLoading: isProfileLoading } = useDashboardData()
+  const { data: userProfile, isLoading: isProfileLoading } = useDashboardData();
 
   // 2. Strict Authentication Guard
   useEffect(() => {
     if (!auth.isAuthenticated && !auth.isLoading && !redirectTriggered.current) {
-      redirectTriggered.current = true
-      void auth.signinRedirect()
+      redirectTriggered.current = true;
+      void auth.signinRedirect();
     }
-  }, [auth.isAuthenticated, auth.isLoading, auth])
+  }, [auth.isAuthenticated, auth.isLoading, auth]);
 
   if (!auth.isAuthenticated && !auth.isLoading) {
-    return null
+    return null;
   }
 
   if (auth.isLoading || isProfileLoading) {
@@ -51,57 +40,82 @@ export function AppLayout() {
       <div className="flex h-screen items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-6">
           <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
-          <p className="text-slate-500 font-medium animate-pulse tracking-wide">Authenticating Securely...</p>
+          <p className="text-slate-500 font-medium animate-pulse tracking-wide">
+            Authenticating Securely...
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   // 3. Strict RBAC Guard (If Standard Tenant, redirect to tenant)
   if (userProfile && !userProfile.is_platform_admin) {
     // Basic redirect for prototype
-    window.location.href = '/tenant/dashboard'
-    return null
+    window.location.href = '/tenant/dashboard';
+    return null;
   }
 
-  const NavItem = ({ icon: Icon, label, to }: { icon: any, label: string, to: string }) => {
-    const active = location.pathname === to || location.pathname.startsWith(`${to}/`)
+  const NavItem = ({ icon: Icon, label, to }: { icon: any; label: string; to: string }) => {
+    const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
     return (
-      <Link to={to} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-        <Icon className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`} />
+      <Link
+        to={to}
+        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+      >
+        <Icon
+          className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`}
+        />
         <span>{label}</span>
         {active && <ChevronRight className="w-4 h-4 ml-auto text-indigo-400" />}
       </Link>
-    )
-  }
+    );
+  };
 
   return (
     <div className="min-h-screen flex bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
-
       {/* Sidebar - Clean White */}
       <aside className="w-72 border-r border-slate-200/60 bg-white flex flex-col fixed inset-y-0 z-50">
         <div className="h-20 flex items-center px-8 border-b border-slate-100/50">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" /></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+              </svg>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Soopa <span className="font-medium text-slate-400">Platform</span></h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              Soopa <span className="font-medium text-slate-400">Platform</span>
+            </h1>
           </div>
         </div>
 
         <nav className="flex-1 px-4 py-8 flex flex-col gap-1.5 overflow-y-auto">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">Platform Control</div>
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">
+            Platform Control
+          </div>
           <NavItem icon={LayoutDashboard} label="Overview" to="/platform/dashboard" />
 
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">Configuration</div>
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-8">
+            Configuration
+          </div>
           <NavItem icon={Server} label="Trading Partners" to="/platform/partners" />
           <NavItem icon={Network} label="Partnerships" to="/platform/partnerships" />
 
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">System Admin</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
+            System Admin
+          </div>
           <NavItem icon={Network} label="Tenants" to="/platform/tenants" />
           <NavItem icon={Users} label="Platform Users" to="/platform/users" />
           <NavItem icon={Clock} label="Scheduler" to="/platform/scheduler" />
-
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -113,7 +127,12 @@ export function AppLayout() {
               <p className="text-sm font-medium text-white truncate">{auth.user?.profile.email}</p>
               <p className="text-xs text-slate-400 truncate">Platform Admin</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => void auth.signoutRedirect()} className="text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void auth.signoutRedirect()}
+              className="text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
+            >
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -127,5 +146,5 @@ export function AppLayout() {
         </div>
       </main>
     </div>
-  )
+  );
 }

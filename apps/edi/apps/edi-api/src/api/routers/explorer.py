@@ -42,7 +42,7 @@ class FilterRule(BaseModel):
 
     @field_validator("field")
     @classmethod
-    def validate_field(cls, v: str) -> str:
+    def validate_field(_cls, v: str) -> str:
         if v not in _ALLOWED_FIELDS:
             raise ValueError(
                 f"Filter field '{v}' is not allowed. Allowed fields: {sorted(_ALLOWED_FIELDS)}"

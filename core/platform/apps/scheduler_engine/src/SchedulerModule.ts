@@ -1,9 +1,15 @@
-import { Module, Provider, Global, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import {
+  Global,
+  Module,
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+  Provider,
+} from '@nestjs/common';
 import { createDbClient } from '@soopa/database';
-import { PostgresJobRepository } from './adapters/outbound/PostgresJobRepository.js';
-import { SchedulerWorker } from './application/SchedulerWorker.js';
-import { HealthController } from './api/HealthController.js';
 import pg from 'pg';
+import { PostgresJobRepository } from './adapters/outbound/PostgresJobRepository.js';
+import { HealthController } from './api/HealthController.js';
+import { SchedulerWorker } from './application/SchedulerWorker.js';
 
 export interface SchedulerModuleOptions {
   dbConnectionString: string;
@@ -17,7 +23,7 @@ export interface SchedulerModuleOptions {
 export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(
     private readonly worker: SchedulerWorker,
-    private readonly pool: pg.Pool
+    private readonly pool: pg.Pool,
   ) {}
 
   async onApplicationBootstrap() {
@@ -31,7 +37,7 @@ export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShu
 
   static register(options: SchedulerModuleOptions) {
     const dbClient = createDbClient(options.dbConnectionString);
-    
+
     const dbProvider: Provider = {
       provide: 'DATABASE_CONNECTION',
       useValue: dbClient.db,
@@ -53,7 +59,12 @@ export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShu
     const workerProvider: Provider = {
       provide: SchedulerWorker,
       useFactory: (repo: PostgresJobRepository) => {
-        return new SchedulerWorker(repo, options.engineId, options.pollIntervalMs, options.batchSize);
+        return new SchedulerWorker(
+          repo,
+          options.engineId,
+          options.pollIntervalMs,
+          options.batchSize,
+        );
       },
       inject: [PostgresJobRepository],
     };
@@ -61,15 +72,8 @@ export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShu
     return {
       module: SchedulerModule,
       controllers: [HealthController],
-      providers: [
-        dbProvider,
-        poolProvider,
-        repoProvider,
-        workerProvider,
-      ],
-      exports: [
-        SchedulerWorker,
-      ]
+      providers: [dbProvider, poolProvider, repoProvider, workerProvider],
+      exports: [SchedulerWorker],
     };
   }
 }

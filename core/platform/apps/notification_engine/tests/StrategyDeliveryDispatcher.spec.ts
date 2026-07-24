@@ -1,9 +1,9 @@
-import { NotificationChannel } from "@soopa/database";
-import { describe, it, expect } from 'vitest';
+import { NotificationChannel } from '@soopa/database';
+import { describe, expect, it } from 'vitest';
 import { StrategyDeliveryDispatcher } from '../src/adapters/outbound/StrategyDeliveryDispatcher.js';
-import { IDeliveryService } from '../src/ports/index.js';
-import { ChannelType, RenderedNotification } from '../src/domain/models.js';
 import { InfrastructureError } from '../src/domain/errors.js';
+import { ChannelType, RenderedNotification } from '../src/domain/models.js';
+import { IDeliveryService } from '../src/ports/index.js';
 
 class FakeStrategy implements IDeliveryService {
   public dispatched: RenderedNotification[] = [];
@@ -19,7 +19,7 @@ describe('StrategyDeliveryDispatcher', () => {
 
     const strategies = new Map<ChannelType, IDeliveryService>([
       [NotificationChannel.EMAIL, emailStrategy],
-      [NotificationChannel.SLACK, slackStrategy]
+      [NotificationChannel.SLACK, slackStrategy],
     ]);
 
     const dispatcher = new StrategyDeliveryDispatcher(strategies);
@@ -35,6 +35,8 @@ describe('StrategyDeliveryDispatcher', () => {
     const strategies = new Map<ChannelType, IDeliveryService>();
     const dispatcher = new StrategyDeliveryDispatcher(strategies);
 
-    await expect(dispatcher.dispatch({ channel: NotificationChannel.IN_APP } as never)).rejects.toThrow(InfrastructureError);
+    await expect(
+      dispatcher.dispatch({ channel: NotificationChannel.IN_APP } as never),
+    ).rejects.toThrow(InfrastructureError);
   });
 });

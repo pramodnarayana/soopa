@@ -1,4 +1,4 @@
-import { Tenant } from '../../domain/models/tenant.model';
+import { Tenant } from '../../domain/models/tenant.model.js';
 
 export const TENANT_REPOSITORY = Symbol('TENANT_REPOSITORY');
 

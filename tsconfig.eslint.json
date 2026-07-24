@@ -1,13 +1,11 @@
 {
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "**/*.mjs",
-    "**/*.cjs"
-  ],
-  "exclude": [
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/.venv/**"
-  ]
+  "extends": "./tsconfig.base.json",
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"],
+  "exclude": ["**/node_modules/**", "**/dist/**", "**/.venv/**"],
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "paths": {
+      "@/*": ["./apps/edi/packages/ui/src/*", "./core/ucp/apps/dashboard/src/*"]
+    }
+  }
 }

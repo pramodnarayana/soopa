@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3
 
 from worker.ports.message_publisher import MessagePublisherPort
 
@@ -86,7 +86,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
 
         return successful_ids
 
-    async def publish(self, queue_name: str, payload: dict) -> None:
+    async def publish(self, queue_name: str, payload: dict[str, Any]) -> None:
         """Publishes a single message without requiring the connect context manager."""
         if queue_name not in self._queue_url_cache:
             try:

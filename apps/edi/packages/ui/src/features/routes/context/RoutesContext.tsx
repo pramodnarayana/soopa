@@ -1,6 +1,6 @@
-import { createContext, useContext, useCallback } from 'react';
-import type { RouteItem } from '../types';
+import { createContext, useCallback, useContext } from 'react';
 import { useRoutesQuery } from '../api/routeHooks';
+import type { RouteItem } from '../types';
 
 interface RoutesContextType {
   routes: RouteItem[];

@@ -1,4 +1,4 @@
-import type { Webhook, CreateWebhookEndpointPayload } from '../types';
+import type { CreateWebhookEndpointPayload, Webhook } from '../types';
 
 class HttpWebhooksRepository {
   private token: string;
@@ -7,7 +7,7 @@ class HttpWebhooksRepository {
     this.token = token;
   }
 
-  private async fetchApi(path: string, options: RequestInit = {}) {
+  private async fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
     const res = await fetch(`/api/v1${path}`, {
       ...options,
       headers: {
@@ -20,10 +20,11 @@ class HttpWebhooksRepository {
     if (!res.ok) {
       let errMessage = 'API Request Failed';
       try {
-        const errData = await res.json();
-        errMessage = typeof errData.detail === 'string'
-          ? errData.detail
-          : errData.detail?.[0]?.msg || errMessage;
+        const errData = (await res.json()) as { detail?: string | Array<{ msg?: string }> };
+        errMessage =
+          typeof errData.detail === 'string'
+            ? errData.detail
+            : errData.detail?.[0]?.msg || errMessage;
       } catch {
         errMessage = res.statusText;
       }
@@ -31,14 +32,25 @@ class HttpWebhooksRepository {
     }
 
     if (res.status === 204) {
-      return null;
+      return null as unknown as T;
     }
-    return res.json();
+    return res.json() as Promise<T>;
   }
 
   async getTenantWebhooks(): Promise<Webhook[]> {
-    const raw = await this.fetchApi('/webhooks');
-    return raw.map((p: any) => ({
+    const raw =
+      await this.fetchApi<
+        Array<{
+          partner_id?: string;
+          id?: string;
+          tenant_id: string;
+          name: string;
+          type: string;
+          status: string;
+          url: string;
+        }>
+      >('/webhooks');
+    return raw.map((p) => ({
       id: p.partner_id,
       tenant_id: p.tenant_id,
       name: p.name,
@@ -49,7 +61,15 @@ class HttpWebhooksRepository {
   }
 
   async createWebhook(payload: CreateWebhookEndpointPayload): Promise<Webhook> {
-    const raw = await this.fetchApi('/webhooks', {
+    const raw = await this.fetchApi<{
+      partner_id?: string;
+      id?: string;
+      tenant_id: string;
+      name: string;
+      type: string;
+      status: string;
+      url: string;
+    }>('/webhooks', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -64,7 +84,15 @@ class HttpWebhooksRepository {
   }
 
   async updateWebhookStatus(webhookId: string, active: boolean): Promise<Webhook> {
-    const raw = await this.fetchApi(`/webhooks/${webhookId}`, {
+    const raw = await this.fetchApi<{
+      partner_id?: string;
+      id?: string;
+      tenant_id: string;
+      name: string;
+      type: string;
+      status: string;
+      url: string;
+    }>(`/webhooks/${webhookId}`, {
       method: 'PATCH',
       body: JSON.stringify({ active }),
     });
@@ -78,8 +106,19 @@ class HttpWebhooksRepository {
     };
   }
 
-  async updateWebhook(webhookId: string, payload: { name?: string, url?: string }): Promise<Webhook> {
-    const raw = await this.fetchApi(`/webhooks/${webhookId}`, {
+  async updateWebhook(
+    webhookId: string,
+    payload: { name?: string; url?: string },
+  ): Promise<Webhook> {
+    const raw = await this.fetchApi<{
+      partner_id?: string;
+      id?: string;
+      tenant_id: string;
+      name: string;
+      type: string;
+      status: string;
+      url: string;
+    }>(`/webhooks/${webhookId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -94,7 +133,7 @@ class HttpWebhooksRepository {
   }
 
   async deleteWebhook(webhookId: string): Promise<void> {
-    await this.fetchApi(`/webhooks/${webhookId}`, {
+    await this.fetchApi<void>(`/webhooks/${webhookId}`, {
       method: 'DELETE',
     });
   }

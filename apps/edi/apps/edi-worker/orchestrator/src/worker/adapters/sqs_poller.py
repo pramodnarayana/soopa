@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3
 
 logger = logging.getLogger(__name__)
 

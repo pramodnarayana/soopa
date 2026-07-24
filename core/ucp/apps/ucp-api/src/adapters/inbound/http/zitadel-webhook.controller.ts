@@ -1,27 +1,27 @@
 import {
-  Controller,
-  Post,
   Body,
-  Inject,
+  Controller,
   HttpCode,
   HttpStatus,
+  Inject,
   Logger,
-  UnauthorizedException,
+  Post,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { USER_REPOSITORY } from '../../../ports/outbound/user.repository';
-import type { IUserRepository } from '../../../ports/outbound/user.repository';
+import type { IUserRepository } from '../../../ports/outbound/user.repository.js';
+import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
 
 export class ZitadelWebhookPayload {
-  eventType:
+  eventType!:
     | 'user.added'
     | 'user.changed'
     | 'user.removed'
     | 'user.membership.added'
     | 'user.membership.removed'
     | 'user.membership.changed';
-  userId: string;
+  userId!: string;
   email?: string;
   firstName?: string;
   lastName?: string;

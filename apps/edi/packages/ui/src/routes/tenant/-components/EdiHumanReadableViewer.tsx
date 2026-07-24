@@ -1,9 +1,9 @@
 import { AlertTriangle } from 'lucide-react';
-import { useEdiDictionary } from './useEdiDictionary';
 import { groupValidationErrors } from './ediErrors';
+import { useEdiDictionary } from './useEdiDictionary';
 
 interface ViewerProps {
-  data: any; // The JSON AST
+  data: Record<string, unknown> | Array<unknown> | null | undefined; // The JSON AST
   validationErrors: string[];
 }
 
@@ -21,7 +21,7 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
   const { parsedErrors, errorMap } = groupValidationErrors(validationErrors);
 
   // Recursive function to render a node
-  const renderNode = (key: string, value: any, depth = 0) => {
+  const renderNode = (key: string, value: unknown, depth = 0): React.ReactNode => {
     if (Array.isArray(value)) {
       return value.map((item, index) => (
         <div key={`${key}-${index}`} className="ml-4 border-l-2 border-slate-100 pl-4 py-2 mt-2">
@@ -32,8 +32,6 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
 
     if (typeof value === 'object' && value !== null) {
       return Object.entries(value).map(([childKey, childValue]) => {
-
-
         const segDef = dictionary.segments[childKey];
         const segErrors = errorMap.get(childKey) || [];
         const hasSegError = segErrors.length > 0;
@@ -44,23 +42,32 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
           const headerTextClass = hasSegError ? 'text-red-900' : 'text-emerald-900';
           const badgeClass = hasSegError ? 'bg-red-600' : 'bg-emerald-600';
 
-          const elemErrors = segErrors.filter(e => e.element);
-          const segmentOnlyErrors = segErrors.filter(e => !e.element);
+          const elemErrors = segErrors.filter((e) => e.element);
+          const segmentOnlyErrors = segErrors.filter((e) => !e.element);
           const hasHeaderErrors = segmentOnlyErrors.length > 0;
 
           // If an error is for a missing element, inject it so it gets rendered
-          const elementsToRender: Record<string, any> = { ...childValue };
-          elemErrors.forEach(err => {
+          const elementsToRender: Record<string, unknown> = {
+            ...(childValue as Record<string, unknown>),
+          };
+          elemErrors.forEach((err) => {
             if (err.element && !(err.element in elementsToRender)) {
-              elementsToRender[err.element] = "";
+              elementsToRender[err.element] = '';
             }
           });
 
           return (
-            <div key={childKey} className={`mb-3 bg-white rounded-lg border ${hasSegError ? 'border-red-300' : ''} shadow-sm overflow-hidden`}>
-              <div className={`${headerBgClass} px-4 py-2 border-b flex items-center justify-between`}>
+            <div
+              key={childKey}
+              className={`mb-3 bg-white rounded-lg border ${hasSegError ? 'border-red-300' : ''} shadow-sm overflow-hidden`}
+            >
+              <div
+                className={`${headerBgClass} px-4 py-2 border-b flex items-center justify-between`}
+              >
                 <div className={`font-semibold ${headerTextClass} flex items-center gap-2`}>
-                  <span className={`${badgeClass} text-white text-xs px-2 py-1 rounded font-mono`}>{childKey}</span>
+                  <span className={`${badgeClass} text-white text-xs px-2 py-1 rounded font-mono`}>
+                    {childKey}
+                  </span>
                   <span>{segDef.info}</span>
                 </div>
               </div>
@@ -90,16 +97,24 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
                     }
                   }
 
-                  const myErrors = elemErrors.filter(e => e.element === elemKey);
+                  const myErrors = elemErrors.filter((e) => e.element === elemKey);
                   const isElemError = myErrors.length > 0;
                   const elemTextClass = isElemError ? 'text-red-600' : 'text-emerald-600';
-                  const elemBgClass = isElemError ? 'bg-red-50 border-red-200 shadow-sm' : 'bg-white';
-                  const textColorClass = isElemError && elemValue === ''
-                                         ? 'text-red-400 italic'
-                                         : (isElemError ? 'text-red-900 font-bold' : 'text-slate-900');
+                  const elemBgClass = isElemError
+                    ? 'bg-red-50 border-red-200 shadow-sm'
+                    : 'bg-white';
+                  const textColorClass =
+                    isElemError && elemValue === ''
+                      ? 'text-red-400 italic'
+                      : isElemError
+                        ? 'text-red-900 font-bold'
+                        : 'text-slate-900';
 
                   return (
-                    <div key={elemKey} className={`flex flex-col p-3 rounded border ${elemBgClass}`}>
+                    <div
+                      key={elemKey}
+                      className={`flex flex-col p-3 rounded border ${elemBgClass}`}
+                    >
                       <span className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-2">
                         <span className={elemTextClass}>{elemKey}</span>
                         <span className="truncate">{elemDesc}</span>
@@ -110,9 +125,14 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
                         </span>
                       )}
                       {isElemError && (
-                        <div className={`flex flex-col gap-1 ${elemValue !== '' ? 'mt-2 pt-2 border-t border-red-200' : 'mt-1'}`}>
+                        <div
+                          className={`flex flex-col gap-1 ${elemValue !== '' ? 'mt-2 pt-2 border-t border-red-200' : 'mt-1'}`}
+                        >
                           {myErrors.map((err, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5 text-red-700 text-xs font-semibold">
+                            <div
+                              key={idx}
+                              className="flex items-center gap-1.5 text-red-700 text-xs font-semibold"
+                            >
                               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                               <span>{err.localMessage}</span>
                             </div>
@@ -130,23 +150,23 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
         // Otherwise, it's a loop wrapper or standard container
         return (
           <div key={childKey} className="mt-2">
-            {depth > 0 && <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Loop {childKey}</div>}
+            {depth > 0 && (
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                Loop {childKey}
+              </div>
+            )}
             {renderNode(childKey, childValue, depth + 1)}
           </div>
         );
       });
     }
 
-    return (
-      <span className="text-sm font-medium text-slate-800 break-all">
-        {String(value)}
-      </span>
-    );
+    return <span className="text-sm font-medium text-slate-800 break-all">{String(value)}</span>;
   };
 
   // The root structure usually has the transactions object
   // bots AST typically: data -> {"type": "message", "record": { "ST": ... }} or similar
-  const astRoot = data?.record || data;
+  const astRoot = (data as { record?: unknown })?.record || data;
 
   return (
     <div className="p-4 overflow-y-auto h-full bg-slate-100/50">
@@ -163,7 +183,7 @@ export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) 
           </ul>
         </div>
       )}
-      {renderNode("root", astRoot)}
+      {renderNode('root', astRoot)}
     </div>
   );
 }

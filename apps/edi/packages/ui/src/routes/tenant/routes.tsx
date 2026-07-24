@@ -1,22 +1,22 @@
-import { createRoute } from '@tanstack/react-router'
-import { Route as appRoute } from '../tenant'
-import { RoutesProvider, useRoutes } from '@/features/routes/context/RoutesContext'
-import { RoutesTable } from '@/features/routes/components/RoutesTable'
-import { CreateInboundRouteModal } from '@/features/routes/components/CreateInboundRouteModal'
-import { CreateOutboundRouteModal } from '@/features/routes/components/CreateOutboundRouteModal'
+import { createRoute } from '@tanstack/react-router';
+import { CreateInboundRouteModal } from '@/features/routes/components/CreateInboundRouteModal';
+import { CreateOutboundRouteModal } from '@/features/routes/components/CreateOutboundRouteModal';
+import { RoutesTable } from '@/features/routes/components/RoutesTable';
+import { RoutesProvider, useRoutes } from '@/features/routes/context/RoutesContext';
+import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({
   getParentRoute: () => appRoute,
   path: '/routes',
   component: RoutesPageWrapper,
-})
+});
 
 export function RoutesPageWrapper() {
   return (
     <RoutesProvider>
       <RoutesPage />
     </RoutesProvider>
-  )
+  );
 }
 
 export function RoutesPage() {
@@ -42,5 +42,5 @@ export function RoutesPage() {
         <RoutesTable data={routes} isLoading={isLoading} />
       </section>
     </div>
-  )
+  );
 }

@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
 import { PartnersPage } from '@soopa/edi-ui';
+import { createFileRoute } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/_authenticated/edi/partners')({
   component: PartnersPage,

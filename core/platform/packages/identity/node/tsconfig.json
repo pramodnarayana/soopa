@@ -8,9 +8,10 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "./dist",
+    "rootDir": ".",
     "declaration": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "tests/**/*"]
 }

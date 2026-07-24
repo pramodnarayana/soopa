@@ -3,14 +3,14 @@ export const Direction = {
   OUTBOUND: 'OUTBOUND',
 } as const;
 
-export type Direction = typeof Direction[keyof typeof Direction];
+export type Direction = (typeof Direction)[keyof typeof Direction];
 
 export const ProcessingMode = {
   TRANSFORM: 'TRANSFORM',
   PASSTHROUGH: 'PASSTHROUGH',
 } as const;
 
-export type ProcessingMode = typeof ProcessingMode[keyof typeof ProcessingMode];
+export type ProcessingMode = (typeof ProcessingMode)[keyof typeof ProcessingMode];
 
 export const DestinationType = {
   WEBHOOK: 'WEBHOOK',
@@ -18,7 +18,7 @@ export const DestinationType = {
   SFTP: 'SFTP',
 } as const;
 
-export type DestinationType = typeof DestinationType[keyof typeof DestinationType];
+export type DestinationType = (typeof DestinationType)[keyof typeof DestinationType];
 
 export interface BaseRouteItem {
   route_id: string;

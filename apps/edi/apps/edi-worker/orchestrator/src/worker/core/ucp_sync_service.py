@@ -25,8 +25,8 @@ class UcpSyncWorkerService:
 
         # Event handler mapping to avoid if/else chains
         self._handlers: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {
-            UcpEventType.TENANT_PROVISIONED.value: self._handle_tenant_provisioned,
-            UcpEventType.API_KEY_CREATED.value: self._handle_api_key_created,
+            UcpEventType.tenant_provisioned.value: self._handle_tenant_provisioned,
+            UcpEventType.api_key_created.value: self._handle_api_key_created,
         }
 
     async def _handle_tenant_provisioned(self, payload: dict[str, Any]) -> None:
@@ -75,14 +75,14 @@ class UcpSyncWorkerService:
                 return
 
             try:
-                handler = self._handlers.get(event.eventType)
+                handler = self._handlers.get(event.eventType.value)
                 if handler:
                     await handler(event.payload)
                 else:
-                    logger.debug(f"Ignored unhandled UCP event type: {event.eventType}")
+                    logger.debug(f"Ignored unhandled UCP event type: {event.eventType.value}")
             except Exception as e:
                 logger.error(
-                    f"Failed to process UCP event {event.eventType} "
+                    f"Failed to process UCP event {event.eventType.value} "
                     f"(idempotency_key={event.idempotencyKey}): {e}"
                 )
                 raise

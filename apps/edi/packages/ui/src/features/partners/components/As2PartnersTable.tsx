@@ -1,16 +1,17 @@
-import { DataTable } from '@/components/ui/data-table';
-import React from 'react';
 import {
   createColumnHelper,
-
   getCoreRowModel,
-  useReactTable,
   getExpandedRowModel,
+  useReactTable,
 } from '@tanstack/react-table';
-
+import { CheckCircle2, Server } from 'lucide-react';
+import React from 'react';
+import { DataTable } from '@/components/ui/data-table';
+import {
+  useDeletePlatformPartnerMutation,
+  useUpdatePlatformPartnerMutation,
+} from '../api/partnerHooks';
 import type { AS2Partner } from '../types';
-import { useDeletePlatformPartnerMutation, useUpdatePlatformPartnerMutation } from '../api/partnerHooks';
-import { Server, CheckCircle2 } from 'lucide-react';
 import { As2PartnerDetails } from './As2PartnerDetails';
 import { SharedRowActions } from './SharedRowActions';
 
@@ -116,7 +117,9 @@ export function As2PartnersTable({ data, isLoading }: { data: AS2Partner[]; isLo
       emptyIcon={<Server className="w-8 h-8" />}
       emptyTitle="No Active AS2 Partners"
       columnsLength={columns.length}
-      renderExpandedRow={(row) => <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />}
+      renderExpandedRow={(row) => (
+        <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
+      )}
     />
   );
 }

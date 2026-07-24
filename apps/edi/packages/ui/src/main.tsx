@@ -1,11 +1,11 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from 'react-oidc-context'
-import { oidcConfig } from './auth'
-import { routeTree } from './routeTree.gen'
-import './index.css'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createRouter, RouterProvider } from '@tanstack/react-router';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { AuthProvider } from 'react-oidc-context';
+import { oidcConfig } from './auth';
+import { routeTree } from './routeTree.gen';
+import './index.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,24 +16,24 @@ const queryClient = new QueryClient({
       retry: 1,
     },
   },
-})
+});
 
 const router = createRouter({
   routeTree,
   context: {
     queryClient,
   },
-})
+});
 
 declare module '@tanstack/react-router' {
   interface Register {
-    router: typeof router
+    router: typeof router;
   }
 }
 
-const rootElement = document.getElementById('root')
+const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error('Root element not found. Unable to mount application.')
+  throw new Error('Root element not found. Unable to mount application.');
 }
 
 ReactDOM.createRoot(rootElement).render(
@@ -44,4 +44,4 @@ ReactDOM.createRoot(rootElement).render(
       </QueryClientProvider>
     </AuthProvider>
   </React.StrictMode>,
-)
+);

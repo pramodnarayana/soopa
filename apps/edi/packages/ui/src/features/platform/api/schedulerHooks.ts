@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
 import { createSchedulerRepository } from './schedulerApi';
 
@@ -33,7 +33,7 @@ export function useUpdateConfigMutation() {
   return useMutation({
     mutationFn: ({ key, value }: { key: string; value: any }) => repo.updateConfig(key, value),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scheduler', 'config'] });
+      void queryClient.invalidateQueries({ queryKey: ['scheduler', 'config'] });
     },
   });
 }
@@ -43,10 +43,20 @@ export function useUpdateJobMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ name, data }: { name: string; data: { interval_seconds?: number | null; cron_expression?: string | null; timezone?: string | null; status?: string } }) =>
-      repo.updateJob(name, data),
+    mutationFn: ({
+      name,
+      data,
+    }: {
+      name: string;
+      data: {
+        interval_seconds?: number | null;
+        cron_expression?: string | null;
+        timezone?: string | null;
+        status?: string;
+      };
+    }) => repo.updateJob(name, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scheduler', 'jobs'] });
+      void queryClient.invalidateQueries({ queryKey: ['scheduler', 'jobs'] });
     },
   });
 }

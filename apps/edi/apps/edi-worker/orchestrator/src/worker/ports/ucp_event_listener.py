@@ -2,10 +2,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Protocol
 
-from event_message import EventMessage
+from soopa_schemas.event_message import EventMessage
+from soopa_schemas.event_type import EventType
 
-# Aliasing to maintain existing contract name for the adapter
+# Aliasing to maintain existing contract names for the adapter
 UcpEventMessage = EventMessage
+UcpEventType = EventType
+
 
 class UcpEventListenerPort(Protocol):
     @asynccontextmanager

@@ -1,15 +1,15 @@
-import type { IPartnersRepository } from './IPartnersRepository';
 import type {
-  Partner,
-  Partnership,
   CertificatesExport,
   CreatePartnerPayload,
-  UpdatePartnerPayload,
   CreatePartnershipPayload,
-  UpdatePartnershipPayload,
   CreateSftpPartnerPayload,
+  Partner,
+  Partnership,
   RotateCertPayload,
+  UpdatePartnerPayload,
+  UpdatePartnershipPayload,
 } from '../types';
+import type { IPartnersRepository } from './IPartnersRepository';
 
 // ─────────────────────────────────────────────
 // HTTP Adapter (Adapter layer — swappable)
@@ -32,12 +32,17 @@ class HttpPartnersRepository implements IPartnersRepository {
     try {
       const res = await fetch(url, { ...init, headers: this.headers, signal: controller.signal });
       if (!res.ok) {
-        const contentType = res.headers.get("content-type");
+        const contentType = res.headers.get('content-type');
         let errorMessage = res.statusText;
-        if (contentType && contentType.includes("application/json")) {
+        if (contentType && contentType.includes('application/json')) {
           try {
-            const data = await res.json();
-            errorMessage = typeof data.detail === "string" ? data.detail : (data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+            const data = (await res.json()) as { detail?: string | Record<string, unknown> };
+            errorMessage =
+              typeof data.detail === 'string'
+                ? data.detail
+                : data.detail
+                  ? JSON.stringify(data.detail)
+                  : JSON.stringify(data);
           } catch {
             errorMessage = await res.text().catch(() => res.statusText);
           }
@@ -55,7 +60,10 @@ class HttpPartnersRepository implements IPartnersRepository {
 
   // ── Platform Trading Partners ──────────────
   deleteCertificateSecret(vaultRef: string): Promise<void> {
-    return this.request(`/api/v1/platform/trading-partners/as2/certificates/secret?vault_ref=${encodeURIComponent(vaultRef)}`, { method: 'DELETE' });
+    return this.request(
+      `/api/v1/platform/trading-partners/as2/certificates/secret?vault_ref=${encodeURIComponent(vaultRef)}`,
+      { method: 'DELETE' },
+    );
   }
 
   getPlatformPartners(): Promise<Partner[]> {
@@ -107,7 +115,16 @@ class HttpPartnersRepository implements IPartnersRepository {
     });
   }
 
-  testAs2PartnershipConnection(id: string, custom_payload?: string): Promise<{ success: boolean; mdn_disposition?: string | null; reason?: string | null; sent_payload?: string | null; raw_mdn?: string | null }> {
+  testAs2PartnershipConnection(
+    id: string,
+    custom_payload?: string,
+  ): Promise<{
+    success: boolean;
+    mdn_disposition?: string | null;
+    reason?: string | null;
+    sent_payload?: string | null;
+    raw_mdn?: string | null;
+  }> {
     return this.request(`/api/v1/platform/trading-partners/as2/partnerships/${id}/test`, {
       method: 'POST',
       body: custom_payload ? JSON.stringify({ custom_payload }) : undefined,
@@ -116,28 +133,30 @@ class HttpPartnersRepository implements IPartnersRepository {
 
   // ── Certificates ───────────────────────────
   exportCertificates(partnerId: string): Promise<CertificatesExport> {
-    return this.request(
-      `/api/v1/trading-partners/as2/${partnerId}/certificates/export`,
-    );
+    return this.request(`/api/v1/trading-partners/as2/${partnerId}/certificates/export`);
   }
 
   rotateCertificates(partnerId: string, payload: RotateCertPayload): Promise<Partner> {
-    return this.request(
-      `/api/v1/trading-partners/as2/${partnerId}/certificates/rotate`,
-      { method: 'PUT', body: JSON.stringify(payload) },
-    );
+    return this.request(`/api/v1/trading-partners/as2/${partnerId}/certificates/rotate`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
   }
 
-  generateCertificate(as2Id: string): Promise<{ public_cert_pem: string; private_key_vault_ref: string }> {
-    return this.request(
-      `/api/v1/platform/trading-partners/as2/certificates/generate`,
-      { method: 'POST', body: JSON.stringify({ as2_id: as2Id }) },
-    );
+  generateCertificate(
+    as2Id: string,
+  ): Promise<{ public_cert_pem: string; private_key_vault_ref: string }> {
+    return this.request(`/api/v1/platform/trading-partners/as2/certificates/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ as2_id: as2Id }),
+    });
   }
 
   // ── Tenant Partners ────────────────────────
   async getTenantPartners(): Promise<Partner[]> {
-    const data = await this.request<any[]>('/api/v1/trading-partners');
+    const data = await this.request<Array<Partner & { partner_id?: string }>>(
+      '/api/v1/trading-partners',
+    );
     return data.map((p) => ({ ...p, id: p.partner_id || p.id }));
   }
 
@@ -159,14 +178,25 @@ class HttpPartnersRepository implements IPartnersRepository {
     return this.request(`/api/v1/trading-partners/sftp/${id}`, { method: 'DELETE' });
   }
 
-  testSftpConnection(payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>): Promise<{ success: boolean; reason?: string }> {
+  testSftpConnection(
+    payload: Omit<
+      CreateSftpPartnerPayload,
+      'name' | 'inbound_remote_path' | 'outbound_remote_path'
+    >,
+  ): Promise<{ success: boolean; reason?: string }> {
     return this.request('/api/v1/trading-partners/sftp/test', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
-  testExistingSftpConnection(id: string, payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>): Promise<{ success: boolean; reason?: string }> {
+  testExistingSftpConnection(
+    id: string,
+    payload: Omit<
+      CreateSftpPartnerPayload,
+      'name' | 'inbound_remote_path' | 'outbound_remote_path'
+    >,
+  ): Promise<{ success: boolean; reason?: string }> {
     return this.request(`/api/v1/trading-partners/${id}/sftp/test`, {
       method: 'POST',
       body: JSON.stringify(payload),

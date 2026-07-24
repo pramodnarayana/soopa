@@ -98,7 +98,7 @@ class CreateWebhookRequest(BaseModel):
 
     @field_validator("url")
     @classmethod
-    def validate_no_loopback(cls, v: HttpUrl) -> HttpUrl:
+    def validate_no_loopback(_cls, v: HttpUrl) -> HttpUrl:
         if v.host in ("127.0.0.1", "localhost", "::1") or (
             v.host and v.host.startswith("169.254.")
         ):
@@ -304,7 +304,7 @@ class PartnerResponse(BaseModel):
     outbound_remote_path: str | None = None
     host_key: str | None = None
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, _context: Any) -> None:
         if self.id is None:
             object.__setattr__(self, "id", self.partner_id)
 

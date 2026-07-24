@@ -5,7 +5,7 @@ description = "Soopa identity contracts, authorization, and middleware for Pytho
 authors = [{name = "Admin", email = "admin@example.com"}]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.0",
+    "fastapi~=0.115.4",
     "pyjwt[crypto]>=2.10.0",
     "pydantic>=2.10.0",
 ]
@@ -46,3 +46,9 @@ indent-style = "space"
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[tool.deptry]
+known_first_party = ["identity"]
+
+[tool.deptry.package_module_name_map]
+pyjwt = ["jwt"]

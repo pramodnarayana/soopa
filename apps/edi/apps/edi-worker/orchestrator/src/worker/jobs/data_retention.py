@@ -6,6 +6,7 @@ from database.connection import DatabaseRouter
 from database.models.control_plane import DatabaseShard
 from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from worker.core.scheduler.handler import JobHandlerPort
 from worker.core.scheduler.models import Job
@@ -60,9 +61,6 @@ class DataRetentionCleanupJobHandler(JobHandlerPort):
         """Sweep a single tenant shard, deleting old records."""
         cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=_RETENTION_DAYS)
 
-        outbox_deleted = 0
-        processed_deleted = 0
-
         engine = await self.db_router.get_engine(shard_name, shard_dsn)
         async with AsyncSession(engine, expire_on_commit=False) as session:
             # Delete old PROCESSED outbox events
@@ -70,13 +68,13 @@ class DataRetentionCleanupJobHandler(JobHandlerPort):
                 DataPlaneOutbox.status == "PROCESSED",
                 DataPlaneOutbox.created_at < cutoff_date,
             )
-            res_outbox = await session.execute(stmt_outbox)
-            outbox_deleted = res_outbox.rowcount
+            res_outbox: CursorResult[tuple[()]] = await session.execute(stmt_outbox)  # type: ignore[assignment]
+            outbox_deleted: int = res_outbox.rowcount
 
             # Delete old processed_events
             stmt_processed = delete(ProcessedEvent).where(ProcessedEvent.processed_at < cutoff_date)
-            res_processed = await session.execute(stmt_processed)
-            processed_deleted = res_processed.rowcount
+            res_processed: CursorResult[tuple[()]] = await session.execute(stmt_processed)  # type: ignore[assignment]
+            processed_deleted: int = res_processed.rowcount
 
             await session.commit()
 

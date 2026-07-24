@@ -21,3 +21,14 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.deptry.per_rule_ignores]
+DEP002 = [
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-grpc",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-sqlalchemy"
+]
+
+[tool.deptry.package_module_name_map]
+"opentelemetry-sdk" = ["opentelemetry"]

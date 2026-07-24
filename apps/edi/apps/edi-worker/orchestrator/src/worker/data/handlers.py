@@ -166,8 +166,8 @@ async def process_delivery(
                 return
 
             # Check Outbox status
-            stmt = select(DataPlaneOutbox).where(DataPlaneOutbox.idempotency_key == key_uuid)
-            outbox_record = (await session.execute(stmt)).scalar_one_or_none()
+            stmt_outbox = select(DataPlaneOutbox).where(DataPlaneOutbox.idempotency_key == key_uuid)
+            outbox_record = (await session.execute(stmt_outbox)).scalar_one_or_none()
             if outbox_record:
                 if outbox_record.status == "DELIVERING":
                     logger.warning(

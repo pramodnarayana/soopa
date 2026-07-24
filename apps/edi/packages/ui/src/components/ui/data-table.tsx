@@ -1,5 +1,5 @@
-import React, { Fragment } from 'react';
 import { flexRender, type Table as ReactTable } from '@tanstack/react-table';
+import React, { Fragment } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface DataTableProps<TData> {
@@ -11,7 +11,10 @@ interface DataTableProps<TData> {
   emptyTitle?: string;
   emptyDescription?: string;
   renderExpandedRow?: (row: import('@tanstack/react-table').Row<TData>) => React.ReactNode;
-  getGroupBoundary?: (row: import('@tanstack/react-table').Row<TData>, prevRow: import('@tanstack/react-table').Row<TData>) => boolean;
+  getGroupBoundary?: (
+    row: import('@tanstack/react-table').Row<TData>,
+    prevRow: import('@tanstack/react-table').Row<TData>,
+  ) => boolean;
 }
 
 export function DataTable<TData>({
@@ -20,7 +23,7 @@ export function DataTable<TData>({
   isLoading,
   dataLength,
   emptyIcon,
-  emptyTitle = "No Data",
+  emptyTitle = 'No Data',
   emptyDescription,
   renderExpandedRow,
   getGroupBoundary,
@@ -57,7 +60,10 @@ export function DataTable<TData>({
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-slate-200/60 bg-slate-50/50">
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left align-middle">
+                  <th
+                    key={header.id}
+                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left align-middle"
+                  >
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
@@ -69,42 +75,55 @@ export function DataTable<TData>({
           <tbody className="divide-y divide-slate-100">
             {table.getRowModel().rows.map((row, index, rows) => {
               const previousRow = index > 0 ? rows[index - 1] : null;
-              const isNewGroup = getGroupBoundary && previousRow ? getGroupBoundary(row, previousRow) : false;
+              const isNewGroup =
+                getGroupBoundary && previousRow ? getGroupBoundary(row, previousRow) : false;
 
               return (
-              <Fragment key={row.id}>
-                {isNewGroup && (
-                  <tr>
-                    <td colSpan={columnsLength} className="p-0 border-t-[6px] border-slate-100/50 bg-slate-50/20"></td>
-                  </tr>
-                )}
-                <tr
-                  className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
-                  onClick={renderExpandedRow ? () => row.toggleExpanded() : undefined}
-                  onKeyDown={renderExpandedRow ? (e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'INPUT') return;
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      row.toggleExpanded();
+                <Fragment key={row.id}>
+                  {isNewGroup && (
+                    <tr>
+                      <td
+                        colSpan={columnsLength}
+                        className="p-0 border-t-[6px] border-slate-100/50 bg-slate-50/20"
+                      ></td>
+                    </tr>
+                  )}
+                  <tr
+                    className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
+                    onClick={renderExpandedRow ? () => row.toggleExpanded() : undefined}
+                    onKeyDown={
+                      renderExpandedRow
+                        ? (e) => {
+                            const target = e.target as HTMLElement;
+                            if (
+                              target.tagName === 'BUTTON' ||
+                              target.tagName === 'A' ||
+                              target.tagName === 'INPUT'
+                            )
+                              return;
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              row.toggleExpanded();
+                            }
+                          }
+                        : undefined
                     }
-                  } : undefined}
-                  tabIndex={renderExpandedRow ? 0 : undefined}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-6 py-4 align-middle">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-                {renderExpandedRow && row.getIsExpanded() && (
-                  <tr>
-                    <td colSpan={columnsLength} className="p-0">
-                      {renderExpandedRow(row)}
-                    </td>
+                    tabIndex={renderExpandedRow ? 0 : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-6 py-4 align-middle">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
-                )}
-              </Fragment>
+                  {renderExpandedRow && row.getIsExpanded() && (
+                    <tr>
+                      <td colSpan={columnsLength} className="p-0">
+                        {renderExpandedRow(row)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>

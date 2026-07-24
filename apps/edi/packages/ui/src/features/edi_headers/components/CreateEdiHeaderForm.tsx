@@ -1,10 +1,16 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCreateEdiHeaderMutation } from '../api/ediHeadersApi';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
+import { useCreateEdiHeaderMutation } from '../api/ediHeadersApi';
 
 export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
   const [name, setName] = useState('');
@@ -26,7 +32,15 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !tradingPartnerId || !isaSender || !isaReceiver || !gsSender || !gsReceiver || !transactionType) {
+    if (
+      !name ||
+      !tradingPartnerId ||
+      !isaSender ||
+      !isaReceiver ||
+      !gsSender ||
+      !gsReceiver ||
+      !transactionType
+    ) {
       toast({ title: 'Please fill all required fields', variant: 'destructive' });
       return;
     }
@@ -49,19 +63,24 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
       toast({ title: 'EDI Header created successfully' });
       onSuccess();
     } catch (err) {
-      toast({ title: 'Failed to create EDI Header', description: String(err), variant: 'destructive' });
+      toast({
+        title: 'Failed to create EDI Header',
+        description: String(err),
+        variant: 'destructive',
+      });
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-
       {/* General Settings */}
       <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-xl space-y-4">
         <h3 className="text-sm font-semibold text-slate-800">General Settings</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="header_name" className="text-slate-600 font-medium">Name *</Label>
+            <Label htmlFor="header_name" className="text-slate-600 font-medium">
+              Name *
+            </Label>
             <Input
               id="header_name"
               value={name}
@@ -71,7 +90,9 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="trading_partner_id" className="text-slate-600 font-medium">Trading Partner ID *</Label>
+            <Label htmlFor="trading_partner_id" className="text-slate-600 font-medium">
+              Trading Partner ID *
+            </Label>
             <Input
               id="trading_partner_id"
               value={tradingPartnerId}
@@ -84,7 +105,9 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="transaction_type" className="text-slate-600 font-medium">Transaction Type *</Label>
+            <Label htmlFor="transaction_type" className="text-slate-600 font-medium">
+              Transaction Type *
+            </Label>
             <Input
               id="transaction_type"
               value={transactionType}
@@ -102,36 +125,86 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
 
         <div className="grid grid-cols-4 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="isa_sender_qual" className="text-slate-600 font-medium text-sm">ISA Sender Qual</Label>
-            <Input id="isa_sender_qual" value={isaSenderQual} onChange={e => setIsaSenderQual(e.target.value)} className="h-10 bg-white font-mono text-sm" />
+            <Label htmlFor="isa_sender_qual" className="text-slate-600 font-medium text-sm">
+              ISA Sender Qual
+            </Label>
+            <Input
+              id="isa_sender_qual"
+              value={isaSenderQual}
+              onChange={(e) => setIsaSenderQual(e.target.value)}
+              className="h-10 bg-white font-mono text-sm"
+            />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="isa_sender" className="text-slate-600 font-medium text-sm font-bold">ISA Sender ID *</Label>
-            <Input id="isa_sender" value={isaSender} onChange={e => setIsaSender(e.target.value)} placeholder="ACME_CORP" className="h-10 bg-white font-mono text-sm uppercase" />
+            <Label htmlFor="isa_sender" className="text-slate-600 font-medium text-sm font-bold">
+              ISA Sender ID *
+            </Label>
+            <Input
+              id="isa_sender"
+              value={isaSender}
+              onChange={(e) => setIsaSender(e.target.value)}
+              placeholder="ACME_CORP"
+              className="h-10 bg-white font-mono text-sm uppercase"
+            />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="isa_receiver_qual" className="text-slate-600 font-medium text-sm">ISA Receiver Qual</Label>
-            <Input id="isa_receiver_qual" value={isaReceiverQual} onChange={e => setIsaReceiverQual(e.target.value)} className="h-10 bg-white font-mono text-sm" />
+            <Label htmlFor="isa_receiver_qual" className="text-slate-600 font-medium text-sm">
+              ISA Receiver Qual
+            </Label>
+            <Input
+              id="isa_receiver_qual"
+              value={isaReceiverQual}
+              onChange={(e) => setIsaReceiverQual(e.target.value)}
+              className="h-10 bg-white font-mono text-sm"
+            />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="isa_receiver" className="text-slate-600 font-medium text-sm font-bold">ISA Receiver ID *</Label>
-            <Input id="isa_receiver" value={isaReceiver} onChange={e => setIsaReceiver(e.target.value)} placeholder="PARTNER" className="h-10 bg-white font-mono text-sm uppercase" />
+            <Label htmlFor="isa_receiver" className="text-slate-600 font-medium text-sm font-bold">
+              ISA Receiver ID *
+            </Label>
+            <Input
+              id="isa_receiver"
+              value={isaReceiver}
+              onChange={(e) => setIsaReceiver(e.target.value)}
+              placeholder="PARTNER"
+              className="h-10 bg-white font-mono text-sm uppercase"
+            />
           </div>
         </div>
 
         <div className="grid grid-cols-4 gap-4 pt-2">
           <div className="grid gap-2">
-            <Label htmlFor="gs_sender" className="text-slate-600 font-medium text-sm font-bold">GS Sender ID *</Label>
-            <Input id="gs_sender" value={gsSender} onChange={e => setGsSender(e.target.value)} placeholder="ACME" className="h-10 bg-white font-mono text-sm uppercase" />
+            <Label htmlFor="gs_sender" className="text-slate-600 font-medium text-sm font-bold">
+              GS Sender ID *
+            </Label>
+            <Input
+              id="gs_sender"
+              value={gsSender}
+              onChange={(e) => setGsSender(e.target.value)}
+              placeholder="ACME"
+              className="h-10 bg-white font-mono text-sm uppercase"
+            />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="gs_receiver" className="text-slate-600 font-medium text-sm font-bold">GS Receiver ID *</Label>
-            <Input id="gs_receiver" value={gsReceiver} onChange={e => setGsReceiver(e.target.value)} placeholder="PARTNER" className="h-10 bg-white font-mono text-sm uppercase" />
+            <Label htmlFor="gs_receiver" className="text-slate-600 font-medium text-sm font-bold">
+              GS Receiver ID *
+            </Label>
+            <Input
+              id="gs_receiver"
+              value={gsReceiver}
+              onChange={(e) => setGsReceiver(e.target.value)}
+              placeholder="PARTNER"
+              className="h-10 bg-white font-mono text-sm uppercase"
+            />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="default_standard" className="text-slate-600 font-medium text-sm">Standard</Label>
+            <Label htmlFor="default_standard" className="text-slate-600 font-medium text-sm">
+              Standard
+            </Label>
             <Select value={defaultStandard} onValueChange={setDefaultStandard}>
-              <SelectTrigger className="h-10 bg-white text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-10 bg-white text-sm">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="x12">X12</SelectItem>
                 <SelectItem value="edifact">EDIFACT</SelectItem>
@@ -139,8 +212,16 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="default_version" className="text-slate-600 font-medium text-sm">Version</Label>
-            <Input id="default_version" value={defaultVersion} onChange={e => setDefaultVersion(e.target.value)} placeholder="004010" className="h-10 bg-white font-mono text-sm" />
+            <Label htmlFor="default_version" className="text-slate-600 font-medium text-sm">
+              Version
+            </Label>
+            <Input
+              id="default_version"
+              value={defaultVersion}
+              onChange={(e) => setDefaultVersion(e.target.value)}
+              placeholder="004010"
+              className="h-10 bg-white font-mono text-sm"
+            />
           </div>
         </div>
       </div>

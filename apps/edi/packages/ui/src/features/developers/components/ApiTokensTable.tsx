@@ -1,26 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import {
-  createColumnHelper,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
-import { DataTable } from '@/components/ui/data-table';
-import type { ApiToken } from '../types';
-import { useUpdateApiTokenMutation, useDeleteApiTokenMutation } from '../api/apiTokenHooks';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { formatDistanceToNow, parseISO } from 'date-fns';
+import { Key, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Key, Pencil, Power, Trash2, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatDistanceToNow, parseISO } from 'date-fns';
+import { useDeleteApiTokenMutation, useUpdateApiTokenMutation } from '../api/apiTokenHooks';
+import type { ApiToken } from '../types';
 
 // ---------------------------------------------------------------------------
 // Delete confirmation dialog
@@ -60,7 +56,8 @@ function DeleteTokenDialog({
           <DialogDescription asChild>
             <div className="space-y-3 text-sm text-slate-600">
               <p>
-                This action is <span className="font-semibold text-slate-900">permanent and irreversible</span>.
+                This action is{' '}
+                <span className="font-semibold text-slate-900">permanent and irreversible</span>.
                 Any integrations authenticating with this token will immediately fail.
               </p>
               <p>To confirm, type the token name below:</p>
@@ -79,7 +76,9 @@ function DeleteTokenDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
           <Button
             id={`delete-token-confirm-btn-${token.id}`}
             variant="destructive"
@@ -210,13 +209,20 @@ function TokenRowActions({ token }: { token: ApiToken }) {
             aria-hidden="true"
             className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${isActive ? 'translate-x-[62px] bg-emerald-600 text-white' : 'translate-x-0 bg-white text-slate-400'}`}
           >
-            {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3 h-3" />}
+            {isUpdating ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Power className="w-3 h-3" />
+            )}
           </span>
         </button>
 
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setShowRename(true); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowRename(true);
+          }}
           className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-200 rounded-md transition-colors"
           title={`Rename ${entityName}`}
           aria-label={`Rename ${entityName}`}
@@ -226,13 +232,20 @@ function TokenRowActions({ token }: { token: ApiToken }) {
 
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setShowDelete(true); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDelete(true);
+          }}
           disabled={isDeleting}
           className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
           title={`Delete ${entityName}`}
           aria-label={`Delete ${entityName}`}
         >
-          {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          {isDeleting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Trash2 className="w-4 h-4" />
+          )}
         </button>
       </div>
 
@@ -262,7 +275,9 @@ const columns = [
   columnHelper.accessor('client_id', {
     header: 'Client ID',
     cell: (info) => (
-      <div className="font-mono text-sm text-slate-500 truncate max-w-[200px]">{info.getValue()}</div>
+      <div className="font-mono text-sm text-slate-500 truncate max-w-[200px]">
+        {info.getValue()}
+      </div>
     ),
   }),
   columnHelper.accessor('active', {

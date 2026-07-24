@@ -1,7 +1,7 @@
 import type {
-  RouteItem,
   CreateInboundRoutePayload,
   CreateOutboundRoutePayload,
+  RouteItem,
   UpdateRoutePayload,
 } from '../types';
 
@@ -9,7 +9,11 @@ export interface IRoutesRepository {
   getRoutes(): Promise<RouteItem[]>;
   createInboundRoute(payload: CreateInboundRoutePayload): Promise<void>;
   createOutboundRoute(payload: CreateOutboundRoutePayload): Promise<void>;
-  updateRoute(routeId: string, direction: 'INBOUND' | 'OUTBOUND', payload: UpdateRoutePayload): Promise<void>;
+  updateRoute(
+    routeId: string,
+    direction: 'INBOUND' | 'OUTBOUND',
+    payload: UpdateRoutePayload,
+  ): Promise<void>;
   deleteRoute(routeId: string, direction: 'INBOUND' | 'OUTBOUND'): Promise<void>;
 }
 
@@ -28,7 +32,7 @@ class HttpRoutesRepository implements IRoutesRepository {
     if (!res.ok) {
       let errorMessage = res.statusText;
       try {
-        const data = await res.json();
+        const data = (await res.json()) as { detail?: string | Record<string, unknown> };
         errorMessage =
           typeof data.detail === 'string'
             ? data.detail
@@ -42,7 +46,7 @@ class HttpRoutesRepository implements IRoutesRepository {
     }
     const text = await res.text();
     if (!text) return {} as T;
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   }
 
   getRoutes(): Promise<RouteItem[]> {
@@ -63,8 +67,15 @@ class HttpRoutesRepository implements IRoutesRepository {
     });
   }
 
-  updateRoute(routeId: string, direction: 'INBOUND' | 'OUTBOUND', payload: UpdateRoutePayload): Promise<void> {
-    const endpoint = direction === 'INBOUND' ? `/api/v1/routes/inbound/${routeId}` : `/api/v1/routes/outbound/${routeId}`;
+  updateRoute(
+    routeId: string,
+    direction: 'INBOUND' | 'OUTBOUND',
+    payload: UpdateRoutePayload,
+  ): Promise<void> {
+    const endpoint =
+      direction === 'INBOUND'
+        ? `/api/v1/routes/inbound/${routeId}`
+        : `/api/v1/routes/outbound/${routeId}`;
     return this.request(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(payload),

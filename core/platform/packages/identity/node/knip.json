@@ -1,1 +1,1 @@
-{"ignoreDependencies": ["@nestjs/core", "@nestjs/platform-express", "@nestjs/testing"]}
+{ "ignoreDependencies": ["@nestjs/core", "@nestjs/platform-express", "@nestjs/testing"] }

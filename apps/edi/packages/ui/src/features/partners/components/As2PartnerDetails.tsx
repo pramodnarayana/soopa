@@ -1,20 +1,45 @@
-import React, { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import type { AS2Partner } from '../types';
-import { useCertificatesExportQuery, useUpdatePlatformPartnerMutation, useRotateCertificatesMutation } from '../api/partnerHooks';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ClipboardPaste,
+  Clock,
+  Copy,
+  Download,
+  Loader2,
+} from 'lucide-react';
 import { pki } from 'node-forge';
-import { Copy, Download, Loader2, ChevronDown, ChevronRight, CheckCircle2, Clock, ClipboardPaste } from 'lucide-react';
+import React, { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
 import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
-import { Combobox } from '@/components/ui/combobox';
-import { CertificateInput } from './CertificateInput';
+import { useToast } from '@/hooks/use-toast';
+import {
+  useCertificatesExportQuery,
+  useRotateCertificatesMutation,
+  useUpdatePlatformPartnerMutation,
+} from '../api/partnerHooks';
+import type { AS2Partner } from '../types';
 import { extractCertificateMaterial } from '../utils/certificate';
+import { CertificateInput } from './CertificateInput';
 
-export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, onCancel?: () => void }) {
+export function As2PartnerDetails({
+  partner,
+  onCancel,
+}: {
+  partner: AS2Partner;
+  onCancel?: () => void;
+}) {
   const { toast } = useToast();
   const { data: platformSettings } = usePlatformSettings();
 
@@ -25,36 +50,59 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
   const [pasteValue, setPasteValue] = useState('');
 
-  const { data: certs, isLoading: certsLoading, error: certsError } = useCertificatesExportQuery(partner.id);
+  const {
+    data: certs,
+    isLoading: certsLoading,
+    error: certsError,
+  } = useCertificatesExportQuery(partner.id);
 
-
-  const { register, handleSubmit, reset, control, formState: { isDirty } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    control,
+    formState: { isDirty },
+  } = useForm({
     defaultValues: {
       name: partner.name,
       as2_id: partner.as2_id || '',
       is_local: partner.is_local || false,
       url: partner.url || '',
-    }
+    },
   });
 
-  const onSubmit = (formData: any) => {
-    const payload: any = {};
+  interface As2FormData {
+    name: string;
+    as2_id: string;
+    is_local: boolean;
+    url: string;
+  }
+
+  const onSubmit = (formData: As2FormData) => {
+    const payload: Partial<As2FormData> = {};
     if (formData.name !== partner.name) payload.name = formData.name;
     if (formData.as2_id !== partner.as2_id) payload.as2_id = formData.as2_id;
     if (formData.is_local !== partner.is_local) payload.is_local = formData.is_local;
     if (formData.url !== partner.url) payload.url = formData.url;
 
     if (formData.is_local && !formData.url?.trim()) {
-      toast({ title: 'Error', description: 'Receiving URL is required for local partners.', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Receiving URL is required for local partners.',
+        variant: 'destructive',
+      });
       return;
     }
 
-    updatePlatform.mutate({ id: partner.id, payload }, {
-      onSuccess: () => {
-        toast({ title: 'Success', description: 'Partner updated successfully.' });
-        reset(formData);
+    updatePlatform.mutate(
+      { id: partner.id, payload },
+      {
+        onSuccess: () => {
+          toast({ title: 'Success', description: 'Partner updated successfully.' });
+          reset(formData);
+        },
       },
-    });
+    );
   };
 
   const handleGenerateCertificate = () => {
@@ -64,30 +112,32 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
         onSuccess: () => {
           setPasteDialogOpen(false);
           setPasteValue('');
-        }
-      }
+        },
+      },
     );
   };
-
 
   const handlePasteSubmit = () => {
     if (!pasteValue.trim()) return;
 
     const { publicCert, privateKey } = extractCertificateMaterial(pasteValue);
 
-    rotateCertificates.mutate({
-      id: partner.id,
-      payload: {
-        action: 'upload',
-        public_cert_pem: publicCert.trim() || undefined as any,
-        private_key_pem: (partner.is_local && privateKey.trim()) ? privateKey.trim() : undefined
-      }
-    }, {
-      onSuccess: () => {
-        setPasteDialogOpen(false);
-        setPasteValue('');
-      }
-    });
+    rotateCertificates.mutate(
+      {
+        id: partner.id,
+        payload: {
+          action: 'upload',
+          public_cert_pem: publicCert.trim() || undefined,
+          private_key_pem: partner.is_local && privateKey.trim() ? privateKey.trim() : undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          setPasteDialogOpen(false);
+          setPasteValue('');
+        },
+      },
+    );
   };
 
   return (
@@ -95,7 +145,9 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-1">AS2 Partner Details</h4>
+            <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-1">
+              AS2 Partner Details
+            </h4>
           </div>
           <div className="flex items-center gap-3">
             <Button
@@ -109,11 +161,7 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={!isDirty || isSubmitting}
-              className="min-w-[100px]"
-            >
+            <Button type="submit" disabled={!isDirty || isSubmitting} className="min-w-[100px]">
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
             </Button>
           </div>
@@ -122,7 +170,7 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
         <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-8">
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Name</Label>
-            <Input {...register("name")} required />
+            <Input {...register('name')} required />
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Type</Label>
@@ -132,17 +180,19 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">AS2 ID</Label>
-            <Input {...register("as2_id")} />
+            <Input {...register('as2_id')} />
           </div>
           <div className="flex items-center gap-2 mt-6">
             <input
               type="checkbox"
               id="is_local"
-              {...register("is_local")}
+              {...register('is_local')}
               disabled
               className="rounded border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <Label htmlFor="is_local" className="text-sm font-medium text-slate-700 opacity-70">Is Local Station?</Label>
+            <Label htmlFor="is_local" className="text-sm font-medium text-slate-700 opacity-70">
+              Is Local Station?
+            </Label>
           </div>
           <div className="mt-4">
             <Label className="text-xs text-slate-500 block mb-1">Receiving URL</Label>
@@ -161,7 +211,7 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
                 )}
               />
             ) : (
-              <Input {...register("url")} placeholder="https://acme.com/as2/receive" />
+              <Input {...register('url')} placeholder="https://acme.com/as2/receive" />
             )}
           </div>
         </div>
@@ -169,9 +219,16 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
 
       <div className="space-y-4 border-t border-slate-200 pt-6">
         <div className="flex justify-between items-center pb-2">
-          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Certificates</h4>
+          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+            Certificates
+          </h4>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => setPasteDialogOpen(true)} disabled={rotateCertificates.isPending}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPasteDialogOpen(true)}
+              disabled={rotateCertificates.isPending}
+            >
               <ClipboardPaste className="w-4 h-4 mr-2" />
               New Certificate
             </Button>
@@ -190,10 +247,18 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/60 bg-slate-50/50">
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Status</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Issued</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Expires</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Description
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">
+                      Issued
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">
+                      Expires
+                    </th>
                     <th className="px-6 py-4 w-full"></th>
                   </tr>
                 </thead>
@@ -221,10 +286,13 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
         ) : null}
       </div>
 
-      <Dialog open={pasteDialogOpen} onOpenChange={(open) => {
-        setPasteDialogOpen(open);
-        if (!open) setPasteValue('');
-      }}>
+      <Dialog
+        open={pasteDialogOpen}
+        onOpenChange={(open) => {
+          setPasteDialogOpen(open);
+          if (!open) setPasteValue('');
+        }}
+      >
         <DialogContent className="sm:max-w-[780px]">
           <DialogHeader>
             <DialogTitle>Update Certificate</DialogTitle>
@@ -233,22 +301,37 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
             <CertificateInput
               value={pasteValue}
               onChange={setPasteValue}
-              extraActions={partner.is_local && !pasteValue ? (
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                  onClick={handleGenerateCertificate}
-                  disabled={rotateCertificates.isPending}
-                >
-                  {rotateCertificates.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Generate Certificate
-                </button>
-              ) : undefined}
+              extraActions={
+                partner.is_local && !pasteValue ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                    onClick={handleGenerateCertificate}
+                    disabled={rotateCertificates.isPending}
+                  >
+                    {rotateCertificates.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : null}
+                    Generate Certificate
+                  </button>
+                ) : undefined
+              }
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPasteDialogOpen(false); setPasteValue(''); }}>Cancel</Button>
-            <Button onClick={handlePasteSubmit} disabled={!pasteValue.trim() || rotateCertificates.isPending}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPasteDialogOpen(false);
+                setPasteValue('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePasteSubmit}
+              disabled={!pasteValue.trim() || rotateCertificates.isPending}
+            >
               {rotateCertificates.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save Certificate
             </Button>
@@ -259,17 +342,16 @@ export function As2PartnerDetails({ partner, onCancel }: { partner: AS2Partner, 
   );
 }
 
-
 function CertificateRow({
   role,
   publicPem,
   privatePem,
-  partnerName
+  partnerName,
 }: {
-  role: 'Active' | 'Previous',
-  publicPem?: string,
-  privatePem?: string,
-  partnerName: string
+  role: 'Active' | 'Previous';
+  publicPem?: string;
+  privatePem?: string;
+  partnerName: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
@@ -279,8 +361,16 @@ function CertificateRow({
     try {
       const cert = pki.certificateFromPem(publicPem);
       return {
-        notBefore: cert.validity.notBefore.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
-        notAfter: cert.validity.notAfter.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+        notBefore: cert.validity.notBefore.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
+        notAfter: cert.validity.notAfter.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
       };
     } catch {
       return null;
@@ -288,7 +378,7 @@ function CertificateRow({
   }, [publicPem]);
 
   const handleCopy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(text);
     toast({ title: 'Copied', description: `${label} copied to clipboard.` });
   };
 
@@ -335,7 +425,11 @@ function CertificateRow({
           )}
         </td>
         <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">
-          <span>{role === 'Active' ? 'Actively used for signing and decryption' : 'In grace period for legacy traffic'}</span>
+          <span>
+            {role === 'Active'
+              ? 'Actively used for signing and decryption'
+              : 'In grace period for legacy traffic'}
+          </span>
         </td>
         <td className="px-6 py-4 whitespace-nowrap">
           {certInfo ? (
@@ -356,7 +450,11 @@ function CertificateRow({
             <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors">
               {expanded ? 'Hide Details' : 'View Details'}
             </span>
-            {expanded ? <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" /> : <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />}
+            {expanded ? (
+              <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+            )}
           </div>
         </td>
       </tr>
@@ -364,15 +462,33 @@ function CertificateRow({
         <tr>
           <td colSpan={5} className="p-0 border-t-0">
             <div className="bg-slate-50 p-4 border-b border-slate-100 flex flex-col gap-4 shadow-inner">
-
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-600 uppercase">Public Certificate</span>
+                  <span className="text-xs font-semibold text-slate-600 uppercase">
+                    Public Certificate
+                  </span>
                   <div className="flex gap-2">
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => publicPem && handleCopy(publicPem, 'Public Certificate')} disabled={!publicPem}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => publicPem && handleCopy(publicPem, 'Public Certificate')}
+                      disabled={!publicPem}
+                    >
                       <Copy className="w-3 h-3" /> Copy
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => publicPem && handleDownload(publicPem, `${partnerName}_${role.toLowerCase()}_public.pem`)} disabled={!publicPem}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() =>
+                        publicPem &&
+                        handleDownload(publicPem, `${partnerName}_${role.toLowerCase()}_public.pem`)
+                      }
+                      disabled={!publicPem}
+                    >
                       <Download className="w-3 h-3" /> Download
                     </Button>
                   </div>
@@ -385,19 +501,37 @@ function CertificateRow({
               {privatePem && (
                 <div className="flex flex-col gap-2 pt-2 border-t border-slate-200">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-semibold text-slate-600 uppercase">Complete Identity (Public + Private)</span>
+                    <span className="text-xs font-semibold text-slate-600 uppercase">
+                      Complete Identity (Public + Private)
+                    </span>
                     <div className="flex gap-2">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => handleCopy(completePem, 'Complete Identity')}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        onClick={() => handleCopy(completePem, 'Complete Identity')}
+                      >
                         <Copy className="w-3 h-3" /> Copy Complete
                       </Button>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => handleDownload(completePem, `${partnerName}_${role.toLowerCase()}_complete.pem`)}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        onClick={() =>
+                          handleDownload(
+                            completePem,
+                            `${partnerName}_${role.toLowerCase()}_complete.pem`,
+                          )
+                        }
+                      >
                         <Download className="w-3 h-3" /> Download Complete
                       </Button>
                     </div>
                   </div>
                 </div>
               )}
-
             </div>
           </td>
         </tr>

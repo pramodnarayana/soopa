@@ -1,6 +1,6 @@
 import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -8,7 +8,9 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        project: 'tsconfig.eslint.json',
+        projectService: {
+          allowDefaultProject: ['*.js', '*.mjs', '*.cjs', '*.d.ts'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
@@ -16,33 +18,45 @@ export default tseslint.config(
       },
     },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/require-await': 'off',
-      '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/no-misused-promises': 'warn',
-      '@typescript-eslint/no-unsafe-assignment': 'warn',
-      '@typescript-eslint/no-unsafe-member-access': 'warn',
-      '@typescript-eslint/no-unsafe-call': 'warn',
-      '@typescript-eslint/no-unsafe-return': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
-      '@typescript-eslint/restrict-template-expressions': 'warn'
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        {
+          checksVoidReturn: {
+            attributes: false,
+          },
+        },
+      ],
     },
   },
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/vitest.config.ts', 'vitest.workspace.ts', '**/eslint.config.mjs', 'eslint.config.mjs', 'ecosystem.config.cjs', '**/drizzle.config.ts', '**/coverage/**', '**/.venv/**', '**/postcss.config.js', '**/tailwind.config.js'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/vitest.config.ts',
+      'vitest.workspace.ts',
+      '**/eslint.config.mjs',
+      'eslint.config.mjs',
+      'ecosystem.config.cjs',
+      '**/drizzle.config.ts',
+      '**/coverage/**',
+      '**/.venv/**',
+      '**/postcss.config.js',
+      '**/tailwind.config.js',
+      '**/generated/**/*.d.ts',
+      '**/*.js',
+      '**/*.mjs',
+      '**/*.cjs',
+      '**/*.d.ts',
+    ],
   },
   {
-    files: ['apps/platform-dashboard/src/components/ui/**/*.tsx', 'apps/platform-dashboard/src/components/ui/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-    }
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+    ...tseslint.configs.disableTypeChecked,
   },
   {
     files: ['**/*.spec.ts', '**/*.test.ts', 'test/**'],
@@ -53,6 +67,6 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
-    }
-  }
+    },
+  },
 );

@@ -1,18 +1,18 @@
-import type { TokenVerifier } from '../ports/TokenVerifier.js';
+import { TenantMappingDomainError } from '../domain/Errors.js';
 import type { IdentityContext } from '../domain/IdentityContext.js';
 import type { TenantRepository } from '../ports/TenantRepository.js';
-import { TenantMappingDomainError } from '../domain/Errors.js';
+import type { TokenVerifier } from '../ports/TokenVerifier.js';
 
 export class AuthenticateUseCase {
   constructor(
     private readonly tokenVerifier: TokenVerifier,
-    private readonly tenantRepo: TenantRepository
+    private readonly tenantRepo: TenantRepository,
   ) {}
 
   async execute(token: string): Promise<IdentityContext> {
     // 1. Cryptographically verify JWT via JWKS
     const claims = await this.tokenVerifier.verify(token);
-    
+
     const email = claims.email || claims.preferred_username || claims.sub;
     const name = claims.name || email.split('@')[0];
     const zitadelOrgId = claims['urn:zitadel:iam:org:id'] || claims.tenant_id;
@@ -27,12 +27,12 @@ export class AuthenticateUseCase {
         tenantId: provisioned.tenantId,
         email,
         name,
-        roles: ['admin'] // In a real app, parse this from Zitadel roles or local tenantUsers table
+        roles: ['admin'], // In a real app, parse this from Zitadel roles or local tenantUsers table
       };
     }
 
-    const tenantId = await this.tenantRepo.getTenantMappingForUser(user.id) ?? '';
-    
+    const tenantId = (await this.tenantRepo.getTenantMappingForUser(user.id)) ?? '';
+
     if (!tenantId) {
       throw new TenantMappingDomainError(email);
     }
@@ -43,7 +43,7 @@ export class AuthenticateUseCase {
       tenantId,
       email,
       name: user.name,
-      roles: ['admin']
+      roles: ['admin'],
     };
   }
 }

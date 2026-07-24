@@ -1,13 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { SchedulerModule } from '../src/SchedulerModule.js';
+import { describe, expect, it, vi } from 'vitest';
 import { HealthController } from '../src/api/HealthController.js';
 import { SchedulerWorker } from '../src/application/SchedulerWorker.js';
+import { SchedulerModule } from '../src/SchedulerModule.js';
 
 // Mock dependencies
 vi.mock('@soopa/database', () => ({
   createDbClient: vi.fn().mockReturnValue({ db: {}, pool: { end: vi.fn() } }),
-  scheduledJobs: {}
+  scheduledJobs: {},
 }));
 
 describe('SchedulerModule', () => {
@@ -18,9 +18,9 @@ describe('SchedulerModule', () => {
           dbConnectionString: 'postgres://dummy',
           engineId: 'test-engine',
           pollIntervalMs: 100,
-          batchSize: 5
-        })
-      ]
+          batchSize: 5,
+        }),
+      ],
     }).compile();
 
     const healthController = moduleRef.get(HealthController);
@@ -31,7 +31,7 @@ describe('SchedulerModule', () => {
 
     const app = moduleRef.createNestApplication();
     await app.init();
-    
+
     // Test HealthController
     const healthResult = healthController.check();
     expect(healthResult.status).toBe('healthy');

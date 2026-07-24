@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
 import { TenantMappingDomainError } from '../src/domain/Errors.js';
-import type { TokenVerifier } from '../src/ports/TokenVerifier.js';
 import type { TenantRepository } from '../src/ports/TenantRepository.js';
+import type { TokenVerifier } from '../src/ports/TokenVerifier.js';
 
 // Fake implementations instead of magic mocks
 class FakeTokenVerifier implements TokenVerifier {
@@ -36,7 +36,7 @@ describe('AuthenticateUseCase', () => {
   it('should provision a new user and tenant if user does not exist', async () => {
     const verifier = new FakeTokenVerifier();
     verifier.claims = { sub: 'new-user', email: 'test@example.com', name: 'Test User' };
-    
+
     const repo = new FakeTenantRepository();
     repo.provisioned = { userId: 'u1', tenantId: 't1' };
 
@@ -48,14 +48,18 @@ describe('AuthenticateUseCase', () => {
       tenantId: 't1',
       email: 'test@example.com',
       name: 'Test User',
-      roles: ['admin']
+      roles: ['admin'],
     });
   });
 
   it('should return existing user and tenant if they exist', async () => {
     const verifier = new FakeTokenVerifier();
-    verifier.claims = { sub: 'existing-user', email: 'existing@example.com', name: 'Existing User' };
-    
+    verifier.claims = {
+      sub: 'existing-user',
+      email: 'existing@example.com',
+      name: 'Existing User',
+    };
+
     const repo = new FakeTenantRepository();
     repo.users['existing@example.com'] = { id: 'u2', name: 'Existing User DB' };
     repo.mappings['u2'] = 't2';
@@ -68,14 +72,18 @@ describe('AuthenticateUseCase', () => {
       tenantId: 't2',
       email: 'existing@example.com',
       name: 'Existing User DB',
-      roles: ['admin']
+      roles: ['admin'],
     });
   });
 
   it('should throw TenantMappingDomainError if user exists but has no tenant mapping', async () => {
     const verifier = new FakeTokenVerifier();
-    verifier.claims = { sub: 'existing-user', email: 'no-tenant@example.com', name: 'Existing User' };
-    
+    verifier.claims = {
+      sub: 'existing-user',
+      email: 'no-tenant@example.com',
+      name: 'Existing User',
+    };
+
     const repo = new FakeTenantRepository();
     repo.users['no-tenant@example.com'] = { id: 'u3', name: 'User 3' };
     // No mapping set
@@ -83,11 +91,11 @@ describe('AuthenticateUseCase', () => {
     const useCase = new AuthenticateUseCase(verifier, repo);
     await expect(useCase.execute('valid')).rejects.toThrow(TenantMappingDomainError);
   });
-  
+
   it('should fall back to sub if email is missing', async () => {
     const verifier = new FakeTokenVerifier();
     verifier.claims = { sub: 'fallback-sub' };
-    
+
     const repo = new FakeTenantRepository();
     repo.provisioned = { userId: 'u4', tenantId: 't4' };
 

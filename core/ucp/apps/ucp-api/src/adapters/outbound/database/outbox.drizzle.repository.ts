@@ -1,12 +1,12 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
-import { controlPlaneOutbox } from '@soopa/database';
+import { Inject, Injectable } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
+import { controlPlaneOutbox } from '@soopa/database';
+import { eq, inArray } from 'drizzle-orm';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
 import {
   IOutboxRepository,
   OutboxEvent,
-} from '../../../ports/outbound/outbox.repository';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module';
+} from '../../../ports/outbound/outbox.repository.js';
 
 @Injectable()
 export class OutboxDrizzleRepository implements IOutboxRepository {

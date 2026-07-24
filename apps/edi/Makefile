@@ -12,25 +12,25 @@ build:
 
 lint:
 	@echo "=== Linting Backend ==="
-	uv run ruff check libs/ services/
+	uv run ruff check packages/ apps/
 	@echo "=== Linting Frontend ==="
 	cd frontend/web && pnpm lint
 
 format:
 	@echo "=== Formatting Backend ==="
-	uv run ruff format libs/ services/
+	uv run ruff format packages/ apps/
 
 typecheck:
 	@echo "=== Typechecking Backend ==="
-	uv run mypy libs/ services/
+	uv run mypy packages/ apps/
 	@echo "=== Typechecking Frontend ==="
 	cd frontend/web && pnpm tsc --noEmit
 
 test:
 	@echo "=== Testing Backend (Unit) ==="
-	uv run pytest libs/ services/ -m "not integration" --cov=.
+	uv run pytest packages/ apps/ -m "not integration" --cov=.
 	@echo "=== Testing Backend (Integration) ==="
-	uv run pytest libs/ services/ -m "integration" --cov=. --cov-append --cov-report=term-missing
+	uv run pytest packages/ apps/ -m "integration" --cov=. --cov-append --cov-report=term-missing
 	@echo "=== Testing Frontend ==="
 	# cd frontend/web && pnpm test (enable when Vitest is scaffolded)
 
@@ -57,19 +57,19 @@ dev-web:
 
 dev-worker-orchestrator:
 	@echo "Starting Orchestrator Worker for local development..."
-	ENVIRONMENT=development PYTHONPATH=services/workers/orchestrator/src:libs/database/src:libs/config/src:libs/pipeline/src:libs/domain/src:libs/transformer/src:libs/scheduler/src uv run python services/workers/orchestrator/src/worker/main.py
+	ENVIRONMENT=development PYTHONPATH=apps/edi-worker/orchestrator/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src:packages/scheduler/src uv run python apps/edi-worker/orchestrator/src/worker/main.py
 
 dev-worker-compute:
 	@echo "Starting Compute Worker for local development..."
-	ENVIRONMENT=development PYTHONPATH=services/workers/compute/src:libs/database/src:libs/config/src:libs/pipeline/src:libs/domain/src:libs/transformer/src uv run python services/workers/compute/src/compute_worker/main.py
+	ENVIRONMENT=development PYTHONPATH=apps/edi-worker/compute/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src uv run python apps/edi-worker/compute/src/compute_worker/main.py
 
 db-init:
 	@echo "Waiting for databases to be ready..."
 	@sleep 5
 	@echo "Running database migrations..."
-	PYTHONPATH=libs/database/src:libs/config/src uv run python libs/database/src/database/run_migrations.py
+	PYTHONPATH=packages/database/src:packages/config/src uv run python packages/database/src/database/run_migrations.py
 	@echo "Seeding the database..."
-	PYTHONPATH=libs/database/src:libs/config/src uv run python services/as2_server/scripts/seed.py
+	PYTHONPATH=packages/database/src:packages/config/src:apps/edi-worker/orchestrator/src uv run python apps/edi-as2-server/scripts/seed.py
 
 db-reset:
 	@echo "Wiping application databases (leaving Zitadel intact)..."

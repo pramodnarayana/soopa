@@ -1,11 +1,11 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import {
+  ZitadelProjectGrant,
   ZitadelProjectGrantsResponseSchema,
   ZitadelUserSchema,
-  ZitadelProjectGrant,
-} from '../../../domain/dtos/zitadel.dto';
-import { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider';
-import { ZitadelBaseClient } from './zitadel-base.client';
+} from '../../../domain/dtos/zitadel.dto.js';
+import { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider.js';
+import { ZitadelBaseClient } from './zitadel-base.client.js';
 
 @Injectable()
 export class ZitadelUsersAdapter

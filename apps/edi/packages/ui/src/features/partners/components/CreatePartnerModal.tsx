@@ -1,15 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
+import { FormModal } from '@/components/ui/form-modal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FormModal } from '@/components/ui/form-modal';
-import { CertificateInput } from './CertificateInput';
-import { useCreatePlatformPartnerMutation, useGenerateCertificateMutation, useDeleteCertificateSecretMutation } from '../api/partnerHooks';
 import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { useToast } from '@/hooks/use-toast';
-import { Combobox } from '@/components/ui/combobox';
-import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import {
+  useCreatePlatformPartnerMutation,
+  useDeleteCertificateSecretMutation,
+  useGenerateCertificateMutation,
+} from '../api/partnerHooks';
 import { extractCertificateMaterial } from '../utils/certificate';
+import { CertificateInput } from './CertificateInput';
 
 export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: string[] }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -21,10 +25,14 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
   const [url, setUrl] = useState('');
 
   const isOpenRef = useRef(isOpen);
-  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   const isLocalRef = useRef(isLocal);
-  useEffect(() => { isLocalRef.current = isLocal; }, [isLocal]);
+  useEffect(() => {
+    isLocalRef.current = isLocal;
+  }, [isLocal]);
 
   const isDuplicate = existingAs2Ids.includes(as2Id);
 
@@ -51,14 +59,14 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
       setAs2Id('');
       setUrl('');
     } catch (e) {
-      console.error("Failed to cleanup orphaned secret during reset", e);
+      console.error('Failed to cleanup orphaned secret during reset', e);
     }
   };
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
-      reset();
+      void reset();
     }
   };
 
@@ -75,7 +83,11 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
     try {
       new URL(url);
     } catch {
-      toast({ title: 'Error', description: 'Receiving URL must be a valid URL.', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Receiving URL must be a valid URL.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -90,7 +102,12 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
       extractedPrivateKey = privateKey;
     }
 
-    if (isLocal && privateKeyVaultRef && generatedForAs2Id && submittedAs2Id !== generatedForAs2Id) {
+    if (
+      isLocal &&
+      privateKeyVaultRef &&
+      generatedForAs2Id &&
+      submittedAs2Id !== generatedForAs2Id
+    ) {
       // Invalidate existing if AS2 ID changed
       try {
         await handleCleanup();
@@ -98,10 +115,18 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         setCertPem('');
         setGeneratedForAs2Id(null);
       } catch {
-        toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
+        toast({
+          title: 'Error',
+          description: 'Failed to cleanup old certificate.',
+          variant: 'destructive',
+        });
         return;
       }
-      toast({ title: 'Warning', description: 'AS2 ID changed. Please regenerate the certificate.', variant: 'destructive' });
+      toast({
+        title: 'Warning',
+        description: 'AS2 ID changed. Please regenerate the certificate.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -117,7 +142,8 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         // If user went through the generate flow, send vault ref
         // If user uploaded their own key, send the raw PEM so backend stores it
         private_key_vault_ref: finalVaultRef || undefined,
-        private_key_pem: (isLocal && !finalVaultRef && extractedPrivateKey) ? extractedPrivateKey : undefined,
+        private_key_pem:
+          isLocal && !finalVaultRef && extractedPrivateKey ? extractedPrivateKey : undefined,
       },
       {
         onSuccess: () => {
@@ -162,7 +188,11 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                 setCertPem('');
                 setGeneratedForAs2Id(null);
               } catch {
-                toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
+                toast({
+                  title: 'Error',
+                  description: 'Failed to cleanup old certificate.',
+                  variant: 'destructive',
+                });
                 return;
               }
               setIsLocal(nextIsLocal);
@@ -176,7 +206,11 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                 setCertPem('');
                 setGeneratedForAs2Id(null);
               } catch {
-                toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
+                toast({
+                  title: 'Error',
+                  description: 'Failed to cleanup old certificate.',
+                  variant: 'destructive',
+                });
                 return;
               }
               setIsLocal(nextIsLocal);
@@ -187,10 +221,14 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
           }}
           className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 ${isLocal ? 'bg-indigo-50 border-indigo-200 focus:ring-indigo-200' : 'bg-violet-50 border-violet-200 focus:ring-violet-200'}`}
         >
-          <span className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isLocal ? 'opacity-100 text-indigo-700' : 'opacity-0'}`}>
+          <span
+            className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isLocal ? 'opacity-100 text-indigo-700' : 'opacity-0'}`}
+          >
             Local
           </span>
-          <span className={`absolute right-1.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isLocal ? 'opacity-0' : 'opacity-100 text-violet-700'}`}>
+          <span
+            className={`absolute right-1.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isLocal ? 'opacity-0' : 'opacity-100 text-violet-700'}`}
+          >
             Remote
           </span>
           <span
@@ -203,11 +241,21 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
       {/* Name + AS2 ID */}
       <div className="grid grid-cols-2 gap-6">
         <div className="grid gap-2">
-          <Label htmlFor="name" className="text-slate-600 font-medium">Partner Name</Label>
-          <Input id="name" name="name" required placeholder="e.g. Acme Corp" className="h-10 rounded-xl" />
+          <Label htmlFor="name" className="text-slate-600 font-medium">
+            Partner Name
+          </Label>
+          <Input
+            id="name"
+            name="name"
+            required
+            placeholder="e.g. Acme Corp"
+            className="h-10 rounded-xl"
+          />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="as2_id" className="text-slate-600 font-medium">AS2 ID</Label>
+          <Label htmlFor="as2_id" className="text-slate-600 font-medium">
+            AS2 ID
+          </Label>
           <Input
             id="as2_id"
             name="as2_id"
@@ -236,7 +284,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
         ) : (
           <Input
             value={url}
-            onChange={e => setUrl(e.target.value)}
+            onChange={(e) => setUrl(e.target.value)}
             placeholder="https://acme.com/as2/receive"
             className="h-10 rounded-xl"
             required
@@ -260,7 +308,11 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                 disabled={generateCert.isPending}
                 onClick={async () => {
                   if (!as2Id.trim()) {
-                    toast({ title: 'Error', description: 'Please enter an AS2 ID first to use as the Common Name.', variant: 'destructive' });
+                    toast({
+                      title: 'Error',
+                      description: 'Please enter an AS2 ID first to use as the Common Name.',
+                      variant: 'destructive',
+                    });
                     return;
                   }
                   if (privateKeyVaultRef) {
@@ -270,7 +322,11 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                       setCertPem('');
                       setGeneratedForAs2Id(null);
                     } catch {
-                      toast({ title: 'Error', description: 'Failed to cleanup old certificate.', variant: 'destructive' });
+                      toast({
+                        title: 'Error',
+                        description: 'Failed to cleanup old certificate.',
+                        variant: 'destructive',
+                      });
                       return;
                     }
                   }
@@ -285,11 +341,18 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                       setCertPem(res.public_cert_pem);
                       setPrivateKeyVaultRef(res.private_key_vault_ref);
                       setGeneratedForAs2Id(as2Id);
-                      toast({ title: 'Certificate Generated', description: 'The certificate has been generated and populated.' });
+                      toast({
+                        title: 'Certificate Generated',
+                        description: 'The certificate has been generated and populated.',
+                      });
                     },
                     onError: () => {
-                      toast({ title: 'Error', description: 'Failed to generate certificate.', variant: 'destructive' });
-                    }
+                      toast({
+                        title: 'Error',
+                        description: 'Failed to generate certificate.',
+                        variant: 'destructive',
+                      });
+                    },
                   });
                 }}
               >

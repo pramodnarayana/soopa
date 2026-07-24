@@ -8,7 +8,7 @@ export interface ParsedEdiError {
 }
 
 export function parseBotsError(errStr: string): ParsedEdiError {
-  let code = "UNKNOWN";
+  let code = 'UNKNOWN';
   let segment: string | null = null;
   let element: string | null = null;
   let globalMessage = errStr;
@@ -23,8 +23,8 @@ export function parseBotsError(errStr: string): ParsedEdiError {
     element = fieldMatch[2];
     const issue = fieldMatch[3];
 
-    segment = recordPath.split("-").pop() || null;
-    if (issue.toLowerCase().includes("mandatory")) {
+    segment = recordPath.split('-').pop() || null;
+    if (issue.toLowerCase().includes('mandatory')) {
       globalMessage = `${element} is missing`;
       localMessage = `Missing`;
     } else {
@@ -32,7 +32,9 @@ export function parseBotsError(errStr: string): ParsedEdiError {
       localMessage = issue.charAt(0).toUpperCase() + issue.slice(1);
     }
   } else {
-    const countMatch = errStr.match(/Count in ([A-Z0-9]+)-([A-Z0-9]+) is \d+; should be equal to number of segments (\d+)/);
+    const countMatch = errStr.match(
+      /Count in ([A-Z0-9]+)-([A-Z0-9]+) is \d+; should be equal to number of segments (\d+)/,
+    );
     if (countMatch) {
       segment = countMatch[1];
       element = countMatch[2];
@@ -55,14 +57,14 @@ export function groupValidationErrors(validationErrors: (string | Record<string,
 } {
   const errorMap = new Map<string, ParsedEdiError[]>();
 
-  const parsedErrors = validationErrors.map(errStr => {
+  const parsedErrors = validationErrors.map((errStr) => {
     if (typeof errStr === 'string') {
       return parseBotsError(errStr);
     }
     return errStr; // fallback just in case
   });
 
-  parsedErrors.forEach(err => {
+  parsedErrors.forEach((err) => {
     if (err && err.segment) {
       const list = errorMap.get(err.segment) || [];
       list.push(err);

@@ -1,5 +1,5 @@
-import { Plus, Edit2, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Edit2, Plus, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -7,21 +7,21 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from '@/components/ui/table';
 
 export interface UserRow {
-  id: string
-  email: string
-  name: string
-  role: 'Owner' | 'Admin' | 'Standard'
+  id: string;
+  email: string;
+  name: string;
+  role: 'Owner' | 'Admin' | 'Standard';
 }
 
 export interface UserManagementTableProps {
-  users: UserRow[]
-  currentPermissions?: string[]
-  onInvite?: () => void
-  onEdit?: (userId: string) => void
-  onDelete?: (userId: string) => void
+  users: UserRow[];
+  currentPermissions?: string[];
+  onInvite?: () => void;
+  onEdit?: (userId: string) => void;
+  onDelete?: (userId: string) => void;
 }
 
 export function UserManagementTable({
@@ -29,9 +29,9 @@ export function UserManagementTable({
   currentPermissions = [],
   onInvite,
   onEdit,
-  onDelete
+  onDelete,
 }: UserManagementTableProps) {
-  const canManage = currentPermissions.includes('users:write')
+  const canManage = currentPermissions.includes('users:write');
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden flex flex-col h-full">
@@ -58,12 +58,17 @@ export function UserManagementTable({
             <TableRow className="hover:bg-transparent border-slate-100">
               <TableHead className="text-slate-500 font-semibold h-12">User</TableHead>
               <TableHead className="text-slate-500 font-semibold h-12">Role</TableHead>
-              <TableHead className="text-right text-slate-500 font-semibold h-12">Actions</TableHead>
+              <TableHead className="text-right text-slate-500 font-semibold h-12">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.map((user) => (
-              <TableRow key={user.id} className="hover:bg-slate-50/50 border-slate-100/60 transition-colors">
+              <TableRow
+                key={user.id}
+                className="hover:bg-slate-50/50 border-slate-100/60 transition-colors"
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold border border-slate-200">
@@ -76,11 +81,15 @@ export function UserManagementTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${
-                    user.role === 'Owner' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                    user.role === 'Admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                    'bg-slate-100 text-slate-700 border-slate-200'
-                  }`}>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${
+                      user.role === 'Owner'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : user.role === 'Admin'
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          : 'bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
                     {user.role}
                   </span>
                 </TableCell>
@@ -116,5 +125,5 @@ export function UserManagementTable({
         </Table>
       </div>
     </div>
-  )
+  );
 }

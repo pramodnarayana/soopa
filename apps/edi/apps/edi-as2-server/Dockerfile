@@ -12,26 +12,27 @@ WORKDIR /build
 # Install uv for fast dependency resolution
 RUN pip install --no-cache-dir uv
 
+# Copy workspace root files for uv workspace resolution
+COPY pyproject.toml uv.lock* ./
+
 # Copy only the dependency manifests first to leverage Docker layer caching
-COPY soopaedi/libs/config/pyproject.toml ./libs/config/pyproject.toml
-COPY soopaedi/libs/database/pyproject.toml ./libs/database/pyproject.toml
-COPY soopaedi/libs/identity/pyproject.toml ./libs/identity/pyproject.toml
-COPY soopaedi/libs/as2_core/pyproject.toml ./libs/as2_core/pyproject.toml
-COPY soopaedi/libs/observability/pyproject.toml ./libs/observability/pyproject.toml
-COPY soopaedi/services/as2_server/pyproject.toml ./services/as2_server/pyproject.toml
+COPY apps/edi/packages/config/pyproject.toml ./apps/edi/packages/config/pyproject.toml
+COPY apps/edi/packages/database/pyproject.toml ./apps/edi/packages/database/pyproject.toml
+COPY apps/edi/packages/security/pyproject.toml ./apps/edi/packages/security/pyproject.toml
+COPY apps/edi/packages/as2_core/pyproject.toml ./apps/edi/packages/as2_core/pyproject.toml
+COPY core/platform/packages/observability/python/pyproject.toml ./core/platform/packages/observability/python/pyproject.toml
+COPY apps/edi/apps/edi-as2-server/pyproject.toml ./apps/edi/apps/edi-as2-server/pyproject.toml
 
 # Copy source code
-COPY soopaedi/libs/ ./libs/
-COPY soopaedi/services/as2_server/ ./services/as2_server/
+COPY apps/edi/packages/config/ ./apps/edi/packages/config/
+COPY apps/edi/packages/database/ ./apps/edi/packages/database/
+COPY apps/edi/packages/security/ ./apps/edi/packages/security/
+COPY apps/edi/packages/as2_core/ ./apps/edi/packages/as2_core/
+COPY core/platform/packages/observability/python/ ./core/platform/packages/observability/python/
+COPY apps/edi/apps/edi-as2-server/ ./apps/edi/apps/edi-as2-server/
 
-# Install all dependencies into /install for the final stage
-RUN uv pip install --system --no-cache \
-    ./libs/config \
-    ./libs/database \
-    ./libs/identity \
-    ./libs/as2_core \
-    ./libs/observability \
-    ./services/as2_server
+# Install dependencies using uv workspaces
+RUN uv pip install --system --no-cache ./apps/edi/apps/edi-as2-server
 
 # --- Stage 2: Production Runtime ---
 FROM python:3.11-slim AS runtime
@@ -45,12 +46,13 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application source
-COPY --from=builder /build/libs/ ./libs/
-COPY --from=builder /build/services/as2_server/ ./services/as2_server/
+# Copy application source exactly as it was built
+COPY --from=builder /build/apps/ /app/apps/
+COPY --from=builder /build/core/ /app/core/
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH="/app/apps/edi/apps/edi-as2-server/src:/app/apps/edi/packages/as2_core/src:/app/apps/edi/packages/config/src:/app/apps/edi/packages/database/src:/app/apps/edi/packages/security/src:/app/core/platform/packages/observability/python/src"
 
 EXPOSE 8000
 

@@ -1,18 +1,27 @@
+import { CheckCircle2, Loader2, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import type { Partnership } from '../context/PlatformPartnersContext';
-import type { Partner } from '../types';
-import { useUpdatePlatformPartnershipMutation, useTestAs2PartnershipConnectionMutation } from '../api/partnerHooks';
+import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
+import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Zap, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
-import { Combobox } from '@/components/ui/combobox';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
+import { useToast } from '@/hooks/use-toast';
+import {
+  useTestAs2PartnershipConnectionMutation,
+  useUpdatePlatformPartnershipMutation,
+} from '../api/partnerHooks';
+import type { Partnership } from '../context/PlatformPartnersContext';
+import type { Partner } from '../types';
 
 export interface PartnershipDetailsProps {
   partnership: Partnership;
@@ -20,7 +29,11 @@ export interface PartnershipDetailsProps {
   onCancel?: () => void;
 }
 
-export function PartnershipDetails({ partnership, availablePartners, onCancel }: PartnershipDetailsProps) {
+export function PartnershipDetails({
+  partnership,
+  availablePartners,
+  onCancel,
+}: PartnershipDetailsProps) {
   const { toast } = useToast();
   const updatePartnership = useUpdatePlatformPartnershipMutation();
   const testConnection = useTestAs2PartnershipConnectionMutation();
@@ -31,7 +44,15 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
   const [customPayload, setCustomPayload] = useState('');
   const [showRawMdn, setShowRawMdn] = useState(false);
 
-  const { register, handleSubmit, control, watch, setValue, formState: { isDirty }, reset } = useForm({
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    formState: { isDirty },
+    reset,
+  } = useForm({
     defaultValues: {
       name: partnership.name || '',
       local_partner_id: partnership.local_partner_id,
@@ -40,7 +61,7 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
       mdn_url: partnership.mdn_url || '',
       encryption_algorithm: partnership.encryption_algorithm || 'AES256',
       signature_algorithm: partnership.signature_algorithm || 'SHA256',
-    }
+    },
   });
 
   const mdnType = watch('mdn_type');
@@ -51,22 +72,38 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
       setValue('mdn_url', platformSettings.available_as2_receive_urls[0], { shouldDirty: true });
     }
   }, [mdnType, mdnUrl, setValue, platformSettings]);
-  const onSubmit = (formData: any) => {
-    const payload: any = {};
+  interface PartnershipFormData {
+    name: string;
+    local_partner_id: string;
+    remote_partner_id: string;
+    mdn_type: string;
+    mdn_url: string;
+    encryption_algorithm: string;
+    signature_algorithm: string;
+  }
+  const onSubmit = (formData: PartnershipFormData) => {
+    const payload: Partial<PartnershipFormData> = {};
     if (formData.name !== partnership.name) payload.name = formData.name;
-    if (formData.local_partner_id !== partnership.local_partner_id) payload.local_partner_id = formData.local_partner_id;
-    if (formData.remote_partner_id !== partnership.remote_partner_id) payload.remote_partner_id = formData.remote_partner_id;
+    if (formData.local_partner_id !== partnership.local_partner_id)
+      payload.local_partner_id = formData.local_partner_id;
+    if (formData.remote_partner_id !== partnership.remote_partner_id)
+      payload.remote_partner_id = formData.remote_partner_id;
     if (formData.mdn_type !== partnership.mdn_type) payload.mdn_type = formData.mdn_type;
     if (formData.mdn_url !== partnership.mdn_url) payload.mdn_url = formData.mdn_url || null;
-    if (formData.encryption_algorithm !== partnership.encryption_algorithm) payload.encryption_algorithm = formData.encryption_algorithm;
-    if (formData.signature_algorithm !== partnership.signature_algorithm) payload.signature_algorithm = formData.signature_algorithm;
+    if (formData.encryption_algorithm !== partnership.encryption_algorithm)
+      payload.encryption_algorithm = formData.encryption_algorithm;
+    if (formData.signature_algorithm !== partnership.signature_algorithm)
+      payload.signature_algorithm = formData.signature_algorithm;
 
-    updatePartnership.mutate({ id: partnership.id, payload }, {
-      onSuccess: () => {
-        toast({ title: 'Success', description: 'Partnership updated successfully.' });
-        reset(formData);
+    updatePartnership.mutate(
+      { id: partnership.id, payload },
+      {
+        onSuccess: () => {
+          toast({ title: 'Success', description: 'Partnership updated successfully.' });
+          reset(formData);
+        },
       },
-    });
+    );
   };
 
   return (
@@ -74,13 +111,18 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
       <form onSubmit={handleSubmit(onSubmit)}>
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex justify-between items-center mb-5">
-          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Partnership Details</h4>
+          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+            Partnership Details
+          </h4>
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => { reset(); if (onCancel) onCancel(); }}
+              onClick={() => {
+                reset();
+                if (onCancel) onCancel();
+              }}
               disabled={!isDirty || isSubmitting}
             >
               Cancel
@@ -96,7 +138,6 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
           </div>
         </div>
 
-
         {/* ── Editable fields ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
           <div>
@@ -109,8 +150,8 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                   value={field.value}
                   onChange={field.onChange}
                   options={availablePartners
-                    .filter(p => p.type === 'AS2' && (p).is_local === true)
-                    .map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+                    .filter((p) => p.type === 'AS2' && p.is_local === true)
+                    .map((p) => ({ label: p.name, value: p.id, searchString: p.name }))}
                 />
               )}
             />
@@ -125,8 +166,8 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                   value={field.value}
                   onChange={field.onChange}
                   options={availablePartners
-                    .filter(p => p.type === 'AS2' && !(p).is_local)
-                    .map(p => ({ label: p.name, value: p.id, searchString: p.name }))}
+                    .filter((p) => p.type === 'AS2' && !p.is_local)
+                    .map((p) => ({ label: p.name, value: p.id, searchString: p.name }))}
                 />
               )}
             />
@@ -143,7 +184,9 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
               control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="SYNC">SYNC</SelectItem>
                     <SelectItem value="ASYNC">ASYNC</SelectItem>
@@ -178,10 +221,14 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
               control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {(platformSettings?.supported_as2_encryption_algorithms || []).map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    {(platformSettings?.supported_as2_encryption_algorithms || []).map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -195,10 +242,14 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
               control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {(platformSettings?.supported_as2_signature_algorithms || []).map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    {(platformSettings?.supported_as2_signature_algorithms || []).map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -214,7 +265,11 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
         <div className="flex flex-col border rounded-xl bg-white shadow-sm overflow-hidden relative h-[350px]">
           <div className="bg-slate-50 px-4 py-2 border-b flex items-center justify-end">
             <div className="flex items-center gap-2">
-              {isDirty && <span className="text-xs text-amber-600 font-medium mr-2">⚠️ Save changes before testing</span>}
+              {isDirty && (
+                <span className="text-xs text-amber-600 font-medium mr-2">
+                  ⚠️ Save changes before testing
+                </span>
+              )}
               <Button
                 type="button"
                 id={`test-as2-connection-${partnership.id}`}
@@ -223,14 +278,19 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
                 className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm h-7 text-xs px-3"
                 onClick={() => {
                   setShowRawMdn(false);
-                  testConnection.mutate({ id: partnership.id, custom_payload: customPayload || undefined });
+                  testConnection.mutate({
+                    id: partnership.id,
+                    custom_payload: customPayload || undefined,
+                  });
                 }}
                 disabled={testConnection.isPending || (isDirty && !isSubmitting)}
-                title={isDirty ? "Save changes before testing" : ""}
+                title={isDirty ? 'Save changes before testing' : ''}
               >
-                {testConnection.isPending
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Zap className="w-3.5 h-3.5 fill-current opacity-70" />}
+                {testConnection.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5 fill-current opacity-70" />
+                )}
                 Test Connection
               </Button>
               <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
@@ -244,22 +304,24 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
               </button>
             </div>
           </div>
-          <EdiEditorPane
-            value={customPayload}
-            onChange={(val) => setCustomPayload(val)}
-          />
+          <EdiEditorPane value={customPayload} onChange={(val) => setCustomPayload(val)} />
         </div>
 
         {/* Results Panel */}
         {testConnection.data && (
           <div className="space-y-3">
-            <div className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm border ${testConnection.data.success
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-red-50 border-red-200 text-red-800'
-              }`}>
-              {testConnection.data.success
-                ? <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
-                : <XCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />}
+            <div
+              className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm border ${
+                testConnection.data.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-red-50 border-red-200 text-red-800'
+              }`}
+            >
+              {testConnection.data.success ? (
+                <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
+              ) : (
+                <XCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />
+              )}
               <div>
                 <p className="font-semibold text-base">
                   {testConnection.data.success ? 'Connection successful' : 'Connection failed'}
@@ -310,7 +372,9 @@ export function PartnershipDetails({ partnership, availablePartners, onCancel }:
             <XCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />
             <div>
               <p className="font-semibold text-base">Request failed</p>
-              <p className="mt-1 opacity-90">{testConnection.error?.message ?? 'Could not reach the server.'}</p>
+              <p className="mt-1 opacity-90">
+                {testConnection.error?.message ?? 'Could not reach the server.'}
+              </p>
             </div>
           </div>
         )}

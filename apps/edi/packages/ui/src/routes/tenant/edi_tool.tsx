@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react';
-import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
+import Editor from '@monaco-editor/react';
 import { useMutation } from '@tanstack/react-query';
-import axios from 'axios';
-import { FileCode, CheckCircle, AlertTriangle, Copy, Trash2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { createRoute } from '@tanstack/react-router';
+import axios from 'axios';
+import { AlertTriangle, CheckCircle, Copy, FileCode, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
+import { useToast } from '@/hooks/use-toast';
+import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
 import { Route as appRoute } from '../tenant';
 import { EdiHumanReadableViewer } from './-components/EdiHumanReadableViewer';
-import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
-import Editor from '@monaco-editor/react';
 
 // Simple useDebounce hook for auto-running
 function useDebounce<T>(value: T, delay: number): T {
@@ -41,17 +41,21 @@ export function EdiToolPage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isValid, setIsValid] = useState<boolean | null>(null);
 
-
-
-  const handleEditorWillMount = (monaco: any) => {
+  const handleEditorWillMount = (monaco: typeof import('monaco-editor')) => {
     registerEdiLanguageAndTheme(monaco);
   };
 
   const { toast } = useToast();
 
+  interface TransformResponse {
+    valid: boolean;
+    result?: string;
+    error?: string;
+  }
+
   const transformMutation = useMutation({
     mutationFn: async (variables: { action: string; payload: string }) => {
-      const response = await axios.post('/api/edi-tools/transform', {
+      const response = await axios.post<TransformResponse>('/api/edi-tools/transform', {
         action: variables.action,
         payload: variables.payload,
       });
@@ -66,13 +70,14 @@ export function EdiToolPage() {
       setIsValid(data.valid);
       if (data.result) {
         try {
-          const parsed = JSON.parse(data.result);
+          const parsed = JSON.parse(data.result) as {
+            data?: unknown;
+            meta?: { validation_errors?: string[] };
+          };
           if (parsed.data !== undefined && parsed.meta) {
             setValidationErrors(parsed.meta.validation_errors || []);
             setOutputResult(
-              typeof parsed.data === 'string'
-                ? parsed.data
-                : JSON.stringify(parsed.data, null, 2)
+              typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data, null, 2),
             );
           } else {
             setValidationErrors([]);
@@ -90,19 +95,21 @@ export function EdiToolPage() {
         setOutputResult('Valid format.');
       }
     },
-    onError: (error: any, variables: any) => {
+    onError: (
+      error: Error | import('axios').AxiosError,
+      variables: { action: string; payload: string },
+    ) => {
       const currentAction = inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI';
-      if (
-        variables.payload !== debouncedPayload ||
-        variables.action !== currentAction
-      ) {
+      if (variables.payload !== debouncedPayload || variables.action !== currentAction) {
         return; // Ignore stale error responses
       }
 
       setValidationErrors([]);
       setIsValid(false);
 
-      let errorDetail = error.response?.data?.detail || error.message;
+      let errorDetail =
+        ('response' in error ? (error.response?.data as { detail?: string })?.detail : undefined) ||
+        error.message;
       if (typeof errorDetail !== 'string') {
         errorDetail = JSON.stringify(errorDetail);
       }
@@ -152,17 +159,20 @@ export function EdiToolPage() {
         const sourceData = inputFormat === 'JSON' ? inputPayload : outputResult;
         if (!sourceData) return <div className="p-4 text-slate-500">No data to display.</div>;
 
-        const parsedData = JSON.parse(sourceData);
+        const parsedData = JSON.parse(sourceData) as {
+          data?: unknown;
+          meta?: { validation_errors?: string[] };
+        };
 
         let astToRender = parsedData;
         let errorsToRender = validationErrors;
 
         // Smart Extractor: If the user pasted an API Envelope, extract the pristine data and errors
         if (inputFormat === 'JSON' && parsedData.data) {
-           astToRender = parsedData.data;
-           if (parsedData.meta && parsedData.meta.validation_errors) {
-               errorsToRender = parsedData.meta.validation_errors;
-           }
+          astToRender = parsedData.data;
+          if (parsedData.meta && parsedData.meta.validation_errors) {
+            errorsToRender = parsedData.meta.validation_errors;
+          }
         }
 
         return <EdiHumanReadableViewer data={astToRender} validationErrors={errorsToRender} />;
@@ -178,17 +188,17 @@ export function EdiToolPage() {
     return (
       <div className="flex flex-col h-full relative">
         {validationErrors.length > 0 && (
-           <div className="bg-red-50 border-b border-red-200 p-3 shrink-0">
-             <div className="flex items-center gap-2 text-red-800 font-bold text-sm mb-2">
-               <AlertTriangle className="w-4 h-4" />
-               Validation Errors
-             </div>
-             <ul className="list-disc list-inside text-red-600 text-xs font-medium space-y-1 overflow-y-auto max-h-32">
-               {validationErrors.map((err, i) => (
-                 <li key={i}>{err}</li>
-               ))}
-             </ul>
-           </div>
+          <div className="bg-red-50 border-b border-red-200 p-3 shrink-0">
+            <div className="flex items-center gap-2 text-red-800 font-bold text-sm mb-2">
+              <AlertTriangle className="w-4 h-4" />
+              Validation Errors
+            </div>
+            <ul className="list-disc list-inside text-red-600 text-xs font-medium space-y-1 overflow-y-auto max-h-32">
+              {validationErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          </div>
         )}
         <div className="flex-1 min-h-0">
           <Editor
@@ -241,10 +251,11 @@ export function EdiToolPage() {
                   setInputFormat('EDI');
                   setOutputFormat('JSON');
                 }}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${inputFormat === 'EDI'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
-                  }`}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  inputFormat === 'EDI'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
+                }`}
               >
                 EDI Input
               </button>
@@ -253,10 +264,11 @@ export function EdiToolPage() {
                   setInputFormat('JSON');
                   setOutputFormat('EDI');
                 }}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${inputFormat === 'JSON'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
-                  }`}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  inputFormat === 'JSON'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                }`}
               >
                 JSON Input
               </button>
@@ -264,7 +276,9 @@ export function EdiToolPage() {
 
             <div className="flex items-center gap-1">
               {transformMutation.isPending && (
-                <span className="text-xs text-slate-400 font-medium mr-2 animate-pulse">Processing...</span>
+                <span className="text-xs text-slate-400 font-medium mr-2 animate-pulse">
+                  Processing...
+                </span>
               )}
               <button
                 onClick={() => setInputPayload('')}
@@ -307,10 +321,11 @@ export function EdiToolPage() {
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border">
               <button
                 onClick={() => setOutputFormat('Human Readable')}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${outputFormat === 'Human Readable'
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  outputFormat === 'Human Readable'
+                    ? 'bg-slate-700 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
               >
                 Human Readable
               </button>
@@ -318,20 +333,22 @@ export function EdiToolPage() {
               {inputFormat === 'EDI' ? (
                 <button
                   onClick={() => setOutputFormat('JSON')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${outputFormat === 'JSON'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
-                    }`}
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    outputFormat === 'JSON'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                  }`}
                 >
                   JSON Output
                 </button>
               ) : (
                 <button
                   onClick={() => setOutputFormat('EDI')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${outputFormat === 'EDI'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
-                    }`}
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    outputFormat === 'EDI'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
+                  }`}
                 >
                   EDI Output
                 </button>
@@ -369,9 +386,7 @@ export function EdiToolPage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 p-0 bg-white min-h-0 flex flex-col">
-            {renderOutputPane()}
-          </div>
+          <div className="flex-1 p-0 bg-white min-h-0 flex flex-col">{renderOutputPane()}</div>
         </div>
       </div>
     </div>

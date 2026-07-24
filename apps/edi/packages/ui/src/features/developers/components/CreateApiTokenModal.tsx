@@ -1,6 +1,6 @@
+import { Key } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Key } from 'lucide-react';
 import { useCreateApiTokenMutation } from '../api/apiTokenHooks';
-import { TokenCredentialsModal } from './TokenCredentialsModal';
 import type { ApiTokenCreated } from '../types';
+import { TokenCredentialsModal } from './TokenCredentialsModal';
 
 export function CreateApiTokenModal() {
   const [open, setOpen] = useState(false);
@@ -79,10 +79,7 @@ export function CreateApiTokenModal() {
       </Dialog>
 
       {createdToken && (
-        <TokenCredentialsModal
-          token={createdToken}
-          onClose={() => setCreatedToken(null)}
-        />
+        <TokenCredentialsModal token={createdToken} onClose={() => setCreatedToken(null)} />
       )}
     </>
   );

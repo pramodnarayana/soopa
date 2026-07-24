@@ -1,17 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { PartnershipsTable } from '@/features/partners/components/PartnershipsTable'
-import { usePlatformPartners } from '@/features/partners/context/PlatformPartnersContext'
-import { Network } from 'lucide-react'
-import { CreatePartnershipModal } from '@/features/partners/components/CreatePartnershipModal'
-import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
+import { createFileRoute } from '@tanstack/react-router';
+import { Network } from 'lucide-react';
+import { CreatePartnershipModal } from '@/features/partners/components/CreatePartnershipModal';
+import { PartnershipsTable } from '@/features/partners/components/PartnershipsTable';
+import {
+  PlatformPartnersProvider,
+  usePlatformPartners,
+} from '@/features/partners/context/PlatformPartnersContext';
 
 export const Route = createFileRoute('/platform/partnerships')({
   component: () => (
     <PlatformPartnersProvider>
       <PartnershipsPage />
     </PlatformPartnersProvider>
-  )
-})
+  ),
+});
 
 export function PartnershipsPage() {
   const { partners, partnerships, isLoading } = usePlatformPartners();
@@ -29,7 +31,11 @@ export function PartnershipsPage() {
         </div>
         <CreatePartnershipModal availablePartners={partners} />
       </div>
-      <PartnershipsTable data={partnerships || []} availablePartners={partners || []} isLoading={isLoading} />
+      <PartnershipsTable
+        data={partnerships || []}
+        availablePartners={partners || []}
+        isLoading={isLoading}
+      />
     </div>
-  )
+  );
 }

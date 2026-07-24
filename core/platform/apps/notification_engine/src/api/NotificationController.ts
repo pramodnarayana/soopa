@@ -1,7 +1,17 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, InternalServerErrorException, Logger, ValidationPipe, UsePipes } from '@nestjs/common';
-import { IsString, IsNotEmpty, IsArray, IsObject } from 'class-validator';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  InternalServerErrorException,
+  Logger,
+  Post,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import { IsArray, IsNotEmpty, IsObject, IsString } from 'class-validator';
 import { DispatchNotificationUseCase } from '../application/DispatchNotificationUseCase.js';
-import { NotificationEvent, Channel } from '../domain/models.js';
+import { Channel, NotificationEvent } from '../domain/models.js';
 
 export class NotificationEventPayload {
   @IsString()
@@ -31,12 +41,12 @@ export class NotificationController {
   async sendNotification(@Body() payload: NotificationEventPayload) {
     try {
       this.logger.log(`Received notification dispatch request for eventType: ${payload.eventType}`);
-      
+
       const event = new NotificationEvent(
         payload.tenantId,
         payload.eventType,
         payload.channels,
-        payload.data
+        payload.data,
       );
 
       await this.useCase.execute(event);
