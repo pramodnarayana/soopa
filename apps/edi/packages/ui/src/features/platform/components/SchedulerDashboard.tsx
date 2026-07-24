@@ -1,11 +1,7 @@
+import { Clock, Pause, Play } from 'lucide-react';
 import { useState } from 'react';
-import { useJobsQuery, useUpdateJobMutation } from '../api/schedulerHooks';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Pause, Play, Clock } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -13,10 +9,21 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CronBuilder } from './CronBuilder';
 import type { JobResponse } from '../api/schedulerApi';
+import { useJobsQuery, useUpdateJobMutation } from '../api/schedulerHooks';
+import { CronBuilder } from './CronBuilder';
 
 export const SchedulerDashboard = () => {
   const { data: jobs = [], isLoading: jobsLoading, refetch: refetchJobs } = useJobsQuery();
@@ -40,14 +47,15 @@ export const SchedulerDashboard = () => {
   const [intervalError, setIntervalError] = useState<string | null>(null);
 
   const getIntervalParts = (seconds: number) => {
-    if (seconds % (30 * 24 * 3600) === 0) return { val: seconds / (30 * 24 * 3600), unit: 'months' };
+    if (seconds % (30 * 24 * 3600) === 0)
+      return { val: seconds / (30 * 24 * 3600), unit: 'months' };
     if (seconds % (24 * 3600) === 0) return { val: seconds / (24 * 3600), unit: 'days' };
     if (seconds % 3600 === 0) return { val: seconds / 3600, unit: 'hours' };
     if (seconds % 60 === 0) return { val: seconds / 60, unit: 'minutes' };
     return { val: seconds, unit: 'seconds' };
   };
 
-  const handleEditIntervalClick = (job: any) => {
+  const handleEditIntervalClick = (job: JobResponse) => {
     setEditingJob(job);
     if (job.cron_expression) {
       setScheduleType('cron');
@@ -84,14 +92,20 @@ export const SchedulerDashboard = () => {
 
         const totalSeconds = val * multiplier;
 
-        await updateJob({ name: editingJob.name, data: { interval_seconds: totalSeconds, cron_expression: null, timezone: null } });
+        await updateJob({
+          name: editingJob.name,
+          data: { interval_seconds: totalSeconds, cron_expression: null, timezone: null },
+        });
       } else {
-        await updateJob({ name: editingJob.name, data: { cron_expression: newCron, timezone: 'UTC', interval_seconds: null } });
+        await updateJob({
+          name: editingJob.name,
+          data: { cron_expression: newCron, timezone: 'UTC', interval_seconds: null },
+        });
       }
       setEditingJob(null);
       setIntervalError(null);
-    } catch (e: any) {
-      setIntervalError(e.message || 'Failed to update job schedule');
+    } catch (e: unknown) {
+      setIntervalError((e as Error).message || 'Failed to update job schedule');
     }
   };
 
@@ -127,32 +141,53 @@ export const SchedulerDashboard = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {jobs.map((job: any) => (
+              {jobs.map((job: JobResponse) => (
                 <TableRow key={job.id}>
                   <TableCell className="font-medium">{job.name}</TableCell>
                   <TableCell>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${job.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                        job.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                          job.status === 'RUNNING' ? 'bg-blue-100 text-blue-800' :
-                            job.status === 'PAUSED' ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-800'
-                      }`}>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        job.status === 'COMPLETED'
+                          ? 'bg-green-100 text-green-800'
+                          : job.status === 'FAILED'
+                            ? 'bg-red-100 text-red-800'
+                            : job.status === 'RUNNING'
+                              ? 'bg-blue-100 text-blue-800'
+                              : job.status === 'PAUSED'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-gray-100 text-gray-800'
+                      }`}
+                    >
                       {job.status}
                     </span>
                   </TableCell>
                   <TableCell>
-                    {job.cron_expression
-                      ? <span className="font-mono bg-muted px-1 rounded">{job.cron_expression}</span>
-                      : job.interval_seconds ? `${job.interval_seconds}s` : '-'}
+                    {job.cron_expression ? (
+                      <span className="font-mono bg-muted px-1 rounded">{job.cron_expression}</span>
+                    ) : job.interval_seconds ? (
+                      `${job.interval_seconds}s`
+                    ) : (
+                      '-'
+                    )}
                   </TableCell>
-                  <TableCell>{job.next_run_at ? new Date(job.next_run_at).toLocaleString() : 'Immediate'}</TableCell>
+                  <TableCell>
+                    {job.next_run_at ? new Date(job.next_run_at).toLocaleString() : 'Immediate'}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="sm" onClick={() => handleTogglePause(job)}>
-                        {job.status === 'PAUSED' ? <Play className="w-4 h-4 mr-1" /> : <Pause className="w-4 h-4 mr-1" />}
+                        {job.status === 'PAUSED' ? (
+                          <Play className="w-4 h-4 mr-1" />
+                        ) : (
+                          <Pause className="w-4 h-4 mr-1" />
+                        )}
                         {job.status === 'PAUSED' ? 'Resume' : 'Pause'}
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleEditIntervalClick(job)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditIntervalClick(job)}
+                      >
                         <Clock className="w-4 h-4 mr-1" />
                         Schedule
                       </Button>
@@ -180,13 +215,18 @@ export const SchedulerDashboard = () => {
               Set how often the {editingJob?.name} job runs.
               {editingJob?.min_interval_seconds && editingJob?.max_interval_seconds && (
                 <span className="block mt-1 text-orange-600">
-                  Allowed range (if using interval): {editingJob.min_interval_seconds}s - {editingJob.max_interval_seconds}s
+                  Allowed range (if using interval): {editingJob.min_interval_seconds}s -{' '}
+                  {editingJob.max_interval_seconds}s
                 </span>
               )}
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="interval" value={scheduleType} onValueChange={(v) => setScheduleType(v)}>
+          <Tabs
+            defaultValue="interval"
+            value={scheduleType}
+            onValueChange={(v) => setScheduleType(v)}
+          >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="interval">Interval</TabsTrigger>
               <TabsTrigger value="cron">Cron Expression</TabsTrigger>
@@ -200,7 +240,10 @@ export const SchedulerDashboard = () => {
                   id="interval"
                   type="number"
                   value={intervalValue}
-                  onChange={(e) => { setIntervalValue(e.target.value); setIntervalError(null); }}
+                  onChange={(e) => {
+                    setIntervalValue(e.target.value);
+                    setIntervalError(null);
+                  }}
                   className={`w-24 ${intervalError ? 'border-red-500' : ''}`}
                 />
                 <select
@@ -217,7 +260,13 @@ export const SchedulerDashboard = () => {
               </div>
             </TabsContent>
             <TabsContent value="cron" className="py-4">
-              <CronBuilder value={newCron} onChange={(val) => { setNewCron(val); setIntervalError(null); }} />
+              <CronBuilder
+                value={newCron}
+                onChange={(val) => {
+                  setNewCron(val);
+                  setIntervalError(null);
+                }}
+              />
               <div className="mt-4 p-3 bg-muted rounded-md text-sm">
                 <span className="font-semibold block mb-1">Generated Cron:</span>
                 <span className="font-mono">{newCron}</span>
@@ -225,11 +274,11 @@ export const SchedulerDashboard = () => {
             </TabsContent>
           </Tabs>
 
-          {intervalError && (
-            <p className="text-sm text-red-600 -mt-2 mb-2">{intervalError}</p>
-          )}
+          {intervalError && <p className="text-sm text-red-600 -mt-2 mb-2">{intervalError}</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingJob(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditingJob(null)}>
+              Cancel
+            </Button>
             <Button onClick={handleSaveSchedule}>Save changes</Button>
           </DialogFooter>
         </DialogContent>

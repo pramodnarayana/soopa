@@ -1,7 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
+import type {
+  CreateInboundRoutePayload,
+  CreateOutboundRoutePayload,
+  UpdateRoutePayload,
+} from '../types';
 import { createRoutesRepository } from './routesApi';
-import type { CreateInboundRoutePayload, CreateOutboundRoutePayload, UpdateRoutePayload } from '../types';
 
 function useRepo() {
   const auth = useAuth();
@@ -25,7 +29,7 @@ export function useCreateInboundRouteMutation() {
   return useMutation({
     mutationFn: (payload: CreateInboundRoutePayload) => repo.createInboundRoute(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
   });
 }
@@ -37,7 +41,7 @@ export function useCreateOutboundRouteMutation() {
   return useMutation({
     mutationFn: (payload: CreateOutboundRoutePayload) => repo.createOutboundRoute(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
   });
 }
@@ -47,10 +51,17 @@ export function useUpdateRouteMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ routeId, direction, payload }: { routeId: string; direction: 'INBOUND' | 'OUTBOUND'; payload: UpdateRoutePayload }) =>
-      repo.updateRoute(routeId, direction, payload),
+    mutationFn: ({
+      routeId,
+      direction,
+      payload,
+    }: {
+      routeId: string;
+      direction: 'INBOUND' | 'OUTBOUND';
+      payload: UpdateRoutePayload;
+    }) => repo.updateRoute(routeId, direction, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
   });
 }
@@ -63,7 +74,7 @@ export function useDeleteRouteMutation() {
     mutationFn: ({ routeId, direction }: { routeId: string; direction: 'INBOUND' | 'OUTBOUND' }) =>
       repo.deleteRoute(routeId, direction),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
   });
 }

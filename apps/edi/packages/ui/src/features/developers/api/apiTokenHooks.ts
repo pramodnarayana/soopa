@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
-import { createApiTokenRepository } from './apiTokensApi';
-import type { CreateApiTokenPayload } from '../types';
 import { useToastMutation } from '@/hooks/use-toast-mutation';
+import type { CreateApiTokenPayload } from '../types';
+import { createApiTokenRepository } from './apiTokensApi';
 
 export const apiTokenKeys = {
   all: ['apiTokens'] as const,
@@ -29,7 +29,7 @@ export function useCreateApiTokenMutation() {
   return useToastMutation(
     (payload: CreateApiTokenPayload) => repo.createApiToken(payload),
     'API Token created successfully.',
-    [apiTokenKeys.lists()]
+    [apiTokenKeys.lists()],
   );
 }
 
@@ -43,7 +43,7 @@ export function useUpdateApiTokenMutation() {
       if (data.name !== undefined) return 'Token renamed.';
       return '';
     },
-    [apiTokenKeys.lists()]
+    [apiTokenKeys.lists()],
   );
 }
 
@@ -52,6 +52,6 @@ export function useDeleteApiTokenMutation() {
   return useToastMutation(
     (id: string) => repo.deleteApiToken(id),
     'API Token permanently deleted.',
-    [apiTokenKeys.lists()]
+    [apiTokenKeys.lists()],
   );
 }

@@ -1,4 +1,8 @@
-import React, { useState } from 'react'
+import { Link } from '@tanstack/react-router';
+import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -6,27 +10,23 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Link } from '@tanstack/react-router'
-import { ChevronDown, ChevronRight, ArrowRight } from 'lucide-react'
+} from '@/components/ui/table';
 
 interface ColumnDef<T> {
-  key: string
-  label: string
-  render?: (item: T) => React.ReactNode
-  className?: string
+  key: string;
+  label: string;
+  render?: (item: T) => React.ReactNode;
+  className?: string;
 }
 
 interface ExplorerTableProps<T> {
-  columns: ColumnDef<T>[]
-  data: T[]
-  isLoading: boolean
-  renderExpanded: (item: T) => React.ReactNode
-  headerToolbar?: React.ReactNode
-  onLoadMore?: () => void
-  hasMore?: boolean
+  columns: ColumnDef<T>[];
+  data: T[];
+  isLoading: boolean;
+  renderExpanded: (item: T) => React.ReactNode;
+  headerToolbar?: React.ReactNode;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
 }
 
 export function ExplorerTable<T extends { id: string; trace_id?: string; status?: string }>({
@@ -38,45 +38,56 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
   onLoadMore,
   hasMore,
 }: ExplorerTableProps<T>) {
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id)
-  }
+    setExpandedId(expandedId === id ? null : id);
+  };
 
   const getStatusBadge = (status?: string) => {
-    if (!status) return null
+    if (!status) return null;
     switch (status.toUpperCase()) {
       case 'RECEIVED':
       case 'ACCEPTED':
       case 'PARSED':
       case 'TRANSFORMED':
       case 'DELIVERED':
-        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">SUCCESS</Badge>
+        return (
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
+            SUCCESS
+          </Badge>
+        );
       case 'FAILED':
       case 'ERROR':
-        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">FAILURE</Badge>
+        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">FAILURE</Badge>;
       case 'PENDING':
       case 'PENDING_DELIVERY':
-        return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">PENDING</Badge>
+        return (
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">PENDING</Badge>
+        );
       default:
-        return <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 border-0">{status}</Badge>
+        return (
+          <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 border-0">
+            {status}
+          </Badge>
+        );
     }
-  }
+  };
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
       {headerToolbar && (
-        <div className="border-b border-slate-200 bg-slate-50/50 p-4">
-          {headerToolbar}
-        </div>
+        <div className="border-b border-slate-200 bg-slate-50/50 p-4">{headerToolbar}</div>
       )}
       <Table>
         <TableHeader className="bg-slate-50/80">
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-10"></TableHead>
             {columns.map((col) => (
-              <TableHead key={col.key} className={`font-semibold text-slate-600 ${col.className || ''}`}>
+              <TableHead
+                key={col.key}
+                className={`font-semibold text-slate-600 ${col.className || ''}`}
+              >
                 {col.label}
               </TableHead>
             ))}
@@ -108,7 +119,11 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                 >
                   <TableCell className="p-3">
                     <div className="text-slate-400">
-                      {expandedId === item.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      {expandedId === item.id ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
                     </div>
                   </TableCell>
                   {columns.map((col) => (
@@ -118,7 +133,9 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                       ) : col.key === 'status' ? (
                         getStatusBadge(item.status)
                       ) : (
-                        <span className="text-slate-700 font-medium">{(item as any)[col.key] || '-'}</span>
+                        <span className="text-slate-700 font-medium">
+                          {((item as Record<string, unknown>)[col.key] as React.ReactNode) || '-'}
+                        </span>
                       )}
                     </TableCell>
                   ))}
@@ -162,5 +179,5 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
         </TableBody>
       </Table>
     </div>
-  )
+  );
 }

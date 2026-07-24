@@ -1,6 +1,6 @@
-import { createContext, useContext, useCallback } from 'react';
-import type { Partner } from '../types';
+import { createContext, useCallback, useContext } from 'react';
 import { useTenantPartnersQuery } from '../api/partnerHooks';
+import type { Partner } from '../types';
 
 interface PartnersContextType {
   partners: Partner[];
@@ -33,6 +33,6 @@ export function usePartners() {
   return ctx;
 }
 
+export type { PartnerType } from '../types';
 // Re-export for backward compatibility
 export type { Partner };
-export type { PartnerType } from '../types';

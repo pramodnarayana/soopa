@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FileJson, Database } from 'lucide-react'
-import { CodeViewer } from '@/components/ui/code-viewer'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { FilterBuilder } from './FilterBuilder'
-import { ExplorerTable } from './ExplorerTable'
-import { useExplorerEdiMessages, useExplorerEdiJson } from '../api/explorerApi'
-import type { FilterRule } from '../types'
+import { Database, FileJson } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CodeViewer } from '@/components/ui/code-viewer';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useExplorerEdiJson, useExplorerEdiMessages } from '../api/explorerApi';
+import type { ExplorerEdiJson, ExplorerEdiMessage, FilterRule } from '../types';
+import { ExplorerTable } from './ExplorerTable';
+import { FilterBuilder } from './FilterBuilder';
 
 const sharedColumns = [
   { key: 'transaction_type', label: 'Type', className: 'w-[10%]' },
@@ -19,12 +19,13 @@ const sharedColumns = [
     key: 'created_at',
     label: 'Created At',
     className: 'w-[25%]',
-    render: (item: any) => item.created_at ? new Date(item.created_at).toLocaleString() : '-'
+    render: (item: { created_at?: string | null }) =>
+      item.created_at ? new Date(item.created_at).toLocaleString() : '-',
   },
-]
+];
 
-const messageColumns = sharedColumns
-const jsonColumns = sharedColumns
+const messageColumns = sharedColumns;
+const jsonColumns = sharedColumns;
 
 const availableFields = [
   { label: 'Trading Partner ID', value: 'trading_partner_id' },
@@ -35,80 +36,114 @@ const availableFields = [
   { label: 'Receiver ID', value: 'receiver_id' },
   { label: 'Shipment Number', value: 'business_metadata.shipment_id' },
   { label: 'Load Number', value: 'business_metadata.load_number' },
-]
+];
 
-function ExplorerCommonFields({ item }: { item: any }) {
+function ExplorerCommonFields({
+  item,
+}: {
+  item: Partial<ExplorerEdiMessage> & Partial<ExplorerEdiJson>;
+}) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-6">
       <div className="space-y-1.5">
         <Label className="text-xs text-slate-500">Transaction Type</Label>
-        <Input readOnly value={item.transaction_type || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+        <Input
+          readOnly
+          value={item.transaction_type || '-'}
+          className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs text-slate-500">ISA Sender</Label>
-        <Input readOnly value={item.sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+        <Input
+          readOnly
+          value={item.sender_id || '-'}
+          className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs text-slate-500">ISA Receiver</Label>
-        <Input readOnly value={item.receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+        <Input
+          readOnly
+          value={item.receiver_id || '-'}
+          className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs text-slate-500">GS Sender</Label>
-        <Input readOnly value={item.gs_sender_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+        <Input
+          readOnly
+          value={item.gs_sender_id || '-'}
+          className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs text-slate-500">GS Receiver</Label>
-        <Input readOnly value={item.gs_receiver_id || '-'} className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm" />
+        <Input
+          readOnly
+          value={item.gs_receiver_id || '-'}
+          className="font-mono text-sm bg-slate-50 border-slate-200 shadow-sm"
+        />
       </div>
     </div>
-  )
+  );
 }
 
 export function ExplorerLayout() {
-  const [filters, setFilters] = useState<FilterRule[]>([])
-  const [activeTab, setActiveTab] = useState('messages')
-  const [messagesOffset, setMessagesOffset] = useState(0)
-  const [jsonOffset, setJsonOffset] = useState(0)
-  const limit = 100
+  const [filters, setFilters] = useState<FilterRule[]>([]);
+  const [activeTab, setActiveTab] = useState('messages');
+  const [messagesOffset, setMessagesOffset] = useState(0);
+  const [jsonOffset, setJsonOffset] = useState(0);
+  const limit = 100;
 
-  const [accumulatedMessages, setAccumulatedMessages] = useState<any[]>([])
-  const [accumulatedJson, setAccumulatedJson] = useState<any[]>([])
+  const [accumulatedMessages, setAccumulatedMessages] = useState<ExplorerEdiMessage[]>([]);
+  const [accumulatedJson, setAccumulatedJson] = useState<ExplorerEdiJson[]>([]);
 
-  const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(filters, limit, messagesOffset, activeTab === 'messages')
-  const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(filters, limit, jsonOffset, activeTab === 'json')
+  const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(
+    filters,
+    limit,
+    messagesOffset,
+    activeTab === 'messages',
+  );
+  const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(
+    filters,
+    limit,
+    jsonOffset,
+    activeTab === 'json',
+  );
 
   const handleFiltersChange = (newFilters: FilterRule[]) => {
-    setFilters(newFilters)
-    setMessagesOffset(0)
-    setJsonOffset(0)
-    setAccumulatedMessages([])
-    setAccumulatedJson([])
-  }
+    setFilters(newFilters);
+    setMessagesOffset(0);
+    setJsonOffset(0);
+    setAccumulatedMessages([]);
+    setAccumulatedJson([]);
+  };
 
   useEffect(() => {
     if (messagesData?.items) {
-      setAccumulatedMessages(prev => {
-        if (messagesOffset === 0) return messagesData.items
-        const nextMap = new Map(prev.map(i => [i.id, i]))
-        messagesData.items.forEach((i: any) => nextMap.set(i.id, i))
-        return Array.from(nextMap.values())
-      })
+      setAccumulatedMessages((prev) => {
+        if (messagesOffset === 0) return messagesData.items;
+        const nextMap = new Map(prev.map((i) => [i.id, i]));
+        messagesData.items.forEach((i: ExplorerEdiMessage) => nextMap.set(i.id, i));
+        return Array.from(nextMap.values());
+      });
     }
-  }, [messagesData, messagesOffset])
+  }, [messagesData, messagesOffset]);
 
   useEffect(() => {
     if (jsonData?.items) {
-      setAccumulatedJson(prev => {
-        if (jsonOffset === 0) return jsonData.items
-        const nextMap = new Map(prev.map(i => [i.id, i]))
-        jsonData.items.forEach((i: any) => nextMap.set(i.id, i))
-        return Array.from(nextMap.values())
-      })
+      setAccumulatedJson((prev) => {
+        if (jsonOffset === 0) return jsonData.items;
+        const nextMap = new Map(prev.map((i) => [i.id, i]));
+        jsonData.items.forEach((i: ExplorerEdiJson) => nextMap.set(i.id, i));
+        return Array.from(nextMap.values());
+      });
     }
-  }, [jsonData, jsonOffset])
+  }, [jsonData, jsonOffset]);
 
-  const handleMessagesLoadMore = () => setMessagesOffset(prev => prev + limit)
-  const handleJsonLoadMore = () => setJsonOffset(prev => prev + limit)
+  const handleMessagesLoadMore = () => setMessagesOffset((prev) => prev + limit);
+  const handleJsonLoadMore = () => setJsonOffset((prev) => prev + limit);
 
   return (
     <div className="space-y-6">
@@ -121,13 +156,19 @@ export function ExplorerLayout() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-slate-100/50 p-1 rounded-lg border border-slate-200">
-          <TabsTrigger value="messages" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4">
+          <TabsTrigger
+            value="messages"
+            className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4"
+          >
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4" />
               <span>EDI Messages</span>
             </div>
           </TabsTrigger>
-          <TabsTrigger value="json" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4">
+          <TabsTrigger
+            value="json"
+            className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4"
+          >
             <div className="flex items-center gap-2">
               <FileJson className="w-4 h-4" />
               <span>EDI JSON</span>
@@ -178,27 +219,31 @@ export function ExplorerLayout() {
               />
             }
             renderExpanded={(item) => (
-            <div className="space-y-4">
-              <ExplorerCommonFields item={item} />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Business Metadata</h4>
-                  <CodeViewer
-                    height={400}
-                    language="json"
-                    value={JSON.stringify(item.business_metadata || {}, null, 2)}
-                  />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">JSON Payload</h4>
-                  <CodeViewer
-                    height={400}
-                    language="json"
-                    value={item.payload ? JSON.stringify(item.payload, null, 2) : 'No payload available.'}
-                  />
+              <div className="space-y-4">
+                <ExplorerCommonFields item={item} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">Business Metadata</h4>
+                    <CodeViewer
+                      height={400}
+                      language="json"
+                      value={JSON.stringify(item.business_metadata || {}, null, 2)}
+                    />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">JSON Payload</h4>
+                    <CodeViewer
+                      height={400}
+                      language="json"
+                      value={
+                        item.payload
+                          ? JSON.stringify(item.payload, null, 2)
+                          : 'No payload available.'
+                      }
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
             )}
             onLoadMore={handleJsonLoadMore}
             hasMore={jsonData?.items.length === limit}
@@ -206,5 +251,5 @@ export function ExplorerLayout() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

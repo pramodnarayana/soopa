@@ -1,7 +1,6 @@
-import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
-import { cn } from "../../lib/utils"
-import { Button } from "@/components/ui/button"
+import { Check, ChevronsUpDown } from 'lucide-react';
+import * as React from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Command,
   CommandEmpty,
@@ -9,48 +8,56 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '../../lib/utils';
 
 export interface ComboboxProps {
-  options: string[]
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  emptyText?: string
-  disabled?: boolean
-  side?: "top" | "right" | "bottom" | "left"
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  emptyText?: string;
+  disabled?: boolean;
+  side?: 'top' | 'right' | 'bottom' | 'left';
 }
 
-export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No results found.", disabled = false, side = "bottom" }: ComboboxProps) {
-  const [open, setOpen] = React.useState(false)
-  const [inputValue, setInputValue] = React.useState(value || "")
+export function Combobox({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select option...',
+  emptyText = 'No results found.',
+  disabled = false,
+  side = 'bottom',
+}: ComboboxProps) {
+  const [open, setOpen] = React.useState(false);
+  const [inputValue, setInputValue] = React.useState(value || '');
 
   // Sync internal input state with external value changes
   React.useEffect(() => {
-    setInputValue(value || "")
-  }, [value])
+    setInputValue(value || '');
+  }, [value]);
 
   const handleSelect = (currentValue: string) => {
-    setInputValue(currentValue)
-    onChange(currentValue)
-    setOpen(false)
-  }
+    setInputValue(currentValue);
+    onChange(currentValue);
+    setOpen(false);
+  };
 
   const handleInputChange = (e: string) => {
-    setInputValue(e)
-    onChange(e)
-  }
+    setInputValue(e);
+    onChange(e);
+  };
 
   const optionsMap = React.useMemo(() => {
-    return options.reduce((acc, opt) => {
-      acc[opt.toLowerCase()] = opt;
-      return acc;
-    }, {} as Record<string, string>);
+    return options.reduce(
+      (acc, opt) => {
+        acc[opt.toLowerCase()] = opt;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   }, [options]);
 
   return (
@@ -70,7 +77,12 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent side={side} portaled={false} className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        side={side}
+        portaled={false}
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+      >
         <Command>
           <CommandInput
             placeholder={placeholder}
@@ -107,8 +119,8 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
                 >
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
-                      inputValue === option ? "opacity-100" : "opacity-0"
+                      'mr-2 h-4 w-4',
+                      inputValue === option ? 'opacity-100' : 'opacity-0',
                     )}
                   />
                   {option}
@@ -119,5 +131,5 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
         </Command>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

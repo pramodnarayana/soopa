@@ -1,7 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useAuth } from 'react-oidc-context';
-import type { EdiHeaderItem, CreateEdiHeaderPayload, UpdateEdiHeaderPayload } from '../types';
+import type { CreateEdiHeaderPayload, EdiHeaderItem, UpdateEdiHeaderPayload } from '../types';
 
 const QUERY_KEY = ['edi_headers'];
 
@@ -10,8 +10,8 @@ export const useEdiHeaders = () => {
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: async (): Promise<EdiHeaderItem[]> => {
-      const response = await axios.get('/api/v1/edi-headers', {
-        headers: { Authorization: `Bearer ${auth.user?.access_token}` }
+      const response = await axios.get<EdiHeaderItem[]>('/api/v1/edi-headers', {
+        headers: { Authorization: `Bearer ${auth.user?.access_token}` },
       });
       return response.data;
     },
@@ -24,13 +24,13 @@ export const useCreateEdiHeaderMutation = () => {
   const auth = useAuth();
   return useMutation({
     mutationFn: async (payload: CreateEdiHeaderPayload) => {
-      const response = await axios.post('/api/v1/edi-headers', payload, {
-        headers: { Authorization: `Bearer ${auth.user?.access_token}` }
+      const response = await axios.post<EdiHeaderItem>('/api/v1/edi-headers', payload, {
+        headers: { Authorization: `Bearer ${auth.user?.access_token}` },
       });
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
 };
@@ -39,14 +39,24 @@ export const useUpdateEdiHeaderMutation = () => {
   const queryClient = useQueryClient();
   const auth = useAuth();
   return useMutation({
-    mutationFn: async ({ headerId, payload }: { headerId: string; payload: UpdateEdiHeaderPayload }) => {
-      const response = await axios.patch(`/api/v1/edi-headers/${headerId}`, payload, {
-        headers: { Authorization: `Bearer ${auth.user?.access_token}` }
-      });
+    mutationFn: async ({
+      headerId,
+      payload,
+    }: {
+      headerId: string;
+      payload: UpdateEdiHeaderPayload;
+    }) => {
+      const response = await axios.patch<EdiHeaderItem>(
+        `/api/v1/edi-headers/${headerId}`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
+        },
+      );
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
 };
@@ -56,13 +66,13 @@ export const useDeleteEdiHeaderMutation = () => {
   const auth = useAuth();
   return useMutation({
     mutationFn: async (headerId: string) => {
-      const response = await axios.delete(`/api/v1/edi-headers/${headerId}`, {
-        headers: { Authorization: `Bearer ${auth.user?.access_token}` }
+      const response = await axios.delete<void>(`/api/v1/edi-headers/${headerId}`, {
+        headers: { Authorization: `Bearer ${auth.user?.access_token}` },
       });
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
 };

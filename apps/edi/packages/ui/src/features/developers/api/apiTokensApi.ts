@@ -21,8 +21,9 @@ class HttpApiTokenRepository {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           try {
-            const data = await res.json();
-            errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data);
+            const data = (await res.json()) as { detail?: string };
+            errorMessage =
+              typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data);
           } catch {
             errorMessage = await res.text().catch(() => res.statusText);
           }

@@ -1,24 +1,40 @@
-import { useState, useEffect, useRef } from 'react';
+import { CheckCircle2, Copy, Loader2, Play, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import type { SFTPPartner } from '../types';
-import { useUpdateSftpPartnerMutation, useTestExistingSftpConnectionMutation } from '../api/partnerHooks';
-import { Loader2, CheckCircle2, XCircle, Copy, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import {
+  useTestExistingSftpConnectionMutation,
+  useUpdateSftpPartnerMutation,
+} from '../api/partnerHooks';
+import type { SFTPPartner } from '../types';
 
-export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner, onCancel?: () => void }) {
+export function SftpPartnerDetails({
+  partner,
+  onCancel,
+}: {
+  partner: SFTPPartner;
+  onCancel?: () => void;
+}) {
   const { toast } = useToast();
 
   const updateSftp = useUpdateSftpPartnerMutation();
   const testConnection = useTestExistingSftpConnectionMutation();
   const isSubmitting = updateSftp.isPending;
 
-  const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const testRequestId = useRef(0);
 
-  const { register, handleSubmit, reset, getValues, watch, formState: { isDirty } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    getValues,
+    watch,
+    formState: { isDirty },
+  } = useForm({
     defaultValues: {
       name: partner.name,
       host: partner.host || '',
@@ -27,7 +43,7 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
       inbound_remote_path: partner.inbound_remote_path || '',
       outbound_remote_path: partner.outbound_remote_path || '',
       password: '',
-    }
+    },
   });
 
   const watchAll = watch();
@@ -36,22 +52,37 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
     setTestResult(null);
   }, [watchAll.host, watchAll.port, watchAll.username, watchAll.password]);
 
-  const onSubmit = (formData: any) => {
-    const payload: any = {};
+  interface SftpFormData {
+    name: string;
+    host: string;
+    username: string;
+    password?: string;
+    port: number;
+    inbound_remote_path?: string;
+    outbound_remote_path?: string;
+  }
+
+  const onSubmit = (formData: SftpFormData) => {
+    const payload: Partial<SftpFormData> = {};
     if (formData.name !== partner.name) payload.name = formData.name;
     if (formData.host !== partner.host) payload.host = formData.host;
     if (formData.username !== partner.username) payload.username = formData.username;
     if (formData.password?.trim()) payload.password = formData.password.trim();
     if (formData.port !== partner.port) payload.port = formData.port;
-    if (formData.inbound_remote_path !== partner.inbound_remote_path) payload.inbound_remote_path = formData.inbound_remote_path;
-    if (formData.outbound_remote_path !== partner.outbound_remote_path) payload.outbound_remote_path = formData.outbound_remote_path;
+    if (formData.inbound_remote_path !== partner.inbound_remote_path)
+      payload.inbound_remote_path = formData.inbound_remote_path;
+    if (formData.outbound_remote_path !== partner.outbound_remote_path)
+      payload.outbound_remote_path = formData.outbound_remote_path;
 
-    updateSftp.mutate({ id: partner.id, payload }, {
-      onSuccess: () => {
-        toast({ title: 'Success', description: 'SFTP Partner updated successfully.' });
-        reset(formData);
+    updateSftp.mutate(
+      { id: partner.id, payload },
+      {
+        onSuccess: () => {
+          toast({ title: 'Success', description: 'SFTP Partner updated successfully.' });
+          reset(formData);
+        },
       },
-    });
+    );
   };
 
   return (
@@ -59,7 +90,9 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-1">SFTP Partner Details</h4>
+            <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-1">
+              SFTP Partner Details
+            </h4>
           </div>
           <div className="flex items-center gap-3">
             <Button
@@ -77,21 +110,41 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
                       port: vals.port || partner.port || 22,
                       username: vals.username || partner.username || '',
                       password: vals.password || undefined,
-                    }
+                    },
                   },
                   {
-                    onSuccess: (data: any) => {
-                      if (currentId === testRequestId.current) setTestResult({ success: data.success, message: data.reason || 'Connection successful!' })
+                    onSuccess: (data: { success: boolean; reason?: string }) => {
+                      if (currentId === testRequestId.current)
+                        setTestResult({
+                          success: data.success,
+                          message: data.reason || 'Connection successful!',
+                        });
                     },
-                    onError: (error: any) => {
-                      if (currentId === testRequestId.current) setTestResult({ success: false, message: error.response?.data?.detail || error.message || 'Connection failed' })
-                    }
-                  }
+                    onError: (
+                      error:
+                        | Error
+                        | { response?: { data?: { detail?: string } }; message?: string },
+                    ) => {
+                      const e = error as {
+                        response?: { data?: { detail?: string } };
+                        message?: string;
+                      };
+                      if (currentId === testRequestId.current)
+                        setTestResult({
+                          success: false,
+                          message: e.response?.data?.detail || e.message || 'Connection failed',
+                        });
+                    },
+                  },
                 );
               }}
               className="flex items-center gap-2"
             >
-              {testConnection.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              {testConnection.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
               {testConnection.isPending ? 'Testing...' : 'Test Connection'}
             </Button>
             <Button
@@ -106,23 +159,29 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={!isDirty || isSubmitting}
-              className="min-w-[100px]"
-            >
+            <Button type="submit" disabled={!isDirty || isSubmitting} className="min-w-[100px]">
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
             </Button>
           </div>
         </div>
 
         {testResult && (
-          <div className={`flex items-start justify-between p-4 mb-6 rounded-xl border ${testResult.success ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}>
+          <div
+            className={`flex items-start justify-between p-4 mb-6 rounded-xl border ${testResult.success ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}
+          >
             <div className="flex gap-3">
-              {testResult.success ? <CheckCircle2 className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 mt-0.5 text-red-600 shrink-0" />}
+              {testResult.success ? (
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-emerald-600 shrink-0" />
+              ) : (
+                <XCircle className="w-5 h-5 mt-0.5 text-red-600 shrink-0" />
+              )}
               <div className="flex flex-col gap-1">
-                <span className="font-semibold text-sm">{testResult.success ? 'Success' : 'Connection Failed'}</span>
-                <span className="font-mono text-xs whitespace-pre-wrap break-all select-text">{testResult.message}</span>
+                <span className="font-semibold text-sm">
+                  {testResult.success ? 'Success' : 'Connection Failed'}
+                </span>
+                <span className="font-mono text-xs whitespace-pre-wrap break-all select-text">
+                  {testResult.message}
+                </span>
               </div>
             </div>
             {!testResult.success && (
@@ -149,30 +208,37 @@ export function SftpPartnerDetails({ partner, onCancel }: { partner: SFTPPartner
         <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-8">
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Name</Label>
-            <Input {...register("name")} required />
+            <Input {...register('name')} required />
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Host</Label>
             <div className="flex gap-2">
-              <Input {...register("host")} className="flex-1" required />
-              <Input id="sftp-port" type="number" {...register('port', { valueAsNumber: true })} className="w-24" placeholder="22" required />
+              <Input {...register('host')} className="flex-1" required />
+              <Input
+                id="sftp-port"
+                type="number"
+                {...register('port', { valueAsNumber: true })}
+                className="w-24"
+                placeholder="22"
+                required
+              />
             </div>
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Username</Label>
-            <Input {...register("username")} required />
+            <Input {...register('username')} required />
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">Password</Label>
-            <Input type="password" {...register("password")} placeholder="••••••••" />
+            <Input type="password" {...register('password')} placeholder="••••••••" />
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">From Trading Partner Path</Label>
-            <Input {...register("inbound_remote_path")} placeholder="/inbound" />
+            <Input {...register('inbound_remote_path')} placeholder="/inbound" />
           </div>
           <div>
             <Label className="text-xs text-slate-500 block mb-1">To Trading Partner Path</Label>
-            <Input {...register("outbound_remote_path")} placeholder="/outbound" />
+            <Input {...register('outbound_remote_path')} placeholder="/outbound" />
           </div>
         </div>
       </form>

@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface CronBuilderProps {
   value: string;
@@ -11,7 +17,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
   // Parse initial value (defaults to '0 * * * *' if invalid)
   const parts = value.split(' ');
   // If 5 parts, prepend '0' for seconds. If 6 parts, use as is. Otherwise default 6 parts.
-  const initial = parts.length === 6 ? parts : parts.length === 5 ? ['0', ...parts] : ['0', '0', '*', '*', '*', '*'];
+  const initial =
+    parts.length === 6
+      ? parts
+      : parts.length === 5
+        ? ['0', ...parts]
+        : ['0', '0', '*', '*', '*', '*'];
 
   const [second, setSecond] = useState(initial[0]);
   const [minute, setMinute] = useState(initial[1]);
@@ -67,10 +78,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       <div className="space-y-2">
         <Label className="text-xs">Second</Label>
         <Select value={second} onValueChange={setSecond}>
-          <SelectTrigger><SelectValue placeholder="Second" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="Second" />
+          </SelectTrigger>
           <SelectContent>
-            {seconds.map(s => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            {seconds.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -78,10 +93,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       <div className="space-y-2">
         <Label className="text-xs">Minute</Label>
         <Select value={minute} onValueChange={setMinute}>
-          <SelectTrigger><SelectValue placeholder="Minute" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="Minute" />
+          </SelectTrigger>
           <SelectContent>
-            {minutes.map(m => (
-              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            {minutes.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -89,10 +108,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       <div className="space-y-2">
         <Label className="text-xs">Hour</Label>
         <Select value={hour} onValueChange={setHour}>
-          <SelectTrigger><SelectValue placeholder="Hour" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="Hour" />
+          </SelectTrigger>
           <SelectContent>
-            {hours.map(h => (
-              <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
+            {hours.map((h) => (
+              <SelectItem key={h.value} value={h.value}>
+                {h.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -100,10 +123,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       <div className="space-y-2">
         <Label className="text-xs">Day of Month</Label>
         <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
-          <SelectTrigger><SelectValue placeholder="Day" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="Day" />
+          </SelectTrigger>
           <SelectContent>
-            {daysOfMonth.map(d => (
-              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+            {daysOfMonth.map((d) => (
+              <SelectItem key={d.value} value={d.value}>
+                {d.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -111,10 +138,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       <div className="space-y-2">
         <Label className="text-xs">Month</Label>
         <Select value={month} onValueChange={setMonth}>
-          <SelectTrigger><SelectValue placeholder="Month" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="Month" />
+          </SelectTrigger>
           <SelectContent>
-            {months.map(m => (
-              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            {months.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -122,10 +153,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       <div className="space-y-2">
         <Label className="text-xs">Day of Week</Label>
         <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-          <SelectTrigger><SelectValue placeholder="Weekday" /></SelectTrigger>
+          <SelectTrigger>
+            <SelectValue placeholder="Weekday" />
+          </SelectTrigger>
           <SelectContent>
-            {daysOfWeek.map(d => (
-              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+            {daysOfWeek.map((d) => (
+              <SelectItem key={d.value} value={d.value}>
+                {d.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>

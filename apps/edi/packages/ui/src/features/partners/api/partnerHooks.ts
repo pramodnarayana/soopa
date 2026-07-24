@@ -1,9 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
-import { createPartnersRepository } from './partnersApi';
-import type { UpdatePartnerPayload, UpdatePartnershipPayload, CreatePartnerPayload, CreatePartnershipPayload, RotateCertPayload, CreateSftpPartnerPayload } from '../types';
 import { useToast } from '@/hooks/use-toast';
+import type {
+  CreatePartnerPayload,
+  CreatePartnershipPayload,
+  CreateSftpPartnerPayload,
+  RotateCertPayload,
+  UpdatePartnerPayload,
+  UpdatePartnershipPayload,
+} from '../types';
+import { createPartnersRepository } from './partnersApi';
 
 // ─────────────────────────────────────────────
 // Query Key Factory
@@ -31,10 +38,10 @@ function useRepository() {
 // Helper — reusable mutation wrapper with toast
 // ─────────────────────────────────────────────
 
-function useToastMutation<TData, TVariables = any>(
+function useToastMutation<TData, TVariables = unknown>(
   mutationFn: (variables: TVariables) => Promise<TData>,
   successMessage: string,
-  queryKeysToInvalidate: QueryKey[] = []
+  queryKeysToInvalidate: QueryKey[] = [],
 ) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -42,14 +49,14 @@ function useToastMutation<TData, TVariables = any>(
   return useMutation({
     mutationFn,
     onSuccess: () => {
-      queryKeysToInvalidate.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: key });
+      queryKeysToInvalidate.forEach((key) => {
+        void queryClient.invalidateQueries({ queryKey: key });
       });
       toast({ title: 'Success', description: successMessage });
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 }
 
@@ -112,7 +119,7 @@ export function useCreatePlatformPartnerMutation() {
       return repo.createPlatformPartner(payload);
     },
     'Trading partner created successfully.',
-    [partnersKeys.platformPartners()]
+    [partnersKeys.platformPartners()],
   );
 }
 
@@ -123,17 +130,15 @@ export function useUpdatePlatformPartnerMutation() {
     ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) =>
       repo.updatePlatformPartner(id, payload),
     'Partner updated successfully.',
-    [partnersKeys.platformPartners()]
+    [partnersKeys.platformPartners()],
   );
 }
 
 export function useDeletePlatformPartnerMutation() {
   const repo = useRepository();
-  return useToastMutation(
-    (id: string) => repo.deletePlatformPartner(id),
-    'Partner deleted.',
-    [partnersKeys.platformPartners()]
-  );
+  return useToastMutation((id: string) => repo.deletePlatformPartner(id), 'Partner deleted.', [
+    partnersKeys.platformPartners(),
+  ]);
 }
 
 export function useDeleteCertificateSecretMutation() {
@@ -158,7 +163,7 @@ export function useCreatePlatformPartnershipMutation() {
       return repo.createPlatformPartnership(payload);
     },
     'Partnership created successfully.',
-    [partnersKeys.platformPartnerships()]
+    [partnersKeys.platformPartnerships()],
   );
 }
 
@@ -169,7 +174,7 @@ export function useUpdatePlatformPartnershipMutation() {
     ({ id, payload }: { id: string; payload: UpdatePartnershipPayload }) =>
       repo.updatePlatformPartnership(id, payload),
     'Partnership updated successfully.',
-    [partnersKeys.platformPartnerships()]
+    [partnersKeys.platformPartnerships()],
   );
 }
 
@@ -179,7 +184,7 @@ export function useDeletePlatformPartnershipMutation() {
   return useToastMutation(
     (id: string) => repo.deletePlatformPartnership(id),
     'Partnership deleted successfully.',
-    [partnersKeys.platformPartnerships()]
+    [partnersKeys.platformPartnerships()],
   );
 }
 
@@ -193,7 +198,7 @@ export function useCreateSftpPartnerMutation() {
   return useToastMutation(
     (payload: CreateSftpPartnerPayload) => repo.createSftpPartner(payload),
     'SFTP Partner created successfully.',
-    [partnersKeys.tenant()]
+    [partnersKeys.tenant()],
   );
 }
 
@@ -204,7 +209,7 @@ export function useUpdateSftpPartnerMutation() {
     ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) =>
       repo.updateSftpPartner(id, payload),
     'SFTP Partner updated successfully.',
-    [partnersKeys.tenant()]
+    [partnersKeys.tenant()],
   );
 }
 
@@ -214,7 +219,7 @@ export function useDeleteSftpPartner() {
   return useToastMutation(
     (id: string) => repo.deleteSftpPartner(id),
     'SFTP Partner deleted successfully.',
-    [partnersKeys.tenant()]
+    [partnersKeys.tenant()],
   );
 }
 
@@ -228,32 +233,42 @@ export function useRotateCertificatesMutation() {
     ({ id, payload }: { id: string; payload: RotateCertPayload }) =>
       repo.rotateCertificates(id, payload),
     'Certificate operation successful.',
-    [
-      partnersKeys.all,
-    ]
+    [partnersKeys.all],
   );
 }
 
 export function useGenerateCertificateMutation() {
   const repo = useRepository();
   return useMutation({
-    mutationFn: (as2Id: string) => repo.generateCertificate(as2Id)
+    mutationFn: (as2Id: string) => repo.generateCertificate(as2Id),
   });
 }
 
 export function useTestSftpConnectionMutation() {
   const repo = useRepository();
   return useMutation({
-    mutationFn: (payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'>) =>
-      repo.testSftpConnection(payload)
+    mutationFn: (
+      payload: Omit<
+        CreateSftpPartnerPayload,
+        'name' | 'inbound_remote_path' | 'outbound_remote_path'
+      >,
+    ) => repo.testSftpConnection(payload),
   });
 }
 
 export function useTestExistingSftpConnectionMutation() {
   const repo = useRepository();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Omit<CreateSftpPartnerPayload, 'name' | 'inbound_remote_path' | 'outbound_remote_path'> }) =>
-      repo.testExistingSftpConnection(id, payload)
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Omit<
+        CreateSftpPartnerPayload,
+        'name' | 'inbound_remote_path' | 'outbound_remote_path'
+      >;
+    }) => repo.testExistingSftpConnection(id, payload),
   });
 }
 

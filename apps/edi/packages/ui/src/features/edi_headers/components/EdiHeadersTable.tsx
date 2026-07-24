@@ -4,23 +4,20 @@ import {
   getExpandedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { Network } from 'lucide-react';
+import { Network, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
+import { useToast } from '@/hooks/use-toast';
+import { useDeleteEdiHeaderMutation, useEdiHeaders } from '../api/ediHeadersApi';
 import type { EdiHeaderItem } from '../types';
 import { EdiHeaderDetails } from './EdiHeaderDetails';
-import { DataTable } from '@/components/ui/data-table';
-import { useEdiHeaders, useDeleteEdiHeaderMutation } from '../api/ediHeadersApi';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
 
 const columnHelper = createColumnHelper<EdiHeaderItem>();
 
 const columns = [
   columnHelper.accessor('name', {
     header: 'Name',
-    cell: (info) => (
-      <span className="font-medium text-slate-900">{info.getValue()}</span>
-    ),
+    cell: (info) => <span className="font-medium text-slate-900">{info.getValue()}</span>,
   }),
   columnHelper.accessor('trading_partner_id', {
     header: 'Trading Partner',
@@ -104,7 +101,7 @@ function EdiHeaderRowActions({ header }: { header: EdiHeaderItem }) {
           description: err.message || 'Failed to delete EDI Header',
           variant: 'destructive',
         });
-      }
+      },
     });
   };
 
@@ -142,7 +139,9 @@ export function EdiHeadersTable() {
         emptyIcon={<Network className="w-8 h-8 text-slate-300" />}
         emptyTitle="No EDI Headers"
         columnsLength={columns.length}
-        renderExpandedRow={(row) => <EdiHeaderDetails header={row.original} onCancel={() => row.toggleExpanded()} />}
+        renderExpandedRow={(row) => (
+          <EdiHeaderDetails header={row.original} onCancel={() => row.toggleExpanded()} />
+        )}
       />
     </div>
   );

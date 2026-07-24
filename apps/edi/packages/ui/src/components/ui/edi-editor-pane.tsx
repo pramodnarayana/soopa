@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { UploadCloud } from 'lucide-react';
+import React, { useState } from 'react';
 import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
 
 export interface EdiEditorPaneProps {
@@ -73,24 +73,30 @@ export function EdiEditorPane({
     }
   };
 
-  const handleEditorWillMount = (monaco: any) => {
+  const handleEditorWillMount = (monaco: typeof import('monaco-editor')) => {
     registerEdiLanguageAndTheme(monaco);
   };
 
   // Monaco's content area intercepts drag events, so we attach listeners
   // directly to its DOM node to ensure drag-and-drop always works.
-  const handleEditorMount = (editor: any) => {
-    const domNode = editor.getDomNode() as HTMLElement | null;
+  const handleEditorMount = (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
+    const domNode = editor.getDomNode();
     if (!domNode) return;
 
-    const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true); };
-    const onDragLeave = (e: DragEvent) => { e.preventDefault(); setIsDragging(false); };
-    const onDrop = async (e: DragEvent) => {
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+    };
+    const onDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        await applyFile(e.dataTransfer.files[0]);
+        void applyFile(e.dataTransfer.files[0]);
       }
     };
 
@@ -117,27 +123,46 @@ export function EdiEditorPane({
       {error && (
         <div className="absolute top-2 right-2 left-2 z-30 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-md shadow-sm flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 font-bold ml-4">
+          <button
+            onClick={() => setError(null)}
+            className="text-red-500 hover:text-red-700 font-bold ml-4"
+          >
             ×
           </button>
         </div>
       )}
 
       {/* Certificate detected — bottom status bar (when value present) */}
-      {!error && value && showCertDetected && value.includes('-----BEGIN CERTIFICATE-----') && value.includes('-----END CERTIFICATE-----') && (
-        <div className="absolute bottom-0 left-0 right-0 z-30 px-4 py-2 bg-green-50 border-t border-green-200 text-green-700 text-xs font-semibold flex items-center gap-2 pointer-events-none">
-          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          Certificate detected — ready to save
-        </div>
-      )}
+      {!error &&
+        value &&
+        showCertDetected &&
+        value.includes('-----BEGIN CERTIFICATE-----') &&
+        value.includes('-----END CERTIFICATE-----') && (
+          <div className="absolute bottom-0 left-0 right-0 z-30 px-4 py-2 bg-green-50 border-t border-green-200 text-green-700 text-xs font-semibold flex items-center gap-2 pointer-events-none">
+            <svg
+              className="w-3.5 h-3.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+            Certificate detected — ready to save
+          </div>
+        )}
 
       {/* Drag-over full-screen overlay */}
       {isDragging && (
         <div className="absolute inset-0 bg-indigo-50/90 z-20 flex flex-col items-center justify-center border-2 border-indigo-400 border-dashed m-2 rounded-lg backdrop-blur-sm transition-all duration-200 pointer-events-none">
           <UploadCloud className="w-10 h-10 text-indigo-500 mb-3 animate-bounce" />
-          <span className="text-indigo-700 font-semibold text-lg tracking-tight">Drop file to load</span>
+          <span className="text-indigo-700 font-semibold text-lg tracking-tight">
+            Drop file to load
+          </span>
         </div>
       )}
 
@@ -196,7 +221,12 @@ export function EdiEditorPane({
           <label className="cursor-pointer inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 transition-colors">
             <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
             Upload File
-            <input type="file" className="hidden" accept={acceptedFileExtensions} onChange={handleFileUpload} />
+            <input
+              type="file"
+              className="hidden"
+              accept={acceptedFileExtensions}
+              onChange={handleFileUpload}
+            />
           </label>
           {extraActions}
         </div>

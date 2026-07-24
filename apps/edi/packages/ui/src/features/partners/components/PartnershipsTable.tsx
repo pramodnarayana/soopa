@@ -1,17 +1,19 @@
-import { DataTable } from '@/components/ui/data-table';
-import React from 'react';
 import {
   createColumnHelper,
-
   getCoreRowModel,
-  useReactTable,
   getExpandedRowModel,
+  useReactTable,
 } from '@tanstack/react-table';
-import type { Partnership } from '../context/PlatformPartnersContext';
 import { Network, ShieldCheck } from 'lucide-react';
+import React from 'react';
+import { DataTable } from '@/components/ui/data-table';
+import {
+  useDeletePlatformPartnershipMutation,
+  useUpdatePlatformPartnershipMutation,
+} from '../api/partnerHooks';
+import type { Partnership } from '../context/PlatformPartnersContext';
 import { PartnershipDetails } from './PartnershipDetails';
 import { SharedRowActions } from './SharedRowActions';
-import { useUpdatePlatformPartnershipMutation, useDeletePlatformPartnershipMutation } from '../api/partnerHooks';
 
 function PartnershipRowActions({ partnership }: { partnership: Partnership }) {
   const updatePlatform = useUpdatePlatformPartnershipMutation();
@@ -21,7 +23,9 @@ function PartnershipRowActions({ partnership }: { partnership: Partnership }) {
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this partnership? This action cannot be undone.')) {
+    if (
+      confirm('Are you sure you want to delete this partnership? This action cannot be undone.')
+    ) {
       deletePlatform.mutate(partnership.id);
     }
   };
@@ -49,10 +53,18 @@ const columnHelper = createColumnHelper<Partnership>();
 
 import type { Partner } from '../context/PlatformPartnersContext';
 
-export function PartnershipsTable({ data, availablePartners, isLoading }: { data: Partnership[]; availablePartners: Partner[]; isLoading: boolean }) {
+export function PartnershipsTable({
+  data,
+  availablePartners,
+  isLoading,
+}: {
+  data: Partnership[];
+  availablePartners: Partner[];
+  isLoading: boolean;
+}) {
   const columns = React.useMemo(() => {
     const getPartnerName = (id: string) => {
-      const p = availablePartners.find(ap => ap.id === id);
+      const p = availablePartners.find((ap) => ap.id === id);
       if (!p) return id.split('-')[0] + '...';
       if (p.name) return p.name;
       if ('as2_id' in p) return p.as2_id;
@@ -64,22 +76,21 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
         header: 'Partnership Name',
         cell: (info) => {
           const name = info.getValue();
-          if (!name) return (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-                <Network className="w-4 h-4" />
+          if (!name)
+            return (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <Network className="w-4 h-4" />
+                </div>
+                <span className="text-slate-400 text-sm">Unnamed Partnership</span>
               </div>
-              <span className="text-slate-400 text-sm">Unnamed Partnership</span>
-            </div>
-          );
+            );
           return (
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
                 <Network className="w-4 h-4" />
               </div>
-              <span className="font-medium text-sm text-slate-700">
-                {name}
-              </span>
+              <span className="font-medium text-sm text-slate-700">{name}</span>
             </div>
           );
         },
@@ -90,7 +101,10 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
         cell: (info) => {
           const resolvedName = getPartnerName(info.getValue());
           return (
-            <span className="text-sm font-medium text-slate-700 truncate max-w-[120px]" title={resolvedName}>
+            <span
+              className="text-sm font-medium text-slate-700 truncate max-w-[120px]"
+              title={resolvedName}
+            >
               {resolvedName}
             </span>
           );
@@ -101,7 +115,10 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
         cell: (info) => {
           const resolvedName = getPartnerName(info.getValue());
           return (
-            <span className="text-sm font-medium text-slate-700 truncate max-w-[120px]" title={resolvedName}>
+            <span
+              className="text-sm font-medium text-slate-700 truncate max-w-[120px]"
+              title={resolvedName}
+            >
               {resolvedName}
             </span>
           );
@@ -158,7 +175,13 @@ export function PartnershipsTable({ data, availablePartners, isLoading }: { data
       emptyIcon={<Network className="w-8 h-8" />}
       emptyTitle="No Active Partnerships"
       columnsLength={columns.length}
-      renderExpandedRow={(row) => <PartnershipDetails partnership={row.original} availablePartners={availablePartners} onCancel={() => row.toggleExpanded()} />}
+      renderExpandedRow={(row) => (
+        <PartnershipDetails
+          partnership={row.original}
+          availablePartners={availablePartners}
+          onCancel={() => row.toggleExpanded()}
+        />
+      )}
     />
   );
 }

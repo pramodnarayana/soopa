@@ -1,7 +1,13 @@
-import type { ReactNode } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 
 interface FormModalProps {
   title: string;
@@ -32,7 +38,7 @@ export function FormModal({
   children,
   submitDisabled = false,
   maxWidth = 'sm:max-w-[600px]',
-  footerContent
+  footerContent,
 }: FormModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange} modal={false}>
@@ -63,9 +69,7 @@ export function FormModal({
           {children}
 
           <div className="flex justify-between items-center mt-2">
-            <div>
-              {footerContent}
-            </div>
+            <div>{footerContent}</div>
             <Button
               type="submit"
               disabled={isPending || submitDisabled}

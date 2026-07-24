@@ -1,7 +1,7 @@
 import Editor from '@monaco-editor/react';
-import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
-import { Copy, Check } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
+import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
 
 interface CodeViewerProps {
   value: string;
@@ -10,10 +10,15 @@ interface CodeViewerProps {
   height?: string | number;
 }
 
-export function CodeViewer({ value, language = 'json', className = '', height = "100%" }: CodeViewerProps) {
+export function CodeViewer({
+  value,
+  language = 'json',
+  className = '',
+  height = '100%',
+}: CodeViewerProps) {
   const [copied, setCopied] = useState(false);
 
-  const handleEditorWillMount = (monaco: any) => {
+  const handleEditorWillMount = (monaco: typeof import('monaco-editor')) => {
     registerEdiLanguageAndTheme(monaco);
   };
 
@@ -28,7 +33,9 @@ export function CodeViewer({ value, language = 'json', className = '', height = 
   };
 
   return (
-    <div className={`relative border border-slate-200 rounded-xl overflow-hidden bg-white ${className} group`}>
+    <div
+      className={`relative border border-slate-200 rounded-xl overflow-hidden bg-white ${className} group`}
+    >
       <button
         onClick={handleCopy}
         className="absolute bottom-4 right-8 z-50 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 transition-opacity shadow-sm"

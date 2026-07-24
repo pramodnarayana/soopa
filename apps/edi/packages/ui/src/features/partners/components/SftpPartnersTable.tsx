@@ -1,16 +1,14 @@
-import { DataTable } from '@/components/ui/data-table';
-import React from 'react';
 import {
   createColumnHelper,
-
   getCoreRowModel,
-  useReactTable,
   getExpandedRowModel,
+  useReactTable,
 } from '@tanstack/react-table';
-
-import type { SFTPPartner } from '../types';
+import { HardDrive, Server } from 'lucide-react';
+import React from 'react';
+import { DataTable } from '@/components/ui/data-table';
 import { useDeleteSftpPartner, useUpdateSftpPartnerMutation } from '../api/partnerHooks';
-import { Server, HardDrive } from 'lucide-react';
+import type { SFTPPartner } from '../types';
 import { SftpPartnerDetails } from './SftpPartnerDetails';
 import { SharedRowActions } from './SharedRowActions';
 
@@ -76,11 +74,7 @@ const columns = [
     cell: (info) => {
       const username = info.getValue();
       if (!username) return null;
-      return (
-        <span className="text-sm font-medium text-slate-500">
-          {username}
-        </span>
-      );
+      return <span className="text-sm font-medium text-slate-500">{username}</span>;
     },
   }),
   columnHelper.display({
@@ -94,8 +88,13 @@ const columns = [
   }),
 ];
 
-export function SftpPartnersTable({ data, isLoading }: { data: SFTPPartner[]; isLoading: boolean }) {
-
+export function SftpPartnersTable({
+  data,
+  isLoading,
+}: {
+  data: SFTPPartner[];
+  isLoading: boolean;
+}) {
   const table = useReactTable({
     data,
     columns,
@@ -112,7 +111,9 @@ export function SftpPartnersTable({ data, isLoading }: { data: SFTPPartner[]; is
       emptyIcon={<HardDrive className="w-8 h-8" />}
       emptyTitle="No Active SFTP Partners"
       columnsLength={columns.length}
-      renderExpandedRow={(row) => <SftpPartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />}
+      renderExpandedRow={(row) => (
+        <SftpPartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
+      )}
     />
   );
 }

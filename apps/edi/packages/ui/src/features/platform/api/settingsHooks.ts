@@ -25,7 +25,7 @@ export const usePlatformSettings = () => {
       if (!response.ok) {
         throw new Error(`Failed to fetch platform config: ${response.statusText}`);
       }
-      return response.json();
+      return response.json() as Promise<PlatformSettings>;
     },
     // The configuration is static, so we can keep it cached indefinitely
     staleTime: Infinity,

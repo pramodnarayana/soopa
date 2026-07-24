@@ -1,6 +1,6 @@
-import { createContext, useContext, useCallback } from 'react';
+import { createContext, useCallback, useContext } from 'react';
+import { usePlatformPartnershipsQuery, usePlatformPartnersQuery } from '../api/partnerHooks';
 import type { Partner, Partnership } from '../types';
-import { usePlatformPartnersQuery, usePlatformPartnershipsQuery } from '../api/partnerHooks';
 
 // ─────────────────────────────────────────────
 // Context contract — read-only data only.

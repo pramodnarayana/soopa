@@ -1,5 +1,5 @@
+import { Loader2, Power, Trash2 } from 'lucide-react';
 import React from 'react';
-import { Power, Trash2, Loader2 } from 'lucide-react';
 
 export interface SharedRowActionsProps {
   isActive: boolean;
@@ -16,7 +16,7 @@ export function SharedRowActions({
   isDeleting,
   onToggleActive,
   onDelete,
-  entityName = "Item"
+  entityName = 'Item',
 }: SharedRowActionsProps) {
   return (
     <div
@@ -48,7 +48,11 @@ export function SharedRowActions({
           aria-hidden="true"
           className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${isActive ? 'translate-x-[62px] bg-emerald-600 text-white' : 'translate-x-0 bg-white text-slate-400'}`}
         >
-          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3 h-3" />}
+          {isUpdating ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Power className="w-3 h-3" />
+          )}
         </span>
       </button>
       <button
