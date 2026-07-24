@@ -1,18 +1,19 @@
 import { Module, Provider } from '@nestjs/common';
 import { NotificationChannel } from '@soopa/database';
-import { PostgresTemplateRepository } from './adapters/outbound/PostgresTemplateRepository.js';
-import { HandlebarsTemplateRenderer } from './adapters/outbound/HandlebarsTemplateRenderer.js';
-import { StrategyDeliveryDispatcher } from './adapters/outbound/StrategyDeliveryDispatcher.js';
 import { EmailDeliveryStrategy } from './adapters/outbound/channels/EmailDeliveryStrategy.js';
-import { SlackDeliveryStrategy } from './adapters/outbound/channels/SlackDeliveryStrategy.js';
 import { InAppDeliveryStrategy } from './adapters/outbound/channels/InAppDeliveryStrategy.js';
-import { DispatchNotificationUseCase } from './application/DispatchNotificationUseCase.js';
-import { NotificationRendererService } from './domain/services.js';
+import { SlackDeliveryStrategy } from './adapters/outbound/channels/SlackDeliveryStrategy.js';
+import { HandlebarsTemplateRenderer } from './adapters/outbound/HandlebarsTemplateRenderer.js';
+import { PostgresTemplateRepository } from './adapters/outbound/PostgresTemplateRepository.js';
+import { StrategyDeliveryDispatcher } from './adapters/outbound/StrategyDeliveryDispatcher.js';
 import { NotificationController } from './api/NotificationController.js';
-import { IDeliveryService, ITemplateRepository } from './ports/index.js';
+import { DispatchNotificationUseCase } from './application/DispatchNotificationUseCase.js';
 import { Channel } from './domain/models.js';
+import { NotificationRendererService } from './domain/services.js';
+import { IDeliveryService, ITemplateRepository } from './ports/index.js';
 
-const dbConnectionString = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/platform_shard_1';
+const dbConnectionString =
+  process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/platform_shard_1';
 
 const repoProvider: Provider = {
   provide: 'ITemplateRepository',
@@ -32,7 +33,7 @@ const deliveryServiceProvider: Provider = {
     const deliveryStrategies = new Map<Channel, IDeliveryService>([
       [NotificationChannel.EMAIL, new EmailDeliveryStrategy()],
       [NotificationChannel.SLACK, new SlackDeliveryStrategy()],
-      [NotificationChannel.IN_APP, new InAppDeliveryStrategy()]
+      [NotificationChannel.IN_APP, new InAppDeliveryStrategy()],
     ]);
     return new StrategyDeliveryDispatcher(deliveryStrategies);
   },
@@ -51,7 +52,7 @@ const dispatchUseCaseProvider: Provider = {
   useFactory: (
     repo: ITemplateRepository,
     delivery: IDeliveryService,
-    rendererService: NotificationRendererService
+    rendererService: NotificationRendererService,
   ) => {
     return new DispatchNotificationUseCase(repo, delivery, rendererService);
   },

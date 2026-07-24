@@ -1,18 +1,20 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable'
-import { usePlatformPartners } from '@/features/partners/context/PlatformPartnersContext'
-import { Server } from 'lucide-react'
-import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal'
-import { PlatformPartnersProvider } from '@/features/partners/context/PlatformPartnersContext'
-import type { AS2Partner } from '@/features/partners/types'
+import { createFileRoute } from '@tanstack/react-router';
+import { Server } from 'lucide-react';
+import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable';
+import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal';
+import {
+  PlatformPartnersProvider,
+  usePlatformPartners,
+} from '@/features/partners/context/PlatformPartnersContext';
+import type { AS2Partner } from '@/features/partners/types';
 
 export const Route = createFileRoute('/platform/partners')({
   component: () => (
     <PlatformPartnersProvider>
       <TradingPartnersPage />
     </PlatformPartnersProvider>
-  )
-})
+  ),
+});
 
 export function TradingPartnersPage() {
   const { partners, isLoading, error } = usePlatformPartners();
@@ -29,7 +31,11 @@ export function TradingPartnersPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Trading Partners</h1>
         </div>
-        <CreatePartnerModal existingAs2Ids={partners.map(p => p.type === 'AS2' ? p.as2_id : null).filter(Boolean) as string[]} />
+        <CreatePartnerModal
+          existingAs2Ids={
+            partners.map((p) => (p.type === 'AS2' ? p.as2_id : null)).filter(Boolean) as string[]
+          }
+        />
       </div>
 
       {isLoading ? (
@@ -61,5 +67,5 @@ export function TradingPartnersPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

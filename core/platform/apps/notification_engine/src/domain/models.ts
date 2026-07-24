@@ -1,4 +1,4 @@
-import type { NotificationChannelType } from "@soopa/database";
+import type { NotificationChannelType } from '@soopa/database';
 export type Channel = NotificationChannelType;
 
 export class NotificationTemplate {
@@ -6,7 +6,7 @@ export class NotificationTemplate {
     public readonly eventType: string,
     public readonly channel: Channel,
     public readonly subjectTemplate: string,
-    public readonly bodyTemplate: string
+    public readonly bodyTemplate: string,
   ) {}
 }
 
@@ -15,7 +15,7 @@ export class NotificationEvent {
     public readonly tenantId: string,
     public readonly eventType: string,
     public readonly channels: Channel[],
-    public readonly payload: Record<string, unknown>
+    public readonly payload: Record<string, unknown>,
   ) {}
 }
 
@@ -23,6 +23,6 @@ export class RenderedNotification {
   constructor(
     public readonly channel: Channel,
     public readonly subject: string,
-    public readonly body: string
+    public readonly body: string,
   ) {}
 }

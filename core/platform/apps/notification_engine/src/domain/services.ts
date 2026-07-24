@@ -1,6 +1,5 @@
 import { NotificationTemplate, RenderedNotification } from './models.js';
 
-
 export interface ITemplateRenderer {
   render(template: string, payload: Record<string, unknown>): string;
 }
@@ -10,7 +9,7 @@ export class NotificationRendererService {
 
   public render(
     template: NotificationTemplate,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
   ): RenderedNotification {
     const subject = this.renderer.render(template.subjectTemplate, payload);
     const body = this.renderer.render(template.bodyTemplate, payload);

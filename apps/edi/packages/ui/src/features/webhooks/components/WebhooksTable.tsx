@@ -1,28 +1,25 @@
-import React, { useState } from 'react';
 import {
   createColumnHelper,
   getCoreRowModel,
-  useReactTable,
   getExpandedRowModel,
+  useReactTable,
 } from '@tanstack/react-table';
-import { DataTable } from '@/components/ui/data-table';
-import type { Webhook } from '../types';
-import {
-  useUpdateWebhookStatusMutation,
-  useDeleteWebhookMutation,
-} from '../api/webhookHooks';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Link, Loader2, Network, Power, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/data-table';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog';
-import { Network, Power, Trash2, Loader2, Link } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useDeleteWebhookMutation, useUpdateWebhookStatusMutation } from '../api/webhookHooks';
+import type { Webhook } from '../types';
 import { WebhookDetails } from './WebhookDetails';
 
 // ---------------------------------------------------------------------------
@@ -64,7 +61,8 @@ function DeleteWebhookDialog({
           <DialogDescription asChild>
             <div className="space-y-3 text-sm text-slate-600">
               <p>
-                This action is <span className="font-semibold text-slate-900">permanent and irreversible</span>.
+                This action is{' '}
+                <span className="font-semibold text-slate-900">permanent and irreversible</span>.
                 Any live integrations pointing to this webhook will immediately stop receiving data.
               </p>
               <p>To confirm, type the exact webhook URL below:</p>
@@ -147,19 +145,30 @@ function WebhookRowActions({ webhook }: { webhook: Webhook }) {
             aria-hidden="true"
             className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${isActive ? 'translate-x-[62px] bg-emerald-600 text-white' : 'translate-x-0 bg-white text-slate-400'}`}
           >
-            {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3 h-3" />}
+            {isUpdating ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Power className="w-3 h-3" />
+            )}
           </span>
         </button>
 
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setShowDelete(true); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDelete(true);
+          }}
           disabled={isDeleting}
           className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
           title={`Delete ${entityName}`}
           aria-label={`Delete ${entityName}`}
         >
-          {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          {isDeleting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Trash2 className="w-4 h-4" />
+          )}
         </button>
       </div>
 
@@ -254,10 +263,7 @@ export function WebhooksTable({ data, isLoading }: WebhooksTableProps) {
       emptyTitle="No Webhooks"
       columnsLength={columns.length}
       renderExpandedRow={(row) => (
-        <WebhookDetails
-          webhook={row.original}
-          onCancel={() => row.toggleExpanded(false)}
-        />
+        <WebhookDetails webhook={row.original} onCancel={() => row.toggleExpanded(false)} />
       )}
     />
   );

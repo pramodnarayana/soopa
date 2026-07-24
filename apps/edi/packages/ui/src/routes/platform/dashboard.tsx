@@ -1,22 +1,21 @@
-import { createRoute } from '@tanstack/react-router'
-import { Route as appRoute } from '../platform'
-import { useDashboardData } from '@/features/dashboard/api/useDashboardData'
-import { IdentityDetailsCard } from '@/features/dashboard/components/IdentityDetailsCard'
-import { TenantProvisioningCard } from '@/features/dashboard/components/TenantProvisioningCard'
-import { Activity } from 'lucide-react'
+import { createRoute } from '@tanstack/react-router';
+import { Activity } from 'lucide-react';
+import { useDashboardData } from '@/features/dashboard/api/useDashboardData';
+import { IdentityDetailsCard } from '@/features/dashboard/components/IdentityDetailsCard';
+import { TenantProvisioningCard } from '@/features/dashboard/components/TenantProvisioningCard';
+import { Route as appRoute } from '../platform';
 
 export const Route = createRoute({
   getParentRoute: () => appRoute,
   path: '/dashboard',
   component: Dashboard,
-})
+});
 
 export function Dashboard() {
-  const { data: userProfile, isLoading, error } = useDashboardData()
+  const { data: userProfile, isLoading, error } = useDashboardData();
 
   return (
     <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
-
       {/* Hero / Overview Section */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-2">
@@ -48,12 +47,8 @@ export function Dashboard() {
       {/* Main Grid */}
       <div className="grid gap-8 grid-cols-1 md:grid-cols-2">
         <IdentityDetailsCard />
-        <TenantProvisioningCard
-          isLoading={isLoading}
-          error={error as Error | null}
-          userProfile={userProfile}
-        />
+        <TenantProvisioningCard isLoading={isLoading} error={error} userProfile={userProfile} />
       </div>
     </div>
-  )
+  );
 }

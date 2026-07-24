@@ -1,12 +1,12 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { useToast } from '@/hooks/use-toast';
 import { useCreateOutboundRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { Direction } from '../types';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
 
 export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
   const [name, setName] = useState('');
@@ -15,7 +15,9 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
 
   const { toast } = useToast();
   // For Outbound, we only fetch destinations that are NOT webhooks
-  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations(Direction.OUTBOUND);
+  const { data: destinations, isLoading: isLoadingDestinations } = useTenantDestinations(
+    Direction.OUTBOUND,
+  );
   const createOutbound = useCreateOutboundRouteMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,7 +28,7 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
     }
 
     try {
-      const selectedPartner = destinations?.find(p => p.id === targetId);
+      const selectedPartner = destinations?.find((p) => p.id === targetId);
       if (!selectedPartner) {
         toast({ title: 'Invalid partner selected', variant: 'destructive' });
         return;
@@ -42,19 +44,24 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
       toast({ title: 'Outbound route created successfully' });
       onSuccess();
     } catch (err) {
-      toast({ title: 'Failed to create outbound route', description: String(err), variant: 'destructive' });
+      toast({
+        title: 'Failed to create outbound route',
+        description: String(err),
+        variant: 'destructive',
+      });
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-
       {/* General Settings */}
       <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-xl space-y-4">
         <h3 className="text-sm font-semibold text-slate-800">General Settings</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="route_name" className="text-slate-600 font-medium">Route Name *</Label>
+            <Label htmlFor="route_name" className="text-slate-600 font-medium">
+              Route Name *
+            </Label>
             <Input
               id="route_name"
               value={name}
@@ -64,7 +71,9 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="trading_partner_id" className="text-slate-600 font-medium">Trading Partner ID *</Label>
+            <Label htmlFor="trading_partner_id" className="text-slate-600 font-medium">
+              Trading Partner ID *
+            </Label>
             <Input
               id="trading_partner_id"
               value={externalId}
@@ -80,23 +89,27 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="bg-indigo-50/30 border border-indigo-100 p-4 rounded-xl space-y-4">
         <h3 className="text-sm font-semibold text-indigo-800">Target Destination</h3>
         <div className="grid gap-2">
-          <Label htmlFor="target" className="text-slate-600 font-medium">AS2 / SFTP Partner *</Label>
+          <Label htmlFor="target" className="text-slate-600 font-medium">
+            AS2 / SFTP Partner *
+          </Label>
           <SearchableSelect
             disabled={isLoadingDestinations}
             value={targetId}
             onChange={setTargetId}
-            placeholder={isLoadingDestinations ? "Loading..." : "Select remote partner"}
+            placeholder={isLoadingDestinations ? 'Loading...' : 'Select remote partner'}
             options={(destinations || [])
-              .filter(d => !(d.type === 'AS2' && (d).is_local))
-              .map(d => ({
+              .filter((d) => !(d.type === 'AS2' && d.is_local))
+              .map((d) => ({
                 value: d.id,
                 label: (
                   <span className="flex items-center gap-2">
-                    <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{d.type}</span>
+                    <span className="font-mono text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                      {d.type}
+                    </span>
                     {d.name}
                   </span>
                 ),
-                searchString: d.name
+                searchString: d.name,
               }))}
           />
         </div>

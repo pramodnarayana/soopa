@@ -1,12 +1,18 @@
-import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { useEffect, useMemo, useState } from 'react';
 
 export interface EdiDictionary {
   segments: Record<string, { info: string; elements: string[] }>;
   elements: Record<string, string>;
 }
 
-export function useEdiDictionary(data: any) {
+export interface EdiDocument {
+  interchange_ISA?: { ISA?: { ISA12?: string } } | Array<{ ISA?: { ISA12?: string } }>;
+  interchange_UNB?: unknown;
+  [key: string]: unknown;
+}
+
+export function useEdiDictionary(data: EdiDocument | EdiDocument[]) {
   const [dictionary, setDictionary] = useState<EdiDictionary | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -15,9 +21,9 @@ export function useEdiDictionary(data: any) {
     let standard = 'x12';
     let version = '5011';
 
-    if (data?.interchange_ISA || (Array.isArray(data) && data[0]?.interchange_ISA)) {
+    if (!Array.isArray(data) && data?.interchange_ISA) {
       standard = 'x12';
-      const isaWrapper = Array.isArray(data) ? data[0].interchange_ISA : data.interchange_ISA;
+      const isaWrapper = data.interchange_ISA;
       const isa = Array.isArray(isaWrapper) ? isaWrapper[0] : isaWrapper;
       if (isa?.ISA?.ISA12) {
         const v = isa.ISA.ISA12.trim();
@@ -25,7 +31,20 @@ export function useEdiDictionary(data: any) {
           version = v.substring(2) + '0'; // e.g. 00401 -> 4010
         }
       }
-    } else if (data?.interchange_UNB || (Array.isArray(data) && data[0]?.interchange_UNB)) {
+    } else if (Array.isArray(data) && data[0]?.interchange_ISA) {
+      standard = 'x12';
+      const isaWrapper = data[0].interchange_ISA;
+      const isa = Array.isArray(isaWrapper) ? isaWrapper[0] : isaWrapper;
+      if (isa?.ISA?.ISA12) {
+        const v = isa.ISA.ISA12.trim();
+        if (v.length === 5) {
+          version = v.substring(2) + '0'; // e.g. 00401 -> 4010
+        }
+      }
+    } else if (!Array.isArray(data) && data?.interchange_UNB) {
+      standard = 'edifact';
+      version = 'd96a'; // default edifact version
+    } else if (Array.isArray(data) && data[0]?.interchange_UNB) {
       standard = 'edifact';
       version = 'd96a'; // default edifact version
     }
@@ -41,23 +60,27 @@ export function useEdiDictionary(data: any) {
 
       try {
         // 2. Fetch base dictionary
-        const baseRes = await axios.get(`/edidescription/${standard}.json`);
+        const baseRes = await axios.get<EdiDictionary>(`/edidescription/${standard}.json`);
         if (isCancelled) return;
 
         let finalDict = baseRes.data;
 
         // 3. Try fetching version-specific override
         try {
-          const overrideRes = await axios.get(`/edidescription/${standard}_${version}.json`);
+          const overrideRes = await axios.get<Partial<EdiDictionary>>(
+            `/edidescription/${standard}_${version}.json`,
+          );
           if (isCancelled) return;
           // Deep merge the overrides
           finalDict = {
             segments: { ...finalDict.segments, ...(overrideRes.data.segments || {}) },
-            elements: { ...finalDict.elements, ...(overrideRes.data.elements || {}) }
+            elements: { ...finalDict.elements, ...(overrideRes.data.elements || {}) },
           };
-        } catch (err: any) {
-          if (err.response?.status === 404) {
-            console.log(`No version override found for ${standard}_${version}.json, using base dictionary.`);
+        } catch (err: unknown) {
+          if (axios.isAxiosError(err) && err.response?.status === 404) {
+            console.log(
+              `No version override found for ${standard}_${version}.json, using base dictionary.`,
+            );
           } else {
             console.warn(`Failed to fetch version override for ${standard}_${version}.json:`, err);
           }
@@ -76,7 +99,7 @@ export function useEdiDictionary(data: any) {
       }
     };
 
-    fetchDictionary();
+    void fetchDictionary();
 
     return () => {
       isCancelled = true;

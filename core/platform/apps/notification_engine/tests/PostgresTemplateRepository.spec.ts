@@ -1,12 +1,17 @@
-import { NotificationChannel, EventTypes } from "@soopa/database";
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { PostgresTemplateRepository } from '../src/adapters/outbound/PostgresTemplateRepository.js';
-import { createDbClient, notificationTemplates } from '@soopa/database';
-import { InfrastructureError } from '../src/domain/errors.js';
+import {
+  createDbClient,
+  EventTypes,
+  NotificationChannel,
+  notificationTemplates,
+} from '@soopa/database';
 import crypto from 'crypto';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PostgresTemplateRepository } from '../src/adapters/outbound/PostgresTemplateRepository.js';
+import { InfrastructureError } from '../src/domain/errors.js';
 
 describe('PostgresTemplateRepository', () => {
-  const dbConnectionString = process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
+  const dbConnectionString =
+    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
   let repo: PostgresTemplateRepository;
   let db: ReturnType<typeof createDbClient>['db'];
 
@@ -29,7 +34,7 @@ describe('PostgresTemplateRepository', () => {
       channel: NotificationChannel.EMAIL,
       subjectTemplate: 'Subject',
       bodyTemplate: 'Body',
-      isActive: true
+      isActive: true,
     });
 
     await db.insert(notificationTemplates).values({
@@ -38,7 +43,7 @@ describe('PostgresTemplateRepository', () => {
       channel: NotificationChannel.SLACK,
       subjectTemplate: 'Subject',
       bodyTemplate: 'Body',
-      isActive: false
+      isActive: false,
     });
 
     const templates = await repo.getTemplates(tenantId, eventType);

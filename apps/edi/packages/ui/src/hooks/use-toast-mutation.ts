@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 
 /**
@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 export function useToastMutation<TData, TVariables = void>(
   mutationFn: (variables: TVariables) => Promise<TData>,
   successMessage: string | ((data: TData, variables: TVariables) => string),
-  queryKeysToInvalidate: QueryKey[] = []
+  queryKeysToInvalidate: QueryKey[] = [],
 ) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -20,12 +20,10 @@ export function useToastMutation<TData, TVariables = void>(
     mutationFn,
     onSuccess: (data, variables) => {
       queryKeysToInvalidate.forEach((key) => {
-        queryClient.invalidateQueries({ queryKey: key });
+        void queryClient.invalidateQueries({ queryKey: key });
       });
       const message =
-        typeof successMessage === 'function'
-          ? successMessage(data, variables)
-          : successMessage;
+        typeof successMessage === 'function' ? successMessage(data, variables) : successMessage;
       if (message) {
         toast({ title: 'Success', description: message });
       }

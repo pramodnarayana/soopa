@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
-import { createWebhooksRepository } from './webhooksApi';
 import { useToastMutation } from '@/hooks/use-toast-mutation';
 import type { CreateWebhookEndpointPayload } from '../types';
+import { createWebhooksRepository } from './webhooksApi';
 
 export const webhooksKeys = {
   all: ['webhooks'] as const,
@@ -29,7 +29,7 @@ export function useCreateWebhookMutation() {
   return useToastMutation(
     (payload: CreateWebhookEndpointPayload) => repo.createWebhook(payload),
     'Webhook created successfully.',
-    [webhooksKeys.tenant()]
+    [webhooksKeys.tenant()],
   );
 }
 
@@ -38,24 +38,23 @@ export function useUpdateWebhookStatusMutation() {
   return useToastMutation(
     ({ id, active }: { id: string; active: boolean }) => repo.updateWebhookStatus(id, active),
     (_result, { active }) => (active ? 'Webhook activated.' : 'Webhook deactivated.'),
-    [webhooksKeys.tenant()]
+    [webhooksKeys.tenant()],
   );
 }
 
 export function useUpdateWebhookMutation() {
   const repo = useRepository();
   return useToastMutation(
-    ({ id, payload }: { id: string; payload: { name?: string, url?: string } }) => repo.updateWebhook(id, payload),
+    ({ id, payload }: { id: string; payload: { name?: string; url?: string } }) =>
+      repo.updateWebhook(id, payload),
     'Webhook updated.',
-    [webhooksKeys.tenant()]
+    [webhooksKeys.tenant()],
   );
 }
 
 export function useDeleteWebhookMutation() {
   const repo = useRepository();
-  return useToastMutation(
-    (id: string) => repo.deleteWebhook(id),
-    'Webhook deleted.',
-    [webhooksKeys.tenant()]
-  );
+  return useToastMutation((id: string) => repo.deleteWebhook(id), 'Webhook deleted.', [
+    webhooksKeys.tenant(),
+  ]);
 }

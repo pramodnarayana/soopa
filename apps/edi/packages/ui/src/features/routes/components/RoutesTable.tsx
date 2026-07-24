@@ -1,18 +1,16 @@
-
 import {
   createColumnHelper,
-
   getCoreRowModel,
   getExpandedRowModel,
-  useReactTable,
   getSortedRowModel,
+  useReactTable,
 } from '@tanstack/react-table';
-import type { RouteItem } from '../types';
-import { Network, ArrowRightLeft, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, ArrowRightLeft, Network } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { SharedRowActions } from '@/features/partners/components/SharedRowActions';
-import { useUpdateRouteMutation, useDeleteRouteMutation } from '../api/routeHooks';
 import { useToast } from '@/hooks/use-toast';
+import { useDeleteRouteMutation, useUpdateRouteMutation } from '../api/routeHooks';
+import type { RouteItem } from '../types';
 import { RouteDetails } from './RouteDetails';
 
 const columnHelper = createColumnHelper<RouteItem>();
@@ -28,20 +26,18 @@ const columns = [
       return (
         <span className="flex items-center gap-2">
           <span className="w-6 h-6 rounded bg-indigo-100 flex items-center justify-center text-indigo-700">
-             <Network className="w-3.5 h-3.5" />
+            <Network className="w-3.5 h-3.5" />
           </span>
           {val}
         </span>
       );
-    }
+    },
   }),
   columnHelper.accessor('name', {
     header: 'Route Name',
     cell: (info) => (
       <div className="flex flex-col gap-1">
-        <span className="font-medium text-slate-900">
-          {info.getValue()}
-        </span>
+        <span className="font-medium text-slate-900">{info.getValue()}</span>
       </div>
     ),
   }),
@@ -51,11 +47,18 @@ const columns = [
       const isOutbound = info.getValue() === 'OUTBOUND';
       return (
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${!isOutbound
-            ? 'bg-blue-50 text-blue-600 border border-blue-100'
-            : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-            }`}>
-            {isOutbound ? <ArrowLeftRight className="w-4 h-4" /> : <ArrowRightLeft className="w-4 h-4" />}
+          <div
+            className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              !isOutbound
+                ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+            }`}
+          >
+            {isOutbound ? (
+              <ArrowLeftRight className="w-4 h-4" />
+            ) : (
+              <ArrowRightLeft className="w-4 h-4" />
+            )}
           </div>
           <span className="font-semibold text-slate-900">
             {isOutbound ? 'From JSON' : 'From EDI'}
@@ -83,7 +86,10 @@ const columns = [
         <span className="font-mono text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-wider">
           {info.row.original.destination_type}
         </span>
-        <span className="text-sm text-slate-900 font-medium truncate max-w-[150px] lg:max-w-[200px]" title={info.getValue()}>
+        <span
+          className="text-sm text-slate-900 font-medium truncate max-w-[150px] lg:max-w-[200px]"
+          title={info.getValue()}
+        >
           {info.getValue()}
         </span>
       </div>
@@ -112,7 +118,7 @@ function RouteRowActions({ route }: { route: RouteItem }) {
         onSuccess: () => {
           toast({
             title: `Route ${!route.active ? 'Activated' : 'Deactivated'}`,
-            description: `The route for ${route.transaction_type} has been ${!route.active ? 'activated' : 'deactivated'}.`
+            description: `The route for ${route.transaction_type} has been ${!route.active ? 'activated' : 'deactivated'}.`,
           });
         },
         onError: (err) => {
@@ -121,8 +127,8 @@ function RouteRowActions({ route }: { route: RouteItem }) {
             description: err.message || 'Failed to update route',
             variant: 'destructive',
           });
-        }
-      }
+        },
+      },
     );
   };
 
@@ -134,7 +140,7 @@ function RouteRowActions({ route }: { route: RouteItem }) {
         onSuccess: () => {
           toast({
             title: 'Route Deleted',
-            description: 'The route has been permanently removed.'
+            description: 'The route has been permanently removed.',
           });
         },
         onError: (err) => {
@@ -143,8 +149,8 @@ function RouteRowActions({ route }: { route: RouteItem }) {
             description: err.message || 'Failed to delete route',
             variant: 'destructive',
           });
-        }
-      }
+        },
+      },
     );
   };
 
@@ -182,8 +188,12 @@ export function RoutesTable({ data, isLoading }: { data: RouteItem[]; isLoading:
       emptyIcon={<ArrowLeftRight className="w-8 h-8" />}
       emptyTitle="No Routes Configured"
       emptyDescription="Get started by creating your first inbound or outbound route."
-      renderExpandedRow={(row) => <RouteDetails route={row.original} onCancel={() => row.toggleExpanded()} />}
-      getGroupBoundary={(row, prevRow) => row.original.trading_partner_id !== prevRow.original.trading_partner_id}
+      renderExpandedRow={(row) => (
+        <RouteDetails route={row.original} onCancel={() => row.toggleExpanded()} />
+      )}
+      getGroupBoundary={(row, prevRow) =>
+        row.original.trading_partner_id !== prevRow.original.trading_partner_id
+      }
     />
   );
 }

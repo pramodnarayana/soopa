@@ -1,7 +1,9 @@
-export function registerEdiLanguageAndTheme(monaco: any) {
-  if (!monaco.languages.getLanguages().some((l: any) => l.id === 'edi')) {
-    monaco.languages.register({ id: 'edi' });
-    monaco.languages.setMonarchTokensProvider('edi', {
+import type * as monaco from 'monaco-editor';
+
+export function registerEdiLanguageAndTheme(monacoInstance: typeof monaco) {
+  if (!monacoInstance.languages.getLanguages().some((l) => l.id === 'edi')) {
+    monacoInstance.languages.register({ id: 'edi' });
+    monacoInstance.languages.setMonarchTokensProvider('edi', {
       tokenizer: {
         root: [
           [/^[A-Z0-9]{2,3}(?=\*)/, 'keyword'],
@@ -13,7 +15,7 @@ export function registerEdiLanguageAndTheme(monaco: any) {
       },
     });
   }
-  monaco.editor.defineTheme('soopa-theme', {
+  monacoInstance.editor.defineTheme('soopa-theme', {
     base: 'vs',
     inherit: true,
     rules: [
@@ -27,6 +29,6 @@ export function registerEdiLanguageAndTheme(monaco: any) {
     ],
     colors: {
       'editor.background': '#ffffff',
-    }
+    },
   });
 }

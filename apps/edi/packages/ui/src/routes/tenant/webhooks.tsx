@@ -1,18 +1,18 @@
-import { createRoute } from '@tanstack/react-router'
-import { Route as appRoute } from '../tenant'
-import { WebhooksTable } from '@/features/webhooks/components/WebhooksTable'
-import { CreateWebhookModal } from '@/features/webhooks/components/CreateWebhookModal'
-import { useTenantWebhooksQuery } from '@/features/webhooks/api/webhookHooks'
-import { Network } from 'lucide-react'
+import { createRoute } from '@tanstack/react-router';
+import { Network } from 'lucide-react';
+import { useTenantWebhooksQuery } from '@/features/webhooks/api/webhookHooks';
+import { CreateWebhookModal } from '@/features/webhooks/components/CreateWebhookModal';
+import { WebhooksTable } from '@/features/webhooks/components/WebhooksTable';
+import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({
   getParentRoute: () => appRoute,
   path: '/webhooks',
   component: WebhooksPage,
-})
+});
 
 export function WebhooksPage() {
-  const { data: webhooks = [], isLoading } = useTenantWebhooksQuery()
+  const { data: webhooks = [], isLoading } = useTenantWebhooksQuery();
 
   return (
     <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out p-8">
@@ -36,5 +36,5 @@ export function WebhooksPage() {
         <WebhooksTable data={webhooks} isLoading={isLoading} />
       </div>
     </div>
-  )
+  );
 }

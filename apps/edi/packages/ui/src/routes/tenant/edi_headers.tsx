@@ -1,13 +1,13 @@
-import { createRoute } from '@tanstack/react-router'
-import { Route as appRoute } from '../tenant'
-import { EdiHeadersTable } from '@/features/edi_headers/components/EdiHeadersTable'
-import { CreateEdiHeaderModal } from '@/features/edi_headers/components/CreateEdiHeaderModal'
+import { createRoute } from '@tanstack/react-router';
+import { CreateEdiHeaderModal } from '@/features/edi_headers/components/CreateEdiHeaderModal';
+import { EdiHeadersTable } from '@/features/edi_headers/components/EdiHeadersTable';
+import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({
   getParentRoute: () => appRoute,
   path: '/edi_headers',
   component: EdiHeadersPage,
-})
+});
 
 export function EdiHeadersPage() {
   return (
@@ -29,5 +29,5 @@ export function EdiHeadersPage() {
         <EdiHeadersTable />
       </section>
     </div>
-  )
+  );
 }
