@@ -12,3 +12,36 @@ dependencies = []
 [build-system]
 requires = ["uv_build>=0.11.24,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.pyright]
+reportUnusedImport = false
+reportWildcardImportFromLibrary = false
+reportUnusedVariable = false
+venvPath = "../../../.."
+venv = ".venv"
+extraPaths = [
+    "../../../../core/platform/packages/identity/python/src",
+    "../../../../core/platform/packages/observability/python/src",
+    "../../../../core/platform/packages/schemas/python/src",
+    "../database/src",
+    "../pipeline/src",
+    "src",
+    "../config/src",
+    "../security/src",
+    "../patches/src",
+    "../transformer/src",
+    "../as2_core/src",
+    "../bots_core/src",
+    "../domain/src",
+    "../../apps/edi-worker/compute/src",
+    "../../apps/edi-worker/ucp-sync/src",
+    "../../apps/edi-worker/orchestrator/src",
+    "../../apps/edi-as2-server/src",
+    "../../apps/edi-api/src",
+]
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"
+
+[tool.ruff.lint]
+ignore = ["F401", "F403", "F405"]
