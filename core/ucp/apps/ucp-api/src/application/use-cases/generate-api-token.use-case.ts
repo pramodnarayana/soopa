@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDate, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiToken } from '../../domain/models/api-token.model.js';
 import type { IApiTokenRepository } from '../../ports/outbound/api-token.repository.js';
 import { API_TOKEN_REPOSITORY } from '../../ports/outbound/api-token.repository.js';
@@ -16,6 +16,7 @@ export class GenerateApiTokenDto {
   name!: string;
 
   @IsOptional()
+  @IsDate()
   expiresAt?: Date;
 }
 

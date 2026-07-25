@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -92,7 +93,7 @@ export class WebhooksController {
   ) {
     const webhook = await this.webhookRepo.findById(tenantId, id);
     if (!webhook) {
-      throw new Error('Webhook not found');
+      throw new NotFoundException('Webhook not found');
     }
 
     const updatedWebhook = webhook.update({
@@ -102,7 +103,14 @@ export class WebhooksController {
     });
 
     await this.webhookRepo.save(updatedWebhook);
-    return updatedWebhook;
+
+    return {
+      id: updatedWebhook.id,
+      name: updatedWebhook.name,
+      url: updatedWebhook.url,
+      active: updatedWebhook.active,
+      createdAt: updatedWebhook.createdAt,
+    };
   }
 
   @Delete(':id')

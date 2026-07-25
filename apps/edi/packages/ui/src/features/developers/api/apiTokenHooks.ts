@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
 import { useToastMutation } from '@/hooks/use-toast-mutation';
+import { UCP_API_URL } from '@/config/ucp';
 import type { CreateApiTokenPayload } from '../types';
 import { createApiTokenRepository } from './apiTokensApi';
 
@@ -14,8 +15,7 @@ function useRepository(tenantId: string) {
   return createApiTokenRepository(
     auth.user?.access_token ?? '',
     tenantId,
-    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
-      'http://localhost:3000',
+    UCP_API_URL,
   );
 }
 

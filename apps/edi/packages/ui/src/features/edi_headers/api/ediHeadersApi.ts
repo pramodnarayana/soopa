@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type { CreateEdiHeaderPayload, EdiHeaderItem, UpdateEdiHeaderPayload } from '../types';
 
-const QUERY_KEY = ['edi_headers'];
-
 export const useEdiHeaders = () => {
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
+  const QUERY_KEY = ['edi_headers', tenantId];
+
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: async (): Promise<EdiHeaderItem[]> => {
@@ -18,6 +20,9 @@ export const useEdiHeaders = () => {
 export const useCreateEdiHeaderMutation = () => {
   const queryClient = useQueryClient();
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
+  const QUERY_KEY = ['edi_headers', tenantId];
+
   return useMutation({
     mutationFn: async (payload: CreateEdiHeaderPayload) => {
       const response = await api.post<EdiHeaderItem>('/edi-headers', payload);
@@ -32,6 +37,9 @@ export const useCreateEdiHeaderMutation = () => {
 export const useUpdateEdiHeaderMutation = () => {
   const queryClient = useQueryClient();
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
+  const QUERY_KEY = ['edi_headers', tenantId];
+
   return useMutation({
     mutationFn: async ({
       headerId,
@@ -52,6 +60,9 @@ export const useUpdateEdiHeaderMutation = () => {
 export const useDeleteEdiHeaderMutation = () => {
   const queryClient = useQueryClient();
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
+  const QUERY_KEY = ['edi_headers', tenantId];
+
   return useMutation({
     mutationFn: async (headerId: string) => {
       const response = await api.delete<void>(`/edi-headers/${headerId}`);

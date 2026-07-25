@@ -5,7 +5,7 @@ class HttpApiTokenRepository {
   private tenantId: string;
   private baseUrl: string;
 
-  constructor(token: string, tenantId: string, baseUrl: string = 'http://localhost:3000') {
+  constructor(token: string, tenantId: string, baseUrl: string) {
     this.token = token;
     this.tenantId = tenantId;
     this.baseUrl = baseUrl;
@@ -48,7 +48,8 @@ class HttpApiTokenRepository {
         throw new Error(errorMessage || `HTTP ${res.status}`);
       }
       if (res.status === 204) return undefined as unknown as T;
-      return res.json() as Promise<T>;
+      const jsonData = await res.json() as T;
+      return jsonData;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -79,6 +80,6 @@ class HttpApiTokenRepository {
   }
 }
 
-export function createApiTokenRepository(token: string, tenantId: string, baseUrl?: string) {
+export function createApiTokenRepository(token: string, tenantId: string, baseUrl: string) {
   return new HttpApiTokenRepository(token, tenantId, baseUrl);
 }

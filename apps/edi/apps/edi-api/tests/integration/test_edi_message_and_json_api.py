@@ -72,6 +72,9 @@ async def test_edi_message_explorer_and_detail(
     and verifying that they appear in the transaction listing, transaction detail,
     and EDI messages explorer endpoints against a live PostgreSQL instance.
     """
+    # Expose the tenant ID resolved by the authentication fixture
+    tenant_id = "1"
+
     trace_id = uuid.uuid4()
     sender_id = f"SENDER_{str(uuid.uuid4())[:6]}"
     receiver_id = f"RECV_{str(uuid.uuid4())[:6]}"
@@ -79,7 +82,7 @@ async def test_edi_message_explorer_and_detail(
 
     # 1. Insert records directly using UnitOfWork to simulate completed pipeline
     gs_gen = override_get_global_session()
-    ts_gen = override_get_tenant_session("1")
+    ts_gen = override_get_tenant_session(tenant_id)
     gs = await gs_gen.__anext__()
     ts = await ts_gen.__anext__()
     try:
@@ -87,7 +90,7 @@ async def test_edi_message_explorer_and_detail(
         async with uow:
             # Create EdiMessage
             await uow.transactions.create_edi_message(
-                tenant_id="1",
+                tenant_id=tenant_id,
                 payload={
                     "trace_id": trace_id,
                     "direction": "INBOUND",
@@ -103,7 +106,7 @@ async def test_edi_message_explorer_and_detail(
             )
             # Create EdiJson
             await uow.transactions.create_edi_json(
-                tenant_id="1",
+                tenant_id=tenant_id,
                 payload={
                     "trace_id": trace_id,
                     "direction": "INBOUND",
@@ -116,7 +119,7 @@ async def test_edi_message_explorer_and_detail(
             )
             # Create ApiGateway
             await uow.transactions.create_api_gateway(
-                tenant_id="1",
+                tenant_id=tenant_id,
                 payload={
                     "trace_id": trace_id,
                     "direction": "INBOUND",

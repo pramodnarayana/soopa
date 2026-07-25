@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -77,7 +78,7 @@ export class ApiTokensController {
   ) {
     const token = await this.tokenRepo.findById(tenantId, id);
     if (!token) {
-      throw new Error('Token not found');
+      throw new NotFoundException('Token not found');
     }
     const updatedToken = token.update({
       name: dto.name,
@@ -85,7 +86,14 @@ export class ApiTokensController {
     });
 
     await this.tokenRepo.save(updatedToken);
-    return updatedToken;
+
+    return {
+      id: updatedToken.id,
+      client_id: updatedToken.clientId,
+      name: updatedToken.name,
+      active: updatedToken.active,
+      createdAt: updatedToken.createdAt,
+    };
   }
 
   @Delete(':id')

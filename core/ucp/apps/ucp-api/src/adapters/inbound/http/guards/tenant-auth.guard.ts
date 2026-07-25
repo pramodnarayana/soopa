@@ -92,13 +92,32 @@ export class TenantAuthGuard implements CanActivate {
     const secretHash = crypto.createHash('sha256').update(token).digest('hex');
     const apiTokens = await this.tokenRepo.findAllByTenant(tenantId);
 
-    const matchingToken = apiTokens.find((t) => t.secretHash === secretHash && t.active);
+    let matchingToken = null;
+    for (const t of apiTokens) {
+      if (!t.active) continue;
+
+      // Use timing-safe comparison for secret hash
+      const storedHashBuffer = Buffer.from(t.secretHash, 'hex');
+      const providedHashBuffer = Buffer.from(secretHash, 'hex');
+
+      // Only compare if lengths match
+      if (storedHashBuffer.length === providedHashBuffer.length) {
+        if (crypto.timingSafeEqual(storedHashBuffer, providedHashBuffer)) {
+          matchingToken = t;
+          break;
+        }
+      }
+    }
 
     if (!matchingToken) {
       throw new UnauthorizedException('Invalid API Token');
     }
 
-    Object.assign(request, { apiToken: matchingToken });
+    // Update lastUsedAt timestamp before assigning to request
+    const updatedToken = matchingToken.markAsUsed();
+    await this.tokenRepo.save(updatedToken);
+
+    Object.assign(request, { apiToken: updatedToken });
     return true;
   }
 }

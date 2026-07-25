@@ -2,13 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type { ConfigResponse, JobResponse } from './schedulerApi';
 
-function useApi() {
-  const api = useEdiNetwork();
-  return api;
-}
 
 export function useJobsQuery() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: ['scheduler', 'jobs'],
     queryFn: async (): Promise<JobResponse[]> => {
@@ -20,7 +16,7 @@ export function useJobsQuery() {
 }
 
 export function useConfigQuery() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: ['scheduler', 'config'],
     queryFn: async (): Promise<ConfigResponse[]> => {
@@ -31,12 +27,12 @@ export function useConfigQuery() {
 }
 
 export function useUpdateConfigMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ key, value }: { key: string; value: unknown }) => {
-      const res = await api.put<ConfigResponse>(`/platform/scheduler/config/${key}`, { value });
+      const res = await api.put<ConfigResponse>(`/platform/scheduler/config/${encodeURIComponent(key)}`, { value });
       return res.data;
     },
     onSuccess: () => {
@@ -46,7 +42,7 @@ export function useUpdateConfigMutation() {
 }
 
 export function useUpdateJobMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -62,7 +58,7 @@ export function useUpdateJobMutation() {
         status?: string;
       };
     }) => {
-      const res = await api.put<JobResponse>(`/platform/scheduler/jobs/${name}`, data);
+      const res = await api.put<JobResponse>(`/platform/scheduler/jobs/${encodeURIComponent(name)}`, data);
       return res.data;
     },
 

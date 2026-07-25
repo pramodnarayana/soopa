@@ -25,156 +25,176 @@ def upgrade() -> None:
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('api_gateway', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('as2_partners', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('as2_partnerships', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('audit_log', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('edi_json', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('edi_messages', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('inbound_routes', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('jobs', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('outbound_edi_headers', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('outbound_routes', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('outbox', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('processed_events', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('sftp_partners', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     op.alter_column('webhooks', 'tenant_id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=128),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"))
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """Downgrade schema.
+
+    WARNING: This downgrade will fail for non-numeric tenant IDs.
+    The postgresql_using clause casts varchar to integer, which requires
+    all tenant_id values to be valid numeric strings.
+    """
     # ### commands auto generated by Alembic - please adjust! ###
     op.alter_column('webhooks', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('sftp_partners', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('processed_events', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('outbox', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('outbound_routes', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('outbound_edi_headers', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('jobs', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('inbound_routes', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('edi_messages', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('edi_json', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('audit_log', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('as2_partnerships', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('as2_partners', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('api_gateway', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     op.alter_column('ack_receipts', 'tenant_id',
                existing_type=sa.String(length=128),
                type_=sa.INTEGER(),
                existing_nullable=False,
-               existing_server_default=sa.text("(current_setting('app.current_tenant'::text))::integer"))
+               existing_server_default=sa.text("current_setting('app.current_tenant'::text)"),
+               postgresql_using='tenant_id::integer')
     # ### end Alembic commands ###

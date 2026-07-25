@@ -20,7 +20,7 @@ from api.core.uow import UnitOfWork
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
 
 
-def _partner_response(partner: Any, tenant_id: int) -> PartnerResponse:
+def _partner_response(partner: Any, tenant_id: str) -> PartnerResponse:
     """Shared mapper from ORM Webhook record to PartnerResponse DTO."""
     return PartnerResponse(
         partner_id=partner.id,
@@ -35,7 +35,7 @@ def _partner_response(partner: Any, tenant_id: int) -> PartnerResponse:
 
 @router.get("", response_model=list[PartnerResponse])
 async def list_webhooks(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Lists all configured webhook delivery destinations for this tenant."""

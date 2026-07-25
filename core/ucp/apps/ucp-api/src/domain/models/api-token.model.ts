@@ -54,4 +54,18 @@ export class ApiToken extends AggregateRoot {
       this.expiresAt,
     );
   }
+
+  markAsUsed(): ApiToken {
+    return new ApiToken(
+      this.id,
+      this.tenantId,
+      this.name,
+      this.clientId,
+      this.secretHash,
+      this.active,
+      this.createdAt,
+      new Date(),
+      this.expiresAt,
+    );
+  }
 }

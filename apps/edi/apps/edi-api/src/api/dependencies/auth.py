@@ -79,6 +79,12 @@ async def get_current_user_profile(
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     auth_service: AuthorizationService = Depends(get_authorization_service),
 ) -> dict[str, Any]:
+    if not tenant_id.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid tenant ID format. Expected numeric tenant identifier.",
+        )
+
     roles = token_payload.get("roles", [])
     if isinstance(roles, dict):
         roles = list(roles.keys())
@@ -86,7 +92,7 @@ async def get_current_user_profile(
     is_platform_admin = tenant_id == "0" or "Platform_Admin" in roles
 
     return await auth_service.get_authorization_profile(
-        tenant_id=int(tenant_id) if tenant_id.isdigit() else 0,
+        tenant_id=int(tenant_id),
         is_platform_admin=is_platform_admin,
         current_rls_tenant=None,
         roles=roles,

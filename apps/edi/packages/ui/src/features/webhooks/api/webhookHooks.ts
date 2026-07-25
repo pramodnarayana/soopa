@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
 import { useTenantId } from '@/contexts/TenantContext';
 import { useToastMutation } from '@/hooks/use-toast-mutation';
+import { UCP_API_URL } from '@/config/ucp';
 import type { CreateWebhookEndpointPayload } from '../types';
 import { createWebhooksRepository } from './webhooksApi';
 
@@ -16,8 +17,7 @@ function useRepository() {
   return createWebhooksRepository(
     auth.user?.access_token ?? '',
     tenantId,
-    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
-      'http://localhost:3000',
+    UCP_API_URL,
   );
 }
 

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type { ExplorerEdiJson, ExplorerEdiMessage, ExplorerResponse, FilterRule } from '../types';
 
 export const explorerKeys = {
-  all: ['explorer'] as const,
-  messages: (filters: FilterRule[]) => [...explorerKeys.all, 'messages', filters] as const,
-  json: (filters: FilterRule[]) => [...explorerKeys.all, 'json', filters] as const,
+  all: (tenantId: string) => ['explorer', tenantId] as const,
+  messages: (tenantId: string, filters: FilterRule[]) => [...explorerKeys.all(tenantId), 'messages', filters] as const,
+  json: (tenantId: string, filters: FilterRule[]) => [...explorerKeys.all(tenantId), 'json', filters] as const,
 };
 
 export function useExplorerQuery<T>(
@@ -39,8 +40,9 @@ export function useExplorerEdiMessages(
   offset: number = 0,
   enabled: boolean = true,
 ) {
+  const tenantId = useTenantId();
   return useExplorerQuery<ExplorerEdiMessage>(
-    explorerKeys.messages(filters),
+    explorerKeys.messages(tenantId, filters),
     '/explorer/edi-messages',
     filters,
     limit,
@@ -55,8 +57,9 @@ export function useExplorerEdiJson(
   offset: number = 0,
   enabled: boolean = true,
 ) {
+  const tenantId = useTenantId();
   return useExplorerQuery<ExplorerEdiJson>(
-    explorerKeys.json(filters),
+    explorerKeys.json(tenantId, filters),
     '/explorer/edi-json',
     filters,
     limit,

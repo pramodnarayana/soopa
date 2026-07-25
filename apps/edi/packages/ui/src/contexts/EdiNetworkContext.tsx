@@ -19,6 +19,7 @@ export function EdiNetworkProvider({
   const api = useMemo(() => {
     const instance = axios.create({
       baseURL: baseUrl,
+      timeout: 15000,
     });
 
     if (token) {

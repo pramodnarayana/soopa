@@ -113,5 +113,4 @@ async def test_as2_partnership_validation_error(platform_client: AsyncClient):
         400,
         404,
         422,
-        500,
     ), f"Expected failure for non-existent partners, got {response.status_code}"

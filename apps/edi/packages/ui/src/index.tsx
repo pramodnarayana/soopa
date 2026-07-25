@@ -1,6 +1,8 @@
 export { TenantProvider, useTenantId } from './contexts/TenantContext';
 export { PartnersProvider } from './features/partners/context/PartnersContext';
 export { TradingPartnersPage } from './routes/platform/partners';
+export { PartnershipsPage } from './routes/platform/partnerships';
+export { SchedulerPage } from './routes/platform/scheduler';
 export { Dashboard as EdiDashboardPage } from './routes/tenant/dashboard';
 export { DevelopersPage } from './routes/tenant/developers';
 export { EdiHeadersPage } from './routes/tenant/edi_headers';

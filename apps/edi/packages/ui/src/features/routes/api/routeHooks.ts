@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type {
   CreateInboundRoutePayload,
@@ -7,15 +8,12 @@ import type {
   UpdateRoutePayload,
 } from '../types';
 
-function useApi() {
-  const api = useEdiNetwork();
-  return api;
-}
 
 export function useRoutesQuery() {
-  const api = useApi();
+  const api = useEdiNetwork();
+  const tenantId = useTenantId();
   return useQuery({
-    queryKey: ['routes'],
+    queryKey: ['routes', tenantId],
     queryFn: async (): Promise<RouteItem[]> => {
       const res = await api.get<RouteItem[]>('/routes');
       return res.data;
@@ -24,36 +22,39 @@ export function useRoutesQuery() {
 }
 
 export function useCreateInboundRouteMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
 
   return useMutation({
     mutationFn: async (payload: CreateInboundRoutePayload) => {
       await api.post('/routes/inbound', payload);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });
     },
   });
 }
 
 export function useCreateOutboundRouteMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
 
   return useMutation({
     mutationFn: async (payload: CreateOutboundRoutePayload) => {
       await api.post('/routes/outbound', payload);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });
     },
   });
 }
 
 export function useUpdateRouteMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
 
   return useMutation({
     mutationFn: async ({
@@ -70,14 +71,15 @@ export function useUpdateRouteMutation() {
       await api.patch(endpoint, payload);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });
     },
   });
 }
 
 export function useDeleteRouteMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   const queryClient = useQueryClient();
+  const tenantId = useTenantId();
 
   return useMutation({
     mutationFn: async ({
@@ -91,7 +93,7 @@ export function useDeleteRouteMutation() {
       await api.delete(`/routes/${ep}/${routeId}`);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['routes'] });
+      void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });
     },
   });
 }

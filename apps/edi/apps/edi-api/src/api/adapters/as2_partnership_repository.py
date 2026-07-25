@@ -25,8 +25,8 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     # The following AS2Partnership methods remain under SqlAlchemyAS2PartnershipRepository which was defined above.
     # We will define a new class for Outbox below.
 
-    async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+    async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> UUID:
+        tid_str = tenant_id
         local_r = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == cmd.local_partner_id,
@@ -64,9 +64,9 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         return partnership_id
 
     async def update_as2_partnership(
-        self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+        self, tenant_id: str, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
     ) -> None:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
                 AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
@@ -107,8 +107,8 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     setattr(partnership, field.name, value)
         await self.session.flush()
 
-    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+    async def delete_as2_partnership(self, tenant_id: str, partnership_id: UUID) -> None:
+        tid_str = tenant_id
         await self.session.execute(
             delete(AS2Partnership).where(
                 AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
@@ -117,9 +117,9 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         await self.session.flush()
 
     async def get_as2_partnership(
-        self, tenant_id: int, partnership_id: UUID
+        self, tenant_id: str, partnership_id: UUID
     ) -> AS2PartnershipDomainModel | None:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
                 AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
@@ -128,10 +128,10 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         record = result.scalar_one_or_none()
         return AS2PartnershipDomainModel.model_validate(record) if record else None
 
-    async def get_as2_partners_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),

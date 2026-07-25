@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type {
   TransactionDetailResponse,
@@ -7,13 +8,13 @@ import type {
 } from '../types';
 
 export const transactionsKeys = {
-  all: ['transactions'] as const,
-  lists: () => [...transactionsKeys.all, 'list'] as const,
-  list: (params: Record<string, unknown>) => [...transactionsKeys.lists(), params] as const,
-  details: () => [...transactionsKeys.all, 'detail'] as const,
-  detail: (id: string) => [...transactionsKeys.details(), id] as const,
-  threads: () => [...transactionsKeys.all, 'thread'] as const,
-  thread: (key: string, value: string) => [...transactionsKeys.threads(), key, value] as const,
+  all: (tenantId: string) => ['transactions', tenantId] as const,
+  lists: (tenantId: string) => [...transactionsKeys.all(tenantId), 'list'] as const,
+  list: (tenantId: string, params: Record<string, unknown>) => [...transactionsKeys.lists(tenantId), params] as const,
+  details: (tenantId: string) => [...transactionsKeys.all(tenantId), 'detail'] as const,
+  detail: (tenantId: string, id: string) => [...transactionsKeys.details(tenantId), id] as const,
+  threads: (tenantId: string) => [...transactionsKeys.all(tenantId), 'thread'] as const,
+  thread: (tenantId: string, key: string, value: string) => [...transactionsKeys.threads(tenantId), key, value] as const,
 };
 
 export function useTransactions(params: {
@@ -24,9 +25,10 @@ export function useTransactions(params: {
   direction?: string;
 }) {
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
 
   return useQuery({
-    queryKey: transactionsKeys.list(params),
+    queryKey: transactionsKeys.list(tenantId, params),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       if (params.limit !== undefined) searchParams.set('limit', params.limit.toString());
@@ -46,8 +48,9 @@ export function useTransactions(params: {
 
 export function useTransactionDetail(traceId: string) {
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
   return useQuery({
-    queryKey: transactionsKeys.detail(traceId),
+    queryKey: transactionsKeys.detail(tenantId, traceId),
     queryFn: async () => {
       const response = await api.get<TransactionDetailResponse>(`/transactions/${traceId}`);
       return response.data;
@@ -59,8 +62,9 @@ export function useTransactionDetail(traceId: string) {
 
 export function useTransactionThread(key: string, value: string) {
   const api = useEdiNetwork();
+  const tenantId = useTenantId();
   return useQuery({
-    queryKey: transactionsKeys.thread(key, value),
+    queryKey: transactionsKeys.thread(tenantId, key, value),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       searchParams.set('key', key);

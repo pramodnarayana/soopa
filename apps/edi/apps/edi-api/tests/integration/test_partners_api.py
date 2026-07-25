@@ -3,7 +3,7 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 async def test_create_and_get_sftp_partner(client: AsyncClient):
     # Test creating a partner

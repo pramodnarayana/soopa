@@ -15,11 +15,11 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         GlobalSqlAlchemyRepository.__init__(self, session)
 
     async def create_outbound_edi_header(
-        self, tenant_id: int, cmd: CreateOutboundEdiHeaderCmd
+        self, tenant_id: str, cmd: CreateOutboundEdiHeaderCmd
     ) -> UUID:
         import uuid
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         header_id = uuid.uuid4()
         import dataclasses
 
@@ -29,13 +29,13 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         return header_id
 
     async def update_outbound_edi_header(
-        self, tenant_id: int, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+        self, tenant_id: str, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
     ) -> bool:
         import dataclasses
 
         from api.domain.models import UnsetType
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         values = {k: v for k, v in dataclasses.asdict(cmd).items() if not isinstance(v, UnsetType)}
 
         if not values:
@@ -53,8 +53,8 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         await self.session.flush()
         return (getattr(result, "rowcount", 0) or 0) > 0
 
-    async def delete_outbound_edi_header(self, tenant_id: int, header_id: UUID) -> bool:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+    async def delete_outbound_edi_header(self, tenant_id: str, header_id: UUID) -> bool:
+        tid_str = tenant_id
         stmt = delete(OutboundEdiHeader).where(
             OutboundEdiHeader.id == header_id,
             OutboundEdiHeader.tenant_id == tid_str,
@@ -64,17 +64,17 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         return (getattr(result, "rowcount", 0) or 0) > 0
 
     async def get_outbound_edi_headers(
-        self, tenant_id: int
+        self, tenant_id: str
     ) -> Sequence[OutboundEdiHeaderDomainModel]:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         stmt = select(OutboundEdiHeader).where(OutboundEdiHeader.tenant_id == tid_str)
         result = await self.session.execute(stmt)
         return [OutboundEdiHeaderDomainModel.model_validate(r) for r in result.scalars().all()]
 
     async def get_outbound_edi_header_by_trading_partner_id(
-        self, tenant_id: int, trading_partner_id: str
+        self, tenant_id: str, trading_partner_id: str
     ) -> OutboundEdiHeaderDomainModel | None:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id
         stmt = select(OutboundEdiHeader).where(
             OutboundEdiHeader.tenant_id == tid_str,
             OutboundEdiHeader.trading_partner_id == trading_partner_id,

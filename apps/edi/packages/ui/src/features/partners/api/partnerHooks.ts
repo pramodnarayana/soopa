@@ -1,6 +1,7 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useToastMutation } from '@/hooks/use-toast-mutation';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type {
   CertificatesExport,
@@ -30,43 +31,13 @@ export const partnersKeys = {
 // Helper — resolves the repository for the current auth user
 // ─────────────────────────────────────────────
 
-function useApi() {
-  const api = useEdiNetwork();
-  return api;
-}
-
-// ─────────────────────────────────────────────
-// Helper — reusable mutation wrapper with toast
-// ─────────────────────────────────────────────
-
-function useToastMutation<TData, TVariables = unknown>(
-  mutationFn: (variables: TVariables) => Promise<TData>,
-  successMessage: string,
-  queryKeysToInvalidate: QueryKey[] = [],
-) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  return useMutation({
-    mutationFn,
-    onSuccess: () => {
-      queryKeysToInvalidate.forEach((key) => {
-        void queryClient.invalidateQueries({ queryKey: key });
-      });
-      toast({ title: 'Success', description: successMessage });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
-}
 
 // ─────────────────────────────────────────────
 // Queries
 // ─────────────────────────────────────────────
 
 export function usePlatformPartnersQuery() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartners(),
     queryFn: async (): Promise<Partner[]> => {
@@ -77,7 +48,7 @@ export function usePlatformPartnersQuery() {
 }
 
 export function usePlatformPartnershipsQuery() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartnerships(),
     queryFn: async (): Promise<Partnership[]> => {
@@ -88,7 +59,7 @@ export function usePlatformPartnershipsQuery() {
 }
 
 export function useCertificatesExportQuery(partnerId: string) {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.certificates(partnerId),
     queryFn: async (): Promise<CertificatesExport> => {
@@ -98,11 +69,12 @@ export function useCertificatesExportQuery(partnerId: string) {
       return res.data;
     },
     enabled: !!partnerId,
+    gcTime: 0,
   });
 }
 
 export function useTenantPartnersQuery() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.tenant(),
     queryFn: async (): Promise<Partner[]> => {
@@ -117,7 +89,7 @@ export function useTenantPartnersQuery() {
 // ─────────────────────────────────────────────
 
 export function useCreatePlatformPartnerMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async (payload: CreatePartnerPayload) => {
@@ -136,7 +108,7 @@ export function useCreatePlatformPartnerMutation() {
 }
 
 export function useUpdatePlatformPartnerMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
@@ -152,7 +124,7 @@ export function useUpdatePlatformPartnerMutation() {
 }
 
 export function useDeletePlatformPartnerMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useToastMutation(
     async (id: string) => {
       await api.delete(`/platform/trading-partners/as2/trading-partners/${id}`);
@@ -163,7 +135,7 @@ export function useDeletePlatformPartnerMutation() {
 }
 
 export function useDeleteCertificateSecretMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useMutation({
     mutationFn: async (vaultRef: string) => {
       await api.delete(
@@ -178,7 +150,7 @@ export function useDeleteCertificateSecretMutation() {
 // ─────────────────────────────────────────────
 
 export function useCreatePlatformPartnershipMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async (payload: CreatePartnershipPayload) => {
@@ -197,7 +169,7 @@ export function useCreatePlatformPartnershipMutation() {
 }
 
 export function useUpdatePlatformPartnershipMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnershipPayload }) => {
@@ -214,7 +186,7 @@ export function useUpdatePlatformPartnershipMutation() {
 }
 
 export function useDeletePlatformPartnershipMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async (id: string) => {
@@ -230,7 +202,7 @@ export function useDeletePlatformPartnershipMutation() {
 // ─────────────────────────────────────────────
 
 export function useCreateSftpPartnerMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async (payload: CreateSftpPartnerPayload) => {
@@ -243,7 +215,7 @@ export function useCreateSftpPartnerMutation() {
 }
 
 export function useUpdateSftpPartnerMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
@@ -256,7 +228,7 @@ export function useUpdateSftpPartnerMutation() {
 }
 
 export function useDeleteSftpPartner() {
-  const api = useApi();
+  const api = useEdiNetwork();
 
   return useToastMutation(
     async (id: string) => {
@@ -272,7 +244,7 @@ export function useDeleteSftpPartner() {
 // ─────────────────────────────────────────────
 
 export function useRotateCertificatesMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: RotateCertPayload }) => {
       const res = await api.post<Partner>(
@@ -287,7 +259,7 @@ export function useRotateCertificatesMutation() {
 }
 
 export function useGenerateCertificateMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useMutation({
     mutationFn: async (as2Id: string) => {
       const res = await api.post<{ public_cert_pem: string; private_key_vault_ref: string }>(
@@ -299,7 +271,7 @@ export function useGenerateCertificateMutation() {
 }
 
 export function useTestSftpConnectionMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useMutation({
     mutationFn: async (
       payload: Omit<
@@ -317,7 +289,7 @@ export function useTestSftpConnectionMutation() {
 }
 
 export function useTestExistingSftpConnectionMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useMutation({
     mutationFn: async ({
       id,
@@ -339,7 +311,7 @@ export function useTestExistingSftpConnectionMutation() {
 }
 
 export function useTestAs2PartnershipConnectionMutation() {
-  const api = useApi();
+  const api = useEdiNetwork();
   return useMutation({
     mutationFn: async ({ id, custom_payload }: { id: string; custom_payload?: string }) => {
       const res = await api.post<{

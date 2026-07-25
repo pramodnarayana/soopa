@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1/developers/tokens", tags=["API Tokens"])
     response_model=ApiTokenListResponse,
 )
 async def list_api_tokens(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     repo: ApiTokenRepositoryPort = Depends(get_api_token_repo),
 ) -> Any:
     """List all API tokens for the current tenant."""

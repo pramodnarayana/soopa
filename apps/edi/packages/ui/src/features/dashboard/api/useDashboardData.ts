@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useDashboardRepository } from './DashboardContext';
 
 export interface DashboardData {
@@ -14,9 +15,10 @@ export interface DashboardData {
 
 export function useDashboardData() {
   const repository = useDashboardRepository();
+  const tenantId = useTenantId();
 
   return useQuery({
-    queryKey: ['dashboard_data'],
+    queryKey: ['dashboard_data', tenantId],
     queryFn: () => repository.getDashboardData(),
   });
 }
