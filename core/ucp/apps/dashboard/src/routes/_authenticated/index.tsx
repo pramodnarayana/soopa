@@ -2,6 +2,7 @@ import { DashboardProvider, EdiDashboardPage } from '@soopa/edi-ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { useIsPlatformAdmin } from '../../hooks/useIsPlatformAdmin';
 import { HttpDashboardRepository } from '../../lib/HttpDashboardRepository';
 
 export const Route = createFileRoute('/_authenticated/')({
@@ -10,9 +11,7 @@ export const Route = createFileRoute('/_authenticated/')({
 
 function DashboardSwitch() {
   const auth = useAuth();
-  const roles =
-    (auth.user?.profile['urn:zitadel:iam:org:project:roles'] as Record<string, unknown>) || {};
-  const isPlatformAdmin = 'PlatformAdmin' in roles;
+  const isPlatformAdmin = useIsPlatformAdmin();
   const tenantId = auth.user?.profile['urn:zitadel:iam:org:id'] as string;
 
   const dashboardRepository = useMemo(() => {

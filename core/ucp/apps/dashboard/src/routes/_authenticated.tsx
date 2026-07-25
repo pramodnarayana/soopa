@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
 import { ChevronRight, Clock, LayoutDashboard, LogOut, Network, Users } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
+import { useIsPlatformAdmin } from '@/hooks/useIsPlatformAdmin';
 import { apiClient } from '@/lib/api-client';
 
 export const Route = createFileRoute('/_authenticated')({
@@ -127,9 +128,7 @@ function AuthenticatedLayout() {
     );
   }
 
-  const roles =
-    (auth.user?.profile['urn:zitadel:iam:org:project:roles'] as Record<string, unknown>) || {};
-  const isPlatformAdmin = 'PlatformAdmin' in roles;
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   return (
     <div className="min-h-screen flex bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">

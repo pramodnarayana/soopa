@@ -298,45 +298,57 @@ class FakeGlobalStore:
     async def list_outbound_routes(self, tenant_id: int) -> list[Any]:
         return [r for r in getattr(self, "outbound_routes", []) if r.tenant_id == tenant_id]
 
+    def _to_mock_sftp_partner(self, p: dict[str, Any]) -> Any:
+        class MockPartner:
+            id = p["id"]
+            tenant_id = p["tenant_id"]
+            name = p["cmd"].name
+            active = True
+            host = p["cmd"].host
+            port = p["cmd"].port
+            username = p["cmd"].username
+            inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
+            outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
+            host_key = getattr(p["cmd"], "host_key", None)
+            password_encrypted = b"encrypted"
+            credentials_vault_ref = None
+
+        return MockPartner()
+
+    def _to_mock_webhook(self, p: dict[str, Any]) -> Any:
+        class MockWebhook:
+            id = p["id"]
+            tenant_id = p["tenant_id"]
+            name = p["cmd"].name
+            active = True
+            url = getattr(p["cmd"], "url", None)
+
+        return MockWebhook()
+
     async def list_sftp_partners(self, tenant_id: int) -> Sequence[Any]:
-        return [p for p in getattr(self, "sftp_partners", []) if p["tenant_id"] == tenant_id]
+        return [
+            self._to_mock_sftp_partner(p)
+            for p in getattr(self, "sftp_partners", [])
+            if p["tenant_id"] == tenant_id
+        ]
 
     async def list_webhooks(self, tenant_id: int) -> Sequence[Any]:
-        return [p for p in getattr(self, "webhooks", []) if p["tenant_id"] == tenant_id]
+        return [
+            self._to_mock_webhook(p)
+            for p in getattr(self, "webhooks", [])
+            if p["tenant_id"] == tenant_id
+        ]
 
     async def get_sftp_partner(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
         for p in self.sftp_partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
-
-                class MockPartner:
-                    id = p["id"]
-                    tenant_id = p["tenant_id"]
-                    name = p["cmd"].name
-                    active = True
-                    host = p["cmd"].host
-                    port = p["cmd"].port
-                    username = p["cmd"].username
-                    inbound_remote_path = getattr(p["cmd"], "inbound_remote_path", None)
-                    outbound_remote_path = getattr(p["cmd"], "outbound_remote_path", None)
-                    host_key = getattr(p["cmd"], "host_key", None)
-                    password_encrypted = b"encrypted"
-                    credentials_vault_ref = None
-
-                return MockPartner()
+                return self._to_mock_sftp_partner(p)
         return None
 
     async def get_webhook(self, tenant_id: int, partner_id: uuid.UUID) -> Any:
         for p in self.webhooks:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
-
-                class MockWebhook:
-                    id = p["id"]
-                    tenant_id = p["tenant_id"]
-                    name = p["cmd"].name
-                    active = True
-                    url = getattr(p["cmd"], "url", None)
-
-                return MockWebhook()
+                return self._to_mock_webhook(p)
         return None
 
 

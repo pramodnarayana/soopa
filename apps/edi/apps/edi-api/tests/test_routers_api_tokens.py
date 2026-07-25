@@ -14,7 +14,7 @@ app.include_router(router)
 
 
 def override_get_tenant_id():
-    return 1
+    return "tenant_1"
 
 
 @pytest.fixture
@@ -49,4 +49,6 @@ def test_list_api_tokens(client, mock_repo):
     data = response.json()
     assert len(data["tokens"]) == 1
     assert data["tokens"][0]["name"] == "Test Token"
+    mock_repo.list_api_tokens.assert_called_once_with("tenant_1")
+    assert isinstance(mock_repo.list_api_tokens.call_args[0][0], str)
 

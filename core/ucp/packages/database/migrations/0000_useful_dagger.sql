@@ -1,3 +1,45 @@
+-- ---------------------------------------------------------------------------
+-- app schema and RLS helper functions
+-- Must be defined before any CREATE POLICY statement that references them.
+-- ---------------------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS app;
+--> statement-breakpoint
+
+-- Returns the tenant_id stored in the current session local variable.
+-- Set this before any query that should be tenant-scoped:
+--   SELECT set_config('app.current_tenant_id', '<id>', true);
+CREATE OR REPLACE FUNCTION app.current_tenant_id()
+RETURNS varchar
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN current_setting('app.current_tenant_id', true);
+END;
+$$;
+--> statement-breakpoint
+
+-- Returns TRUE when the caller explicitly opts out of RLS (e.g. background
+-- workers, migrations).  Set the flag before any such query:
+--   SELECT set_config('app.bypass_rls', 'true', true);
+CREATE OR REPLACE FUNCTION app.bypass_rls()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN COALESCE(current_setting('app.bypass_rls', true), 'false')::boolean;
+END;
+$$;
+--> statement-breakpoint
+
+-- Grant EXECUTE to the public role so every connected user can call the
+-- helpers from within policy expressions.
+GRANT EXECUTE ON FUNCTION app.current_tenant_id() TO public;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.bypass_rls() TO public;
+--> statement-breakpoint
+
 CREATE TABLE "api_keys" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"tenant_id" varchar(128) NOT NULL,

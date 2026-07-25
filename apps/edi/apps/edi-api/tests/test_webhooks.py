@@ -11,7 +11,9 @@ from api.main import app
 @pytest.fixture
 def mock_uow():
     uow = AsyncMock()
+    uow.__aenter__.return_value = uow
     uow.transactions = AsyncMock()
+    uow.webhooks = AsyncMock()
     return uow
 
 
@@ -31,4 +33,6 @@ def test_list_webhooks(client, mock_uow):
     mock_uow.webhooks.list_webhooks.return_value = []
     response = client.get("/api/v1/webhooks")
     assert response.status_code == 200
+    assert isinstance(response.json(), list)
+    mock_uow.webhooks.list_webhooks.assert_called_once_with(1)
 
