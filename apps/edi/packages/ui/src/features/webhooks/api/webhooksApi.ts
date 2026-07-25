@@ -44,7 +44,7 @@ class HttpWebhooksRepository {
       if (res.status === 204) {
         return null as unknown as T;
       }
-      return res.json() as Promise<T>;
+      return await res.json() as T;
     } finally {
       clearTimeout(timeoutId);
     }

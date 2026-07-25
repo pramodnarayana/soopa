@@ -18,7 +18,7 @@ def client(fake_uow):
 
     app.dependency_overrides[get_uow] = lambda: fake_uow
     app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
-    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[require_platform_admin] = lambda: 0
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "user"}
     app.dependency_overrides[get_current_user_profile] = lambda: {
@@ -392,12 +392,12 @@ def test_list_tenant_webhooks(client, fake_uow):
     wh2_id = uuid4()
     fake_uow.webhooks.webhooks.append({
         "id": wh1_id,
-        "tenant_id": 1,
+        "tenant_id": "1",
         "cmd": CreateWebhookCmd(name="Current Tenant Wh", url="http://local/wh1"),
     })
     fake_uow.webhooks.webhooks.append({
         "id": wh2_id,
-        "tenant_id": 2,
+        "tenant_id": "2",
         "cmd": CreateWebhookCmd(name="Cross Tenant Wh", url="http://local/wh2"),
     })
 

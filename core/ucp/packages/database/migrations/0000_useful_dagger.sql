@@ -19,25 +19,25 @@ END;
 $$;
 --> statement-breakpoint
 
--- Returns TRUE when the caller explicitly opts out of RLS (e.g. background
--- workers, migrations).  Set the flag before any such query:
---   SELECT set_config('app.bypass_rls', 'true', true);
+-- Returns TRUE when the caller is a privileged backend role with BYPASSRLS.
+-- This function should only be executable by authorized roles, not by public.
+-- Workers and migrations should connect using a role with BYPASSRLS attribute.
 CREATE OR REPLACE FUNCTION app.bypass_rls()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE SECURITY DEFINER
 AS $$
 BEGIN
-  RETURN COALESCE(current_setting('app.bypass_rls', true), 'false')::boolean;
+  -- Only permit bypass for roles with BYPASSRLS attribute or superuser
+  RETURN pg_has_role(current_user, 'pg_database_owner', 'MEMBER')
+         OR (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user);
 END;
 $$;
 --> statement-breakpoint
 
--- Grant EXECUTE to the public role so every connected user can call the
--- helpers from within policy expressions.
+-- Grant EXECUTE to the public role only for current_tenant_id.
+-- bypass_rls should NOT be publicly executable - it checks role membership internally.
 GRANT EXECUTE ON FUNCTION app.current_tenant_id() TO public;
---> statement-breakpoint
-GRANT EXECUTE ON FUNCTION app.bypass_rls() TO public;
 --> statement-breakpoint
 
 CREATE TABLE "api_keys" (

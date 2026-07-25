@@ -19,7 +19,7 @@ def mock_uow():
 
 @pytest.fixture
 def client(mock_uow):
-    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[get_uow] = lambda: mock_uow
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
 
@@ -34,5 +34,5 @@ def test_list_webhooks(client, mock_uow):
     response = client.get("/api/v1/webhooks")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
-    mock_uow.webhooks.list_webhooks.assert_called_once_with(1)
+    mock_uow.webhooks.list_webhooks.assert_called_once_with("1")
 

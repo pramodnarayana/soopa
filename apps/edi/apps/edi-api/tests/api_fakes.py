@@ -303,7 +303,7 @@ class FakeGlobalStore:
             id = p["id"]
             tenant_id = p["tenant_id"]
             name = p["cmd"].name
-            active = True
+            active = p.get("status", "ACTIVE") == "ACTIVE"
             host = p["cmd"].host
             port = p["cmd"].port
             username = p["cmd"].username
@@ -320,7 +320,7 @@ class FakeGlobalStore:
             id = p["id"]
             tenant_id = p["tenant_id"]
             name = p["cmd"].name
-            active = True
+            active = p.get("status", "ACTIVE") == "ACTIVE"
             url = getattr(p["cmd"], "url", None)
 
         return MockWebhook()

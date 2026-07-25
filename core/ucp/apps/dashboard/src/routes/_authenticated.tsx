@@ -73,6 +73,7 @@ function TenantSidebar() {
 
 function AuthenticatedLayout() {
   const auth = useAuth();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   // Keep apiClient in sync with auth state
   if (auth.user?.access_token) {
@@ -127,8 +128,6 @@ function AuthenticatedLayout() {
       </div>
     );
   }
-
-  const isPlatformAdmin = useIsPlatformAdmin();
 
   return (
     <div className="min-h-screen flex bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
