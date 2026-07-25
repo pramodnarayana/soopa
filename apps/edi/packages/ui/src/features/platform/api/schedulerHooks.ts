@@ -1,37 +1,44 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from 'react-oidc-context';
-import { createSchedulerRepository } from './schedulerApi';
+import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
+import type { ConfigResponse, JobResponse } from './schedulerApi';
 
-function useRepo() {
-  const auth = useAuth();
-  const token = auth.user?.access_token;
-  if (!token) throw new Error('No token');
-  return createSchedulerRepository(token);
+function useApi() {
+  const api = useEdiNetwork();
+  return api;
 }
 
 export function useJobsQuery() {
-  const repo = useRepo();
+  const api = useApi();
   return useQuery({
     queryKey: ['scheduler', 'jobs'],
-    queryFn: () => repo.getJobs(),
+    queryFn: async (): Promise<JobResponse[]> => {
+      const res = await api.get<JobResponse[]>('/platform/scheduler/jobs');
+      return res.data;
+    },
     refetchInterval: 10000,
   });
 }
 
 export function useConfigQuery() {
-  const repo = useRepo();
+  const api = useApi();
   return useQuery({
     queryKey: ['scheduler', 'config'],
-    queryFn: () => repo.getConfig(),
+    queryFn: async (): Promise<ConfigResponse[]> => {
+      const res = await api.get<ConfigResponse[]>('/platform/scheduler/config');
+      return res.data;
+    },
   });
 }
 
 export function useUpdateConfigMutation() {
-  const repo = useRepo();
+  const api = useApi();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ key, value }: { key: string; value: any }) => repo.updateConfig(key, value),
+    mutationFn: async ({ key, value }: { key: string; value: unknown }) => {
+      const res = await api.put<ConfigResponse>(`/platform/scheduler/config/${key}`, { value });
+      return res.data;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['scheduler', 'config'] });
     },
@@ -39,11 +46,11 @@ export function useUpdateConfigMutation() {
 }
 
 export function useUpdateJobMutation() {
-  const repo = useRepo();
+  const api = useApi();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       name,
       data,
     }: {
@@ -54,7 +61,11 @@ export function useUpdateJobMutation() {
         timezone?: string | null;
         status?: string;
       };
-    }) => repo.updateJob(name, data),
+    }) => {
+      const res = await api.put<JobResponse>(`/platform/scheduler/jobs/${name}`, data);
+      return res.data;
+    },
+
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['scheduler', 'jobs'] });
     },

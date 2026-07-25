@@ -61,10 +61,10 @@ class TenantAwareMixin:
     """
 
     @declared_attr
-    def tenant_id(cls) -> Mapped[int]:
+    def tenant_id(cls) -> Mapped[str]:
         return mapped_column(
-            Integer,
-            server_default=text("current_setting('app.current_tenant')::int"),
+            String(128),
+            server_default=text("current_setting('app.current_tenant')::varchar"),
             nullable=False,
             index=True,
         )
@@ -306,8 +306,6 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
-    attempts: Mapped[int] = mapped_column(Integer, default=0)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index(

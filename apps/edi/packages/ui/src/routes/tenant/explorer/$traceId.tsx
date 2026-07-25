@@ -1,27 +1,30 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
 import { useTransactionDetail } from '@/features/transactions/api/transactionsApi';
 import { TransactionTimeline } from '@/features/transactions/components/TransactionTimeline';
 
-export const Route = createFileRoute('/tenant/explorer/$traceId')({
-  component: TransactionDetailRoute,
-});
-
-function TransactionDetailRoute() {
-  const { traceId } = Route.useParams();
+export function TransactionDetailPage({
+  traceId,
+  onBack,
+}: {
+  traceId: string;
+  onBack?: () => void;
+}) {
   const { data, isLoading, isError } = useTransactionDetail(traceId);
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <div className="mb-6">
-        <Link
-          to="/tenant/explorer"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Data Explorer
-        </Link>
-      </div>
+      {onBack && (
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Data Explorer
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4">

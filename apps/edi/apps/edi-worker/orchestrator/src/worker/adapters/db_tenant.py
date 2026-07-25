@@ -11,20 +11,20 @@ from worker.ports.tenant import TenantPort
 class SqlAlchemyTenantAdapter(TenantPort):
     def __init__(self, db_router: DatabaseRouter):
         self.db_router = db_router
-        self._cache: dict[int, tuple[str, str]] = {}
+        self._cache: dict[str, tuple[str, str]] = {}
 
-    async def get_all_tenant_ids(self) -> list[int]:
+    async def get_all_tenant_ids(self) -> list[str]:
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
         try:
             stmt = select(Tenant.id).join(DatabaseShard)
             result = await global_session.execute(stmt)
-            return list(result.scalars().all())
+            return [str(t_id) for t_id in result.scalars().all()]
         finally:
             with contextlib.suppress(StopAsyncIteration):
                 await global_gen.__anext__()
 
-    async def resolve_shard(self, tenant_id: int) -> tuple[str, str]:
+    async def resolve_shard(self, tenant_id: str) -> tuple[str, str]:
         if tenant_id in self._cache:
             return self._cache[tenant_id]
 
@@ -43,14 +43,18 @@ class SqlAlchemyTenantAdapter(TenantPort):
             with contextlib.suppress(StopAsyncIteration):
                 await global_gen.__anext__()
 
-    async def upsert_tenant(self, tenant_id: int, name: str) -> None:
+    async def upsert_tenant(self, tenant_id: str, name: str) -> None:
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
         try:
+            # For MVP, default all new tenants to shard_1
+            # In the future, a shard balancer will assign this
             stmt = insert(Tenant).values(
                 id=tenant_id,
                 name=name,
-                status="active"
+                shard_id="shard_1",
+                tier="standard",
+                shard_schema=f"tenant_{tenant_id}"
             ).on_conflict_do_update(
                 index_elements=['id'],
                 set_={"name": name}

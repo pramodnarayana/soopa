@@ -1,20 +1,12 @@
-import { createRoute } from '@tanstack/react-router';
 import { Terminal } from 'lucide-react';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useApiTokensQuery } from '@/features/developers/api/apiTokenHooks';
 import { ApiTokensTable } from '@/features/developers/components/ApiTokensTable';
 import { CreateApiTokenModal } from '@/features/developers/components/CreateApiTokenModal';
-import { Route as appRoute } from '../tenant';
-
-export const Route = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/developers',
-  component: DevelopersPage,
-});
 
 export function DevelopersPage() {
-  const { data, isLoading } = useApiTokensQuery();
-
-  const tokens = data?.tokens ?? [];
+  const tenantId = useTenantId();
+  const { data: tokens = [], isLoading } = useApiTokensQuery(tenantId);
 
   return (
     <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out p-8">

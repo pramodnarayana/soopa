@@ -1,10 +1,36 @@
+import { DashboardProvider, EdiDashboardPage } from '@soopa/edi-ui';
 import { createFileRoute } from '@tanstack/react-router';
+import { useMemo } from 'react';
+import { useAuth } from 'react-oidc-context';
+import { HttpDashboardRepository } from '../../lib/HttpDashboardRepository';
 
 export const Route = createFileRoute('/_authenticated/')({
-  component: Dashboard,
+  component: DashboardSwitch,
 });
 
-function Dashboard() {
+function DashboardSwitch() {
+  const auth = useAuth();
+  const roles =
+    (auth.user?.profile['urn:zitadel:iam:org:project:roles'] as Record<string, unknown>) || {};
+  const isPlatformAdmin = 'PlatformAdmin' in roles;
+  const tenantId = auth.user?.profile['urn:zitadel:iam:org:id'] as string;
+
+  const dashboardRepository = useMemo(() => {
+    return new HttpDashboardRepository(tenantId || '');
+  }, [tenantId]);
+
+  if (!isPlatformAdmin) {
+    return (
+      <DashboardProvider repository={dashboardRepository}>
+        <EdiDashboardPage />
+      </DashboardProvider>
+    );
+  }
+
+  return <PlatformDashboard />;
+}
+
+function PlatformDashboard() {
   return (
     <div>
       <h1 className="text-3xl font-bold tracking-tight mb-8">Dashboard</h1>

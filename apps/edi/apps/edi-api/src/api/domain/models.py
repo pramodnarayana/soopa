@@ -34,7 +34,21 @@ class SignatureAlgorithm(StrEnum):
 
 
 class UnsetType:
-    pass
+    def __repr__(self) -> str:
+        return "UNSET"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UnsetType)
+
+    def __hash__(self) -> int:
+        return hash("UNSET")
+
+    def __copy__(self) -> "UnsetType":
+        return self
+
+    def __deepcopy__(self, memo: Any) -> "UnsetType":
+        return self
+
 
 
 UNSET = UnsetType()

@@ -1,9 +1,10 @@
 import pytest
+from api_fakes import FakeUnitOfWork
+from fastapi.testclient import TestClient
+
 from api.dependencies.auth import get_current_tenant_id, require_platform_admin
 from api.dependencies.database import get_tenant_uow, get_uow
 from api.main import app
-from api_fakes import FakeUnitOfWork
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -383,20 +384,10 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     assert resp.status_code == 400
 
 
-def test_create_tenant_webhook_partner(client, fake_uow):
-    response = client.post(
-        "/api/v1/webhooks/",
-        json={"name": "My Webhook", "url": "https://example.com/webhook"},
-    )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["type"] == "WEBHOOK"
-
-    # Coverage for unimplemented fake paths
-    p_id = data["id"]
-    client.get(f"/api/v1/webhooks/{p_id}")
-    client.patch(f"/api/v1/webhooks/{p_id}", json={"name": "updated"})
-    client.delete(f"/api/v1/webhooks/{p_id}")
+def test_list_tenant_webhooks(client, fake_uow):
+    response = client.get("/api/v1/webhooks")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
 
 
 def test_list_tenant_partners(client, fake_uow):

@@ -30,7 +30,7 @@ class UcpSyncWorkerService:
         }
 
     async def _handle_tenant_provisioned(self, payload: dict[str, Any]) -> None:
-        tenant_id = int(payload["id"])
+        tenant_id = str(payload["id"])
         name = payload["name"]
 
         logger.info(f"Syncing tenant {tenant_id} from UCP into EDI Global")
@@ -51,7 +51,7 @@ class UcpSyncWorkerService:
 
     async def _handle_api_key_created(self, payload: dict[str, Any]) -> None:
         client_id = payload["id"]
-        tenant_id = int(payload["tenantId"])
+        tenant_id = str(payload["tenantId"])
         name = payload["name"]
         key_hash = payload["keyHash"]
 

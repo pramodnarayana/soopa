@@ -281,7 +281,7 @@ async def list_platform_as2_partnerships(
     """
     async with uow:
         result = await uow.global_session.execute(
-            select(AS2Partnership).where(AS2Partnership.tenant_id == 0)
+            select(AS2Partnership).where(AS2Partnership.tenant_id == "0")
         )
         partnerships = result.scalars().all()
 

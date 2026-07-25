@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import { useAuth } from 'react-oidc-context';
+import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type { ExplorerEdiJson, ExplorerEdiMessage, ExplorerResponse, FilterRule } from '../types';
 
 export const explorerKeys = {
@@ -17,22 +16,19 @@ export function useExplorerQuery<T>(
   offset: number,
   enabledOverride: boolean = true,
 ) {
-  const auth = useAuth();
+  const api = useEdiNetwork();
 
   return useQuery({
     queryKey: [...queryKeyArray, limit, offset],
     queryFn: async () => {
-      const response = await axios.post<ExplorerResponse<T>>(
+      const response = await api.post<ExplorerResponse<T>>(
         url,
         { filters },
-        {
-          params: { limit, offset },
-          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
-        },
+        { params: { limit, offset } },
       );
       return response.data;
     },
-    enabled: !!auth.user?.access_token && enabledOverride,
+    enabled: enabledOverride,
     refetchInterval: 2000,
   });
 }
@@ -45,7 +41,7 @@ export function useExplorerEdiMessages(
 ) {
   return useExplorerQuery<ExplorerEdiMessage>(
     explorerKeys.messages(filters),
-    '/api/v1/explorer/edi-messages',
+    '/explorer/edi-messages',
     filters,
     limit,
     offset,
@@ -61,7 +57,7 @@ export function useExplorerEdiJson(
 ) {
   return useExplorerQuery<ExplorerEdiJson>(
     explorerKeys.json(filters),
-    '/api/v1/explorer/edi-json',
+    '/explorer/edi-json',
     filters,
     limit,
     offset,

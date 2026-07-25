@@ -28,7 +28,7 @@ class ProvisioningWorkerService:
             if tenant_id is None:
                 raise PermanentProvisioningError("Missing tenant_id in provision event payload")
 
-            if tenant_id == 0:
+            if tenant_id == "0":
                 logger.info(
                     f"Processing GLOBAL provision event {event.id} (tenant_id=0). Broadcasting to all tenants."
                 )
@@ -43,7 +43,7 @@ class ProvisioningWorkerService:
 
                     _semaphore = asyncio.Semaphore(10)
 
-                    async def _replicate(t_id: int) -> None:
+                    async def _replicate(t_id: str) -> None:
                         async with _semaphore:
                             await self.replication_port.replicate_tenant_configuration(t_id)
 

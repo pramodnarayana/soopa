@@ -2,9 +2,10 @@ import uuid
 from typing import Any
 from uuid import UUID
 
-from api.ports.outbox_repository import OutboxRepositoryPort
 from database.base_repository import GlobalSqlAlchemyRepository, TenantSqlAlchemyRepository
 from database.models.control_plane import ControlPlaneOutbox
+
+from api.ports.outbox_repository import OutboxRepositoryPort
 
 
 class SqlAlchemyOutboxRepositoryMixin:
@@ -18,10 +19,11 @@ class SqlAlchemyOutboxRepositoryMixin:
         payload: dict[str, Any],
         idempotency_key: UUID | None = None,
     ) -> UUID:
+        tid_str = str(tenant_id) if tenant_id is not None else None
         event_id = uuid.uuid4()
         record = self.model_class(
             id=event_id,
-            tenant_id=tenant_id,
+            tenant_id=tid_str,
             idempotency_key=idempotency_key or uuid.uuid4(),
             event_type=event_type,
             payload=payload,

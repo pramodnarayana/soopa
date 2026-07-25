@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import { useAuth } from 'react-oidc-context';
+import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type {
   TransactionDetailResponse,
   TransactionListResponse,
@@ -24,7 +23,7 @@ export function useTransactions(params: {
   transaction_type?: string;
   direction?: string;
 }) {
-  const auth = useAuth();
+  const api = useEdiNetwork();
 
   return useQuery({
     queryKey: transactionsKeys.list(params),
@@ -36,53 +35,41 @@ export function useTransactions(params: {
       if (params.transaction_type) searchParams.set('transaction_type', params.transaction_type);
       if (params.direction) searchParams.set('direction', params.direction);
 
-      const response = await axios.get<TransactionListResponse>(
-        `/api/v1/transactions?${searchParams.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
-        },
+      const response = await api.get<TransactionListResponse>(
+        `/transactions?${searchParams.toString()}`,
       );
       return response.data;
     },
-    enabled: !!auth.user?.access_token,
     refetchInterval: 10000,
   });
 }
 
 export function useTransactionDetail(traceId: string) {
-  const auth = useAuth();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: transactionsKeys.detail(traceId),
     queryFn: async () => {
-      const response = await axios.get<TransactionDetailResponse>(
-        `/api/v1/transactions/${traceId}`,
-        {
-          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
-        },
-      );
+      const response = await api.get<TransactionDetailResponse>(`/transactions/${traceId}`);
       return response.data;
     },
-    enabled: !!traceId && !!auth.user?.access_token,
+    enabled: !!traceId,
     refetchInterval: 10000,
   });
 }
 
 export function useTransactionThread(key: string, value: string) {
-  const auth = useAuth();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: transactionsKeys.thread(key, value),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       searchParams.set('key', key);
       searchParams.set('value', value);
-      const response = await axios.get<TransactionThreadResponse>(
-        `/api/v1/transactions/thread?${searchParams.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${auth.user?.access_token}` },
-        },
+      const response = await api.get<TransactionThreadResponse>(
+        `/transactions/thread?${searchParams.toString()}`,
       );
       return response.data;
     },
-    enabled: !!key && !!value && !!auth.user?.access_token,
+    enabled: !!key && !!value,
   });
 }

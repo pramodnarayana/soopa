@@ -1,33 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from 'react-oidc-context';
+import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type {
   CreateInboundRoutePayload,
   CreateOutboundRoutePayload,
+  RouteItem,
   UpdateRoutePayload,
 } from '../types';
-import { createRoutesRepository } from './routesApi';
 
-function useRepo() {
-  const auth = useAuth();
-  const token = auth.user?.access_token;
-  if (!token) throw new Error('No token');
-  return createRoutesRepository(token);
+function useApi() {
+  const api = useEdiNetwork();
+  return api;
 }
 
 export function useRoutesQuery() {
-  const repo = useRepo();
+  const api = useApi();
   return useQuery({
     queryKey: ['routes'],
-    queryFn: () => repo.getRoutes(),
+    queryFn: async (): Promise<RouteItem[]> => {
+      const res = await api.get<RouteItem[]>('/routes');
+      return res.data;
+    },
   });
 }
 
 export function useCreateInboundRouteMutation() {
-  const repo = useRepo();
+  const api = useApi();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: CreateInboundRoutePayload) => repo.createInboundRoute(payload),
+    mutationFn: async (payload: CreateInboundRoutePayload) => {
+      await api.post('/routes/inbound', payload);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
@@ -35,11 +38,13 @@ export function useCreateInboundRouteMutation() {
 }
 
 export function useCreateOutboundRouteMutation() {
-  const repo = useRepo();
+  const api = useApi();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: CreateOutboundRoutePayload) => repo.createOutboundRoute(payload),
+    mutationFn: async (payload: CreateOutboundRoutePayload) => {
+      await api.post('/routes/outbound', payload);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
@@ -47,11 +52,11 @@ export function useCreateOutboundRouteMutation() {
 }
 
 export function useUpdateRouteMutation() {
-  const repo = useRepo();
+  const api = useApi();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       routeId,
       direction,
       payload,
@@ -59,7 +64,11 @@ export function useUpdateRouteMutation() {
       routeId: string;
       direction: 'INBOUND' | 'OUTBOUND';
       payload: UpdateRoutePayload;
-    }) => repo.updateRoute(routeId, direction, payload),
+    }) => {
+      const endpoint =
+        direction === 'INBOUND' ? `/routes/inbound/${routeId}` : `/routes/outbound/${routeId}`;
+      await api.patch(endpoint, payload);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },
@@ -67,12 +76,20 @@ export function useUpdateRouteMutation() {
 }
 
 export function useDeleteRouteMutation() {
-  const repo = useRepo();
+  const api = useApi();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ routeId, direction }: { routeId: string; direction: 'INBOUND' | 'OUTBOUND' }) =>
-      repo.deleteRoute(routeId, direction),
+    mutationFn: async ({
+      routeId,
+      direction,
+    }: {
+      routeId: string;
+      direction: 'INBOUND' | 'OUTBOUND';
+    }) => {
+      const ep = direction === 'INBOUND' ? 'inbound' : 'outbound';
+      await api.delete(`/routes/${ep}/${routeId}`);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes'] });
     },

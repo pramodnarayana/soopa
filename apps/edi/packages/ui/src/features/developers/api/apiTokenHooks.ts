@@ -6,35 +6,40 @@ import { createApiTokenRepository } from './apiTokensApi';
 
 export const apiTokenKeys = {
   all: ['apiTokens'] as const,
-  lists: () => [...apiTokenKeys.all, 'list'] as const,
+  lists: (tenantId: string) => [...apiTokenKeys.all, tenantId] as const,
 };
 
-function useRepository() {
+function useRepository(tenantId: string) {
   const auth = useAuth();
-  return createApiTokenRepository(auth.user?.access_token ?? '');
-}
-
-export function useApiTokensQuery() {
-  const repo = useRepository();
-  const auth = useAuth();
-  return useQuery({
-    queryKey: apiTokenKeys.lists(),
-    queryFn: () => repo.getApiTokens(),
-    enabled: !!auth.user?.access_token,
-  });
-}
-
-export function useCreateApiTokenMutation() {
-  const repo = useRepository();
-  return useToastMutation(
-    (payload: CreateApiTokenPayload) => repo.createApiToken(payload),
-    'API Token created successfully.',
-    [apiTokenKeys.lists()],
+  return createApiTokenRepository(
+    auth.user?.access_token ?? '',
+    tenantId,
+    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
+      'http://localhost:3000',
   );
 }
 
-export function useUpdateApiTokenMutation() {
-  const repo = useRepository();
+export function useApiTokensQuery(tenantId: string) {
+  const repo = useRepository(tenantId);
+  const auth = useAuth();
+  return useQuery({
+    queryKey: apiTokenKeys.lists(tenantId),
+    queryFn: () => repo.getApiTokens(),
+    enabled: !!auth.user?.access_token && !!tenantId,
+  });
+}
+
+export function useCreateApiTokenMutation(tenantId: string) {
+  const repo = useRepository(tenantId);
+  return useToastMutation(
+    (payload: CreateApiTokenPayload) => repo.createApiToken(payload),
+    'API Token created successfully.',
+    [apiTokenKeys.lists(tenantId)],
+  );
+}
+
+export function useUpdateApiTokenMutation(tenantId: string) {
+  const repo = useRepository(tenantId);
   return useToastMutation(
     ({ id, data }: { id: string; data: { name?: string; active?: boolean } }) =>
       repo.updateApiToken(id, data),
@@ -43,15 +48,15 @@ export function useUpdateApiTokenMutation() {
       if (data.name !== undefined) return 'Token renamed.';
       return '';
     },
-    [apiTokenKeys.lists()],
+    [apiTokenKeys.lists(tenantId)],
   );
 }
 
-export function useDeleteApiTokenMutation() {
-  const repo = useRepository();
+export function useDeleteApiTokenMutation(tenantId: string) {
+  const repo = useRepository(tenantId);
   return useToastMutation(
     (id: string) => repo.deleteApiToken(id),
     'API Token permanently deleted.',
-    [apiTokenKeys.lists()],
+    [apiTokenKeys.lists(tenantId)],
   );
 }

@@ -1,4 +1,3 @@
-CREATE SCHEMA IF NOT EXISTS app;--> statement-breakpoint
 CREATE TABLE "api_keys" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"tenant_id" varchar(128) NOT NULL,
@@ -50,6 +49,20 @@ CREATE TABLE "notification_templates" (
 );
 --> statement-breakpoint
 ALTER TABLE "notification_templates" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "outbox_events" (
+	"id" varchar(128) PRIMARY KEY NOT NULL,
+	"idempotency_key" varchar(255) NOT NULL,
+	"tenant_id" varchar(128),
+	"event_type" varchar(100) NOT NULL,
+	"payload" jsonb NOT NULL,
+	"status" varchar(50) DEFAULT 'PENDING' NOT NULL,
+	"error_reason" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "outbox_events_idempotency_key_unique" UNIQUE("idempotency_key")
+);
+--> statement-breakpoint
+ALTER TABLE "outbox_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "scheduled_jobs" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"name" varchar(255) NOT NULL,
@@ -89,43 +102,50 @@ CREATE TABLE "tenant_subscriptions" (
 );
 --> statement-breakpoint
 ALTER TABLE "tenant_subscriptions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "outbox_events" (
+CREATE TABLE "api_tokens" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
-	"idempotency_key" varchar(255) NOT NULL,
-	"tenant_id" varchar(128),
-	"event_type" varchar(100) NOT NULL,
-	"payload" jsonb NOT NULL,
-	"status" varchar(50) DEFAULT 'PENDING' NOT NULL,
-	"error_reason" text,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "outbox_events_idempotency_key_unique" UNIQUE("idempotency_key")
+	"tenant_id" varchar(128) NOT NULL,
+	"name" varchar(255) NOT NULL,
+	"client_id" varchar(64) NOT NULL,
+	"secret_hash" varchar(64) NOT NULL,
+	"last_used_at" timestamp with time zone,
+	"expires_at" timestamp with time zone,
+	"active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "api_tokens_client_id_unique" UNIQUE("client_id")
 );
 --> statement-breakpoint
-ALTER TABLE "outbox_events" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "api_tokens" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "webhooks" (
+	"id" varchar(128) PRIMARY KEY NOT NULL,
+	"tenant_id" varchar(128) NOT NULL,
+	"name" varchar(255) NOT NULL,
+	"url" varchar(1024) NOT NULL,
+	"auth_header_vault_ref" varchar(255),
+	"active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "webhooks" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_users" ADD CONSTRAINT "tenant_users_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_users" ADD CONSTRAINT "tenant_users_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "api_tokens" ADD CONSTRAINT "api_tokens_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "webhooks" ADD CONSTRAINT "webhooks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "tenant_users_user_id_idx" ON "tenant_users" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_template_idx" ON "notification_templates" USING btree ("tenant_id","event_type","channel");--> statement-breakpoint
 CREATE INDEX "job_status_next_run_idx" ON "scheduled_jobs" USING btree ("status","next_run_at");--> statement-breakpoint
-CREATE OR REPLACE FUNCTION app.current_tenant_id() RETURNS VARCHAR(128) AS $$
-BEGIN
-  RETURN current_setting('app.current_tenant_id', true);
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;--> statement-breakpoint
-CREATE OR REPLACE FUNCTION app.bypass_rls() RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN COALESCE(current_setting('app.bypass_rls', true) = 'on', false);
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION app.current_tenant_id() TO public;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION app.bypass_rls() TO public;--> statement-breakpoint
+CREATE INDEX "api_tokens_tenant_idx" ON "api_tokens" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "webhooks_tenant_idx" ON "webhooks" USING btree ("tenant_id");--> statement-breakpoint
 CREATE POLICY "api_keys_isolation" ON "api_keys" AS PERMISSIVE FOR ALL TO public USING ("api_keys"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "tenant_users_isolation" ON "tenant_users" AS PERMISSIVE FOR ALL TO public USING ("tenant_users"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "notification_templates_isolation" ON "notification_templates" AS PERMISSIVE FOR ALL TO public USING ("notification_templates"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "outbox_events_isolation" ON "outbox_events" AS PERMISSIVE FOR ALL TO public USING ("outbox_events"."tenant_id" IS NULL OR "outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "tenant_subscriptions_isolation" ON "tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("tenant_subscriptions"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
-CREATE POLICY "outbox_events_isolation" ON "outbox_events" AS PERMISSIVE FOR ALL TO public USING ("outbox_events"."tenant_id" IS NULL OR "outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());
+CREATE POLICY "api_tokens_isolation" ON "api_tokens" AS PERMISSIVE FOR ALL TO public USING ("api_tokens"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "webhooks_isolation" ON "webhooks" AS PERMISSIVE FOR ALL TO public USING ("webhooks"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());

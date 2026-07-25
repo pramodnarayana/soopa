@@ -1,12 +1,6 @@
 import uuid
 from uuid import UUID
 
-from api.domain.models import (
-    CreateInboundRouteCmd,
-    UnsetType,
-    UpdateInboundRouteCmd,
-)
-from api.ports.inbound_route_repository import InboundRouteRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     AS2Partner,
@@ -16,6 +10,13 @@ from database.models.control_plane import (
 )
 from domain.models import InboundRouteDomainModel
 from sqlalchemy import delete, or_, select
+
+from api.domain.models import (
+    CreateInboundRouteCmd,
+    UnsetType,
+    UpdateInboundRouteCmd,
+)
+from api.ports.inbound_route_repository import InboundRouteRepositoryPort
 
 
 class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlchemyRepository):
@@ -48,7 +49,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             result = await self.session.execute(
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
-                    AS2Partner.tenant_id.in_([tenant_id, 0]),
+                    AS2Partner.tenant_id.in_([str(tenant_id), "0"]),
                 )
             )
             if not result.scalar_one_or_none():
@@ -182,7 +183,8 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 f"Ambiguous ISA pair ({isa_sender_id!r} -> {isa_receiver_id!r}) "
                 f"matched {len(unique_tenants)} distinct tenants: {unique_tenants}"
             )
-        return rows[0] if rows else None
+        return int(rows[0]) if rows else None
+
 
     async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
         result = await self.session.execute(
