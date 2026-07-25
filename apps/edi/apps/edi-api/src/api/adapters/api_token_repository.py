@@ -2,13 +2,14 @@ from datetime import UTC
 from typing import Any
 from uuid import UUID
 
-from api.domain.models import ApiTokenListEntity
-from api.ports.api_token_repository import ApiTokenRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     ApiToken,
 )
 from sqlalchemy import delete, or_, select, update
+
+from api.domain.models import ApiTokenListEntity
+from api.ports.api_token_repository import ApiTokenRepositoryPort
 
 
 class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):

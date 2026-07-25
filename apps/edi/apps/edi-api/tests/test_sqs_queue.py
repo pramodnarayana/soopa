@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from api.adapters.sqs_queue import SQSMessageQueueAdapter
 
 pytestmark = pytest.mark.asyncio

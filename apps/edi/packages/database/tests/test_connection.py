@@ -3,9 +3,10 @@ import os
 from collections.abc import AsyncGenerator
 
 import pytest
-from database.connection import DatabaseRouter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.connection import DatabaseRouter
 
 # We use the local test databases spun up by docker-compose, but allow overrides
 GLOBAL_DB_URL = os.getenv(

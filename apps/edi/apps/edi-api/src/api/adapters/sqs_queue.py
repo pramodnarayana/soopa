@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 import aioboto3  # type: ignore[import-untyped]
+
 from api.ports.message_queue import MessageQueuePort
 
 logger = logging.getLogger(__name__)

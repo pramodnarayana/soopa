@@ -7,6 +7,7 @@ Extended test suite for grammar.py covering previously uncovered branches such a
 """
 
 import pytest
+
 from bots_core.domain.exceptions import BotsImportError, GrammarError, GrammarPartMissing
 from bots_core.domain.grammar import loader, validator
 from bots_core.domain.grammar.grammar import ERROR_IN_GRAMMAR, Grammar

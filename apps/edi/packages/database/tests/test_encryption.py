@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
+
 from database.encryption import DBEncryptionAdapter
 
 

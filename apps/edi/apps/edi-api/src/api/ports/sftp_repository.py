@@ -2,11 +2,12 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
+from domain.models import SFTPPartnerDomainModel
+
 from api.domain.models import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
-from domain.models import SFTPPartnerDomainModel
 
 
 class SFTPPartnerRepositoryPort(Protocol):

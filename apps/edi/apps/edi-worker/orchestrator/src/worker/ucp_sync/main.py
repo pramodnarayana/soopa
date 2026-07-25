@@ -4,6 +4,7 @@ import os
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
+
 from worker.adapters.db_api_token import SqlAlchemyApiTokenAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from worker.adapters.sqs_outbox import SqsOutboxAdapter

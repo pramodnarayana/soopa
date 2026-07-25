@@ -9,10 +9,11 @@ Follows Hexagonal Architecture:
 import logging
 from uuid import UUID
 
-from api.core.uow import UnitOfWork
-from api.domain.models import CreateWebhookCmd, PartnerEntity
 from domain.events import ProvisioningEventType
 from domain.models import ConnectionType, PartnerStatus
+
+from api.core.uow import UnitOfWork
+from api.domain.models import CreateWebhookCmd, PartnerEntity
 
 logger = logging.getLogger(__name__)
 

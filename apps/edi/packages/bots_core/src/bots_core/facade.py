@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Any, cast
+from typing import cast
 
 from bots_core.domain import inmessage, outmessage
 from bots_core.domain.node import Node

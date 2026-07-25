@@ -1,6 +1,9 @@
 import logging
 from uuid import UUID
 
+from domain.events import ProvisioningEventType
+from domain.models import ConnectionType, Direction, InboundRouteDomainModel
+
 from api.core.uow import UnitOfWork
 from api.domain.models import (
     CreateInboundRouteCmd,
@@ -8,8 +11,6 @@ from api.domain.models import (
     RouteEntity,
     UpdateInboundRouteCmd,
 )
-from domain.events import ProvisioningEventType
-from domain.models import ConnectionType, Direction, InboundRouteDomainModel
 
 logger = logging.getLogger(__name__)
 

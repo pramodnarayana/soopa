@@ -5,8 +5,6 @@ import uuid
 from email import policy
 from typing import Any
 
-from api.core.uow import UnitOfWork
-from api.ports.vault import VaultPort
 from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
@@ -15,6 +13,9 @@ from domain.events import PipelineEventType
 from security.smime import decrypt_payload, verify_signature
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.uow import UnitOfWork
+from api.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 

@@ -17,6 +17,7 @@ Comprehensive unit tests for Node methods covering the uncovered branches:
 import decimal
 
 import pytest
+
 from bots_core.domain.exceptions import MappingFormatError, MappingRootError
 from bots_core.domain.node import Node
 

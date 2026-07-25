@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+
 from api.core.services.as2_partner_service import AS2PartnerService
 from api.domain.models import UpdateAS2TradingPartnerCmd
 

@@ -4,6 +4,7 @@ from typing import Any
 from domain.direction import MessageDirection
 from domain.events import PipelineEventType
 from domain.status import MessageStatus
+
 from pipeline.ports.repository import RepositoryPort
 
 logger = logging.getLogger(__name__)

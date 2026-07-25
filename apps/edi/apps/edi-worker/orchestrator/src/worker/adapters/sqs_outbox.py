@@ -107,7 +107,7 @@ class SqsOutboxAdapter(OutboxPort):
         event_type: str,
         payload: dict[str, object],
         idempotency_key: str,
-        tenant_id: int,
+        tenant_id: str,
     ) -> None:
         """Publishes an event to the outbox queue."""
         async with self.session.client(

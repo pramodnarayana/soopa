@@ -15,6 +15,7 @@ from fakes import (
     InMemoryRepositoryAdapter,
     InMemoryStorageAdapter,
 )
+
 from pipeline.core.delivery import (
     As2DeliveryStrategy,
     DeliveryRouter,

@@ -2,11 +2,12 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
+from domain.models import OutboundEdiHeaderDomainModel
+
 from api.domain.models import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
 )
-from domain.models import OutboundEdiHeaderDomainModel
 
 
 class EdiHeaderRepositoryPort(Protocol):

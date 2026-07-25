@@ -1,11 +1,12 @@
 from typing import Protocol
 from uuid import UUID
 
+from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
+
 from api.domain.models import (
     CreateAS2PartnershipCmd,
     UpdateAS2PartnershipCmd,
 )
-from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 
 
 class AS2PartnershipRepositoryPort(Protocol):

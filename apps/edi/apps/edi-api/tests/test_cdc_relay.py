@@ -1,10 +1,11 @@
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
+
 from api.dependencies.services import get_message_queue
 from api.main import app
 from api.ports.message_queue import MessageQueuePort
-from fastapi.testclient import TestClient
 
 
 class InMemoryQueueAdapter(MessageQueuePort):

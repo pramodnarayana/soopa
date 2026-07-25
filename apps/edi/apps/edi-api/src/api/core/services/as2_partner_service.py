@@ -1,14 +1,15 @@
 import logging
 from uuid import UUID
 
+from domain.events import ProvisioningEventType
+from domain.models import ConnectionType, PartnerStatus
+
 from api.core.uow import UnitOfWork
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     PartnerEntity,
     UpdateAS2TradingPartnerCmd,
 )
-from domain.events import ProvisioningEventType
-from domain.models import ConnectionType, PartnerStatus
 
 logger = logging.getLogger(__name__)
 

@@ -22,3 +22,30 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/database"]
+
+[tool.pyright]
+venvPath = "../../../.."
+venv = ".venv"
+extraPaths = [
+    "../../../../core/platform/packages/identity/python/src",
+    "../../../../core/platform/packages/observability/python/src",
+    "../../../../core/platform/packages/schemas/python/src",
+    "src",
+    "../pipeline/src",
+    "../grammar/src",
+    "../config/src",
+    "../security/src",
+    "../patches/src",
+    "../transformer/src",
+    "../as2_core/src",
+    "../bots_core/src",
+    "../domain/src",
+    "../../apps/edi-worker/compute/src",
+    "../../apps/edi-worker/ucp-sync/src",
+    "../../apps/edi-worker/orchestrator/src",
+    "../../apps/edi-as2-server/src",
+    "../../apps/edi-api/src",
+]
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"

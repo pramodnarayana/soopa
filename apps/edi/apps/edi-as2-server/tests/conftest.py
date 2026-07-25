@@ -229,8 +229,9 @@ async def as2_client(
 
         import uuid
 
-        from as2_server.main import app
         from database.session import get_session
+
+        from as2_server.main import app
 
         async def override_get_session() -> AsyncGenerator[AsyncMock, None]:
             mock_session = AsyncMock()

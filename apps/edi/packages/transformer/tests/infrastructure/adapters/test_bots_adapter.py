@@ -1,4 +1,5 @@
 import pytest
+
 from transformer.domain.exceptions import TransformationError
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 

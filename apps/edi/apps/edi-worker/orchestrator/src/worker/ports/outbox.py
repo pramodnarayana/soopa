@@ -21,7 +21,7 @@ class OutboxPort(Protocol):
         event_type: str,
         payload: dict[str, Any],
         idempotency_key: str,
-        tenant_id: int,
+        tenant_id: str,
     ) -> None:
         """Publishes an event to the outbox queue."""
         ...

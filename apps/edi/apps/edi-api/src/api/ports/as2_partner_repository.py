@@ -2,11 +2,12 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
+from domain.models import AS2PartnerDomainModel
+
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     UpdateAS2TradingPartnerCmd,
 )
-from domain.models import AS2PartnerDomainModel
 
 
 class AS2TradingPartnerRepositoryPort(Protocol):

@@ -37,6 +37,7 @@ async def list_trading_partners(
             # AS2 partners are global platform entities (tenant_id = 0) or tenant-specific
             as2_partners = await uow.as2_partners.list_as2_partners(tenant_id)
             as2_partners_global = await uow.as2_partners.list_as2_partners(0)
+
             as2_partners = list(as2_partners) + list(as2_partners_global)
 
         sftp_partners = await uow.sftp_partners.list_sftp_partners(tenant_id)

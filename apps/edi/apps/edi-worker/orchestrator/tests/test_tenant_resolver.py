@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from worker.core.tenant_resolver import TenantResolver
 
 

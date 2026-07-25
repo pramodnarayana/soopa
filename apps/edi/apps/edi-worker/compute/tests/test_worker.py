@@ -1,8 +1,9 @@
 import json
 
 import pytest
-from compute_worker.worker import SQSComputeWorker
 from transformer.domain.models import ParsedEdiPayload
+
+from compute_worker.worker import SQSComputeWorker
 
 
 class FakeProcessInboundEdiUseCase:

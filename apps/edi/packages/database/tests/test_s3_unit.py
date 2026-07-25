@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from database.s3 import Aioboto3PayloadStorage
 
 

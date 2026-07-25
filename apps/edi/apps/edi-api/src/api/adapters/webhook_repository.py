@@ -3,16 +3,17 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from api.domain.models import (
-    CreateWebhookCmd,
-)
-from api.ports.webhook_repository import WebhookRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     Webhook,
 )
 from domain.models import WebhookDomainModel
 from sqlalchemy import delete, select, update
+
+from api.domain.models import (
+    CreateWebhookCmd,
+)
+from api.ports.webhook_repository import WebhookRepositoryPort
 
 
 class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyRepository):

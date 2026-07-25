@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
+
 from pipeline.ports.http import HttpDeliveryPort
 
 

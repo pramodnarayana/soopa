@@ -72,3 +72,30 @@ DEP002 = [
 "src/api/routers/**/*.py" = ["B008", "E402"]
 "src/api/dependencies/**/*.py" = ["B008"]
 "tests/**/*.py" = ["E402"]
+
+[tool.pyright]
+venvPath = "../../../.."
+venv = ".venv"
+extraPaths = [
+    "../../../../core/platform/packages/identity/python/src",
+    "../../../../core/platform/packages/observability/python/src",
+    "../../../../core/platform/packages/schemas/python/src",
+    "../../packages/database/src",
+    "../../packages/pipeline/src",
+    "../../packages/grammar/src",
+    "../../packages/config/src",
+    "../../packages/security/src",
+    "../../packages/patches/src",
+    "../../packages/transformer/src",
+    "../../packages/as2_core/src",
+    "../../packages/bots_core/src",
+    "../../packages/domain/src",
+    "../edi-worker/compute/src",
+    "../edi-worker/ucp-sync/src",
+    "../edi-worker/orchestrator/src",
+    "../edi-as2-server/src",
+    "src",
+]
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"

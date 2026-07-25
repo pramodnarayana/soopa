@@ -3,8 +3,9 @@ import uuid
 from typing import Any
 from uuid import UUID
 
-from api.core.uow import UnitOfWork
 from pipeline.core.metadata_extractor import MetadataExtractorService
+
+from api.core.uow import UnitOfWork
 
 logger = logging.getLogger(__name__)
 

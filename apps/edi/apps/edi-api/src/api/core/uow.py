@@ -1,5 +1,7 @@
 from typing import Any, Self
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 from api.adapters.as2_partner_repository import SqlAlchemyAS2TradingPartnerRepository
 from api.adapters.as2_partnership_repository import SqlAlchemyAS2PartnershipRepository
@@ -15,7 +17,6 @@ from api.adapters.sftp_repository import SqlAlchemySFTPPartnerRepository
 from api.adapters.tenant_repository import SqlAlchemyTenantRepository
 from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
 from api.adapters.webhook_repository import SqlAlchemyWebhookRepository
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class UnitOfWork:

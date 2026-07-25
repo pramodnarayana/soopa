@@ -9,6 +9,7 @@ All inputs and outputs are raw Python bytes/dicts.
 """
 
 import pytest
+
 from as2_core.mdn import Disposition, calculate_mic, generate_mdn
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request

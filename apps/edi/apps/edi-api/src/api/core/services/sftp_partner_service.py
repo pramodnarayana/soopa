@@ -3,6 +3,9 @@ import logging
 import uuid
 from uuid import UUID
 
+from domain.events import ProvisioningEventType
+from domain.models import ConnectionType, PartnerStatus
+
 from api.core.uow import UnitOfWork
 from api.domain.models import (
     UNSET,
@@ -10,8 +13,6 @@ from api.domain.models import (
     PartnerEntity,
     UpdateSFTPPartnerCmd,
 )
-from domain.events import ProvisioningEventType
-from domain.models import ConnectionType, PartnerStatus
 
 logger = logging.getLogger(__name__)
 

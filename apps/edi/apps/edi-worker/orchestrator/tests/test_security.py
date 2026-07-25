@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+
 from worker.core.security import get_safe_ip, ssrf_safe_context, validate_target_url
 
 

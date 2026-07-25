@@ -3,6 +3,7 @@ import uuid
 
 from domain.events import PipelineEventType
 from domain.models import EdiMessageDomainModel
+
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.vault import VaultPort
 

@@ -4,6 +4,7 @@ Advanced tests for message.py checking edge cases in repeating fields, max repea
 """
 
 import pytest
+
 from bots_core.domain.exceptions import MappingFormatError
 from bots_core.domain.message import Message
 from bots_core.domain.node import Node

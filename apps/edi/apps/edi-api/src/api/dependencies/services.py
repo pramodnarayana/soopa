@@ -2,6 +2,10 @@ import os
 from functools import lru_cache
 from typing import Annotated
 
+from database.base_repository import GlobalSession
+from database.session import get_global_session
+from fastapi import Depends
+
 from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 from api.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
 from api.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
@@ -14,9 +18,6 @@ from api.ports.message_queue import MessageQueuePort
 from api.ports.sftp_tester import SftpTesterPort
 from api.ports.tenant_repository import TenantRepositoryPort
 from api.ports.vault import VaultPort
-from database.base_repository import GlobalSession
-from database.session import get_global_session
-from fastapi import Depends
 
 
 @lru_cache

@@ -5,6 +5,7 @@ from config.settings import get_settings
 from domain.direction import MessageDirection
 from domain.events import PipelineEventType
 from domain.status import MessageStatus
+
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.transformer import TransformerPort
 

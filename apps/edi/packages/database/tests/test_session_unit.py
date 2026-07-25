@@ -3,8 +3,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from database.session import get_session
 from fastapi import Request
+
+from database.session import get_session
 
 
 @pytest.mark.asyncio

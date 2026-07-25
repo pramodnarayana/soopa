@@ -1,9 +1,10 @@
 import pytest
+from api_fakes import FakeUnitOfWork
+from fastapi.testclient import TestClient
+
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_tenant_uow
 from api.main import app
-from api_fakes import FakeUnitOfWork
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture

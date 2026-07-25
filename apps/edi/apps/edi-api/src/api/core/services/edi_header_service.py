@@ -2,12 +2,13 @@ import logging
 from collections.abc import Sequence
 from uuid import UUID
 
+from domain.models import OutboundEdiHeaderDomainModel
+
 from api.core.uow import UnitOfWork
 from api.domain.models import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
 )
-from domain.models import OutboundEdiHeaderDomainModel
 
 logger = logging.getLogger(__name__)
 

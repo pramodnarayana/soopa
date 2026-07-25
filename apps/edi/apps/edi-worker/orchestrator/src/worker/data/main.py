@@ -7,6 +7,7 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 from domain.events import MessageQueueName
 from dotenv import load_dotenv
+
 from worker.adapters.sqs_poller import poll_sqs_queue
 from worker.adapters.sqs_publisher import SqsPublisherAdapter
 from worker.core.scheduler.models import JobName

@@ -1,9 +1,9 @@
 import ipaddress
 import logging
 import socket
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Iterator
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)

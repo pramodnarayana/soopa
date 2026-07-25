@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from pipeline.adapters.sftp import ParamikoSftpDeliveryAdapter
 
 

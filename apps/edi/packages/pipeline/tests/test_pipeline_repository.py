@@ -7,6 +7,7 @@ from database.models import ApiGateway
 from domain.direction import MessageDirection
 from domain.status import MessageStatus
 from fakes import InMemoryStorageAdapter
+
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
 
 pytestmark = pytest.mark.asyncio

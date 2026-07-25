@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+
 from api.core.services.api_token_service import ApiTokenService, _generate_credentials
 from api.domain.models import CreateApiTokenCmd
 

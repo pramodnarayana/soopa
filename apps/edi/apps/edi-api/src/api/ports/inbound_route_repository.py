@@ -1,8 +1,9 @@
 from typing import Protocol
 from uuid import UUID
 
-from api.domain.models import CreateInboundRouteCmd, UpdateInboundRouteCmd
 from domain.models import InboundRouteDomainModel
+
+from api.domain.models import CreateInboundRouteCmd, UpdateInboundRouteCmd
 
 
 class InboundRouteRepositoryPort(Protocol):

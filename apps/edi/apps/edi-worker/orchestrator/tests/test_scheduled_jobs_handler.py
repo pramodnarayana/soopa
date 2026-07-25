@@ -2,6 +2,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from worker.data.scheduled_jobs_handler import process_scheduled_job
 
 

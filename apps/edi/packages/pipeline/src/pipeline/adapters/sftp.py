@@ -5,6 +5,7 @@ import logging
 
 import paramiko
 import patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
+
 from pipeline.ports.sftp import SftpDeliveryPort
 
 logger = logging.getLogger(__name__)

@@ -1,10 +1,11 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi.testclient import TestClient
+
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
 from api.dependencies.database import get_tenant_uow
 from api.main import app
-from fastapi.testclient import TestClient
 
 
 def override_get_current_user_profile():

@@ -27,7 +27,10 @@ _ALLOWED_FIELDS: frozenset[str] = frozenset(
         "connection_type",
         "business_metadata.shipment_id",
         "business_metadata.purchase_order_id",
+        "business_metadata.po_number",
         "business_metadata.invoice_number",
+        "business_metadata.load_number",
+        "business_metadata.business_reference",
     }
 )
 _ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})

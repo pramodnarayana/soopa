@@ -1,6 +1,7 @@
 import pytest
-from api.core.authorization import AuthorizationService
 from api_fakes import FakeTenantRepository
+
+from api.core.authorization import AuthorizationService
 
 
 @pytest.fixture

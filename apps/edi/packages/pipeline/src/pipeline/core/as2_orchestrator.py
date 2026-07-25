@@ -17,8 +17,9 @@ import logging
 from typing import Any
 
 from as2_core import OutboundAS2Message, build_outbound_message
-from pipeline.ports.vault import VaultPort
 from security import encrypt_payload, sign_payload
+
+from pipeline.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 

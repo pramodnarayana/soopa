@@ -1,6 +1,7 @@
 from io import StringIO
 
 import pytest
+
 from bots_core.domain.exceptions import InMessageError
 from bots_core.domain.parsers.base import var
 from bots_core.infrastructure.config.botsconfig import SFIELD, VALUE

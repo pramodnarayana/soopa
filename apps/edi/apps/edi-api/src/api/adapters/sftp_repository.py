@@ -2,11 +2,6 @@ import uuid
 from collections.abc import Sequence
 from uuid import UUID
 
-from api.domain.models import (
-    CreateSFTPPartnerCmd,
-    UpdateSFTPPartnerCmd,
-)
-from api.ports.sftp_repository import SFTPPartnerRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.encryption import db_encryption
 from database.models.control_plane import (
@@ -14,6 +9,12 @@ from database.models.control_plane import (
 )
 from domain.models import SFTPPartnerDomainModel
 from sqlalchemy import delete, select
+
+from api.domain.models import (
+    CreateSFTPPartnerCmd,
+    UpdateSFTPPartnerCmd,
+)
+from api.ports.sftp_repository import SFTPPartnerRepositoryPort
 
 
 class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchemyRepository):

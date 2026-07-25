@@ -15,9 +15,10 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-from api.main import app
 from api_fakes import FakeUnitOfWork
 from fastapi.testclient import TestClient
+
+from api.main import app
 
 # ---------------------------------------------------------------------------
 # Fakes

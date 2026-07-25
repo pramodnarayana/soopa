@@ -1,11 +1,12 @@
 from typing import Any
 
-from api.ports.tenant_repository import TenantRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     Tenant,
 )
 from sqlalchemy import select
+
+from api.ports.tenant_repository import TenantRepositoryPort
 
 
 class SqlAlchemyTenantRepository(TenantRepositoryPort, GlobalSqlAlchemyRepository):

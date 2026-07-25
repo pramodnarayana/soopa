@@ -2,11 +2,12 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
+
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
 from api.dependencies.database import get_tenant_uow, get_uow
 from api.dependencies.services import get_vault
 from api.main import app
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture

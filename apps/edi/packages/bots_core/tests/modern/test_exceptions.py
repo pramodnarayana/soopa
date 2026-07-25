@@ -4,6 +4,7 @@ Covers the InMessageError, OutMessageError, BotsError hierarchy and formatting.
 """
 
 import pytest
+
 from bots_core.domain.exceptions import (
     BotsError,
     InMessageError,

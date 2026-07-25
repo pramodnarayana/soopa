@@ -2,10 +2,11 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
+from domain.models import WebhookDomainModel
+
 from api.domain.models import (
     CreateWebhookCmd,
 )
-from domain.models import WebhookDomainModel
 
 
 class WebhookRepositoryPort(Protocol):

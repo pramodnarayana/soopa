@@ -32,3 +32,30 @@ DEP002 = [
 
 [tool.deptry.package_module_name_map]
 "opentelemetry-sdk" = ["opentelemetry"]
+
+[tool.pyright]
+venvPath = "../../../../.."
+venv = ".venv"
+extraPaths = [
+    "../../identity/python/src",
+    "src",
+    "../../schemas/python/src",
+    "../../../../../apps/edi/packages/database/src",
+    "../../../../../apps/edi/packages/pipeline/src",
+    "../../../../../apps/edi/packages/grammar/src",
+    "../../../../../apps/edi/packages/config/src",
+    "../../../../../apps/edi/packages/security/src",
+    "../../../../../apps/edi/packages/patches/src",
+    "../../../../../apps/edi/packages/transformer/src",
+    "../../../../../apps/edi/packages/as2_core/src",
+    "../../../../../apps/edi/packages/bots_core/src",
+    "../../../../../apps/edi/packages/domain/src",
+    "../../../../../apps/edi/apps/edi-worker/compute/src",
+    "../../../../../apps/edi/apps/edi-worker/ucp-sync/src",
+    "../../../../../apps/edi/apps/edi-worker/orchestrator/src",
+    "../../../../../apps/edi/apps/edi-as2-server/src",
+    "../../../../../apps/edi/apps/edi-api/src",
+]
+
+[tool.ruff]
+extend = "../../../../../pyproject.toml"

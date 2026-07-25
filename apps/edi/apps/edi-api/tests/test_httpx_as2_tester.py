@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+
 from api.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
 
 

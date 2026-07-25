@@ -1,8 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pipeline.adapters.transformer import BotsTransformerAdapter
 from transformer.domain.models import ParsedEdiPayload, TransactionSet
+
+from pipeline.adapters.transformer import BotsTransformerAdapter
 
 pytestmark = pytest.mark.asyncio
 

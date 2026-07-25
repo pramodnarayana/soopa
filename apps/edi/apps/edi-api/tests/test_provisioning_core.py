@@ -1,6 +1,8 @@
 import uuid
 
 import pytest
+from api_fakes import FakeGlobalStore
+
 from api.core.services import (
     AS2PartnerService,
     AS2PartnershipService,
@@ -17,7 +19,6 @@ from api.domain.models import (
     CreateWebhookCmd,
     UpdateAS2TradingPartnerCmd,
 )
-from api_fakes import FakeGlobalStore
 
 
 @pytest.fixture

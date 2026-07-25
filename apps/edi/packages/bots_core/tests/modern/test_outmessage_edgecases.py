@@ -1,4 +1,5 @@
 import pytest
+
 from bots_core.domain.exceptions import OutMessageError
 from bots_core.domain.models import create_field_definition, create_structure_node
 from bots_core.domain.node import Node

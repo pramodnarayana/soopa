@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from pipeline.adapters.storage import S3StorageAdapter
 
 pytestmark = pytest.mark.asyncio

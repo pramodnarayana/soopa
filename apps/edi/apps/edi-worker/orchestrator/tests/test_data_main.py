@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from database.connection import DatabaseRouter
 from database.models.control_plane import DatabaseShard, Tenant
+
 from worker.adapters.sqs_poller import poll_sqs_queue
 from worker.core.security import validate_target_url
 from worker.core.tenant_resolver import TenantResolver

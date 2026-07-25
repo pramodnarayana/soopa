@@ -1,9 +1,10 @@
 from typing import Any
 
-from api.ports.platform_settings_repository import PlatformSettingsRepositoryPort
 from database.models.platform_settings import PlatformSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.ports.platform_settings_repository import PlatformSettingsRepositoryPort
 
 
 class SqlAlchemyPlatformSettingsRepository(PlatformSettingsRepositoryPort):
