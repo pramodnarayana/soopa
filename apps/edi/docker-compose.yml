@@ -2,6 +2,28 @@ version: '3.9'
 # include:
 # - libs/identity/docker/docker-compose.yml
 services:
+  postgres_global:
+    image: postgres:15-alpine
+    container_name: edi_postgres_global
+    environment:
+      POSTGRES_USER: edi
+      POSTGRES_PASSWORD: edi_password
+      POSTGRES_DB: edi_global
+    command:
+    - postgres
+    - -c
+    - wal_level=logical
+    ports:
+    - 5432:5432
+    volumes:
+    - postgres_global_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U edi
+      interval: 5s
+      timeout: 5s
+      retries: 5
   postgres_shard_1:
     image: postgres:15-alpine
     container_name: edi_postgres_shard_1
@@ -95,6 +117,7 @@ services:
       postgres_shard_1:
         condition: service_healthy
 volumes:
+  postgres_global_data: null
   postgres_shard_1_data: null
   postgres_enterprise_1_data: null
   debezium_data: null
