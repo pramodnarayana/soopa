@@ -99,7 +99,7 @@ class DatabaseRouter:
             # Enforce Row-Level Security isolation
             await session.execute(
                 text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
-                {"tenant_id": str(tenant_id)},
+                {"tenant_id": tenant_id},
             )
             yield session  # type: ignore
 

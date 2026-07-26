@@ -53,7 +53,7 @@ async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     Test that yielding a tenant session dynamically connects to the correct shard
     and fundamentally applies the PostgreSQL Row-Level Security parameter.
     """
-    tenant_id = 999
+    tenant_id = "999"
 
     async_gen = router.get_tenant_session(
         tenant_id=tenant_id, shard_key="shard_1", shard_url=SHARD_1_URL
@@ -65,7 +65,7 @@ async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
         result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
         applied_tenant_id = result.scalar()
 
-        assert applied_tenant_id == str(tenant_id), "RLS current_tenant was not set correctly!"
+        assert applied_tenant_id == tenant_id, "RLS current_tenant was not set correctly!"
     finally:
         with contextlib.suppress(StopAsyncIteration):
             await async_gen.__anext__()

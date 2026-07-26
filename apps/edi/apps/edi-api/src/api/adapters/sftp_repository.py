@@ -28,7 +28,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         partner_id = uuid.uuid4()
         record = SFTPPartner(
             id=partner_id,
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             name=cmd.name,
             host=cmd.host,
             port=cmd.port,
@@ -53,7 +53,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
     ) -> SFTPPartnerDomainModel | None:
         result = await self.session.execute(
             select(SFTPPartner).where(
-                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == str(tenant_id)
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == tenant_id
             )
         )
         record = result.scalar_one_or_none()
@@ -61,7 +61,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
 
     async def list_sftp_partners(self, tenant_id: str) -> Sequence[SFTPPartnerDomainModel]:
         result = await self.session.execute(
-            select(SFTPPartner).where(SFTPPartner.tenant_id == str(tenant_id))
+            select(SFTPPartner).where(SFTPPartner.tenant_id == tenant_id)
         )
         return [SFTPPartnerDomainModel.model_validate(r) for r in result.scalars().all()]
 
@@ -70,7 +70,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
     ) -> None:
         result = await self.session.execute(
             select(SFTPPartner).where(
-                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == str(tenant_id)
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == tenant_id
             )
         )
         partner = result.scalar_one_or_none()
@@ -94,7 +94,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
     async def delete_sftp_partner(self, tenant_id: str, partner_id: UUID) -> None:
         await self.session.execute(
             delete(SFTPPartner).where(
-                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == str(tenant_id)
+                SFTPPartner.id == partner_id, SFTPPartner.tenant_id == tenant_id
             )
         )
         await self.session.flush()
@@ -104,7 +104,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
             return {}
         result = await self.session.execute(
             select(SFTPPartner.id, SFTPPartner.name).where(
-                SFTPPartner.id.in_(ids), SFTPPartner.tenant_id == str(tenant_id)
+                SFTPPartner.id.in_(ids), SFTPPartner.tenant_id == tenant_id
             )
         )
         return {row.id: row.name for row in result.all()}

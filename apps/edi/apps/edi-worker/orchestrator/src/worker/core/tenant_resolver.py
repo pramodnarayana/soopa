@@ -31,7 +31,7 @@ class TenantResolver:
         now = time.monotonic()
         self._sweep(now)
 
-        tid_str = str(tenant_id)
+        tid_str = tenant_id
         if tid_str in self._cache:
             shard_name, shard_dsn, expiry = self._cache[tid_str]
             if now < expiry:

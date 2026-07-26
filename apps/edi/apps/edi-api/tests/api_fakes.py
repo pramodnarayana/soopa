@@ -320,7 +320,7 @@ class FakeGlobalStore:
 class FakeRoute:
     def __init__(self, id, tenant_id, cmd):
         self.id = id
-        self.tenant_id = str(tenant_id)
+        self.tenant_id = tenant_id
         self.name = getattr(cmd, "name", "Test Route")
         self.processing_mode = getattr(cmd, "processing_mode", "TRANSFORM")
         self.active = True

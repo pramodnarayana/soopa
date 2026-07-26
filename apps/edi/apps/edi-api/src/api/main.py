@@ -123,7 +123,7 @@ async def get_me(
     rls_result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
     current_rls_tenant = rls_result.scalar()
 
-    if str(current_rls_tenant) != str(tenant_id):
+    if str(current_rls_tenant) != tenant_id:
         raise HTTPException(status_code=403, detail="RLS context mismatch. Unauthorized access.")
 
     return profile

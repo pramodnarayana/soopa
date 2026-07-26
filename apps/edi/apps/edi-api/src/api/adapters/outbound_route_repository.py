@@ -56,7 +56,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             result = await self.session.execute(
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
-                    AS2Partner.tenant_id.in_([str(tenant_id), "0"]),
+                    AS2Partner.tenant_id.in_([tenant_id, "0"]),
                 )
             )
             if not result.scalar_one_or_none():

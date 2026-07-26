@@ -28,18 +28,16 @@ class AS2PartnerService:
     ) -> PartnerEntity:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
-        partner_id = await self.uow.as2_partners.create_as2_identity(
-            tenant_id=str(tenant_id), cmd=cmd
-        )
+        partner_id = await self.uow.as2_partners.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_CREATED,
-            payload={"partner_id": str(partner_id), "tenant_id": str(tenant_id)},
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
         )
 
         return PartnerEntity(
             partner_id=partner_id,
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             name=cmd.name,
             type=ConnectionType.AS2,
             status=PartnerStatus.PROVISIONING,
@@ -49,21 +47,21 @@ class AS2PartnerService:
         self, tenant_id: str, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating AS2 partner {partner_id} for tenant {tenant_id}")
-        await self.uow.as2_partners.update_as2_identity(str(tenant_id), partner_id, cmd)
+        await self.uow.as2_partners.update_as2_identity(tenant_id, partner_id, cmd)
 
-        updated_partner = await self.uow.as2_partners.get_as2_partner(str(tenant_id), partner_id)
+        updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not updated_partner:
             raise ValueError("Partner not found after update")
 
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
-            payload={"partner_id": str(partner_id), "tenant_id": str(tenant_id)},
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
         )
 
         return PartnerEntity(
             partner_id=partner_id,
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             name=cmd.name or updated_partner.name,
             type=ConnectionType.AS2,
             status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
@@ -71,11 +69,11 @@ class AS2PartnerService:
 
     async def delete_as2_partner(self, tenant_id: str, partner_id: UUID) -> None:
         logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
-        await self.uow.as2_partners.delete_as2_identity(str(tenant_id), partner_id)
+        await self.uow.as2_partners.delete_as2_identity(tenant_id, partner_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_DELETED,
-            payload={"partner_id": str(partner_id), "tenant_id": str(tenant_id)},
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
         )
 
     async def rotate_certificates(
@@ -87,22 +85,22 @@ class AS2PartnerService:
     ) -> PartnerEntity:
         logger.info(f"Rotating certificates for AS2 partner {partner_id} for tenant {tenant_id}")
         await self.uow.as2_partners.rotate_as2_certificates(
-            str(tenant_id), partner_id, new_public_cert, new_private_key_vault_ref
+            tenant_id, partner_id, new_public_cert, new_private_key_vault_ref
         )
 
-        updated_partner = await self.uow.as2_partners.get_as2_partner(str(tenant_id), partner_id)
+        updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not updated_partner:
             raise ValueError("Partner not found after certificate rotation")
 
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
-            payload={"partner_id": str(partner_id), "tenant_id": str(tenant_id)},
+            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
         )
 
         return PartnerEntity(
             partner_id=partner_id,
-            tenant_id=str(tenant_id),
+            tenant_id=tenant_id,
             name=updated_partner.name,
             type=ConnectionType.AS2,
             status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,

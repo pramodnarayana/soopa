@@ -26,7 +26,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     # We will define a new class for Outbox below.
 
     async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> UUID:
-        tid_str = str(tenant_id)
+        tid_str = tenant_id
         local_r = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == cmd.local_partner_id,
@@ -66,7 +66,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def update_as2_partnership(
         self, tenant_id: str, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
     ) -> None:
-        tid_str = str(tenant_id)
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
                 AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
@@ -108,7 +108,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         await self.session.flush()
 
     async def delete_as2_partnership(self, tenant_id: str, partnership_id: UUID) -> None:
-        tid_str = str(tenant_id)
+        tid_str = tenant_id
         await self.session.execute(
             delete(AS2Partnership).where(
                 AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
@@ -119,7 +119,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def get_as2_partnership(
         self, tenant_id: str, partnership_id: UUID
     ) -> AS2PartnershipDomainModel | None:
-        tid_str = str(tenant_id)
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
                 AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
@@ -131,7 +131,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
-        tid_str = str(tenant_id)
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),

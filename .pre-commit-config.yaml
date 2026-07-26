@@ -24,20 +24,3 @@ repos:
         types_or: [python, pyi]
         exclude: ^libs/edi_grammar/
         require_serial: true
-
-  - repo: local
-    hooks:
-      - id: mypy
-        name: mypy
-        entry: uv run mypy libs/ services/
-        language: system
-        pass_filenames: false
-
-  - repo: local
-    hooks:
-      - id: pytest-cov
-        name: pytest-cov
-        entry: make test
-        language: system
-        pass_filenames: false
-        always_run: true

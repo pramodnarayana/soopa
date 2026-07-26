@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
+from worker.core.schemas import DISCRIMINATOR_FIELD
 from worker.core.service import ProvisioningWorkerService
 
 pytestmark = pytest.mark.asyncio
@@ -33,7 +34,7 @@ async def test_process_next_event_tenant_specific() -> None:
     mock_replication = AsyncMock()
 
     mock_event = MagicMock()
-    mock_event.payload = {"tenant_id": 99}
+    mock_event.payload = {DISCRIMINATOR_FIELD: "provision_tenant", "tenant_id": "99"}
 
     from contextlib import asynccontextmanager
 
@@ -46,7 +47,7 @@ async def test_process_next_event_tenant_specific() -> None:
     svc = ProvisioningWorkerService(mock_tenant, mock_outbox, mock_replication)
     result = await svc.process_next_event()
     assert result is True
-    mock_replication.replicate_tenant_configuration.assert_awaited_once_with(99)
+    mock_replication.replicate_tenant_configuration.assert_awaited_once_with("99")
 
 
 async def test_process_next_event_global() -> None:
@@ -55,7 +56,7 @@ async def test_process_next_event_global() -> None:
     mock_replication = AsyncMock()
 
     mock_event = MagicMock()
-    mock_event.payload = {"tenant_id": 0}
+    mock_event.payload = {DISCRIMINATOR_FIELD: "provision_all_tenants"}
 
     from contextlib import asynccontextmanager
 
@@ -101,7 +102,7 @@ async def test_process_next_event_permanent_error() -> None:
     mock_replication = AsyncMock()
 
     mock_event = MagicMock()
-    mock_event.payload = {"tenant_id": 99}
+    mock_event.payload = {DISCRIMINATOR_FIELD: "provision_tenant", "tenant_id": "99"}
 
     from contextlib import asynccontextmanager
 
@@ -124,7 +125,7 @@ async def test_process_next_event_transient_error() -> None:
     mock_replication = AsyncMock()
 
     mock_event = MagicMock()
-    mock_event.payload = {"tenant_id": 99}
+    mock_event.payload = {DISCRIMINATOR_FIELD: "provision_tenant", "tenant_id": "99"}
 
     from contextlib import asynccontextmanager
 
@@ -147,7 +148,7 @@ async def test_process_next_event_global_partial_failure() -> None:
     mock_replication = AsyncMock()
 
     mock_event = MagicMock()
-    mock_event.payload = {"tenant_id": 0}
+    mock_event.payload = {DISCRIMINATOR_FIELD: "provision_all_tenants"}
 
     from contextlib import asynccontextmanager
 
@@ -178,7 +179,7 @@ async def test_process_next_event_global_exception() -> None:
     mock_replication = AsyncMock()
 
     mock_event = MagicMock()
-    mock_event.payload = {"tenant_id": 0}
+    mock_event.payload = {DISCRIMINATOR_FIELD: "provision_all_tenants"}
 
     from contextlib import asynccontextmanager
 

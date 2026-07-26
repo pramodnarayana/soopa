@@ -22,15 +22,24 @@ class ProvisioningWorkerService:
             if not event:
                 return False
 
+            from pydantic import TypeAdapter, ValidationError
+
+            from worker.core.schemas import (
+                ProvisionAllTenantsEvent,
+                ProvisionEventPayload,
+                ProvisionTenantEvent,
+            )
+
             payload = event.payload
-            tenant_id = payload.get("tenant_id")
 
-            if tenant_id is None:
-                raise PermanentProvisioningError("Missing tenant_id in provision event payload")
+            try:
+                parsed_payload = TypeAdapter(ProvisionEventPayload).validate_python(payload)
+            except ValidationError as e:
+                raise PermanentProvisioningError(f"Invalid provision event payload: {e}") from e
 
-            if str(tenant_id) == "0":
+            if isinstance(parsed_payload, ProvisionAllTenantsEvent):
                 logger.info(
-                    f"Processing GLOBAL provision event {event.id} (tenant_id=0). Broadcasting to all tenants."
+                    f"Processing provision event {event.id} for all tenants. Broadcasting..."
                 )
                 try:
                     all_tenant_ids = await self.tenant_port.get_all_tenant_ids()
@@ -70,7 +79,8 @@ class ProvisioningWorkerService:
                     if isinstance(e, TransientProvisioningError):
                         raise
                     raise TransientProvisioningError(f"Global broadcasting failed: {e}") from e
-            else:
+            elif isinstance(parsed_payload, ProvisionTenantEvent):
+                tenant_id = parsed_payload.tenant_id
                 logger.info(f"Processing provision event {event.id} for tenant_id={tenant_id}")
                 await self.replication_port.replicate_tenant_configuration(tenant_id)
 
