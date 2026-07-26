@@ -13,7 +13,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort, GlobalSqlAlchemyRepositor
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
-    async def get_tenant_flags(self, tenant_id: int) -> dict[str, Any] | None:
+    async def get_tenant_flags(self, tenant_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
         if tenant:

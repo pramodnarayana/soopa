@@ -39,7 +39,7 @@ class DebeziumUnwrappedEvent(BaseModel):
     idempotency_key: str | None = None
     event_type: str | None = None
     payload: dict[str, Any] | str | None = None
-    tenant_id: int | None = None
+    tenant_id: str | None = None
 
     model_config = ConfigDict(extra="ignore")  # Debezium sends many extra metadata fields
 

@@ -29,7 +29,7 @@ class WebhookService:
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> PartnerEntity:
+    async def create_webhook(self, tenant_id: str, cmd: CreateWebhookCmd) -> PartnerEntity:
         logger.info("Webhook creating", extra={"tenant_id": tenant_id, "webhook_name": cmd.name})
         partner_id = await self.uow.webhooks.create_webhook(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
@@ -47,7 +47,7 @@ class WebhookService:
 
     async def update_webhook(
         self,
-        tenant_id: int,
+        tenant_id: str,
         webhook_id: UUID,
         name: str | None = None,
         active: bool | None = None,
@@ -65,7 +65,7 @@ class WebhookService:
             )
         return result
 
-    async def delete_webhook(self, tenant_id: int, webhook_id: UUID) -> bool:
+    async def delete_webhook(self, tenant_id: str, webhook_id: UUID) -> bool:
         logger.info(
             "Webhook deleting", extra={"tenant_id": tenant_id, "webhook_id": str(webhook_id)}
         )

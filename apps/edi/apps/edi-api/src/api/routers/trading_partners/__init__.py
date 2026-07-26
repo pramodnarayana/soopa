@@ -26,7 +26,7 @@ router = APIRouter(prefix=_PREFIX)
 
 @router.get("", response_model=list[PartnerResponse])
 async def list_trading_partners(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Lists all tenant trading partners (AS2 and SFTP)."""
@@ -34,9 +34,9 @@ async def list_trading_partners(
         as2_partners: Sequence[Any] = []
         sftp_partners: Sequence[Any] = []
         if uow.global_session is not None:
-            # AS2 partners are global platform entities (tenant_id = 0) or tenant-specific
+            # AS2 partners are global platform entities (tenant_id = "0") or tenant-specific
             as2_partners = await uow.as2_partners.list_as2_partners(tenant_id)
-            as2_partners_global = await uow.as2_partners.list_as2_partners(0)
+            as2_partners_global = await uow.as2_partners.list_as2_partners("0")
 
             as2_partners = list(as2_partners) + list(as2_partners_global)
 

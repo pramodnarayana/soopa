@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/edi_json", tags=["EDI JSON"])
 )
 async def submit_outbound_message(
     request: OutboundMessageRequest,
-    tenant_id: int = Depends(get_tenant_id_from_api_key),
+    tenant_id: str = Depends(get_tenant_id_from_api_key),
     uow: UnitOfWork = Depends(get_m2m_tenant_uow),
 ) -> Any:
     """

@@ -28,7 +28,7 @@ router = APIRouter(tags=["Partners — AS2"])
 )
 async def export_as2_certificates(
     partner_id: UUID,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     profile: dict[str, Any] = Depends(get_current_user_profile),
@@ -38,7 +38,7 @@ async def export_as2_certificates(
     async with uow:
         partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            partner = await uow.as2_partners.get_as2_partner(0, partner_id)
+            partner = await uow.as2_partners.get_as2_partner("0", partner_id)
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
@@ -88,7 +88,7 @@ async def export_as2_certificates(
 async def rotate_as2_certificates(
     partner_id: UUID,
     request: RotateCertificateRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_uow),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
@@ -97,12 +97,12 @@ async def rotate_as2_certificates(
     async with uow:
         partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            partner = await uow.as2_partners.get_as2_partner(0, partner_id)
+            partner = await uow.as2_partners.get_as2_partner("0", partner_id)
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
-        actual_tenant_id = partner.tenant_id
-        assert actual_tenant_id is not None
+        assert partner.tenant_id is not None
+        actual_tenant_id = str(partner.tenant_id)
 
         if partner.is_local and "certificates:rotate" not in profile["permissions"]:
             raise HTTPException(

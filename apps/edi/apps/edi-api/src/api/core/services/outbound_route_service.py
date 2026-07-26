@@ -25,7 +25,7 @@ class OutboundRouteService:
         self.uow = uow
 
     async def create_outbound_route(
-        self, tenant_id: int, cmd: CreateOutboundRouteCmd
+        self, tenant_id: str, cmd: CreateOutboundRouteCmd
     ) -> RouteEntity:
         logger.info(
             f"Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}"
@@ -41,7 +41,7 @@ class OutboundRouteService:
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.OUTBOUND)
 
     async def update_outbound_route(
-        self, tenant_id: int, route_id: UUID, cmd: UpdateOutboundRouteCmd
+        self, tenant_id: str, route_id: UUID, cmd: UpdateOutboundRouteCmd
     ) -> bool:
         res = await self.uow.outbound_routes.update_outbound_route(tenant_id, route_id, cmd)
         if res:
@@ -52,7 +52,7 @@ class OutboundRouteService:
             )
         return res
 
-    async def delete_outbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+    async def delete_outbound_route(self, tenant_id: str, route_id: UUID) -> bool:
         res = await self.uow.outbound_routes.delete_outbound_route(tenant_id, route_id)
         if res:
             await self.uow.control_plane_outbox.publish_outbox_event(
@@ -62,7 +62,7 @@ class OutboundRouteService:
             )
         return res
 
-    async def list_outbound_routes(self, tenant_id: int) -> list[OutboundRouteListEntity]:
+    async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteListEntity]:
         outbound = await self.uow.outbound_routes.list_outbound_routes(tenant_id)
 
         as2_ids: set[UUID] = set()

@@ -36,7 +36,7 @@ def test_cdc_relay_successful_transform_routing(memory_queue: InMemoryQueueAdapt
         "event_type": "TRANSFORM_EVENT",
         "payload": {"trace_id": "req-123"},
         "status": "PENDING",
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
@@ -49,7 +49,7 @@ def test_cdc_relay_successful_transform_routing(memory_queue: InMemoryQueueAdapt
         "idempotency_key": "uuid-123",
         "event_type": "TRANSFORM_EVENT",
         "payload": {"trace_id": "req-123"},
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
 
@@ -62,7 +62,7 @@ def test_cdc_relay_successful_deliver_routing(memory_queue: InMemoryQueueAdapter
         "event_type": "DELIVER_EVENT",
         "payload": {"trace_id": "req-123", "target": "webhook"},
         "status": "PENDING",
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
@@ -75,7 +75,7 @@ def test_cdc_relay_successful_deliver_routing(memory_queue: InMemoryQueueAdapter
         "idempotency_key": "uuid-456",
         "event_type": "DELIVER_EVENT",
         "payload": {"trace_id": "req-123", "target": "webhook"},
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
 
@@ -88,7 +88,7 @@ def test_cdc_relay_ignores_updates_and_deletes(memory_queue: InMemoryQueueAdapte
         "event_type": "TRANSLATE",
         "payload": {},
         "status": "PENDING",
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
@@ -105,7 +105,7 @@ def test_cdc_relay_skips_unknown_table(memory_queue: InMemoryQueueAdapter) -> No
         "event_type": "TRANSLATE",
         "payload": {},
         "status": "PENDING",
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
@@ -121,9 +121,9 @@ def test_cdc_relay_successful_provisioning_routing(memory_queue: InMemoryQueueAd
         "__table": "outbox",
         "idempotency_key": "uuid-789",
         "event_type": "AS2_PARTNERSHIP_CREATED",
-        "payload": {"tenant_id": 999},
+        "payload": {"tenant_id": "999"},
         "status": "PENDING",
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
     response = client.post("/internal/cdc/relay", json=payload)
@@ -135,8 +135,8 @@ def test_cdc_relay_successful_provisioning_routing(memory_queue: InMemoryQueueAd
     assert msg_payload == {
         "idempotency_key": "uuid-789",
         "event_type": "AS2_PARTNERSHIP_CREATED",
-        "payload": {"tenant_id": 999},
-        "tenant_id": 999,
+        "payload": {"tenant_id": "999"},
+        "tenant_id": "999",
     }
 
 
@@ -149,7 +149,7 @@ def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) ->
         "event_type": "TRANSFORM_EVENT",
         "payload": {},  # Missing trace_id
         "status": "PENDING",
-        "tenant_id": 999,
+        "tenant_id": "999",
     }
 
     response = client.post("/internal/cdc/relay", json=payload)

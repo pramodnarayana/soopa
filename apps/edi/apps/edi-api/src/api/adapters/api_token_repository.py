@@ -20,7 +20,7 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
 
     async def create_api_token(
         self,
-        tenant_id: int,
+        tenant_id: str,
         name: str,
         client_id: str,
         secret_hash: str,
@@ -42,7 +42,7 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         await self.session.flush()  # type: ignore
         return token_id
 
-    async def list_api_tokens(self, tenant_id: int) -> list[ApiTokenListEntity]:
+    async def list_api_tokens(self, tenant_id: str) -> list[ApiTokenListEntity]:
         result = await self.session.execute(  # type: ignore
             select(ApiToken)
             .where(ApiToken.tenant_id == tenant_id)
@@ -62,7 +62,7 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
             for t in tokens
         ]
 
-    async def get_api_token(self, tenant_id: int, token_id: UUID) -> dict[str, Any] | None:
+    async def get_api_token(self, tenant_id: str, token_id: UUID) -> dict[str, Any] | None:
         result = await self.session.execute(  # type: ignore
             select(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
         )
@@ -77,7 +77,7 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         }
 
     async def update_api_token(
-        self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None
+        self, tenant_id: str, token_id: UUID, name: str | None = None, active: bool | None = None
     ) -> bool:
         values: dict[str, Any] = {}
         if name is not None:
@@ -97,14 +97,14 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         await self.session.flush()  # type: ignore
         return (getattr(result, "rowcount", 0) or 0) > 0
 
-    async def delete_api_token(self, tenant_id: int, token_id: UUID) -> bool:
+    async def delete_api_token(self, tenant_id: str, token_id: UUID) -> bool:
         result = await self.session.execute(  # type: ignore
             delete(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == tenant_id)
         )
         await self.session.flush()  # type: ignore
         return (getattr(result, "rowcount", 0) or 0) > 0
 
-    async def get_tenant_id_by_credentials(self, client_id: str, secret_hash: str) -> int | None:
+    async def get_tenant_id_by_credentials(self, client_id: str, secret_hash: str) -> str | None:
         """
         Two-step lookup (indexed client_id → hash check → tenant_id).
         Step 1: Find row by client_id (plaintext index — O(1), no full scan).

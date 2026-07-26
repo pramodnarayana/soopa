@@ -73,7 +73,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
     async def get_as2_partner(
         self, tenant_id: str, partner_id: UUID
     ) -> AS2PartnerDomainModel | None:
-        tid_str = tenant_id
+        tid_str = str(tenant_id)
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == partner_id,

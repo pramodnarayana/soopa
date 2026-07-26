@@ -22,7 +22,7 @@ class ApiReceiverService:
 
     async def process_api_edi_json(
         self,
-        tenant_id: int,
+        tenant_id: str,
         trading_partner_id: str,
         payload: dict[str, Any] | list[dict[str, Any]],
         transaction_type: str | None = None,

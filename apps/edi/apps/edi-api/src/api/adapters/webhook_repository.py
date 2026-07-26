@@ -23,7 +23,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyReposit
     # ------------------------------------------------------------------------
     # Webhook Partners (Now in Control Plane)
     # ------------------------------------------------------------------------
-    async def create_webhook(self, tenant_id: int, cmd: CreateWebhookCmd) -> UUID:
+    async def create_webhook(self, tenant_id: str, cmd: CreateWebhookCmd) -> UUID:
         partner_id = uuid.uuid4()
         record = Webhook(
             id=partner_id,
@@ -37,7 +37,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyReposit
         await self.session.flush()
         return partner_id
 
-    async def get_webhook(self, tenant_id: int, partner_id: UUID) -> WebhookDomainModel | None:
+    async def get_webhook(self, tenant_id: str, partner_id: UUID) -> WebhookDomainModel | None:
         result = await self.session.execute(
             select(Webhook).where(Webhook.id == partner_id, Webhook.tenant_id == tenant_id)
         )
@@ -46,7 +46,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyReposit
 
     async def update_webhook(
         self,
-        tenant_id: int,
+        tenant_id: str,
         webhook_id: UUID,
         name: str | None = None,
         active: bool | None = None,
@@ -71,16 +71,16 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyReposit
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", 0) or 0) > 0
 
-    async def delete_webhook(self, tenant_id: int, webhook_id: UUID) -> bool:
+    async def delete_webhook(self, tenant_id: str, webhook_id: UUID) -> bool:
         stmt = delete(Webhook).where(Webhook.id == webhook_id, Webhook.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
         return (getattr(result, "rowcount", 0) or 0) > 0
 
-    async def list_webhooks(self, tenant_id: int) -> Sequence[WebhookDomainModel]:
+    async def list_webhooks(self, tenant_id: str) -> Sequence[WebhookDomainModel]:
         result = await self.session.execute(select(Webhook).where(Webhook.tenant_id == tenant_id))
         return [WebhookDomainModel.model_validate(r) for r in result.scalars().all()]
 
-    async def get_webhooks_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
         result = await self.session.execute(

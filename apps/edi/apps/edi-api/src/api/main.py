@@ -114,7 +114,7 @@ app.include_router(explorer.router)
 
 @app.get("/api/me", tags=["Identity"])
 async def get_me(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_tenant_session),
     profile: dict[str, Any] = Depends(get_current_user_profile),
 ) -> Any:

@@ -27,7 +27,7 @@ def mock_vault():
 
 @pytest.fixture
 def client(mock_uow, mock_vault):
-    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[get_uow] = lambda: mock_uow
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "test"}

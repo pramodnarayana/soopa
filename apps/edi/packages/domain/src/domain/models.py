@@ -47,7 +47,7 @@ class EdiRecordBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     trace_id: UUID
     direction: Direction
     status: RecordStatus
@@ -97,7 +97,7 @@ class WebhookDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     url: str
     auth_header_vault_ref: str | None = None
@@ -110,7 +110,7 @@ class AS2PartnerDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int | None = None
+    tenant_id: str | None = None
     as2_id: str
     name: str
     public_cert_pem: str | None = None
@@ -130,7 +130,7 @@ class AS2PartnershipDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int | None = None
+    tenant_id: str | None = None
     name: str
     local_partner_id: UUID
     remote_partner_id: UUID
@@ -149,7 +149,7 @@ class SFTPPartnerDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     host: str
     port: int
@@ -168,7 +168,7 @@ class InboundRouteDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     trading_partner_id: str | None = None
     isa_sender_id: str
@@ -189,7 +189,7 @@ class OutboundRouteDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     trading_partner_id: str
     name: str
     protocol: str | None = None
@@ -204,7 +204,7 @@ class OutboundEdiHeaderDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     trading_partner_id: str
     isa_sender_id: str

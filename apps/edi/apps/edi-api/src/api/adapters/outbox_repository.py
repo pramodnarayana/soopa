@@ -14,12 +14,12 @@ class SqlAlchemyOutboxRepositoryMixin:
 
     async def publish_outbox_event(
         self,
-        tenant_id: int,
+        tenant_id: str,
         event_type: str,
         payload: dict[str, Any],
         idempotency_key: UUID | None = None,
     ) -> UUID:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         event_id = uuid.uuid4()
         record = self.model_class(
             id=event_id,

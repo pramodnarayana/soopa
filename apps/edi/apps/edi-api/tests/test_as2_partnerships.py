@@ -79,8 +79,8 @@ def client_factory(fake_uow: FakeUnitOfWork) -> Callable[..., TestClient]:
         fake_tester = FakeAS2Tester(transport_ok=transport_ok, result=result)
 
         app.dependency_overrides[get_uow] = lambda: fake_uow
-        app.dependency_overrides[get_current_tenant_id] = lambda: 0
-        app.dependency_overrides[require_platform_admin] = lambda: 0
+        app.dependency_overrides[get_current_tenant_id] = lambda: "0"
+        app.dependency_overrides[require_platform_admin] = lambda: "0"
         app.dependency_overrides[get_vault] = lambda: FakeVault()
         app.dependency_overrides[get_as2_tester] = lambda: fake_tester
 

@@ -24,7 +24,7 @@ async def test_update_as2_partner_not_found():
     cmd = UpdateAS2TradingPartnerCmd(name="Test")
 
     with pytest.raises(ValueError, match="Partner not found after update"):
-        await svc.update_as2_partner(1, uuid4(), cmd)
+        await svc.update_as2_partner("1", uuid4(), cmd)
 
 
 @pytest.mark.asyncio
@@ -39,14 +39,14 @@ async def test_rotate_certificates_success():
     partner_id = uuid4()
 
     result = await svc.rotate_certificates(
-        tenant_id=1, partner_id=partner_id, new_public_cert="cert", new_private_key_vault_ref="ref"
+        tenant_id="1", partner_id=partner_id, new_public_cert="cert", new_private_key_vault_ref="ref"
     )
 
     assert result.partner_id == partner_id
     assert result.name == "Test Partner"
     assert result.status == "ACTIVE"
 
-    mock_repo.rotate_as2_certificates.assert_awaited_once_with(1, partner_id, "cert", "ref")
+    mock_repo.rotate_as2_certificates.assert_awaited_once_with("1", partner_id, "cert", "ref")
     mock_repo.publish_outbox_event.assert_awaited_once()
 
 
@@ -58,4 +58,4 @@ async def test_rotate_certificates_not_found():
     svc = AS2PartnerService(uow=make_mock_uow(mock_repo))
 
     with pytest.raises(ValueError, match="Partner not found after certificate rotation"):
-        await svc.rotate_certificates(1, uuid4(), "cert", None)
+        await svc.rotate_certificates("1", uuid4(), "cert", None)

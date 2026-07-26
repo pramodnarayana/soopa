@@ -10,7 +10,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from database.models.data_plane import SanitizedText
 
 # revision identifiers, used by Alembic.
 revision: str = '9600e87c4280'
@@ -142,7 +141,7 @@ def upgrade() -> None:
     sa.Column('interchange_control_no', sa.String(length=255), nullable=True),
     sa.Column('transaction_type', sa.String(length=50), nullable=True),
     sa.Column('format_standard', sa.String(length=50), nullable=True),
-    sa.Column('edi_data', SanitizedText(), nullable=True),
+    sa.Column('edi_data', sa.Text(), nullable=True),
     sa.Column('storage_uri', sa.String(length=1024), nullable=True),
     sa.Column('file_size_bytes', sa.BigInteger(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=False),
@@ -305,6 +304,31 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_outbound_routes_tenant_id'), 'outbound_routes', ['tenant_id'], unique=False)
     op.create_index('ix_outbound_routes_unique_trading_partner_id', 'outbound_routes', ['tenant_id', 'trading_partner_id'], unique=True, postgresql_where=sa.text('active = true'))
+
+    # Enable Row-Level Security and create isolation policies for all tenant tables
+    tenant_tables = [
+        'ack_receipts',
+        'api_gateway',
+        'as2_partners',
+        'audit_log',
+        'edi_json',
+        'edi_messages',
+        'jobs',
+        'outbound_edi_headers',
+        'outbox',
+        'processed_events',
+        'sftp_partners',
+        'webhooks',
+        'as2_partnerships',
+        'inbound_routes',
+        'outbound_routes',
+    ]
+    for table in tenant_tables:
+        op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
+        op.execute(
+            f"CREATE POLICY tenant_isolation_policy ON {table} "
+            f"USING (tenant_id = current_setting('app.current_tenant')::varchar);"
+        )
     # ### end Alembic commands ###
 
 

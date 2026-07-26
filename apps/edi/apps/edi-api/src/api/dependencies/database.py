@@ -15,7 +15,7 @@ from api.dependencies.auth import get_current_tenant_id
 
 async def get_tenant_session_for_id(
     request: Request,
-    tenant_id: int,
+    tenant_id: str,
     global_session: AsyncSession,
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yields an AsyncSession bound to the database shard for a given tenant."""
@@ -46,7 +46,7 @@ async def get_tenant_session_for_id(
 
 async def get_tenant_session(
     request: Request,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     global_session: AsyncSession = Depends(get_global_session),
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yields an AsyncSession using the JWT's resolved tenant_id."""
@@ -71,7 +71,7 @@ async def get_tenant_uow(
 
 async def get_m2m_tenant_uow(
     request: Request,
-    tenant_id: int = Depends(get_tenant_id_from_api_key),
+    tenant_id: str = Depends(get_tenant_id_from_api_key),
     global_session: GlobalSession = Depends(get_global_session),
 ) -> AsyncGenerator[UnitOfWork, None]:
     """

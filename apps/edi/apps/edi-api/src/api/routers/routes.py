@@ -31,7 +31,7 @@ _route_list_adapter = TypeAdapter(list[RouteItemResponse])
 
 @router.get("", response_model=list[RouteItemResponse], status_code=status.HTTP_200_OK)
 async def list_routes(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -51,7 +51,7 @@ async def list_routes(
 @router.post("/inbound", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 async def create_inbound_route(
     request: CreateInboundRouteRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -85,7 +85,7 @@ async def create_inbound_route(
 @router.post("/outbound", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 async def create_outbound_route(
     request: CreateOutboundRouteRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -113,7 +113,7 @@ async def create_outbound_route(
 async def update_inbound_route(
     route_id: UUID,
     request: UpdateRouteRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -148,7 +148,7 @@ async def update_inbound_route(
 @router.delete("/inbound/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_inbound_route(
     route_id: UUID,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
     """
@@ -166,7 +166,7 @@ async def delete_inbound_route(
 async def update_outbound_route(
     route_id: UUID,
     request: UpdateRouteRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -194,7 +194,7 @@ async def update_outbound_route(
 @router.delete("/outbound/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_outbound_route(
     route_id: UUID,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
     """

@@ -92,7 +92,7 @@ async def get_current_user_profile(
     is_platform_admin = tenant_id == "0" or "Platform_Admin" in roles
 
     return await auth_service.get_authorization_profile(
-        tenant_id=int(tenant_id),
+        tenant_id=tenant_id,
         is_platform_admin=is_platform_admin,
         current_rls_tenant=None,
         roles=roles,

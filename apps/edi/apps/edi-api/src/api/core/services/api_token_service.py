@@ -58,7 +58,7 @@ class ApiTokenService:
         self._repo = repo
 
     async def create_token(
-        self, tenant_id: int, tenant_name: str, cmd: CreateApiTokenCmd
+        self, tenant_id: str, tenant_name: str, cmd: CreateApiTokenCmd
     ) -> ApiTokenEntity:
         """
         Generates a two-part API credential for the given tenant.
@@ -88,12 +88,12 @@ class ApiTokenService:
             active=False,
         )
 
-    async def list_tokens(self, tenant_id: int) -> list[ApiTokenListEntity]:
+    async def list_tokens(self, tenant_id: str) -> list[ApiTokenListEntity]:
         """Returns all tokens for a tenant. client_id is safe; secret is never returned."""
         return await self._repo.list_api_tokens(tenant_id)
 
     async def update_token(
-        self, tenant_id: int, token_id: UUID, name: str | None = None, active: bool | None = None
+        self, tenant_id: str, token_id: UUID, name: str | None = None, active: bool | None = None
     ) -> bool:
         """Updates token properties (e.g. name or active status)."""
         token = await self._repo.get_api_token(tenant_id, token_id)
@@ -111,7 +111,7 @@ class ApiTokenService:
             )
         return result
 
-    async def delete_token(self, tenant_id: int, token_id: UUID) -> bool:
+    async def delete_token(self, tenant_id: str, token_id: UUID) -> bool:
         """Hard deletes a token record. Irreversible."""
         token = await self._repo.get_api_token(tenant_id, token_id)
         if not token:

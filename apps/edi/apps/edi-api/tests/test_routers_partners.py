@@ -19,7 +19,7 @@ def client(fake_uow):
     app.dependency_overrides[get_uow] = lambda: fake_uow
     app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
-    app.dependency_overrides[require_platform_admin] = lambda: 0
+    app.dependency_overrides[require_platform_admin] = lambda: "0"
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "user"}
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private"]

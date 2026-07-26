@@ -236,7 +236,7 @@ class UpdateOutboundEdiHeaderCmd:
 @dataclass(frozen=True)
 class PartnerEntity:
     partner_id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     type: ConnectionType
     status: PartnerStatus
@@ -245,7 +245,7 @@ class PartnerEntity:
 @dataclass(frozen=True)
 class RouteEntity:
     route_id: UUID
-    tenant_id: int
+    tenant_id: str
     direction: Direction
 
 
@@ -307,7 +307,7 @@ class ApiTokenEntity:
     """Returned once after creation. client_secret is shown only this time."""
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     client_id: str  # stored plaintext, safe to display in UI
     client_secret: str  # shown once, never stored — only its hash is in DB

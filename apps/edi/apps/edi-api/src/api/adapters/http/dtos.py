@@ -289,7 +289,7 @@ class UpdateRouteRequest(BaseModel):
 class PartnerResponse(BaseModel):
     partner_id: UUID
     id: UUID | None = None
-    tenant_id: int
+    tenant_id: str
     name: str
     type: str  # AS2, SFTP, WEBHOOK
     status: str
@@ -347,7 +347,7 @@ class CertificateExportResponse(BaseModel):
 
 class AS2PartnershipResponse(BaseModel):
     id: str
-    tenant_id: int | None
+    tenant_id: str | None
     trading_partner_id: str | None = None
     name: str | None = None
     local_partner_id: str
@@ -363,7 +363,7 @@ class AS2PartnershipResponse(BaseModel):
 
 class RouteResponse(BaseModel):
     route_id: UUID
-    tenant_id: int
+    tenant_id: str
     direction: str  # INBOUND, OUTBOUND
 
 

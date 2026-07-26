@@ -53,16 +53,16 @@ async def test_as2_partnership_connection(
     """
     async with uow:
         partnership = await uow.as2_partnerships.get_as2_partnership(
-            tenant_id=0, partnership_id=partnership_id
+            tenant_id="0", partnership_id=partnership_id
         )
         if not partnership:
             raise HTTPException(status_code=404, detail="Partnership not found")
 
         local_partner = await uow.as2_partners.get_as2_partner(
-            tenant_id=0, partner_id=partnership.local_partner_id
+            tenant_id="0", partner_id=partnership.local_partner_id
         )
         remote_partner = await uow.as2_partners.get_as2_partner(
-            tenant_id=0, partner_id=partnership.remote_partner_id
+            tenant_id="0", partner_id=partnership.remote_partner_id
         )
 
     if not local_partner:
@@ -158,17 +158,17 @@ async def create_platform_as2_partnership(
             )
 
             svc = AS2PartnershipService(uow=uow)
-            entity = await svc.create_as2_partnership(tenant_id=0, cmd=cmd)
+            entity = await svc.create_as2_partnership(tenant_id="0", cmd=cmd)
             await uow.commit()
             p = await uow.as2_partnerships.get_as2_partnership(
-                tenant_id=0, partnership_id=entity.partner_id
+                tenant_id="0", partnership_id=entity.partner_id
             )
             if not p:
                 raise HTTPException(status_code=404, detail="Partnership not found")
 
             return AS2PartnershipResponse(
                 id=str(entity.partner_id),
-                tenant_id=0,
+                tenant_id="0",
                 name=p.name,
                 local_partner_id=str(p.local_partner_id),
                 remote_partner_id=str(p.remote_partner_id),
@@ -219,11 +219,11 @@ async def update_platform_as2_partnership(
                 active=get_val("active"),
             )
             svc = AS2PartnershipService(uow=uow)
-            await svc.update_as2_partnership(tenant_id=0, partnership_id=partnership_id, cmd=cmd)
+            await svc.update_as2_partnership(tenant_id="0", partnership_id=partnership_id, cmd=cmd)
             await uow.commit()
 
             p = await uow.as2_partnerships.get_as2_partnership(
-                tenant_id=0, partnership_id=partnership_id
+                tenant_id="0", partnership_id=partnership_id
             )
             if not p:
                 raise HTTPException(status_code=404, detail="Partnership not found")
@@ -265,7 +265,7 @@ async def delete_platform_as2_partnership(
     try:
         async with uow:
             svc = AS2PartnershipService(uow=uow)
-            await svc.delete_as2_partnership(tenant_id=0, partnership_id=partnership_id)
+            await svc.delete_as2_partnership(tenant_id="0", partnership_id=partnership_id)
             await uow.commit()
     except Exception as err:
         logger.exception("Internal error deleting platform AS2 partnership")

@@ -124,7 +124,7 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     app.dependency_overrides[get_tenant_session] = override_get_tenant_session
     app.dependency_overrides[get_vault] = lambda: override_get_vault
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
-    app.dependency_overrides[get_tenant_id_from_api_key] = lambda: 1
+    app.dependency_overrides[get_tenant_id_from_api_key] = lambda: "1"
     app.dependency_overrides[get_current_user_profile] = lambda: {"sub": "test-user", "tenant_id": "1", "permissions": ["*"]}
 
     async def _m2m_uow():

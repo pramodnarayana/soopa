@@ -20,19 +20,19 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     def __init__(self, session: TenantSession) -> None:
         TenantSqlAlchemyRepository.__init__(self, session)
 
-    async def create_edi_message(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
-        tid_str = str(tenant_id) if tenant_id is not None else None
+    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+        tid_str = tenant_id if tenant_id is not None else None
         msg = EdiMessage(tenant_id=tid_str, **payload)
         self.session.add(msg)
         await self.session.flush()
         return msg.id
 
     async def publish_outbox_event(
-        self, tenant_id: int, event_type: str, payload: dict[str, Any], idempotency_key: UUID
+        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: UUID
     ) -> UUID:
         from database.models.data_plane import DataPlaneOutbox
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         event_id = uuid.uuid4()
         record = DataPlaneOutbox(
             id=event_id,
@@ -46,19 +46,19 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.session.flush()
         return event_id
 
-    async def create_edi_json(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
+    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
         from database.models.data_plane import EdiJson
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         msg = EdiJson(tenant_id=tid_str, **payload)
         self.session.add(msg)
         await self.session.flush()
         return msg.id
 
-    async def create_api_gateway(self, tenant_id: int, payload: dict[str, Any]) -> UUID:
+    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
         from database.models.data_plane import ApiGateway
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         log = ApiGateway(tenant_id=tid_str, **payload)
         self.session.add(log)
         await self.session.flush()
@@ -66,7 +66,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def list_transactions(
         self,
-        tenant_id: int,
+        tenant_id: str,
         limit: int = 50,
         offset: int = 0,
         partner_id: str | None = None,
@@ -78,7 +78,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         limit = min(max(1, limit), 200)
         offset = max(0, offset)
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
         if direction:
             stmt = stmt.where(EdiMessage.direction == direction)
@@ -248,11 +248,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return stmt
 
     async def explorer_list_edi_messages(
-        self, tenant_id: int, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
+        self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
     ) -> Sequence[Any]:
         from database.models.data_plane import EdiMessage
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
         stmt = self._apply_dynamic_filters(stmt, EdiMessage, filters)
         stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
@@ -260,22 +260,22 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return result.scalars().all()
 
     async def explorer_list_edi_json(
-        self, tenant_id: int, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
+        self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
     ) -> Sequence[Any]:
         from database.models.data_plane import EdiJson
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
         stmt = self._apply_dynamic_filters(stmt, EdiJson, filters)
         stmt = stmt.order_by(EdiJson.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_transaction(self, tenant_id: int, trace_id: UUID) -> TransactionDetailDTO | None:
+    async def get_transaction(self, tenant_id: str, trace_id: UUID) -> TransactionDetailDTO | None:
 
         from database.models.data_plane import ApiGateway, EdiJson, EdiMessage
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         msg_stmt = select(EdiMessage).where(
             EdiMessage.tenant_id == tid_str, EdiMessage.trace_id == trace_id
         )
@@ -379,10 +379,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             ],
         )
 
-    async def get_transaction_thread(self, tenant_id: int, key: str, value: str) -> Sequence[Any]:
+    async def get_transaction_thread(self, tenant_id: str, key: str, value: str) -> Sequence[Any]:
         from database.models.data_plane import EdiJson
 
-        tid_str = str(tenant_id) if tenant_id is not None else None
+        tid_str = tenant_id if tenant_id is not None else None
         json_stmt = (
             select(EdiJson)
             .where(EdiJson.tenant_id == tid_str, EdiJson.business_metadata.contains({key: value}))
