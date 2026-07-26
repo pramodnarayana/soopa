@@ -331,7 +331,9 @@ class As2ReceiverService:
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
-        true_tenant_id: str | None = await self.uow.inbound_routes.get_tenant_by_isa(isa_sender, isa_receiver)
+        true_tenant_id: str | None = await self.uow.inbound_routes.get_tenant_by_isa(
+            isa_sender, isa_receiver
+        )
         if not true_tenant_id and partnership.tenant_id is not None:
             true_tenant_id = str(partnership.tenant_id)
 

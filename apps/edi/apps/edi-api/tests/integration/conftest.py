@@ -1,7 +1,7 @@
 import os
 
-os.environ['DB_ENCRYPTION_KEY'] = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
-os.environ.setdefault('TESTCONTAINERS_RYUK_DISABLED', 'true')
+os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 import asyncio
 
 import pytest
@@ -21,11 +21,13 @@ def event_loop():
     yield loop
     loop.close()
 
+
 @pytest.fixture(scope="session")
 def postgres_container():
     """Spin up a real Postgres database for the test session."""
     with PostgresContainer("postgres:15-alpine") as postgres:
         yield postgres
+
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine(postgres_container):
@@ -46,6 +48,7 @@ async def db_engine(postgres_container):
     yield engine
     await engine.dispose()
 
+
 @pytest_asyncio.fixture(scope="function")
 async def db_session(db_engine):
     """
@@ -55,9 +58,7 @@ async def db_session(db_engine):
     connection = await db_engine.connect()
     transaction = await connection.begin()
 
-    SessionLocal = async_sessionmaker(
-        bind=connection, expire_on_commit=False, class_=AsyncSession
-    )
+    SessionLocal = async_sessionmaker(bind=connection, expire_on_commit=False, class_=AsyncSession)
 
     session = SessionLocal()
     yield session
@@ -65,19 +66,29 @@ async def db_session(db_engine):
     await transaction.rollback()
     await connection.close()
 
+
 @pytest_asyncio.fixture(scope="function")
 async def override_get_global_session(db_engine):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    SessionLocal = async_sessionmaker(bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "global"})
+
+    SessionLocal = async_sessionmaker(
+        bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "global"}
+    )
+
     async def _override():
         async with SessionLocal() as session:
             yield session
+
     return _override
+
 
 @pytest_asyncio.fixture(scope="function")
 async def override_get_tenant_session(db_engine):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    SessionLocal = async_sessionmaker(bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "tenant"})
+
+    SessionLocal = async_sessionmaker(
+        bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "tenant"}
+    )
     from fastapi import Depends
 
     from api.dependencies.auth import get_current_tenant_id
@@ -86,6 +97,7 @@ async def override_get_tenant_session(db_engine):
         async with SessionLocal() as session:
             await session.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}';"))
             yield session
+
     return _override
 
 
@@ -125,7 +137,11 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     app.dependency_overrides[get_vault] = lambda: override_get_vault
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[get_tenant_id_from_api_key] = lambda: "1"
-    app.dependency_overrides[get_current_user_profile] = lambda: {"sub": "test-user", "tenant_id": "1", "permissions": ["*"]}
+    app.dependency_overrides[get_current_user_profile] = lambda: {
+        "sub": "test-user",
+        "tenant_id": "1",
+        "permissions": ["*"],
+    }
 
     async def _m2m_uow():
         gs_gen = override_get_global_session()
@@ -147,7 +163,9 @@ async def client(override_get_global_session, override_get_tenant_session, overr
 
 
 @pytest_asyncio.fixture(scope="function")
-async def platform_client(override_get_global_session, override_get_tenant_session, override_get_vault):
+async def platform_client(
+    override_get_global_session, override_get_tenant_session, override_get_vault
+):
     from httpx import ASGITransport, AsyncClient
 
     from api.dependencies.auth import (
@@ -165,7 +183,11 @@ async def platform_client(override_get_global_session, override_get_tenant_sessi
     app.dependency_overrides[get_vault] = lambda: override_get_vault
     app.dependency_overrides[get_current_tenant_id] = lambda: "0"
     app.dependency_overrides[require_platform_admin] = lambda: "0"
-    app.dependency_overrides[get_current_user_profile] = lambda: {"sub": "admin-user", "tenant_id": "0", "permissions": ["*"]}
+    app.dependency_overrides[get_current_user_profile] = lambda: {
+        "sub": "admin-user",
+        "tenant_id": "0",
+        "permissions": ["*"],
+    }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

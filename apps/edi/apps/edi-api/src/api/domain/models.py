@@ -50,7 +50,6 @@ class UnsetType:
         return self
 
 
-
 UNSET = UnsetType()
 
 # ---------------------------------------------------------------------------
@@ -136,13 +135,6 @@ class UpdateSFTPPartnerCmd:
     active: bool | None | UnsetType = UNSET
     password: str | None | UnsetType = UNSET
     host_key: str | None | UnsetType = UNSET
-
-
-@dataclass(frozen=True)
-class CreateWebhookCmd:
-    name: str
-    url: str
-    auth_header_vault_ref: str | None = None
 
 
 # ---------------------------------------------------------------------------

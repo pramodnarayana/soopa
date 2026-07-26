@@ -39,7 +39,10 @@ async def test_rotate_certificates_success():
     partner_id = uuid4()
 
     result = await svc.rotate_certificates(
-        tenant_id="1", partner_id=partner_id, new_public_cert="cert", new_private_key_vault_ref="ref"
+        tenant_id="1",
+        partner_id=partner_id,
+        new_public_cert="cert",
+        new_private_key_vault_ref="ref",
     )
 
     assert result.partner_id == partner_id

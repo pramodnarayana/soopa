@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from uuid import UUID as PyUUID
 
@@ -34,7 +35,7 @@ class GlobalBase(DeclarativeBase):
 class DatabaseShard(GlobalBase):
     __tablename__ = "database_shards"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     dsn: Mapped[str] = mapped_column(String(1024), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -42,10 +43,10 @@ class DatabaseShard(GlobalBase):
 class Tenant(GlobalBase):
     __tablename__ = "tenants"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    shard_id: Mapped[int] = mapped_column(Integer, ForeignKey("database_shards.id"), nullable=False)
+    shard_id: Mapped[str] = mapped_column(String(128), ForeignKey("database_shards.id"), nullable=False)
     tier: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
     allow_private_as2: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     shard_schema: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
@@ -54,7 +55,7 @@ class Tenant(GlobalBase):
 class User(GlobalBase):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -68,12 +69,12 @@ class User(GlobalBase):
 class TenantUser(GlobalBase):
     __tablename__ = "tenant_users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     tenant_id: Mapped[str] = mapped_column(
         String(128), nullable=False
     )
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
 

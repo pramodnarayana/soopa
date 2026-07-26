@@ -25,27 +25,28 @@ class TenantResolver:
             for k, _ in sorted_entries[:to_evict]:
                 del self._cache[k]
 
-    async def resolve(self, tenant_id: int) -> tuple[str, str]:
+    async def resolve(self, tenant_id: str | int) -> tuple[str, str]:
         import time
 
         now = time.monotonic()
         self._sweep(now)
 
-        if tenant_id in self._cache:
-            shard_name, shard_dsn, expiry = self._cache[tenant_id]
+        tid_str = str(tenant_id)
+        if tid_str in self._cache:
+            shard_name, shard_dsn, expiry = self._cache[tid_str]
             if now < expiry:
                 return shard_name, shard_dsn
 
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
         try:
-            stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == tenant_id)
+            stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == tid_str)
             result = await global_session.execute(stmt)
             row = result.first()
             if not row:
-                raise ValueError(f"Tenant {tenant_id} not found in Global DB")
+                raise ValueError(f"Tenant {tid_str} not found in Global DB")
             _, shard_obj = row
-            self._cache[tenant_id] = (str(shard_obj.name), str(shard_obj.dsn), now + self._ttl)
+            self._cache[tid_str] = (str(shard_obj.name), str(shard_obj.dsn), now + self._ttl)
             self._sweep(now)
             return str(shard_obj.name), str(shard_obj.dsn)
         finally:

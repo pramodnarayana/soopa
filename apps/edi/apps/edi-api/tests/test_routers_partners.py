@@ -384,32 +384,6 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     assert resp.status_code == 400
 
 
-def test_list_tenant_webhooks(client, fake_uow):
-    from uuid import uuid4
-    from api.domain.models import CreateWebhookCmd
-
-    wh1_id = uuid4()
-    wh2_id = uuid4()
-    fake_uow.webhooks.webhooks.append({
-        "id": wh1_id,
-        "tenant_id": "1",
-        "cmd": CreateWebhookCmd(name="Current Tenant Wh", url="http://local/wh1"),
-    })
-    fake_uow.webhooks.webhooks.append({
-        "id": wh2_id,
-        "tenant_id": "2",
-        "cmd": CreateWebhookCmd(name="Cross Tenant Wh", url="http://local/wh2"),
-    })
-
-    response = client.get("/api/v1/webhooks")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
-    assert data[0]["partner_id"] == str(wh1_id)
-    assert data[0]["name"] == "Current Tenant Wh"
-
-
 def test_list_tenant_partners(client, fake_uow):
     response = client.get("/api/v1/trading-partners")
     assert response.status_code == 200

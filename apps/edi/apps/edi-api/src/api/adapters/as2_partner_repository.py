@@ -77,40 +77,49 @@ class SqlAlchemyAS2TradingPartnerRepository(
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == partner_id,
-                or_(AS2Partner.tenant_id == tid_str, AS2Partner.tenant_id.is_(None)),
+                or_(
+                    AS2Partner.tenant_id == tid_str,
+                    AS2Partner.tenant_id == "0",
+                    AS2Partner.tenant_id.is_(None),
+                ),
             )
         )
         record = result.scalar_one_or_none()
         return AS2PartnerDomainModel.model_validate(record) if record else None
 
     async def get_as2_partner_for_write(self, tenant_id: str, partner_id: UUID) -> Any:
-        tid_str = tenant_id
-        result = await self.session.execute(
-            select(AS2Partner).where(
-                AS2Partner.id == partner_id,
-                AS2Partner.tenant_id == tid_str,
-            )
-        )
+        tid_str = str(tenant_id)
+        conds = [AS2Partner.id == partner_id]
+        if tid_str == "0":
+            conds.append(or_(AS2Partner.tenant_id == "0", AS2Partner.tenant_id.is_(None)))
+        else:
+            conds.append(AS2Partner.tenant_id == tid_str)
+        result = await self.session.execute(select(AS2Partner).where(*conds))
         return result.scalar_one_or_none()
 
     async def list_as2_partners(self, tenant_id: str) -> Sequence[AS2PartnerDomainModel]:
-        tid_str = tenant_id
-        result = await self.session.execute(
-            select(AS2Partner).where(AS2Partner.tenant_id == tid_str)
-        )
+        tid_str = str(tenant_id)
+        if tid_str == "0":
+            where_clause = or_(AS2Partner.tenant_id == "0", AS2Partner.tenant_id.is_(None))
+        else:
+            where_clause = AS2Partner.tenant_id == tid_str
+        result = await self.session.execute(select(AS2Partner).where(where_clause))
         return [AS2PartnerDomainModel.model_validate(r) for r in result.scalars().all()]
 
     async def delete_as2_identity(self, tenant_id: str, partner_id: UUID) -> None:
-        tid_str = tenant_id
-        await self.session.execute(
-            delete(AS2Partner).where(AS2Partner.id == partner_id, AS2Partner.tenant_id == tid_str)
-        )
+        tid_str = str(tenant_id)
+        conds = [AS2Partner.id == partner_id]
+        if tid_str == "0":
+            conds.append(or_(AS2Partner.tenant_id == "0", AS2Partner.tenant_id.is_(None)))
+        else:
+            conds.append(AS2Partner.tenant_id == tid_str)
+        await self.session.execute(delete(AS2Partner).where(*conds))
         await self.session.flush()
 
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
-        tid_str = tenant_id
+        tid_str = str(tenant_id)
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),

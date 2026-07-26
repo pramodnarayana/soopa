@@ -28,7 +28,9 @@ class AS2PartnerService:
     ) -> PartnerEntity:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
-        partner_id = await self.uow.as2_partners.create_as2_identity(tenant_id=str(tenant_id), cmd=cmd)
+        partner_id = await self.uow.as2_partners.create_as2_identity(
+            tenant_id=str(tenant_id), cmd=cmd
+        )
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_CREATED,

@@ -1,6 +1,3 @@
-from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
-
 """
 Webhooks router package.
 
@@ -16,6 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.adapters.http.dtos import PartnerResponse
 from api.core.uow import UnitOfWork
+from api.dependencies.auth import get_current_tenant_id
+from api.dependencies.database import get_tenant_uow
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
 
@@ -29,7 +28,7 @@ def _partner_response(partner: Any, tenant_id: str) -> PartnerResponse:
         type="WEBHOOK",
         status="ACTIVE" if partner.active else "INACTIVE",
         active=partner.active,
-        url=partner.url,
+        url=str(partner.url) if partner.url else None,
     )
 
 
@@ -44,6 +43,3 @@ async def list_webhooks(
             raise HTTPException(status_code=500, detail="Control plane not initialized")
         webhooks: Sequence[Any] = await uow.webhooks.list_webhooks(tenant_id)
         return [_partner_response(p, tenant_id) for p in webhooks]
-
-
-

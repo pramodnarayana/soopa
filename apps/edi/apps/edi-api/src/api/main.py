@@ -33,7 +33,6 @@ from api.routers import (
 from api.routers import (
     platform as platform_admin,
 )
-from api.routers.developers import api_tokens
 from api.routers.trading_partners import as2_receive, platform
 
 logger = logging.getLogger(__name__)
@@ -107,7 +106,6 @@ app.include_router(edi_headers.router)
 app.include_router(edi_tools.router)
 app.include_router(as2_receive.router, prefix="/api/v1")
 app.include_router(edi_json.router)
-app.include_router(api_tokens.router)
 app.include_router(transactions.router)
 app.include_router(explorer.router)
 

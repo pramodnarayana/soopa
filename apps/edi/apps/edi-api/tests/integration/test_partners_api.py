@@ -5,6 +5,7 @@ from httpx import AsyncClient
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
+
 async def test_create_and_get_sftp_partner(client: AsyncClient):
     # Test creating a partner
     payload = {
@@ -13,7 +14,7 @@ async def test_create_and_get_sftp_partner(client: AsyncClient):
         "port": 22,
         "username": "user123",
         "password": "password123",
-        "active": True
+        "active": True,
     }
 
     response = await client.post("/api/v1/trading-partners/sftp", json=payload)
@@ -41,17 +42,20 @@ async def test_create_and_get_sftp_partner(client: AsyncClient):
         "port": 22,
     }
     response = await client.post("/api/v1/trading-partners/sftp", json=bad_payload)
-    assert response.status_code == 422 # Pydantic validation error
+    assert response.status_code == 422  # Pydantic validation error
+
 
 async def test_create_and_get_as2_partner(platform_client: AsyncClient):
     payload = {
         "name": "Integration Test AS2",
         "as2_id": "AS2_TEST_" + str(uuid.uuid4())[:8],
         "is_local": True,
-        "url": "http://example.com/as2"
+        "url": "http://example.com/as2",
     }
 
-    response = await platform_client.post("/api/v1/platform/trading-partners/as2/trading-partners", json=payload)
+    response = await platform_client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners", json=payload
+    )
     assert response.status_code == 201, f"Failed to create AS2 partner: {response.text}"
     data = response.json()
     assert data["name"] == payload["name"]

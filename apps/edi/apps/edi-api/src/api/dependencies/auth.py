@@ -97,4 +97,3 @@ async def get_current_user_profile(
         current_rls_tenant=None,
         roles=roles,
     )
-

@@ -51,9 +51,9 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
     res_partnership = await platform_client.post(
         "/api/v1/platform/trading-partners/as2/partnerships", json=partnership_payload
     )
-    assert (
-        res_partnership.status_code == 201
-    ), f"Failed to create AS2 partnership: {res_partnership.text}"
+    assert res_partnership.status_code == 201, (
+        f"Failed to create AS2 partnership: {res_partnership.text}"
+    )
     partnership = res_partnership.json()
     assert partnership["name"] == partnership_payload["name"]
     assert partnership["local_partner_id"] == local_id

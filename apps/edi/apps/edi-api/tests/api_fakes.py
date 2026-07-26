@@ -10,7 +10,6 @@ from api.domain.models import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookCmd,
     UpdateAS2PartnershipCmd,
     UpdateAS2TradingPartnerCmd,
     UpdateInboundRouteCmd,
@@ -219,40 +218,6 @@ class FakeGlobalStore:
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
-    async def create_webhook(self, tenant_id: str, cmd: CreateWebhookCmd) -> uuid.UUID:
-        wh_id = uuid.uuid4()
-        self.webhooks.append({"id": wh_id, "tenant_id": tenant_id, "cmd": cmd})
-        return wh_id
-
-    async def update_webhook(
-        self,
-        tenant_id: str,
-        webhook_id: uuid.UUID,
-        name: str | None = None,
-        active: bool | None = None,
-        url: str | None = None,
-    ) -> bool:
-        from dataclasses import replace
-
-        for w in self.webhooks:
-            if w["id"] == webhook_id and w["tenant_id"] == tenant_id:
-                updates = {}
-                if name is not None:
-                    updates["name"] = name
-                if url is not None:
-                    updates["url"] = url
-                w["cmd"] = replace(w["cmd"], **updates)
-                if active is not None:
-                    w["status"] = "ACTIVE" if active else "INACTIVE"
-                return True
-        return False
-
-    async def delete_webhook(self, tenant_id: str, webhook_id: uuid.UUID) -> bool:
-        self.webhooks = [
-            w for w in self.webhooks if not (w["id"] == webhook_id and w["tenant_id"] == tenant_id)
-        ]
-        return True
-
     async def get_webhooks_by_ids(
         self, tenant_id: str, ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:
@@ -414,25 +379,6 @@ class FakeTenantStore:
                 return MockPartner()
         return None
 
-    async def create_webhook(self, cmd: CreateWebhookCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
-        self.webhooks.append({"id": p_id, "cmd": cmd})
-        return p_id
-
-    async def get_webhook(self, partner_id: uuid.UUID) -> Any:
-        for p in self.webhooks:
-            if p["id"] == partner_id:
-
-                class MockWebhook:
-                    id = p["id"]
-                    tenant_id = "1"
-                    name = p["cmd"].name
-                    active = True
-                    url = getattr(p["cmd"], "url", None)
-
-                return MockWebhook()
-        return None
-
     async def list_sftp_partners(self) -> Sequence[Any]:
         return self.sftp_partners
 
@@ -493,6 +439,7 @@ class MockSession:
             class T:
                 def __init__(self):
                     self.id = "123"
+                    self.tenant_id = "0"
                     self.name = "Test"
                     self.as2_id = "TEST"
                     self.is_local = True

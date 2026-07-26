@@ -67,8 +67,6 @@ async def get_tenant_uow(
     return UnitOfWork(global_session=global_session, tenant_session=tenant_session)
 
 
-
-
 async def get_m2m_tenant_uow(
     request: Request,
     tenant_id: str = Depends(get_tenant_id_from_api_key),

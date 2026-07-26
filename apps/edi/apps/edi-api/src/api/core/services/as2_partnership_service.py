@@ -26,7 +26,9 @@ class AS2PartnershipService:
     async def create_as2_partnership(
         self, tenant_id: str, cmd: CreateAS2PartnershipCmd
     ) -> PartnerEntity:
-        local_partner = await self.uow.as2_partners.get_as2_partner(str(tenant_id), cmd.local_partner_id)
+        local_partner = await self.uow.as2_partners.get_as2_partner(
+            str(tenant_id), cmd.local_partner_id
+        )
         if not local_partner:
             raise ValueError(f"Local AS2 partner {cmd.local_partner_id} not found")
 
@@ -83,7 +85,9 @@ class AS2PartnershipService:
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_UPDATED,
             payload={"partner_id": str(partnership_id), "tenant_id": str(tenant_id)},
         )
-        updated = await self.uow.as2_partnerships.get_as2_partnership(str(tenant_id), partnership_id)
+        updated = await self.uow.as2_partnerships.get_as2_partnership(
+            str(tenant_id), partnership_id
+        )
         if not updated:
             raise ValueError(f"AS2 partnership {partnership_id} not found")
 

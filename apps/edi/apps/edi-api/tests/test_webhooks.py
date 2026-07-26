@@ -35,4 +35,3 @@ def test_list_webhooks(client, mock_uow):
     assert response.status_code == 200
     assert isinstance(response.json(), list)
     mock_uow.webhooks.list_webhooks.assert_called_once_with("1")
-

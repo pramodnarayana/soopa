@@ -27,21 +27,15 @@ async def test_edi_json_submission_and_thread(client: AsyncClient):
 
     # 1. Submit outbound JSON message
     res_post = await client.post("/api/v1/edi_json", json=payload)
-    assert (
-        res_post.status_code == 202
-    ), f"Failed to submit outbound EDI JSON: {res_post.text}"
+    assert res_post.status_code == 202, f"Failed to submit outbound EDI JSON: {res_post.text}"
     response_data = res_post.json()
     assert response_data["status"] == "ACCEPTED"
     trace_id = response_data["trace_id"]
     assert trace_id is not None
 
     # 2. Query transaction thread by po_number
-    res_thread = await client.get(
-        f"/api/v1/transactions/thread?key=po_number&value={po_num}"
-    )
-    assert (
-        res_thread.status_code == 200
-    ), f"Failed to get transaction thread: {res_thread.text}"
+    res_thread = await client.get(f"/api/v1/transactions/thread?key=po_number&value={po_num}")
+    assert res_thread.status_code == 200, f"Failed to get transaction thread: {res_thread.text}"
     thread_items = res_thread.json()["items"]
     assert len(thread_items) >= 1
     assert any(item["trace_id"] == trace_id for item in thread_items)
@@ -57,9 +51,7 @@ async def test_edi_json_submission_and_thread(client: AsyncClient):
         ]
     }
     res_explore = await client.post("/api/v1/explorer/edi-json", json=explore_payload)
-    assert (
-        res_explore.status_code == 200
-    ), f"Failed to explore EDI JSON: {res_explore.text}"
+    assert res_explore.status_code == 200, f"Failed to explore EDI JSON: {res_explore.text}"
     explore_items = res_explore.json()["items"]
     assert any(item["trace_id"] == trace_id for item in explore_items)
 
@@ -141,9 +133,7 @@ async def test_edi_message_explorer_and_detail(
 
     # 3. Get transaction detail via GET /api/v1/transactions/{trace_id}
     res_detail = await client.get(f"/api/v1/transactions/{trace_id}")
-    assert (
-        res_detail.status_code == 200
-    ), f"Failed to get transaction detail: {res_detail.text}"
+    assert res_detail.status_code == 200, f"Failed to get transaction detail: {res_detail.text}"
     detail = res_detail.json()
     assert detail["edi_message"]["trace_id"] == str(trace_id)
     assert detail["edi_message"]["sender_id"] == sender_id
@@ -164,11 +154,7 @@ async def test_edi_message_explorer_and_detail(
             }
         ]
     }
-    res_explore = await client.post(
-        "/api/v1/explorer/edi-messages", json=explore_payload
-    )
-    assert (
-        res_explore.status_code == 200
-    ), f"Failed to explore EDI messages: {res_explore.text}"
+    res_explore = await client.post("/api/v1/explorer/edi-messages", json=explore_payload)
+    assert res_explore.status_code == 200, f"Failed to explore EDI messages: {res_explore.text}"
     explore_msgs = res_explore.json()["items"]
     assert any(m["trace_id"] == str(trace_id) for m in explore_msgs)

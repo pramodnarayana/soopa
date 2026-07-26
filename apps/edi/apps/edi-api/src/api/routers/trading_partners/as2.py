@@ -38,8 +38,6 @@ async def export_as2_certificates(
     async with uow:
         partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            partner = await uow.as2_partners.get_as2_partner("0", partner_id)
-        if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
         response = CertificateExportResponse(
@@ -97,12 +95,9 @@ async def rotate_as2_certificates(
     async with uow:
         partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            partner = await uow.as2_partners.get_as2_partner("0", partner_id)
-        if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
-        assert partner.tenant_id is not None
-        actual_tenant_id = str(partner.tenant_id)
+        actual_tenant_id = str(partner.tenant_id) if partner.tenant_id is not None else "0"
 
         if partner.is_local and "certificates:rotate" not in profile["permissions"]:
             raise HTTPException(

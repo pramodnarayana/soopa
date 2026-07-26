@@ -27,7 +27,7 @@ class EDIMessagePort(Protocol):
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
         trading_partner_id: str | None = None,
-        tenant_id: int | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         """Stores a raw EDI message."""
         ...
@@ -83,7 +83,7 @@ class APIPayloadPort(Protocol):
         business_metadata: dict[str, Any],
         payload: dict[str, Any],
         status: str,
-        tenant_id: int | None = None,
+        tenant_id: str | None = None,
     ) -> str:
         """Persists a new EdiJson record and returns its UUID as a string."""
         ...
@@ -143,7 +143,7 @@ class RoutePort(Protocol):
         ...
 
     async def get_outbound_route_by_trading_partner_id(
-        self, trading_partner_id: str, tenant_id: int
+        self, trading_partner_id: str, tenant_id: str
     ) -> dict[str, Any] | None:
         """Fetches an outbound route by Trading Partner ID."""
         ...
@@ -152,7 +152,7 @@ class RoutePort(Protocol):
         self,
         route_id: str | None = None,
         trading_partner_id: str | None = None,
-        tenant_id: int | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any] | None:
         """Fetches OutboundEdiHeader by route or partner ID to get translation config like standard, ISA, etc."""
         ...

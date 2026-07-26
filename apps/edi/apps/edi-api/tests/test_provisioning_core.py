@@ -9,14 +9,12 @@ from api.core.services import (
     InboundRouteService,
     OutboundRouteService,
     SFTPPartnerService,
-    WebhookService,
 )
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookCmd,
     UpdateAS2TradingPartnerCmd,
 )
 
@@ -57,11 +55,6 @@ def as2_partnership_service(mock_uow):
 @pytest.fixture
 def sftp_partner_service(mock_uow):
     return SFTPPartnerService(uow=mock_uow)
-
-
-@pytest.fixture
-def webhook_service(mock_uow):
-    return WebhookService(uow=mock_uow)
 
 
 @pytest.mark.asyncio
@@ -109,18 +102,6 @@ async def test_create_sftp_partner(sftp_partner_service: SFTPPartnerService, glo
     assert partner.type == "SFTP"
     assert partner.status == "INACTIVE"
     assert len(global_repo.sftp_partners) == 1
-
-
-@pytest.mark.asyncio
-async def test_create_webhook(webhook_service: WebhookService, global_repo):
-    cmd = CreateWebhookCmd(
-        name="Webhook Partner", url="https://example.com/webhook", auth_header_vault_ref="vault-ref"
-    )
-    partner = await webhook_service.create_webhook(tenant_id=1, cmd=cmd)
-
-    assert partner.type == "WEBHOOK"
-    assert partner.status == "ACTIVE"
-    assert len(global_repo.webhooks) == 1
 
 
 @pytest.mark.asyncio

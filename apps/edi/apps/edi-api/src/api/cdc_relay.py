@@ -3,7 +3,7 @@ from typing import Any
 
 from domain.events import MessageQueueName, PipelineEventType
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from api.dependencies.services import get_message_queue
 from api.ports.message_queue import MessageQueuePort
@@ -21,8 +21,6 @@ _TRANSFORM_QUEUE_EVENT_TYPES: frozenset[str] = frozenset(
     {
         PipelineEventType.TRANSFORM_EVENT,
         PipelineEventType.COMPUTE_TRANSFORM_EVENT,
-        PipelineEventType.TRANSFORM_COMPLETED,
-        PipelineEventType.DELIVERY_COMPLETED,
     }
 )
 
@@ -40,6 +38,13 @@ class DebeziumUnwrappedEvent(BaseModel):
     event_type: str | None = None
     payload: dict[str, Any] | str | None = None
     tenant_id: str | None = None
+
+    @field_validator("tenant_id", mode="before")
+    @classmethod
+    def normalize_tenant_id(cls, v: Any) -> str | None:
+        if v is not None and not isinstance(v, str):
+            return str(v)
+        return v
 
     model_config = ConfigDict(extra="ignore")  # Debezium sends many extra metadata fields
 

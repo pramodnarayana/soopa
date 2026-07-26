@@ -111,7 +111,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
         trading_partner_id: str | None = None,
-        tenant_id: int | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         storage_uri = None
         data_to_store = edi_data
@@ -159,7 +159,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         business_metadata: dict[str, Any],
         payload: dict[str, Any],
         status: str,
-        tenant_id: int | None = None,
+        tenant_id: str | None = None,
     ) -> str:
         import json
 
@@ -467,7 +467,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         }
 
     async def get_outbound_route_by_trading_partner_id(
-        self, trading_partner_id: str, tenant_id: int
+        self, trading_partner_id: str, tenant_id: str
     ) -> dict[str, Any] | None:
         result = await self.session.execute(
             select(OutboundRoute).where(
@@ -490,7 +490,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         self,
         route_id: str | None = None,
         trading_partner_id: str | None = None,
-        tenant_id: int | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any] | None:
         from database.models.data_plane import OutboundEdiHeader, OutboundRoute
 

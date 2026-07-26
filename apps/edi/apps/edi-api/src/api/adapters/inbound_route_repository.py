@@ -185,7 +185,6 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             )
         return str(rows[0]) if rows else None
 
-
     async def delete_inbound_route(self, tenant_id: str, route_id: UUID) -> bool:
         result = await self.session.execute(
             delete(InboundRoute).where(
