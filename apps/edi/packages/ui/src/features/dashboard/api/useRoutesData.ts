@@ -1,23 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import { useAuth } from 'react-oidc-context';
 import type { RouteItem } from '@/features/routes/types';
+import { useTenantId } from '@/contexts/TenantContext';
+import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 
 export type { RouteItem };
 
 export function useRoutesData() {
-  const auth = useAuth();
+  const api = useEdiNetwork();
+  const tenantId = useTenantId();
 
   return useQuery({
-    queryKey: ['active-routes'],
+    queryKey: ['active-routes', tenantId],
     queryFn: async (): Promise<RouteItem[]> => {
-      const response = await axios.get<RouteItem[]>('/api/v1/routes', {
-        headers: {
-          Authorization: `Bearer ${auth.user?.access_token}`,
-        },
-      });
-      return response.data;
+      const res = await api.get<RouteItem[]>('/routes');
+      return res.data;
     },
-    enabled: !!auth.user?.access_token,
   });
 }

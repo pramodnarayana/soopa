@@ -1,8 +1,7 @@
-from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -87,29 +86,6 @@ class TestAS2ConnectionResponse(BaseModel):
     reason: str | None = None
     sent_payload: str | None = None
     raw_mdn: str | None = None
-
-
-class CreateWebhookRequest(BaseModel):
-    name: str = Field(..., max_length=255, description="Name of the Webhook partner")
-    url: HttpUrl = Field(..., description="Webhook endpoint URL")
-    auth_header_vault_ref: str | None = Field(
-        None, max_length=512, description="Vault reference for auth header"
-    )
-
-    @field_validator("url")
-    @classmethod
-    def validate_no_loopback(_cls, v: HttpUrl) -> HttpUrl:
-        if v.host in ("127.0.0.1", "localhost", "::1") or (
-            v.host and v.host.startswith("169.254.")
-        ):
-            raise ValueError("Loopback or link-local addresses are not permitted for webhooks.")
-        return v
-
-
-class UpdateWebhookRequest(BaseModel):
-    name: str | None = Field(None, max_length=255, description="Name of the Webhook partner")
-    active: bool | None = Field(None, description="Active status of the Webhook partner")
-    url: HttpUrl | None = Field(None, description="Receiving URL for the Webhook")
 
 
 class UpdateAS2TradingPartnerRequest(BaseModel):
@@ -289,7 +265,7 @@ class UpdateRouteRequest(BaseModel):
 class PartnerResponse(BaseModel):
     partner_id: UUID
     id: UUID | None = None
-    tenant_id: int
+    tenant_id: str
     name: str
     type: str  # AS2, SFTP, WEBHOOK
     status: str
@@ -347,7 +323,7 @@ class CertificateExportResponse(BaseModel):
 
 class AS2PartnershipResponse(BaseModel):
     id: str
-    tenant_id: int | None
+    tenant_id: str | None
     trading_partner_id: str | None = None
     name: str | None = None
     local_partner_id: str
@@ -363,7 +339,7 @@ class AS2PartnershipResponse(BaseModel):
 
 class RouteResponse(BaseModel):
     route_id: UUID
-    tenant_id: int
+    tenant_id: str
     direction: str  # INBOUND, OUTBOUND
 
 
@@ -426,56 +402,3 @@ class OutboundMessageResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # API Token DTOs
 # ---------------------------------------------------------------------------
-
-
-class CreateApiTokenRequest(BaseModel):
-    name: str = Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Human-readable label for this token (e.g. 'ERP Integration Prod')",
-    )
-    expires_at: datetime | None = Field(
-        None, description="Optional ISO-8601 expiry datetime. Null = never expires."
-    )
-
-
-class UpdateApiTokenRequest(BaseModel):
-    name: str | None = Field(
-        None, min_length=1, max_length=255, description="Human-readable label for this token"
-    )
-    active: bool | None = Field(None, description="Whether the token is active")
-
-
-class ApiTokenCreatedResponse(BaseModel):
-    """
-    Returned exactly once upon token creation.
-    client_secret is shown here and NEVER returned again.
-    """
-
-    id: UUID
-    name: str
-    client_id: str = Field(
-        ..., description="Plaintext client identifier — safe to display in UI and logs"
-    )
-    client_secret: str = Field(
-        ..., description="Raw client secret — store immediately, shown ONCE only"
-    )
-    active: bool
-    created_at: str
-
-
-class ApiTokenListItem(BaseModel):
-    """Safe list representation — secret is never included."""
-
-    id: UUID
-    name: str
-    client_id: str
-    active: bool
-    last_used_at: str | None
-    expires_at: str | None
-    created_at: str
-
-
-class ApiTokenListResponse(BaseModel):
-    tokens: list[ApiTokenListItem]

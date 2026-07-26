@@ -24,7 +24,7 @@ class AS2PartnershipService:
         self.uow = uow
 
     async def create_as2_partnership(
-        self, tenant_id: int, cmd: CreateAS2PartnershipCmd
+        self, tenant_id: str, cmd: CreateAS2PartnershipCmd
     ) -> PartnerEntity:
         local_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, cmd.local_partner_id)
         if not local_partner:
@@ -57,7 +57,7 @@ class AS2PartnershipService:
         )
 
     async def update_as2_partnership(
-        self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+        self, tenant_id: str, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
     ) -> PartnerEntity:
         check_ids: list[UUID] = []
         if isinstance(cmd.local_partner_id, UUID):
@@ -95,7 +95,7 @@ class AS2PartnershipService:
             status=PartnerStatus.ACTIVE if updated.active else PartnerStatus.INACTIVE,
         )
 
-    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
+    async def delete_as2_partnership(self, tenant_id: str, partnership_id: UUID) -> None:
         logger.info(f"Deleting AS2 partnership {partnership_id} for tenant {tenant_id}")
         await self.uow.as2_partnerships.delete_as2_partnership(tenant_id, partnership_id)
         await self.uow.control_plane_outbox.publish_outbox_event(

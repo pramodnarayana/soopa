@@ -73,7 +73,11 @@ class SqsOutboxAdapter(OutboxPort):
             try:
                 raw_body = json.loads(body_str)
                 # Handle SNS Envelope
-                if "Type" in raw_body and raw_body["Type"] == "Notification" and "Message" in raw_body:
+                if (
+                    "Type" in raw_body
+                    and raw_body["Type"] == "Notification"
+                    and "Message" in raw_body
+                ):
                     body = json.loads(raw_body["Message"])
                 else:
                     body = raw_body
@@ -120,15 +124,17 @@ class SqsOutboxAdapter(OutboxPort):
                 logger.error(f"Failed to get queue URL for {self.queue_name}: {e}")
                 raise
 
-            message_body = json.dumps({
-                "event_type": event_type,
-                "payload": payload,
-            })
+            message_body = json.dumps(
+                {
+                    "event_type": event_type,
+                    "payload": payload,
+                }
+            )
 
             await sqs.send_message(
                 QueueUrl=queue_url,
                 MessageBody=message_body,
-                MessageGroupId=str(tenant_id),
+                MessageGroupId=tenant_id,
                 MessageDeduplicationId=idempotency_key,
             )
             logger.info(f"Published event {event_type} for tenant {tenant_id} to {self.queue_name}")

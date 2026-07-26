@@ -9,14 +9,12 @@ from api.core.services import (
     InboundRouteService,
     OutboundRouteService,
     SFTPPartnerService,
-    WebhookService,
 )
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    CreateWebhookCmd,
     UpdateAS2TradingPartnerCmd,
 )
 
@@ -59,40 +57,35 @@ def sftp_partner_service(mock_uow):
     return SFTPPartnerService(uow=mock_uow)
 
 
-@pytest.fixture
-def webhook_service(mock_uow):
-    return WebhookService(uow=mock_uow)
-
-
 @pytest.mark.asyncio
 async def test_create_as2_partner(as2_partner_service: AS2PartnerService, global_repo):
     cmd = CreateAS2TradingPartnerCmd(name="Test Partner", as2_id="TEST_AS2")
-    partner = await as2_partner_service.create_as2_partner(tenant_id=1, cmd=cmd)
+    partner = await as2_partner_service.create_as2_partner(tenant_id="1", cmd=cmd)
 
     assert partner.type == "AS2"
-    assert partner.tenant_id == 1
+    assert partner.tenant_id == "1"
     assert partner.status == "PROVISIONING"
 
     assert len(global_repo.partners) == 1
     assert len(global_repo.outbox_events) == 1
     assert global_repo.outbox_events[0]["event_type"] == "AS2_PARTNER_CREATED"
-    assert global_repo.outbox_events[0]["tenant_id"] == 1
+    assert global_repo.outbox_events[0]["tenant_id"] == "1"
 
 
 @pytest.mark.asyncio
 async def test_update_and_delete_as2_partner(as2_partner_service: AS2PartnerService, global_repo):
     cmd = CreateAS2TradingPartnerCmd(name="Test Partner", as2_id="TEST_AS2")
-    partner = await as2_partner_service.create_as2_partner(tenant_id=1, cmd=cmd)
+    partner = await as2_partner_service.create_as2_partner(tenant_id="1", cmd=cmd)
 
     # Update
     update_cmd = UpdateAS2TradingPartnerCmd(name="Updated Partner", as2_id="NEW_AS2")
     updated = await as2_partner_service.update_as2_partner(
-        tenant_id=1, partner_id=partner.partner_id, cmd=update_cmd
+        tenant_id="1", partner_id=partner.partner_id, cmd=update_cmd
     )
     assert updated.name == "Updated Partner"
 
     # Delete
-    await as2_partner_service.delete_as2_partner(tenant_id=1, partner_id=partner.partner_id)
+    await as2_partner_service.delete_as2_partner(tenant_id="1", partner_id=partner.partner_id)
     assert len(global_repo.partners) == 0
 
 
@@ -104,23 +97,11 @@ async def test_create_sftp_partner(sftp_partner_service: SFTPPartnerService, glo
         username="user",
         credentials_vault_ref="vault-ref",
     )
-    partner = await sftp_partner_service.create_sftp_partner(tenant_id=1, cmd=cmd)
+    partner = await sftp_partner_service.create_sftp_partner(tenant_id="1", cmd=cmd)
 
     assert partner.type == "SFTP"
     assert partner.status == "INACTIVE"
     assert len(global_repo.sftp_partners) == 1
-
-
-@pytest.mark.asyncio
-async def test_create_webhook(webhook_service: WebhookService, global_repo):
-    cmd = CreateWebhookCmd(
-        name="Webhook Partner", url="https://example.com/webhook", auth_header_vault_ref="vault-ref"
-    )
-    partner = await webhook_service.create_webhook(tenant_id=1, cmd=cmd)
-
-    assert partner.type == "WEBHOOK"
-    assert partner.status == "ACTIVE"
-    assert len(global_repo.webhooks) == 1
 
 
 @pytest.mark.asyncio

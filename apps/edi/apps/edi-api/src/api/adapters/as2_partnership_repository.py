@@ -1,12 +1,13 @@
 import uuid
 from uuid import UUID
 
-from api.domain.models import CreateAS2PartnershipCmd, UnsetType, UpdateAS2PartnershipCmd
-from api.ports.as2_partnership_repository import AS2PartnershipRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import AS2Partner, AS2Partnership
 from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from sqlalchemy import delete, select
+
+from api.domain.models import CreateAS2PartnershipCmd, UnsetType, UpdateAS2PartnershipCmd
+from api.ports.as2_partnership_repository import AS2PartnershipRepositoryPort
 
 
 class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSqlAlchemyRepository):
@@ -24,11 +25,12 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     # The following AS2Partnership methods remain under SqlAlchemyAS2PartnershipRepository which was defined above.
     # We will define a new class for Outbox below.
 
-    async def create_as2_partnership(self, tenant_id: int, cmd: CreateAS2PartnershipCmd) -> UUID:
+    async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> UUID:
+        tid_str = tenant_id
         local_r = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == cmd.local_partner_id,
-                AS2Partner.tenant_id.in_([tenant_id, 0]),
+                AS2Partner.tenant_id.in_([tid_str, "0"]),
             )
         )
         local_partner = local_r.scalar_one_or_none()
@@ -36,7 +38,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         remote_r = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == cmd.remote_partner_id,
-                AS2Partner.tenant_id.in_([tenant_id, 0]),
+                AS2Partner.tenant_id.in_([tid_str, "0"]),
             )
         )
         remote_partner = remote_r.scalar_one_or_none()
@@ -47,7 +49,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         partnership_id = uuid.uuid4()
         record = AS2Partnership(
             id=partnership_id,
-            tenant_id=tenant_id,
+            tenant_id=tid_str,
             name=cmd.name,
             local_partner_id=cmd.local_partner_id,
             remote_partner_id=cmd.remote_partner_id,
@@ -62,11 +64,12 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         return partnership_id
 
     async def update_as2_partnership(
-        self, tenant_id: int, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+        self, tenant_id: str, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
     ) -> None:
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
-                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tenant_id
+                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
             )
         )
         partnership = result.scalar_one_or_none()
@@ -76,7 +79,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     r = await self.session.execute(
                         select(AS2Partner.id).where(
                             AS2Partner.id == cmd.local_partner_id,
-                            AS2Partner.tenant_id.in_([tenant_id, 0]),
+                            AS2Partner.tenant_id.in_([tid_str, "0"]),
                         )
                     )
                     if not r.scalar_one_or_none():
@@ -87,7 +90,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     r = await self.session.execute(
                         select(AS2Partner.id).where(
                             AS2Partner.id == cmd.remote_partner_id,
-                            AS2Partner.tenant_id.in_([tenant_id, 0]),
+                            AS2Partner.tenant_id.in_([tid_str, "0"]),
                         )
                     )
                     if not r.scalar_one_or_none():
@@ -104,32 +107,35 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     setattr(partnership, field.name, value)
         await self.session.flush()
 
-    async def delete_as2_partnership(self, tenant_id: int, partnership_id: UUID) -> None:
+    async def delete_as2_partnership(self, tenant_id: str, partnership_id: UUID) -> None:
+        tid_str = tenant_id
         await self.session.execute(
             delete(AS2Partnership).where(
-                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tenant_id
+                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
             )
         )
         await self.session.flush()
 
     async def get_as2_partnership(
-        self, tenant_id: int, partnership_id: UUID
+        self, tenant_id: str, partnership_id: UUID
     ) -> AS2PartnershipDomainModel | None:
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
-                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tenant_id
+                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
             )
         )
         record = result.scalar_one_or_none()
         return AS2PartnershipDomainModel.model_validate(record) if record else None
 
-    async def get_as2_partners_by_ids(self, tenant_id: int, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
         if not ids:
             return {}
+        tid_str = tenant_id
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),
-                AS2Partner.tenant_id.in_([tenant_id, 0]),
+                AS2Partner.tenant_id.in_([tid_str, "0"]),
             )
         )
         return {row.id: row.name for row in result.all()}

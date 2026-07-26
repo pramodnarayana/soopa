@@ -31,11 +31,11 @@ def mock_uow():
 
 @pytest.fixture
 def client(mock_uow):
-    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    app.dependency_overrides[get_current_tenant_id] = lambda: "0"
     app.dependency_overrides[get_uow] = lambda: mock_uow
     app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "test"}
-    app.dependency_overrides[require_platform_admin] = lambda: True
+    app.dependency_overrides[require_platform_admin] = lambda: "0"
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import { useAuth } from 'react-oidc-context';
+import { useTenantId } from '@/contexts/TenantContext';
+import { useDashboardRepository } from './DashboardContext';
 
 export interface DashboardData {
   id?: string;
@@ -12,19 +12,13 @@ export interface DashboardData {
   rls_enforced_tenant?: string | null;
   [key: string]: unknown;
 }
+
 export function useDashboardData() {
-  const auth = useAuth();
+  const repository = useDashboardRepository();
+  const tenantId = useTenantId();
 
   return useQuery({
-    queryKey: ['me'],
-    queryFn: async (): Promise<DashboardData> => {
-      const response = await axios.get<DashboardData>('/api/me', {
-        headers: {
-          Authorization: `Bearer ${auth.user?.access_token}`,
-        },
-      });
-      return response.data;
-    },
-    enabled: !!auth.user?.access_token,
+    queryKey: ['dashboard_data', tenantId],
+    queryFn: () => repository.getDashboardData(),
   });
 }

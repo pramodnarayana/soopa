@@ -9,11 +9,11 @@ from api.main import app
 
 
 def override_get_current_user_profile():
-    return {"sub": "test-user", "tenant_id": 1}
+    return {"sub": "test-user", "tenant_id": "1"}
 
 
 def override_get_current_tenant_id():
-    return 1
+    return "1"
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def test_explorer_edi_messages(mock_uow):
     response = client.post("/api/v1/explorer/edi-messages", json={"filters": []})
     assert response.status_code == 200
     mock_uow.transactions.explorer_list_edi_messages.assert_called_once_with(
-        tenant_id=1, filters=[], limit=50, offset=0
+        tenant_id="1", filters=[], limit=50, offset=0
     )
 
 
@@ -53,7 +53,7 @@ def test_explorer_edi_json(mock_uow):
     response = client.post("/api/v1/explorer/edi-json", json={"filters": []})
     assert response.status_code == 200
     mock_uow.transactions.explorer_list_edi_json.assert_called_once_with(
-        tenant_id=1, filters=[], limit=50, offset=0
+        tenant_id="1", filters=[], limit=50, offset=0
     )
 
 

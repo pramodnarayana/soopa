@@ -1,12 +1,6 @@
 import uuid
 from uuid import UUID
 
-from api.domain.models import (
-    CreateInboundRouteCmd,
-    UnsetType,
-    UpdateInboundRouteCmd,
-)
-from api.ports.inbound_route_repository import InboundRouteRepositoryPort
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     AS2Partner,
@@ -17,6 +11,13 @@ from database.models.control_plane import (
 from domain.models import InboundRouteDomainModel
 from sqlalchemy import delete, or_, select
 
+from api.domain.models import (
+    CreateInboundRouteCmd,
+    UnsetType,
+    UpdateInboundRouteCmd,
+)
+from api.ports.inbound_route_repository import InboundRouteRepositoryPort
+
 
 class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlchemyRepository):
     def __init__(self, session: GlobalSession) -> None:
@@ -26,7 +27,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     # Routes (Now in Control Plane)
     # ------------------------------------------------------------------------
     async def _validate_inbound_destination(
-        self, tenant_id: int, webhook_id: UUID | None, as2_id: UUID | None, sftp_id: UUID | None
+        self, tenant_id: str, webhook_id: UUID | None, as2_id: UUID | None, sftp_id: UUID | None
     ) -> None:
         destinations = [d for d in (webhook_id, as2_id, sftp_id) if d is not None]
         if len(destinations) != 1:
@@ -48,7 +49,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             result = await self.session.execute(
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
-                    AS2Partner.tenant_id.in_([tenant_id, 0]),
+                    AS2Partner.tenant_id.in_([tenant_id, "0"]),
                 )
             )
             if not result.scalar_one_or_none():
@@ -67,7 +68,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     f"SFTP partner {sftp_id} not found or does not belong to this tenant"
                 )
 
-    async def create_inbound_route(self, tenant_id: int, cmd: CreateInboundRouteCmd) -> UUID:
+    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> UUID:
         await self._validate_inbound_destination(
             tenant_id, cmd.webhook_id, cmd.as2_partner_id, cmd.sftp_partner_id
         )
@@ -93,7 +94,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         return route_id
 
     async def update_inbound_route(
-        self, tenant_id: int, route_id: UUID, cmd: UpdateInboundRouteCmd
+        self, tenant_id: str, route_id: UUID, cmd: UpdateInboundRouteCmd
     ) -> bool:
         result = await self.session.execute(
             select(InboundRoute).where(
@@ -139,7 +140,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         self,
         isa_sender_id: str,
         isa_receiver_id: str,
-        tenant_id: int,
+        tenant_id: str,
         transaction_type: str | None = None,
     ) -> InboundRouteDomainModel | None:
         stmt = select(InboundRoute).where(
@@ -161,13 +162,13 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         record = result.scalars().first()
         return InboundRouteDomainModel.model_validate(record) if record else None
 
-    async def list_inbound_routes(self, tenant_id: int) -> list[InboundRouteDomainModel]:
+    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
         result = await self.session.execute(
             select(InboundRoute).where(InboundRoute.tenant_id == tenant_id)
         )
         return [InboundRouteDomainModel.model_validate(r) for r in result.scalars().all()]
 
-    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> int | None:
+    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         result = await self.session.execute(
             select(InboundRoute.tenant_id).where(
                 InboundRoute.isa_sender_id == isa_sender_id,
@@ -182,9 +183,9 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 f"Ambiguous ISA pair ({isa_sender_id!r} -> {isa_receiver_id!r}) "
                 f"matched {len(unique_tenants)} distinct tenants: {unique_tenants}"
             )
-        return rows[0] if rows else None
+        return str(rows[0]) if rows else None
 
-    async def delete_inbound_route(self, tenant_id: int, route_id: UUID) -> bool:
+    async def delete_inbound_route(self, tenant_id: str, route_id: UUID) -> bool:
         result = await self.session.execute(
             delete(InboundRoute).where(
                 InboundRoute.id == route_id, InboundRoute.tenant_id == tenant_id

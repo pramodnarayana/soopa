@@ -128,7 +128,7 @@ async def test_tenant_resolver_not_found(router: DatabaseRouter):
     """
     resolver = TenantResolver(db_router=router, ttl_secs=300)
     with pytest.raises(ValueError, match="Tenant -999 not found in Global DB"):
-        await resolver.resolve(-999)
+        await resolver.resolve("-999")
 
 
 async def test_process_delivery_no_message(router: DatabaseRouter):
@@ -219,7 +219,6 @@ async def test_main_execution_loop():
         patch("worker.data.main.SqsPublisherAdapter"),
         patch("worker.data.main.poll_sqs_queue", new_callable=AsyncMock),
     ):
-
         await main()
 
         assert mock_create_task.call_count >= 3

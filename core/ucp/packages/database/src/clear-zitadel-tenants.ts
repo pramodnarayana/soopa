@@ -1,5 +1,8 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { getEsmPaths } from './utils/esm-paths.js';
+
+const { __dirname } = getEsmPaths(import.meta.url);
 
 // Try loading .env from package root
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });

@@ -83,7 +83,7 @@ async def test_get_tenant_session_enforces_rls(router: DatabaseRouter) -> None:
     mock_factory.return_value = mock_cm
 
     with patch("database.connection.async_sessionmaker", return_value=mock_factory):
-        async_gen = router.get_tenant_session(123, "shard_1", "postgresql+asyncpg://url")
+        async_gen = router.get_tenant_session("123", "shard_1", "postgresql+asyncpg://url")
         session = await async_gen.__anext__()
 
         assert session == mock_session

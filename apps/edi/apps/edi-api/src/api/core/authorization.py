@@ -9,9 +9,9 @@ class AuthorizationService:
 
     async def get_authorization_profile(
         self,
-        tenant_id: int,
+        tenant_id: str,
         is_platform_admin: bool,
-        current_rls_tenant: int | None,
+        current_rls_tenant: str | None,
         roles: list[str] | None = None,
     ) -> dict[str, Any]:
         """

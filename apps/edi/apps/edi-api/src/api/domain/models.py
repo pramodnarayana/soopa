@@ -34,7 +34,20 @@ class SignatureAlgorithm(StrEnum):
 
 
 class UnsetType:
-    pass
+    def __repr__(self) -> str:
+        return "UNSET"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UnsetType)
+
+    def __hash__(self) -> int:
+        return hash("UNSET")
+
+    def __copy__(self) -> "UnsetType":
+        return self
+
+    def __deepcopy__(self, memo: Any) -> "UnsetType":
+        return self
 
 
 UNSET = UnsetType()
@@ -122,13 +135,6 @@ class UpdateSFTPPartnerCmd:
     active: bool | None | UnsetType = UNSET
     password: str | None | UnsetType = UNSET
     host_key: str | None | UnsetType = UNSET
-
-
-@dataclass(frozen=True)
-class CreateWebhookCmd:
-    name: str
-    url: str
-    auth_header_vault_ref: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +228,7 @@ class UpdateOutboundEdiHeaderCmd:
 @dataclass(frozen=True)
 class PartnerEntity:
     partner_id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     type: ConnectionType
     status: PartnerStatus
@@ -231,7 +237,7 @@ class PartnerEntity:
 @dataclass(frozen=True)
 class RouteEntity:
     route_id: UUID
-    tenant_id: int
+    tenant_id: str
     direction: Direction
 
 
@@ -293,7 +299,7 @@ class ApiTokenEntity:
     """Returned once after creation. client_secret is shown only this time."""
 
     id: UUID
-    tenant_id: int
+    tenant_id: str
     name: str
     client_id: str  # stored plaintext, safe to display in UI
     client_secret: str  # shown once, never stored — only its hash is in DB

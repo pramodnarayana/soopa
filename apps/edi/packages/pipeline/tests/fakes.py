@@ -94,7 +94,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             if "id" not in msg:
                 msg["id"] = uuid.uuid4()
             if "tenant_id" not in msg:
-                msg["tenant_id"] = 1
+                msg["tenant_id"] = "1"
             if "created_at" not in msg:
                 msg["created_at"] = datetime.now(UTC)
             if "updated_at" not in msg:
@@ -209,7 +209,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         return wildcard_match
 
     async def get_outbound_route_by_trading_partner_id(
-        self, trading_partner_id: str, tenant_id: int
+        self, trading_partner_id: str, tenant_id: str | None = None
     ) -> dict[str, Any] | None:
         candidates = [
             r

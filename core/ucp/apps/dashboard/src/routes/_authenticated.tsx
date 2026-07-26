@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
 import { ChevronRight, Clock, LayoutDashboard, LogOut, Network, Users } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
+import { useIsPlatformAdmin } from '@/hooks/useIsPlatformAdmin';
 import { apiClient } from '@/lib/api-client';
 
 export const Route = createFileRoute('/_authenticated')({
@@ -23,8 +24,56 @@ const NavItem = ({ icon: Icon, label, to }: { icon: any; label: string; to: stri
   );
 };
 
+function PlatformSidebar() {
+  return (
+    <>
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">
+        Platform Control
+      </div>
+      <NavItem icon={LayoutDashboard} label="Overview" to="/" />
+
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
+        System Admin
+      </div>
+      <NavItem icon={Network} label="Tenants" to="/tenants" />
+      <NavItem icon={Users} label="Platform Users" to="/users" />
+      <NavItem icon={Clock} label="Scheduler" to="/scheduler" />
+
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
+        Global Settings
+      </div>
+      <NavItem icon={Network} label="EDI Platform" to="/edi/partners" />
+    </>
+  );
+}
+
+function TenantSidebar() {
+  return (
+    <>
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">
+        Overview
+      </div>
+      <NavItem icon={LayoutDashboard} label="Dashboard" to="/" />
+
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
+        EDI Network
+      </div>
+      <NavItem icon={Network} label="EDI Headers" to="/edi/headers" />
+      <NavItem icon={Network} label="Routes" to="/edi/routes" />
+      <NavItem icon={Network} label="Webhooks" to="/edi/webhooks" />
+
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
+        Configuration
+      </div>
+      <NavItem icon={Users} label="Trading Partners" to="/edi/partners" />
+      <NavItem icon={Clock} label="Tools" to="/edi/tools" />
+    </>
+  );
+}
+
 function AuthenticatedLayout() {
   const auth = useAuth();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   // Keep apiClient in sync with auth state
   if (auth.user?.access_token) {
@@ -108,26 +157,7 @@ function AuthenticatedLayout() {
         </div>
 
         <nav className="flex-1 px-4 py-8 flex flex-col gap-1.5 overflow-y-auto">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">
-            Platform Control
-          </div>
-          <NavItem icon={LayoutDashboard} label="Overview" to="/" />
-
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
-            System Admin
-          </div>
-          <NavItem icon={Network} label="Tenants" to="/tenants" />
-          <NavItem icon={Users} label="Platform Users" to="/users" />
-          <NavItem icon={Clock} label="Scheduler" to="/scheduler" />
-
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
-            EDI Domain
-          </div>
-          <NavItem icon={Users} label="Trading Partners" to="/edi/partners" />
-          <NavItem icon={Network} label="EDI Headers" to="/edi/headers" />
-          <NavItem icon={Network} label="Routes" to="/edi/routes" />
-          <NavItem icon={Network} label="Webhooks" to="/edi/webhooks" />
-          <NavItem icon={Network} label="Tools" to="/edi/tools" />
+          {isPlatformAdmin ? <PlatformSidebar /> : <TenantSidebar />}
         </nav>
 
         <div className="p-4 border-t border-slate-200/60">
@@ -137,7 +167,9 @@ function AuthenticatedLayout() {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-sm font-medium text-white truncate">{auth.user?.profile.email}</p>
-              <p className="text-xs text-slate-400 truncate">Platform Admin</p>
+              <p className="text-xs text-slate-400 truncate">
+                {isPlatformAdmin ? 'Platform Admin' : 'Tenant Admin'}
+              </p>
             </div>
             <button
               onClick={() => void auth.signoutRedirect()}

@@ -25,7 +25,7 @@ class SFTPPartnerService:
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def create_sftp_partner(self, tenant_id: int, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
+    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
         partner_id = await self.uow.sftp_partners.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
@@ -44,7 +44,7 @@ class SFTPPartnerService:
         )
 
     async def update_sftp_partner(
-        self, tenant_id: int, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
+        self, tenant_id: str, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
         existing = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)

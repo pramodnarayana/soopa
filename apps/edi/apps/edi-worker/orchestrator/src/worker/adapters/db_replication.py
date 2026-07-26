@@ -31,7 +31,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         self.db_router = db_router
         self.tenant_port = tenant_port
 
-    async def replicate_tenant_configuration(self, tenant_id: int) -> None:
+    async def replicate_tenant_configuration(self, tenant_id: str) -> None:
         """Copy all relevant configuration from Global DB to Tenant DB Shard."""
 
         try:
@@ -58,11 +58,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     f"Failed to replicate tenant {tenant_id}: {e}"
                 ) from e
 
-    async def _do_replicate(self, tenant_id: int, global_session: Any, tenant_session: Any) -> None:
+    async def _do_replicate(self, tenant_id: str, global_session: Any, tenant_session: Any) -> None:
         # --- AS2 Partners ---
         stmt = (
             select(GlobalAS2Partner)
-            .where((GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id == 0))
+            .where((GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id.is_(None)))
             .order_by(GlobalAS2Partner.id)
         )
         tp_result = await global_session.execute(stmt)
@@ -117,7 +117,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             select(GlobalAS2Partnership)
             .where(
                 (GlobalAS2Partnership.tenant_id == tenant_id)
-                | (GlobalAS2Partnership.tenant_id == 0)
+                | (GlobalAS2Partnership.tenant_id.is_(None))
             )
             .order_by(GlobalAS2Partnership.id)
         )
@@ -456,7 +456,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
     async def _sync_deletes(
         self,
-        tenant_id: int,
+        tenant_id: str,
         global_session: Any,
         tenant_session: Any,
         global_model: Any,
@@ -469,7 +469,6 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         if include_shared:
             global_stmt = select(global_model.id).where(
                 (global_model.tenant_id == tenant_id)
-                | (global_model.tenant_id == 0)
                 | (global_model.tenant_id.is_(None))
             )
         global_ids_result = await global_session.execute(global_stmt)

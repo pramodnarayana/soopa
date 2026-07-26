@@ -4,6 +4,7 @@ from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     DateTime,
+    Integer,
     String,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -28,6 +29,14 @@ class OutboxMixin:
     @declared_attr
     def status(cls) -> Mapped[str]:
         return mapped_column(String(50), nullable=False, default="PENDING")
+
+    @declared_attr
+    def attempts(cls) -> Mapped[int]:
+        return mapped_column(Integer, default=0)
+
+    @declared_attr
+    def published_at(cls) -> Mapped[datetime | None]:
+        return mapped_column(DateTime(timezone=True), nullable=True)
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:

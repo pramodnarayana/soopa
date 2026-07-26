@@ -9,6 +9,10 @@ services:
       POSTGRES_USER: edi
       POSTGRES_PASSWORD: edi_password
       POSTGRES_DB: edi_global
+    command:
+    - postgres
+    - -c
+    - wal_level=logical
     ports:
     - 5432:5432
     volumes:

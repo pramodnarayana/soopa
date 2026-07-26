@@ -12,15 +12,15 @@ from api.domain.models import (
 
 class EdiHeaderRepositoryPort(Protocol):
     async def create_outbound_edi_header(
-        self, tenant_id: int, cmd: CreateOutboundEdiHeaderCmd
+        self, tenant_id: str, cmd: CreateOutboundEdiHeaderCmd
     ) -> UUID: ...
     async def update_outbound_edi_header(
-        self, tenant_id: int, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+        self, tenant_id: str, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
     ) -> bool: ...
-    async def delete_outbound_edi_header(self, tenant_id: int, header_id: UUID) -> bool: ...
+    async def delete_outbound_edi_header(self, tenant_id: str, header_id: UUID) -> bool: ...
     async def get_outbound_edi_headers(
-        self, tenant_id: int
+        self, tenant_id: str
     ) -> Sequence[OutboundEdiHeaderDomainModel]: ...
     async def get_outbound_edi_header_by_trading_partner_id(
-        self, tenant_id: int, trading_partner_id: str
+        self, tenant_id: str, trading_partner_id: str
     ) -> OutboundEdiHeaderDomainModel | None: ...

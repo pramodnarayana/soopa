@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from uuid import UUID as PyUUID
 
@@ -34,46 +35,46 @@ class GlobalBase(DeclarativeBase):
 class DatabaseShard(GlobalBase):
     __tablename__ = "database_shards"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     dsn: Mapped[str] = mapped_column(String(1024), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-
 class Tenant(GlobalBase):
     __tablename__ = "tenants"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    shard_id: Mapped[int] = mapped_column(Integer, ForeignKey("database_shards.id"), nullable=False)
+    shard_id: Mapped[str] = mapped_column(String(128), ForeignKey("database_shards.id"), nullable=False)
     tier: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
     allow_private_as2: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     shard_schema: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-
 class User(GlobalBase):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (Index("uq_users_email_lower", text("lower(email)"), unique=True),)
+    __table_args__ = (
+        Index("uq_users_email_lower", text("lower(email)"), unique=True),
+    )
 
 
 class TenantUser(GlobalBase):
     __tablename__ = "tenant_users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False
     )
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
 
@@ -91,8 +92,8 @@ class ApiToken(GlobalBase, TimestampMixin):
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     # client_id: stored in plaintext, used for fast indexed lookup and displayed in UI
@@ -111,8 +112,8 @@ class AS2Partner(GlobalBase, AS2PartnerMixin, TimestampMixin):
 
     __tablename__ = "as2_partners"
 
-    tenant_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
     )  # Null if shared global
     is_local: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -132,8 +133,8 @@ class AS2Partnership(GlobalBase, AS2PartnershipMixin, TimestampMixin):
 
     __tablename__ = "as2_partnerships"
 
-    tenant_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
     )
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
@@ -154,8 +155,8 @@ class ControlPlaneOutbox(GlobalBase, OutboxMixin):
     id: Mapped[PyUUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False
     )
 
     __table_args__ = (
@@ -175,7 +176,7 @@ class SystemAuditLog(GlobalBase):
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
     event: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -191,24 +192,24 @@ class SystemAuditLog(GlobalBase):
 class SFTPPartner(GlobalBase, SFTPPartnerMixin, TimestampMixin):
     __tablename__ = "sftp_partners"
 
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
     )
 
 
 class Webhook(GlobalBase, WebhookMixin, TimestampMixin):
     __tablename__ = "webhooks"
 
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
     )
 
 
 class InboundRoute(GlobalBase, InboundRouteMixin, TimestampMixin):
     __tablename__ = "inbound_routes"
 
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
     )
 
     webhook_id: Mapped[PyUUID | None] = mapped_column(
@@ -234,15 +235,15 @@ class InboundRoute(GlobalBase, InboundRouteMixin, TimestampMixin):
             "transaction_type",
             unique=True,
             postgresql_where=text("active = true"),
-        ),
+        )
     )
 
 
 class OutboundRoute(GlobalBase, OutboundRouteMixin, TimestampMixin):
     __tablename__ = "outbound_routes"
 
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
     )
 
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
@@ -270,8 +271,8 @@ class OutboundRoute(GlobalBase, OutboundRouteMixin, TimestampMixin):
 class OutboundEdiHeader(GlobalBase, OutboundEdiHeaderMixin, TimestampMixin):
     __tablename__ = "outbound_edi_headers"
 
-    tenant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
     )
 
     __table_args__ = (

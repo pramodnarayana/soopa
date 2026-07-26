@@ -30,7 +30,7 @@ async def test_get_edi_message_success() -> None:
 
     mock_record = EdiMessage()
     mock_record.id = uuid.uuid4()
-    mock_record.tenant_id = 1
+    mock_record.tenant_id = "1"
     mock_record.trace_id = uuid.uuid4()
     mock_record.edi_data = "s3://foo"
     mock_record.direction = MessageDirection.INBOUND

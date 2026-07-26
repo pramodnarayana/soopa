@@ -15,7 +15,7 @@ def fake_uow():
 @pytest.fixture
 def client(fake_uow):
     app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
-    app.dependency_overrides[get_current_tenant_id] = lambda: 1
+    app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

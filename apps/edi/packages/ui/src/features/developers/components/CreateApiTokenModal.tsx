@@ -1,5 +1,6 @@
 import { Key } from 'lucide-react';
 import { useState } from 'react';
+import { useTenantId } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,11 +18,12 @@ import type { ApiTokenCreated } from '../types';
 import { TokenCredentialsModal } from './TokenCredentialsModal';
 
 export function CreateApiTokenModal() {
+  const tenantId = useTenantId();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [createdToken, setCreatedToken] = useState<ApiTokenCreated | null>(null);
 
-  const createMutation = useCreateApiTokenMutation();
+  const createMutation = useCreateApiTokenMutation(tenantId);
 
   const handleCreate = async () => {
     if (!name.trim()) return;

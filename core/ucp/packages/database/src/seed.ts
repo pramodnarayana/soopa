@@ -8,6 +8,9 @@ import {
   NotificationChannel,
   notificationTemplates,
 } from './index.js';
+import { getEsmPaths } from './utils/esm-paths.js';
+
+const { __dirname } = getEsmPaths(import.meta.url);
 
 // Try loading .env from current directory, else fallback
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });

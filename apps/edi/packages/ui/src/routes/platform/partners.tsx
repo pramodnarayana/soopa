@@ -1,4 +1,3 @@
-import { createFileRoute } from '@tanstack/react-router';
 import { Server } from 'lucide-react';
 import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable';
 import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal';
@@ -8,15 +7,15 @@ import {
 } from '@/features/partners/context/PlatformPartnersContext';
 import type { AS2Partner } from '@/features/partners/types';
 
-export const Route = createFileRoute('/platform/partners')({
-  component: () => (
-    <PlatformPartnersProvider>
-      <TradingPartnersPage />
-    </PlatformPartnersProvider>
-  ),
-});
-
 export function TradingPartnersPage() {
+  return (
+    <PlatformPartnersProvider>
+      <TradingPartnersPageContent />
+    </PlatformPartnersProvider>
+  );
+}
+
+function TradingPartnersPageContent() {
   const { partners, isLoading, error } = usePlatformPartners();
 
   const localPartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && p.is_local);

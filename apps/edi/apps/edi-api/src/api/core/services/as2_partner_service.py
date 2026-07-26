@@ -24,7 +24,7 @@ class AS2PartnerService:
         self.uow = uow
 
     async def create_as2_partner(
-        self, tenant_id: int, cmd: CreateAS2TradingPartnerCmd
+        self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
@@ -44,7 +44,7 @@ class AS2PartnerService:
         )
 
     async def update_as2_partner(
-        self, tenant_id: int, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
+        self, tenant_id: str, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
     ) -> PartnerEntity:
         logger.info(f"Updating AS2 partner {partner_id} for tenant {tenant_id}")
         await self.uow.as2_partners.update_as2_identity(tenant_id, partner_id, cmd)
@@ -67,7 +67,7 @@ class AS2PartnerService:
             status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
         )
 
-    async def delete_as2_partner(self, tenant_id: int, partner_id: UUID) -> None:
+    async def delete_as2_partner(self, tenant_id: str, partner_id: UUID) -> None:
         logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
         await self.uow.as2_partners.delete_as2_identity(tenant_id, partner_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
@@ -78,7 +78,7 @@ class AS2PartnerService:
 
     async def rotate_certificates(
         self,
-        tenant_id: int,
+        tenant_id: str,
         partner_id: UUID,
         new_public_cert: str,
         new_private_key_vault_ref: str | None,

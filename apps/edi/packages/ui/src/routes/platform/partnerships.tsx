@@ -1,4 +1,3 @@
-import { createFileRoute } from '@tanstack/react-router';
 import { Network } from 'lucide-react';
 import { CreatePartnershipModal } from '@/features/partners/components/CreatePartnershipModal';
 import { PartnershipsTable } from '@/features/partners/components/PartnershipsTable';
@@ -7,15 +6,15 @@ import {
   usePlatformPartners,
 } from '@/features/partners/context/PlatformPartnersContext';
 
-export const Route = createFileRoute('/platform/partnerships')({
-  component: () => (
-    <PlatformPartnersProvider>
-      <PartnershipsPage />
-    </PlatformPartnersProvider>
-  ),
-});
-
 export function PartnershipsPage() {
+  return (
+    <PlatformPartnersProvider>
+      <PartnershipsPageContent />
+    </PlatformPartnersProvider>
+  );
+}
+
+function PartnershipsPageContent() {
   const { partners, partnerships, isLoading } = usePlatformPartners();
 
   return (

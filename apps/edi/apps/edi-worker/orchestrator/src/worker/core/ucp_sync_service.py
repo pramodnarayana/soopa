@@ -30,7 +30,7 @@ class UcpSyncWorkerService:
         }
 
     async def _handle_tenant_provisioned(self, payload: dict[str, Any]) -> None:
-        tenant_id = int(payload["id"])
+        tenant_id = str(payload["id"])
         name = payload["name"]
 
         logger.info(f"Syncing tenant {tenant_id} from UCP into EDI Global")
@@ -42,16 +42,21 @@ class UcpSyncWorkerService:
         # 2. Drop a message into the local EDI outbox (edi.tenant.sync.fifo)
         # This delegates the shard replication to the existing provision worker.
         logger.info(f"Dispatching internal provisioning sync for tenant {tenant_id}")
+        from worker.core.schemas import DISCRIMINATOR_FIELD, ProvisionTarget
+
         await self.sync_outbox_port.publish_event(
             event_type="tenant.sync",
-            payload={"tenant_id": tenant_id},
+            payload={
+                DISCRIMINATOR_FIELD: ProvisionTarget.PROVISION_TENANT.value,
+                "tenant_id": tenant_id,
+            },
             idempotency_key=f"sync_tenant_{tenant_id}",
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
         )
 
     async def _handle_api_key_created(self, payload: dict[str, Any]) -> None:
         client_id = payload["id"]
-        tenant_id = int(payload["tenantId"])
+        tenant_id = str(payload["tenantId"])
         name = payload["name"]
         key_hash = payload["keyHash"]
 
@@ -60,10 +65,7 @@ class UcpSyncWorkerService:
         # API Keys only reside in the global database for authentication by the edi-api.
         # They are not replicated to shards.
         await self.api_token_port.create_api_token(
-            tenant_id=tenant_id,
-            name=name,
-            client_id=client_id,
-            key_hash=key_hash
+            tenant_id=tenant_id, name=name, client_id=client_id, key_hash=key_hash
         )
 
     async def process_messages(self) -> None:

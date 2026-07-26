@@ -42,7 +42,7 @@ class OutboundEdiHeaderItem(BaseModel):
 
 @router.get("", response_model=list[OutboundEdiHeaderItem], status_code=status.HTTP_200_OK)
 async def list_edi_headers(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -57,7 +57,7 @@ async def list_edi_headers(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_edi_header(
     request: CreateOutboundEdiHeaderRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -90,7 +90,7 @@ async def create_edi_header(
 async def update_edi_header(
     header_id: UUID,
     request: UpdateOutboundEdiHeaderRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """
@@ -126,7 +126,7 @@ async def update_edi_header(
 @router.delete("/{header_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_edi_header(
     header_id: UUID,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
     """

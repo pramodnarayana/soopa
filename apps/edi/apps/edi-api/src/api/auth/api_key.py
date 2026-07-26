@@ -33,7 +33,7 @@ _client_secret_header = APIKeyHeader(name="X-Client-Secret", auto_error=False)
 # In-process cache: { client_id → (tenant_id, secret_hash) }
 # Short-circuits the DB lookup for repeated calls within the same process.
 # Tokens are evicted on revocation via invalidate_token_cache().
-_token_cache: dict[str, tuple[int, str]] = {}
+_token_cache: dict[str, tuple[str, str]] = {}
 _MAX_CACHE_SIZE = 5000
 
 
@@ -41,7 +41,7 @@ async def get_tenant_id_from_api_key(
     client_id: str | None = Security(_client_id_header),
     client_secret: str | None = Security(_client_secret_header),
     global_session: GlobalSession = Depends(get_global_session),  # noqa: B008
-) -> int:
+) -> str:
     """
     Resolves a two-part API credential to a tenant_id.
 

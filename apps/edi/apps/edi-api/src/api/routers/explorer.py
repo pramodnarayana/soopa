@@ -109,7 +109,7 @@ def _serialize_edi_json(j: Any) -> dict[str, Any]:
 @router.post("/edi-messages", response_model=ExplorerResponse, status_code=status.HTTP_200_OK)
 async def explore_edi_messages(
     req: ExplorerRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -128,7 +128,7 @@ async def explore_edi_messages(
 @router.post("/edi-json", response_model=ExplorerResponse, status_code=status.HTTP_200_OK)
 async def explore_edi_json(
     req: ExplorerRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),

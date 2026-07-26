@@ -33,7 +33,6 @@ from api.routers import (
 from api.routers import (
     platform as platform_admin,
 )
-from api.routers.developers import api_tokens
 from api.routers.trading_partners import as2_receive, platform
 
 logger = logging.getLogger(__name__)
@@ -107,14 +106,13 @@ app.include_router(edi_headers.router)
 app.include_router(edi_tools.router)
 app.include_router(as2_receive.router, prefix="/api/v1")
 app.include_router(edi_json.router)
-app.include_router(api_tokens.router)
 app.include_router(transactions.router)
 app.include_router(explorer.router)
 
 
 @app.get("/api/me", tags=["Identity"])
 async def get_me(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_tenant_session),
     profile: dict[str, Any] = Depends(get_current_user_profile),
 ) -> Any:
@@ -125,7 +123,7 @@ async def get_me(
     rls_result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
     current_rls_tenant = rls_result.scalar()
 
-    if str(current_rls_tenant) != str(tenant_id):
+    if str(current_rls_tenant) != tenant_id:
         raise HTTPException(status_code=403, detail="RLS context mismatch. Unauthorized access.")
 
     return profile

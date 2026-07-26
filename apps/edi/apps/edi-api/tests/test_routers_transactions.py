@@ -12,11 +12,11 @@ from api.main import app
 
 
 def override_get_current_user_profile():
-    return {"sub": "test-user", "tenant_id": 1}
+    return {"sub": "test-user", "tenant_id": "1"}
 
 
 def override_get_current_tenant_id():
-    return 1
+    return "1"
 
 
 def _make_mock_msg() -> MagicMock:

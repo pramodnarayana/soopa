@@ -34,7 +34,7 @@ async def _get_client_key_from_vault(vault_ref: str, vault_port: VaultPort) -> s
 @router.post("/sftp/test", response_model=TestConnectionResponse, status_code=status.HTTP_200_OK)
 async def test_sftp_connection(
     request: TestSFTPConnectionRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
     vault_port: VaultPort = Depends(get_vault),
 ) -> Any:
@@ -71,7 +71,7 @@ async def test_sftp_connection(
 async def test_existing_sftp_connection(
     partner_id: UUID,
     request: TestSFTPConnectionRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
     vault_port: VaultPort = Depends(get_vault),
@@ -122,7 +122,7 @@ async def test_existing_sftp_connection(
 @router.post("/sftp", response_model=PartnerResponse, status_code=status.HTTP_201_CREATED)
 async def create_sftp_partner(
     request: CreateSFTPPartnerRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
@@ -183,7 +183,7 @@ async def create_sftp_partner(
 async def update_sftp_partner(
     partner_id: UUID,
     request: UpdateSFTPPartnerRequest,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
@@ -224,7 +224,7 @@ async def update_sftp_partner(
 @router.delete("/sftp/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sftp_partner(
     partner_id: UUID,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> None:
     """Deletes an SFTP partner."""

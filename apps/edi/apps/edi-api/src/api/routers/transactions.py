@@ -36,7 +36,7 @@ class TransactionThreadResponse(BaseModel):
 
 @router.get("", response_model=TransactionListResponse)
 async def list_transactions(
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -81,7 +81,7 @@ async def list_transactions(
 async def get_transaction_thread(
     key: str = Query(..., description="Business metadata key (e.g. shipment_id)"),
     value: str = Query(..., description="Business metadata value (e.g. 12345)"),
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> TransactionThreadResponse:
     """
@@ -110,7 +110,7 @@ async def get_transaction_thread(
 @router.get("/{trace_id}", response_model=TransactionDetailResponse)
 async def get_transaction(
     trace_id: UUID,
-    tenant_id: int = Depends(get_current_tenant_id),
+    tenant_id: str = Depends(get_current_tenant_id),
     uow: UnitOfWork = Depends(get_tenant_uow),
 ) -> TransactionDetailResponse:
     """
