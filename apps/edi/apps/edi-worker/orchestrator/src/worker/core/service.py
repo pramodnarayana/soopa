@@ -28,7 +28,7 @@ class ProvisioningWorkerService:
             if tenant_id is None:
                 raise PermanentProvisioningError("Missing tenant_id in provision event payload")
 
-            if tenant_id == "0":
+            if str(tenant_id) == "0":
                 logger.info(
                     f"Processing GLOBAL provision event {event.id} (tenant_id=0). Broadcasting to all tenants."
                 )
