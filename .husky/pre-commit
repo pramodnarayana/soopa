@@ -1,2 +1,36 @@
+#!/bin/sh
+export DATABASE_URL="postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
+export SHARD_1_URL="postgresql://edi:edi_password@localhost:5433/edi_shard_1"
+
+echo "[pre-commit] Checking if database is running..."
+if ! docker ps | grep -q "postgres_global"; then
+  echo "ERROR: Local database is not running. Please start it to run local tests."
+  echo "Run: docker compose up -d postgres_global edi_postgres_shard_1 --wait"
+  exit 1
+fi
+
+echo "[pre-commit] Running formatting..."
 npx lint-staged
 uvx pre-commit run
+
+echo "[pre-commit] Running typechecks..."
+pnpm turbo typecheck
+pnpm turbo typecheck:tests
+
+echo "[pre-commit] Running lint..."
+pnpm turbo lint
+
+echo "[pre-commit] Running Node tests..."
+CI=true pnpm turbo test
+
+echo "[pre-commit] Running Python tests..."
+export DATABASE_URL="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+export SHARD_1_URL="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/* apps/edi/apps/edi-worker/*; do
+  if [ -f "$d/pyproject.toml" ]; then
+    (cd "$d" && uv run pytest || [ $? -eq 5 ]) || exit 1
+  fi
+done
+
+echo "[pre-commit] Running build..."
+pnpm turbo build

@@ -11,7 +11,10 @@ from worker.core.tenant_resolver import TenantResolver
 from worker.data.handlers import process_pipeline_event
 
 GLOBAL_DB_URL = os.getenv(
-    "DB_GLOBAL_URL", "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"
+    "DB_GLOBAL_URL",
+    os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+    ),
 )
 SHARD_1_URL = os.getenv(
     "DB_SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"

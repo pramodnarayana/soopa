@@ -69,9 +69,11 @@ export class ZitadelAuthService {
           // If roles are missing from the access token, fetch them from the standard OIDC UserInfo endpoint
           if (
             !jwtPayload['urn:zitadel:iam:org:project:roles'] &&
-            !jwtPayload[`urn:zitadel:iam:org:project:id:${process.env.ZITADEL_UCP_PROJECT_ID}:roles`]
+            !jwtPayload[
+              `urn:zitadel:iam:org:project:id:${process.env.ZITADEL_UCP_PROJECT_ID}:roles`
+            ]
           ) {
-            const jti = jwtPayload['jti'] as string | undefined;
+            const jti = jwtPayload['jti'];
             if (jti) {
               // Check cache first
               const cached = this.userinfoCache.get(jti);
@@ -115,9 +117,9 @@ export class ZitadelAuthService {
                 }
                 resolve(jwtPayload);
               })
-              .catch((e) => {
+              .catch((e: unknown) => {
                 clearTimeout(timeoutId);
-                if (e.name === 'AbortError') {
+                if (e instanceof Error && e.name === 'AbortError') {
                   console.error('Userinfo request timed out after 5 seconds');
                 } else {
                   console.error('Failed to fetch userinfo request', e);
