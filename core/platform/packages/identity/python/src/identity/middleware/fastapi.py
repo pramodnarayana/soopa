@@ -7,7 +7,9 @@ from identity.domain.identity_context import IdentityContext
 from identity.ports.token_verifier import TokenVerifier
 
 
-def identity_dependency(token_verifier: TokenVerifier) -> Callable[[str | None], Awaitable[IdentityContext]]:
+def identity_dependency(
+    token_verifier: TokenVerifier,
+) -> Callable[[str | None], Awaitable[IdentityContext]]:
     async def dependency(authorization: str | None = Header(default=None)) -> IdentityContext:
         try:
             return await authenticate_bearer_token(authorization, token_verifier)

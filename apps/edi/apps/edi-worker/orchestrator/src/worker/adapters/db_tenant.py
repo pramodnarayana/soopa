@@ -49,15 +49,16 @@ class SqlAlchemyTenantAdapter(TenantPort):
         try:
             # For MVP, default all new tenants to shard_1
             # In the future, a shard balancer will assign this
-            stmt = insert(Tenant).values(
-                id=tenant_id,
-                name=name,
-                shard_id="shard_1",
-                tier="standard",
-                shard_schema=f"tenant_{tenant_id}"
-            ).on_conflict_do_update(
-                index_elements=['id'],
-                set_={"name": name}
+            stmt = (
+                insert(Tenant)
+                .values(
+                    id=tenant_id,
+                    name=name,
+                    shard_id="shard_1",
+                    tier="standard",
+                    shard_schema=f"tenant_{tenant_id}",
+                )
+                .on_conflict_do_update(index_elements=["id"], set_={"name": name})
             )
             await global_session.execute(stmt)
             await global_session.commit()

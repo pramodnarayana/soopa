@@ -72,7 +72,6 @@ async def test_attach_identity_to_request(
     )
     mock_authenticate.return_value = mock_context
 
-
     mock_request = MagicMock()
     mock_request.headers.get.return_value = "Bearer valid"
 

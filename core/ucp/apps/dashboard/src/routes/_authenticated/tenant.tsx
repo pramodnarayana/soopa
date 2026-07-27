@@ -6,9 +6,21 @@ export const Route = createFileRoute('/_authenticated/tenant')({
   component: TenantLayout,
 });
 
-const NavItem = ({ icon: Icon, label, to, exact }: { icon: any; label: string; to: string; exact?: boolean }) => {
+const NavItem = ({
+  icon: Icon,
+  label,
+  to,
+  exact,
+}: {
+  icon: any;
+  label: string;
+  to: string;
+  exact?: boolean;
+}) => {
   const location = useLocation();
-  const active = exact ? location.pathname === to : (location.pathname === to || location.pathname.startsWith(`${to}/`));
+  const active = exact
+    ? location.pathname === to
+    : location.pathname === to || location.pathname.startsWith(`${to}/`);
   return (
     <Link
       to={to}

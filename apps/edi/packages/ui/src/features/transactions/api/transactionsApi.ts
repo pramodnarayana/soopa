@@ -10,11 +10,13 @@ import type {
 export const transactionsKeys = {
   all: (tenantId: string) => ['transactions', tenantId] as const,
   lists: (tenantId: string) => [...transactionsKeys.all(tenantId), 'list'] as const,
-  list: (tenantId: string, params: Record<string, unknown>) => [...transactionsKeys.lists(tenantId), params] as const,
+  list: (tenantId: string, params: Record<string, unknown>) =>
+    [...transactionsKeys.lists(tenantId), params] as const,
   details: (tenantId: string) => [...transactionsKeys.all(tenantId), 'detail'] as const,
   detail: (tenantId: string, id: string) => [...transactionsKeys.details(tenantId), id] as const,
   threads: (tenantId: string) => [...transactionsKeys.all(tenantId), 'thread'] as const,
-  thread: (tenantId: string, key: string, value: string) => [...transactionsKeys.threads(tenantId), key, value] as const,
+  thread: (tenantId: string, key: string, value: string) =>
+    [...transactionsKeys.threads(tenantId), key, value] as const,
 };
 
 export function useTransactions(params: {

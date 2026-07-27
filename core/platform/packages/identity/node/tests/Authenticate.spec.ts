@@ -62,7 +62,11 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.users['existing@example.com'] = { id: 'u2', name: 'Existing User DB', email: 'existing@example.com' } satisfies UserData;
+    repo.users['existing@example.com'] = {
+      id: 'u2',
+      name: 'Existing User DB',
+      email: 'existing@example.com',
+    } satisfies UserData;
     repo.mappings['u2'] = 't2';
 
     const useCase = new AuthenticateUseCase(verifier, repo);
@@ -86,7 +90,11 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.users['no-tenant@example.com'] = { id: 'u3', name: 'User 3', email: 'no-tenant@example.com' } satisfies UserData;
+    repo.users['no-tenant@example.com'] = {
+      id: 'u3',
+      name: 'User 3',
+      email: 'no-tenant@example.com',
+    } satisfies UserData;
     // No mapping set
 
     const useCase = new AuthenticateUseCase(verifier, repo);

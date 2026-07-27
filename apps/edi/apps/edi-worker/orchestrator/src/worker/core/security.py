@@ -67,7 +67,15 @@ def _patched_getaddrinfo(
     type: int = 0,
     proto: int = 0,
     flags: int = 0,
-) -> list[tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int] | tuple[str, int, int, int] | tuple[int, bytes]]]:
+) -> list[
+    tuple[
+        socket.AddressFamily,
+        socket.SocketKind,
+        int,
+        str,
+        tuple[str, int] | tuple[str, int, int, int] | tuple[int, bytes],
+    ]
+]:
     override = _override_dns.get()
     if override and host == override[0]:
         return _orig_getaddrinfo(override[1], port, family, type, proto, flags)

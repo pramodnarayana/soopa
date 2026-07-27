@@ -29,7 +29,10 @@ class HttpWebhooksRepository {
       if (!res.ok) {
         let errMessage = 'API Request Failed';
         try {
-          const errData = (await res.json()) as { message?: string | Array<string>; detail?: string };
+          const errData = (await res.json()) as {
+            message?: string | Array<string>;
+            detail?: string;
+          };
           errMessage = errData.message
             ? Array.isArray(errData.message)
               ? errData.message[0]
@@ -44,16 +47,17 @@ class HttpWebhooksRepository {
       if (res.status === 204) {
         return null as unknown as T;
       }
-      return await res.json() as T;
+      return (await res.json()) as T;
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
   async getTenantWebhooks(): Promise<Webhook[]> {
-    const rawWebhooks = await this.fetchApi<
-      Array<{ id: string; name: string; url: string; active: boolean; createdAt: string }>
-    >('/webhooks');
+    const rawWebhooks =
+      await this.fetchApi<
+        Array<{ id: string; name: string; url: string; active: boolean; createdAt: string }>
+      >('/webhooks');
     return rawWebhooks.map((w) => ({
       id: w.id,
       name: w.name,

@@ -72,5 +72,7 @@ def test_requires_permission_decorator_missing_identity() -> None:
     def my_handler() -> str:
         return "success"
 
-    with pytest.raises(TypeError, match="requires_permission expects an IdentityContext keyword argument"):
+    with pytest.raises(
+        TypeError, match="requires_permission expects an IdentityContext keyword argument"
+    ):
         my_handler()

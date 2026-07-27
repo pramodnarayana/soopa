@@ -24,6 +24,7 @@ def test_identity_context_from_claims_creates_valid_context() -> None:
     assert context.claims["extra_claim"] == "some-value"
     assert context.claims["iss"] == "https://auth.soopa.io"
 
+
 def test_token_claims_defaults() -> None:
     claims = TokenClaims(
         sub="user-123",

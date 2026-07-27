@@ -8,5 +8,5 @@ from enum import Enum
 
 
 class EventType(Enum):
-    tenant_provisioned = 'tenant.provisioned'
-    api_key_created = 'api_key.created'
+    tenant_provisioned = "tenant.provisioned"
+    api_key_created = "api_key.created"

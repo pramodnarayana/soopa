@@ -1,5 +1,5 @@
-import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
+import * as dotenv from 'dotenv';
 import * as path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);

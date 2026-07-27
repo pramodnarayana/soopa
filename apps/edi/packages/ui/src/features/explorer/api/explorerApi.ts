@@ -5,8 +5,10 @@ import type { ExplorerEdiJson, ExplorerEdiMessage, ExplorerResponse, FilterRule 
 
 export const explorerKeys = {
   all: (tenantId: string) => ['explorer', tenantId] as const,
-  messages: (tenantId: string, filters: FilterRule[]) => [...explorerKeys.all(tenantId), 'messages', filters] as const,
-  json: (tenantId: string, filters: FilterRule[]) => [...explorerKeys.all(tenantId), 'json', filters] as const,
+  messages: (tenantId: string, filters: FilterRule[]) =>
+    [...explorerKeys.all(tenantId), 'messages', filters] as const,
+  json: (tenantId: string, filters: FilterRule[]) =>
+    [...explorerKeys.all(tenantId), 'json', filters] as const,
 };
 
 export function useExplorerQuery<T>(

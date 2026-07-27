@@ -42,7 +42,9 @@ def edi_to_json(
     )
 
     if raw_edi is not None:
-        ta_info["raw_edi"] = cast(str, raw_edi)  # vendored domain accepts bytes|str; annotated as str
+        ta_info["raw_edi"] = cast(
+            str, raw_edi
+        )  # vendored domain accepts bytes|str; annotated as str
     else:
         ta_info["filename"] = cast(str, edi_file_path)  # narrowed: edi_file_path is str here
 

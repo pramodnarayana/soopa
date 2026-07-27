@@ -1,6 +1,5 @@
 import { Key } from 'lucide-react';
 import { useState } from 'react';
-import { useTenantId } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useTenantId } from '@/contexts/TenantContext';
 import { useCreateApiTokenMutation } from '../api/apiTokenHooks';
 import type { ApiTokenCreated } from '../types';
 import { TokenCredentialsModal } from './TokenCredentialsModal';

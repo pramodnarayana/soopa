@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
-import { useToastMutation } from '@/hooks/use-toast-mutation';
 import { UCP_API_URL } from '@/config/ucp';
+import { useToastMutation } from '@/hooks/use-toast-mutation';
 import type { CreateApiTokenPayload } from '../types';
 import { createApiTokenRepository } from './apiTokensApi';
 
@@ -12,11 +12,7 @@ export const apiTokenKeys = {
 
 function useRepository(tenantId: string) {
   const auth = useAuth();
-  return createApiTokenRepository(
-    auth.user?.access_token ?? '',
-    tenantId,
-    UCP_API_URL,
-  );
+  return createApiTokenRepository(auth.user?.access_token ?? '', tenantId, UCP_API_URL);
 }
 
 export function useApiTokensQuery(tenantId: string) {

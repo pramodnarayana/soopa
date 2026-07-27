@@ -9,11 +9,9 @@ from pydantic import BaseModel, Field
 
 class ApiKeyProvisioned(BaseModel):
     id: str = Field(
-        ..., description='The unique identifier of the API Key (also used as client_id)'
+        ..., description="The unique identifier of the API Key (also used as client_id)"
     )
-    tenantId: str = Field(..., description='The ID of the tenant that owns this key')
-    name: str = Field(..., description='The human-readable name of the API key')
-    keyHash: str = Field(..., description='The SHA-256 hashed secret of the API key')
-    scopes: list[str] | None = Field(
-        None, description='List of authorized scopes for this API key'
-    )
+    tenantId: str = Field(..., description="The ID of the tenant that owns this key")
+    name: str = Field(..., description="The human-readable name of the API key")
+    keyHash: str = Field(..., description="The SHA-256 hashed secret of the API key")
+    scopes: list[str] | None = Field(None, description="List of authorized scopes for this API key")

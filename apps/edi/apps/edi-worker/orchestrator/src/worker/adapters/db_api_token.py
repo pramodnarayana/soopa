@@ -17,13 +17,17 @@ class SqlAlchemyApiTokenAdapter(ApiTokenPort):
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
         try:
-            stmt = insert(ApiToken).values(
-                tenant_id=tenant_id,
-                name=name,
-                client_id=client_id,
-                client_secret=key_hash,
-                active=True
-            ).on_conflict_do_nothing(index_elements=['client_id'])
+            stmt = (
+                insert(ApiToken)
+                .values(
+                    tenant_id=tenant_id,
+                    name=name,
+                    client_id=client_id,
+                    client_secret=key_hash,
+                    active=True,
+                )
+                .on_conflict_do_nothing(index_elements=["client_id"])
+            )
 
             await global_session.execute(stmt)
             await global_session.commit()

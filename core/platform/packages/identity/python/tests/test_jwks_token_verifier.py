@@ -22,15 +22,15 @@ def verifier(options: ZitadelTokenVerifierOptions) -> ZitadelTokenVerifier:
 
 
 @pytest.mark.asyncio
-
 @patch("identity.adapters.outbound.zitadel.jwks_token_verifier.jwt.decode")
 async def test_verify_valid_token(
     mock_jwt_decode: MagicMock,
     options: ZitadelTokenVerifierOptions,
 ) -> None:
     # We patch PyJWKClient on the module level before instantiating
-    with patch("identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient") as mock_jwk_client_cls:
-
+    with patch(
+        "identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient"
+    ) as mock_jwk_client_cls:
         mock_jwk_client = mock_jwk_client_cls.return_value
         mock_signing_key = MagicMock()
         mock_signing_key.key = "test-key"
@@ -43,7 +43,7 @@ async def test_verify_valid_token(
             "iss": "https://auth.example.com",
             "aud": "my-api",
             "exp": 1700000000,
-            "tenant_id": "tenant-abc"
+            "tenant_id": "tenant-abc",
         }
 
         claims = await verifier.verify("fake.jwt.token")
@@ -58,4 +58,3 @@ async def test_verify_valid_token(
             issuer="https://auth.example.com",
         )
         mock_jwk_client.get_signing_key_from_jwt.assert_called_once_with("fake.jwt.token")
-

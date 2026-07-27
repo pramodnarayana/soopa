@@ -62,7 +62,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         # --- AS2 Partners ---
         stmt = (
             select(GlobalAS2Partner)
-            .where((GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id.is_(None)))
+            .where(
+                (GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id.is_(None))
+            )
             .order_by(GlobalAS2Partner.id)
         )
         tp_result = await global_session.execute(stmt)
@@ -468,8 +470,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         # Special handling for global models (tenant_id = 0 or NULL)
         if include_shared:
             global_stmt = select(global_model.id).where(
-                (global_model.tenant_id == tenant_id)
-                | (global_model.tenant_id.is_(None))
+                (global_model.tenant_id == tenant_id) | (global_model.tenant_id.is_(None))
             )
         global_ids_result = await global_session.execute(global_stmt)
         global_ids = set(global_ids_result.scalars().all())

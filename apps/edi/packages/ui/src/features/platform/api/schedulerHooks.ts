@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type { ConfigResponse, JobResponse } from './schedulerApi';
 
-
 export function useJobsQuery() {
   const api = useEdiNetwork();
   return useQuery({
@@ -32,7 +31,10 @@ export function useUpdateConfigMutation() {
 
   return useMutation({
     mutationFn: async ({ key, value }: { key: string; value: unknown }) => {
-      const res = await api.put<ConfigResponse>(`/platform/scheduler/config/${encodeURIComponent(key)}`, { value });
+      const res = await api.put<ConfigResponse>(
+        `/platform/scheduler/config/${encodeURIComponent(key)}`,
+        { value },
+      );
       return res.data;
     },
     onSuccess: () => {
@@ -58,7 +60,10 @@ export function useUpdateJobMutation() {
         status?: string;
       };
     }) => {
-      const res = await api.put<JobResponse>(`/platform/scheduler/jobs/${encodeURIComponent(name)}`, data);
+      const res = await api.put<JobResponse>(
+        `/platform/scheduler/jobs/${encodeURIComponent(name)}`,
+        data,
+      );
       return res.data;
     },
 

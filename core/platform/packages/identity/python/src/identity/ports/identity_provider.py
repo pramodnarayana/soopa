@@ -12,5 +12,4 @@ class UserProfile(BaseModel):
 
 
 class IdentityProvider(Protocol):
-    async def get_user_profile(self, identity: IdentityContext) -> UserProfile:
-        ...
+    async def get_user_profile(self, identity: IdentityContext) -> UserProfile: ...

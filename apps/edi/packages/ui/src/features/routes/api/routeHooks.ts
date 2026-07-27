@@ -8,7 +8,6 @@ import type {
   UpdateRoutePayload,
 } from '../types';
 
-
 export function useRoutesQuery() {
   const api = useEdiNetwork();
   const tenantId = useTenantId();

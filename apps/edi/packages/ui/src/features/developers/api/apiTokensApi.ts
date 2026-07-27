@@ -48,7 +48,7 @@ class HttpApiTokenRepository {
         throw new Error(errorMessage || `HTTP ${res.status}`);
       }
       if (res.status === 204) return undefined as unknown as T;
-      const jsonData = await res.json() as T;
+      const jsonData = (await res.json()) as T;
       return jsonData;
     } finally {
       clearTimeout(timeoutId);

@@ -100,7 +100,7 @@ terraform output -json
 ## 🧠 Development Tips
 
 1. **Changing Shared Packages**: If you modify code in a package (like `edi/packages/ui`), the `pnpm dev` command will watch and rebuild it using `tsup --watch`. However, if you add new exports, you may need to restart the `dashboard` dev server.
-2. **Ports**: 
+2. **Ports**:
    - `5173/5174/5175`: Vite Dev Servers (Dashboard)
    - `5434`: UCP Global Postgres DB
    - `5435`: UCP Shard 1 Postgres DB

@@ -12,11 +12,7 @@ from . import event_type
 
 
 class EventMessage(BaseModel):
-    idempotencyKey: str = Field(..., description='Unique key for idempotency')
-    tenantId: str | None = Field(
-        None, description='The tenant ID this event belongs to'
-    )
+    idempotencyKey: str = Field(..., description="Unique key for idempotency")
+    tenantId: str | None = Field(None, description="The tenant ID this event belongs to")
     eventType: event_type.EventType
-    payload: dict[str, Any] = Field(
-        ..., description='The event payload, which varies by eventType'
-    )
+    payload: dict[str, Any] = Field(..., description="The event payload, which varies by eventType")

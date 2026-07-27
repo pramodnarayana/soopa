@@ -3,10 +3,11 @@ from logging.config import fileConfig
 
 from alembic import context
 from config.settings import get_settings
-from database.models import GlobalBase
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from database.models import GlobalBase
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -47,13 +48,14 @@ def include_name(name, type_, parent_names):
     else:
         return True
 
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
-        connection=connection, 
+        connection=connection,
         target_metadata=target_metadata,
         include_schemas=True,
         include_name=include_name,
-        version_table_schema="edi"
+        version_table_schema="edi",
     )
 
     with context.begin_transaction():

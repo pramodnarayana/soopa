@@ -12,18 +12,23 @@ class JobStatus(StrEnum):
     FAILED = "FAILED"
     PAUSED = "PAUSED"
 
+
 class JobName(StrEnum):
     OUTBOX_SWEEPER = "outbox_sweeper"
     DATA_RETENTION_CLEANUP = "data_retention_cleanup"
 
+
 class AppNamespace(StrEnum):
     EDI = "EDI"
+
 
 class TargetQueue(StrEnum):
     EDI_ORCHESTRATOR_JOBS = "edi-orchestrator-jobs"
 
+
 class Timezone(StrEnum):
     UTC = "UTC"
+
 
 @dataclass
 class Job:

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import type { RouteItem } from '@/features/routes/types';
 import { useTenantId } from '@/contexts/TenantContext';
+import type { RouteItem } from '@/features/routes/types';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 
 export type { RouteItem };
