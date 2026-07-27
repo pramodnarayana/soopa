@@ -24,3 +24,8 @@ output "ucp_backend_pat_token" {
   value     = zitadel_personal_access_token.ucp_backend_pat.token
   sensitive = true
 }
+
+output "edi_api_client_id" {
+  value     = zitadel_application_api.edi_api.client_id
+  sensitive = true
+}

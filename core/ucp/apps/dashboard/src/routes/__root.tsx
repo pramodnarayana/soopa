@@ -8,14 +8,16 @@ const queryClient = new QueryClient();
 const oidcConfig = {
   authority:
     (import.meta.env as unknown as Record<string, string>).VITE_ZITADEL_AUTHORITY ||
-    'http://localhost:8080',
+    'http://ucp.localhost:8080',
   client_id:
     (import.meta.env as unknown as Record<string, string>).VITE_ZITADEL_CLIENT_ID ||
-    'dev-client-id',
+    '383492001540145155',
   redirect_uri: `${window.location.origin}/callback`,
   response_type: 'code',
-  scope: 'openid profile email',
+  scope:
+    'openid profile email urn:zitadel:iam:org:project:roles urn:zitadel:iam:org:id urn:zitadel:iam:org:project:id:383492001305264131:roles',
   prompt: 'login',
+  loadUserInfo: true,
 };
 
 export const Route = createRootRoute({

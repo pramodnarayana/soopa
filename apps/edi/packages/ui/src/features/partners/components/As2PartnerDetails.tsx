@@ -27,7 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   useCertificatesExportQuery,
   useRotateCertificatesMutation,
-  useUpdatePlatformPartnerMutation,
+  useUpdateAS2PartnerMutation,
 } from '../api/partnerHooks';
 import type { AS2Partner } from '../types';
 import { extractCertificateMaterial } from '../utils/certificate';
@@ -43,7 +43,7 @@ export function As2PartnerDetails({
   const { toast } = useToast();
   const { data: platformSettings } = usePlatformSettings();
 
-  const updatePlatform = useUpdatePlatformPartnerMutation();
+  const updatePlatform = useUpdateAS2PartnerMutation();
   const rotateCertificates = useRotateCertificatesMutation();
   const isSubmitting = updatePlatform.isPending;
 

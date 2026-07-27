@@ -34,7 +34,7 @@ async def main() -> None:
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
 
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
-    outbox_adapter = SqsOutboxAdapter(queue_name="edi.tenant.sync.fifo")
+    outbox_adapter = SqsOutboxAdapter(queue_name="edi-tenant-sync.fifo")
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
     service = ProvisioningWorkerService(tenant_adapter, outbox_adapter, replication_adapter)

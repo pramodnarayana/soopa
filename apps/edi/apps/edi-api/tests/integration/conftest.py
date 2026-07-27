@@ -40,6 +40,7 @@ async def db_engine(postgres_container):
 
     # Initialize the schema
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
         await conn.run_sync(GlobalBase.metadata.drop_all)
         await conn.run_sync(TenantBase.metadata.drop_all)
         await conn.run_sync(GlobalBase.metadata.create_all)

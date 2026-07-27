@@ -12,7 +12,7 @@ function CallbackComponent() {
 
   useEffect(() => {
     if (auth.isAuthenticated) {
-      void navigate({ to: '/tenants', replace: true });
+      void navigate({ to: '/', replace: true });
     } else if (auth.error) {
       console.error('OIDC Auth Error:', auth.error);
       void navigate({ to: '/', replace: true });

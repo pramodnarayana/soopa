@@ -5,6 +5,9 @@ import * as path from 'path';
 import { ApiKeysController } from './adapters/inbound/http/api-keys.controller.js';
 import { ApiTokensController } from './adapters/inbound/http/api-tokens.controller.js';
 import { AppsController } from './adapters/inbound/http/apps.controller.js';
+import { ZitadelAuthService } from './adapters/inbound/http/auth/zitadel-auth.service.js';
+import { PlatformAuthGuard } from './adapters/inbound/http/guards/platform-auth.guard.js';
+import { TenantAuthGuard } from './adapters/inbound/http/guards/tenant-auth.guard.js';
 import { PlatformProxyController } from './adapters/inbound/http/platform-proxy.controller.js';
 import { SubscriptionsController } from './adapters/inbound/http/subscriptions.controller.js';
 import { TenantProxyController } from './adapters/inbound/http/tenant-proxy.controller.js';
@@ -64,6 +67,9 @@ import { WEBHOOK_REPOSITORY } from './ports/outbound/webhook.repository.js';
     TenantProxyController,
   ],
   providers: [
+    ZitadelAuthService,
+    PlatformAuthGuard,
+    TenantAuthGuard,
     ProvisionTenantUseCase,
     GenerateApiKeyUseCase,
     GenerateApiTokenUseCase,

@@ -66,7 +66,7 @@ const STATUS_THEME = {
 
 const columnHelper = createColumnHelper<Tenant>();
 
-export const Route = createFileRoute('/_authenticated/tenants/')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/')({
   component: TenantsPage,
 });
 
@@ -158,7 +158,7 @@ function TenantsPage() {
                 className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 mr-4"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void navigate({ to: `/tenants/${tenant.id}` });
+                  void navigate({ to: `/platform/tenants/${tenant.id}` });
                 }}
               >
                 Manage
@@ -327,7 +327,7 @@ function TenantsPage() {
           emptyTitle="No Tenants Provisioned"
           emptyDescription="Get started by provisioning your first tenant."
           onRowClick={(row) => {
-            void navigate({ to: `/tenants/${row.original.id}` });
+            void navigate({ to: `/platform/tenants/${row.original.id}` });
           }}
         />
       </div>

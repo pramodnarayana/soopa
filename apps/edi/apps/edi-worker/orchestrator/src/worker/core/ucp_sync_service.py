@@ -39,7 +39,7 @@ class UcpSyncWorkerService:
         # This implementation details are hidden behind the port.
         await self.tenant_port.upsert_tenant(tenant_id, name)
 
-        # 2. Drop a message into the local EDI outbox (edi.tenant.sync.fifo)
+        # 2. Drop a message into the local EDI outbox (edi-tenant-sync.fifo)
         # This delegates the shard replication to the existing provision worker.
         logger.info(f"Dispatching internal provisioning sync for tenant {tenant_id}")
         from worker.core.schemas import DISCRIMINATOR_FIELD, ProvisionTarget

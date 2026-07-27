@@ -35,7 +35,7 @@ class SqsEvent(OutboxEvent):
 
 
 class SqsOutboxAdapter(OutboxPort):
-    def __init__(self, queue_name: str = "edi.tenant.sync.fifo"):
+    def __init__(self, queue_name: str = "edi-tenant-sync.fifo"):
         self.queue_name = queue_name
         self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
         self.region = "us-east-1"

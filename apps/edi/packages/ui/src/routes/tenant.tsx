@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { Button } from '@/components/ui/button';
 import { useDashboardData } from '@/features/dashboard/api/useDashboardData';
-import { PartnersProvider } from '@/features/partners/context/PartnersContext';
+import { SFTPPartnersProvider } from '@/features/partners/context/SFTPPartnersContext';
 import { Route as rootRoute } from './__root';
 
 export const Route = createRoute({
@@ -25,9 +25,9 @@ export const Route = createRoute({
 
 export function AppWrapper() {
   return (
-    <PartnersProvider>
+    <SFTPPartnersProvider>
       <AppLayout />
-    </PartnersProvider>
+    </SFTPPartnersProvider>
   );
 }
 

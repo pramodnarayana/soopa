@@ -18,9 +18,9 @@ import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { useToast } from '@/hooks/use-toast';
 import {
   useTestAs2PartnershipConnectionMutation,
-  useUpdatePlatformPartnershipMutation,
+  useUpdateAS2PartnershipMutation,
 } from '../api/partnerHooks';
-import type { Partnership } from '../context/PlatformPartnersContext';
+import type { Partnership } from '../context/AS2PartnersContext';
 import type { Partner } from '../types';
 
 export interface PartnershipDetailsProps {
@@ -35,7 +35,7 @@ export function PartnershipDetails({
   onCancel,
 }: PartnershipDetailsProps) {
   const { toast } = useToast();
-  const updatePartnership = useUpdatePlatformPartnershipMutation();
+  const updatePartnership = useUpdateAS2PartnershipMutation();
   const testConnection = useTestAs2PartnershipConnectionMutation();
   const { data: platformSettings } = usePlatformSettings();
   const isSubmitting = updatePartnership.isPending;

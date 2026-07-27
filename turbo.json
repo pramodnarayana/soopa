@@ -6,6 +6,7 @@
       "persistent": true
     },
     "start:dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
@@ -21,12 +22,17 @@
     },
     "test": {
       "dependsOn": ["build"],
+      "env": ["DATABASE_URL", "DB_SHARD_1_URL", "SHARD_1_URL"],
       "outputs": []
     },
     "lint": {
       "outputs": []
     },
     "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "typecheck:tests": {
       "dependsOn": ["^build"],
       "outputs": []
     }

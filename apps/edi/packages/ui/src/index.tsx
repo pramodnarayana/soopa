@@ -1,5 +1,5 @@
 export { TenantProvider, useTenantId } from './contexts/TenantContext';
-export { PartnersProvider } from './features/partners/context/PartnersContext';
+export { SFTPPartnersProvider } from './features/partners/context/SFTPPartnersContext';
 export { TradingPartnersPage } from './routes/platform/partners';
 export { PartnershipsPage } from './routes/platform/partnerships';
 export { SchedulerPage } from './routes/platform/scheduler';
@@ -17,7 +17,6 @@ export { WebhooksPage } from './routes/tenant/webhooks';
 
 import { EdiNetworkProvider } from './contexts/EdiNetworkContext';
 import { TenantProvider } from './contexts/TenantContext';
-import { PartnersProvider } from './features/partners/context/PartnersContext';
 
 export function EdiUIProvider({
   children,
@@ -33,7 +32,7 @@ export function EdiUIProvider({
   return (
     <TenantProvider tenantId={tenantId}>
       <EdiNetworkProvider baseUrl={baseUrl} token={token}>
-        <PartnersProvider>{children}</PartnersProvider>
+        {children}
       </EdiNetworkProvider>
     </TenantProvider>
   );

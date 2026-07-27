@@ -80,7 +80,7 @@ describe('DataPlaneReplicationService (Integration)', () => {
           useValue: {
             getOrThrow: (key: ConfigKey | string) => {
               if (key === (ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN as string))
-                return 'ucp.tenant.events.fifo';
+                return 'ucp-tenant-events.fifo';
               throw new Error(`Config key ${key} not found`);
             },
           },
@@ -102,7 +102,7 @@ describe('DataPlaneReplicationService (Integration)', () => {
 
     // Assert
     expect(publishedMessages.length).toBe(1);
-    expect(publishedMessages[0].topic).toBe('ucp.tenant.events.fifo');
+    expect(publishedMessages[0].topic).toBe('ucp-tenant-events.fifo');
     expect(publishedMessages[0].message).toEqual({ foo: 'bar' });
     expect(publishedMessages[0].groupId).toBe('tenant_123');
     expect(publishedMessages[0].deduplicationId).toBe('idemp_123');

@@ -28,7 +28,7 @@ import { TenantUser, useGetTenantUsers } from '@/domains/users/api/queries';
 
 const columnHelper = createColumnHelper<TenantUser>();
 
-export const Route = createFileRoute('/_authenticated/tenants/$tenantId/users')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/users')({
   component: TenantUsersPage,
 });
 

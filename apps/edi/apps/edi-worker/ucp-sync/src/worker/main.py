@@ -47,8 +47,8 @@ class UcpSyncWorkerService:
         )
         await global_session.commit()
 
-        # Dispatch to edi.tenant.sync.fifo
-        logger.info(f"Dispatching sync event for tenant {tenant_id} to edi.tenant.sync.fifo")
+        # Dispatch to edi-tenant-sync.fifo
+        logger.info(f"Dispatching sync event for tenant {tenant_id} to edi-tenant-sync.fifo")
         try:
             await self.sqs_client.send_message(
                 QueueUrl=self.sync_queue_url,
@@ -152,7 +152,7 @@ async def main() -> None:
         # Resolve queue URLs (In a real environment, these would be passed via config)
         try:
             ucp_resp = await sqs_client.get_queue_url(QueueName="ucp.events.fifo")
-            sync_resp = await sqs_client.get_queue_url(QueueName="edi.tenant.sync.fifo")
+            sync_resp = await sqs_client.get_queue_url(QueueName="edi-tenant-sync.fifo")
 
             service = UcpSyncWorkerService(
                 db_router=db_router,

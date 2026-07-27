@@ -1,6 +1,11 @@
 import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import * as path from 'path';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -23,7 +28,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  await app.listen(3001, '0.0.0.0');
+  await app.listen(3002, '0.0.0.0');
   logger.log(`Scheduler Engine listening on ${await app.getUrl()}`);
 }
 

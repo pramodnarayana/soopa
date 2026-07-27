@@ -2,20 +2,24 @@ import { Network } from 'lucide-react';
 import { CreatePartnershipModal } from '@/features/partners/components/CreatePartnershipModal';
 import { PartnershipsTable } from '@/features/partners/components/PartnershipsTable';
 import {
-  PlatformPartnersProvider,
-  usePlatformPartners,
-} from '@/features/partners/context/PlatformPartnersContext';
+  AS2PartnersProvider,
+  useAS2Partners,
+} from '@/features/partners/context/AS2PartnersContext';
 
 export function PartnershipsPage() {
   return (
-    <PlatformPartnersProvider>
+    <AS2PartnersProvider>
       <PartnershipsPageContent />
-    </PlatformPartnersProvider>
+    </AS2PartnersProvider>
   );
 }
 
 function PartnershipsPageContent() {
-  const { partners, partnerships, isLoading } = usePlatformPartners();
+  const { partners, partnerships, isLoading, partnershipsError, partnersError } = useAS2Partners();
+
+  const safePartners = Array.isArray(partners) ? partners : [];
+  const safePartnerships = Array.isArray(partnerships) ? partnerships : [];
+  const combinedError = partnershipsError || partnersError;
 
   return (
     <div className="p-8">
@@ -28,13 +32,19 @@ function PartnershipsPageContent() {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Partnerships</h1>
           </div>
         </div>
-        <CreatePartnershipModal availablePartners={partners} />
+        {!combinedError && <CreatePartnershipModal availablePartners={safePartners} />}
       </div>
-      <PartnershipsTable
-        data={partnerships || []}
-        availablePartners={partners || []}
-        isLoading={isLoading}
-      />
+      {combinedError ? (
+        <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
+          Failed to load partner data: {combinedError.message}
+        </div>
+      ) : (
+        <PartnershipsTable
+          data={safePartnerships}
+          availablePartners={safePartners}
+          isLoading={isLoading}
+        />
+      )}
     </div>
   );
 }

@@ -2,29 +2,8 @@ version: '3.9'
 # include:
 # - libs/identity/docker/docker-compose.yml
 services:
-  postgres_global:
-    image: postgres:15-alpine
-    container_name: edi_postgres_global
-    environment:
-      POSTGRES_USER: edi
-      POSTGRES_PASSWORD: edi_password
-      POSTGRES_DB: edi_global
-    command:
-    - postgres
-    - -c
-    - wal_level=logical
-    ports:
-    - 5432:5432
-    volumes:
-    - postgres_global_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - pg_isready -U edi
-      interval: 5s
-      timeout: 5s
-      retries: 5
-  postgres_shard_1:
+
+  edi_postgres_shard_1:
     image: postgres:15-alpine
     container_name: edi_postgres_shard_1
     environment:
@@ -38,7 +17,7 @@ services:
     ports:
     - 5433:5432
     volumes:
-    - postgres_shard_1_data:/var/lib/postgresql/data
+    - edi_postgres_shard_1_data:/var/lib/postgresql/data
     healthcheck:
       test:
       - CMD-SHELL
@@ -46,28 +25,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-  localstack:
-    image: localstack/localstack:3.8.0
-    container_name: edi_localstack
-    ports:
-    - 4566:4566
-    - 4510-4559:4510-4559
-    environment:
-    - DEBUG=${DEBUG:-0}
-    - DOCKER_HOST=unix:///var/run/docker.sock
-    volumes:
-    - localstack_data:/var/lib/localstack
-    - /var/run/docker.sock:/var/run/docker.sock
-    - ./docker/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
-    healthcheck:
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:4566/_localstack/health
-      interval: 5s
-      timeout: 5s
-      retries: 5
+
   vault:
     image: hashicorp/vault:1.15
     container_name: edi_vault
@@ -102,7 +60,7 @@ services:
     image: quay.io/debezium/server:2.7.3.Final
     container_name: edi_debezium_shard_1
     environment:
-    - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=postgres_shard_1
+    - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard_1
     - DEBEZIUM_SOURCE_DATABASE_PORT=5432
     - DEBEZIUM_SOURCE_DATABASE_USER=edi
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
@@ -114,11 +72,9 @@ services:
     - ./docker/debezium/application.properties:/debezium/conf/application.properties
     - debezium_data:/debezium/data
     depends_on:
-      postgres_shard_1:
+      edi_postgres_shard_1:
         condition: service_healthy
 volumes:
-  postgres_global_data: null
-  postgres_shard_1_data: null
+  edi_postgres_shard_1_data: null
   postgres_enterprise_1_data: null
   debezium_data: null
-  localstack_data: null

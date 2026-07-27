@@ -2,24 +2,29 @@ import { Server } from 'lucide-react';
 import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable';
 import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal';
 import {
-  PlatformPartnersProvider,
-  usePlatformPartners,
-} from '@/features/partners/context/PlatformPartnersContext';
+  AS2PartnersProvider,
+  useAS2Partners,
+} from '@/features/partners/context/AS2PartnersContext';
 import type { AS2Partner } from '@/features/partners/types';
 
 export function TradingPartnersPage() {
   return (
-    <PlatformPartnersProvider>
+    <AS2PartnersProvider>
       <TradingPartnersPageContent />
-    </PlatformPartnersProvider>
+    </AS2PartnersProvider>
   );
 }
 
 function TradingPartnersPageContent() {
-  const { partners, isLoading, error } = usePlatformPartners();
+  const { partners, partnersLoading, partnersError } = useAS2Partners();
+  const isLoading = partnersLoading;
+  const error = partnersError;
 
-  const localPartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && p.is_local);
-  const remotePartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && !p.is_local);
+  const safePartners = Array.isArray(partners) ? partners : [];
+  const localPartners = safePartners.filter((p): p is AS2Partner => p.type === 'AS2' && p.is_local);
+  const remotePartners = safePartners.filter(
+    (p): p is AS2Partner => p.type === 'AS2' && !p.is_local,
+  );
 
   return (
     <div className="p-8">
@@ -32,7 +37,9 @@ function TradingPartnersPageContent() {
         </div>
         <CreatePartnerModal
           existingAs2Ids={
-            partners.map((p) => (p.type === 'AS2' ? p.as2_id : null)).filter(Boolean) as string[]
+            safePartners
+              .map((p) => (p.type === 'AS2' ? p.as2_id : null))
+              .filter(Boolean) as string[]
           }
         />
       </div>
@@ -46,7 +53,7 @@ function TradingPartnersPageContent() {
         <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
           Failed to load partners: {error.message}
         </div>
-      ) : partners.length === 0 ? (
+      ) : localPartners.length === 0 && remotePartners.length === 0 ? (
         <As2PartnersTable data={[]} isLoading={false} />
       ) : (
         <div className="space-y-8">

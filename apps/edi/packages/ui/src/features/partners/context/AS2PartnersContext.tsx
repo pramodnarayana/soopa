@@ -1,37 +1,41 @@
 import { createContext, useCallback, useContext } from 'react';
-import { usePlatformPartnershipsQuery, usePlatformPartnersQuery } from '../api/partnerHooks';
+import { useAS2PartnershipsQuery, useAS2PartnersQuery } from '../api/partnerHooks';
 import type { Partner, Partnership } from '../types';
 
 // ─────────────────────────────────────────────
 // Context contract — read-only data only.
 // Mutations are consumed directly via hooks at
-// the component level (useCreatePlatformPartnerMutation, etc.)
+// the component level (useCreateAS2PartnerMutation, etc.)
 // ─────────────────────────────────────────────
 
-interface PlatformPartnersContextType {
+interface AS2PartnersContextType {
   partners: Partner[];
   partnerships: Partnership[];
   isLoading: boolean;
   error: Error | null;
+  partnersLoading: boolean;
+  partnersError: Error | null;
+  partnershipsLoading: boolean;
+  partnershipsError: Error | null;
   refresh: () => Promise<void>;
 }
 
-const PlatformPartnersContext = createContext<PlatformPartnersContextType | undefined>(undefined);
+const AS2PartnersContext = createContext<AS2PartnersContextType | undefined>(undefined);
 
-export function PlatformPartnersProvider({ children }: { children: React.ReactNode }) {
+export function AS2PartnersProvider({ children }: { children: React.ReactNode }) {
   const {
     data: partners = [],
     isLoading: isLoadingPartners,
     error: errorPartners,
     refetch: refetchPartners,
-  } = usePlatformPartnersQuery();
+  } = useAS2PartnersQuery();
 
   const {
     data: partnerships = [],
     isLoading: isLoadingPartnerships,
     error: errorPartnerships,
     refetch: refetchPartnerships,
-  } = usePlatformPartnershipsQuery();
+  } = useAS2PartnershipsQuery();
 
   const isLoading = isLoadingPartners || isLoadingPartnerships;
   const error = errorPartners || errorPartnerships;
@@ -41,16 +45,28 @@ export function PlatformPartnersProvider({ children }: { children: React.ReactNo
   }, [refetchPartners, refetchPartnerships]);
 
   return (
-    <PlatformPartnersContext.Provider value={{ partners, partnerships, isLoading, error, refresh }}>
+    <AS2PartnersContext.Provider
+      value={{
+        partners,
+        partnerships,
+        isLoading,
+        error,
+        partnersLoading: isLoadingPartners,
+        partnersError: errorPartners,
+        partnershipsLoading: isLoadingPartnerships,
+        partnershipsError: errorPartnerships,
+        refresh,
+      }}
+    >
       {children}
-    </PlatformPartnersContext.Provider>
+    </AS2PartnersContext.Provider>
   );
 }
 
-export function usePlatformPartners() {
-  const ctx = useContext(PlatformPartnersContext);
+export function useAS2Partners() {
+  const ctx = useContext(AS2PartnersContext);
   if (ctx === undefined) {
-    throw new Error('usePlatformPartners must be used within a PlatformPartnersProvider');
+    throw new Error('useAS2Partners must be used within a AS2PartnersProvider');
   }
   return ctx;
 }

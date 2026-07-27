@@ -27,10 +27,10 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
     env:
-      DATABASE_URL: postgresql://edi:edi_password@localhost:5432/edi_global
-      SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
-      POSTGRES_PASSWORD: zitadel_password
-      ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global' }}
+      SHARD_1_URL: ${{ secrets.SHARD_1_URL || 'postgresql://edi:edi_password@localhost:5433/edi_shard_1' }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'zitadel_password' }}
+      ZITADEL_MASTERKEY: ${{ secrets.ZITADEL_MASTERKEY || 'a-32-byte-long-secret-key-for-zitadel-in-ci' }}
 
     steps:
       - name: Checkout code
@@ -70,12 +70,15 @@ jobs:
       - name: Typecheck (Node)
         run: pnpm turbo typecheck --filter="./apps/edi/**"
 
+      - name: Typecheck Tests (Node)
+        run: pnpm turbo typecheck:tests --filter="./apps/edi/**"
+
       - name: Lint (Node)
         run: pnpm turbo lint --filter="./apps/edi/**"
 
       - name: Start Database
         run: |
-          docker compose -f apps/edi/docker-compose.yml up -d postgres_global postgres_shard_1 --wait
+          docker compose up -d postgres_global edi_postgres_shard_1 --wait
           uv run --directory apps/edi/packages/database python -m database.run_migrations
 
       - name: Test (Node)

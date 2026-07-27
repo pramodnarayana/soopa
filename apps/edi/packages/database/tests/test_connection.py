@@ -4,17 +4,25 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.connection import DatabaseRouter
 
-# We use the local test databases spun up by docker-compose, but allow overrides
-GLOBAL_DB_URL = os.getenv(
-    "DB_GLOBAL_URL", "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"
+# We use the local test databases spun up by docker-compose, but allow overrides.
+# Since Node.js and Python share the DATABASE_URL environment variable,
+# we safely mutate the dialect to asyncpg for Python using SQLAlchemy's URL parser.
+raw_global_url = os.getenv(
+    "DATABASE_URL", "postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
 )
-SHARD_1_URL = os.getenv(
-    "DB_SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+parsed_global_url = make_url(raw_global_url).set(drivername="postgresql+asyncpg")
+GLOBAL_DB_URL = os.getenv("DB_GLOBAL_URL", parsed_global_url.render_as_string(hide_password=False))
+
+raw_shard_1_url = os.getenv(
+    "SHARD_1_URL", "postgresql://edi:edi_password@localhost:5433/edi_shard_1"
 )
+parsed_shard_1_url = make_url(raw_shard_1_url).set(drivername="postgresql+asyncpg")
+SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hide_password=False))
 
 
 @pytest.fixture

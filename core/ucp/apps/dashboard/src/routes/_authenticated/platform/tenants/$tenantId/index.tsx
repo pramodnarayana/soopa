@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useUpdateTenantName } from '@/domains/tenants/api/mutations';
 import { useGetTenants } from '@/domains/tenants/api/queries';
-import { HttpDashboardRepository } from '../../../../lib/HttpDashboardRepository';
+import { HttpDashboardRepository } from '@/lib/HttpDashboardRepository';
 
-export const Route = createFileRoute('/_authenticated/tenants/$tenantId/')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/')({
   component: TenantOverviewPage,
 });
 

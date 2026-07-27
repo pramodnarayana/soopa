@@ -37,31 +37,10 @@ describe('DispatchNotificationUseCase', () => {
     const renderer = new NotificationRendererService(new FakeTemplateRenderer());
 
     repo.templates = [
-      {
-        id: '1',
-        tenantId: 't1',
-        eventType: EventTypes.TEST,
-        channel: NotificationChannel.EMAIL,
-        subjectTemplate: 'Sub1',
-        bodyTemplate: 'Body1',
-      },
-      {
-        id: '2',
-        tenantId: 't1',
-        eventType: EventTypes.TEST,
-        channel: NotificationChannel.SLACK,
-        subjectTemplate: 'Sub2',
-        bodyTemplate: 'Body2',
-      },
-      {
-        id: '3',
-        tenantId: 't1',
-        eventType: EventTypes.TEST,
-        channel: NotificationChannel.IN_APP,
-        subjectTemplate: 'Sub3',
-        bodyTemplate: 'Body3',
-      },
-    ] as NotificationTemplate[];
+      new NotificationTemplate(EventTypes.TEST, NotificationChannel.EMAIL, 'Sub1', 'Body1'),
+      new NotificationTemplate(EventTypes.TEST, NotificationChannel.SLACK, 'Sub2', 'Body2'),
+      new NotificationTemplate(EventTypes.TEST, NotificationChannel.IN_APP, 'Sub3', 'Body3'),
+    ];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 
@@ -89,15 +68,8 @@ describe('DispatchNotificationUseCase', () => {
     const renderer = new NotificationRendererService(new FakeTemplateRenderer());
 
     repo.templates = [
-      {
-        id: '3',
-        tenantId: 't1',
-        eventType: EventTypes.TEST,
-        channel: NotificationChannel.IN_APP,
-        subjectTemplate: 'Sub3',
-        bodyTemplate: 'Body3',
-      },
-    ] as NotificationTemplate[];
+      new NotificationTemplate(EventTypes.TEST, NotificationChannel.IN_APP, 'Sub3', 'Body3'),
+    ];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 

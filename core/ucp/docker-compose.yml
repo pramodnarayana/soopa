@@ -1,74 +1,24 @@
 version: '3.8'
-name: soopaucp
 
 services:
-  ucp_postgres_global:
-    image: postgres:16-alpine
-    container_name: soopaucp-postgres-global
-    environment:
-      POSTGRES_USER: ucp_admin
-      POSTGRES_PASSWORD: ucp_password
-      POSTGRES_DB: ucp_global
-    ports:
-      - "5434:5432" # Bound to 5434 to avoid colliding with EDI App on 5432
-    volumes:
-      - ucp_pgdata_global:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ucp_admin -d ucp_global"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  ucp_postgres_shard_1:
-    image: postgres:16-alpine
-    container_name: soopaucp-postgres-shard-1
-    environment:
-      POSTGRES_USER: ucp_admin
-      POSTGRES_PASSWORD: ucp_password
-      POSTGRES_DB: ucp_shard_1
-    ports:
-      - "5435:5432" # Bound to 5435
-    volumes:
-      - ucp_pgdata_shard_1:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ucp_admin -d ucp_shard_1"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   ucp_engine:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: soopaucp-engine
+    container_name: ucp-engine
     env_file: .env
     ports:
       - "3001:3001"
       - "3002:3002"
     depends_on:
-      ucp_postgres_global:
-        condition: service_healthy
-      ucp_postgres_shard_1:
+      postgres_global:
         condition: service_healthy
       localstack:
         condition: service_started
 
-  localstack:
-    image: localstack/localstack:3.5.0
-    container_name: soopaucp-localstack
-    ports:
-      - "4566:4566"
-    environment:
-      - SERVICES=sqs
-      - DEFAULT_REGION=us-east-1
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-    volumes:
-      - ./localstack-setup.sh:/etc/localstack/init/ready.d/init.sh
-
   zitadel_postgres:
     image: postgres:16-alpine
-    container_name: soopaucp-zitadel-postgres
+    container_name: zitadel-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-zitadel}
@@ -81,11 +31,11 @@ services:
       retries: 5
       start_period: 20s
     volumes:
-      - zitadel_data_new:/var/lib/postgresql/data:rw
+      - zitadel_data:/var/lib/postgresql/data:rw
 
   zitadel:
     image: ghcr.io/zitadel/zitadel:v3.4.12
-    container_name: soopaucp-zitadel
+    container_name: zitadel
     restart: unless-stopped
     command: start-from-init --config /zitadel-first-instance.yaml --masterkey "${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY must be set (32 bytes)}" --tlsMode disabled
     environment:
@@ -112,11 +62,7 @@ services:
         condition: service_healthy
 
 volumes:
-  ucp_pgdata_global:
-    name: ucp_pgdata_global
-  ucp_pgdata_shard_1:
-    name: ucp_pgdata_shard_1
-  zitadel_data_new:
-    name: zitadel_data_new
+  zitadel_data:
+    name: zitadel_data
   zitadel_machinekey:
     name: zitadel_machinekey

@@ -2,8 +2,7 @@ import { createRoute } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
 import { CreateSftpPartnerModal } from '@/features/partners/components/CreateSftpPartnerModal';
 import { SftpPartnersTable } from '@/features/partners/components/SftpPartnersTable';
-import { usePartners } from '@/features/partners/context/PartnersContext';
-import type { SFTPPartner } from '@/features/partners/types';
+import { useSFTPPartners } from '@/features/partners/context/SFTPPartnersContext';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({
@@ -13,9 +12,7 @@ export const Route = createRoute({
 });
 
 export function PartnersPage() {
-  const { partners, isLoading } = usePartners();
-
-  const sftpPartners = partners.filter((p): p is SFTPPartner => p.type === 'SFTP');
+  const { sftpPartners, isLoading, error } = useSFTPPartners();
 
   return (
     <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out p-8">
@@ -36,7 +33,13 @@ export function PartnersPage() {
 
       {/* Main Grid */}
       <div className="space-y-8">
-        <SftpPartnersTable data={sftpPartners} isLoading={isLoading} />
+        {error ? (
+          <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
+            Failed to load partners: {error.message}
+          </div>
+        ) : (
+          <SftpPartnersTable data={sftpPartners} isLoading={isLoading} />
+        )}
       </div>
     </div>
   );

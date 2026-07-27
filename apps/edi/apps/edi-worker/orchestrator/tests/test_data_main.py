@@ -4,18 +4,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from database.connection import DatabaseRouter
 from database.models.control_plane import DatabaseShard, Tenant
+from sqlalchemy.engine.url import make_url
 
 from worker.adapters.sqs_poller import poll_sqs_queue
 from worker.core.security import validate_target_url
 from worker.core.tenant_resolver import TenantResolver
 from worker.data.handlers import process_pipeline_event
 
-GLOBAL_DB_URL = os.getenv(
-    "DB_GLOBAL_URL", "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"
+raw_global_url = os.getenv(
+    "DATABASE_URL", "postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
 )
-SHARD_1_URL = os.getenv(
-    "DB_SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+parsed_global_url = make_url(raw_global_url).set(drivername="postgresql+asyncpg")
+GLOBAL_DB_URL = os.getenv("DB_GLOBAL_URL", parsed_global_url.render_as_string(hide_password=False))
+
+raw_shard_1_url = os.getenv(
+    "SHARD_1_URL", "postgresql://edi:edi_password@localhost:5433/edi_shard_1"
 )
+parsed_shard_1_url = make_url(raw_shard_1_url).set(drivername="postgresql+asyncpg")
+SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hide_password=False))
 
 
 def test_validate_target_url():

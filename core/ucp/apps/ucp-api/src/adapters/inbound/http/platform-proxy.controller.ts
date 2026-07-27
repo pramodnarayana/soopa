@@ -1,12 +1,12 @@
 import { All, Controller, Next, Req, Res, UseGuards } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { ApiKeyGuard } from './api-key.guard.js';
+import { PlatformAuthGuard } from './guards/platform-auth.guard.js';
 
-const EDI_API_URL = process.env.EDI_API_URL || 'http://localhost:8000';
+const EDI_API_URL = process.env.EDI_API_URL || 'http://localhost:8001';
 
 @Controller('api/v1/platform')
-@UseGuards(ApiKeyGuard)
+@UseGuards(PlatformAuthGuard)
 export class PlatformProxyController {
   private proxy = createProxyMiddleware({
     target: EDI_API_URL,

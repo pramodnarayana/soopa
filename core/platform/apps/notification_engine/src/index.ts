@@ -1,6 +1,11 @@
 import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import * as path from 'path';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
