@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class ZitadelTokenVerifierOptions:
     issuer: str
-    audience: str
+    audience: str | list[str]
     jwks_url: str | None = None
 
 
@@ -77,7 +77,7 @@ class ZitadelTokenVerifier(TokenVerifier):
 
         def _fetch() -> dict[str, Any]:
             with urlopen(req, timeout=5) as response:
-                return json.loads(response.read().decode())
+                return dict(json.loads(response.read().decode()))
 
         userinfo = await asyncio.to_thread(_fetch)
 

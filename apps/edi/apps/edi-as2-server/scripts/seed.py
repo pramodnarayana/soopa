@@ -143,7 +143,9 @@ async def seed_database() -> None:
 
         now = datetime.now(UTC)
         for job_def in SYSTEM_JOB_REGISTRY:
-            job_result = await session.execute(select(ScheduledJob).filter_by(name=job_def.name.value))
+            job_result = await session.execute(
+                select(ScheduledJob).filter_by(name=job_def.name.value)
+            )
             job = job_result.scalar_one_or_none()
 
             if not job:

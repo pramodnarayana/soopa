@@ -39,8 +39,7 @@ async def main() -> None:
 
     # New adapter for polling UCP events
     ucp_listener_adapter = SqsUcpListenerAdapter(
-        endpoint_url=endpoint_url,
-        queue_name="ucp.events.fifo"
+        endpoint_url=endpoint_url, queue_name="ucp.events.fifo"
     )
 
     # 2. Instantiate Service (Core Business Logic) with strict Dependency Injection

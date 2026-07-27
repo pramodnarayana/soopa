@@ -9,10 +9,15 @@ class TokenClaims(BaseModel):
     aud: str | list[str]
     exp: int
     iat: int | None = None
-    tenant_id: str | None = Field(default=None, validation_alias=AliasChoices("urn:zitadel:iam:org:id", "tenant_id"))
+    tenant_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("urn:zitadel:iam:org:id", "tenant_id")
+    )
     organization_id: str | None = None
     authorized_tenants: set[str] = Field(default_factory=set)
-    roles: list[str] = Field(default_factory=list, validation_alias=AliasChoices("urn:zitadel:iam:org:project:roles", "roles"))
+    roles: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("urn:zitadel:iam:org:project:roles", "roles"),
+    )
     permissions: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")

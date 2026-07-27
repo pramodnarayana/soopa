@@ -46,6 +46,7 @@ async def get_raw_jwt(
 
 logger = logging.getLogger(__name__)
 
+
 async def get_current_tenant_id(
     request: Request,
     identity: IdentityContext = Depends(get_identity_context),
@@ -54,25 +55,33 @@ async def get_current_tenant_id(
     tenant_id = request.path_params.get("tenant_id")
     is_platform_admin = "PlatformAdmin" in identity.roles or "0" in identity.authorized_tenants
 
-    logger.info(f"get_current_tenant_id: tenant_id={tenant_id}, roles={identity.roles}, authorized_tenants={identity.authorized_tenants}, is_platform_admin={is_platform_admin}")
+    logger.info(
+        f"get_current_tenant_id: tenant_id={tenant_id}, roles={identity.roles}, authorized_tenants={identity.authorized_tenants}, is_platform_admin={is_platform_admin}"
+    )
 
     if not tenant_id:
         if is_platform_admin:
-            logger.info("get_current_tenant_id: No tenant_id in path, but user is platform admin. Returning '0'.")
+            logger.info(
+                "get_current_tenant_id: No tenant_id in path, but user is platform admin. Returning '0'."
+            )
             return "0"
-        logger.warning(f"get_current_tenant_id: Raising 400 Bad Request because tenant_id is missing and user is not platform admin. Roles: {identity.roles}")
+        logger.warning(
+            f"get_current_tenant_id: Raising 400 Bad Request because tenant_id is missing and user is not platform admin. Roles: {identity.roles}"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tenant ID missing from request path.",
         )
 
     if tenant_id not in identity.authorized_tenants and not is_platform_admin:
-        logger.warning(f"get_current_tenant_id: Raising 403 Forbidden because {tenant_id} is not in {identity.authorized_tenants} and user is not platform admin.")
+        logger.warning(
+            f"get_current_tenant_id: Raising 403 Forbidden because {tenant_id} is not in {identity.authorized_tenants} and user is not platform admin."
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Token does not grant cryptographic roles for tenant {tenant_id}.",
         )
-    return tenant_id
+    return str(tenant_id)
 
 
 def require_platform_admin(identity: IdentityContext = Depends(get_identity_context)) -> str:
