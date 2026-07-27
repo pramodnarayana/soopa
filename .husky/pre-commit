@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 export DATABASE_URL="postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
 export SHARD_1_URL="postgresql://edi:edi_password@localhost:5433/edi_shard_1"
 
