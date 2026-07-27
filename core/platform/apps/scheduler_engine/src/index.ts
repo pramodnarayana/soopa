@@ -28,7 +28,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  await app.listen(3002, '0.0.0.0');
+  await app.listen(8765, '0.0.0.0');
   logger.log(`Scheduler Engine listening on ${await app.getUrl()}`);
 }
 
