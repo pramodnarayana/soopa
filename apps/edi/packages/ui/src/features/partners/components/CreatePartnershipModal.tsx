@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
-import { useCreatePlatformPartnershipMutation } from '../api/partnerHooks';
+import { useCreateAS2PartnershipMutation } from '../api/partnerHooks';
 
 export interface CreatePartnershipModalProps {
   availablePartners: { id: string; name: string; type: string; is_local?: boolean }[];
@@ -29,7 +29,7 @@ export function CreatePartnershipModal({ availablePartners }: CreatePartnershipM
   const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256');
 
   const { data: platformSettings } = usePlatformSettings();
-  const createPartnership = useCreatePlatformPartnershipMutation();
+  const createPartnership = useCreateAS2PartnershipMutation();
 
   useEffect(() => {
     if (mdnType === 'ASYNC' && !mdnUrl && platformSettings?.available_as2_receive_urls?.length) {

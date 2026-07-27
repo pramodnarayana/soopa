@@ -22,7 +22,7 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
     try:
         async with engine.connect() as conn:
             # We don't use ORM here to keep migration runner simple and resilient
-            result = await conn.execute(text("SELECT dsn FROM database_shards"))
+            result = await conn.execute(text("SELECT dsn FROM edi.database_shards"))
             urls = [row[0] for row in result.fetchall()]
     except Exception as e:
         logger.error(f"Failed to query database_shards from global DB: {e}")

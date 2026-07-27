@@ -27,7 +27,7 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
     env:
-      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5434/ucp_global
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
       POSTGRES_PASSWORD: zitadel_password
       ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
 
@@ -69,12 +69,15 @@ jobs:
       - name: Typecheck (Node)
         run: pnpm turbo typecheck --filter="./core/platform/**"
 
+      - name: Typecheck Tests (Node)
+        run: pnpm turbo typecheck:tests --filter="./core/platform/**"
+
       - name: Lint (Node)
         run: pnpm turbo lint --filter="./core/platform/**"
 
       - name: Start Database
         run: |
-          docker compose up -d ucp_postgres_global ucp_postgres_shard_1 --wait
+          docker compose up -d postgres_global --wait
           pnpm db:migrate
 
       - name: Test (Node)

@@ -1,6 +1,4 @@
-import type { QueryKey } from '@tanstack/react-query';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useToastMutation } from '@/hooks/use-toast-mutation';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import type {
@@ -31,29 +29,30 @@ export const partnersKeys = {
 // Helper — resolves the repository for the current auth user
 // ─────────────────────────────────────────────
 
-
 // ─────────────────────────────────────────────
 // Queries
 // ─────────────────────────────────────────────
 
-export function usePlatformPartnersQuery() {
+import { PartnersArraySchema, PartnershipsArraySchema } from './partnerSchemas';
+
+export function useAS2PartnersQuery() {
   const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartners(),
     queryFn: async (): Promise<Partner[]> => {
-      const res = await api.get<Partner[]>('/platform/trading-partners/as2/trading-partners');
-      return res.data;
+      const res = await api.get('/platform/trading-partners/as2/trading-partners');
+      return PartnersArraySchema.parse(res.data);
     },
   });
 }
 
-export function usePlatformPartnershipsQuery() {
+export function useAS2PartnershipsQuery() {
   const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartnerships(),
     queryFn: async (): Promise<Partnership[]> => {
-      const res = await api.get<Partnership[]>('/platform/trading-partners/as2/partnerships');
-      return res.data;
+      const res = await api.get('/platform/trading-partners/as2/partnerships');
+      return PartnershipsArraySchema.parse(res.data);
     },
   });
 }
@@ -78,8 +77,8 @@ export function useTenantPartnersQuery() {
   return useQuery({
     queryKey: partnersKeys.tenant(),
     queryFn: async (): Promise<Partner[]> => {
-      const res = await api.get<Partner[]>('/trading-partners/sftp');
-      return res.data;
+      const res = await api.get('/trading-partners');
+      return PartnersArraySchema.parse(res.data);
     },
   });
 }
@@ -88,7 +87,7 @@ export function useTenantPartnersQuery() {
 // Platform Partner Mutations
 // ─────────────────────────────────────────────
 
-export function useCreatePlatformPartnerMutation() {
+export function useCreateAS2PartnerMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(
@@ -107,7 +106,7 @@ export function useCreatePlatformPartnerMutation() {
   );
 }
 
-export function useUpdatePlatformPartnerMutation() {
+export function useUpdateAS2PartnerMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(
@@ -123,7 +122,7 @@ export function useUpdatePlatformPartnerMutation() {
   );
 }
 
-export function useDeletePlatformPartnerMutation() {
+export function useDeleteAS2PartnerMutation() {
   const api = useEdiNetwork();
   return useToastMutation(
     async (id: string) => {
@@ -149,7 +148,7 @@ export function useDeleteCertificateSecretMutation() {
 // Platform Partnership Mutations
 // ─────────────────────────────────────────────
 
-export function useCreatePlatformPartnershipMutation() {
+export function useCreateAS2PartnershipMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(
@@ -168,7 +167,7 @@ export function useCreatePlatformPartnershipMutation() {
   );
 }
 
-export function useUpdatePlatformPartnershipMutation() {
+export function useUpdateAS2PartnershipMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(
@@ -185,7 +184,7 @@ export function useUpdatePlatformPartnershipMutation() {
   );
 }
 
-export function useDeletePlatformPartnershipMutation() {
+export function useDeleteAS2PartnershipMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(

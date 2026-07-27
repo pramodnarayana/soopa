@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
-const EDI_API_URL = process.env.EDI_API_URL || 'http://localhost:8000';
+const EDI_API_URL = process.env.EDI_API_URL || 'http://localhost:8001';
 
 @Controller('api/v1/tenants/:tenantId/edi')
 @UseGuards(TenantAuthGuard)
@@ -12,10 +12,9 @@ export class TenantProxyController {
     target: EDI_API_URL,
     changeOrigin: true,
     pathRewrite: (path) => {
-      // Strip only the /api/v1/tenants/:tenantId/edi prefix
-      // Example: /api/v1/tenants/123/edi/api/me -> /api/me
-      // Example: /api/v1/tenants/123/edi/transactions -> /transactions
-      return path.replace(/^\/api\/v1\/tenants\/[^/]+\/edi/, '');
+      // Replace the /api/v1/tenants/:tenantId/edi prefix with /api/v1
+      // Example: /api/v1/tenants/123/edi/transactions -> /api/v1/transactions
+      return path.replace(/^\/api\/v1\/tenants\/[^/]+\/edi/, '/api/v1');
     },
   });
 

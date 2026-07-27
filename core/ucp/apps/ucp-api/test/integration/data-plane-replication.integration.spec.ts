@@ -4,10 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DataPlaneReplicationService } from '../../src/application/services/data-plane-replication.service.js';
 import { ConfigKey } from '../../src/domain/enums/config-keys.enum.js';
 import { MESSAGE_BUS } from '../../src/ports/outbound/message.bus.js';
-import {
-  OUTBOX_REPOSITORY,
-  OutboxEvent,
-} from '../../src/ports/outbound/outbox.repository.js';
+import { OUTBOX_REPOSITORY, OutboxEvent } from '../../src/ports/outbound/outbox.repository.js';
 
 describe('DataPlaneReplicationService (Integration)', () => {
   let service: DataPlaneReplicationService;
@@ -80,7 +77,7 @@ describe('DataPlaneReplicationService (Integration)', () => {
           useValue: {
             getOrThrow: (key: ConfigKey | string) => {
               if (key === (ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN as string))
-                return 'ucp.tenant.events.fifo';
+                return 'ucp-tenant-events.fifo';
               throw new Error(`Config key ${key} not found`);
             },
           },
@@ -88,9 +85,7 @@ describe('DataPlaneReplicationService (Integration)', () => {
       ],
     }).compile();
 
-    service = module.get<DataPlaneReplicationService>(
-      DataPlaneReplicationService,
-    );
+    service = module.get<DataPlaneReplicationService>(DataPlaneReplicationService);
 
     // Reset mock data status for isolation
     mockEvents[0].status = 'PENDING';
@@ -102,7 +97,7 @@ describe('DataPlaneReplicationService (Integration)', () => {
 
     // Assert
     expect(publishedMessages.length).toBe(1);
-    expect(publishedMessages[0].topic).toBe('ucp.tenant.events.fifo');
+    expect(publishedMessages[0].topic).toBe('ucp-tenant-events.fifo');
     expect(publishedMessages[0].message).toEqual({ foo: 'bar' });
     expect(publishedMessages[0].groupId).toBe('tenant_123');
     expect(publishedMessages[0].deduplicationId).toBe('idemp_123');

@@ -6,6 +6,7 @@
       "persistent": true
     },
     "start:dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
@@ -27,6 +28,10 @@
       "outputs": []
     },
     "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "typecheck:tests": {
       "dependsOn": ["^build"],
       "outputs": []
     }

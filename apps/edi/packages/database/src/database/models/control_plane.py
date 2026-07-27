@@ -29,7 +29,7 @@ from .replicated_mixins import (
 
 
 class GlobalBase(DeclarativeBase):
-    pass
+    __table_args__ = {"schema": "edi"}
 
 
 class DatabaseShard(GlobalBase):
@@ -46,7 +46,7 @@ class Tenant(GlobalBase):
     id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    shard_id: Mapped[str] = mapped_column(String(128), ForeignKey("database_shards.id"), nullable=False)
+    shard_id: Mapped[str] = mapped_column(String(128), ForeignKey("edi.database_shards.id"), nullable=False)
     tier: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
     allow_private_as2: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     shard_schema: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
@@ -63,6 +63,7 @@ class User(GlobalBase):
 
     __table_args__ = (
         Index("uq_users_email_lower", text("lower(email)"), unique=True),
+        {"schema": "edi"}
     )
 
 
@@ -74,11 +75,11 @@ class TenantUser(GlobalBase):
         String(128), nullable=False
     )
     user_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("edi.users.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
 
-    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_tenant_user"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_tenant_user"), {"schema": "edi"})
 
 
 class ApiToken(GlobalBase, TimestampMixin):
@@ -122,6 +123,7 @@ class AS2Partner(GlobalBase, AS2PartnerMixin, TimestampMixin):
         Index(
             "uq_global_as2_id", "as2_id", unique=True, postgresql_where=text("tenant_id IS NULL")
         ),
+        {"schema": "edi"}
     )
 
 
@@ -138,14 +140,15 @@ class AS2Partnership(GlobalBase, AS2PartnershipMixin, TimestampMixin):
     )
 
     local_partner_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
     )
     remote_partner_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
     __table_args__ = (
         UniqueConstraint("local_partner_id", "remote_partner_id", name="uq_as2_partnership"),
+        {"schema": "edi"}
     )
 
 
@@ -166,6 +169,7 @@ class ControlPlaneOutbox(GlobalBase, OutboxMixin):
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
+        {"schema": "edi"}
     )
 
 
@@ -181,7 +185,7 @@ class SystemAuditLog(GlobalBase):
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (Index("ix_system_audit_log_tenant_time", "tenant_id", "created_at"),)
+    __table_args__ = (Index("ix_system_audit_log_tenant_time", "tenant_id", "created_at"), {"schema": "edi"})
 
 
 # ---------------------------------------------------------------------------
@@ -213,13 +217,13 @@ class InboundRoute(GlobalBase, InboundRouteMixin, TimestampMixin):
     )
 
     webhook_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("edi.webhooks.id"), nullable=True
     )
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("edi.as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("edi.sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -235,7 +239,8 @@ class InboundRoute(GlobalBase, InboundRouteMixin, TimestampMixin):
             "transaction_type",
             unique=True,
             postgresql_where=text("active = true"),
-        )
+        ),
+        {"schema": "edi"}
     )
 
 
@@ -247,10 +252,10 @@ class OutboundRoute(GlobalBase, OutboundRouteMixin, TimestampMixin):
     )
 
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("edi.as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("edi.sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -265,6 +270,7 @@ class OutboundRoute(GlobalBase, OutboundRouteMixin, TimestampMixin):
             unique=True,
             postgresql_where=text("active = true"),
         ),
+        {"schema": "edi"}
     )
 
 
@@ -282,4 +288,5 @@ class OutboundEdiHeader(GlobalBase, OutboundEdiHeaderMixin, TimestampMixin):
             "trading_partner_id",
             unique=True,
         ),
+        {"schema": "edi"}
     )

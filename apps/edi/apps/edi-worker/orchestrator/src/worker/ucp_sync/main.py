@@ -35,7 +35,7 @@ async def main() -> None:
     api_token_adapter = SqlAlchemyApiTokenAdapter(db_router)
 
     # Existing adapter for pushing to internal sync queue
-    sync_outbox_adapter = SqsOutboxAdapter(queue_name="edi.tenant.sync.fifo")
+    sync_outbox_adapter = SqsOutboxAdapter(queue_name="edi-tenant-sync.fifo")
 
     # New adapter for polling UCP events
     ucp_listener_adapter = SqsUcpListenerAdapter(

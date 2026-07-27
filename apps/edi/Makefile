@@ -41,15 +41,15 @@ check-all: format lint typecheck test
 
 dev:
 	@echo "Starting Frontend, API, and Worker concurrently..."
-	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,web,orch,comp" "make dev-api" "make dev-web" "make dev-worker-orchestrator" "make dev-worker-compute"
+	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,orch,comp" "make dev-api" "make dev-worker-orchestrator" "make dev-worker-compute"
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	ENVIRONMENT=development uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
+	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,383492001305198595,383492001305264131" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-api:
 	@echo "Starting API Gateway with hot-reload for local development..."
-	ENVIRONMENT=development uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,383492001305198595,383492001305264131" uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 
 dev-web:
 	@echo "Starting React Frontend with Vite..."
@@ -72,14 +72,11 @@ db-init:
 	PYTHONPATH=packages/database/src:packages/config/src:apps/edi-worker/orchestrator/src uv run python apps/edi-as2-server/scripts/seed.py
 
 db-reset:
-	@echo "Wiping application databases (leaving Zitadel intact)..."
-	docker compose stop postgres_global postgres_shard_1 debezium_shard_1
-	docker compose rm -f -v postgres_global postgres_shard_1 debezium_shard_1
-	-docker volume ls -q | grep -E "postgres_global_data|postgres_shard_[0-9]+_data|debezium_data|localstack_data" | xargs -r docker volume rm 2>/dev/null
-	@echo "Restarting application databases and Debezium..."
-	docker compose up -d postgres_global postgres_shard_1 debezium_shard_1
-	@echo "Waiting for databases to initialize..."
-	sleep 5
+	@echo "Restarting Debezium..."
+	docker compose stop debezium_shard_1
+	docker compose rm -f -v debezium_shard_1
+	-docker volume ls -q | grep -E "debezium_data" | xargs -r docker volume rm 2>/dev/null
+	docker compose up -d debezium_shard_1
 	@echo "Re-running migrations and seeding..."
 	$(MAKE) db-init
 

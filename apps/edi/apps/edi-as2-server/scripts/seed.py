@@ -42,13 +42,13 @@ async def seed_database() -> None:
 
         # 2. Seed Default Tenant 0
         logger.info("Seeding Host Company as Tenant 0...")
-        tenant_result = await session.execute(select(Tenant).filter_by(id=0))
+        tenant_result = await session.execute(select(Tenant).filter_by(id="0"))
         tenant_obj = tenant_result.scalar_one_or_none()
 
         if not tenant_obj:
             # Tenant 0 is the host company; it uses a dedicated schema "tenant_host"
             tenant_obj = Tenant(
-                id=0,
+                id="0",
                 name="Host Company",
                 shard_id=shard.id,
                 tier="standard",

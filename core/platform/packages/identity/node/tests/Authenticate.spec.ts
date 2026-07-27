@@ -1,25 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
 import { TenantMappingDomainError } from '../src/domain/Errors.js';
-import type { TenantRepository } from '../src/ports/TenantRepository.js';
+import type { TokenClaims } from '../src/domain/IdentityContext.js';
+import type { TenantRepository, UserData } from '../src/ports/TenantRepository.js';
 import type { TokenVerifier } from '../src/ports/TokenVerifier.js';
 
 // Fake implementations instead of magic mocks
 class FakeTokenVerifier implements TokenVerifier {
   public claims: Record<string, unknown> = {};
-  public async verify(token: string) {
+  public async verify(token: string): Promise<TokenClaims> {
     if (token === 'bad') throw new Error('Invalid token');
-    return this.claims;
+    return this.claims as unknown as TokenClaims;
   }
 }
 
 class FakeTenantRepository implements TenantRepository {
-  public users: Record<string, { id: string; name: string }> = {};
+  public users: Record<string, { id: string; name: string; email?: string }> = {};
   public mappings: Record<string, string> = {};
   public provisioned: { userId: string; tenantId: string } | null = null;
 
-  async findUserByEmail(email: string) {
-    return this.users[email] || null;
+  async findUserByEmail(email: string): Promise<UserData | null> {
+    return (this.users[email] as UserData) || null;
   }
 
   async provisionUserAndTenant(_email: string, _name: string, _zitadelOrgId?: string) {

@@ -13,7 +13,8 @@ describe('ZitadelJwksVerifier', () => {
 
     vi.mocked(jose.jwtVerify).mockResolvedValue({
       payload: { sub: 'test-user', email: 'test@test.com' },
-    });
+      protectedHeader: { alg: 'RS256' },
+    } as any);
 
     const claims = await verifier.verify('token');
 

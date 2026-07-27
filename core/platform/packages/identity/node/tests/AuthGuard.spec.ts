@@ -15,7 +15,6 @@ describe('AuthGuard', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // @ts-expect-error - Mucking dependencies for test
     useCase = { execute: vi.fn() } as unknown as AuthenticateUseCase;
     guard = new AuthGuard(useCase);
   });

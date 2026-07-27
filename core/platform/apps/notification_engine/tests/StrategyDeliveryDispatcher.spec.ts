@@ -2,7 +2,7 @@ import { NotificationChannel } from '@soopa/database';
 import { describe, expect, it } from 'vitest';
 import { StrategyDeliveryDispatcher } from '../src/adapters/outbound/StrategyDeliveryDispatcher.js';
 import { InfrastructureError } from '../src/domain/errors.js';
-import { ChannelType, RenderedNotification } from '../src/domain/models.js';
+import { Channel, RenderedNotification } from '../src/domain/models.js';
 import { IDeliveryService } from '../src/ports/index.js';
 
 class FakeStrategy implements IDeliveryService {
@@ -17,7 +17,7 @@ describe('StrategyDeliveryDispatcher', () => {
     const emailStrategy = new FakeStrategy();
     const slackStrategy = new FakeStrategy();
 
-    const strategies = new Map<ChannelType, IDeliveryService>([
+    const strategies = new Map<Channel, IDeliveryService>([
       [NotificationChannel.EMAIL, emailStrategy],
       [NotificationChannel.SLACK, slackStrategy],
     ]);
@@ -32,7 +32,7 @@ describe('StrategyDeliveryDispatcher', () => {
   });
 
   it('should throw if no strategy registered', async () => {
-    const strategies = new Map<ChannelType, IDeliveryService>();
+    const strategies = new Map<Channel, IDeliveryService>();
     const dispatcher = new StrategyDeliveryDispatcher(strategies);
 
     await expect(

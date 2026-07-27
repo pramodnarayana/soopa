@@ -8,14 +8,14 @@ import type {
 } from '../types';
 export interface IPartnersRepository {
   deleteCertificateSecret(vaultRef: string): Promise<void>;
-  getPlatformPartners(): Promise<Partner[]>;
-  createPlatformPartner(payload: CreatePartnerPayload): Promise<Partner>;
-  updatePlatformPartner(id: string, payload: UpdatePartnerPayload): Promise<Partner>;
-  deletePlatformPartner(id: string): Promise<void>;
-  getPlatformPartnerships(): Promise<Partnership[]>;
-  createPlatformPartnership(payload: CreatePartnershipPayload): Promise<Partnership>;
-  updatePlatformPartnership(id: string, payload: UpdatePartnershipPayload): Promise<Partnership>;
-  deletePlatformPartnership(id: string): Promise<void>;
+  getAS2Partners(): Promise<Partner[]>;
+  createAS2Partner(payload: CreatePartnerPayload): Promise<Partner>;
+  updateAS2Partner(id: string, payload: UpdatePartnerPayload): Promise<Partner>;
+  deleteAS2Partner(id: string): Promise<void>;
+  getAS2Partnerships(): Promise<Partnership[]>;
+  createAS2Partnership(payload: CreatePartnershipPayload): Promise<Partnership>;
+  updateAS2Partnership(id: string, payload: UpdatePartnershipPayload): Promise<Partnership>;
+  deleteAS2Partnership(id: string): Promise<void>;
   testAs2PartnershipConnection(
     id: string,
     custom_payload?: string,
@@ -105,50 +105,50 @@ class HttpPartnersRepository implements IPartnersRepository {
     );
   }
 
-  getPlatformPartners(): Promise<Partner[]> {
+  getAS2Partners(): Promise<Partner[]> {
     return this.request('/api/v1/platform/trading-partners/as2/trading-partners');
   }
 
-  createPlatformPartner(payload: CreatePartnerPayload): Promise<Partner> {
+  createAS2Partner(payload: CreatePartnerPayload): Promise<Partner> {
     return this.request('/api/v1/platform/trading-partners/as2/trading-partners', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
-  updatePlatformPartner(id: string, payload: UpdatePartnerPayload): Promise<Partner> {
+  updateAS2Partner(id: string, payload: UpdatePartnerPayload): Promise<Partner> {
     return this.request(`/api/v1/platform/trading-partners/as2/trading-partners/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   }
 
-  deletePlatformPartner(id: string): Promise<void> {
+  deleteAS2Partner(id: string): Promise<void> {
     return this.request(`/api/v1/platform/trading-partners/as2/trading-partners/${id}`, {
       method: 'DELETE',
     });
   }
 
   // ── Platform Partnerships ──────────────────
-  getPlatformPartnerships(): Promise<Partnership[]> {
+  getAS2Partnerships(): Promise<Partnership[]> {
     return this.request('/api/v1/platform/trading-partners/as2/partnerships');
   }
 
-  createPlatformPartnership(payload: CreatePartnershipPayload): Promise<Partnership> {
+  createAS2Partnership(payload: CreatePartnershipPayload): Promise<Partnership> {
     return this.request('/api/v1/platform/trading-partners/as2/partnerships', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   }
 
-  updatePlatformPartnership(id: string, payload: UpdatePartnershipPayload): Promise<Partnership> {
+  updateAS2Partnership(id: string, payload: UpdatePartnershipPayload): Promise<Partnership> {
     return this.request(`/api/v1/platform/trading-partners/as2/partnerships/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   }
 
-  deletePlatformPartnership(id: string): Promise<void> {
+  deleteAS2Partnership(id: string): Promise<void> {
     return this.request(`/api/v1/platform/trading-partners/as2/partnerships/${id}`, {
       method: 'DELETE',
     });

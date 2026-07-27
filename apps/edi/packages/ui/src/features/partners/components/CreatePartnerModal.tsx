@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
 import { useToast } from '@/hooks/use-toast';
 import {
-  useCreatePlatformPartnerMutation,
+  useCreateAS2PartnerMutation,
   useDeleteCertificateSecretMutation,
   useGenerateCertificateMutation,
 } from '../api/partnerHooks';
@@ -38,7 +38,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
 
   const { data: platformSettings } = usePlatformSettings();
   const { toast } = useToast();
-  const createPartner = useCreatePlatformPartnerMutation();
+  const createPartner = useCreateAS2PartnerMutation();
   const generateCert = useGenerateCertificateMutation();
   const deleteCertSecret = useDeleteCertificateSecretMutation();
 

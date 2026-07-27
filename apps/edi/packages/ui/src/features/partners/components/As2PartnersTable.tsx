@@ -7,17 +7,14 @@ import {
 import { CheckCircle2, Server } from 'lucide-react';
 import React from 'react';
 import { DataTable } from '@/components/ui/data-table';
-import {
-  useDeletePlatformPartnerMutation,
-  useUpdatePlatformPartnerMutation,
-} from '../api/partnerHooks';
+import { useDeleteAS2PartnerMutation, useUpdateAS2PartnerMutation } from '../api/partnerHooks';
 import type { AS2Partner } from '../types';
 import { As2PartnerDetails } from './As2PartnerDetails';
 import { SharedRowActions } from './SharedRowActions';
 
 function As2PartnerRowActions({ partner }: { partner: AS2Partner }) {
-  const deletePlatform = useDeletePlatformPartnerMutation();
-  const updatePlatform = useUpdatePlatformPartnerMutation();
+  const deletePlatform = useDeleteAS2PartnerMutation();
+  const updatePlatform = useUpdateAS2PartnerMutation();
 
   const isDeleting = deletePlatform.isPending;
   const isUpdating = updatePlatform.isPending;

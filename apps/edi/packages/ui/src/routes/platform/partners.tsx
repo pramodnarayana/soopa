@@ -2,24 +2,27 @@ import { Server } from 'lucide-react';
 import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable';
 import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal';
 import {
-  PlatformPartnersProvider,
-  usePlatformPartners,
-} from '@/features/partners/context/PlatformPartnersContext';
+  AS2PartnersProvider,
+  useAS2Partners,
+} from '@/features/partners/context/AS2PartnersContext';
 import type { AS2Partner } from '@/features/partners/types';
 
 export function TradingPartnersPage() {
   return (
-    <PlatformPartnersProvider>
+    <AS2PartnersProvider>
       <TradingPartnersPageContent />
-    </PlatformPartnersProvider>
+    </AS2PartnersProvider>
   );
 }
 
 function TradingPartnersPageContent() {
-  const { partners, isLoading, error } = usePlatformPartners();
+  const { partners, isLoading, error } = useAS2Partners();
 
-  const localPartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && p.is_local);
-  const remotePartners = partners.filter((p): p is AS2Partner => p.type === 'AS2' && !p.is_local);
+  const safePartners = Array.isArray(partners) ? partners : [];
+  const localPartners = safePartners.filter((p): p is AS2Partner => p.type === 'AS2' && p.is_local);
+  const remotePartners = safePartners.filter(
+    (p): p is AS2Partner => p.type === 'AS2' && !p.is_local,
+  );
 
   return (
     <div className="p-8">

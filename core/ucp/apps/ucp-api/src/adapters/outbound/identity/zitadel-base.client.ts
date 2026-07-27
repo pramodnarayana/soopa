@@ -4,7 +4,7 @@ export abstract class ZitadelBaseClient {
   protected readonly logger = new Logger(this.constructor.name);
 
   protected get apiUrl() {
-    return process.env.ZITADEL_API_URL || 'http://localhost:8080';
+    return process.env.ZITADEL_API_URL || 'http://ucp.localhost:8080';
   }
 
   protected get token() {
@@ -17,23 +17,15 @@ export abstract class ZitadelBaseClient {
 
   protected assertConfig() {
     if (!this.token) throw new Error('ZITADEL_API_TOKEN is not configured');
-    if (!this.ucpProjectId)
-      throw new Error('ZITADEL_UCP_PROJECT_ID is not configured');
+    if (!this.ucpProjectId) throw new Error('ZITADEL_UCP_PROJECT_ID is not configured');
   }
 
-  protected async fetchWithAuth(
-    endpoint: string,
-    options: RequestInit = {},
-  ): Promise<Response> {
+  protected async fetchWithAuth(endpoint: string, options: RequestInit = {}): Promise<Response> {
     this.assertConfig();
     const headers = new Headers(options.headers);
     headers.set('Authorization', `Bearer ${this.token}`);
     headers.set('Accept', 'application/json');
-    if (
-      !headers.has('Content-Type') &&
-      options.method !== 'GET' &&
-      options.method !== 'DELETE'
-    ) {
+    if (!headers.has('Content-Type') && options.method !== 'GET' && options.method !== 'DELETE') {
       headers.set('Content-Type', 'application/json');
     }
 
@@ -45,10 +37,7 @@ export abstract class ZitadelBaseClient {
     return response;
   }
 
-  protected async handleResponseError(
-    response: Response,
-    actionContext: string,
-  ): Promise<never> {
+  protected async handleResponseError(response: Response, actionContext: string): Promise<never> {
     const errorText = await response.text();
     this.logger.error(`Failed to ${actionContext}: ${errorText}`);
     throw new HttpException(

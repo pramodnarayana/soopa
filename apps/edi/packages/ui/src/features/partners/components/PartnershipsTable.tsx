@@ -8,16 +8,16 @@ import { Network, ShieldCheck } from 'lucide-react';
 import React from 'react';
 import { DataTable } from '@/components/ui/data-table';
 import {
-  useDeletePlatformPartnershipMutation,
-  useUpdatePlatformPartnershipMutation,
+  useDeleteAS2PartnershipMutation,
+  useUpdateAS2PartnershipMutation,
 } from '../api/partnerHooks';
-import type { Partnership } from '../context/PlatformPartnersContext';
+import type { Partnership } from '../context/AS2PartnersContext';
 import { PartnershipDetails } from './PartnershipDetails';
 import { SharedRowActions } from './SharedRowActions';
 
 function PartnershipRowActions({ partnership }: { partnership: Partnership }) {
-  const updatePlatform = useUpdatePlatformPartnershipMutation();
-  const deletePlatform = useDeletePlatformPartnershipMutation();
+  const updatePlatform = useUpdateAS2PartnershipMutation();
+  const deletePlatform = useDeleteAS2PartnershipMutation();
   const isUpdating = updatePlatform.isPending;
   const isDeleting = deletePlatform.isPending;
 
@@ -51,7 +51,7 @@ function PartnershipRowActions({ partnership }: { partnership: Partnership }) {
 
 const columnHelper = createColumnHelper<Partnership>();
 
-import type { Partner } from '../context/PlatformPartnersContext';
+import type { Partner } from '../context/AS2PartnersContext';
 
 export function PartnershipsTable({
   data,

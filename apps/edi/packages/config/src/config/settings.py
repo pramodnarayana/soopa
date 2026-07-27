@@ -5,7 +5,7 @@ Each service can use the full AppSettings or cherry-pick specific groups.
 """
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,7 +17,7 @@ class DatabaseSettings(BaseSettings):
     global_url: str = Field(
         validation_alias="DB_URL",
         serialization_alias="DB_GLOBAL_URL",
-        default="postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global",
+        default="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
         description="Async PostgreSQL connection string for the Global Control Plane.",
     )
     pool_size: int = Field(default=10)
@@ -43,6 +43,8 @@ class AwsSettings(BaseSettings):
     endpoint_url: str | None = Field(default=None)
     region: str | None = Field(default=None)
     default_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
+    access_key_id: str | None = Field(default=None)
+    secret_access_key: str | None = Field(default=None)
 
     @property
     def resolved_region(self) -> str:
@@ -68,29 +70,38 @@ class IdentitySettings(BaseSettings):
         description="The ZITADEL Client ID for the API Gateway Swagger UI",
     )
     authorization_url: str = Field(
-        default="http://localhost:8080/oauth/v2/authorize",
+        default="http://ucp.localhost:8080/oauth/v2/authorize",
         description="The OAuth2 authorization endpoint URL",
     )
     token_url: str = Field(
-        default="http://localhost:8080/oauth/v2/token",
+        default="http://ucp.localhost:8080/oauth/v2/token",
         description="The OAuth2 token endpoint URL",
     )
     issuer: str = Field(
-        default="http://localhost:8080",
+        default="http://ucp.localhost:8080",
         description="The OIDC Issuer URL",
     )
     jwks_url: str = Field(
-        default="http://localhost:8080/oauth/v2/keys",
+        default="http://ucp.localhost:8080/oauth/v2/keys",
         description="The OIDC JWKS URL for verifying signatures",
     )
     userinfo_url: str = Field(
-        default="http://localhost:8080/oidc/v1/userinfo",
+        default="http://ucp.localhost:8080/oidc/v1/userinfo",
         description="The OIDC UserInfo endpoint for remote token introspection",
     )
-    audience: str = Field(
+    audience: str | list[str] = Field(
         default="api-gateway",
-        description="The expected audience for the JWT",
+        description="The expected audience for the JWT. Can be a single string or a comma-separated list of strings.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_audience(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "audience" in data:
+            aud = data["audience"]
+            if isinstance(aud, str) and "," in aud:
+                data["audience"] = [a.strip() for a in aud.split(",") if a.strip()]
+        return data
 
 
 class ServerSettings(BaseSettings):

@@ -66,7 +66,7 @@ const STATUS_THEME = {
 
 const columnHelper = createColumnHelper<Tenant>();
 
-export const Route = createFileRoute('/_authenticated/tenants/')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/')({
   component: TenantsPage,
 });
 

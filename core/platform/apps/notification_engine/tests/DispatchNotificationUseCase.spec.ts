@@ -61,7 +61,7 @@ describe('DispatchNotificationUseCase', () => {
         subjectTemplate: 'Sub3',
         bodyTemplate: 'Body3',
       },
-    ] as NotificationTemplate[];
+    ] as unknown as NotificationTemplate[];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 
@@ -97,7 +97,7 @@ describe('DispatchNotificationUseCase', () => {
         subjectTemplate: 'Sub3',
         bodyTemplate: 'Body3',
       },
-    ] as NotificationTemplate[];
+    ] as unknown as NotificationTemplate[];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 

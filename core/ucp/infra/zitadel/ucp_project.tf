@@ -39,6 +39,8 @@ resource "zitadel_application_oidc" "ucp_web_dashboard" {
   grant_types               = ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"]
   app_type                  = "OIDC_APP_TYPE_USER_AGENT"
   auth_method_type          = "OIDC_AUTH_METHOD_TYPE_NONE"
+  access_token_type         = "OIDC_TOKEN_TYPE_JWT"
+  access_token_role_assertion = true
   dev_mode                  = true
 }
 

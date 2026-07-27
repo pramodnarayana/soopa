@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useSubscribeTenant, useUnsubscribeTenant } from '@/domains/apps/api/mutations';
 import { useGetApps, useGetTenantSubscriptions } from '@/domains/apps/api/queries';
 
-export const Route = createFileRoute('/_authenticated/tenants/$tenantId/apps')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/apps')({
   component: TenantAppsPage,
 });
 

@@ -1,4 +1,5 @@
 version: '3.9'
 include:
+  - core/infra/docker-compose.yml
   - core/ucp/docker-compose.yml
-  # - apps/edi/docker-compose.yml # Commented out temporarily due to localstack port conflict until Phase 4 refactor
+  - apps/edi/docker-compose.yml

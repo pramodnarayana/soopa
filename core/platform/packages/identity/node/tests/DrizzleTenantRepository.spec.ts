@@ -14,7 +14,7 @@ describe('DrizzleTenantRepository', () => {
   let db: ReturnType<typeof createDbClient>['db'];
   let repo: DrizzleTenantRepository;
   const dbConnectionString =
-    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
+    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5432/ucp_global';
 
   beforeAll(async () => {
     db = createDbClient(dbConnectionString).db;

@@ -3,7 +3,7 @@ import { ArrowLeft, Box, Building2, Code2, Key, Network, Users } from 'lucide-re
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetTenants } from '@/domains/tenants/api/queries';
 
-export const Route = createFileRoute('/_authenticated/tenants/$tenantId')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId')({
   component: TenantLayout,
 });
 
@@ -35,7 +35,7 @@ function TenantLayout() {
         <div className="max-w-7xl mx-auto px-8 py-6">
           <div className="mb-4">
             <Link
-              to="/tenants"
+              to="/platform/tenants"
               className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
             >
               <ArrowLeft className="w-4 h-4 mr-1" />
@@ -64,7 +64,7 @@ function TenantLayout() {
         <div className="max-w-7xl mx-auto px-8">
           <nav className="flex items-center gap-6" aria-label="Tabs">
             <Link
-              to="/tenants/$tenantId"
+              to="/platform/tenants/$tenantId"
               params={{ tenantId }}
               activeOptions={{ exact: true }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
@@ -73,7 +73,7 @@ function TenantLayout() {
               Overview
             </Link>
             <Link
-              to="/tenants/$tenantId/users"
+              to="/platform/tenants/$tenantId/users"
               params={{ tenantId }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
             >
@@ -81,7 +81,7 @@ function TenantLayout() {
               Users
             </Link>
             <Link
-              to="/tenants/$tenantId/apps"
+              to="/platform/tenants/$tenantId/apps"
               params={{ tenantId }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
             >
@@ -96,7 +96,7 @@ function TenantLayout() {
                 Developer
               </span>
               <Link
-                to="/tenants/$tenantId/api-tokens"
+                to="/platform/tenants/$tenantId/api-tokens"
                 params={{ tenantId }}
                 className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
               >
@@ -104,7 +104,7 @@ function TenantLayout() {
                 API Tokens
               </Link>
               <Link
-                to="/tenants/$tenantId/webhooks"
+                to="/platform/tenants/$tenantId/webhooks"
                 params={{ tenantId }}
                 className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
               >

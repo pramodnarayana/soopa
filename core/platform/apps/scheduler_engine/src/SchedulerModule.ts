@@ -1,5 +1,6 @@
 import {
   Global,
+  Inject,
   Module,
   OnApplicationBootstrap,
   OnApplicationShutdown,
@@ -18,12 +19,15 @@ export interface SchedulerModuleOptions {
   batchSize: number;
 }
 
+export const DATABASE_POOL_TOKEN = Symbol('DATABASE_POOL');
+export const DATABASE_CONNECTION_TOKEN = Symbol('DATABASE_CONNECTION');
+
 @Global()
 @Module({})
 export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(
-    private readonly worker: SchedulerWorker,
-    private readonly pool: pg.Pool,
+    @Inject(SchedulerWorker) private readonly worker: SchedulerWorker,
+    @Inject(DATABASE_POOL_TOKEN) private readonly pool: pg.Pool,
   ) {}
 
   async onApplicationBootstrap() {
@@ -39,12 +43,12 @@ export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShu
     const dbClient = createDbClient(options.dbConnectionString);
 
     const dbProvider: Provider = {
-      provide: 'DATABASE_CONNECTION',
+      provide: DATABASE_CONNECTION_TOKEN,
       useValue: dbClient.db,
     };
 
     const poolProvider: Provider = {
-      provide: pg.Pool,
+      provide: DATABASE_POOL_TOKEN,
       useValue: dbClient.pool,
     };
 
@@ -53,7 +57,7 @@ export class SchedulerModule implements OnApplicationBootstrap, OnApplicationShu
       useFactory: (db: ReturnType<typeof createDbClient>['db']) => {
         return new PostgresJobRepository(db);
       },
-      inject: ['DATABASE_CONNECTION'],
+      inject: [DATABASE_CONNECTION_TOKEN],
     };
 
     const workerProvider: Provider = {

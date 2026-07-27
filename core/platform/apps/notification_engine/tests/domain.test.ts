@@ -6,7 +6,7 @@ import { ITemplateRenderer, NotificationRendererService } from '../src/domain/se
 // Fake Renderer for Pure Logic (Zero Mocks for Pure Logic)
 class FakeTemplateRenderer implements ITemplateRenderer {
   render(template: string, payload: Record<string, unknown>): string {
-    return template.replace('{{name}}', payload.name);
+    return template.replace('{{name}}', String(payload['name']));
   }
 }
 

@@ -1,6 +1,8 @@
 import * as dotenv from 'dotenv';
 
-dotenv.config();
+import * as path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '../../../../.env') });
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -23,7 +25,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  await app.listen(3001, '0.0.0.0');
+  await app.listen(3002, '0.0.0.0');
   logger.log(`Scheduler Engine listening on ${await app.getUrl()}`);
 }
 
