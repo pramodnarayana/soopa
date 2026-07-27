@@ -32,7 +32,7 @@ function PartnershipsPageContent() {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Partnerships</h1>
           </div>
         </div>
-        <CreatePartnershipModal availablePartners={safePartners} />
+        {!combinedError && <CreatePartnershipModal availablePartners={safePartners} />}
       </div>
       {combinedError ? (
         <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
