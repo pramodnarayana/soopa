@@ -40,7 +40,7 @@ check-all: format lint typecheck test
 # --- Local Development Server ---
 
 dev:
-	@echo "Starting Frontend, API, and Worker concurrently..."
+	@echo "Starting API and Workers concurrently..."
 	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,orch,comp" "make dev-api" "make dev-worker-orchestrator" "make dev-worker-compute"
 
 dev-as2:
@@ -75,7 +75,7 @@ db-reset:
 	@echo "Restarting Debezium..."
 	docker compose stop debezium_shard_1
 	docker compose rm -f -v debezium_shard_1
-	-docker volume ls -q | grep -E "debezium_data" | xargs -r docker volume rm 2>/dev/null
+	-docker volume rm apps_edi_debezium_data 2>/dev/null || true
 	docker compose up -d debezium_shard_1
 	@echo "Re-running migrations and seeding..."
 	$(MAKE) db-init

@@ -16,7 +16,7 @@ export class PlatformAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.error('PlatformAuthGuard: Missing or invalid Bearer token. authHeader:', authHeader);
+      console.error('PlatformAuthGuard: Missing or invalid Bearer token');
       throw new UnauthorizedException('Missing or invalid Bearer token');
     }
 
@@ -25,7 +25,6 @@ export class PlatformAuthGuard implements CanActivate {
     const payload = await this.authService.verifyToken(token);
 
     // Verify the user has PlatformAdmin role
-    console.log('JWT Payload:', JSON.stringify(payload, null, 2));
     const defaultRoles = payload['urn:zitadel:iam:org:project:roles'] as
       | Record<string, unknown>
       | undefined;
@@ -33,9 +32,11 @@ export class PlatformAuthGuard implements CanActivate {
       `urn:zitadel:iam:org:project:id:${process.env.ZITADEL_UCP_PROJECT_ID}:roles`
     ] as Record<string, unknown> | undefined;
 
-    const roles = defaultRoles || ucpRoles;
-    if (!roles || !('PlatformAdmin' in roles)) {
-      console.error('PlatformAuthGuard: User missing PlatformAdmin role. Roles:', roles);
+    const hasPlatformAdminInDefault = defaultRoles && 'PlatformAdmin' in defaultRoles;
+    const hasPlatformAdminInUcp = ucpRoles && 'PlatformAdmin' in ucpRoles;
+
+    if (!hasPlatformAdminInDefault && !hasPlatformAdminInUcp) {
+      console.error('PlatformAuthGuard: User missing PlatformAdmin role');
       throw new ForbiddenException('User is not a Platform Administrator');
     }
 

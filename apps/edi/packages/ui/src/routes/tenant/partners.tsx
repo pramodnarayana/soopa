@@ -12,7 +12,7 @@ export const Route = createRoute({
 });
 
 export function PartnersPage() {
-  const { sftpPartners, isLoading } = useSFTPPartners();
+  const { sftpPartners, isLoading, error } = useSFTPPartners();
 
   return (
     <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out p-8">
@@ -33,7 +33,13 @@ export function PartnersPage() {
 
       {/* Main Grid */}
       <div className="space-y-8">
-        <SftpPartnersTable data={sftpPartners} isLoading={isLoading} />
+        {error ? (
+          <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
+            Failed to load partners: {error.message}
+          </div>
+        ) : (
+          <SftpPartnersTable data={sftpPartners} isLoading={isLoading} />
+        )}
       </div>
     </div>
   );

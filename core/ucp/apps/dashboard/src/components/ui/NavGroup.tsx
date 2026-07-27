@@ -15,6 +15,7 @@ export function NavGroup({ label, icon: Icon, defaultExpanded = false, children 
     <div className="flex flex-col gap-1 w-full">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
+        aria-expanded={isExpanded}
         className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 w-full group text-slate-600 hover:bg-slate-50 hover:text-slate-900 focus:outline-none"
       >
         {Icon && (
@@ -29,9 +30,11 @@ export function NavGroup({ label, icon: Icon, defaultExpanded = false, children 
       </button>
 
       <div
+        aria-hidden={!isExpanded}
         className={`overflow-hidden transition-all duration-300 ease-in-out ${
           isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
         }`}
+        inert={!isExpanded ? true : undefined}
       >
         <div className="ml-5 mt-1 border-l-2 border-slate-100 pl-2 flex flex-col gap-1">
           {children}

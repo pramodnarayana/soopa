@@ -5,7 +5,7 @@ import { PostgresJobRepository } from '../src/adapters/outbound/PostgresJobRepos
 
 describe('PostgresJobRepository', () => {
   const dbConnectionString =
-    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5432/ucp_global';
+    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5434/ucp_global';
   let repo: PostgresJobRepository;
   let db: any;
 

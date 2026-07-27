@@ -10,8 +10,10 @@ import { PostgresTemplateRepository } from '../src/adapters/outbound/PostgresTem
 import { InfrastructureError } from '../src/domain/errors.js';
 
 describe('PostgresTemplateRepository', () => {
-  const dbConnectionString =
-    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5432/ucp_global';
+  const dbConnectionString = process.env.DATABASE_URL;
+  if (!dbConnectionString) {
+    throw new Error('DATABASE_URL must be set for PostgresTemplateRepository tests');
+  }
   let repo: PostgresTemplateRepository;
   let db: ReturnType<typeof createDbClient>['db'];
 

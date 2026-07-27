@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+set -e
 
 echo "Running typechecks before push..."
 pnpm typecheck

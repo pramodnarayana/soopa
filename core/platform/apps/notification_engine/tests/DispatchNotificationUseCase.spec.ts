@@ -44,7 +44,7 @@ describe('DispatchNotificationUseCase', () => {
         channel: NotificationChannel.EMAIL,
         subjectTemplate: 'Sub1',
         bodyTemplate: 'Body1',
-      },
+      } satisfies NotificationTemplate,
       {
         id: '2',
         tenantId: 't1',
@@ -52,7 +52,7 @@ describe('DispatchNotificationUseCase', () => {
         channel: NotificationChannel.SLACK,
         subjectTemplate: 'Sub2',
         bodyTemplate: 'Body2',
-      },
+      } satisfies NotificationTemplate,
       {
         id: '3',
         tenantId: 't1',
@@ -60,8 +60,8 @@ describe('DispatchNotificationUseCase', () => {
         channel: NotificationChannel.IN_APP,
         subjectTemplate: 'Sub3',
         bodyTemplate: 'Body3',
-      },
-    ] as unknown as NotificationTemplate[];
+      } satisfies NotificationTemplate,
+    ];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 
@@ -96,8 +96,8 @@ describe('DispatchNotificationUseCase', () => {
         channel: NotificationChannel.IN_APP,
         subjectTemplate: 'Sub3',
         bodyTemplate: 'Body3',
-      },
-    ] as unknown as NotificationTemplate[];
+      } satisfies NotificationTemplate,
+    ];
 
     const useCase = new DispatchNotificationUseCase(repo, delivery, renderer);
 

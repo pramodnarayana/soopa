@@ -33,6 +33,12 @@ class TokenClaims(BaseModel):
                         for org_id in orgs:
                             authorized_tenants.add(str(org_id))
 
+            # NOTE: The string "0" is used as a reserved sentinel value to represent
+            # platform-admin/instance-owner privileges. Downstream code checks for
+            # exact match of "0" in authorized_tenants to grant platform-wide access.
+            # This is an intentional convention and not a verification of the actual
+            # Zitadel instance-owner organization ID.
+
             data["authorized_tenants"] = list(authorized_tenants)
         return data
 

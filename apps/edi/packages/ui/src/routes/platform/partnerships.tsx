@@ -15,7 +15,7 @@ export function PartnershipsPage() {
 }
 
 function PartnershipsPageContent() {
-  const { partners, partnerships, isLoading } = useAS2Partners();
+  const { partners, partnerships, isLoading, error } = useAS2Partners();
 
   const safePartners = Array.isArray(partners) ? partners : [];
   const safePartnerships = Array.isArray(partnerships) ? partnerships : [];
@@ -33,11 +33,17 @@ function PartnershipsPageContent() {
         </div>
         <CreatePartnershipModal availablePartners={safePartners} />
       </div>
-      <PartnershipsTable
-        data={safePartnerships}
-        availablePartners={safePartners}
-        isLoading={isLoading}
-      />
+      {error ? (
+        <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
+          Failed to load partnerships: {error.message}
+        </div>
+      ) : (
+        <PartnershipsTable
+          data={safePartnerships}
+          availablePartners={safePartners}
+          isLoading={isLoading}
+        />
+      )}
     </div>
   );
 }

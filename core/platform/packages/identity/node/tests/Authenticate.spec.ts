@@ -15,12 +15,12 @@ class FakeTokenVerifier implements TokenVerifier {
 }
 
 class FakeTenantRepository implements TenantRepository {
-  public users: Record<string, { id: string; name: string; email?: string }> = {};
+  public users: Record<string, UserData> = {};
   public mappings: Record<string, string> = {};
   public provisioned: { userId: string; tenantId: string } | null = null;
 
   async findUserByEmail(email: string): Promise<UserData | null> {
-    return (this.users[email] as UserData) || null;
+    return this.users[email] ?? null;
   }
 
   async provisionUserAndTenant(_email: string, _name: string, _zitadelOrgId?: string) {
@@ -62,7 +62,7 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.users['existing@example.com'] = { id: 'u2', name: 'Existing User DB' };
+    repo.users['existing@example.com'] = { id: 'u2', name: 'Existing User DB', email: 'existing@example.com' } satisfies UserData;
     repo.mappings['u2'] = 't2';
 
     const useCase = new AuthenticateUseCase(verifier, repo);
@@ -86,7 +86,7 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.users['no-tenant@example.com'] = { id: 'u3', name: 'User 3' };
+    repo.users['no-tenant@example.com'] = { id: 'u3', name: 'User 3', email: 'no-tenant@example.com' } satisfies UserData;
     // No mapping set
 
     const useCase = new AuthenticateUseCase(verifier, repo);

@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,6 +9,8 @@ from jwt import PyJWKClient
 
 from identity.domain.identity_context import TokenClaims
 from identity.ports.token_verifier import TokenVerifier
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,17 +39,20 @@ class ZitadelTokenVerifier(TokenVerifier):
                 issuer=self._options.issuer,
             )
         except Exception as e:
-            print(f"FastAPI JWT Decode Error: {e!r}")
+            logger.error("JWT decode failed", exc_info=e)
             raise
 
         # Fallback to /userinfo if roles are missing (with enterprise caching)
         if "urn:zitadel:iam:org:project:roles" not in payload:
-            jti = payload.get("jti", token)
+            jti = payload.get("jti")
+            if jti is None:
+                # Hash token to derive cache key when jti is absent
+                jti = hashlib.sha256(token.encode()).hexdigest()
             try:
                 userinfo = await self._get_cached_userinfo(token, jti)
                 payload.update(userinfo)
             except Exception as e:
-                print(f"Failed to fetch userinfo: {e!r}")
+                logger.warning("Failed to fetch userinfo", exc_info=e)
 
         return TokenClaims.model_validate(payload)
 

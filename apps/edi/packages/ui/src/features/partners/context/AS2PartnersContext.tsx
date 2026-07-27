@@ -13,6 +13,10 @@ interface AS2PartnersContextType {
   partnerships: Partnership[];
   isLoading: boolean;
   error: Error | null;
+  partnersLoading: boolean;
+  partnersError: Error | null;
+  partnershipsLoading: boolean;
+  partnershipsError: Error | null;
   refresh: () => Promise<void>;
 }
 
@@ -41,7 +45,19 @@ export function AS2PartnersProvider({ children }: { children: React.ReactNode })
   }, [refetchPartners, refetchPartnerships]);
 
   return (
-    <AS2PartnersContext.Provider value={{ partners, partnerships, isLoading, error, refresh }}>
+    <AS2PartnersContext.Provider
+      value={{
+        partners,
+        partnerships,
+        isLoading,
+        error,
+        partnersLoading: isLoadingPartners,
+        partnersError: errorPartners,
+        partnershipsLoading: isLoadingPartnerships,
+        partnershipsError: errorPartnerships,
+        refresh,
+      }}
+    >
       {children}
     </AS2PartnersContext.Provider>
   );

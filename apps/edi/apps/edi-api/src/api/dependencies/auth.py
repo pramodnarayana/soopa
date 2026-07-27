@@ -75,11 +75,12 @@ async def get_current_tenant_id(
     return tenant_id
 
 
-def require_platform_admin(tenant_id: str | None = Depends(get_current_tenant_id)) -> str:
+def require_platform_admin(identity: IdentityContext = Depends(get_identity_context)) -> str:
     """
-    Dependency that enforces the user belongs to Tenant 0 (Platform Admin).
+    Dependency that enforces the user has Platform Admin privileges.
     """
-    if tenant_id != "0":
+    is_platform_admin = "PlatformAdmin" in identity.roles or "0" in identity.authorized_tenants
+    if not is_platform_admin:
         raise HTTPException(
             status_code=403,
             detail="Forbidden. This action requires Platform Admin privileges.",

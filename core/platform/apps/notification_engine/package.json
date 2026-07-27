@@ -1,6 +1,7 @@
 {
   "name": "@soopa/notification-engine",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "description": "Stateful Notification Engine",
   "main": "dist/index.js",
