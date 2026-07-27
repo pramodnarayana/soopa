@@ -27,7 +27,7 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
     env:
-      DATABASE_URL: postgresql://edi:edi_password@localhost:5432/edi_global
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
       SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
       POSTGRES_PASSWORD: zitadel_password
       ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
