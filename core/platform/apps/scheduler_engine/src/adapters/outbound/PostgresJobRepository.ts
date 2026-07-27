@@ -85,20 +85,15 @@ export class PostgresJobRepository {
   async sweepStuckJobs() {
     const threshold = new Date(Date.now() - this.lockLeaseMs);
 
-    try {
-      const result = await this.db
-        .update(scheduledJobs)
-        .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null })
-        .where(
-          and(
-            eq(scheduledJobs.status, JobStatus.RUNNING),
-            sql`${scheduledJobs.lockedAt} <= ${threshold.toISOString()}::timestamp`,
-          ),
-        );
-      return result.rowCount;
-    } catch (err: any) {
-      console.error('Deep Drizzle Error Details:', err, 'Cause:', err?.cause);
-      throw err;
-    }
+    const result = await this.db
+      .update(scheduledJobs)
+      .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null })
+      .where(
+        and(
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          sql`${scheduledJobs.lockedAt} <= ${threshold.toISOString()}::timestamp`,
+        ),
+      );
+    return result.rowCount;
   }
 }
