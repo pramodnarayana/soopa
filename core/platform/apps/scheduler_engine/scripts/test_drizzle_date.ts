@@ -4,8 +4,8 @@ import pkg from 'pg';
 
 const { Client } = pkg;
 
+import { scheduledJobs } from '@soopa/database';
 import { and, eq, lte } from 'drizzle-orm';
-import { scheduledJobs } from './core/ucp/packages/database/src/schema/scheduler.ts';
 
 const TEST_JOB_ID = `diag-${Date.now()}`;
 
