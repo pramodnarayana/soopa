@@ -15,10 +15,12 @@ GLOBAL_DB_URL = os.getenv(
     os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     ),
-)
+).replace("postgresql://", "postgresql+asyncpg://")
+
 SHARD_1_URL = os.getenv(
-    "DB_SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-)
+    "DB_SHARD_1_URL",
+    os.getenv("SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"),
+).replace("postgresql://", "postgresql+asyncpg://")
 
 
 def test_validate_target_url():
