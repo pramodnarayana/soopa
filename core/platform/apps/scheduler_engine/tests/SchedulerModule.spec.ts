@@ -4,18 +4,15 @@ import { HealthController } from '../src/api/HealthController.js';
 import { SchedulerWorker } from '../src/application/SchedulerWorker.js';
 import { SchedulerModule } from '../src/SchedulerModule.js';
 
-// Mock dependencies
-vi.mock('@soopa/database', () => ({
-  createDbClient: vi.fn().mockReturnValue({ db: {}, pool: { end: vi.fn() } }),
-  scheduledJobs: {},
-}));
-
 describe('SchedulerModule', () => {
+  const dbConnectionString =
+    process.env.DATABASE_URL || 'postgres://ucp_admin:ucp_password@localhost:5432/ucp_global';
+
   it('should compile the module and resolve controllers and providers', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
         SchedulerModule.register({
-          dbConnectionString: 'postgres://dummy',
+          dbConnectionString,
           engineId: 'test-engine',
           pollIntervalMs: 100,
           batchSize: 5,
@@ -31,6 +28,10 @@ describe('SchedulerModule', () => {
 
     const app = moduleRef.createNestApplication();
     await app.init();
+
+    // Give the worker loop a chance to run at least once against the real database
+    // This will trigger sweepStuckJobs and test the actual DB connection/schema
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     // Test HealthController
     const healthResult = healthController.check();
