@@ -8,7 +8,7 @@ from identity.adapters.outbound.zitadel.jwks_token_verifier import (
     ZitadelTokenVerifierOptions,
 )
 from identity.application.authenticate import AuthenticationError, authenticate_bearer_token
-from identity.domain.identity_context import IdentityContext
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 
 from api.core.authorization import AuthorizationService
 from api.dependencies.services import get_tenant_repo
@@ -53,18 +53,20 @@ async def get_current_tenant_id(
 ) -> str:
     """Extracts tenant ID dynamically from the URL and enforces Zero Trust ACL."""
     tenant_id = request.path_params.get("tenant_id")
-    is_platform_admin = "PlatformAdmin" in identity.roles or "0" in identity.authorized_tenants
+    is_platform_admin = (
+        "PlatformAdmin" in identity.roles or PLATFORM_TENANT_ID in identity.authorized_tenants
+    )
 
-    logger.info(
+    logger.debug(
         f"get_current_tenant_id: tenant_id={tenant_id}, roles={identity.roles}, authorized_tenants={identity.authorized_tenants}, is_platform_admin={is_platform_admin}"
     )
 
     if not tenant_id:
         if is_platform_admin:
             logger.info(
-                "get_current_tenant_id: No tenant_id in path, but user is platform admin. Returning '0'."
+                f"get_current_tenant_id: No tenant_id in path, but user is platform admin. Returning '{PLATFORM_TENANT_ID}'."
             )
-            return "0"
+            return PLATFORM_TENANT_ID
         logger.warning(
             f"get_current_tenant_id: Raising 400 Bad Request because tenant_id is missing and user is not platform admin. Roles: {identity.roles}"
         )
@@ -88,13 +90,15 @@ def require_platform_admin(identity: IdentityContext = Depends(get_identity_cont
     """
     Dependency that enforces the user has Platform Admin privileges.
     """
-    is_platform_admin = "PlatformAdmin" in identity.roles or "0" in identity.authorized_tenants
+    is_platform_admin = (
+        "PlatformAdmin" in identity.roles or PLATFORM_TENANT_ID in identity.authorized_tenants
+    )
     if not is_platform_admin:
         raise HTTPException(
             status_code=403,
             detail="Forbidden. This action requires Platform Admin privileges.",
         )
-    return "0"
+    return PLATFORM_TENANT_ID
 
 
 def get_authorization_service(
@@ -118,7 +122,7 @@ async def get_current_user_profile(
     if isinstance(roles, dict):
         roles = list(roles.keys())
 
-    is_platform_admin = tenant_id == "0" or "PlatformAdmin" in roles
+    is_platform_admin = tenant_id == PLATFORM_TENANT_ID or "PlatformAdmin" in roles
 
     return await auth_service.get_authorization_profile(
         tenant_id=tenant_id,

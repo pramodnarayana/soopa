@@ -61,6 +61,10 @@ class TokenClaims(BaseModel):
     model_config = {"extra": "allow", "populate_by_name": True}
 
 
+# The canonical tenant ID used to represent the global platform administrator scope.
+PLATFORM_TENANT_ID = "0"
+
+
 class IdentityContext(BaseModel):
     subject: str
     tenant_id: str | None = None

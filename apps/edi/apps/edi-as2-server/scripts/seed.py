@@ -7,6 +7,7 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models import DatabaseShard, Tenant, TenantUser, User
 from dotenv import load_dotenv
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select
 
 load_dotenv()
@@ -41,14 +42,14 @@ async def seed_database() -> None:
             logger.info("Created shard_1.")
 
         # 2. Seed Default Tenant 0
-        logger.info("Seeding Host Company as Tenant 0...")
-        tenant_result = await session.execute(select(Tenant).filter_by(id="0"))
+        logger.info("Seeding Host Company as Tenant %s...", PLATFORM_TENANT_ID)
+        tenant_result = await session.execute(select(Tenant).filter_by(id=PLATFORM_TENANT_ID))
         tenant_obj = tenant_result.scalar_one_or_none()
 
         if not tenant_obj:
             # Tenant 0 is the host company; it uses a dedicated schema "tenant_host"
             tenant_obj = Tenant(
-                id="0",
+                id=PLATFORM_TENANT_ID,
                 name="Host Company",
                 shard_id=shard.id,
                 tier="standard",
@@ -56,7 +57,7 @@ async def seed_database() -> None:
             )
             session.add(tenant_obj)
             await session.flush()
-            logger.info("Created Tenant 0 (Host Company).")
+            logger.info("Created Tenant %s (Host Company).", PLATFORM_TENANT_ID)
         else:
             needs_repair = False
             if tenant_obj.shard_schema != "tenant_host":
@@ -68,7 +69,10 @@ async def seed_database() -> None:
             if needs_repair:
                 session.add(tenant_obj)
                 await session.flush()
-                logger.info("Repaired Tenant 0 shard_id and shard_schema to shard_1/tenant_host.")
+                logger.info(
+                    "Repaired Tenant %s shard_id and shard_schema to shard_1/tenant_host.",
+                    PLATFORM_TENANT_ID,
+                )
 
         # 3. Seed Default User
         admin_email = os.getenv("SYSTEM_ADMIN_EMAIL")
@@ -85,7 +89,7 @@ async def seed_database() -> None:
                 await session.flush()
                 logger.info("Created Admin User.")
 
-            # Map user to Tenant 0 idempotently
+            # Map user to Tenant PLATFORM_TENANT_ID idempotently
             mapping_result = await session.execute(
                 select(TenantUser).filter_by(tenant_id=tenant_obj.id, user_id=user.id)
             )
@@ -93,7 +97,7 @@ async def seed_database() -> None:
             if not tenant_user:
                 tenant_user = TenantUser(tenant_id=tenant_obj.id, user_id=user.id, role="admin")
                 session.add(tenant_user)
-                logger.info("Mapped Admin User to Tenant 0.")
+                logger.info("Mapped Admin User to Tenant %s.", PLATFORM_TENANT_ID)
         else:
             logger.info("SYSTEM_ADMIN_EMAIL not provided. Skipping default admin creation.")
 

@@ -37,7 +37,9 @@ function TradingPartnersPageContent() {
         </div>
         <CreatePartnerModal
           existingAs2Ids={
-            safePartners.map((p) => (p.type === 'AS2' ? p.as2_id : null)).filter(Boolean) as string[]
+            safePartners
+              .map((p) => (p.type === 'AS2' ? p.as2_id : null))
+              .filter(Boolean) as string[]
           }
         />
       </div>
@@ -51,7 +53,7 @@ function TradingPartnersPageContent() {
         <div className="p-6 text-center text-red-600 bg-red-50 rounded-lg border border-red-100">
           Failed to load partners: {error.message}
         </div>
-      ) : safePartners.length === 0 ? (
+      ) : localPartners.length === 0 && remotePartners.length === 0 ? (
         <As2PartnersTable data={[]} isLoading={false} />
       ) : (
         <div className="space-y-8">

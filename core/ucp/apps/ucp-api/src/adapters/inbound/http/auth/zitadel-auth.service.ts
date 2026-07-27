@@ -13,6 +13,22 @@ export class ZitadelAuthService {
   private jwksClient: jwksClient.JwksClient;
   private userinfoCache: Map<string, CachedUserinfo> = new Map();
   private readonly USERINFO_TTL_MS = 3600000; // 1 hour
+  private readonly MAX_CACHE_SIZE = 1000;
+
+  private evictIfNeeded() {
+    if (this.userinfoCache.size > this.MAX_CACHE_SIZE) {
+      const now = Date.now();
+      for (const [key, value] of this.userinfoCache.entries()) {
+        if (now >= value.expiry) {
+          this.userinfoCache.delete(key);
+        }
+      }
+      // If still too large after expiring old entries, clear completely
+      if (this.userinfoCache.size > this.MAX_CACHE_SIZE) {
+        this.userinfoCache.clear();
+      }
+    }
+  }
 
   constructor(private readonly configService: ConfigService) {
     const zitadelUrl = this.configService.get<string>('ZITADEL_URL', 'http://ucp.localhost:8080');
@@ -49,6 +65,12 @@ export class ZitadelAuthService {
     return new Promise<jwt.JwtPayload>((resolve, reject) => {
       const zitadelUrl = this.configService.get<string>('ZITADEL_URL', 'http://ucp.localhost:8080');
       const audience = this.configService.get<string>('ZITADEL_UCP_PROJECT_ID');
+
+      if (!audience) {
+        reject(new Error('Missing ZITADEL_UCP_PROJECT_ID configuration. Failing closed.'));
+        return;
+      }
+
       jwt.verify(
         token,
         this.getKey.bind(this),
@@ -69,9 +91,7 @@ export class ZitadelAuthService {
           // If roles are missing from the access token, fetch them from the standard OIDC UserInfo endpoint
           if (
             !jwtPayload['urn:zitadel:iam:org:project:roles'] &&
-            !jwtPayload[
-              `urn:zitadel:iam:org:project:id:${process.env.ZITADEL_UCP_PROJECT_ID}:roles`
-            ]
+            !jwtPayload[`urn:zitadel:iam:org:project:id:${audience}:roles`]
           ) {
             const jti = jwtPayload['jti'];
             if (jti) {
@@ -113,6 +133,7 @@ export class ZitadelAuthService {
                       data: userinfo,
                       expiry: Date.now() + this.USERINFO_TTL_MS,
                     });
+                    this.evictIfNeeded();
                   }
                 }
                 resolve(jwtPayload);
