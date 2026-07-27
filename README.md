@@ -55,7 +55,8 @@ We use Turborepo to orchestrate commands across the monorepo. Here are the essen
 
 | Command | Description |
 |---|---|
-| **`pnpm ucp-reset`** | **The Nuke Button.** Tears down local Docker databases/LocalStack, spins them back up fresh, runs Drizzle migrations, and seeds the test Tenants. Run this when your DB state is corrupted or you change schemas. |
+| **`pnpm infra-reset`** | ⚠️ **First-Time Setup & Schema Changes.** The canonical command to run when setting up a fresh environment or after any schema change. Tears down all Docker volumes, recreates containers, runs ALL Drizzle migrations (`pnpm db:migrate`), seeds the database, and initialises EDI infra. **Always run this if you see `relation "..." does not exist` errors.** |
+| **`pnpm ucp-reset`** | Like `infra-reset` but skips the EDI-specific `db-init`/`sqs-purge` steps. Use when working on UCP only. |
 | **`pnpm dev`** | **Start the World.** Boots the UCP Dashboard UI, UCP API, EDI API, and EDI Worker all in parallel with hot-module reloading. |
 
 ### Viewing the Application
@@ -94,6 +95,26 @@ terraform init
 terraform apply
 terraform output -json
 ```
+
+---
+
+## ⚠️ Local Database Setup — Critical
+
+The `scheduled_jobs` table and all other tables are created by Drizzle migrations. **They are NOT created automatically when you start Docker.** You MUST run migrations explicitly:
+
+```bash
+# Full reset (first-time setup or after any schema change)
+pnpm infra-reset
+
+# Or just apply pending migrations if containers are already running
+pnpm db:migrate
+```
+
+**Symptoms of missing migrations:**
+- `DrizzleQueryError: relation "<table>" does not exist`
+- `Failed query: update "scheduled_jobs" ...`
+
+When you see these errors, always run `pnpm infra-reset`.
 
 ---
 

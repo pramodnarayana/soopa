@@ -26,3 +26,8 @@
 - **Phase:** Active Development
 - **Backward Compatibility:** NOT a concern. Do NOT prioritize backwards compatibility, legacy facade patterns, or minimizing code churn when refactoring.
 - **Enterprise Grade:** Always prioritize true enterprise-grade software architecture, explicit imports, separation of concerns, and clean architectural principles over 'quick fixes'. If a 'god file' needs to be split, update all dependent files explicitly rather than relying on re-exports/facades.
+
+# Local Infrastructure
+- When a query fails with `relation "..." does not exist` or any other missing-table error, ALWAYS run `pnpm infra-reset` before attempting any code fix. This tears down Docker volumes, recreates containers, runs all Drizzle migrations, and seeds the database.
+- NEVER attempt to work around a missing migration with code changes. Missing tables are an infrastructure problem, not a code problem.
+- After any change to a Drizzle schema file, remind the user to run `pnpm infra-reset` (or at minimum `pnpm db:migrate`) to apply the migration locally.
