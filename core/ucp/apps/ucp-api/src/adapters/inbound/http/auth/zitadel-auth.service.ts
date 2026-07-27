@@ -31,7 +31,10 @@ export class ZitadelAuthService {
   }
 
   constructor(private readonly configService: ConfigService) {
-    const zitadelUrl = this.configService.get<string>('ZITADEL_URL', 'http://ucp.localhost:8080');
+    const zitadelUrl = this.configService.get<string>(
+      'ZITADEL_URL',
+      'http://ucp.localhost:8080',
+    );
     this.jwksClient = jwksClient({
       jwksUri: `${zitadelUrl}/oauth/v2/keys`,
       cache: true,
@@ -63,11 +66,18 @@ export class ZitadelAuthService {
     }
 
     return new Promise<jwt.JwtPayload>((resolve, reject) => {
-      const zitadelUrl = this.configService.get<string>('ZITADEL_URL', 'http://ucp.localhost:8080');
+      const zitadelUrl = this.configService.get<string>(
+        'ZITADEL_URL',
+        'http://ucp.localhost:8080',
+      );
       const audience = this.configService.get<string>('ZITADEL_UCP_PROJECT_ID');
 
       if (!audience) {
-        reject(new Error('Missing ZITADEL_UCP_PROJECT_ID configuration. Failing closed.'));
+        reject(
+          new Error(
+            'Missing ZITADEL_UCP_PROJECT_ID configuration. Failing closed.',
+          ),
+        );
         return;
       }
 
@@ -120,7 +130,10 @@ export class ZitadelAuthService {
                 if (response.ok) {
                   return response.json();
                 } else {
-                  console.error('Failed to fetch userinfo, status:', response.status);
+                  console.error(
+                    'Failed to fetch userinfo, status:',
+                    response.status,
+                  );
                   return null;
                 }
               })

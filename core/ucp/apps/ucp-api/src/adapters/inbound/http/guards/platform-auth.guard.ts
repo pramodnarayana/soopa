@@ -31,13 +31,13 @@ export class PlatformAuthGuard implements CanActivate {
 
     // Verify the user has PlatformAdmin role
     const defaultRoles = payload['urn:zitadel:iam:org:project:roles'] as
-      | Record<string, unknown>
-      | undefined;
-    const ucpRoles = payload[`urn:zitadel:iam:org:project:id:${audience}:roles`] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
+    const ucpRoles = payload[
+      `urn:zitadel:iam:org:project:id:${audience}:roles`
+    ] as Record<string, unknown> | undefined;
 
-    const hasPlatformAdminInDefault = defaultRoles && 'PlatformAdmin' in defaultRoles;
+    const hasPlatformAdminInDefault =
+      defaultRoles && 'PlatformAdmin' in defaultRoles;
     const hasPlatformAdminInUcp = ucpRoles && 'PlatformAdmin' in ucpRoles;
 
     if (!hasPlatformAdminInDefault && !hasPlatformAdminInUcp) {
