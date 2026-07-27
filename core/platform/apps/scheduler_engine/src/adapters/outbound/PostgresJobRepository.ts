@@ -89,7 +89,10 @@ export class PostgresJobRepository {
       .update(scheduledJobs)
       .set({ status: JobStatus.PENDING, lockedAt: null, lockedBy: null })
       .where(
-        and(eq(scheduledJobs.status, JobStatus.RUNNING), lte(scheduledJobs.lockedAt, threshold)),
+        and(
+          eq(scheduledJobs.status, JobStatus.RUNNING),
+          sql`${scheduledJobs.lockedAt} <= ${threshold.toISOString()}::timestamp`,
+        ),
       );
     return result.rowCount;
   }
