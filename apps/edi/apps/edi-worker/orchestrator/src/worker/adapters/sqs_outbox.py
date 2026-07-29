@@ -3,9 +3,11 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import aioboto3
 
+from worker.adapters.acl.registry import translate_external_event
 from worker.core.errors import PermanentProvisioningError
 from worker.ports.outbox import OutboxEvent, OutboxPort
 
@@ -27,11 +29,8 @@ class SqsEvent(OutboxEvent):
         return str(self._body.get("event_type", "UNKNOWN"))
 
     @property
-    def payload(self) -> dict[str, object]:
-        payload_val = self._body.get("payload", {})
-        if isinstance(payload_val, dict):
-            return payload_val
-        return {}
+    def body(self) -> dict[str, Any]:
+        return self._body
 
 
 class SqsOutboxAdapter(OutboxPort):
@@ -60,6 +59,10 @@ class SqsOutboxAdapter(OutboxPort):
                 WaitTimeSeconds=5,
             )
 
+            logger.debug(
+                f"SQS receive_message: {len(response.get('Messages', []))} message(s) received"
+            )
+
             messages = response.get("Messages", [])
             if not messages:
                 yield None
@@ -81,6 +84,30 @@ class SqsOutboxAdapter(OutboxPort):
                     body = json.loads(raw_body["Message"])
                 else:
                     body = raw_body
+
+                # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
+                external_event_type = body.get("eventType")
+                if external_event_type:
+                    try:
+                        translated_body = translate_external_event(external_event_type, body)
+                        if translated_body is None:
+                            # Unregistered event type - leave message for retry/DLQ
+                            logger.warning(
+                                f"Unregistered event type '{external_event_type}' in message {message_id}. "
+                                f"Leaving message for retry or DLQ routing."
+                            )
+                            yield None
+                            return
+                        body = translated_body
+                    except ValueError as e:
+                        # Permanent validation error - malformed message
+                        logger.error(
+                            f"Permanent validation error for event type '{external_event_type}' in message {message_id}: {e}. "
+                            f"Message body: {body}. Deleting malformed message."
+                        )
+                        await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                        yield None
+                        return
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse JSON body from SQS message {message_id}")
                 await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
@@ -126,8 +153,10 @@ class SqsOutboxAdapter(OutboxPort):
 
             message_body = json.dumps(
                 {
+                    **(payload or {}),
+                    "tenant_id": tenant_id,
                     "event_type": event_type,
-                    "payload": payload,
+                    "idempotency_key": idempotency_key,
                 }
             )
 

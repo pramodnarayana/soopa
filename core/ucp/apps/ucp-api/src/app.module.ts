@@ -45,11 +45,12 @@ import { WEBHOOK_REPOSITORY } from './ports/outbound/webhook.repository.js';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [
-        path.resolve(process.cwd(), '.env'),
-        path.resolve(import.meta.dirname, '../../../.env'),
-        path.resolve(process.cwd(), '../../.env'),
-      ],
+      // In an enterprise setup, environment variables should be injected by the runtime
+      // (Docker, Kubernetes) or the build tool (Turborepo).
+      // We allow an optional ENV_FILE_PATH override, and fallback to the monorepo root for local dev.
+      envFilePath: process.env.ENV_FILE_PATH
+        ? [process.env.ENV_FILE_PATH]
+        : ['.env', path.resolve(process.cwd(), '../../../../.env')],
     }),
     DatabaseModule,
     ScheduleModule.forRoot(),

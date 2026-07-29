@@ -1,21 +1,21 @@
-import { CheckCircle2, Loader2, Trash2, XCircle, Zap } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
-import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
-import { useToast } from '@/hooks/use-toast';
+} from '@soopa/ui/components/ui/select';
+import { CheckCircle2, Loader2, Trash2, XCircle, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { Combobox } from '../../../components/ui/combobox';
+import { EdiEditorPane } from '../../../components/ui/edi-editor-pane';
+import { SearchableSelect } from '../../../components/ui/searchable-select';
+import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
+import { useToast } from '../../../hooks/use-toast';
 import {
   useTestAs2PartnershipConnectionMutation,
   useUpdateAS2PartnershipMutation,

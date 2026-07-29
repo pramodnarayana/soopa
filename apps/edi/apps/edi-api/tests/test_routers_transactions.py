@@ -6,8 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
-from api.dependencies.database import get_tenant_uow
-from api.domain.models import TransactionDetailDTO
+from api.dependencies.database import get_data_plane_uow, get_global_session
+from api.domain.models import EdiJsonDTO, TransactionDetailDTO
 from api.main import app
 
 
@@ -66,7 +66,7 @@ def _make_mock_gw() -> MagicMock:
 @pytest.fixture
 def base_mock_uow():
     """Fresh mock UoW for every test — prevents side_effect state leakage."""
-    from api.core.uow import UnitOfWork
+    from api.core.uow import DataPlaneUnitOfWork
 
     mock_msg = _make_mock_msg()
     mock_json = _make_mock_json()
@@ -99,8 +99,9 @@ def base_mock_uow():
     mock_global = AsyncMock()
     mock_global.execute.return_value = mock_db_result
 
-    uow = UnitOfWork(global_session=mock_global, tenant_session=mock_tenant)
-    uow._transactions = mock_repo
+    uow = DataPlaneUnitOfWork(tenant_session=mock_tenant)
+    uow._mock_global = mock_global
+    uow.transactions = mock_repo
     return uow
 
 
@@ -108,7 +109,8 @@ def base_mock_uow():
 def setup_dependencies(base_mock_uow):
     app.dependency_overrides[get_current_user_profile] = override_get_current_user_profile
     app.dependency_overrides[get_current_tenant_id] = override_get_current_tenant_id
-    app.dependency_overrides[get_tenant_uow] = lambda: base_mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: base_mock_uow
+    app.dependency_overrides[get_global_session] = lambda: base_mock_uow._mock_global
     yield
     app.dependency_overrides.clear()
 
@@ -133,8 +135,8 @@ def test_get_transaction_thread():
 
 
 def test_get_transaction_detail_sftp():
-    from api.core.uow import UnitOfWork
-    from api.dependencies.database import get_tenant_uow
+    from api.core.uow import DataPlaneUnitOfWork
+    from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_msg = MagicMock()
     mock_msg.id = uuid.uuid4()
@@ -164,18 +166,20 @@ def test_get_transaction_detail_sftp():
     mock_global = AsyncMock()
     mock_global.execute.return_value = mock_db_result
 
-    mock_uow = UnitOfWork(global_session=mock_global, tenant_session=mock_tenant)
-    mock_uow._transactions = mock_repo
+    mock_uow = DataPlaneUnitOfWork(tenant_session=mock_tenant)
+    mock_uow._mock_global = mock_global
+    mock_uow.transactions = mock_repo
 
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")
     assert response.status_code == 200
     assert response.json()["trading_partner_name"] == "SFTP Partner"
 
 
 def test_get_transaction_detail_fallback():
-    from api.core.uow import UnitOfWork
-    from api.dependencies.database import get_tenant_uow
+    from api.core.uow import DataPlaneUnitOfWork
+    from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_msg = MagicMock()
     mock_msg.id = uuid.uuid4()
@@ -183,10 +187,13 @@ def test_get_transaction_detail_fallback():
     mock_msg.trading_partner_id = None
     mock_msg.created_at = None
 
-    mock_json = MagicMock()
-    mock_json.id = uuid.uuid4()
-    mock_json.created_at = None
-    mock_json.business_metadata = {"_routing": {"trading_partner_id": str(uuid.uuid4())}}
+    mock_json = EdiJsonDTO(
+        id=uuid.uuid4(),
+        trace_id=uuid.uuid4(),
+        status="RECEIVED",
+        transaction_type="mock_type",
+        business_metadata={"_routing": {"trading_partner_id": str(uuid.uuid4())}},
+    )
 
     mock_repo = AsyncMock()
     mock_repo.get_transaction.return_value = TransactionDetailDTO(
@@ -207,34 +214,38 @@ def test_get_transaction_detail_fallback():
     mock_global = AsyncMock()
     mock_global.execute.return_value = mock_db_result
 
-    mock_uow = UnitOfWork(global_session=mock_global, tenant_session=mock_tenant)
-    mock_uow._transactions = mock_repo
+    mock_uow = DataPlaneUnitOfWork(tenant_session=mock_tenant)
+    mock_uow._mock_global = mock_global
+    mock_uow.transactions = mock_repo
 
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")
     assert response.status_code == 200
     assert response.json()["trading_partner_name"] == "Fallback Partner"
 
 
 def test_get_transaction_not_found():
-    from api.core.uow import UnitOfWork
-    from api.dependencies.database import get_tenant_uow
+    from api.core.uow import DataPlaneUnitOfWork
+    from api.dependencies.database import get_data_plane_uow, get_global_session
 
-    mock_uow = UnitOfWork(global_session=AsyncMock(), tenant_session=AsyncMock())
+    mock_uow = DataPlaneUnitOfWork(tenant_session=AsyncMock())
+    mock_uow._mock_global = AsyncMock()
 
     mock_repo = AsyncMock()
     mock_repo.get_transaction.return_value = None
-    mock_uow._transactions = mock_repo
+    mock_uow.transactions = mock_repo
 
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     uid = str(uuid.uuid4())
     response = client.get(f"/api/v1/transactions/{uid}")
     assert response.status_code == 404
 
 
 def test_get_transaction_webhook_fallback():
-    from api.core.uow import UnitOfWork
-    from api.dependencies.database import get_tenant_uow
+    from api.core.uow import DataPlaneUnitOfWork
+    from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_repo = AsyncMock()
 
@@ -250,9 +261,9 @@ def test_get_transaction_webhook_fallback():
     mock_msg.created_at = None
     mock_msg.trading_partner_id = None
 
-    mock_json = MagicMock()
-    mock_json.id = uuid.uuid4()
-    mock_json.transaction_type = "850"
+    mock_json = EdiJsonDTO(
+        id=uuid.uuid4(), trace_id=uuid.uuid4(), status="RECEIVED", transaction_type="850"
+    )
 
     mock_repo.get_transaction.return_value = TransactionDetailDTO(
         edi_message=mock_msg,
@@ -262,7 +273,7 @@ def test_get_transaction_webhook_fallback():
 
     mock_tenant_session = AsyncMock()
     mock_inbound_route = MagicMock()
-    mock_inbound_route.webhook_id = uuid.uuid4()
+    mock_inbound_route.webhook_id = str(uuid.uuid4())
 
     mock_tenant_execute = MagicMock()
     mock_tenant_execute.scalar_one_or_none.return_value = mock_inbound_route
@@ -279,10 +290,12 @@ def test_get_transaction_webhook_fallback():
     mock_global_execute.scalars.return_value = mock_global_scalars
     mock_global_session.execute.return_value = mock_global_execute
 
-    mock_uow = UnitOfWork(global_session=mock_global_session, tenant_session=mock_tenant_session)
-    mock_uow._transactions = mock_repo
+    mock_uow = DataPlaneUnitOfWork(tenant_session=mock_tenant_session)
+    mock_uow._mock_global = mock_global_session
+    mock_uow.transactions = mock_repo
 
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     response = client.get(f"/api/v1/transactions/{mock_msg.trace_id}")
     assert response.status_code == 200
     assert response.json()["trading_partner_name"] == "https://webhook.soopa.com"

@@ -1,6 +1,4 @@
-import { Key } from 'lucide-react';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -9,10 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useTenantId } from '@/contexts/TenantContext';
+} from '@soopa/ui/components/ui/dialog';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
+import { Key } from 'lucide-react';
+import { useState } from 'react';
+import { useTenantId } from '../../../contexts/TenantContext';
 import { useCreateApiTokenMutation } from '../api/apiTokenHooks';
 import type { ApiTokenCreated } from '../types';
 import { TokenCredentialsModal } from './TokenCredentialsModal';
@@ -40,11 +40,11 @@ export function CreateApiTokenModal() {
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
-            <Key className="w-4 h-4" />
-            Generate Token
-          </Button>
+        <DialogTrigger
+          render={<Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" />}
+        >
+          <Key className="w-4 h-4" />
+          Generate Token
         </DialogTrigger>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>

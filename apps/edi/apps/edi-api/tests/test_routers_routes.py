@@ -1,20 +1,21 @@
 import pytest
-from api_fakes import FakeUnitOfWork
+from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_control_plane_uow, get_global_session
 from api.main import app
 
 
 @pytest.fixture
 def fake_uow():
-    return FakeUnitOfWork()
+    return FakeControlPlaneUnitOfWork()
 
 
 @pytest.fixture
 def client(fake_uow):
-    app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
+    app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
+    app.dependency_overrides[get_global_session] = lambda: fake_uow.global_session
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     with TestClient(app) as test_client:
         yield test_client

@@ -1,8 +1,8 @@
 import { Terminal } from 'lucide-react';
-import { useTenantId } from '@/contexts/TenantContext';
-import { useApiTokensQuery } from '@/features/developers/api/apiTokenHooks';
-import { ApiTokensTable } from '@/features/developers/components/ApiTokensTable';
-import { CreateApiTokenModal } from '@/features/developers/components/CreateApiTokenModal';
+import { useTenantId } from '../../contexts/TenantContext';
+import { useApiTokensQuery } from '../../features/developers/api/apiTokenHooks';
+import { ApiTokensTable } from '../../features/developers/components/ApiTokensTable';
+import { CreateApiTokenModal } from '../../features/developers/components/CreateApiTokenModal';
 
 export function DevelopersPage() {
   const tenantId = useTenantId();

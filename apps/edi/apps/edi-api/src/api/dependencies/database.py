@@ -2,15 +2,23 @@ import contextlib
 from collections.abc import AsyncGenerator
 
 from database.base_repository import GlobalSession
-from database.models import DatabaseShard, Tenant
+from database.models import DatabaseShard, Tenant, TenantShard
 from database.session import get_global_session
 from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth.api_key import get_tenant_id_from_api_key
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork, DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
+
+__all__ = [
+    "get_global_session",
+    "get_tenant_session",
+    "get_control_plane_uow",
+    "get_data_plane_uow",
+    "get_m2m_data_plane_uow",
+]
 
 
 async def get_tenant_session_for_id(
@@ -25,7 +33,8 @@ async def get_tenant_session_for_id(
 
     stmt = (
         select(Tenant, DatabaseShard)
-        .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
+        .join(TenantShard, Tenant.id == TenantShard.tenant_id)
+        .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
         .where(Tenant.id == tenant_id)
     )
     result = await global_session.execute(stmt)
@@ -54,27 +63,26 @@ async def get_tenant_session(
         yield session
 
 
-async def get_uow(
+async def get_control_plane_uow(
     global_session: GlobalSession = Depends(get_global_session),
-) -> UnitOfWork:
-    return UnitOfWork(global_session=global_session)
+) -> ControlPlaneUnitOfWork:
+    return ControlPlaneUnitOfWork(global_session=global_session)
 
 
-async def get_tenant_uow(
-    global_session: GlobalSession = Depends(get_global_session),
+async def get_data_plane_uow(
     tenant_session: AsyncSession = Depends(get_tenant_session),
-) -> UnitOfWork:
-    return UnitOfWork(global_session=global_session, tenant_session=tenant_session)
+) -> DataPlaneUnitOfWork:
+    return DataPlaneUnitOfWork(tenant_session=tenant_session)
 
 
-async def get_m2m_tenant_uow(
+async def get_m2m_data_plane_uow(
     request: Request,
     tenant_id: str = Depends(get_tenant_id_from_api_key),
     global_session: GlobalSession = Depends(get_global_session),
-) -> AsyncGenerator[UnitOfWork, None]:
+) -> AsyncGenerator[DataPlaneUnitOfWork, None]:
     """
-    Constructs a UnitOfWork dynamically without relying on Zitadel JWTs.
+    Constructs a DataPlaneUnitOfWork dynamically without relying on Zitadel JWTs.
     Useful for Machine-to-Machine routes that authenticate via API keys.
     """
     async for tenant_session in get_tenant_session_for_id(request, tenant_id, global_session):
-        yield UnitOfWork(global_session=global_session, tenant_session=tenant_session)
+        yield DataPlaneUnitOfWork(tenant_session=tenant_session)

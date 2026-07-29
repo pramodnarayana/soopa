@@ -9,7 +9,7 @@ import pytest_asyncio
 
 # Assuming Alembic is used for migrations. We can run it programmatically.
 # Or we can just use BaseModel.metadata.create_all(bind=engine) for tests.
-from database.models import GlobalBase, TenantBase
+from database.models import GlobalRegistry, TenantBase
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
@@ -41,9 +41,10 @@ async def db_engine(postgres_container):
     # Initialize the schema
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
-        await conn.run_sync(GlobalBase.metadata.drop_all)
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
+        await conn.run_sync(GlobalRegistry.metadata.drop_all)
         await conn.run_sync(TenantBase.metadata.drop_all)
-        await conn.run_sync(GlobalBase.metadata.create_all)
+        await conn.run_sync(GlobalRegistry.metadata.create_all)
         await conn.run_sync(TenantBase.metadata.create_all)
 
     yield engine
@@ -126,9 +127,14 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     from httpx import ASGITransport, AsyncClient
 
     from api.auth.api_key import get_tenant_id_from_api_key
-    from api.core.uow import UnitOfWork
+    from api.core.uow import DataPlaneUnitOfWork
     from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
-    from api.dependencies.database import get_global_session, get_m2m_tenant_uow, get_tenant_session
+    from api.dependencies.database import (
+        get_data_plane_uow,
+        get_global_session,
+        get_m2m_data_plane_uow,
+        get_tenant_session,
+    )
     from api.dependencies.services import get_vault
     from api.main import app
 
@@ -147,15 +153,16 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     async def _m2m_uow():
         gs_gen = override_get_global_session()
         ts_gen = override_get_tenant_session("1")
-        gs = await gs_gen.__anext__()
+        await gs_gen.__anext__()
         ts = await ts_gen.__anext__()
         try:
-            yield UnitOfWork(global_session=gs, tenant_session=ts)
+            yield DataPlaneUnitOfWork(tenant_session=ts)
         finally:
             await gs_gen.aclose()
             await ts_gen.aclose()
 
-    app.dependency_overrides[get_m2m_tenant_uow] = _m2m_uow
+    app.dependency_overrides[get_m2m_data_plane_uow] = _m2m_uow
+    app.dependency_overrides[get_data_plane_uow] = _m2m_uow
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
@@ -174,7 +181,10 @@ async def platform_client(
         get_current_user_profile,
         require_platform_admin,
     )
-    from api.dependencies.database import get_global_session, get_tenant_session
+    from api.dependencies.database import (
+        get_global_session,
+        get_tenant_session,
+    )
     from api.dependencies.services import get_vault
     from api.main import app
 

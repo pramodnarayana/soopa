@@ -1,6 +1,6 @@
+import { Skeleton } from '@soopa/ui/components/ui/skeleton';
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
-import { ArrowLeft, Box, Building2, Code2, Key, Network, Users } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ArrowLeft, Box, Building2, Users } from 'lucide-react';
 import { useGetTenants } from '@/domains/tenants/api/queries';
 
 export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId')({
@@ -88,30 +88,6 @@ function TenantLayout() {
               <Box className="w-4 h-4" />
               Apps
             </Link>
-
-            {/* Developer Section */}
-            <div className="flex items-center gap-4 ml-6 pl-6 border-l border-slate-200">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Code2 className="w-3.5 h-3.5" />
-                Developer
-              </span>
-              <Link
-                to="/platform/tenants/$tenantId/api-tokens"
-                params={{ tenantId }}
-                className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
-              >
-                <Key className="w-4 h-4" />
-                API Tokens
-              </Link>
-              <Link
-                to="/platform/tenants/$tenantId/webhooks"
-                params={{ tenantId }}
-                className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
-              >
-                <Network className="w-4 h-4" />
-                Webhooks
-              </Link>
-            </div>
           </nav>
         </div>
       </div>

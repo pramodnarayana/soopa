@@ -4,9 +4,9 @@ import { createRoute } from '@tanstack/react-router';
 import axios from 'axios';
 import { AlertTriangle, CheckCircle, Copy, FileCode, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
-import { useToast } from '@/hooks/use-toast';
-import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
+import { EdiEditorPane } from '../../components/ui/edi-editor-pane';
+import { useToast } from '../../hooks/use-toast';
+import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
 import { Route as appRoute } from '../tenant';
 import { EdiHumanReadableViewer } from './-components/EdiHumanReadableViewer';
 
@@ -298,9 +298,9 @@ export function EdiToolPage() {
           </div>
           <EdiEditorPane
             value={inputPayload}
-            onChange={(value) => {
+            onChange={(value: string | undefined) => {
               // Auto-detect if user pasted full JSON while in EDI mode
-              if (inputFormat === 'EDI' && value.trim().startsWith('{')) {
+              if (value && inputFormat === 'EDI' && value.trim().startsWith('{')) {
                 try {
                   JSON.parse(value);
                   setInputFormat('JSON');
@@ -309,7 +309,7 @@ export function EdiToolPage() {
                   // Not valid JSON yet, do nothing
                 }
               }
-              setInputPayload(value);
+              setInputPayload(value || '');
             }}
             language={inputFormat === 'EDI' ? 'edi' : 'json'}
           />

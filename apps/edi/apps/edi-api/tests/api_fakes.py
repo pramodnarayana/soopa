@@ -152,6 +152,26 @@ class FakeGlobalStore:
                 return FakePartnership()
         return None
 
+    async def list_as2_partnerships(self, tenant_id: str) -> list[Any]:
+        results = []
+        for p in self.partnerships:
+            if p["tenant_id"] == tenant_id:
+
+                class FakePartnership:
+                    id = p["id"]
+                    tenant_id = str(p["tenant_id"])
+                    name = p["cmd"].name
+                    local_partner_id = p["cmd"].local_partner_id
+                    remote_partner_id = p["cmd"].remote_partner_id
+                    mdn_type = p["cmd"].mdn_type
+                    mdn_url = p["cmd"].mdn_url
+                    encryption_algorithm = p["cmd"].encryption_algorithm
+                    signature_algorithm = p["cmd"].signature_algorithm
+                    active = p.get("status", "INACTIVE") == "ACTIVE"
+
+                results.append(FakePartnership())
+        return results
+
     async def publish_outbox_event(
         self,
         tenant_id: str,
@@ -449,7 +469,7 @@ class MockSession:
             return MockResult([T()])
 
 
-class FakeUnitOfWork:
+class FakeControlPlaneUnitOfWork:
     def __init__(self):
         repo = FakeGlobalStore()
         self.api_tokens = repo
@@ -463,10 +483,7 @@ class FakeUnitOfWork:
         self.webhooks = repo
         self.edi_headers = repo
 
-        self.transactions = FakeTenantStore()
-
         self.global_session = MockSession(repo)
-        self.tenant_session = MockSession(repo)
 
     async def __aenter__(self):
         return self
@@ -477,9 +494,25 @@ class FakeUnitOfWork:
     async def commit(self):
         pass
 
-    @property
-    def data_plane_outbox(self):
-        return self.transactions
+    async def rollback(self):
+        pass
+
+
+class FakeDataPlaneUnitOfWork:
+    def __init__(self):
+        self.transactions = FakeTenantStore()
+        repo = FakeGlobalStore()
+        self.data_plane_outbox = self.transactions
+        self.tenant_session = MockSession(repo)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, _exc_val, _exc_tb):
+        pass
+
+    async def commit(self):
+        pass
 
     async def rollback(self):
         pass

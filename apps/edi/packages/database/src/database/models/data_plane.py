@@ -106,8 +106,8 @@ class Webhook(TenantBase, TenantAwareMixin, WebhookMixin, TimestampMixin):
 class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMixin):
     __tablename__ = "inbound_routes"
 
-    webhook_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=True
+    webhook_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("webhooks.id"), nullable=True
     )
     as2_partner_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True

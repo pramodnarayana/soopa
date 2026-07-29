@@ -1,6 +1,6 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
 import { Plus, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import type { FilterRule } from '../types';
 
 interface FilterBuilderProps {

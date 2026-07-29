@@ -1,23 +1,23 @@
 import pytest
-from api_fakes import FakeUnitOfWork
+from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 
 from api.dependencies.auth import get_current_tenant_id, require_platform_admin
-from api.dependencies.database import get_tenant_uow, get_uow
+from api.dependencies.database import get_control_plane_uow, get_data_plane_uow
 from api.main import app
 
 
 @pytest.fixture
 def fake_uow():
-    return FakeUnitOfWork()
+    return FakeControlPlaneUnitOfWork()
 
 
 @pytest.fixture
 def client(fake_uow):
     from api.dependencies.auth import get_current_user_profile, get_raw_jwt
 
-    app.dependency_overrides[get_uow] = lambda: fake_uow
-    app.dependency_overrides[get_tenant_uow] = lambda: fake_uow
+    app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: fake_uow
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[require_platform_admin] = lambda: "0"
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "user"}
@@ -154,7 +154,29 @@ def test_create_platform_as2_partnership(client, fake_uow):
     assert len(fake_uow.as2_partnerships.partnerships) == 1
 
 
-def test_list_platform_as2_partnerships(client):
+def test_list_platform_as2_partnerships(client, fake_uow):
+    # Seed partners first so the partnership create call validates them
+    loc_resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "List Local Partner", "as2_id": "LIST_LOCAL", "is_local": True},
+    )
+    local_id = loc_resp.json()["id"]
+
+    rem_resp = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "List Remote Partner", "as2_id": "LIST_REMOTE", "is_local": False},
+    )
+    remote_id = rem_resp.json()["id"]
+
+    client.post(
+        "/api/v1/platform/trading-partners/as2/partnerships",
+        json={
+            "name": "Listed Partnership",
+            "local_partner_id": local_id,
+            "remote_partner_id": remote_id,
+        },
+    )
+
     response = client.get("/api/v1/platform/trading-partners/as2/partnerships")
     assert response.status_code == 200
     assert len(response.json()) == 1

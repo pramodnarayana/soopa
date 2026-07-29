@@ -2,9 +2,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from database.models.control_plane import AS2Partnership
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from api.adapters.http.dtos import (
@@ -15,8 +13,8 @@ from api.adapters.http.dtos import (
     UpdateAS2PartnershipRequest,
 )
 from api.core.services import AS2PartnershipService
-from api.core.uow import UnitOfWork
-from api.dependencies.database import get_uow
+from api.core.uow import ControlPlaneUnitOfWork
+from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_as2_tester, get_vault
 from api.domain.models import (
     CreateAS2PartnershipCmd,
@@ -41,7 +39,7 @@ router = APIRouter(tags=["Platform Partners - AS2 Partnerships"])
 async def test_as2_partnership_connection(
     partnership_id: UUID,
     request: TestAS2ConnectionRequest | None = None,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     as2_tester: AS2TesterPort = Depends(get_as2_tester),
     vault_port: VaultPort = Depends(get_vault),
 ) -> Any:
@@ -138,7 +136,7 @@ async def test_as2_partnership_connection(
 @router.post("/as2/partnerships", response_model=Any, status_code=status.HTTP_201_CREATED)
 async def create_platform_as2_partnership(
     request: CreateAS2PartnershipRequest,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Creates a new AS2 Partnership directly in the Control Plane (used by Platform Admins).
@@ -193,7 +191,7 @@ async def create_platform_as2_partnership(
 async def update_platform_as2_partnership(
     partnership_id: UUID,
     request: UpdateAS2PartnershipRequest,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     try:
         async with uow:
@@ -260,7 +258,7 @@ async def update_platform_as2_partnership(
 )
 async def delete_platform_as2_partnership(
     partnership_id: UUID,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     try:
         async with uow:
@@ -274,16 +272,13 @@ async def delete_platform_as2_partnership(
 
 @router.get("/as2/partnerships", response_model=list[AS2PartnershipResponse])
 async def list_platform_as2_partnerships(
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Returns all global AS2 partnerships (tenant_id = 0).
     """
     async with uow:
-        result = await uow.global_session.execute(
-            select(AS2Partnership).where(AS2Partnership.tenant_id == "0")
-        )
-        partnerships = result.scalars().all()
+        partnerships = await uow.as2_partnerships.list_as2_partnerships(tenant_id="0")
 
         return [
             AS2PartnershipResponse(

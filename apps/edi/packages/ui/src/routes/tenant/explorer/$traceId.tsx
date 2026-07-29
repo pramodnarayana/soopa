@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
-import { useTransactionDetail } from '@/features/transactions/api/transactionsApi';
-import { TransactionTimeline } from '@/features/transactions/components/TransactionTimeline';
+import { useTransactionDetail } from '../../../features/transactions/api/transactionsApi';
+import { TransactionTimeline } from '../../../features/transactions/components/TransactionTimeline';
 
 export function TransactionDetailPage({
   traceId,

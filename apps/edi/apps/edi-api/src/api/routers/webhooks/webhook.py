@@ -6,15 +6,14 @@ where processed EDI data is pushed to after the pipeline completes.
 They are NOT trading partners; they are delivery destinations.
 """
 
-from collections.abc import Sequence
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from api.adapters.http.dtos import PartnerResponse
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_control_plane_uow
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
 
@@ -35,11 +34,9 @@ def _partner_response(partner: Any, tenant_id: str) -> PartnerResponse:
 @router.get("", response_model=list[PartnerResponse])
 async def list_webhooks(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Lists all configured webhook delivery destinations for this tenant."""
     async with uow:
-        if uow.global_session is None:
-            raise HTTPException(status_code=500, detail="Control plane not initialized")
-        webhooks: Sequence[Any] = await uow.webhooks.list_webhooks(tenant_id)
+        webhooks = await uow.webhooks.list_webhooks(tenant_id)
         return [_partner_response(p, tenant_id) for p in webhooks]

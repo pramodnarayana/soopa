@@ -1,13 +1,13 @@
-import { Network, Plus } from 'lucide-react';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from '@soopa/ui/components/ui/dialog';
+import { Network, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { CreateEdiHeaderForm } from './CreateEdiHeaderForm';
 
 export function CreateEdiHeaderModal() {
@@ -15,17 +15,16 @@ export function CreateEdiHeaderModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
-          <Plus className="h-4 w-4" />
-          Create EDI Header
-        </Button>
+      <DialogTrigger
+        render={
+          <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm" />
+        }
+      >
+        <Plus className="h-4 w-4" />
+        Create EDI Header
       </DialogTrigger>
 
-      <DialogContent
-        className="sm:max-w-[700px] rounded-2xl"
-        onPointerDownOutside={(e) => e.preventDefault()}
-      >
+      <DialogContent className="sm:max-w-[700px] rounded-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">

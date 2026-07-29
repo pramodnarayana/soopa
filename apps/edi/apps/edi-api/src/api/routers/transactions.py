@@ -4,10 +4,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.uow import UnitOfWork
+from api.core.uow import DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_data_plane_uow, get_global_session
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class TransactionThreadResponse(BaseModel):
 @router.get("", response_model=TransactionListResponse)
 async def list_transactions(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     partner_id: str | None = Query(None, description="Filter by sender or receiver ID"),
@@ -82,7 +83,7 @@ async def get_transaction_thread(
     key: str = Query(..., description="Business metadata key (e.g. shipment_id)"),
     value: str = Query(..., description="Business metadata value (e.g. 12345)"),
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
 ) -> TransactionThreadResponse:
     """
     Get a chronological thread of documents sharing a specific business metadata key/value.
@@ -111,7 +112,8 @@ async def get_transaction_thread(
 async def get_transaction(
     trace_id: UUID,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    global_session: AsyncSession = Depends(get_global_session),
 ) -> TransactionDetailResponse:
     """
     Get the full deep-dive payload for a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
@@ -167,7 +169,10 @@ async def get_transaction(
                 }
             )
 
-        trading_partner_name, new_conn_type = await uow.resolve_trading_partner_name(
+        from api.core.services.routing_resolver import RoutingResolutionService
+
+        resolver = RoutingResolutionService(global_session, uow.tenant_session)
+        trading_partner_name, new_conn_type = await resolver.resolve_routing_context(
             msg, result.edi_jsons or []
         )
         if new_conn_type and edi_msg_dict.get("connection_type") in ("UNKNOWN", None):

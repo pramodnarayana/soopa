@@ -39,8 +39,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
-        with:
-          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
@@ -79,6 +77,7 @@ jobs:
         run: |
           docker compose up -d postgres_global --wait
           pnpm db:migrate
+          pnpm db:seed
 
       - name: Test (Node)
         run: CI=true pnpm turbo test --filter="./core/platform/**"

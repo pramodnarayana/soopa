@@ -1,4 +1,4 @@
-import { and, createDbClient, eq, JobStatus, lte, scheduledJobs, sql } from '@soopa/database';
+import { and, createDbClient, eq, JobStatus, scheduledJobs, sql } from '@soopa/database';
 
 export class PostgresJobRepository {
   constructor(
@@ -13,10 +13,10 @@ export class PostgresJobRepository {
     // In Drizzle, doing SKIP LOCKED requires raw SQL for now, or a very specific Query Builder sequence.
     // For simplicity, we use raw SQL to ensure exact SKIP LOCKED behavior identical to Python.
     const query = sql`
-      UPDATE scheduled_jobs
+      UPDATE ucp.scheduled_jobs
       SET status = ${JobStatus.RUNNING}, locked_at = ${now.toISOString()}, locked_by = ${workerId}
       WHERE id IN (
-        SELECT id FROM scheduled_jobs
+        SELECT id FROM ucp.scheduled_jobs
         WHERE (status = ${JobStatus.PENDING} OR (status = ${JobStatus.RUNNING} AND locked_at < ${threshold.toISOString()}))
           AND (next_run_at IS NULL OR next_run_at <= ${now.toISOString()})
         ORDER BY next_run_at ASC NULLS FIRST, created_at ASC
@@ -96,9 +96,10 @@ export class PostgresJobRepository {
           ),
         );
       return result.rowCount;
-    } catch (err: any) {
-      console.error('Deep Drizzle Error Details:', err, 'Cause:', err?.cause);
-      throw err;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(err ? String(err) : 'Unknown error');
+      console.error('Deep Drizzle Error Details:', error, 'Cause:', (error as any).cause);
+      throw error;
     }
   }
 }

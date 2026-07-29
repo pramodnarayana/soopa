@@ -9,9 +9,9 @@ from api.adapters.http.dtos import (
     UpdateOutboundEdiHeaderRequest,
 )
 from api.core.services.edi_header_service import EdiHeaderService
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_control_plane_uow
 from api.domain.models import (
     UNSET,
     CreateOutboundEdiHeaderCmd,
@@ -43,7 +43,7 @@ class OutboundEdiHeaderItem(BaseModel):
 @router.get("", response_model=list[OutboundEdiHeaderItem], status_code=status.HTTP_200_OK)
 async def list_edi_headers(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     List all Outbound EDI Headers for the current Tenant.
@@ -58,7 +58,7 @@ async def list_edi_headers(
 async def create_edi_header(
     request: CreateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Creates a new Outbound EDI Header in the Tenant Data Plane.
@@ -91,7 +91,7 @@ async def update_edi_header(
     header_id: UUID,
     request: UpdateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Updates an Outbound EDI Header for the current Tenant.
@@ -127,7 +127,7 @@ async def update_edi_header(
 async def delete_edi_header(
     header_id: UUID,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """
     Deletes an Outbound EDI Header for the current Tenant.

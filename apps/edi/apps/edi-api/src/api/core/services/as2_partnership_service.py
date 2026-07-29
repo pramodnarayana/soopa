@@ -4,7 +4,7 @@ from uuid import UUID
 from domain.events import ProvisioningEventType
 from domain.models import ConnectionType, PartnerStatus
 
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateAS2PartnershipCmd,
     PartnerEntity,
@@ -20,7 +20,7 @@ class AS2PartnershipService:
     Validates that referenced local/remote partners exist before mutating state.
     """
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_as2_partnership(
@@ -45,7 +45,7 @@ class AS2PartnershipService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_CREATED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"resource_id": str(partner_id), "tenant_id": tenant_id},
         )
 
         return PartnerEntity(
@@ -81,7 +81,7 @@ class AS2PartnershipService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_UPDATED,
-            payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
+            payload={"resource_id": str(partnership_id), "tenant_id": tenant_id},
         )
         updated = await self.uow.as2_partnerships.get_as2_partnership(tenant_id, partnership_id)
         if not updated:
@@ -101,5 +101,5 @@ class AS2PartnershipService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNERSHIP_DELETED,
-            payload={"partner_id": str(partnership_id), "tenant_id": tenant_id},
+            payload={"resource_id": str(partnership_id), "tenant_id": tenant_id},
         )

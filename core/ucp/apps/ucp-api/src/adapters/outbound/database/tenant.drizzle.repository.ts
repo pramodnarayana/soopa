@@ -6,6 +6,7 @@ import {
   apps,
   controlPlaneOutbox,
   eq,
+  tenantShards,
   tenantSubscriptions,
   tenants,
   tenantUsers,
@@ -19,14 +20,12 @@ import { ITenantRepository } from '../../../ports/outbound/tenant.repository.js'
 export class TenantDrizzleRepository implements ITenantRepository {
   constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
-  private mapToDomain(
-    row: typeof tenants.$inferSelect,
-    subscriptions: string[] = [],
-  ): Tenant {
+  private mapToDomain(row: typeof tenants.$inferSelect, subscriptions: string[] = []): Tenant {
     return new Tenant(
       row.id,
       row.name,
       row.zitadelOrgId,
+      row.idpTenantId,
       row.status,
       row.createdAt,
       row.updatedAt,
@@ -35,10 +34,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
   }
 
   async findById(id: string): Promise<Tenant | null> {
-    const [row] = await this.db
-      .select()
-      .from(tenants)
-      .where(eq(tenants.id, id));
+    const [row] = await this.db.select().from(tenants).where(eq(tenants.id, id));
     return row ? this.mapToDomain(row) : null;
   }
 
@@ -56,6 +52,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           id: tenant.id,
           name: tenant.name,
           zitadelOrgId: tenant.zitadelOrgId,
+          idpTenantId: tenant.idpTenantId,
           status: tenant.status,
           createdAt: tenant.createdAt,
           updatedAt: tenant.updatedAt,
@@ -65,6 +62,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           set: {
             name: tenant.name,
             zitadelOrgId: tenant.zitadelOrgId,
+            idpTenantId: tenant.idpTenantId,
             status: tenant.status,
             updatedAt: new Date(),
           },
@@ -73,20 +71,14 @@ export class TenantDrizzleRepository implements ITenantRepository {
 
       // 2. Save Subscriptions
       if (tenant.subscriptions && tenant.subscriptions.length > 0) {
-        const dbApps = await tx
-          .select()
-          .from(apps)
-          .where(inArray(apps.slug, tenant.subscriptions));
+        const dbApps = await tx.select().from(apps).where(inArray(apps.slug, tenant.subscriptions));
         if (dbApps.length > 0) {
           const subs = dbApps.map((app) => ({
             tenantId: tenant.id,
             appId: app.id,
             tier: 'standard',
           }));
-          await tx
-            .insert(tenantSubscriptions)
-            .values(subs)
-            .onConflictDoNothing();
+          await tx.insert(tenantSubscriptions).values(subs).onConflictDoNothing();
         }
       }
 
@@ -115,15 +107,14 @@ export class TenantDrizzleRepository implements ITenantRepository {
       // Delete api_keys
       await tx.delete(apiKeys).where(eq(apiKeys.tenantId, id));
 
+      // Delete tenant_shards
+      await tx.delete(tenantShards).where(eq(tenantShards.tenantId, id));
+
       // Delete tenant_subscriptions
-      await tx
-        .delete(tenantSubscriptions)
-        .where(eq(tenantSubscriptions.tenantId, id));
+      await tx.delete(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, id));
 
       // Delete outbox events for this tenant
-      await tx
-        .delete(controlPlaneOutbox)
-        .where(eq(controlPlaneOutbox.tenantId, id));
+      await tx.delete(controlPlaneOutbox).where(eq(controlPlaneOutbox.tenantId, id));
 
       // Finally, delete the tenant itself
       await tx.delete(tenants).where(eq(tenants.id, id));

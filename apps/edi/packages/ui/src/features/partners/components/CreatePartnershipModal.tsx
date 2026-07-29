@@ -1,17 +1,17 @@
-import { useEffect, useState } from 'react';
-import { Combobox } from '@/components/ui/combobox';
-import { FormModal } from '@/components/ui/form-modal';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
+} from '@soopa/ui/components/ui/select';
+import { useEffect, useState } from 'react';
+import { Combobox } from '../../../components/ui/combobox';
+import { FormModal } from '../../../components/ui/form-modal';
+import { SearchableSelect } from '../../../components/ui/searchable-select';
+import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
 import { useCreateAS2PartnershipMutation } from '../api/partnerHooks';
 
 export interface CreatePartnershipModalProps {

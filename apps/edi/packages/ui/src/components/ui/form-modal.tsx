@@ -1,13 +1,13 @@
-import { Plus } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from '@soopa/ui/components/ui/dialog';
+import { Plus } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 interface FormModalProps {
   title: string;
@@ -42,18 +42,16 @@ export function FormModal({
 }: FormModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange} modal={false}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm">
-          {triggerIcon}
-          {triggerText}
-        </Button>
+      <DialogTrigger
+        render={
+          <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm" />
+        }
+      >
+        {triggerIcon}
+        {triggerText}
       </DialogTrigger>
 
-      <DialogContent
-        className={`${maxWidth} rounded-2xl`}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onFocusOutside={(e) => e.preventDefault()}
-      >
+      <DialogContent className={`${maxWidth} rounded-2xl`}>
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             {icon && (

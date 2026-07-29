@@ -1,7 +1,7 @@
 import Editor from '@monaco-editor/react';
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
-import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
+import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
 
 interface CodeViewerProps {
   value: string;

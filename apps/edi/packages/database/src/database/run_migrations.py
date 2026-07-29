@@ -22,11 +22,18 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
     try:
         async with engine.connect() as conn:
             # We don't use ORM here to keep migration runner simple and resilient
-            result = await conn.execute(text("SELECT dsn FROM edi.database_shards"))
+            result = await conn.execute(text("SELECT dsn FROM ucp.database_shards"))
             urls = [row[0] for row in result.fetchall()]
     except Exception as e:
-        logger.error(f"Failed to query database_shards from global DB: {e}")
-        raise
+        # Check for SQLSTATE codes indicating missing database objects:
+        # 42P01 = undefined_table, 3F000 = invalid_schema_name
+        sqlstate = getattr(e, 'orig', e)
+        pgcode = getattr(sqlstate, 'pgcode', None)
+        if pgcode in ('42P01', '3F000'):
+            logger.info("ucp.database_shards does not exist yet. Falling back to default shards.")
+        else:
+            logger.error(f"Failed to query database_shards from global DB: {e}")
+            raise
     finally:
         await engine.dispose()
 
@@ -57,10 +64,12 @@ def run_migrations():
     global_cfg = Config(str(package_root / "alembic.global.ini"))
     global_cfg.set_main_option("script_location", str(base_dir / "migrations" / "global"))
     command.upgrade(global_cfg, "head")
+    logger.info("FINISHED UPGRADE")
 
     # 2. Fetch Shards dynamically
     logger.info("--- Fetching Tenant Shards ---")
     shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.database.global_url))
+    logger.info(f"Found {len(shard_urls)} shard(s) to migrate")
 
     # 3. Run Tenant Migrations per shard
     for url in shard_urls:
@@ -80,6 +89,7 @@ def run_migrations():
         tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
         tenant_cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(tenant_cfg, "head")
+        logger.info(f"FINISHED TENANT UPGRADE FOR {masked_url}")
 
     logger.info("--- All Database Migrations Complete ---")
 

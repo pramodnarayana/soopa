@@ -1,3 +1,14 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { DataTable } from '@soopa/ui/components/ui/data-table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@soopa/ui/components/ui/dialog';
+import { Input } from '@soopa/ui/components/ui/input';
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -6,18 +17,7 @@ import {
 } from '@tanstack/react-table';
 import { Link, Loader2, Network, Power, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/ui/data-table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Badge } from '../../../components/ui/badge';
 import { useDeleteWebhookMutation, useUpdateWebhookStatusMutation } from '../api/webhookHooks';
 import type { Webhook } from '../types';
 import { WebhookDetails } from './WebhookDetails';
@@ -58,26 +58,24 @@ function DeleteWebhookDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete Webhook</DialogTitle>
-          <DialogDescription asChild>
-            <div className="space-y-3 text-sm text-slate-600">
-              <p>
-                This action is{' '}
-                <span className="font-semibold text-slate-900">permanent and irreversible</span>.
-                Any live integrations pointing to this webhook will immediately stop receiving data.
-              </p>
-              <p>To confirm, type the exact webhook URL below:</p>
-              <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
-                {confirmValue}
-              </code>
-              <Input
-                id="delete-webhook-confirm-input"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="Paste the webhook URL to confirm"
-                className="font-mono text-sm"
-                autoComplete="off"
-              />
-            </div>
+          <DialogDescription render={<div className="space-y-3 text-sm text-slate-600" />}>
+            <p>
+              This action is{' '}
+              <span className="font-semibold text-slate-900">permanent and irreversible</span>. Any
+              live integrations pointing to this webhook will immediately stop receiving data.
+            </p>
+            <p>To confirm, type the exact webhook URL below:</p>
+            <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
+              {confirmValue}
+            </code>
+            <Input
+              id="delete-webhook-confirm-input"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="Paste the webhook URL to confirm"
+              className="font-mono text-sm"
+              autoComplete="off"
+            />
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

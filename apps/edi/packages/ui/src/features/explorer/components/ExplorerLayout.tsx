@@ -1,9 +1,9 @@
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import { Database, FileJson } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { CodeViewer } from '@/components/ui/code-viewer';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CodeViewer } from '../../../components/ui/code-viewer';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { useExplorerEdiJson, useExplorerEdiMessages } from '../api/explorerApi';
 import type { ExplorerEdiJson, ExplorerEdiMessage, FilterRule } from '../types';
 import { ExplorerTable } from './ExplorerTable';

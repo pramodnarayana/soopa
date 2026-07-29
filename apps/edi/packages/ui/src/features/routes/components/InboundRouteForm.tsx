@@ -1,16 +1,16 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+} from '@soopa/ui/components/ui/select';
+import { useState } from 'react';
+import { SearchableSelect } from '../../../components/ui/searchable-select';
+import { useToast } from '../../../hooks/use-toast';
 import { useCreateInboundRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { DestinationType, Direction, ProcessingMode } from '../types';

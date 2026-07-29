@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
-import { UCP_API_URL } from '@/config/ucp';
-import { useToastMutation } from '@/hooks/use-toast-mutation';
+import { UCP_API_URL } from '../../../config/ucp';
+import { useToastMutation } from '../../../hooks/use-toast-mutation';
 import type { CreateApiTokenPayload } from '../types';
 import { createApiTokenRepository } from './apiTokensApi';
 

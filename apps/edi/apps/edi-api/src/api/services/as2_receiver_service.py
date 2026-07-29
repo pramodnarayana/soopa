@@ -8,13 +8,13 @@ from typing import Any
 from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
-from database.models.control_plane import DatabaseShard, Tenant
+from database.models.control_plane import DatabaseShard, Tenant, TenantShard
 from domain.events import PipelineEventType
 from security.smime import decrypt_payload, verify_signature
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class As2ReceiverService:
         self.global_session = global_session
         self.vault = vault
         self.db_router = db_router
-        self.uow = UnitOfWork(global_session=global_session)
+        self.control_plane_uow = ControlPlaneUnitOfWork(global_session=global_session)
 
     async def process_inbound_message(
         self, headers: dict[str, str], body_bytes: bytes
@@ -113,8 +113,8 @@ class As2ReceiverService:
             raise ValueError(f"Bad Request: {e}") from e
 
     async def _lookup_partnership(self, as2_from: str, as2_to: str):  # type: ignore
-        async with self.uow:
-            match = await self.uow.as2_partnerships.get_partnership_by_as2_ids(
+        async with self.control_plane_uow:
+            match = await self.control_plane_uow.as2_partnerships.get_partnership_by_as2_ids(
                 as2_from=as2_from, as2_to=as2_to
             )
             if not match:
@@ -331,7 +331,7 @@ class As2ReceiverService:
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
-        true_tenant_id: str | None = await self.uow.inbound_routes.get_tenant_by_isa(
+        true_tenant_id: str | None = await self.control_plane_uow.inbound_routes.get_tenant_by_isa(
             isa_sender, isa_receiver
         )
         if not true_tenant_id and partnership.tenant_id is not None:
@@ -364,7 +364,8 @@ class As2ReceiverService:
         # 3. Save directly to the true Tenant's Data Plane Shard
         stmt = (
             select(Tenant, DatabaseShard)
-            .join(DatabaseShard, Tenant.shard_id == DatabaseShard.id)
+            .join(TenantShard, Tenant.id == TenantShard.tenant_id)
+            .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
             .where(Tenant.id == true_tenant_id)
         )
         result = await self.global_session.execute(stmt)

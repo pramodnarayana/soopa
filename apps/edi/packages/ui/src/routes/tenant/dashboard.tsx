@@ -1,8 +1,8 @@
 import { createRoute } from '@tanstack/react-router';
 import { Activity } from 'lucide-react';
-import { useDashboardData } from '@/features/dashboard/api/useDashboardData';
-import { IdentityDetailsCard } from '@/features/dashboard/components/IdentityDetailsCard';
-import { TenantProvisioningCard } from '@/features/dashboard/components/TenantProvisioningCard';
+import { useDashboardData } from '../../features/dashboard/api/useDashboardData';
+import { IdentityDetailsCard } from '../../features/dashboard/components/IdentityDetailsCard';
+import { TenantProvisioningCard } from '../../features/dashboard/components/TenantProvisioningCard';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({

@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 from uuid import UUID as PyUUID
 
@@ -56,6 +57,10 @@ class AS2PartnerMixin:
     @declared_attr
     def url(cls) -> Mapped[str | None]:
         return mapped_column(String(1024), nullable=True)
+
+    @declared_attr
+    def is_local(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     @declared_attr
     def active(cls) -> Mapped[bool]:
@@ -158,10 +163,8 @@ class WebhookMixin:
     """Shared columns for Webhook across Global and Tenant schemas."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
-        return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
-        )
+    def id(cls) -> Mapped[str]:
+        return mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
 
     @declared_attr
     def name(cls) -> Mapped[str]:

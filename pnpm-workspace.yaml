@@ -4,3 +4,4 @@ packages:
   - 'core/*/packages/*/node'
   - 'apps/*/apps/*'
   - 'apps/*/packages/*'
+  - 'core/packages/*'

@@ -27,10 +27,10 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global' }}
-      SHARD_1_URL: ${{ secrets.SHARD_1_URL || 'postgresql://edi:edi_password@localhost:5433/edi_shard_1' }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'zitadel_password' }}
-      ZITADEL_MASTERKEY: ${{ secrets.ZITADEL_MASTERKEY || 'a-32-byte-long-secret-key-for-zitadel-in-ci' }}
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
+      SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
+      POSTGRES_PASSWORD: zitadel_password
+      ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
 
     steps:
       - name: Checkout code
@@ -40,8 +40,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
-        with:
-          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
@@ -78,13 +76,19 @@ jobs:
 
       - name: Start Database
         run: |
-          docker compose up -d postgres_global edi_postgres_shard_1 --wait
+          docker compose up -d postgres_global edi_postgres_shard_1 localstack --wait
+          pnpm db:migrate
+          pnpm db:seed
           uv run --directory apps/edi/packages/database python -m database.run_migrations
 
       - name: Test (Node)
         run: CI=true pnpm turbo test --filter="./apps/edi/**"
 
       - name: Test (Python)
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           for d in apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
             if [ -f "$d/pyproject.toml" ]; then

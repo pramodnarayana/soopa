@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import UUID
 
+from config.settings import get_settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
@@ -12,8 +13,8 @@ from api.adapters.http.dtos import (
     UpdateAS2TradingPartnerRequest,
 )
 from api.core.services import AS2PartnerService
-from api.core.uow import UnitOfWork
-from api.dependencies.database import get_uow
+from api.core.uow import ControlPlaneUnitOfWork
+from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_vault
 from api.domain.certificate import generate_self_signed_cert
 from api.domain.models import (
@@ -51,6 +52,70 @@ async def generate_certificate(
     )
 
 
+import logging
+
+from api.adapters.http.dtos import CertificateExportResponse
+from api.dependencies.auth import get_current_user_profile, get_raw_jwt
+
+logger = logging.getLogger(__name__)
+
+
+@router.get(
+    "/as2/certificates/{partner_id}/export",
+    response_model=CertificateExportResponse,
+)
+async def export_platform_as2_certificates(
+    partner_id: UUID,
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    token_payload: dict[str, Any] = Depends(get_raw_jwt),
+    profile: dict[str, Any] = Depends(get_current_user_profile),
+    vault: VaultPort = Depends(get_vault),
+) -> Any:
+    """Exports current and previous certificates for a Platform AS2 partner."""
+    async with uow:
+        partner = await uow.as2_partners.get_as2_partner(tenant_id="0", partner_id=partner_id)
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner not found")
+
+        response = CertificateExportResponse(
+            public_cert_pem=partner.public_cert_pem,
+            prev_public_cert_pem=partner.prev_public_cert_pem,
+        )
+
+        if partner.is_local:
+            if "certificates:export_private" not in profile["permissions"]:
+                raise HTTPException(
+                    status_code=403, detail="Insufficient permissions to export private keys."
+                )
+
+            if partner.private_key_vault_ref:
+                try:
+                    response.private_key_pem = vault.retrieve_private_key(
+                        partner.private_key_vault_ref
+                    ).decode("utf-8")
+                except Exception as e:
+                    logger.error(f"Failed to retrieve private key from vault: {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=500, detail="Failed to retrieve private key from vault"
+                    ) from e
+
+            if partner.prev_private_key_vault_ref:
+                try:
+                    response.prev_private_key_pem = vault.retrieve_private_key(
+                        partner.prev_private_key_vault_ref
+                    ).decode("utf-8")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to retrieve prev private key from vault: {e}", exc_info=True
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to retrieve prev private key from vault",
+                    ) from e
+
+        return response
+
+
 @router.delete(
     "/as2/certificates/secret",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -58,7 +123,7 @@ async def generate_certificate(
 async def delete_certificate_secret(
     vault_ref: str,
     vault: VaultPort = Depends(get_vault),
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
     async with uow:
@@ -87,7 +152,7 @@ async def delete_certificate_secret(
 )
 async def create_platform_as2_partner(
     request: CreateAS2TradingPartnerRequest,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """
@@ -124,11 +189,17 @@ async def create_platform_as2_partner(
                     )
                     public_cert_pem = public_cert_bytes.decode("utf-8")
 
+            # Auto-generate URL for local partners if not provided
+            url = str(request.url) if request.url else None
+            if request.is_local and not url:
+                settings = get_settings()
+                url = f"{settings.server.external_url}/api/v1/as2/receive"
+
             cmd = CreateAS2TradingPartnerCmd(
                 name=request.name,
                 as2_id=request.as2_id,
                 is_local=request.is_local,
-                url=str(request.url) if request.url else None,
+                url=url,
                 public_cert_pem=public_cert_pem,
                 public_cert_vault_ref=request.public_cert_vault_ref,
                 private_key_vault_ref=private_key_vault_ref,
@@ -165,7 +236,7 @@ async def create_platform_as2_partner(
 
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])
 async def list_platform_as2_partners(
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Returns all global AS2 partners (tenant_id = 0).
@@ -189,7 +260,7 @@ async def list_platform_as2_partners(
 async def update_platform_as2_partner(
     partner_id: UUID,
     request: UpdateAS2TradingPartnerRequest,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Updates a global AS2 partner."""
     async with uow:
@@ -227,7 +298,7 @@ async def update_platform_as2_partner(
 @router.delete("/as2/trading-partners/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_platform_as2_partner(
     partner_id: UUID,
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an AS2 partner."""
     async with uow:

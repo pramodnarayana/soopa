@@ -1,5 +1,5 @@
 import React from 'react';
-import { EdiEditorPane } from '@/components/ui/edi-editor-pane';
+import { EdiEditorPane } from '../../../components/ui/edi-editor-pane';
 
 export interface CertificateInputProps {
   value: string;
@@ -13,7 +13,7 @@ export interface CertificateInputProps {
  */
 export function CertificateInput({ value, onChange, extraActions }: CertificateInputProps) {
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden h-[420px] flex flex-col">
+    <div className="border border-slate-200 rounded-xl overflow-hidden h-[250px] flex flex-col">
       <EdiEditorPane
         value={value}
         onChange={onChange}

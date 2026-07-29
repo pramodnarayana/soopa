@@ -1,15 +1,15 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+} from '@soopa/ui/components/ui/select';
+import { useState } from 'react';
+import { useToast } from '../../../hooks/use-toast';
 import { useCreateEdiHeaderMutation } from '../api/ediHeadersApi';
 
 export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {

@@ -6,6 +6,7 @@ export class Tenant extends AggregateRoot {
     public readonly id: string,
     public name: string,
     public readonly zitadelOrgId: string | null,
+    public readonly idpTenantId: string | null,
     public status: 'active' | 'inactive',
     public readonly createdAt: Date,
     public updatedAt: Date,
@@ -18,6 +19,7 @@ export class Tenant extends AggregateRoot {
     id: string,
     name: string,
     zitadelOrgId: string | null,
+    idpTenantId: string | null,
     subscriptions: string[] = [],
   ): Tenant {
     const now = new Date();
@@ -25,6 +27,7 @@ export class Tenant extends AggregateRoot {
       id,
       name,
       zitadelOrgId,
+      idpTenantId,
       'active',
       now,
       now,

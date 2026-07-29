@@ -1,3 +1,4 @@
+import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -6,9 +7,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeftRight, ArrowRightLeft, Network } from 'lucide-react';
-import { DataTable } from '@/components/ui/data-table';
-import { SharedRowActions } from '@/features/partners/components/SharedRowActions';
-import { useToast } from '@/hooks/use-toast';
+import { SharedRowActions } from '../../../features/partners/components/SharedRowActions';
+import { useToast } from '../../../hooks/use-toast';
 import { useDeleteRouteMutation, useUpdateRouteMutation } from '../api/routeHooks';
 import type { RouteItem } from '../types';
 import { RouteDetails } from './RouteDetails';

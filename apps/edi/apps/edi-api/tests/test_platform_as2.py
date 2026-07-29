@@ -10,7 +10,7 @@ from api.dependencies.auth import (
     get_raw_jwt,
     require_platform_admin,
 )
-from api.dependencies.database import get_tenant_uow, get_uow
+from api.dependencies.database import get_control_plane_uow, get_data_plane_uow, get_global_session
 from api.main import app
 
 
@@ -32,8 +32,9 @@ def mock_uow():
 @pytest.fixture
 def client(mock_uow):
     app.dependency_overrides[get_current_tenant_id] = lambda: "0"
-    app.dependency_overrides[get_uow] = lambda: mock_uow
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_control_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "test"}
     app.dependency_overrides[require_platform_admin] = lambda: "0"
     app.dependency_overrides[get_current_user_profile] = lambda: {

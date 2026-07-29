@@ -1,5 +1,5 @@
 from api.dependencies.auth import get_current_tenant_id, require_platform_admin
-from api.dependencies.database import get_uow
+from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_as2_tester, get_vault
 
 """
@@ -7,7 +7,7 @@ Tests for the AS2 Partnership connection test endpoint.
 
 POST /api/v1/platform/trading-partners/as2/partnerships/{id}/test
 
-All infrastructure is injected via FakeUnitOfWork, a fixture-controlled FakeAS2Tester,
+All infrastructure is injected via FakeControlPlaneUnitOfWork, a fixture-controlled FakeAS2Tester,
 and FakeVault — zero real network connections or Vault required.
 """
 
@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-from api_fakes import FakeUnitOfWork
+from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -58,12 +58,12 @@ class FakeVault:
 
 
 @pytest.fixture
-def fake_uow() -> FakeUnitOfWork:
-    return FakeUnitOfWork()
+def fake_uow() -> FakeControlPlaneUnitOfWork:
+    return FakeControlPlaneUnitOfWork()
 
 
 @pytest.fixture
-def client_factory(fake_uow: FakeUnitOfWork) -> Callable[..., TestClient]:
+def client_factory(fake_uow: FakeControlPlaneUnitOfWork) -> Callable[..., TestClient]:
     """
     Factory fixture that creates a TestClient with all dependency overrides
     registered BEFORE the TestClient context is entered. This ensures no
@@ -78,7 +78,7 @@ def client_factory(fake_uow: FakeUnitOfWork) -> Callable[..., TestClient]:
     def _make(*, transport_ok: bool = True, result: str = "processed") -> TestClient:
         fake_tester = FakeAS2Tester(transport_ok=transport_ok, result=result)
 
-        app.dependency_overrides[get_uow] = lambda: fake_uow
+        app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
         app.dependency_overrides[get_current_tenant_id] = lambda: "0"
         app.dependency_overrides[require_platform_admin] = lambda: "0"
         app.dependency_overrides[get_vault] = lambda: FakeVault()
@@ -101,7 +101,9 @@ def client_factory(fake_uow: FakeUnitOfWork) -> Callable[..., TestClient]:
 # ---------------------------------------------------------------------------
 
 
-def _create_partnership(client: TestClient, fake_uow: FakeUnitOfWork) -> tuple[str, str, str]:
+def _create_partnership(
+    client: TestClient, fake_uow: FakeControlPlaneUnitOfWork
+) -> tuple[str, str, str]:
     """
     Creates local partner → remote partner → partnership via the real API.
     Returns (local_id, remote_id, partnership_id).

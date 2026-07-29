@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Label } from '@/components/ui/label';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from '@soopa/ui/components/ui/select';
+import { useEffect, useState } from 'react';
 
 interface CronBuilderProps {
   value: string;

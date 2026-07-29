@@ -1,6 +1,7 @@
 import {
   controlPlaneOutbox,
   createDbClient,
+  tenantShards,
   tenantSubscriptions,
   tenants,
   tenantUsers,
@@ -27,6 +28,7 @@ describe('DrizzleTenantRepository', () => {
     await db.delete(controlPlaneOutbox);
     await db.delete(tenantSubscriptions);
     await db.delete(tenantUsers);
+    await db.delete(tenantShards);
     await db.delete(tenants);
     await db.delete(users);
   });

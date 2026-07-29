@@ -1,7 +1,7 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
 import { Activity, AlertCircle, CheckCircle2, Database, FileJson, Server } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CodeViewer } from '@/components/ui/code-viewer';
+import { Badge } from '../../../components/ui/badge';
+import { CodeViewer } from '../../../components/ui/code-viewer';
 import type { TransactionDetailResponse } from '../types';
 
 interface Props {

@@ -9,7 +9,3 @@ class TenantPort(Protocol):
     async def resolve_shard(self, tenant_id: str) -> tuple[str, str]:
         """Resolve a tenant_id to a database shard (name, dsn)."""
         ...
-
-    async def upsert_tenant(self, tenant_id: str, name: str) -> None:
-        """Upsert a tenant into the global database."""
-        ...

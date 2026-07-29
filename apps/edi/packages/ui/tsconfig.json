@@ -1,9 +1,6 @@
 {
   "compilerOptions": {
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
     "types": ["vite/client"],
     "strict": true,
     "strictNullChecks": true

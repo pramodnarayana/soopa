@@ -1,6 +1,6 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '../hooks/use-toast';
 
 /**
  * Shared React Query mutation helper that automatically:

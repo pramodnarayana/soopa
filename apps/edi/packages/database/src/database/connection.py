@@ -44,6 +44,10 @@ class DatabaseRouter:
         logger.info("Initialized DatabaseRouter with global connection pool.")
 
     def _create_engine(self, url: str) -> AsyncEngine:
+        # Enterprise-grade compatibility: transparently handle standard Postgres DSNs
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
         return create_async_engine(
             url,
             echo=False,
@@ -80,7 +84,7 @@ class DatabaseRouter:
             yield session  # type: ignore
 
     async def get_tenant_session(
-        self, tenant_id: int, shard_key: str, shard_url: str
+        self, tenant_id: str, shard_key: str, shard_url: str
     ) -> AsyncGenerator[TenantSession, None]:
         """
         Yields a session connected to a specific tenant's shard.

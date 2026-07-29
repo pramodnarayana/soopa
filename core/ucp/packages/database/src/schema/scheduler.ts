@@ -1,5 +1,6 @@
 import { createId } from '@paralleldrive/cuid2';
-import { index, integer, jsonb, pgTable, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { ucpSchema } from './shared.js';
 
 const JobStatus = {
   PENDING: 'PENDING',
@@ -9,7 +10,7 @@ const JobStatus = {
 } as const;
 type JobStatusType = (typeof JobStatus)[keyof typeof JobStatus];
 
-export const scheduledJobs = pgTable(
+export const scheduledJobs = ucpSchema.table(
   'scheduled_jobs',
   {
     id: varchar('id', { length: 128 })
@@ -23,8 +24,12 @@ export const scheduledJobs = pgTable(
       .$type<JobStatusType>(), // PENDING, RUNNING, COMPLETED, FAILED
     nextRunAt: timestamp('next_run_at'),
     intervalSeconds: integer('interval_seconds'),
+    minIntervalSeconds: integer('min_interval_seconds'),
+    maxIntervalSeconds: integer('max_interval_seconds'),
     cronExpression: varchar('cron_expression', { length: 100 }),
+    timezone: varchar('timezone', { length: 50 }),
     targetQueue: varchar('target_queue', { length: 255 }),
+    appNamespace: varchar('app_namespace', { length: 255 }),
     retryCount: integer('retry_count').default(0).notNull(),
     maxRetries: integer('max_retries').default(3).notNull(),
     errorMessage: text('error_message'),

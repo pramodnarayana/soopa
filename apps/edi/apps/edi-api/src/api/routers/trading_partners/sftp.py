@@ -12,9 +12,9 @@ from api.adapters.http.dtos import (
     UpdateSFTPPartnerRequest,
 )
 from api.core.services import SFTPPartnerService
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_sftp_tester, get_vault
 from api.domain.models import (
     CreateSFTPPartnerCmd,
@@ -72,7 +72,7 @@ async def test_existing_sftp_connection(
     partner_id: UUID,
     request: TestSFTPConnectionRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
     vault_port: VaultPort = Depends(get_vault),
 ) -> Any:
@@ -81,19 +81,18 @@ async def test_existing_sftp_connection(
 
     if not request.password and not request.credentials_vault_ref:
         async with uow:
-            if uow.global_session is not None:
-                partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
-                if partner:
-                    if partner.password_encrypted:
-                        try:
-                            request.password = db_encryption.decrypt(partner.password_encrypted)
-                        except Exception as e:
-                            return TestConnectionResponse(
-                                success=False,
-                                reason=f"Failed to decrypt stored password: {e}",
-                            )
-                    elif partner.credentials_vault_ref:
-                        request.credentials_vault_ref = partner.credentials_vault_ref
+            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
+            if partner:
+                if partner.password_encrypted:
+                    try:
+                        request.password = db_encryption.decrypt(partner.password_encrypted)
+                    except Exception as e:
+                        return TestConnectionResponse(
+                            success=False,
+                            reason=f"Failed to decrypt stored password: {e}",
+                        )
+                elif partner.credentials_vault_ref:
+                    request.credentials_vault_ref = partner.credentials_vault_ref
 
     if not request.password and not request.credentials_vault_ref:
         return TestConnectionResponse(
@@ -123,7 +122,7 @@ async def test_existing_sftp_connection(
 async def create_sftp_partner(
     request: CreateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
     from sqlalchemy.exc import IntegrityError
@@ -157,8 +156,6 @@ async def create_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if uow.tenant_session is None:
-                raise HTTPException(status_code=500, detail="Data plane not initialized")
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.partner_id)
             if not partner:
                 raise HTTPException(status_code=404, detail="Partner not found after creation")
@@ -184,7 +181,7 @@ async def update_sftp_partner(
     partner_id: UUID,
     request: UpdateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
     async with uow:
@@ -199,8 +196,6 @@ async def update_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            if uow.tenant_session is None:
-                raise HTTPException(status_code=500, detail="Data plane not initialized")
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
             if not partner:
                 raise HTTPException(status_code=404, detail="Partner not found after update")
@@ -225,13 +220,11 @@ async def update_sftp_partner(
 async def delete_sftp_partner(
     partner_id: UUID,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an SFTP partner."""
     async with uow:
         try:
-            if uow.tenant_session is None:
-                raise HTTPException(status_code=500, detail="Tenant data plane not available")
             await uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
             await uow.commit()
         except IntegrityError as e:

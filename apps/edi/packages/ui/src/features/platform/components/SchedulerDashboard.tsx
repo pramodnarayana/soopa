@@ -1,7 +1,5 @@
-import { Clock, Pause, Play } from 'lucide-react';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@soopa/ui/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -9,9 +7,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from '@soopa/ui/components/ui/dialog';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   Table,
   TableBody,
@@ -19,8 +17,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from '@soopa/ui/components/ui/table';
+import { Clock, Pause, Play } from 'lucide-react';
+import { useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import type { JobResponse } from '../api/schedulerApi';
 import { useJobsQuery, useUpdateJobMutation } from '../api/schedulerHooks';
 import { CronBuilder } from './CronBuilder';

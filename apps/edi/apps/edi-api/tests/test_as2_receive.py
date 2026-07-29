@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-from api.dependencies.database import get_tenant_uow, get_uow
+from api.dependencies.database import get_control_plane_uow, get_data_plane_uow, get_global_session
 from api.dependencies.services import get_message_queue
 from api.main import app
 
@@ -23,8 +23,9 @@ def mock_mq():
 
 @pytest.fixture
 def client(mock_uow, mock_mq):
-    app.dependency_overrides[get_uow] = lambda: mock_uow
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_control_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     app.dependency_overrides[get_message_queue] = lambda: mock_mq
 
     with TestClient(app) as client:

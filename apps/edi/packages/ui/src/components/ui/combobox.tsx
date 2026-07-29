@@ -1,6 +1,7 @@
+import { Button } from '@soopa/ui/components/ui/button';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import * as React from 'react';
-import { Button } from '@/components/ui/button';
+import { cn } from '../../lib/utils';
 import {
   Command,
   CommandEmpty,
@@ -8,9 +9,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '../../lib/utils';
+} from './command';
+import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
 export interface ComboboxProps {
   options: string[];
@@ -62,20 +62,22 @@ export function Combobox({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between font-normal text-left px-3 h-10 shadow-sm"
-          disabled={disabled}
-        >
-          <span className="truncate flex-1">
-            {inputValue || <span className="text-muted-foreground">{placeholder}</span>}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between font-normal text-left px-3 h-10 shadow-sm"
+            disabled={disabled}
+          />
+        }
+      >
+        <span className="truncate flex-1">
+          {inputValue || <span className="text-muted-foreground">{placeholder}</span>}
+        </span>
+        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </PopoverTrigger>
       <PopoverContent
         side={side}

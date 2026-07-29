@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pipeline.core.metadata_extractor import MetadataExtractorService
 
-from api.core.uow import UnitOfWork
+from api.core.uow import DataPlaneUnitOfWork
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class ApiReceiverService:
     Strictly follows Single Responsibility Principle and encapsulates business logic.
     """
 
-    def __init__(self, uow: UnitOfWork):
+    def __init__(self, uow: DataPlaneUnitOfWork):
         self.uow = uow
         self.extractor = MetadataExtractorService()
 

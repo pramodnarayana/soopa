@@ -27,7 +27,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     # Routes (Now in Control Plane)
     # ------------------------------------------------------------------------
     async def _validate_inbound_destination(
-        self, tenant_id: str, webhook_id: UUID | None, as2_id: UUID | None, sftp_id: UUID | None
+        self, tenant_id: str, webhook_id: str | None, as2_id: UUID | None, sftp_id: UUID | None
     ) -> None:
         destinations = [d for d in (webhook_id, as2_id, sftp_id) if d is not None]
         if len(destinations) != 1:
@@ -130,7 +130,10 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             record.active = cmd.active
 
         await self._validate_inbound_destination(
-            tenant_id, record.webhook_id, record.as2_partner_id, record.sftp_partner_id
+            tenant_id,
+            record.webhook_id,
+            record.as2_partner_id,
+            record.sftp_partner_id,
         )
 
         await self.session.flush()

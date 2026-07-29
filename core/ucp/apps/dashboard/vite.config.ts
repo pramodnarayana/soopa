@@ -11,6 +11,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@soopa/ui': path.resolve(__dirname, '../../../packages/ui/src'),
+      '@soopa/edi-ui': path.resolve(__dirname, '../../../../apps/edi/packages/ui/src'),
     },
   },
 });

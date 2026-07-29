@@ -1,5 +1,4 @@
-import { Edit2, Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@soopa/ui/components/ui/button';
 import {
   Table,
   TableBody,
@@ -7,7 +6,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from '@soopa/ui/components/ui/table';
+import { Edit2, Plus, Trash2 } from 'lucide-react';
 
 export interface UserRow {
   id: string;

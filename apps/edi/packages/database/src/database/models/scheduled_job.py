@@ -5,13 +5,15 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from database.models.control_plane import GlobalBase
+from database.models.control_plane import UcpBase
 
 
-class ScheduledJob(GlobalBase):
+class ScheduledJob(UcpBase):
     __tablename__ = "scheduled_jobs"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
     name: Mapped[str] = mapped_column(String, index=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String, index=True, default="PENDING")

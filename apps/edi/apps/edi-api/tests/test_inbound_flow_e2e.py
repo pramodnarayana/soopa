@@ -37,8 +37,10 @@ def generate_self_signed_cert() -> tuple[bytes, bytes]:
         .issuer_name(issuer)
         .public_key(private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
+        .not_valid_before(datetime.datetime.now(datetime.UTC).replace(tzinfo=None))
+        .not_valid_after(
+            datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(days=10)
+        )
         .sign(private_key, hashes.SHA256())
     )
 

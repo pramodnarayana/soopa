@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+from pydantic import BaseModel
+
 
 class PipelineEventType(StrEnum):
     TRANSFORM_EVENT = "TRANSFORM_EVENT"
@@ -31,6 +33,15 @@ class ProvisioningEventType(StrEnum):
     OUTBOUND_EDI_HEADER_CREATED = "OUTBOUND_EDI_HEADER_CREATED"
     OUTBOUND_EDI_HEADER_UPDATED = "OUTBOUND_EDI_HEADER_UPDATED"
     OUTBOUND_EDI_HEADER_DELETED = "OUTBOUND_EDI_HEADER_DELETED"
+
+    # Legacy / UCP System Events
+    PROVISION_ALL_TENANTS = "tenant.provision_all"
+
+
+class ProvisioningEvent(BaseModel):
+    tenant_id: str
+    event_type: ProvisioningEventType
+    resource_id: str | None = None
 
 
 class MessageQueueName(StrEnum):

@@ -23,7 +23,7 @@ def mock_db_router():
 @pytest.fixture
 def service(mock_session, mock_vault, mock_db_router):
     svc = As2ReceiverService(mock_session, mock_vault, mock_db_router)
-    svc.uow = AsyncMock()
+    svc.control_plane_uow = AsyncMock()
     return svc
 
 
@@ -52,7 +52,7 @@ async def test_process_inbound_message_partnership_not_found(service):
         mock_msg.as2_to = "unknown2"
         mock_parse.return_value = mock_msg
 
-        service.uow.as2_partnerships.get_partnership_by_as2_ids.return_value = None
+        service.control_plane_uow.as2_partnerships.get_partnership_by_as2_ids.return_value = None
 
         with pytest.raises(ValueError, match="Partnership not configured"):
             await service.process_inbound_message(headers, body_bytes)
@@ -74,7 +74,7 @@ async def test_process_inbound_message_success(service):
         mock_local_partner = MagicMock()
         mock_remote_partner = MagicMock()
 
-        service.uow.as2_partnerships.get_partnership_by_as2_ids.return_value = (
+        service.control_plane_uow.as2_partnerships.get_partnership_by_as2_ids.return_value = (
             mock_partnership,
             mock_local_partner,
             mock_remote_partner,

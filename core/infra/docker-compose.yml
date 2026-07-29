@@ -29,6 +29,11 @@ services:
     volumes:
       - ./localstack-setup.sh:/etc/localstack/init/ready.d/init.sh
       - ../../apps/edi/docker/localstack/init-aws.sh:/etc/localstack/init/ready.d/edi-init.sh
+    healthcheck:
+      test: ["CMD", "curl", "-s", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_global_data:

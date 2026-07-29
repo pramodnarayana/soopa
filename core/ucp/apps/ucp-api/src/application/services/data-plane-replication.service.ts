@@ -2,10 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigKey } from '../../domain/enums/config-keys.enum.js';
-import {
-  type IMessageBus,
-  MESSAGE_BUS,
-} from '../../ports/outbound/message.bus.js';
+import { type IMessageBus, MESSAGE_BUS } from '../../ports/outbound/message.bus.js';
 import {
   type IOutboxRepository,
   OUTBOX_REPOSITORY,
@@ -35,21 +32,22 @@ export class DataPlaneReplicationService {
     this.logger.log(`Found ${pendingEvents.length} pending events.`);
 
     // Resolve SNS topic ARN once before processing events
-    const topicArn = this.configService.getOrThrow<string>(
-      ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN,
-    );
+    const topicArn = this.configService.getOrThrow<string>(ConfigKey.SNS_TENANT_EVENTS_TOPIC_ARN);
 
     for (const event of pendingEvents) {
       try {
         // 2. Dispatch to Message Bus
-        this.logger.log(
-          `Dispatching event ${event.eventType} to message bus...`,
-        );
+        this.logger.log(`Dispatching event ${event.eventType} to message bus...`);
 
         // Dispatch to the SNS fan-out topic for all Data Planes
+        const messagePayload = {
+          eventType: event.eventType,
+          payload: event.payload,
+        };
+
         await this.messageBus.publish(
           topicArn,
-          event.payload,
+          messagePayload,
           event.tenantId,
           event.idempotencyKey,
         );
@@ -60,8 +58,7 @@ export class DataPlaneReplicationService {
         this.logger.log(`Event ${event.id} marked as PROCESSED.`);
       } catch (error: unknown) {
         this.logger.error(`Failed to process event ${event.id}`, error);
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
         await this.outboxRepo.markAsFailed(event.id, errorMessage);
       }
     }

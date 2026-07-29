@@ -1,10 +1,12 @@
 import logging
 from uuid import UUID
 
-from domain.events import ProvisioningEventType
+from domain.events import (
+    ProvisioningEventType,
+)
 from domain.models import ConnectionType, PartnerStatus
 
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     PartnerEntity,
@@ -20,7 +22,7 @@ class AS2PartnerService:
     Operates exclusively on the Global Control Plane repository.
     """
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_as2_partner(
@@ -32,7 +34,7 @@ class AS2PartnerService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_CREATED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
         )
 
         return PartnerEntity(
@@ -56,7 +58,7 @@ class AS2PartnerService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
         )
 
         return PartnerEntity(
@@ -73,7 +75,7 @@ class AS2PartnerService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_DELETED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
         )
 
     async def rotate_certificates(
@@ -95,7 +97,7 @@ class AS2PartnerService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
         )
 
         return PartnerEntity(

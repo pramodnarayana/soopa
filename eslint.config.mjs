@@ -59,6 +59,23 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
+    files: ['apps/edi/packages/ui/src/**/*.ts', 'apps/edi/packages/ui/src/**/*.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/*'],
+              message:
+                'Absolute imports (@/*) are forbidden inside shared UI packages to prevent Vite alias hijacking by host applications. Use relative imports instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.test.ts', 'test/**'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',

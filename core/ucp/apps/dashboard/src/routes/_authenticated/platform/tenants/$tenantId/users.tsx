@@ -1,3 +1,13 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { DataTable } from '@soopa/ui/components/ui/data-table';
+import { Input } from '@soopa/ui/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@soopa/ui/components/ui/select';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   createColumnHelper,
@@ -8,16 +18,6 @@ import {
 import { ChevronDown, ChevronRight, Send, Trash2, UserPlus, Users, X } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/ui/data-table';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useGetRoles } from '@/domains/roles/api/queries';
 import {
   useCreateTenantUser,
