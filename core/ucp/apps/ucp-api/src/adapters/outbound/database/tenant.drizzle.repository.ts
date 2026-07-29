@@ -25,6 +25,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
       row.id,
       row.name,
       row.zitadelOrgId,
+      row.idpTenantId,
       row.status,
       row.createdAt,
       row.updatedAt,
@@ -51,6 +52,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           id: tenant.id,
           name: tenant.name,
           zitadelOrgId: tenant.zitadelOrgId,
+          idpTenantId: tenant.idpTenantId,
           status: tenant.status,
           createdAt: tenant.createdAt,
           updatedAt: tenant.updatedAt,
@@ -60,6 +62,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
           set: {
             name: tenant.name,
             zitadelOrgId: tenant.zitadelOrgId,
+            idpTenantId: tenant.idpTenantId,
             status: tenant.status,
             updatedAt: new Date(),
           },

@@ -106,7 +106,16 @@ class SqsPublisherAdapter(MessagePublisherPort):
             async with self.session.client(
                 "sqs", endpoint_url=self.endpoint_url, region_name=self.region
             ) as sqs:
-                await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(event))
+                kwargs: dict[str, Any] = {
+                    "QueueUrl": queue_url,
+                    "MessageBody": json.dumps(event),
+                }
+                if queue_name.endswith(".fifo"):
+                    kwargs["MessageGroupId"] = event.get("partition_key", "default")
+                    if "idempotency_key" in event:
+                        kwargs["MessageDeduplicationId"] = event["idempotency_key"]
+
+                await sqs.send_message(**kwargs)
         except Exception:
             logger.exception(f"Failed to send single message to {queue_name}")
             raise

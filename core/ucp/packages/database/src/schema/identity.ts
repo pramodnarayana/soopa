@@ -29,24 +29,32 @@ export const tenants = ucpSchema.table('tenants', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const tenantShards = ucpSchema.table(
-  'tenant_shards',
-  {
-    tenantId: varchar('tenant_id', { length: 128 })
-      .notNull()
-      .references(() => tenants.id),
-    shardId: varchar('shard_id', { length: 128 }).notNull(),
-    shardSchema: varchar('shard_schema', { length: 255 }).notNull().default('public'),
-    tier: varchar('tier', { length: 50 }).notNull().default('standard'),
-    allowPrivateAs2: boolean('allow_private_as2').notNull().default(false),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => {
-    return {
-      pk: primaryKey({ columns: [table.tenantId, table.shardId] }),
-    };
-  },
-);
+export const tenantShards = ucpSchema
+  .table(
+    'tenant_shards',
+    {
+      tenantId: varchar('tenant_id', { length: 128 })
+        .notNull()
+        .references(() => tenants.id),
+      shardId: varchar('shard_id', { length: 128 }).notNull(),
+      shardSchema: varchar('shard_schema', { length: 255 }).notNull().default('public'),
+      tier: varchar('tier', { length: 50 }).notNull().default('standard'),
+      allowPrivateAs2: boolean('allow_private_as2').notNull().default(false),
+      createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => {
+      return {
+        pk: primaryKey({ columns: [table.tenantId, table.shardId] }),
+        rlsPolicy: pgPolicy('tenant_shards_isolation', {
+          as: 'permissive',
+          for: 'all',
+          to: 'public',
+          using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
+        }),
+      };
+    },
+  )
+  .enableRLS();
 
 export const users = ucpSchema.table('users', {
   id: varchar('id', { length: 128 })
@@ -63,53 +71,57 @@ export const users = ucpSchema.table('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const tenantUsers = ucpSchema.table(
-  'tenant_users',
-  {
-    tenantId: varchar('tenant_id', { length: 128 })
-      .notNull()
-      .references(() => tenants.id),
-    userId: varchar('user_id', { length: 128 })
-      .notNull()
-      .references(() => users.id),
-    role: varchar('role', { length: 50 }).notNull(),
-    metadata: jsonb('metadata'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => {
-    return {
-      pk: primaryKey({ columns: [table.tenantId, table.userId] }),
-      userIdIdx: index('tenant_users_user_id_idx').on(table.userId),
-      rlsPolicy: pgPolicy('tenant_users_isolation', {
+export const tenantUsers = ucpSchema
+  .table(
+    'tenant_users',
+    {
+      tenantId: varchar('tenant_id', { length: 128 })
+        .notNull()
+        .references(() => tenants.id),
+      userId: varchar('user_id', { length: 128 })
+        .notNull()
+        .references(() => users.id),
+      role: varchar('role', { length: 50 }).notNull(),
+      metadata: jsonb('metadata'),
+      createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => {
+      return {
+        pk: primaryKey({ columns: [table.tenantId, table.userId] }),
+        userIdIdx: index('tenant_users_user_id_idx').on(table.userId),
+        rlsPolicy: pgPolicy('tenant_users_isolation', {
+          as: 'permissive',
+          for: 'all',
+          to: 'public',
+          using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
+        }),
+      };
+    },
+  )
+  .enableRLS();
+
+export const apiKeys = ucpSchema
+  .table(
+    'api_keys',
+    {
+      id: varchar('id', { length: 128 })
+        .primaryKey()
+        .$defaultFn(() => createId()),
+      tenantId: varchar('tenant_id', { length: 128 })
+        .notNull()
+        .references(() => tenants.id),
+      keyHash: text('key_hash').notNull().unique(),
+      name: text('name').notNull(),
+      scopes: text('scopes').array().notNull().default([]),
+      createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => [
+      pgPolicy('api_keys_isolation', {
         as: 'permissive',
         for: 'all',
         to: 'public',
         using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
       }),
-    };
-  },
-);
-
-export const apiKeys = ucpSchema.table(
-  'api_keys',
-  {
-    id: varchar('id', { length: 128 })
-      .primaryKey()
-      .$defaultFn(() => createId()),
-    tenantId: varchar('tenant_id', { length: 128 })
-      .notNull()
-      .references(() => tenants.id),
-    keyHash: text('key_hash').notNull().unique(),
-    name: text('name').notNull(),
-    scopes: text('scopes').array().notNull().default([]),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => [
-    pgPolicy('api_keys_isolation', {
-      as: 'permissive',
-      for: 'all',
-      to: 'public',
-      using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
-    }),
-  ],
-);
+    ],
+  )
+  .enableRLS();

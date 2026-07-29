@@ -1,5 +1,5 @@
 {
-  "id": "c2f966ed-e31e-428d-b29b-11ea6db4f476",
+  "id": "86fd1fa2-630e-4382-a63b-ef28b6c2a430",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -262,7 +262,15 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
+      "policies": {
+        "tenant_shards_isolation": {
+          "name": "tenant_shards_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": ["public"],
+          "using": "\"ucp\".\"tenant_shards\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -674,9 +682,180 @@
           "as": "PERMISSIVE",
           "for": "ALL",
           "to": ["public"],
-          "using": "\"ucp\".\"outbox_events\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox_events\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+          "using": "\"ucp\".\"outbox_events\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox_events\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()",
+          "withCheck": "\"ucp\".\"outbox_events\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox_events\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "ucp.database_shards": {
+      "name": "database_shards",
+      "schema": "ucp",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(128)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dsn": {
+          "name": "dsn",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "database_shards_name_unique": {
+          "name": "database_shards_name_unique",
+          "nullsNotDistinct": false,
+          "columns": ["name"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "ucp.platform_settings": {
+      "name": "platform_settings",
+      "schema": "ucp",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "ucp.system_audit_log": {
+      "name": "system_audit_log",
+      "schema": "ucp",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(128)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "trace_id": {
+          "name": "trace_id",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event": {
+          "name": "event",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ix_system_audit_log_tenant_time": {
+          "name": "ix_system_audit_log_tenant_time",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ix_ucp_system_audit_log_trace_id": {
+          "name": "ix_ucp_system_audit_log_trace_id",
+          "columns": [
+            {
+              "expression": "trace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },
@@ -1074,176 +1253,6 @@
           "using": "\"ucp\".\"webhooks\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "ucp.database_shards": {
-      "name": "database_shards",
-      "schema": "ucp",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(128)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dsn": {
-          "name": "dsn",
-          "type": "varchar(1024)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "database_shards_name_unique": {
-          "name": "database_shards_name_unique",
-          "nullsNotDistinct": false,
-          "columns": ["name"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "ucp.platform_settings": {
-      "name": "platform_settings",
-      "schema": "ucp",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "varchar",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "value": {
-          "name": "value",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "ucp.system_audit_log": {
-      "name": "system_audit_log",
-      "schema": "ucp",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(128)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "trace_id": {
-          "name": "trace_id",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event": {
-          "name": "event",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "ix_system_audit_log_tenant_time": {
-          "name": "ix_system_audit_log_tenant_time",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ix_ucp_system_audit_log_trace_id": {
-          "name": "ix_ucp_system_audit_log_trace_id",
-          "columns": [
-            {
-              "expression": "trace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     }

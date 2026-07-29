@@ -115,6 +115,7 @@ class ControlPlaneOutboxRelayService:
                     continue
 
             if not publishable:
+                await session.commit()
                 return 0
 
             messages = [msg for _, msg in publishable]

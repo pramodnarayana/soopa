@@ -61,15 +61,19 @@ export class TenantAuthGuard implements CanActivate {
     }
 
     // If it's not a JWT, it must be a UCP API Token using the Split Token Pattern (soopa_live_clientId_rawSecret)
-    // token format: [prefix]_[clientId]_[rawSecret]
-    const tokenParts = token.split('_');
-    if (tokenParts.length < 3) {
+    // token format: soopa_live_[clientId]_[rawSecret]
+    if (!token.startsWith('soopa_live_')) {
       throw new UnauthorizedException('Invalid API Token format');
     }
 
-    // The last part is the rawSecret, the second to last is the clientId
-    const rawSecret = tokenParts.pop();
-    const clientId = tokenParts.pop();
+    const lastUnderscoreIndex = token.lastIndexOf('_');
+    if (lastUnderscoreIndex <= 11) {
+      // 11 is the length of 'soopa_live_'
+      throw new UnauthorizedException('Invalid API Token format');
+    }
+
+    const rawSecret = token.slice(lastUnderscoreIndex + 1);
+    const clientId = token.slice(11, lastUnderscoreIndex);
 
     if (!clientId || !rawSecret) {
       throw new UnauthorizedException('Invalid API Token format');

@@ -97,8 +97,8 @@ export class PostgresJobRepository {
         );
       return result.rowCount;
     } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Deep Drizzle Error Details:', error, 'Cause:', error.cause);
+      const error = err instanceof Error ? err : new Error(err ? String(err) : 'Unknown error');
+      console.error('Deep Drizzle Error Details:', error, 'Cause:', (error as any).cause);
       throw error;
     }
   }
