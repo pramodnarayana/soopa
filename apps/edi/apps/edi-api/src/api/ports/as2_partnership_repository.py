@@ -10,6 +10,7 @@ from api.domain.models import (
 
 
 class AS2PartnershipRepositoryPort(Protocol):
+    async def list_as2_partnerships(self, tenant_id: str) -> list[AS2PartnershipDomainModel]: ...
     async def create_as2_partnership(
         self, tenant_id: str, cmd: CreateAS2PartnershipCmd
     ) -> UUID: ...

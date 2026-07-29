@@ -3,9 +3,9 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, field_validator
 
-from api.core.uow import UnitOfWork
+from api.core.uow import DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_data_plane_uow
 
 router = APIRouter(prefix="/api/v1/explorer", tags=["Explorer"])
 
@@ -110,7 +110,7 @@ def _serialize_edi_json(j: Any) -> dict[str, Any]:
 async def explore_edi_messages(
     req: ExplorerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Any:
@@ -129,7 +129,7 @@ async def explore_edi_messages(
 async def explore_edi_json(
     req: ExplorerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Any:

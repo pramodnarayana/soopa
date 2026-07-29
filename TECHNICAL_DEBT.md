@@ -17,3 +17,8 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-07-27
 - **Description**: The API authorization middleware (`auth.py`) and Zero Trust ACL currently hardcode external Identity Provider (Zitadel) role names (e.g. `PlatformAdmin`) and virtual tenant IDs (`"0"`). This violates Hexagonal Architecture and creates tight coupling to external IdP nomenclature.
 - **Action Item**: Implement an Anti-Corruption Layer (ACL) that dynamically maps IdP roles to canonical internal capabilities/permissions (e.g. `Permissions.SYSTEM_TENANT_BYPASS`) via configuration. Update all backend dependencies to evaluate generic capabilities rather than checking for magic strings or virtual tenant IDs.
+
+## [UI Architecture] Consolidate UI Primitives (Radix UI vs Base UI)
+- **Date Added**: 2026-07-27
+- **Description**: The monorepo currently mixes two different headless UI libraries: `@soopa/edi-ui` uses Radix UI (`asChild` pattern), while `@soopa/dashboard` uses Base UI (`render` prop pattern). This library mixing led to "swallowed ref" and unclickable button bugs when the dashboard hijacked imports via Vite aliases. We have temporarily mitigated this by isolating the packages with strict ESLint boundaries and relative imports.
+- **Action Item**: Standardize the entire monorepo on a single UI library (preferably Base UI, to match the newer Shadcn UI standard). Extract a unified `packages/ui` library, migrate all `@soopa/edi-ui` components to use it, and remove the Radix dependencies to reduce bundle bloat and cognitive load.

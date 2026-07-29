@@ -3,6 +3,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from domain.events import PipelineEventType
 
 from worker.core.scheduler.models import Job
 from worker.jobs.outbox_sweeper import DataPlaneOutboxSweeperJobHandler
@@ -117,12 +118,12 @@ async def test_outbox_sweep_shard_with_events(mock_async_session):
 
     mock_event1 = MagicMock()
     mock_event1.id = "1"
-    mock_event1.event_type = "TRANSFORM_EVENT"
+    mock_event1.event_type = PipelineEventType.TRANSFORM_EVENT
     mock_event1.payload = {"foo": "bar"}
 
     mock_event2 = MagicMock()
     mock_event2.id = "2"
-    mock_event2.event_type = "DELIVER_EVENT"
+    mock_event2.event_type = PipelineEventType.DELIVER_EVENT
     mock_event2.payload = {"baz": "qux"}
 
     mock_result = MagicMock()

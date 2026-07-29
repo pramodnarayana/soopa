@@ -41,7 +41,7 @@ check-all: format lint typecheck test
 
 dev:
 	@echo "Starting API and Workers concurrently..."
-	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,orch,comp" "make dev-api" "make dev-worker-orchestrator" "make dev-worker-compute"
+	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,orch,as2,comp" "make dev-api" "make dev-worker-orchestrator" "make dev-as2" "make dev-worker-compute"
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."

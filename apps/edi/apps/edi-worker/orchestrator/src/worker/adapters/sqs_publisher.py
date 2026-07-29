@@ -6,7 +6,7 @@ from typing import Any
 
 import aioboto3
 
-from worker.ports.message_publisher import MessagePublisherPort
+from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,9 @@ class SqsPublisherAdapter(MessagePublisherPort):
             finally:
                 self._sqs_client = None
 
-    async def publish_batch(self, queue_name: str, messages: list[dict[str, Any]]) -> list[str]:
+    async def publish_batch(
+        self, queue_name: str, messages: list[PublishMessageEnvelope]
+    ) -> list[str]:
         if not messages:
             return []
 
@@ -55,18 +57,16 @@ class SqsPublisherAdapter(MessagePublisherPort):
             batch = messages[i : i + 10]
             entries = []
             for msg in batch:
-                # 'Id' is required and used to correlate success/failure responses.
-                # We pass the full message dict (which must contain 'Id').
-                if "Id" not in msg:
-                    logger.warning("Message missing 'Id' key, skipping.")
-                    continue
+                entry = {
+                    "Id": msg.message_id,
+                    "MessageBody": json.dumps(msg.event),
+                }
+                if msg.partition_key:
+                    entry["MessageGroupId"] = msg.partition_key
+                if msg.idempotency_key:
+                    entry["MessageDeduplicationId"] = msg.idempotency_key
 
-                entries.append(
-                    {
-                        "Id": msg["Id"],
-                        "MessageBody": json.dumps(msg["MessageBody"]),
-                    }
-                )
+                entries.append(entry)
 
             if not entries:
                 continue
@@ -86,7 +86,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
 
         return successful_ids
 
-    async def publish(self, queue_name: str, payload: dict[str, Any]) -> None:
+    async def publish(self, queue_name: str, event: dict[str, Any]) -> None:
         """Publishes a single message without requiring the connect context manager."""
         if queue_name not in self._queue_url_cache:
             try:
@@ -105,7 +105,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
             async with self.session.client(
                 "sqs", endpoint_url=self.endpoint_url, region_name=self.region
             ) as sqs:
-                await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(payload))
+                await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(event))
         except Exception:
             logger.exception(f"Failed to send single message to {queue_name}")
             raise

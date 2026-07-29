@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
-from api.dependencies.database import get_tenant_uow, get_uow
+from api.dependencies.database import get_control_plane_uow, get_data_plane_uow, get_global_session
 from api.dependencies.services import get_vault
 from api.main import app
 
@@ -28,8 +28,9 @@ def mock_vault():
 @pytest.fixture
 def client(mock_uow, mock_vault):
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
-    app.dependency_overrides[get_uow] = lambda: mock_uow
-    app.dependency_overrides[get_tenant_uow] = lambda: mock_uow
+    app.dependency_overrides[get_control_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
+    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "test"}
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]

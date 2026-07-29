@@ -152,7 +152,7 @@ class CreateInboundRouteCmd:
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     processing_mode: str = "TRANSFORM"
-    webhook_id: UUID | None = None
+    webhook_id: str | None = None
     as2_partner_id: UUID | None = None
     sftp_partner_id: UUID | None = None
 
@@ -167,7 +167,7 @@ class UpdateInboundRouteCmd:
     gs_receiver_id: str | None | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET
     processing_mode: str | UnsetType = UNSET
-    webhook_id: UUID | None | UnsetType = UNSET
+    webhook_id: str | None | UnsetType = UNSET
     as2_partner_id: UUID | None | UnsetType = UNSET
     sftp_partner_id: UUID | None | UnsetType = UNSET
     active: bool | UnsetType = UNSET
@@ -248,7 +248,7 @@ class BaseRouteListEntity:
     trading_partner_id: str | None
     destination_type: str
     destination_name: str
-    webhook_id: UUID | None
+    webhook_id: str | None
     as2_partner_id: UUID | None
     sftp_partner_id: UUID | None
     active: bool

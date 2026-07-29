@@ -80,7 +80,7 @@ class DatabaseRouter:
             yield session  # type: ignore
 
     async def get_tenant_session(
-        self, tenant_id: int, shard_key: str, shard_url: str
+        self, tenant_id: str, shard_key: str, shard_url: str
     ) -> AsyncGenerator[TenantSession, None]:
         """
         Yields a session connected to a specific tenant's shard.

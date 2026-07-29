@@ -1,8 +1,8 @@
-"""tenant initial schema
+"""tenant_initial_schema
 
-Revision ID: 9600e87c4280
+Revision ID: 66442b2ab25b
 Revises:
-Create Date: 2026-07-25 17:59:24.454013
+Create Date: 2026-07-29 12:15:34.726423
 
 """
 
@@ -12,8 +12,10 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+import database.models.data_plane
+
 # revision identifiers, used by Alembic.
-revision: str = "9600e87c4280"
+revision: str = "66442b2ab25b"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -87,6 +89,7 @@ def upgrade() -> None:
         sa.Column("prev_public_cert_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("prev_private_key_vault_ref", sa.String(length=255), nullable=True),
         sa.Column("url", sa.String(length=1024), nullable=True),
+        sa.Column("is_local", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -192,7 +195,7 @@ def upgrade() -> None:
         sa.Column("interchange_control_no", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("format_standard", sa.String(length=50), nullable=True),
-        sa.Column("edi_data", sa.Text(), nullable=True),
+        sa.Column("edi_data", database.models.data_plane.SanitizedText(), nullable=True),
         sa.Column("storage_uri", sa.String(length=1024), nullable=True),
         sa.Column("file_size_bytes", sa.BigInteger(), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),
@@ -355,7 +358,7 @@ def upgrade() -> None:
             server_default=sa.text("current_setting('app.current_tenant')::varchar"),
             nullable=False,
         ),
-        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("url", sa.String(length=1024), nullable=False),
         sa.Column("auth_header_vault_ref", sa.String(length=255), nullable=True),
@@ -395,7 +398,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "inbound_routes",
-        sa.Column("webhook_id", sa.UUID(), nullable=True),
+        sa.Column("webhook_id", sa.String(length=128), nullable=True),
         sa.Column("as2_partner_id", sa.UUID(), nullable=True),
         sa.Column("sftp_partner_id", sa.UUID(), nullable=True),
         sa.Column(
@@ -487,31 +490,6 @@ def upgrade() -> None:
         unique=True,
         postgresql_where=sa.text("active = true"),
     )
-
-    # Enable Row-Level Security and create isolation policies for all tenant tables
-    tenant_tables = [
-        "ack_receipts",
-        "api_gateway",
-        "as2_partners",
-        "audit_log",
-        "edi_json",
-        "edi_messages",
-        "jobs",
-        "outbound_edi_headers",
-        "outbox",
-        "processed_events",
-        "sftp_partners",
-        "webhooks",
-        "as2_partnerships",
-        "inbound_routes",
-        "outbound_routes",
-    ]
-    for table in tenant_tables:
-        op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
-        op.execute(
-            f"CREATE POLICY tenant_isolation_policy ON {table} "
-            f"USING (tenant_id = current_setting('app.current_tenant')::varchar);"
-        )
     # ### end Alembic commands ###
 
 

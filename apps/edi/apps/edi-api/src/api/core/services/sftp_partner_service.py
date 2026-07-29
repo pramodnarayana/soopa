@@ -6,7 +6,7 @@ from uuid import UUID
 from domain.events import ProvisioningEventType
 from domain.models import ConnectionType, PartnerStatus
 
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     UNSET,
     CreateSFTPPartnerCmd,
@@ -22,7 +22,7 @@ class SFTPPartnerService:
     Domain service responsible for the lifecycle of SFTP Partners.
     """
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
@@ -31,7 +31,7 @@ class SFTPPartnerService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_CREATED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"resource_id": str(partner_id), "tenant_id": tenant_id},
             idempotency_key=uuid.uuid5(partner_id, "SFTP_PARTNER_CREATED"),
         )
 
@@ -74,7 +74,7 @@ class SFTPPartnerService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.SFTP_PARTNER_UPDATED,
-            payload={"partner_id": str(partner_id), "tenant_id": tenant_id},
+            payload={"resource_id": str(partner_id), "tenant_id": tenant_id},
             idempotency_key=uuid.uuid5(partner_id, f"SFTP_PARTNER_UPDATED-{update_hash}"),
         )
         updated_partner = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)

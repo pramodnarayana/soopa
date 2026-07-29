@@ -152,6 +152,26 @@ class FakeGlobalStore:
                 return FakePartnership()
         return None
 
+    async def list_as2_partnerships(self, tenant_id: str) -> list[Any]:
+        results = []
+        for p in self.partnerships:
+            if p["tenant_id"] == tenant_id:
+
+                class FakePartnership:
+                    id = p["id"]
+                    tenant_id = str(p["tenant_id"])
+                    name = p["cmd"].name
+                    local_partner_id = p["cmd"].local_partner_id
+                    remote_partner_id = p["cmd"].remote_partner_id
+                    mdn_type = p["cmd"].mdn_type
+                    mdn_url = p["cmd"].mdn_url
+                    encryption_algorithm = p["cmd"].encryption_algorithm
+                    signature_algorithm = p["cmd"].signature_algorithm
+                    active = p.get("status", "INACTIVE") == "ACTIVE"
+
+                results.append(FakePartnership())
+        return results
+
     async def publish_outbox_event(
         self,
         tenant_id: str,
@@ -449,7 +469,7 @@ class MockSession:
             return MockResult([T()])
 
 
-class FakeUnitOfWork:
+class FakeControlPlaneUnitOfWork:
     def __init__(self):
         repo = FakeGlobalStore()
         self.api_tokens = repo

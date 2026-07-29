@@ -5,7 +5,6 @@ import os
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 
-from worker.adapters.db_api_token import SqlAlchemyApiTokenAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from worker.adapters.sqs_outbox import SqsOutboxAdapter
 from worker.adapters.sqs_ucp_listener import SqsUcpListenerAdapter
@@ -32,7 +31,6 @@ async def main() -> None:
 
     # 1. Instantiate Adapters (Infrastructure Layer)
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
-    api_token_adapter = SqlAlchemyApiTokenAdapter(db_router)
 
     # Existing adapter for pushing to internal sync queue
     sync_outbox_adapter = SqsOutboxAdapter(queue_name="edi-tenant-sync.fifo")
@@ -46,7 +44,6 @@ async def main() -> None:
     service = UcpSyncWorkerService(
         listener_port=ucp_listener_adapter,
         tenant_port=tenant_adapter,
-        api_token_port=api_token_adapter,
         sync_outbox_port=sync_outbox_adapter,
     )
 

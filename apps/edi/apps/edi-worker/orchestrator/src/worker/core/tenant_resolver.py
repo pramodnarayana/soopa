@@ -1,5 +1,5 @@
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard, Tenant
+from database.models.control_plane import DatabaseShard, Tenant, TenantShard
 from sqlalchemy import select
 
 
@@ -10,7 +10,7 @@ class TenantResolver:
 
     def __init__(self, db_router: DatabaseRouter, ttl_secs: int = 300, max_entries: int = 1000):
         self.db_router = db_router
-        self._cache: dict[int, tuple[str, str, float]] = {}
+        self._cache: dict[str, tuple[str, str, float]] = {}
         self._ttl = ttl_secs
         self._max_entries = max_entries
 
@@ -25,7 +25,7 @@ class TenantResolver:
             for k, _ in sorted_entries[:to_evict]:
                 del self._cache[k]
 
-    async def resolve(self, tenant_id: str | int) -> tuple[str, str]:
+    async def resolve(self, tenant_id: str) -> tuple[str, str]:
         import time
 
         now = time.monotonic()
@@ -40,7 +40,12 @@ class TenantResolver:
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
         try:
-            stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == tid_str)
+            stmt = (
+                select(Tenant, DatabaseShard)
+                .join(TenantShard, Tenant.id == TenantShard.tenant_id)
+                .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
+                .where(Tenant.id == tid_str)
+            )
             result = await global_session.execute(stmt)
             row = result.first()
             if not row:

@@ -7,7 +7,7 @@ from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from database.models import GlobalBase
+from database.models import GlobalRegistry
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -20,7 +20,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-target_metadata = GlobalBase.metadata
+target_metadata = GlobalRegistry.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -49,18 +49,26 @@ def include_name(name, type_, parent_names):
         return True
 
 
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table":
+        return object.schema == "edi"
+    return True
+
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         include_schemas=True,
         include_name=include_name,
+        include_object=include_object,
         version_table_schema="edi",
     )
 
     with context.begin_transaction():
-        # Ensure schema exists before running migrations
+        # Ensure schemas exist before running migrations
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS edi;"))
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS ucp;"))
         context.run_migrations()
 
 

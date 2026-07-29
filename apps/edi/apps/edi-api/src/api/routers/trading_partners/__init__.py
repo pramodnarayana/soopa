@@ -1,5 +1,5 @@
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_control_plane_uow
 
 """
 Trading Partners router package.
@@ -10,13 +10,12 @@ Each module handles a specific transport protocol:
   - sftp.py  — SFTP protocol (SSH file transfer)
 """
 
-from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends
 
 from api.adapters.http.dtos import PartnerResponse
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.routers.trading_partners import as2, sftp
 
 _PREFIX = "/api/v1/trading-partners"
@@ -27,18 +26,15 @@ router = APIRouter(prefix=_PREFIX)
 @router.get("", response_model=list[PartnerResponse])
 async def list_trading_partners(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Lists all tenant trading partners (AS2 and SFTP)."""
     async with uow:
-        as2_partners: Sequence[Any] = []
-        sftp_partners: Sequence[Any] = []
-        if uow.global_session is not None:
-            # AS2 partners are global platform entities (tenant_id = "0") or tenant-specific
-            as2_partners = await uow.as2_partners.list_as2_partners(tenant_id)
-            if tenant_id != "0":
-                as2_partners_global = await uow.as2_partners.list_as2_partners("0")
-                as2_partners = list(as2_partners) + list(as2_partners_global)
+        # AS2 partners are global platform entities (tenant_id = "0") or tenant-specific
+        as2_partners = list(await uow.as2_partners.list_as2_partners(tenant_id))
+        if tenant_id != "0":
+            as2_partners_global = await uow.as2_partners.list_as2_partners("0")
+            as2_partners = as2_partners + list(as2_partners_global)
 
         sftp_partners = await uow.sftp_partners.list_sftp_partners(tenant_id)
 

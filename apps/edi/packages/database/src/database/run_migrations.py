@@ -22,7 +22,7 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
     try:
         async with engine.connect() as conn:
             # We don't use ORM here to keep migration runner simple and resilient
-            result = await conn.execute(text("SELECT dsn FROM edi.database_shards"))
+            result = await conn.execute(text("SELECT dsn FROM ucp.database_shards"))
             urls = [row[0] for row in result.fetchall()]
     except Exception as e:
         logger.error(f"Failed to query database_shards from global DB: {e}")
@@ -57,10 +57,13 @@ def run_migrations():
     global_cfg = Config(str(package_root / "alembic.global.ini"))
     global_cfg.set_main_option("script_location", str(base_dir / "migrations" / "global"))
     command.upgrade(global_cfg, "head")
+    logger.info("FINISHED UPGRADE")
+    print("FINISHED UPGRADE PRINT")
 
     # 2. Fetch Shards dynamically
-    logger.info("--- Fetching Tenant Shards ---")
+    print("--- Fetching Tenant Shards ---")
     shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.database.global_url))
+    print(f"SHARD URLS: {shard_urls}")
 
     # 3. Run Tenant Migrations per shard
     for url in shard_urls:
@@ -75,13 +78,14 @@ def run_migrations():
             except Exception:
                 masked_url = "***redacted***"
 
-        logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
+        print(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
         tenant_cfg = Config(str(package_root / "alembic.tenant.ini"))
         tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
         tenant_cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(tenant_cfg, "head")
+        print(f"FINISHED TENANT UPGRADE FOR {masked_url}")
 
-    logger.info("--- All Database Migrations Complete ---")
+    print("--- All Database Migrations Complete ---")
 
 
 if __name__ == "__main__":

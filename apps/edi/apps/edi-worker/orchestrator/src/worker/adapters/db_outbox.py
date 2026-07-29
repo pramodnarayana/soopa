@@ -2,6 +2,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from database.connection import DatabaseRouter
 from database.models.control_plane import ControlPlaneOutbox
@@ -56,6 +57,34 @@ class SqlAlchemyOutboxAdapter(OutboxPort):
                         f"Transient error processing event {event.id}: {e}. Leaving as PENDING."
                     )
                     await global_session.rollback()
+        finally:
+            with contextlib.suppress(StopAsyncIteration):
+                await global_gen.__anext__()
+
+    async def publish_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: str,
+        tenant_id: str,
+    ) -> None:
+        """
+        Publishes an event to the global outbox table.
+        This writes to ControlPlaneOutbox.
+        """
+        global_gen = self.db_router.get_global_session()
+        global_session = await global_gen.__anext__()
+        try:
+            new_event = ControlPlaneOutbox(
+                event_type=event_type,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                tenant_id=tenant_id,
+                status="PENDING",
+            )
+            global_session.add(new_event)
+            await global_session.commit()
+            logger.info(f"Published control plane outbox event {event_type} for tenant {tenant_id}")
         finally:
             with contextlib.suppress(StopAsyncIteration):
                 await global_gen.__anext__()

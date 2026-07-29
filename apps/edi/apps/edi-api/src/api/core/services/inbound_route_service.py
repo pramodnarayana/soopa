@@ -4,7 +4,7 @@ from uuid import UUID
 from domain.events import ProvisioningEventType
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
 
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateInboundRouteCmd,
     InboundRouteListEntity,
@@ -21,7 +21,7 @@ class InboundRouteService:
     including resolution of partner names for list operations.
     """
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> RouteEntity:
@@ -30,7 +30,7 @@ class InboundRouteService:
         await self.uow.control_plane_outbox.publish_outbox_event(
             tenant_id=tenant_id,
             event_type=ProvisioningEventType.INBOUND_ROUTE_CREATED,
-            payload={"route_id": str(route_id), "tenant_id": tenant_id},
+            payload={"resource_id": str(route_id), "tenant_id": tenant_id},
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.INBOUND)
 
@@ -42,7 +42,7 @@ class InboundRouteService:
             await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_UPDATED,
-                payload={"route_id": str(route_id), "tenant_id": tenant_id},
+                payload={"resource_id": str(route_id), "tenant_id": tenant_id},
             )
         return res
 
@@ -52,7 +52,7 @@ class InboundRouteService:
             await self.uow.control_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,
                 event_type=ProvisioningEventType.INBOUND_ROUTE_DELETED,
-                payload={"route_id": str(route_id), "tenant_id": tenant_id},
+                payload={"resource_id": str(route_id), "tenant_id": tenant_id},
             )
         return res
 

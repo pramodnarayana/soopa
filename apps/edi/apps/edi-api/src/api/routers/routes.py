@@ -12,9 +12,9 @@ from api.adapters.http.dtos import (
     UpdateRouteRequest,
 )
 from api.core.services import InboundRouteService, OutboundRouteService
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
-from api.dependencies.database import get_tenant_uow
+from api.dependencies.database import get_control_plane_uow
 from api.domain.models import (
     UNSET,
     CreateInboundRouteCmd,
@@ -32,7 +32,7 @@ _route_list_adapter = TypeAdapter(list[RouteItemResponse])
 @router.get("", response_model=list[RouteItemResponse], status_code=status.HTTP_200_OK)
 async def list_routes(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     List all Active Routes for the current Tenant.
@@ -52,7 +52,7 @@ async def list_routes(
 async def create_inbound_route(
     request: CreateInboundRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Creates a new Inbound Route directly in the Tenant Data Plane.
@@ -86,7 +86,7 @@ async def create_inbound_route(
 async def create_outbound_route(
     request: CreateOutboundRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Creates a new Outbound Route directly in the Tenant Data Plane.
@@ -114,7 +114,7 @@ async def update_inbound_route(
     route_id: UUID,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Updates an Inbound Route for the current Tenant.
@@ -149,7 +149,7 @@ async def update_inbound_route(
 async def delete_inbound_route(
     route_id: UUID,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """
     Deletes an Inbound Route for the current Tenant.
@@ -167,7 +167,7 @@ async def update_outbound_route(
     route_id: UUID,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
     Updates an Outbound Route for the current Tenant.
@@ -195,7 +195,7 @@ async def update_outbound_route(
 async def delete_outbound_route(
     route_id: UUID,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_tenant_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """
     Deletes an Outbound Route for the current Tenant.

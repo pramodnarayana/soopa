@@ -14,6 +14,12 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    async def list_as2_partnerships(self, tenant_id: str) -> list[AS2PartnershipDomainModel]:
+        result = await self.session.execute(
+            select(AS2Partnership).where(AS2Partnership.tenant_id == tenant_id)
+        )
+        return [AS2PartnershipDomainModel.model_validate(r) for r in result.scalars().all()]
+
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
@@ -21,9 +27,6 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
 
         repo = PartnershipRepository(self.session)
         return await repo.get_partnership_by_as2_ids(as2_from, as2_to)
-
-    # The following AS2Partnership methods remain under SqlAlchemyAS2PartnershipRepository which was defined above.
-    # We will define a new class for Outbox below.
 
     async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> UUID:
         tid_str = tenant_id

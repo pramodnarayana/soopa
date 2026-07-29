@@ -12,7 +12,7 @@ class SqlAlchemyApiTokenAdapter(ApiTokenPort):
         self.db_router = db_router
 
     async def create_api_token(
-        self, tenant_id: int, name: str, client_id: str, key_hash: str
+        self, tenant_id: str, name: str, client_id: str, key_hash: str
     ) -> None:
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()

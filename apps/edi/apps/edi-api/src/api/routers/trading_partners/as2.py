@@ -10,9 +10,9 @@ from api.adapters.http.dtos import (
     RotateCertificateRequest,
 )
 from api.core.services import AS2PartnerService
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
-from api.dependencies.database import get_uow
+from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_vault
 from api.domain.certificate import generate_self_signed_cert
 from api.ports.vault import VaultPort
@@ -29,7 +29,7 @@ router = APIRouter(tags=["Partners — AS2"])
 async def export_as2_certificates(
     partner_id: UUID,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
@@ -87,7 +87,7 @@ async def rotate_as2_certificates(
     partner_id: UUID,
     request: RotateCertificateRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: UnitOfWork = Depends(get_uow),
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:

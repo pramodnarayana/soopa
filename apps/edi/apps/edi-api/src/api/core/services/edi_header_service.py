@@ -4,7 +4,7 @@ from uuid import UUID
 
 from domain.models import OutboundEdiHeaderDomainModel
 
-from api.core.uow import UnitOfWork
+from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
@@ -18,7 +18,7 @@ class EdiHeaderService:
     Domain service responsible for the lifecycle of Outbound EDI Headers.
     """
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_outbound_edi_header(

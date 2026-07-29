@@ -1,30 +1,27 @@
-from enum import StrEnum
-from typing import Annotated, Literal
-
-from pydantic import BaseModel, Field
-
-DISCRIMINATOR_FIELD = "target"
+from pydantic import BaseModel
 
 
-class ProvisionTarget(StrEnum):
-    PROVISION_TENANT = "provision_tenant"
-    PROVISION_ALL_TENANTS = "provision_all_tenants"
-
-
-class BaseProvisionEvent(BaseModel):
-    target: ProvisionTarget
-
-
-class ProvisionTenantEvent(BaseProvisionEvent):
-    target: Literal[ProvisionTarget.PROVISION_TENANT] = ProvisionTarget.PROVISION_TENANT
+class ProvisionTenantEvent(BaseModel):
+    # Keeping for backwards compatibility if needed, though we ignore it.
     tenant_id: str
+    name: str | None = None
 
 
-class ProvisionAllTenantsEvent(BaseProvisionEvent):
-    target: Literal[ProvisionTarget.PROVISION_ALL_TENANTS] = ProvisionTarget.PROVISION_ALL_TENANTS
+class ProvisionAllTenantsEvent(BaseModel):
+    # This might still be used for global broadcasts.
+    pass
 
 
-ProvisionEventPayload = Annotated[
-    ProvisionTenantEvent | ProvisionAllTenantsEvent,
-    Field(discriminator=DISCRIMINATOR_FIELD),
-]
+class AS2PartnerCreatedEvent(BaseModel):
+    tenant_id: str
+    partner_id: str
+
+
+class AS2PartnerUpdatedEvent(BaseModel):
+    tenant_id: str
+    partner_id: str
+
+
+class AS2PartnerDeletedEvent(BaseModel):
+    tenant_id: str
+    partner_id: str

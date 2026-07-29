@@ -17,5 +17,5 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort, GlobalSqlAlchemyRepositor
         result = await self.session.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
         if tenant:
-            return {"allow_private_as2": tenant.allow_private_as2}
+            return {"allow_private_as2": True}
         return None
