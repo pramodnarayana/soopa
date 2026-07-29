@@ -79,6 +79,7 @@ jobs:
       - name: Start Database
         run: |
           docker compose up -d postgres_global edi_postgres_shard_1 --wait
+          pnpm db:migrate
           uv run --directory apps/edi/packages/database python -m database.run_migrations
 
       - name: Test (Node)
