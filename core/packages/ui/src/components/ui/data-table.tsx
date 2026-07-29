@@ -1,6 +1,6 @@
 import { flexRender, type Table as ReactTable } from '@tanstack/react-table';
 import React, { Fragment } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from './skeleton';
 
 interface DataTableProps<TData> {
   table: ReactTable<TData>;
@@ -11,6 +11,7 @@ interface DataTableProps<TData> {
   emptyTitle?: string;
   emptyDescription?: string;
   renderExpandedRow?: (row: import('@tanstack/react-table').Row<TData>) => React.ReactNode;
+  onRowClick?: (row: import('@tanstack/react-table').Row<TData>) => void;
   getGroupBoundary?: (
     row: import('@tanstack/react-table').Row<TData>,
     prevRow: import('@tanstack/react-table').Row<TData>,
@@ -26,6 +27,7 @@ export function DataTable<TData>({
   emptyTitle = 'No Data',
   emptyDescription,
   renderExpandedRow,
+  onRowClick,
   getGroupBoundary,
 }: DataTableProps<TData>) {
   if (isLoading) {
@@ -89,10 +91,17 @@ export function DataTable<TData>({
                     </tr>
                   )}
                   <tr
-                    className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
-                    onClick={renderExpandedRow ? () => row.toggleExpanded() : undefined}
-                    onKeyDown={
+                    className={`hover:bg-slate-50/50 transition-colors group ${renderExpandedRow || onRowClick ? 'cursor-pointer' : ''} ${row.getIsExpanded() ? 'bg-slate-50/50' : ''}`}
+                    onClick={
                       renderExpandedRow
+                        ? () => row.toggleExpanded()
+                        : onRowClick
+                          ? () => onRowClick(row)
+                          : undefined
+                    }
+                    role={renderExpandedRow || onRowClick ? 'button' : undefined}
+                    onKeyDown={
+                      renderExpandedRow || onRowClick
                         ? (e) => {
                             const target = e.target as HTMLElement;
                             if (
@@ -103,12 +112,13 @@ export function DataTable<TData>({
                               return;
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
-                              row.toggleExpanded();
+                              if (renderExpandedRow) row.toggleExpanded();
+                              else if (onRowClick) onRowClick(row);
                             }
                           }
                         : undefined
                     }
-                    tabIndex={renderExpandedRow ? 0 : undefined}
+                    tabIndex={renderExpandedRow || onRowClick ? 0 : undefined}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="px-6 py-4 align-middle">

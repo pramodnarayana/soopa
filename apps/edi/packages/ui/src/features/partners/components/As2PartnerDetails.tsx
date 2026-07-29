@@ -1,3 +1,13 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@soopa/ui/components/ui/dialog';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import {
   CheckCircle2,
   ChevronDown,
@@ -11,19 +21,9 @@ import {
 import { pki } from 'node-forge';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
-import { useToast } from '@/hooks/use-toast';
+import { Combobox } from '../../../components/ui/combobox';
+import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
+import { useToast } from '../../../hooks/use-toast';
 import {
   useCertificatesExportQuery,
   useRotateCertificatesMutation,

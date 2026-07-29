@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useTenantId } from '@/contexts/TenantContext';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
+import { useTenantId } from '../../../contexts/TenantContext';
 import type {
   TransactionDetailResponse,
   TransactionListResponse,

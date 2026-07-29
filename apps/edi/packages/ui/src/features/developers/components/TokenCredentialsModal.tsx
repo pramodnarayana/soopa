@@ -1,7 +1,4 @@
-import { AlertTriangle, Check, Copy } from 'lucide-react';
-import { useState } from 'react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -9,9 +6,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
+} from '@soopa/ui/components/ui/dialog';
+import { Input } from '@soopa/ui/components/ui/input';
+import { AlertTriangle, Check, Copy } from 'lucide-react';
+import { useState } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert';
+import { useToast } from '../../../hooks/use-toast';
 import type { ApiTokenCreated } from '../types';
 
 interface Props {

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from 'react-oidc-context';
-import { createPartnersRepository } from '@/features/partners/api/partnersApi';
-import { createWebhooksRepository } from '@/features/webhooks/api/webhooksApi';
+import { createPartnersRepository } from '../../../features/partners/api/partnersApi';
+import { createWebhooksRepository } from '../../../features/webhooks/api/webhooksApi';
 import { Direction } from '../types';
 
 export function useTenantDestinations(direction: Direction) {

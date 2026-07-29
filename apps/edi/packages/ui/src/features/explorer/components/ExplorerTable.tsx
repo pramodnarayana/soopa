@@ -1,8 +1,4 @@
-import { Link } from '@tanstack/react-router';
-import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
-import React, { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@soopa/ui/components/ui/button';
 import {
   Table,
   TableBody,
@@ -10,7 +6,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from '@soopa/ui/components/ui/table';
+import { Link } from '@tanstack/react-router';
+import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Badge } from '../../../components/ui/badge';
 
 interface ColumnDef<T> {
   key: string;
@@ -141,16 +141,20 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                   ))}
                   <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
                     {item.trace_id && (
-                      <Button variant="secondary" size="sm" asChild>
-                        <Link
-                          to="/tenant/explorer/$traceId"
-                          params={{ traceId: item.trace_id }}
-                          className="inline-flex items-center gap-1.5"
-                          title="View Trace Timeline"
-                        >
-                          Trace
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        render={
+                          <Link
+                            to="/tenant/explorer/$traceId"
+                            params={{ traceId: item.trace_id }}
+                            className="inline-flex items-center gap-1.5"
+                            title="View Trace Timeline"
+                          />
+                        }
+                      >
+                        Trace
+                        <ArrowRight className="h-3.5 w-3.5" />
                       </Button>
                     )}
                   </TableCell>

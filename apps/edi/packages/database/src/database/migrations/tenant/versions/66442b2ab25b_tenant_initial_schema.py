@@ -488,6 +488,31 @@ def upgrade() -> None:
         unique=True,
         postgresql_where=sa.text("active = true"),
     )
+
+    # Enable Row-Level Security and create isolation policies for all tenant tables
+    tenant_tables = [
+        "ack_receipts",
+        "api_gateway",
+        "as2_partners",
+        "audit_log",
+        "edi_json",
+        "edi_messages",
+        "jobs",
+        "outbound_edi_headers",
+        "outbox",
+        "processed_events",
+        "sftp_partners",
+        "webhooks",
+        "as2_partnerships",
+        "inbound_routes",
+        "outbound_routes",
+    ]
+    for table in tenant_tables:
+        op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
+        op.execute(
+            f"CREATE POLICY tenant_isolation_policy ON {table} "
+            f"USING (tenant_id = current_setting('app.current_tenant')::varchar);"
+        )
     # ### end Alembic commands ###
 
 

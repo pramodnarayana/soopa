@@ -191,7 +191,6 @@ async def seed_database() -> None:
                 job.timezone = job_def.default_timezone
                 job.min_interval_seconds = job_def.min_interval_seconds
                 job.max_interval_seconds = job_def.max_interval_seconds
-                job.status = JobStatus.PENDING.value
                 logger.info(f"Synced config for system job: {job_def.name.value}.")
 
             await session.flush()

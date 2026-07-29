@@ -1,7 +1,7 @@
 import Editor from '@monaco-editor/react';
 import { UploadCloud } from 'lucide-react';
 import React, { useState } from 'react';
-import { registerEdiLanguageAndTheme } from '@/utils/monaco-edi';
+import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
 
 export interface EdiEditorPaneProps {
   value: string;

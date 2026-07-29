@@ -1,3 +1,5 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -5,9 +7,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { Network, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/ui/data-table';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '../../../hooks/use-toast';
 import { useDeleteEdiHeaderMutation, useEdiHeaders } from '../api/ediHeadersApi';
 import type { EdiHeaderItem } from '../types';
 import { EdiHeaderDetails } from './EdiHeaderDetails';

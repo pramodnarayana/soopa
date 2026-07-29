@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useTenantId } from '@/contexts/TenantContext';
+import { useTenantId } from '../../../contexts/TenantContext';
 import { useDashboardRepository } from './DashboardContext';
 
 export interface DashboardData {

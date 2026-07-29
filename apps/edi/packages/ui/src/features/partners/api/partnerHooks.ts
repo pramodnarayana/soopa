@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useToastMutation } from '@/hooks/use-toast-mutation';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
+import { useToastMutation } from '../../../hooks/use-toast-mutation';
 import type {
   CertificatesExport,
   CreatePartnerPayload,

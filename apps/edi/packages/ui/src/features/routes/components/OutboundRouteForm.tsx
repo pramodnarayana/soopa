@@ -1,9 +1,9 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { useToast } from '@/hooks/use-toast';
+import { SearchableSelect } from '../../../components/ui/searchable-select';
+import { useToast } from '../../../hooks/use-toast';
 import { useCreateOutboundRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { Direction } from '../types';

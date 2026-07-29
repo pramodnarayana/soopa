@@ -2,6 +2,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from worker.adapters.acl.registry import UcpEventNames, translate_external_event
 from worker.ports.outbox import OutboxPort
 from worker.ports.tenant import TenantPort
 from worker.ports.ucp_event_listener import UcpEventListenerPort
@@ -21,7 +22,22 @@ class UcpSyncWorkerService:
         self.sync_outbox_port = sync_outbox_port
 
         # Event handler mapping to avoid if/else chains
-        self._handlers: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {}
+        self._handlers: dict[str, Callable[[Any], Awaitable[None]]] = {
+            UcpEventNames.TENANT_PROVISIONED: self._handle_external_event,
+            "api_key.created": self._handle_external_event,
+        }
+
+    async def _handle_external_event(self, event: Any) -> None:
+        translated = translate_external_event(event.eventType.value, event.payload)
+        if translated:
+            await self.sync_outbox_port.publish_event(
+                event_type=translated["event_type"],
+                payload=translated["payload"],
+                idempotency_key=event.idempotencyKey,
+                tenant_id=event.tenantId,
+            )
+        else:
+            logger.debug(f"No translation available for external event: {event.eventType.value}")
 
     async def process_messages(self) -> None:
         """
@@ -34,7 +50,7 @@ class UcpSyncWorkerService:
             try:
                 handler = self._handlers.get(event.eventType.value)
                 if handler:
-                    await handler(event.payload)
+                    await handler(event)
                 else:
                     logger.debug(f"Ignored unhandled UCP event type: {event.eventType.value}")
             except Exception as e:

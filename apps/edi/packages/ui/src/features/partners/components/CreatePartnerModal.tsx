@@ -1,12 +1,12 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
-import { FormModal } from '@/components/ui/form-modal';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { usePlatformSettings } from '@/features/platform/api/settingsHooks';
-import { useToast } from '@/hooks/use-toast';
+import { Combobox } from '../../../components/ui/combobox';
+import { FormModal } from '../../../components/ui/form-modal';
+import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
+import { useToast } from '../../../hooks/use-toast';
 import {
   useCreateAS2PartnerMutation,
   useDeleteCertificateSecretMutation,
@@ -163,14 +163,13 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
   return (
     <FormModal
       title="Add AS2 Partner"
-      triggerText="Create Trading Partner"
+      triggerText="Create AS2 Trading Partner"
       isOpen={isOpen}
       onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
       isPending={createPartner.isPending}
       submitDisabled={isDuplicate}
-      submitText="Create Trading Partner"
-      maxWidth="sm:max-w-[780px]"
+      submitText="Create AS2 Trading Partner"
     >
       {/* Local / Remote toggle */}
       <div className="flex items-center gap-3">

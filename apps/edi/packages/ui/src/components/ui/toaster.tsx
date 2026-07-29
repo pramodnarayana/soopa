@@ -1,4 +1,4 @@
-import { ToastProvider } from '@/components/ui/toast';
+import { ToastProvider } from './toast';
 
 export function Toaster() {
   return <ToastProvider />;

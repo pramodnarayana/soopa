@@ -1,3 +1,4 @@
+import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -6,7 +7,6 @@ import {
 } from '@tanstack/react-table';
 import { Network, ShieldCheck } from 'lucide-react';
 import React from 'react';
-import { DataTable } from '@/components/ui/data-table';
 import {
   useDeleteAS2PartnershipMutation,
   useUpdateAS2PartnershipMutation,

@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterator
 from contextlib import aclosing, asynccontextmanager
 from typing import Any
 
@@ -34,7 +35,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         self.tenant_port = tenant_port
 
     @asynccontextmanager
-    async def _get_sessions(self, tenant_id: str) -> Any:
+    async def _get_sessions(
+        self, tenant_id: str
+    ) -> AsyncIterator[tuple[AsyncSession, AsyncSession]]:
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
         except Exception as e:
@@ -208,7 +211,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
     async def replicate_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         await self._granular_replicate(
-            tenant_id, partnership_id, GlobalAS2Partnership, TenantAS2Partnership, include_shared=True
+            tenant_id,
+            partnership_id,
+            GlobalAS2Partnership,
+            TenantAS2Partnership,
+            include_shared=True,
         )
 
     async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
@@ -248,7 +255,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
     async def replicate_outbound_edi_header(self, tenant_id: str, header_id: str) -> None:
         await self._granular_replicate(
-            tenant_id, header_id, GlobalOutboundEdiHeader, TenantOutboundEdiHeader, include_shared=False
+            tenant_id,
+            header_id,
+            GlobalOutboundEdiHeader,
+            TenantOutboundEdiHeader,
+            include_shared=False,
         )
 
     async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> None:

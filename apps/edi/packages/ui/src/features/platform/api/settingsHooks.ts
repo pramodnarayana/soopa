@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from 'react-oidc-context';
+import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 
 export interface SupportedAlgorithm {
   value: string;
@@ -13,22 +13,14 @@ export interface PlatformSettings {
 }
 
 export const usePlatformSettings = () => {
-  const auth = useAuth();
+  const api = useEdiNetwork();
   return useQuery({
     queryKey: ['platform-settings'],
     queryFn: async (): Promise<PlatformSettings> => {
-      const response = await fetch('/api/v1/platform/trading-partners/config', {
-        headers: {
-          Authorization: `Bearer ${auth.user?.access_token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch platform config: ${response.statusText}`);
-      }
-      return response.json() as Promise<PlatformSettings>;
+      const response = await api.get('/platform/trading-partners/config');
+      return response.data;
     },
     // The configuration is static, so we can keep it cached indefinitely
     staleTime: Infinity,
-    enabled: !!auth.user?.access_token,
   });
 };

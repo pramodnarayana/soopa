@@ -1,3 +1,4 @@
+import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
   createColumnHelper,
   getCoreRowModel,
@@ -6,7 +7,6 @@ import {
 } from '@tanstack/react-table';
 import { CheckCircle2, Server } from 'lucide-react';
 import React from 'react';
-import { DataTable } from '@/components/ui/data-table';
 import { useDeleteAS2PartnerMutation, useUpdateAS2PartnerMutation } from '../api/partnerHooks';
 import type { AS2Partner } from '../types';
 import { As2PartnerDetails } from './As2PartnerDetails';
@@ -112,7 +112,7 @@ export function As2PartnersTable({ data, isLoading }: { data: AS2Partner[]; isLo
       isLoading={isLoading}
       dataLength={data.length}
       emptyIcon={<Server className="w-8 h-8" />}
-      emptyTitle="No Active AS2 Partners"
+      emptyTitle="No Active AS2 Trading Partners"
       columnsLength={columns.length}
       renderExpandedRow={(row) => (
         <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
