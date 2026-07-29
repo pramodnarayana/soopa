@@ -111,9 +111,11 @@ class SqsPublisherAdapter(MessagePublisherPort):
                     "MessageBody": json.dumps(event),
                 }
                 if queue_name.endswith(".fifo"):
-                    kwargs["MessageGroupId"] = event.get("partition_key", "default")
-                    if "idempotency_key" in event:
-                        kwargs["MessageDeduplicationId"] = event["idempotency_key"]
+                    partition_key = event.get("partition_key")
+                    kwargs["MessageGroupId"] = partition_key if partition_key else "default"
+                    idempotency_key = event.get("idempotency_key")
+                    if idempotency_key:
+                        kwargs["MessageDeduplicationId"] = idempotency_key
 
                 await sqs.send_message(**kwargs)
         except Exception:

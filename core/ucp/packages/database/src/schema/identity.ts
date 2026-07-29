@@ -115,13 +115,16 @@ export const apiKeys = ucpSchema
       scopes: text('scopes').array().notNull().default([]),
       createdAt: timestamp('created_at').defaultNow().notNull(),
     },
-    (table) => [
-      pgPolicy('api_keys_isolation', {
-        as: 'permissive',
-        for: 'all',
-        to: 'public',
-        using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
-      }),
-    ],
+    (table) => {
+      return {
+        tenantIdx: index('api_keys_tenant_idx').on(table.tenantId),
+        rlsPolicy: pgPolicy('api_keys_isolation', {
+          as: 'permissive',
+          for: 'all',
+          to: 'public',
+          using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
+        }),
+      };
+    },
   )
   .enableRLS();

@@ -165,6 +165,7 @@ CREATE TABLE "ucp"."system_audit_log" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "ucp"."system_audit_log" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "ucp"."scheduled_jobs" (
 	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"name" varchar(255) NOT NULL,
@@ -196,7 +197,6 @@ CREATE TABLE "ucp"."apps" (
 	CONSTRAINT "apps_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
-ALTER TABLE "ucp"."apps" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "ucp"."tenant_subscriptions" (
 	"tenant_id" varchar(128) NOT NULL,
 	"app_id" varchar(128) NOT NULL,
@@ -231,6 +231,7 @@ ALTER TABLE "ucp"."tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_te
 ALTER TABLE "ucp"."tenant_subscriptions" ADD CONSTRAINT "tenant_subscriptions_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "ucp"."apps"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ucp"."webhooks" ADD CONSTRAINT "webhooks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "ucp"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "api_tokens_tenant_idx" ON "ucp"."api_tokens" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "api_keys_tenant_idx" ON "ucp"."api_keys" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "tenant_users_user_id_idx" ON "ucp"."tenant_users" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_template_idx" ON "ucp"."notification_templates" USING btree ("tenant_id","event_type","channel");--> statement-breakpoint
 CREATE INDEX "ix_system_audit_log_tenant_time" ON "ucp"."system_audit_log" USING btree ("tenant_id","created_at");--> statement-breakpoint
@@ -244,4 +245,5 @@ CREATE POLICY "tenant_users_isolation" ON "ucp"."tenant_users" AS PERMISSIVE FOR
 CREATE POLICY "notification_templates_isolation" ON "ucp"."notification_templates" AS PERMISSIVE FOR ALL TO public USING ("ucp"."notification_templates"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "outbox_events_isolation" ON "ucp"."outbox_events" AS PERMISSIVE FOR ALL TO public USING ("ucp"."outbox_events"."tenant_id" IS NULL OR "ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls()) WITH CHECK ("ucp"."outbox_events"."tenant_id" IS NULL OR "ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "tenant_subscriptions_isolation" ON "ucp"."tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("ucp"."tenant_subscriptions"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
-CREATE POLICY "webhooks_isolation" ON "ucp"."webhooks" AS PERMISSIVE FOR ALL TO public USING ("ucp"."webhooks"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());
+CREATE POLICY "webhooks_isolation" ON "ucp"."webhooks" AS PERMISSIVE FOR ALL TO public USING ("ucp"."webhooks"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "system_audit_log_isolation" ON "ucp"."system_audit_log" AS PERMISSIVE FOR ALL TO public USING ("ucp"."system_audit_log"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());

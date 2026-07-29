@@ -75,7 +75,6 @@ export class DrizzleTenantRepository implements TenantRepository {
         .from(tenantUsers)
         .where(eq(tenantUsers.userId as never, userId))
         .limit(1);
-      console.log('GET TENANT MAPPING FOR USER', userId, 'MAPPING:', mapping);
       return mapping.length > 0 ? mapping[0].tenantId : null;
     } catch (e: unknown) {
       let msg = typeof e === 'string' ? e : 'Unknown Error';

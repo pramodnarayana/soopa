@@ -4,17 +4,15 @@ import { pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-c
 import { tenants } from './identity.js';
 import { ucpSchema } from './shared.js';
 
-export const apps = ucpSchema
-  .table('apps', {
-    id: varchar('id', { length: 128 })
-      .primaryKey()
-      .$defaultFn(() => createId()),
-    name: text('name').notNull(),
-    slug: varchar('slug', { length: 255 }).notNull().unique(), // e.g., 'edi', 'idp'
-    description: text('description'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  })
-  .enableRLS();
+export const apps = ucpSchema.table('apps', {
+  id: varchar('id', { length: 128 })
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  name: text('name').notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(), // e.g., 'edi', 'idp'
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
 
 const SubscriptionStatus = {
   ACTIVE: 'active',
