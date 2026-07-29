@@ -88,15 +88,26 @@ class SqsOutboxAdapter(OutboxPort):
                 # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
                 external_event_type = body.get("eventType")
                 if external_event_type:
-                    translated_body = translate_external_event(external_event_type, body)
-                    if translated_body is None:
+                    try:
+                        translated_body = translate_external_event(external_event_type, body)
+                        if translated_body is None:
+                            # Unregistered event type - leave message for retry/DLQ
+                            logger.warning(
+                                f"Unregistered event type '{external_event_type}' in message {message_id}. "
+                                f"Leaving message for retry or DLQ routing."
+                            )
+                            yield None
+                            return
+                        body = translated_body
+                    except ValueError as e:
+                        # Permanent validation error - malformed message
                         logger.error(
-                            f"Translation failed for event type '{external_event_type}' in message {message_id}"
+                            f"Permanent validation error for event type '{external_event_type}' in message {message_id}: {e}. "
+                            f"Message body: {body}. Deleting malformed message."
                         )
                         await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                         yield None
                         return
-                    body = translated_body
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse JSON body from SQS message {message_id}")
                 await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)

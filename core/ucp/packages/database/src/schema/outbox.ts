@@ -35,6 +35,7 @@ export const controlPlaneOutbox = pgTable(
       for: 'all',
       to: 'public',
       using: sql`${table.tenantId} IS NULL OR ${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
+      withCheck: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
     }),
   ],
 );

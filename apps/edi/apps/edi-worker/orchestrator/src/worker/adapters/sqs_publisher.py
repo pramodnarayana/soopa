@@ -61,10 +61,11 @@ class SqsPublisherAdapter(MessagePublisherPort):
                     "Id": msg.message_id,
                     "MessageBody": json.dumps(msg.event),
                 }
-                # FIFO queues require MessageGroupId
-                entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
-                if msg.idempotency_key:
-                    entry["MessageDeduplicationId"] = msg.idempotency_key
+                # FIFO queues require MessageGroupId; standard queues do not support it
+                if queue_name.endswith(".fifo"):
+                    entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
+                    if msg.idempotency_key:
+                        entry["MessageDeduplicationId"] = msg.idempotency_key
 
                 entries.append(entry)
 

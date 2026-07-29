@@ -12,6 +12,7 @@ CREATE OR REPLACE FUNCTION app.current_tenant_id()
 RETURNS varchar
 LANGUAGE plpgsql
 STABLE SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   RETURN current_setting('app.current_tenant_id', true);
@@ -26,6 +27,7 @@ CREATE OR REPLACE FUNCTION app.bypass_rls()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   -- Only permit bypass for roles with BYPASSRLS attribute or superuser
@@ -38,6 +40,8 @@ $$;
 -- Grant EXECUTE to the public role only for current_tenant_id.
 -- bypass_rls should NOT be publicly executable - it checks role membership internally.
 GRANT EXECUTE ON FUNCTION app.current_tenant_id() TO public;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION app.bypass_rls() FROM public;
 --> statement-breakpoint
 CREATE SCHEMA "ucp";
 --> statement-breakpoint
@@ -234,6 +238,6 @@ CREATE POLICY "api_tokens_isolation" ON "ucp"."api_tokens" AS PERMISSIVE FOR ALL
 CREATE POLICY "api_keys_isolation" ON "ucp"."api_keys" AS PERMISSIVE FOR ALL TO public USING ("ucp"."api_keys"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "tenant_users_isolation" ON "ucp"."tenant_users" AS PERMISSIVE FOR ALL TO public USING ("ucp"."tenant_users"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "notification_templates_isolation" ON "ucp"."notification_templates" AS PERMISSIVE FOR ALL TO public USING ("ucp"."notification_templates"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
-CREATE POLICY "outbox_events_isolation" ON "ucp"."outbox_events" AS PERMISSIVE FOR ALL TO public USING ("ucp"."outbox_events"."tenant_id" IS NULL OR "ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "outbox_events_isolation" ON "ucp"."outbox_events" AS PERMISSIVE FOR ALL TO public USING ("ucp"."outbox_events"."tenant_id" IS NULL OR "ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls()) WITH CHECK ("ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "tenant_subscriptions_isolation" ON "ucp"."tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("ucp"."tenant_subscriptions"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "webhooks_isolation" ON "ucp"."webhooks" AS PERMISSIVE FOR ALL TO public USING ("ucp"."webhooks"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());

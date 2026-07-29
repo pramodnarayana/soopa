@@ -1,4 +1,4 @@
-import { Button } from '@soopa/ui/components/ui/button';
+import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
 import {
   Table,
   TableBody,
@@ -141,21 +141,15 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                   ))}
                   <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
                     {item.trace_id && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        render={
-                          <Link
-                            to="/tenant/explorer/$traceId"
-                            params={{ traceId: item.trace_id }}
-                            className="inline-flex items-center gap-1.5"
-                            title="View Trace Timeline"
-                          />
-                        }
+                      <Link
+                        to="/tenant/explorer/$traceId"
+                        params={{ traceId: item.trace_id }}
+                        className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                        title="View Trace Timeline"
                       >
                         Trace
                         <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
+                      </Link>
                     )}
                   </TableCell>
                 </TableRow>

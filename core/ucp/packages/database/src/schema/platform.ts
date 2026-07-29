@@ -24,7 +24,7 @@ export const systemAuditLog = ucpSchema.table(
   {
     id: varchar('id', { length: 128 })
       .primaryKey()
-      .$defaultFn(() => createId()), // Note: Python used UUID but TS uses createId (cuid), that's fine or we can use uuid
+      .$defaultFn(() => createId()),
     traceId: varchar('trace_id', { length: 128 }).notNull(),
     tenantId: varchar('tenant_id', { length: 128 }).notNull(),
     event: varchar('event', { length: 100 }).notNull(),
