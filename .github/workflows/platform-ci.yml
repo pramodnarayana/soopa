@@ -79,6 +79,7 @@ jobs:
         run: |
           docker compose up -d postgres_global --wait
           pnpm db:migrate
+          pnpm db:seed
 
       - name: Test (Node)
         run: CI=true pnpm turbo test --filter="./core/platform/**"
