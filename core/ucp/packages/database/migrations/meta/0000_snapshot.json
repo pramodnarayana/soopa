@@ -164,7 +164,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "api_keys_tenant_idx": {
+          "name": "api_keys_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "api_keys_tenant_id_tenants_id_fk": {
           "name": "api_keys_tenant_id_tenants_id_fk",
@@ -188,9 +204,9 @@
       "policies": {
         "api_keys_isolation": {
           "name": "api_keys_isolation",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": ["public"],
+          "as": "permissive",
+          "for": "all",
+          "to": "public",
           "using": "\"ucp\".\"api_keys\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
@@ -855,9 +871,17 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
+      "policies": {
+        "system_audit_log_isolation": {
+          "name": "system_audit_log_isolation",
+          "as": "permissive",
+          "for": "all",
+          "to": "public",
+          "using": "\"ucp\".\"system_audit_log\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+        }
+      },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.scheduled_jobs": {
       "name": "scheduled_jobs",

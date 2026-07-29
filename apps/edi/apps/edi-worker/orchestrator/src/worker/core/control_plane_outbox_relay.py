@@ -1,8 +1,10 @@
 import logging
+from contextlib import aclosing
 
 from database.connection import DatabaseRouter
 from database.models.control_plane import ControlPlaneOutbox
 from domain.events import ProvisioningEvent, ProvisioningEventType
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
@@ -67,10 +69,6 @@ class ControlPlaneOutboxRelayService:
         return total_processed
 
     async def _sweep_global(self) -> int:
-        from contextlib import aclosing
-
-        from pydantic import ValidationError
-
         processed = 0
         async with aclosing(self.db_router.get_global_session()) as session_gen:
             async for session in session_gen:
@@ -136,6 +134,8 @@ class ControlPlaneOutboxRelayService:
                         event.attempts = (event.attempts or 0) + 1
                         if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
                             event.status = "FAILED"
+                        else:
+                            event.status = "PENDING"
                     await session.commit()
                     raise
 

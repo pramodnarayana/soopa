@@ -16,22 +16,20 @@ export const apps = ucpSchema
       description: text('description'),
       createdAt: timestamp('created_at').defaultNow().notNull(),
     },
-    (table) => {
-      return {
-        rlsPolicy: pgPolicy('apps_isolation', {
-          as: 'permissive',
-          for: 'all',
-          to: 'public',
-          using: sql`app.bypass_rls()`,
-        }),
-        readPolicy: pgPolicy('apps_read', {
-          as: 'permissive',
-          for: 'select',
-          to: 'public',
-          using: sql`true`,
-        }),
-      };
-    },
+    () => [
+      pgPolicy('apps_isolation', {
+        as: 'permissive',
+        for: 'all',
+        to: 'public',
+        using: sql`app.bypass_rls()`,
+      }),
+      pgPolicy('apps_read', {
+        as: 'permissive',
+        for: 'select',
+        to: 'public',
+        using: sql`true`,
+      }),
+    ],
   )
   .enableRLS();
 
