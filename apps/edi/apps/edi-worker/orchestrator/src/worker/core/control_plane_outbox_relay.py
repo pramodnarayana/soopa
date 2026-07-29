@@ -67,86 +67,97 @@ class ControlPlaneOutboxRelayService:
         return total_processed
 
     async def _sweep_global(self) -> int:
+        from contextlib import aclosing
+
+        from pydantic import ValidationError
+
         processed = 0
-        async for session in self.db_router.get_global_session():
-            # Filter by supported ProvisioningEventType values
-            supported_event_types = [e.value for e in ProvisioningEventType]
-            stmt = (
-                select(ControlPlaneOutbox)
-                .where(
-                    ControlPlaneOutbox.status == "PENDING",
-                    ControlPlaneOutbox.event_type.in_(supported_event_types),
+        async with aclosing(self.db_router.get_global_session()) as session_gen:
+            async for session in session_gen:
+                # Filter by supported ProvisioningEventType values
+                supported_event_types = [e.value for e in ProvisioningEventType]
+                stmt = (
+                    select(ControlPlaneOutbox)
+                    .where(
+                        ControlPlaneOutbox.status == "PENDING",
+                        ControlPlaneOutbox.event_type.in_(supported_event_types),
+                    )
+                    .limit(_BATCH_SIZE)
+                    .with_for_update(skip_locked=True)
                 )
-                .limit(_BATCH_SIZE)
-                .with_for_update(skip_locked=True)
-            )
-            result = await session.execute(stmt)
-            events = result.scalars().all()
+                result = await session.execute(stmt)
+                events = result.scalars().all()
 
-            if not events:
-                logger.debug("[ControlPlaneOutboxRelay] No pending events in global outbox")
-                return 0
+                if not events:
+                    logger.debug("[ControlPlaneOutboxRelay] No pending events in global outbox")
+                    return 0
 
-            # Provisioning queue for control plane events
-            queue_name = self._queue_name
-            publishable = []
-            for event in events:
-                try:
-                    provision_event = _build_provision_event(event)
-                    publishable.append(
-                        (
-                            event,
-                            PublishMessageEnvelope(
-                                message_id=str(event.id),
-                                event_type=event.event_type,
-                                event=provision_event.model_dump(mode="json"),
-                                idempotency_key=str(event.idempotency_key)
-                                if event.idempotency_key
-                                else str(event.id),
-                                partition_key=event.tenant_id,
-                            ),
+                # Provisioning queue for control plane events
+                queue_name = self._queue_name
+                publishable = []
+                for event in events:
+                    try:
+                        provision_event = _build_provision_event(event)
+                        publishable.append(
+                            (
+                                event,
+                                PublishMessageEnvelope(
+                                    message_id=str(event.id),
+                                    event_type=event.event_type,
+                                    event=provision_event.model_dump(mode="json"),
+                                    idempotency_key=str(event.idempotency_key)
+                                    if event.idempotency_key
+                                    else str(event.id),
+                                    partition_key=event.tenant_id,
+                                ),
+                            )
                         )
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[ControlPlaneOutboxRelay] Failed to build event {event.id}: {e}. Marking as FAILED."
-                    )
-                    event.status = "FAILED"
-                    continue
-
-            if not publishable:
-                await session.commit()
-                return 0
-
-            messages = [msg for _, msg in publishable]
-            try:
-                successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
-            except Exception:
-                for event, _ in publishable:
-                    event.attempts = (event.attempts or 0) + 1
-                    if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
-                        event.status = "FAILED"
-                await session.commit()
-                raise
-
-            for event, _ in publishable:
-                if str(event.id) in successful_ids:
-                    event.status = "PROCESSED"
-                    processed += 1
-                else:
-                    # Track publish attempts and apply bounded retry policy
-                    event.attempts = (event.attempts or 0) + 1
-                    if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
-                        event.status = "FAILED"
-                        logger.error(
-                            f"[ControlPlaneOutboxRelay] Event {event.id} exceeded max publish attempts ({_MAX_PUBLISH_ATTEMPTS}). Marking as FAILED.",
-                            extra={"event_id": event.id, "tenant_id": event.tenant_id},
-                        )
-                    else:
+                        event.status = "IN_FLIGHT"
+                    except (ValueError, ValidationError) as e:
                         logger.warning(
-                            f"[ControlPlaneOutboxRelay] Failed to forward event id={event.id} to {queue_name}. Attempt {event.attempts}/{_MAX_PUBLISH_ATTEMPTS}."
+                            f"[ControlPlaneOutboxRelay] Invalid event {event.id}: {e}. Marking as FAILED."
                         )
+                        event.status = "FAILED"
+                        continue
 
-            await session.commit()
+                # Atomically claim rows by updating their status and committing
+                await session.commit()
 
-        return processed
+                if not publishable:
+                    return 0
+
+                messages = [msg for _, msg in publishable]
+                try:
+                    successful_ids = await self.message_publisher.publish_batch(
+                        queue_name, messages
+                    )
+                except Exception:
+                    for event, _ in publishable:
+                        event.attempts = (event.attempts or 0) + 1
+                        if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
+                            event.status = "FAILED"
+                    await session.commit()
+                    raise
+
+                for event, _ in publishable:
+                    if str(event.id) in successful_ids:
+                        event.status = "PROCESSED"
+                        processed += 1
+                    else:
+                        # Track publish attempts and apply bounded retry policy
+                        event.attempts = (event.attempts or 0) + 1
+                        if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
+                            event.status = "FAILED"
+                            logger.error(
+                                f"[ControlPlaneOutboxRelay] Event {event.id} exceeded max publish attempts ({_MAX_PUBLISH_ATTEMPTS}). Marking as FAILED.",
+                                extra={"event_id": event.id, "tenant_id": event.tenant_id},
+                            )
+                        else:
+                            event.status = "PENDING"  # Revert back to PENDING for retry
+                            logger.warning(
+                                f"[ControlPlaneOutboxRelay] Failed to forward event id={event.id} to {queue_name}. Attempt {event.attempts}/{_MAX_PUBLISH_ATTEMPTS}."
+                            )
+
+                await session.commit()
+
+            return processed

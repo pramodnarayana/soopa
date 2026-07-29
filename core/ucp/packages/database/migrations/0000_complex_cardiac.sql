@@ -246,4 +246,7 @@ CREATE POLICY "notification_templates_isolation" ON "ucp"."notification_template
 CREATE POLICY "outbox_events_isolation" ON "ucp"."outbox_events" AS PERMISSIVE FOR ALL TO public USING ("ucp"."outbox_events"."tenant_id" IS NULL OR "ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls()) WITH CHECK ("ucp"."outbox_events"."tenant_id" IS NULL OR "ucp"."outbox_events"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "tenant_subscriptions_isolation" ON "ucp"."tenant_subscriptions" AS PERMISSIVE FOR ALL TO public USING ("ucp"."tenant_subscriptions"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
 CREATE POLICY "webhooks_isolation" ON "ucp"."webhooks" AS PERMISSIVE FOR ALL TO public USING ("ucp"."webhooks"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
-CREATE POLICY "system_audit_log_isolation" ON "ucp"."system_audit_log" AS PERMISSIVE FOR ALL TO public USING ("ucp"."system_audit_log"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());
+CREATE POLICY "system_audit_log_isolation" ON "ucp"."system_audit_log" AS PERMISSIVE FOR ALL TO public USING ("ucp"."system_audit_log"."tenant_id" = app.current_tenant_id() OR app.bypass_rls());--> statement-breakpoint
+ALTER TABLE "ucp"."apps" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "apps_isolation" ON "ucp"."apps" AS PERMISSIVE FOR ALL TO public USING (app.bypass_rls());--> statement-breakpoint
+CREATE POLICY "apps_read" ON "ucp"."apps" AS PERMISSIVE FOR SELECT TO public USING (true);

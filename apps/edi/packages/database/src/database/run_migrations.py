@@ -25,8 +25,11 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
             result = await conn.execute(text("SELECT dsn FROM ucp.database_shards"))
             urls = [row[0] for row in result.fetchall()]
     except Exception as e:
-        logger.error(f"Failed to query database_shards from global DB: {e}")
-        raise
+        if 'relation "ucp.database_shards" does not exist' in str(e):
+            logger.info("ucp.database_shards does not exist yet. Falling back to default shards.")
+        else:
+            logger.error(f"Failed to query database_shards from global DB: {e}")
+            raise
     finally:
         await engine.dispose()
 

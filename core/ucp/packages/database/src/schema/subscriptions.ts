@@ -4,15 +4,36 @@ import { pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-c
 import { tenants } from './identity.js';
 import { ucpSchema } from './shared.js';
 
-export const apps = ucpSchema.table('apps', {
-  id: varchar('id', { length: 128 })
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  name: text('name').notNull(),
-  slug: varchar('slug', { length: 255 }).notNull().unique(), // e.g., 'edi', 'idp'
-  description: text('description'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+export const apps = ucpSchema
+  .table(
+    'apps',
+    {
+      id: varchar('id', { length: 128 })
+        .primaryKey()
+        .$defaultFn(() => createId()),
+      name: text('name').notNull(),
+      slug: varchar('slug', { length: 255 }).notNull().unique(), // e.g., 'edi', 'idp'
+      description: text('description'),
+      createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => {
+      return {
+        rlsPolicy: pgPolicy('apps_isolation', {
+          as: 'permissive',
+          for: 'all',
+          to: 'public',
+          using: sql`app.bypass_rls()`,
+        }),
+        readPolicy: pgPolicy('apps_read', {
+          as: 'permissive',
+          for: 'select',
+          to: 'public',
+          using: sql`true`,
+        }),
+      };
+    },
+  )
+  .enableRLS();
 
 const SubscriptionStatus = {
   ACTIVE: 'active',

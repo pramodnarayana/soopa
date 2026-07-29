@@ -1060,7 +1060,22 @@
           "columns": ["slug"]
         }
       },
-      "policies": {},
+      "policies": {
+        "apps_isolation": {
+          "name": "apps_isolation",
+          "as": "permissive",
+          "for": "all",
+          "to": "public",
+          "using": "app.bypass_rls()"
+        },
+        "apps_read": {
+          "name": "apps_read",
+          "as": "permissive",
+          "for": "select",
+          "to": "public",
+          "using": "true"
+        }
+      },
       "checkConstraints": {},
       "isRLSEnabled": true
     },
