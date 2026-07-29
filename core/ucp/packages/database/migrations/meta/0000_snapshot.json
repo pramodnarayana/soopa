@@ -1,5 +1,5 @@
 {
-  "id": "86fd1fa2-630e-4382-a63b-ef28b6c2a430",
+  "id": "0ad50ffb-b0e0-46df-947c-d27021c41cb4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -119,7 +119,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.api_keys": {
       "name": "api_keys",
@@ -195,7 +195,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.tenant_shards": {
       "name": "tenant_shards",
@@ -272,7 +272,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.tenant_users": {
       "name": "tenant_users",
@@ -366,7 +366,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.tenants": {
       "name": "tenants",
@@ -591,7 +591,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.outbox_events": {
       "name": "outbox_events",
@@ -687,7 +687,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.database_shards": {
       "name": "database_shards",
@@ -1062,7 +1062,7 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.tenant_subscriptions": {
       "name": "tenant_subscriptions",
@@ -1155,7 +1155,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "ucp.webhooks": {
       "name": "webhooks",
@@ -1254,7 +1254,7 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     }
   },
   "enums": {},
