@@ -81,10 +81,16 @@ async def e2e_context():
         )
         shard = shard_res.scalars().first()
 
-        assert shard is not None, (
-            "shard_1 not found in database_shards table. "
-            "Ensure control-plane shard data is seeded before running tests."
-        )
+        if not shard:
+            shard = DatabaseShard(
+                name="shard_1",
+                dsn=os.getenv(
+                    "SHARD_1_URL",
+                    "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                ),
+            )
+            session.add(shard)
+            await session.commit()
 
         tenant_shard = TenantShard(
             tenant_id=test_tenant_id,
