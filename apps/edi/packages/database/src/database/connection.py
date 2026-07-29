@@ -44,6 +44,10 @@ class DatabaseRouter:
         logger.info("Initialized DatabaseRouter with global connection pool.")
 
     def _create_engine(self, url: str) -> AsyncEngine:
+        # Enterprise-grade compatibility: transparently handle standard Postgres DSNs
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
         return create_async_engine(
             url,
             echo=False,

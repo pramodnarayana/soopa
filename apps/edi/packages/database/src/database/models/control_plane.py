@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID as PyUUID
 
@@ -58,7 +58,9 @@ class DatabaseShard(UcpBase):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     dsn: Mapped[str] = mapped_column(String(1024), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
 
 class Tenant(UcpBase):
@@ -69,7 +71,9 @@ class Tenant(UcpBase):
     )
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
 
 class TenantShard(UcpBase):
@@ -84,7 +88,9 @@ class TenantShard(UcpBase):
     shard_schema: Mapped[str] = mapped_column(String(255), nullable=False, default="public")
     tier: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
     allow_private_as2: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
 
 class User(UcpBase):
@@ -96,7 +102,9 @@ class User(UcpBase):
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
     __table_args__ = (
         Index("uq_users_email_lower", text("lower(email)"), unique=True),
@@ -221,7 +229,9 @@ class SystemAuditLog(UcpBase):
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
     event: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
     __table_args__ = (
         Index("ix_system_audit_log_tenant_time", "tenant_id", "created_at"),
