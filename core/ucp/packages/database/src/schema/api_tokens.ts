@@ -1,9 +1,10 @@
 import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
-import { boolean, index, pgPolicy, pgTable, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, pgPolicy, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
+import { ucpSchema } from './shared.js';
 
-export const apiTokens = pgTable(
+export const apiTokens = ucpSchema.table(
   'api_tokens',
   {
     // Using varchar to support CUID or UUID

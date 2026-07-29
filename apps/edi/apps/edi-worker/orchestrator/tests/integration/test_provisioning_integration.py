@@ -39,7 +39,7 @@ async def e2e_context():
     # We use localstack URL directly as per the local dev environment
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
-    queue_name = "test-edi-tenant-sync.fifo"
+    queue_name = f"test-edi-tenant-sync-{uuid.uuid4()}.fifo"
     outbox_adapter = SqsOutboxAdapter(queue_name=queue_name)
     outbox_adapter.endpoint_url = sqs_endpoint
 
@@ -135,6 +135,15 @@ async def e2e_context():
             delete(TenantAS2Partner).where(TenantAS2Partner.id == test_partner_id)
         )
         await tenant_session.commit()
+
+    async with message_publisher.session.client(
+        "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
+    ) as sqs:
+        try:
+            resp = await sqs.get_queue_url(QueueName=queue_name)
+            await sqs.delete_queue(QueueUrl=resp["QueueUrl"])
+        except Exception as e:
+            logging.warning(f"Could not delete queue {queue_name}: {e}")
 
     await db_router.close_all()
 

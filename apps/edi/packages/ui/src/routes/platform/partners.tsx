@@ -1,11 +1,11 @@
 import { Server } from 'lucide-react';
-import { As2PartnersTable } from '@/features/partners/components/As2PartnersTable';
-import { CreatePartnerModal } from '@/features/partners/components/CreatePartnerModal';
+import { As2PartnersTable } from '../../features/partners/components/As2PartnersTable';
+import { CreatePartnerModal } from '../../features/partners/components/CreatePartnerModal';
 import {
   AS2PartnersProvider,
   useAS2Partners,
-} from '@/features/partners/context/AS2PartnersContext';
-import type { AS2Partner } from '@/features/partners/types';
+} from '../../features/partners/context/AS2PartnersContext';
+import type { AS2Partner } from '../../features/partners/types';
 
 export function TradingPartnersPage() {
   return (

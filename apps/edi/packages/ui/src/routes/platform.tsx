@@ -1,9 +1,9 @@
+import { Button } from '@soopa/ui/components/ui/button';
 import { createRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
 import { ChevronRight, Clock, LayoutDashboard, LogOut, Network, Server, Users } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Button } from '@/components/ui/button';
-import { useDashboardData } from '@/features/dashboard/api/useDashboardData';
+import { useDashboardData } from '../features/dashboard/api/useDashboardData';
 import { Route as rootRoute } from './__root';
 
 export const Route = createRoute({

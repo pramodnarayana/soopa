@@ -1,10 +1,10 @@
 import { Network } from 'lucide-react';
-import { CreatePartnershipModal } from '@/features/partners/components/CreatePartnershipModal';
-import { PartnershipsTable } from '@/features/partners/components/PartnershipsTable';
+import { CreatePartnershipModal } from '../../features/partners/components/CreatePartnershipModal';
+import { PartnershipsTable } from '../../features/partners/components/PartnershipsTable';
 import {
   AS2PartnersProvider,
   useAS2Partners,
-} from '@/features/partners/context/AS2PartnersContext';
+} from '../../features/partners/context/AS2PartnersContext';
 
 export function PartnershipsPage() {
   return (

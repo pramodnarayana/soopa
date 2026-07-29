@@ -60,28 +60,35 @@ export class TenantAuthGuard implements CanActivate {
       }
     }
 
-    // If it's not a JWT, it must be a UCP API Token
-    const secretHash = crypto.createHash('sha256').update(token).digest('hex');
-    const apiTokens = await this.tokenRepo.findAllByTenant(tenantId);
-
-    let matchingToken = null;
-    for (const t of apiTokens) {
-      if (!t.active) continue;
-
-      // Use timing-safe comparison for secret hash
-      const storedHashBuffer = Buffer.from(t.secretHash, 'hex');
-      const providedHashBuffer = Buffer.from(secretHash, 'hex');
-
-      // Only compare if lengths match
-      if (storedHashBuffer.length === providedHashBuffer.length) {
-        if (crypto.timingSafeEqual(storedHashBuffer, providedHashBuffer)) {
-          matchingToken = t;
-          break;
-        }
-      }
+    // If it's not a JWT, it must be a UCP API Token using the Split Token Pattern (soopa_live_clientId_rawSecret)
+    // token format: [prefix]_[clientId]_[rawSecret]
+    const tokenParts = token.split('_');
+    if (tokenParts.length < 3) {
+      throw new UnauthorizedException('Invalid API Token format');
     }
 
-    if (!matchingToken) {
+    // The last part is the rawSecret, the second to last is the clientId
+    const rawSecret = tokenParts.pop();
+    const clientId = tokenParts.pop();
+
+    if (!clientId || !rawSecret) {
+      throw new UnauthorizedException('Invalid API Token format');
+    }
+
+    const matchingToken = await this.tokenRepo.findByClientId(tenantId, clientId);
+
+    if (!matchingToken || !matchingToken.active) {
+      throw new UnauthorizedException('Invalid API Token');
+    }
+
+    const secretHash = crypto.createHash('sha256').update(rawSecret).digest('hex');
+    const storedHashBuffer = Buffer.from(matchingToken.secretHash, 'hex');
+    const providedHashBuffer = Buffer.from(secretHash, 'hex');
+
+    if (
+      storedHashBuffer.length !== providedHashBuffer.length ||
+      !crypto.timingSafeEqual(storedHashBuffer, providedHashBuffer)
+    ) {
       throw new UnauthorizedException('Invalid API Token');
     }
 

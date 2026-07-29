@@ -54,7 +54,7 @@ export class ApiTokensController {
       name: result.apiToken.name,
       active: result.apiToken.active,
       createdAt: result.apiToken.createdAt,
-      client_secret: result.rawSecret, // only returned once
+      token: `soopa_live_${result.apiToken.clientId}_${result.rawSecret}`, // The split token to be used as Bearer
     };
   }
 

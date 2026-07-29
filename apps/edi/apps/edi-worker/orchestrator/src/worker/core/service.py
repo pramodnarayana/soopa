@@ -154,6 +154,8 @@ class ProvisioningWorkerService:
                     await self._broadcast_or_replicate(
                         parsed_event.tenant_id, handler, parsed_event.resource_id
                     )
+            except PermanentProvisioningError:
+                raise
             except TransientProvisioningError:
                 raise
             except Exception as e:

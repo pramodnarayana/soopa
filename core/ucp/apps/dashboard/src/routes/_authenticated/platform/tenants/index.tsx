@@ -1,9 +1,5 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { Building2, Loader2, Plus, Power, Trash2 } from 'lucide-react';
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/ui/data-table';
+import { Button } from '@soopa/ui/components/ui/button';
+import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
   Dialog,
   DialogContent,
@@ -12,9 +8,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from '@soopa/ui/components/ui/dialog';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { Building2, Loader2, Plus, Power, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
 import {
   useDeleteTenant,
   useProvisionTenant,

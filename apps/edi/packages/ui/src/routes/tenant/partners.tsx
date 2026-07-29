@@ -1,8 +1,8 @@
 import { createRoute } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
-import { CreateSftpPartnerModal } from '@/features/partners/components/CreateSftpPartnerModal';
-import { SftpPartnersTable } from '@/features/partners/components/SftpPartnersTable';
-import { useSFTPPartners } from '@/features/partners/context/SFTPPartnersContext';
+import { CreateSftpPartnerModal } from '../../features/partners/components/CreateSftpPartnerModal';
+import { SftpPartnersTable } from '../../features/partners/components/SftpPartnersTable';
+import { useSFTPPartners } from '../../features/partners/context/SFTPPartnersContext';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({

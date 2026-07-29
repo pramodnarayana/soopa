@@ -1,3 +1,4 @@
+import { NavGroup } from '@soopa/ui/components/ui/NavGroup';
 import { createFileRoute, Link, Navigate, Outlet, useLocation } from '@tanstack/react-router';
 import {
   ChevronRight,
@@ -9,7 +10,6 @@ import {
   Users,
 } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
-import { NavGroup } from '@/components/ui/NavGroup';
 import { useIsPlatformAdmin } from '@/hooks/useIsPlatformAdmin';
 
 export const Route = createFileRoute('/_authenticated/platform')({

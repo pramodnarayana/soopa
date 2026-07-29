@@ -1,9 +1,9 @@
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import { Webhook } from 'lucide-react';
 import { useState } from 'react';
-import { FormModal } from '@/components/ui/form-modal';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+import { FormModal } from '../../../components/ui/form-modal';
+import { useToast } from '../../../hooks/use-toast';
 import { useCreateWebhookMutation } from '../api/webhookHooks';
 
 export function CreateWebhookModal() {

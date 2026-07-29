@@ -2,7 +2,7 @@ import { Copy } from 'lucide-react';
 import * as React from 'react';
 import { type ExternalToast, toast as sonnerToast } from 'sonner';
 
-import type { ToastActionElement } from '@/components/ui/toast';
+import type { ToastActionElement } from '../components/ui/toast';
 
 const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 3000;

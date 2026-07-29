@@ -1,7 +1,8 @@
 import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
-import { jsonb, pgPolicy, pgTable, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { jsonb, pgPolicy, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
+import { ucpSchema } from './shared.js';
 
 const OutboxStatus = {
   PENDING: 'PENDING',
@@ -11,7 +12,7 @@ const OutboxStatus = {
 } as const;
 export type OutboxStatusType = (typeof OutboxStatus)[keyof typeof OutboxStatus];
 
-export const controlPlaneOutbox = pgTable(
+export const controlPlaneOutbox = ucpSchema.table(
   'outbox_events',
   {
     id: varchar('id', { length: 128 })

@@ -1,8 +1,8 @@
 import { createRoute } from '@tanstack/react-router';
 import { Network } from 'lucide-react';
-import { useTenantWebhooksQuery } from '@/features/webhooks/api/webhookHooks';
-import { CreateWebhookModal } from '@/features/webhooks/components/CreateWebhookModal';
-import { WebhooksTable } from '@/features/webhooks/components/WebhooksTable';
+import { useTenantWebhooksQuery } from '../../features/webhooks/api/webhookHooks';
+import { CreateWebhookModal } from '../../features/webhooks/components/CreateWebhookModal';
+import { WebhooksTable } from '../../features/webhooks/components/WebhooksTable';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({

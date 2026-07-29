@@ -1,6 +1,6 @@
+import { Button } from '@soopa/ui/components/ui/button';
 import { createRoute, Navigate, Outlet } from '@tanstack/react-router';
 import { useAuth } from 'react-oidc-context';
-import { Button } from '@/components/ui/button';
 import { Route as rootRoute } from './__root';
 
 export const Route = createRoute({

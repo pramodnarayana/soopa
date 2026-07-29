@@ -1,6 +1,6 @@
 import { createRoute } from '@tanstack/react-router';
-import { CreateEdiHeaderModal } from '@/features/edi_headers/components/CreateEdiHeaderModal';
-import { EdiHeadersTable } from '@/features/edi_headers/components/EdiHeadersTable';
+import { CreateEdiHeaderModal } from '../../features/edi_headers/components/CreateEdiHeaderModal';
+import { EdiHeadersTable } from '../../features/edi_headers/components/EdiHeadersTable';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({

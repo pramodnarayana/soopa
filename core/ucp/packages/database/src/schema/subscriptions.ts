@@ -1,9 +1,10 @@
 import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
-import { pgPolicy, pgTable, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
+import { ucpSchema } from './shared.js';
 
-export const apps = pgTable('apps', {
+export const apps = ucpSchema.table('apps', {
   id: varchar('id', { length: 128 })
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -20,7 +21,7 @@ const SubscriptionStatus = {
 } as const;
 export type SubscriptionStatusType = (typeof SubscriptionStatus)[keyof typeof SubscriptionStatus];
 
-export const tenantSubscriptions = pgTable(
+export const tenantSubscriptions = ucpSchema.table(
   'tenant_subscriptions',
   {
     tenantId: varchar('tenant_id', { length: 128 })

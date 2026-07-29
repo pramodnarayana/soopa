@@ -284,8 +284,20 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_data)
         await tenant_session.execute(stmt)
 
+    @asynccontextmanager
+    async def _get_tenant_session(self, tenant_id: str) -> AsyncIterator[AsyncSession]:
+        try:
+            shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
+        except Exception as e:
+            raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
+
+        tenant_gen = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
+        async with aclosing(tenant_gen) as tenant_gen_ctx:
+            tenant_session = await tenant_gen_ctx.__anext__()
+            yield tenant_session
+
     async def _granular_delete(self, tenant_id: str, entity_id: str, tenant_model: Any) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
+        async with self._get_tenant_session(tenant_id) as tenant_session:
             try:
                 await tenant_session.execute(
                     delete(tenant_model).where(

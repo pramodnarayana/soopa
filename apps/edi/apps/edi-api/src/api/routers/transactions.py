@@ -173,7 +173,7 @@ async def get_transaction(
 
         resolver = RoutingResolutionService(global_session, uow.tenant_session)
         trading_partner_name, new_conn_type = await resolver.resolve_routing_context(
-            msg, result.edi_jsons
+            msg, result.edi_jsons or []
         )
         if new_conn_type and edi_msg_dict.get("connection_type") in ("UNKNOWN", None):
             edi_msg_dict["connection_type"] = new_conn_type

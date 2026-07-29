@@ -1,6 +1,5 @@
 import { createId } from '@paralleldrive/cuid2';
-import { boolean, index, jsonb, text, timestamp, varchar } from 'drizzle-orm/pg-core';
-import { tenants } from './identity.js';
+import { index, jsonb, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { ucpSchema } from './shared.js';
 
 export const databaseShards = ucpSchema.table('database_shards', {

@@ -1,6 +1,6 @@
 import { createRoute } from '@tanstack/react-router';
-import { useDashboardData } from '@/features/dashboard/api/useDashboardData';
-import { UserManagementTable } from '@/features/users/components/UserManagementTable';
+import { useDashboardData } from '../../features/dashboard/api/useDashboardData';
+import { UserManagementTable } from '../../features/users/components/UserManagementTable';
 import { Route as platformRoute } from '../platform';
 
 export const Route = createRoute({

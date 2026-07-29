@@ -1,8 +1,8 @@
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useUpdateWebhookMutation } from '../api/webhookHooks';
 import type { Webhook } from '../types';
 

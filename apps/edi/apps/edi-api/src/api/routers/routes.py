@@ -69,7 +69,7 @@ async def create_inbound_route(
             gs_receiver_id=request.gs_receiver_id,
             transaction_type=request.transaction_type,
             processing_mode=request.processing_mode,
-            webhook_id=request.webhook_id,
+            webhook_id=str(request.webhook_id) if request.webhook_id else None,
             as2_partner_id=request.as2_partner_id,
             sftp_partner_id=request.sftp_partner_id,
         )

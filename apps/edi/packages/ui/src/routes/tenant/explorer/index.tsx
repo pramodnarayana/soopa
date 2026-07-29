@@ -1,4 +1,4 @@
-import { ExplorerLayout } from '@/features/explorer/components/ExplorerLayout';
+import { ExplorerLayout } from '../../../features/explorer/components/ExplorerLayout';
 
 export function ExplorerPage() {
   return (

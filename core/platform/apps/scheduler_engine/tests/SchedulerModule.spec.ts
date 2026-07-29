@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { HealthController } from '../src/api/HealthController.js';
 import { SchedulerWorker } from '../src/application/SchedulerWorker.js';
 import { SchedulerModule } from '../src/SchedulerModule.js';

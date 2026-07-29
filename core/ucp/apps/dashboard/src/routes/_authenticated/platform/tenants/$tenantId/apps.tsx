@@ -1,7 +1,7 @@
+import { Button } from '@soopa/ui/components/ui/button';
 import { createFileRoute } from '@tanstack/react-router';
 import { Box, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { useSubscribeTenant, useUnsubscribeTenant } from '@/domains/apps/api/mutations';
 import { useGetApps, useGetTenantSubscriptions } from '@/domains/apps/api/queries';
 

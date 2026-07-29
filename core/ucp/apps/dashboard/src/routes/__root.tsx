@@ -1,7 +1,7 @@
+import { Toaster } from '@soopa/ui/components/ui/sonner';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { AuthProvider } from 'react-oidc-context';
-import { Toaster } from '@/components/ui/sonner';
 
 const queryClient = new QueryClient();
 

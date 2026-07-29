@@ -109,16 +109,24 @@ class ControlPlaneOutboxRelayService:
                     )
                 except Exception as e:
                     logger.warning(
-                        f"[ControlPlaneOutboxRelay] Failed to build event {event.id}: {e}. Skipping."
+                        f"[ControlPlaneOutboxRelay] Failed to build event {event.id}: {e}. Marking as FAILED."
                     )
-                    # Optionally quarantine the event here
+                    event.status = "FAILED"
                     continue
 
             if not publishable:
                 return 0
 
             messages = [msg for _, msg in publishable]
-            successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
+            try:
+                successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
+            except Exception:
+                for event, _ in publishable:
+                    event.attempts = (event.attempts or 0) + 1
+                    if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
+                        event.status = "FAILED"
+                await session.commit()
+                raise
 
             for event, _ in publishable:
                 if str(event.id) in successful_ids:

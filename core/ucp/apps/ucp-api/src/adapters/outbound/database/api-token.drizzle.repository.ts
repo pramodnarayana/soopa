@@ -56,6 +56,14 @@ export class ApiTokenDrizzleRepository implements IApiTokenRepository {
     return this.mapToDomain(row);
   }
 
+  async findByClientId(tenantId: string, clientId: string): Promise<ApiToken | null> {
+    const row = await this.db.query.apiTokens.findFirst({
+      where: (t, { eq, and }) => and(eq(t.clientId, clientId), eq(t.tenantId, tenantId)),
+    });
+    if (!row) return null;
+    return this.mapToDomain(row);
+  }
+
   async findAllByTenant(tenantId: string): Promise<ApiToken[]> {
     const rows = await this.db.query.apiTokens.findMany({
       where: (t, { eq }) => eq(t.tenantId, tenantId),

@@ -1,17 +1,10 @@
 import { sql } from 'drizzle-orm';
-import {
-  boolean,
-  pgPolicy,
-  pgTable,
-  serial,
-  text,
-  uniqueIndex,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { boolean, pgPolicy, serial, text, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import { ucpSchema } from './shared.js';
 
 export type NotificationChannelType = 'EMAIL' | 'SLACK' | 'IN_APP';
 
-export const notificationTemplates = pgTable(
+export const notificationTemplates = ucpSchema.table(
   'notification_templates',
   {
     id: serial('id').primaryKey(),

@@ -1,13 +1,11 @@
-import { DashboardProvider, EdiDashboardPage } from '@soopa/edi-ui';
+import { Button } from '@soopa/ui/components/ui/button';
+import { Input } from '@soopa/ui/components/ui/input';
+import { Label } from '@soopa/ui/components/ui/label';
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useUpdateTenantName } from '@/domains/tenants/api/mutations';
 import { useGetTenants } from '@/domains/tenants/api/queries';
-import { HttpDashboardRepository } from '@/lib/HttpDashboardRepository';
 
 export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/')({
   component: TenantOverviewPage,
@@ -41,10 +39,6 @@ function TenantOverviewPage() {
     );
   };
 
-  const dashboardRepository = useMemo(() => {
-    return new HttpDashboardRepository(tenantId);
-  }, [tenantId]);
-
   if (!tenant) return null;
 
   return (
@@ -70,13 +64,6 @@ function TenantOverviewPage() {
             </Button>
           </div>
         </div>
-      </div>
-
-      <div className="mt-12">
-        <h2 className="text-lg font-semibold text-slate-900 mb-6">EDI Network Isolation</h2>
-        <DashboardProvider repository={dashboardRepository}>
-          <EdiDashboardPage />
-        </DashboardProvider>
       </div>
     </div>
   );

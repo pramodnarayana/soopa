@@ -116,7 +116,7 @@ class InboundRouteService:
                     transaction_type=r.transaction_type,
                     destination_type=dest_type,
                     destination_name=dest_name,
-                    webhook_id=r.webhook_id,
+                    webhook_id=str(r.webhook_id) if r.webhook_id else None,
                     as2_partner_id=r.as2_partner_id,
                     sftp_partner_id=r.sftp_partner_id,
                     active=r.active,

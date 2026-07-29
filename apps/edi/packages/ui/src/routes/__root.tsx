@@ -1,7 +1,7 @@
+import { Button } from '@soopa/ui/components/ui/button';
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { useAuth } from 'react-oidc-context';
-import { Button } from '@/components/ui/button';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster } from '../components/ui/toaster';
 
 export const Route = createRootRoute({
   component: RootComponent,
