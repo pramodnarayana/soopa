@@ -27,7 +27,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     # Routes (Now in Control Plane)
     # ------------------------------------------------------------------------
     async def _validate_inbound_destination(
-        self, tenant_id: str, webhook_id: UUID | None, as2_id: UUID | None, sftp_id: UUID | None
+        self, tenant_id: str, webhook_id: str | None, as2_id: UUID | None, sftp_id: UUID | None
     ) -> None:
         destinations = [d for d in (webhook_id, as2_id, sftp_id) if d is not None]
         if len(destinations) != 1:
@@ -121,7 +121,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         if not isinstance(cmd.processing_mode, UnsetType):
             record.processing_mode = cmd.processing_mode
         if not isinstance(cmd.webhook_id, UnsetType):
-            record.webhook_id = str(cmd.webhook_id) if cmd.webhook_id else None
+            record.webhook_id = cmd.webhook_id
         if not isinstance(cmd.as2_partner_id, UnsetType):
             record.as2_partner_id = cmd.as2_partner_id
         if not isinstance(cmd.sftp_partner_id, UnsetType):
@@ -131,7 +131,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
 
         await self._validate_inbound_destination(
             tenant_id,
-            uuid.UUID(str(record.webhook_id)) if record.webhook_id else None,
+            record.webhook_id,
             record.as2_partner_id,
             record.sftp_partner_id,
         )

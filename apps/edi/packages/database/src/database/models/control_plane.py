@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
@@ -203,6 +204,11 @@ class ControlPlaneOutbox(EdiGlobalBase, OutboxMixin):
         ),
         {"schema": "edi"},
     )
+
+    @property
+    def body(self) -> dict[str, Any]:
+        """Alias for payload to satisfy OutboxEvent protocol."""
+        return self.payload
 
 
 class SystemAuditLog(UcpBase):

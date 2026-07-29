@@ -158,141 +158,98 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
     # --- Granular Upsert / Delete Methods ---
 
-    async def replicate_as2_partner(self, tenant_id: str, partner_id: str) -> None:
+    async def _granular_replicate(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        global_model: Any,
+        tenant_model: Any,
+        include_shared: bool = False,
+    ) -> None:
+        """
+        Consolidated granular replication helper.
+        Queries the global entity (with tenant scoping), warns if missing, and upserts to tenant db.
+        """
         async with self._get_sessions(tenant_id) as (global_session, tenant_session):
             try:
-                res = await global_session.execute(
-                    select(GlobalAS2Partner).where(GlobalAS2Partner.id == partner_id)
-                )
+                # Build query with tenant scoping
+                stmt = select(global_model).where(global_model.id == entity_id)
+                if include_shared:
+                    stmt = stmt.where(
+                        (global_model.tenant_id == tenant_id) | (global_model.tenant_id.is_(None))
+                    )
+                else:
+                    stmt = stmt.where(global_model.tenant_id == tenant_id)
+
+                res = await global_session.execute(stmt)
                 entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(tenant_session, tenant_id, entity, TenantAS2Partner)
-                    await tenant_session.commit()
+
+                if not entity:
+                    logger.warning(
+                        f"{global_model.__name__} {entity_id} not found in global DB for tenant {tenant_id}"
+                    )
+                    return
+
+                await self._upsert_entity(tenant_session, tenant_id, entity, tenant_model)
+                await tenant_session.commit()
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
-                    f"Failed to replicate AS2Partner {partner_id}: {e}"
+                    f"Failed to replicate {global_model.__name__} {entity_id}: {e}"
                 ) from e
+
+    async def replicate_as2_partner(self, tenant_id: str, partner_id: str) -> None:
+        await self._granular_replicate(
+            tenant_id, partner_id, GlobalAS2Partner, TenantAS2Partner, include_shared=True
+        )
 
     async def delete_as2_partner(self, tenant_id: str, partner_id: str) -> None:
         await self._granular_delete(tenant_id, partner_id, TenantAS2Partner)
 
     async def replicate_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                res = await global_session.execute(
-                    select(GlobalAS2Partnership).where(GlobalAS2Partnership.id == partnership_id)
-                )
-                entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(
-                        tenant_session, tenant_id, entity, TenantAS2Partnership
-                    )
-                    await tenant_session.commit()
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    f"Failed to replicate AS2Partnership {partnership_id}: {e}"
-                ) from e
+        await self._granular_replicate(
+            tenant_id, partnership_id, GlobalAS2Partnership, TenantAS2Partnership, include_shared=True
+        )
 
     async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         await self._granular_delete(tenant_id, partnership_id, TenantAS2Partnership)
 
     async def replicate_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                res = await global_session.execute(
-                    select(GlobalSFTPPartner).where(GlobalSFTPPartner.id == partner_id)
-                )
-                entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(tenant_session, tenant_id, entity, TenantSFTPPartner)
-                    await tenant_session.commit()
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    f"Failed to replicate SFTPPartner {partner_id}: {e}"
-                ) from e
+        await self._granular_replicate(
+            tenant_id, partner_id, GlobalSFTPPartner, TenantSFTPPartner, include_shared=False
+        )
 
     async def delete_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
         await self._granular_delete(tenant_id, partner_id, TenantSFTPPartner)
 
     async def replicate_webhook(self, tenant_id: str, webhook_id: str) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                res = await global_session.execute(
-                    select(GlobalWebhook).where(GlobalWebhook.id == webhook_id)
-                )
-                entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(tenant_session, tenant_id, entity, TenantWebhook)
-                    await tenant_session.commit()
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    f"Failed to replicate Webhook {webhook_id}: {e}"
-                ) from e
+        await self._granular_replicate(
+            tenant_id, webhook_id, GlobalWebhook, TenantWebhook, include_shared=False
+        )
 
     async def delete_webhook(self, tenant_id: str, webhook_id: str) -> None:
         await self._granular_delete(tenant_id, webhook_id, TenantWebhook)
 
     async def replicate_inbound_route(self, tenant_id: str, route_id: str) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                res = await global_session.execute(
-                    select(GlobalInboundRoute).where(GlobalInboundRoute.id == route_id)
-                )
-                entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(tenant_session, tenant_id, entity, TenantInboundRoute)
-                    await tenant_session.commit()
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    f"Failed to replicate InboundRoute {route_id}: {e}"
-                ) from e
+        await self._granular_replicate(
+            tenant_id, route_id, GlobalInboundRoute, TenantInboundRoute, include_shared=False
+        )
 
     async def delete_inbound_route(self, tenant_id: str, route_id: str) -> None:
         await self._granular_delete(tenant_id, route_id, TenantInboundRoute)
 
     async def replicate_outbound_route(self, tenant_id: str, route_id: str) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                res = await global_session.execute(
-                    select(GlobalOutboundRoute).where(GlobalOutboundRoute.id == route_id)
-                )
-                entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(
-                        tenant_session, tenant_id, entity, TenantOutboundRoute
-                    )
-                    await tenant_session.commit()
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    f"Failed to replicate OutboundRoute {route_id}: {e}"
-                ) from e
+        await self._granular_replicate(
+            tenant_id, route_id, GlobalOutboundRoute, TenantOutboundRoute, include_shared=False
+        )
 
     async def delete_outbound_route(self, tenant_id: str, route_id: str) -> None:
         await self._granular_delete(tenant_id, route_id, TenantOutboundRoute)
 
     async def replicate_outbound_edi_header(self, tenant_id: str, header_id: str) -> None:
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                res = await global_session.execute(
-                    select(GlobalOutboundEdiHeader).where(GlobalOutboundEdiHeader.id == header_id)
-                )
-                entity = res.scalars().first()
-                if entity:
-                    await self._upsert_entity(
-                        tenant_session, tenant_id, entity, TenantOutboundEdiHeader
-                    )
-                    await tenant_session.commit()
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    f"Failed to replicate OutboundEdiHeader {header_id}: {e}"
-                ) from e
+        await self._granular_replicate(
+            tenant_id, header_id, GlobalOutboundEdiHeader, TenantOutboundEdiHeader, include_shared=False
+        )
 
     async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> None:
         await self._granular_delete(tenant_id, header_id, TenantOutboundEdiHeader)
@@ -300,10 +257,13 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     async def _upsert_entity(
         self, tenant_session: AsyncSession, tenant_id: str, global_entity: Any, tenant_model: Any
     ) -> None:
+        # Get column names that exist on the tenant model
+        tenant_columns = {col.name for col in tenant_model.__table__.columns}
+
         data = {
             col.name: getattr(global_entity, col.name)
             for col in global_entity.__table__.columns
-            if hasattr(global_entity, col.name)
+            if hasattr(global_entity, col.name) and col.name in tenant_columns
         }
         data["tenant_id"] = tenant_id
 
@@ -317,7 +277,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         async with self._get_sessions(tenant_id) as (global_session, tenant_session):
             try:
                 await tenant_session.execute(
-                    delete(tenant_model).where(tenant_model.id == entity_id)
+                    delete(tenant_model).where(
+                        tenant_model.id == entity_id, tenant_model.tenant_id == tenant_id
+                    )
                 )
                 await tenant_session.commit()
             except Exception as e:

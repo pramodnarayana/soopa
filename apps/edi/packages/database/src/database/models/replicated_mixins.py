@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 from uuid import UUID as PyUUID
 
@@ -163,7 +164,7 @@ class WebhookMixin:
 
     @declared_attr
     def id(cls) -> Mapped[str]:
-        return mapped_column(String(128), primary_key=True)
+        return mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
 
     @declared_attr
     def name(cls) -> Mapped[str]:

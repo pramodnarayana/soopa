@@ -81,6 +81,11 @@ async def e2e_context():
         )
         shard = shard_res.scalars().first()
 
+        assert shard is not None, (
+            "shard_1 not found in database_shards table. "
+            "Ensure control-plane shard data is seeded before running tests."
+        )
+
         tenant_shard = TenantShard(
             tenant_id=test_tenant_id,
             shard_id=shard.id,
@@ -112,7 +117,8 @@ async def e2e_context():
     async for session in db_router.get_global_session():
         await session.execute(
             delete(ControlPlaneOutbox).where(
-                ControlPlaneOutbox.event_type == ProvisioningEventType.AS2_PARTNER_CREATED.value
+                ControlPlaneOutbox.event_type == ProvisioningEventType.AS2_PARTNER_CREATED.value,
+                ControlPlaneOutbox.tenant_id == test_tenant_id,
             )
         )
         await session.execute(delete(AS2Partner).where(AS2Partner.id == test_partner_id))

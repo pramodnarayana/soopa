@@ -72,7 +72,7 @@ async def test_edi_message_explorer_and_detail(
     receiver_id = f"RECV_{str(uuid.uuid4())[:6]}"
     msg_id_val = f"MSG_{str(uuid.uuid4())[:6]}"
 
-    # 1. Insert records directly using ControlPlaneUnitOfWork to simulate completed pipeline
+    # 1. Insert records directly using DataPlaneUnitOfWork to simulate completed pipeline
     gs_gen = override_get_global_session()
     ts_gen = override_get_tenant_session(tenant_id)
     await gs_gen.__anext__()

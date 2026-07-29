@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class ProvisionTenantEvent(BaseModel):
     # Keeping for backwards compatibility if needed, though we ignore it.
     tenant_id: str
-    name: str | None = None
+    name: str
 
 
 class ProvisionAllTenantsEvent(BaseModel):

@@ -99,14 +99,19 @@ class ProvisioningWorkerService:
     async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
         if tenant_id == "0":
             all_tenants = await self.tenant_port.get_all_tenant_ids()
-            errors = []
+            transient_errors = []
             for t_id in all_tenants:
                 try:
                     await replicate_fn(t_id, *args)
+                except PermanentProvisioningError as e:
+                    # Log permanent errors but don't retry them
+                    logger.error(f"Permanent error for tenant {t_id}: {e}")
                 except Exception as e:
-                    errors.append(e)
-            if errors:
-                raise TransientProvisioningError(f"Broadcast failed for some tenants: {errors}")
+                    transient_errors.append(e)
+            if transient_errors:
+                raise TransientProvisioningError(
+                    f"Broadcast failed for some tenants: {transient_errors}"
+                )
         else:
             await replicate_fn(tenant_id, *args)
 
@@ -132,6 +137,11 @@ class ProvisioningWorkerService:
                 if parsed_event.event_type == ProvisioningEventType.PROVISION_ALL_TENANTS:
                     await handle_provision_all_tenants(self, parsed_event, str(event.id))
                 else:
+                    if parsed_event.resource_id is None:
+                        raise PermanentProvisioningError(
+                            f"Event {parsed_event.event_type} missing required resource_id"
+                        )
+
                     handler = self._handlers.get(parsed_event.event_type)
                     if not handler:
                         raise PermanentProvisioningError(

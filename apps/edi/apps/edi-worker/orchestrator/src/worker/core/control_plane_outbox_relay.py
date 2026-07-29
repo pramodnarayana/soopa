@@ -10,6 +10,7 @@ from worker.ports.message_publisher import MessagePublisherPort, PublishMessageE
 logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 100
+_MAX_PUBLISH_ATTEMPTS = 5
 
 
 def _build_provision_event(outbox_row: ControlPlaneOutbox) -> ProvisioningEvent:
@@ -29,7 +30,8 @@ def _build_provision_event(outbox_row: ControlPlaneOutbox) -> ProvisioningEvent:
 
 
 class ControlPlaneOutboxRelayService:
-    _PROVISIONING_QUEUE = "edi-tenant-sync.fifo"
+    # Default queue name; can be overridden via constructor for testing
+    _DEFAULT_PROVISIONING_QUEUE = "edi-tenant-sync.fifo"
 
     def __init__(
         self,
@@ -39,7 +41,7 @@ class ControlPlaneOutboxRelayService:
     ) -> None:
         self.db_router = db_router
         self.message_publisher = message_publisher
-        self._queue_name = queue_name or self._PROVISIONING_QUEUE
+        self._queue_name = queue_name or self._DEFAULT_PROVISIONING_QUEUE
 
     async def relay_pending_events(self) -> int:
         """
@@ -67,9 +69,14 @@ class ControlPlaneOutboxRelayService:
     async def _sweep_global(self) -> int:
         processed = 0
         async for session in self.db_router.get_global_session():
+            # Filter by supported ProvisioningEventType values
+            supported_event_types = [e.value for e in ProvisioningEventType]
             stmt = (
                 select(ControlPlaneOutbox)
-                .where(ControlPlaneOutbox.status == "PENDING")
+                .where(
+                    ControlPlaneOutbox.status == "PENDING",
+                    ControlPlaneOutbox.event_type.in_(supported_event_types),
+                )
                 .limit(_BATCH_SIZE)
                 .with_for_update(skip_locked=True)
             )
@@ -82,31 +89,54 @@ class ControlPlaneOutboxRelayService:
 
             # Provisioning queue for control plane events
             queue_name = self._queue_name
-            messages = []
+            publishable = []
             for event in events:
-                provision_event = _build_provision_event(event)
-                messages.append(
-                    PublishMessageEnvelope(
-                        message_id=str(event.id),
-                        event_type=event.event_type,
-                        event=provision_event.model_dump(mode="json"),
-                        idempotency_key=str(event.idempotency_key)
-                        if event.idempotency_key
-                        else str(event.id),
-                        partition_key=event.tenant_id,
+                try:
+                    provision_event = _build_provision_event(event)
+                    publishable.append(
+                        (
+                            event,
+                            PublishMessageEnvelope(
+                                message_id=str(event.id),
+                                event_type=event.event_type,
+                                event=provision_event.model_dump(mode="json"),
+                                idempotency_key=str(event.idempotency_key)
+                                if event.idempotency_key
+                                else str(event.id),
+                                partition_key=event.tenant_id,
+                            ),
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.warning(
+                        f"[ControlPlaneOutboxRelay] Failed to build event {event.id}: {e}. Skipping."
+                    )
+                    # Optionally quarantine the event here
+                    continue
 
+            if not publishable:
+                return 0
+
+            messages = [msg for _, msg in publishable]
             successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
 
-            for event in events:
+            for event, _ in publishable:
                 if str(event.id) in successful_ids:
                     event.status = "PROCESSED"
                     processed += 1
                 else:
-                    logger.error(
-                        f"[ControlPlaneOutboxRelay] Failed to forward global event id={event.id} to {queue_name}"
-                    )
+                    # Track publish attempts and apply bounded retry policy
+                    event.attempts = (event.attempts or 0) + 1
+                    if event.attempts >= _MAX_PUBLISH_ATTEMPTS:
+                        event.status = "FAILED"
+                        logger.error(
+                            f"[ControlPlaneOutboxRelay] Event {event.id} exceeded max publish attempts ({_MAX_PUBLISH_ATTEMPTS}). Marking as FAILED.",
+                            extra={"event_id": event.id, "tenant_id": event.tenant_id},
+                        )
+                    else:
+                        logger.warning(
+                            f"[ControlPlaneOutboxRelay] Failed to forward event id={event.id} to {queue_name}. Attempt {event.attempts}/{_MAX_PUBLISH_ATTEMPTS}."
+                        )
 
             await session.commit()
 

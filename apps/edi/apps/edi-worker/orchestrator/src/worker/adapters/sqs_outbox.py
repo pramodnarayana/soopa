@@ -7,6 +7,7 @@ from typing import Any
 
 import aioboto3
 
+from worker.adapters.acl.registry import translate_external_event
 from worker.core.errors import PermanentProvisioningError
 from worker.ports.outbox import OutboxEvent, OutboxPort
 
@@ -58,7 +59,9 @@ class SqsOutboxAdapter(OutboxPort):
                 WaitTimeSeconds=5,
             )
 
-            logger.info(f"SQS receive_message response: {response}")
+            logger.debug(
+                f"SQS receive_message: {len(response.get('Messages', []))} message(s) received"
+            )
 
             messages = response.get("Messages", [])
             if not messages:
@@ -83,13 +86,17 @@ class SqsOutboxAdapter(OutboxPort):
                     body = raw_body
 
                 # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
-                from worker.adapters.acl.registry import translate_external_event
-
                 external_event_type = body.get("eventType")
                 if external_event_type:
                     translated_body = translate_external_event(external_event_type, body)
-                    if translated_body:
-                        body = translated_body
+                    if translated_body is None:
+                        logger.error(
+                            f"Translation failed for event type '{external_event_type}' in message {message_id}"
+                        )
+                        await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                        yield None
+                        return
+                    body = translated_body
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse JSON body from SQS message {message_id}")
                 await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
@@ -135,10 +142,10 @@ class SqsOutboxAdapter(OutboxPort):
 
             message_body = json.dumps(
                 {
+                    **(payload or {}),
                     "tenant_id": tenant_id,
                     "event_type": event_type,
                     "idempotency_key": idempotency_key,
-                    **(payload or {}),
                 }
             )
 

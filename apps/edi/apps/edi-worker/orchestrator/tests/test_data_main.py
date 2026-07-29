@@ -57,7 +57,7 @@ async def test_process_pipeline_event_no_message(router: DatabaseRouter):
             trace_id="nonexistent-trace-id",
             event_type="INBOUND",
             payload={"direction": "INBOUND"},
-            tenant_id=999,
+            tenant_id="999",
             resolver=resolver,
             db_router=router,
             s3_bucket="test-bucket",
@@ -160,7 +160,7 @@ async def test_process_delivery_no_message(router: DatabaseRouter):
             trace_id="nonexistent-trace-id",
             event_type="DELIVER",
             payload={},
-            tenant_id=999,
+            tenant_id="999",
             resolver=resolver,
             db_router=router,
             s3_bucket="test-bucket",
@@ -179,7 +179,7 @@ async def test_poll_sqs_queue():
     mock_sqs.receive_message.side_effect = [
         {
             "Messages": [
-                {"ReceiptHandle": "1", "Body": '{"payload": {"trace_id": "123"}, "tenant_id": 999}'}
+                {"ReceiptHandle": "1", "Body": '{"payload": {"trace_id": "123"}, "tenant_id": "999"}'}
             ]
         },
         {"Messages": [{"ReceiptHandle": "2", "Body": "not json"}]},

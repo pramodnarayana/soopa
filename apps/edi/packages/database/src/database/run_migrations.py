@@ -58,12 +58,11 @@ def run_migrations():
     global_cfg.set_main_option("script_location", str(base_dir / "migrations" / "global"))
     command.upgrade(global_cfg, "head")
     logger.info("FINISHED UPGRADE")
-    print("FINISHED UPGRADE PRINT")
 
     # 2. Fetch Shards dynamically
-    print("--- Fetching Tenant Shards ---")
+    logger.info("--- Fetching Tenant Shards ---")
     shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.database.global_url))
-    print(f"SHARD URLS: {shard_urls}")
+    logger.info(f"Found {len(shard_urls)} shard(s) to migrate")
 
     # 3. Run Tenant Migrations per shard
     for url in shard_urls:
@@ -78,14 +77,14 @@ def run_migrations():
             except Exception:
                 masked_url = "***redacted***"
 
-        print(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
+        logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
         tenant_cfg = Config(str(package_root / "alembic.tenant.ini"))
         tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
         tenant_cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(tenant_cfg, "head")
-        print(f"FINISHED TENANT UPGRADE FOR {masked_url}")
+        logger.info(f"FINISHED TENANT UPGRADE FOR {masked_url}")
 
-    print("--- All Database Migrations Complete ---")
+    logger.info("--- All Database Migrations Complete ---")
 
 
 if __name__ == "__main__":

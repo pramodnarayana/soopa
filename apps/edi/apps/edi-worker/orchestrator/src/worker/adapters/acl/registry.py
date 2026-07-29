@@ -3,7 +3,6 @@ from typing import Any
 
 from worker.adapters.acl.base import EventTranslator
 from worker.adapters.acl.ucp_translators import (
-    TenantDeletedTranslator,
     TenantProvisionedTranslator,
 )
 
@@ -14,13 +13,11 @@ class UcpEventNames:
     """Constants representing external UCP Event names."""
 
     TENANT_PROVISIONED = "tenant.provisioned"
-    TENANT_DELETED = "tenant.deleted"
 
 
 # Registry mapping external event names to their concrete translator strategies
 _TRANSLATOR_REGISTRY: dict[str, EventTranslator] = {
     UcpEventNames.TENANT_PROVISIONED: TenantProvisionedTranslator(),
-    UcpEventNames.TENANT_DELETED: TenantDeletedTranslator(),
 }
 
 
@@ -40,7 +37,7 @@ def translate_external_event(event_type: str, payload: dict[str, Any]) -> dict[s
         try:
             return translator.translate(payload)
         except Exception as e:
-            logger.error(f"Error translating external event '{event_type}': {e}")
-            return None
+            logger.exception(f"Error translating external event '{event_type}': {e}")
+            raise
 
     return None

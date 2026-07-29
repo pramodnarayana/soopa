@@ -17,6 +17,8 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+PROVISIONING_QUEUE_NAME = "edi-tenant-sync.fifo"
+
 
 async def run_worker(service: ProvisioningWorkerService) -> None:
     logger.info("Started polling SQS for PROVISION events")
@@ -50,37 +52,42 @@ async def run_outbox_relay(
     dsn = settings.database.global_url.replace("postgresql+asyncpg://", "postgresql://")
 
     conn = None
-    while True:
-        try:
-            if not conn or conn.is_closed():
-                conn = await asyncpg.connect(dsn)
-                await conn.add_listener("control_plane_outbox_inserted", handle_notify)
-                logger.info("Connected and listening to 'control_plane_outbox_inserted'")
+    try:
+        while True:
+            try:
+                if not conn or conn.is_closed():
+                    conn = await asyncpg.connect(dsn)
+                    await conn.add_listener("control_plane_outbox_inserted", handle_notify)
+                    logger.info("Connected and listening to 'control_plane_outbox_inserted'")
 
-                # Catch-up sweep on boot/reconnect to guarantee at-least-once delivery
+                    # Catch-up sweep on boot/reconnect to guarantee at-least-once delivery
+                    await relay_service.relay_pending_events()
+
+                # Wait for notification or 60s failsafe timeout
+                try:
+                    await asyncio.wait_for(queue.get(), timeout=60.0)
+                    # If we get here, we received a notification.
+                    # Wait briefly to batch up rapid subsequent inserts
+                    await asyncio.sleep(0.1)
+                    # Clear all currently queued notifications
+                    while not queue.empty():
+                        queue.get_nowait()
+                except TimeoutError:
+                    # Failsafe timeout reached, proceed to sweep just in case
+                    pass
+
+                # Perform the sweep
                 await relay_service.relay_pending_events()
 
-            # Wait for notification or 60s failsafe timeout
-            try:
-                await asyncio.wait_for(queue.get(), timeout=60.0)
-                # If we get here, we received a notification.
-                # Wait briefly to batch up rapid subsequent inserts
-                await asyncio.sleep(0.1)
-                # Clear all currently queued notifications
-                while not queue.empty():
-                    queue.get_nowait()
-            except TimeoutError:
-                # Failsafe timeout reached, proceed to sweep just in case
-                pass
-
-            # Perform the sweep
-            await relay_service.relay_pending_events()
-
-        except Exception as e:
-            logger.exception(f"Error in outbox relay daemon loop: {e}")
-            if conn and not conn.is_closed():
-                await conn.close()
-            await asyncio.sleep(5)
+            except Exception as e:
+                logger.exception(f"Error in outbox relay daemon loop: {e}")
+                if conn and not conn.is_closed():
+                    await conn.close()
+                    conn = None
+                await asyncio.sleep(5)
+    finally:
+        if conn and not conn.is_closed():
+            await conn.close()
 
 
 async def main() -> None:
@@ -89,7 +96,7 @@ async def main() -> None:
 
     # 1. Provisioning Consumer Setup
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
-    outbox_adapter = SqsOutboxAdapter(queue_name="edi-tenant-sync.fifo")
+    outbox_adapter = SqsOutboxAdapter(queue_name=PROVISIONING_QUEUE_NAME)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
     provisioning_service = ProvisioningWorkerService(
         tenant_adapter, outbox_adapter, replication_adapter

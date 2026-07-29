@@ -85,6 +85,9 @@ class SqlAlchemyOutboxAdapter(OutboxPort):
             global_session.add(new_event)
             await global_session.commit()
             logger.info(f"Published control plane outbox event {event_type} for tenant {tenant_id}")
+        except Exception:
+            await global_session.rollback()
+            raise
         finally:
             with contextlib.suppress(StopAsyncIteration):
                 await global_gen.__anext__()

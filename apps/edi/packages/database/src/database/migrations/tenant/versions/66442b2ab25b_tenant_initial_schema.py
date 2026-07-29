@@ -12,8 +12,6 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-import database.models.data_plane
-
 # revision identifiers, used by Alembic.
 revision: str = "66442b2ab25b"
 down_revision: str | Sequence[str] | None = None
@@ -195,7 +193,7 @@ def upgrade() -> None:
         sa.Column("interchange_control_no", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("format_standard", sa.String(length=50), nullable=True),
-        sa.Column("edi_data", database.models.data_plane.SanitizedText(), nullable=True),
+        sa.Column("edi_data", sa.Text(), nullable=True),
         sa.Column("storage_uri", sa.String(length=1024), nullable=True),
         sa.Column("file_size_bytes", sa.BigInteger(), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),

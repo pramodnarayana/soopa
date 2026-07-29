@@ -100,7 +100,7 @@ def upgrade() -> None:
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("attempts", sa.Integer(), nullable=False),
+        sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -194,10 +194,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["sftp_partner_id"],
             ["edi.sftp_partners.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["webhook_id"],
-            ["ucp.webhooks.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
         schema="edi",
