@@ -4,9 +4,11 @@
 # EDI AS2 - Enterprise Task Runner
 # ==============================================================================
 
-# Load variables from root .env
-include ../../.env
+# Load variables from root .env (optional)
+-include ../../.env
+ifneq (,$(wildcard ../../.env))
 export $(shell awk -F= '/^[a-zA-Z_][a-zA-Z0-9_]*=/ {print $$1}' ../../.env)
+endif
 
 build:
 	@echo "=== Building Backend ==="

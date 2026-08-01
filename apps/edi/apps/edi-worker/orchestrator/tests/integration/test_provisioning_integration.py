@@ -172,15 +172,10 @@ async def test_provisioning_replication_e2e_flow(e2e_context):
     tenant_id = ctx["tenant_id"]
 
     # 1. Simulate the UCP API (AwsControlPlaneEventRouter) publishing directly to the SNS/SQS topic
-    event_id = uuid.uuid4()
     payload = {
-        "id": str(event_id),
         "tenant_id": tenant_id,
         "event_type": EdiEventType.edi_as2_partner_created.value,
         "resource_id": str(partner_id),
-        "idempotency_key": str(uuid.uuid4()),
-        "partition_key": tenant_id,
-        "payload": {"tenant_id": tenant_id, "resource_id": str(partner_id)},
     }
 
     await message_publisher.publish(queue_name, payload)

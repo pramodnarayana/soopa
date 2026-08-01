@@ -36,6 +36,7 @@ export const partnersKeys = {
 import {
   AS2PartnershipSchema,
   AS2PartnershipsArraySchema,
+  normalizePartnerResponse,
   PartnerSchema,
   PartnersArraySchema,
 } from './partnerSchemas';
@@ -83,10 +84,7 @@ export function useTenantPartnersQuery() {
     queryKey: partnersKeys.tenant(),
     queryFn: async (): Promise<Partner[]> => {
       const res = await api.get('/trading-partners');
-      // Some properties might be aliased like partner_id -> id. Wait, let's parse them properly.
-      return PartnersArraySchema.parse(
-        res.data.map((p: any) => ({ ...p, id: p.partner_id || p.id })),
-      );
+      return PartnersArraySchema.parse(res.data.map(normalizePartnerResponse));
     },
   });
 }

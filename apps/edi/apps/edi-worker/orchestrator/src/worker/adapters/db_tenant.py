@@ -6,6 +6,8 @@ from sqlalchemy import select
 
 from worker.ports.tenant import TenantPort
 
+EDI_APP_SLUG = "edi"
+
 
 class SqlAlchemyTenantAdapter(TenantPort):
     def __init__(self, db_router: DatabaseRouter):
@@ -20,7 +22,7 @@ class SqlAlchemyTenantAdapter(TenantPort):
                 select(Tenant.id)
                 .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
                 .join(App, App.id == ShardRegistry.app_id)
-                .where(App.slug == "edi")
+                .where(App.slug == EDI_APP_SLUG)
             )
             result = await global_session.execute(stmt)
             return [str(t_id) for t_id in result.scalars().all()]

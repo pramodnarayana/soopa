@@ -29,12 +29,12 @@ export function EdiUIProvider({
   children: React.ReactNode;
   tenantId?: string;
   baseUrl: string;
-  ucpBaseUrl?: string;
+  ucpBaseUrl: string;
   token?: string;
 }) {
   return (
     <TenantProvider tenantId={tenantId}>
-      <UcpNetworkProvider baseUrl={ucpBaseUrl || 'http://localhost:3000'} token={token}>
+      <UcpNetworkProvider baseUrl={ucpBaseUrl} token={token}>
         <EdiNetworkProvider baseUrl={baseUrl} token={token}>
           {children}
         </EdiNetworkProvider>

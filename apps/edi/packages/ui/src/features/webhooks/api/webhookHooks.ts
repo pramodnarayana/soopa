@@ -15,7 +15,7 @@ export const webhooksKeys = {
   tenant: (tenantId: string) => [...webhooksKeys.all, tenantId] as const,
 };
 
-function mapRawWebhook(raw: any, tenantId: string): Webhook {
+export function mapRawWebhook(raw: any, tenantId: string): Webhook {
   return WebhookSchema.parse({
     id: raw.id,
     name: raw.name,

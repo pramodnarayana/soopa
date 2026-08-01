@@ -50,26 +50,25 @@ export class DrizzleTenantRepository implements TenantRepository {
         let tenantIdToLink: string;
 
         if (idpTenantId) {
-          const existingTenants = await tx
+          // Atomic insert with onConflictDoNothing to avoid select-then-insert race
+          const newTenantId = generateId('ten');
+          await tx
+            .insert(tenants)
+            .values({
+              id: newTenantId,
+              name: `${name}'s Organization`,
+              idpTenantId,
+            })
+            .onConflictDoNothing({ target: tenants.idpTenantId });
+
+          // Fetch the existing or newly inserted tenant
+          const [tenant] = await tx
             .select()
             .from(tenants)
             .where(eq(tenants.idpTenantId as never, idpTenantId))
             .limit(1);
 
-          if (existingTenants.length > 0) {
-            tenantIdToLink = existingTenants[0].id;
-          } else {
-            const newTenantId = generateId('ten');
-            const [newTenant] = await tx
-              .insert(tenants)
-              .values({
-                id: newTenantId,
-                name: `${name}'s Organization`,
-                idpTenantId,
-              })
-              .returning();
-            tenantIdToLink = newTenant.id;
-          }
+          tenantIdToLink = tenant.id;
         } else {
           const newTenantId = generateId('ten');
           const [newTenant] = await tx

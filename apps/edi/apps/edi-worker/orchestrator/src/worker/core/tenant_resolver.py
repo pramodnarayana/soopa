@@ -2,6 +2,8 @@ from database.connection import DatabaseRouter
 from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
 from sqlalchemy import select
 
+EDI_APP_SLUG = "edi"
+
 
 class TenantResolver:
     """
@@ -45,7 +47,7 @@ class TenantResolver:
                 .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
                 .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
                 .join(App, App.id == ShardRegistry.app_id)
-                .where(Tenant.id == tid_str, App.slug == "edi")
+                .where(Tenant.id == tid_str, App.slug == EDI_APP_SLUG)
             )
             result = await global_session.execute(stmt)
             row = result.first()

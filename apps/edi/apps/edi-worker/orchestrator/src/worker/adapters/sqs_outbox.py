@@ -38,7 +38,7 @@ class SqsOutboxAdapter(OutboxPort):
         self.queue_name = queue_name
         self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
         # Fallback for local development if missing
-        if not self.endpoint_url and os.environ.get("ENVIRONMENT", "local") == "local":
+        if not self.endpoint_url and os.environ.get("ENVIRONMENT") == "local":
             self.endpoint_url = "http://localhost:4566"
         self.region = "us-east-1"
         self.session = aioboto3.Session()

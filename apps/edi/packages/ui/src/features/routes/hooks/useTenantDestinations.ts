@@ -3,24 +3,13 @@ import { useAuth } from 'react-oidc-context';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import { useTenantId } from '../../../contexts/TenantContext';
 import { useUcpNetwork } from '../../../contexts/UcpNetworkContext';
-import { PartnersArraySchema } from '../../../features/partners/api/partnerSchemas';
 import {
-  RawWebhooksArrayResponseSchema,
-  WebhookSchema,
-} from '../../../features/webhooks/api/webhookSchemas';
-import type { Webhook } from '../../../features/webhooks/types';
+  normalizePartnerResponse,
+  PartnersArraySchema,
+} from '../../../features/partners/api/partnerSchemas';
+import { RawWebhooksArrayResponseSchema } from '../../../features/webhooks/api/webhookSchemas';
+import { mapRawWebhook } from '../../../features/webhooks/api/webhookHooks';
 import { Direction } from '../types';
-
-function mapRawWebhook(raw: any, tenantId: string): Webhook {
-  return WebhookSchema.parse({
-    id: raw.id,
-    name: raw.name,
-    url: raw.url,
-    type: 'WEBHOOK',
-    status: raw.active ? 'ACTIVE' : 'INACTIVE',
-    tenant_id: tenantId,
-  });
-}
 
 export function useTenantDestinations(direction: Direction) {
   const auth = useAuth();
@@ -40,9 +29,7 @@ export function useTenantDestinations(direction: Direction) {
 
         const rawWebhooks = RawWebhooksArrayResponseSchema.parse(webhooksRes.data);
         const webhooks = rawWebhooks.map((w) => mapRawWebhook(w, tenantId));
-        const partners = PartnersArraySchema.parse(
-          partnersRes.data.map((p: any) => ({ ...p, id: p.partner_id || p.id })),
-        );
+        const partners = PartnersArraySchema.parse(partnersRes.data.map(normalizePartnerResponse));
 
         return [
           ...webhooks.map((d) => ({ id: d.id, name: d.name, type: d.type })),
@@ -55,9 +42,7 @@ export function useTenantDestinations(direction: Direction) {
         ];
       } else {
         const partnersRes = await ediApi.get('/trading-partners');
-        const data = PartnersArraySchema.parse(
-          partnersRes.data.map((p: any) => ({ ...p, id: p.partner_id || p.id })),
-        );
+        const data = PartnersArraySchema.parse(partnersRes.data.map(normalizePartnerResponse));
         return data.map((d) => ({
           id: d.id,
           name: d.name,

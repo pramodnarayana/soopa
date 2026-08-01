@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 
 from config.settings import get_settings
@@ -46,6 +47,10 @@ async def get_raw_jwt(
 
 logger = logging.getLogger(__name__)
 
+# Simple TTL cache for UCP tenant ID -> IdP tenant ID mapping
+_tenant_mapping_cache: dict[str, tuple[str, float]] = {}  # {ucp_tenant_id: (idp_tenant_id, expiry_timestamp)}
+_CACHE_TTL_SECONDS = 300  # 5 minutes
+
 
 async def get_current_tenant_id(
     request: Request,
@@ -74,9 +79,23 @@ async def get_current_tenant_id(
         return str(tenant_id)
 
     # 2. Translate internal UCP ID (`ten_...`) to verify against JWT (Zitadel ID)
+    # Check cache first
+    current_time = time.time()
+    cached_entry = _tenant_mapping_cache.get(tenant_id)
+    if cached_entry:
+        idp_tenant_id, expiry = cached_entry
+        if current_time < expiry and idp_tenant_id in identity.authorized_tenants:
+            return str(tenant_id)
+
+    # Cache miss or expired, fetch from repository
     tenant_record = await tenant_repo.get_tenant(tenant_id)
-    if tenant_record and tenant_record.get("idp_tenant_id") in identity.authorized_tenants:
-        return str(tenant_id)
+    if tenant_record and tenant_record.get("idp_tenant_id"):
+        # Update cache
+        idp_tenant_id = tenant_record["idp_tenant_id"]
+        _tenant_mapping_cache[tenant_id] = (idp_tenant_id, current_time + _CACHE_TTL_SECONDS)
+
+        if idp_tenant_id in identity.authorized_tenants:
+            return str(tenant_id)
 
     if not is_platform_admin:
         raise HTTPException(

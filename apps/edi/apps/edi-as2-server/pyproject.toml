@@ -32,6 +32,11 @@ observability = { workspace = true }
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "ruff>=0.15.22",
+]
+
 [tool.deptry]
 extend_exclude = ["scripts"]
 known_first_party = ["as2_server"]

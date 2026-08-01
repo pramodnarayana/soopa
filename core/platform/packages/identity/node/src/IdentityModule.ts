@@ -59,7 +59,7 @@ export class IdentityModule implements NestModule {
     const useCaseProvider: Provider = {
       provide: AuthenticateUseCase,
       useFactory: (verifier: ZitadelJwksVerifier, repo: DrizzleTenantRepository) => {
-        return new AuthenticateUseCase(verifier, repo, { audience: options.zitadelAudience });
+        return new AuthenticateUseCase(verifier, repo);
       },
       inject: [ZitadelJwksVerifier, DrizzleTenantRepository],
     };

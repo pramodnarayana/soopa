@@ -91,8 +91,12 @@ class ShardRegistry(UcpBase):
     tenant_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("ucp.tenants.id", ondelete="CASCADE"), primary_key=True
     )
-    app_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    shard_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    app_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("ucp.apps.id", ondelete="CASCADE"), primary_key=True
+    )
+    shard_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("ucp.database_shards.id", ondelete="CASCADE"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
@@ -143,8 +147,8 @@ class ApiToken(UcpBase, TimestampMixin):
 
     __tablename__ = "api_tokens"
 
-    id: Mapped[PyUUID] = mapped_column(
-        String(128), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

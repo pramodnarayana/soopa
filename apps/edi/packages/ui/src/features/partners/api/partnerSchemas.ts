@@ -41,3 +41,10 @@ export const AS2PartnershipSchema: z.ZodType<AS2Partnership> = z.object({
 });
 
 export const AS2PartnershipsArraySchema = z.array(AS2PartnershipSchema);
+
+export function normalizePartnerResponse(raw: unknown): unknown {
+  if (typeof raw === 'object' && raw !== null && 'partner_id' in raw) {
+    return { ...(raw as any), id: (raw as any).partner_id || (raw as any).id };
+  }
+  return raw;
+}

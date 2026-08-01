@@ -1,6 +1,9 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
+
+# Reusable constrained identifier type for all ID fields
+ConstrainedId = Annotated[str, StringConstraints(min_length=1, max_length=128)]
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -26,8 +29,8 @@ class CreateAS2TradingPartnerRequest(BaseModel):
 
 class CreateAS2PartnershipRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name for the partnership")
-    local_partner_id: str = Field(..., description="ID of the local identity")
-    remote_partner_id: str = Field(..., description="ID of the remote identity")
+    local_partner_id: ConstrainedId = Field(..., description="ID of the local identity")
+    remote_partner_id: ConstrainedId = Field(..., description="ID of the remote identity")
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for basic auth"
     )
@@ -99,8 +102,8 @@ class UpdateAS2TradingPartnerRequest(BaseModel):
 
 class UpdateAS2PartnershipRequest(BaseModel):
     name: str | None = Field(None, max_length=255)
-    local_partner_id: str | None = None
-    remote_partner_id: str | None = None
+    local_partner_id: ConstrainedId | None = None
+    remote_partner_id: ConstrainedId | None = None
     credentials_vault_ref: str | None = Field(None, max_length=255)
     mdn_type: Literal["SYNC", "ASYNC", "NONE"] | None = Field(None)
     mdn_url: HttpUrl | None = Field(None)
@@ -138,8 +141,8 @@ class UpdateSFTPPartnerRequest(BaseModel):
 
 class CreateInboundRouteRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the route")
-    trading_partner_id: str | None = Field(
-        None, max_length=255, description="Trading Partner ID for internal routing"
+    trading_partner_id: ConstrainedId | None = Field(
+        None, description="Trading Partner ID for internal routing"
     )
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to match")
     isa_receiver_id: str = Field(..., max_length=255, description="ISA Receiver ID to match")
@@ -151,20 +154,20 @@ class CreateInboundRouteRequest(BaseModel):
     processing_mode: Literal["TRANSFORM", "PASSTHROUGH"] = Field(
         "TRANSFORM", description="Processing Mode"
     )
-    webhook_id: str | None = Field(
+    webhook_id: ConstrainedId | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
-    as2_partner_id: str | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
-    sftp_partner_id: str | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
+    as2_partner_id: ConstrainedId | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
+    sftp_partner_id: ConstrainedId | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
 
 
 class CreateOutboundRouteRequest(BaseModel):
-    trading_partner_id: str = Field(
-        ..., max_length=255, description="The ERP's identifier for this route"
+    trading_partner_id: ConstrainedId = Field(
+        ..., description="The ERP's identifier for this route"
     )
     name: str = Field(..., max_length=255, description="Name of the route")
-    as2_partner_id: str | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: str | None = Field(None, description="ID of SFTP Partner for routing")
+    as2_partner_id: ConstrainedId | None = Field(None, description="ID of AS2 Partner for routing")
+    sftp_partner_id: ConstrainedId | None = Field(None, description="ID of SFTP Partner for routing")
 
     @model_validator(mode="after")
     def check_exactly_one_destination(self) -> "CreateOutboundRouteRequest":
@@ -179,8 +182,8 @@ class CreateOutboundRouteRequest(BaseModel):
 
 class CreateOutboundEdiHeaderRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name of the header mapping")
-    trading_partner_id: str = Field(
-        ..., max_length=255, description="The ERP's identifier for this route"
+    trading_partner_id: ConstrainedId = Field(
+        ..., description="The ERP's identifier for this route"
     )
     isa_sender_id: str = Field(..., max_length=255, description="ISA Sender ID to map")
     isa_sender_qualifier: str | None = Field(None, max_length=2, description="ISA Sender Qualifier")
@@ -199,7 +202,7 @@ class CreateOutboundEdiHeaderRequest(BaseModel):
 
 class UpdateOutboundEdiHeaderRequest(BaseModel):
     name: str | None = Field(None, max_length=255, description="Name of the header mapping")
-    trading_partner_id: str | None = Field(None, max_length=255, description="Trading Partner ID")
+    trading_partner_id: ConstrainedId | None = Field(None, description="Trading Partner ID")
     isa_sender_id: str | None = Field(None, max_length=255, description="ISA Sender ID to match")
     isa_sender_qualifier: str | None = Field(
         None, max_length=2, description="ISA Sender Qualifier (Outbound only)"
@@ -224,7 +227,7 @@ class UpdateOutboundEdiHeaderRequest(BaseModel):
 class UpdateRouteRequest(BaseModel):
     active: bool | None = None
     name: str | None = Field(None, max_length=255, description="Name of the route")
-    trading_partner_id: str | None = Field(None, max_length=255, description="Trading Partner ID")
+    trading_partner_id: ConstrainedId | None = Field(None, description="Trading Partner ID")
     isa_sender_id: str | None = Field(None, max_length=255, description="ISA Sender ID to match")
     isa_sender_qualifier: str | None = Field(
         None, max_length=2, description="ISA Sender Qualifier (Outbound only)"
@@ -249,11 +252,11 @@ class UpdateRouteRequest(BaseModel):
     processing_mode: Literal["TRANSFORM", "PASSTHROUGH"] | None = Field(
         None, description="Processing Mode"
     )
-    webhook_id: str | None = Field(
+    webhook_id: ConstrainedId | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
-    as2_partner_id: str | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: str | None = Field(None, description="ID of SFTP Partner for routing")
+    as2_partner_id: ConstrainedId | None = Field(None, description="ID of AS2 Partner for routing")
+    sftp_partner_id: ConstrainedId | None = Field(None, description="ID of SFTP Partner for routing")
 
 
 # ---------------------------------------------------------------------------
@@ -323,10 +326,10 @@ class CertificateExportResponse(BaseModel):
 class AS2PartnershipResponse(BaseModel):
     id: str
     tenant_id: str | None
-    trading_partner_id: str | None = None
+    trading_partner_id: ConstrainedId | None = None
     name: str | None = None
-    local_partner_id: str
-    remote_partner_id: str
+    local_partner_id: ConstrainedId
+    remote_partner_id: ConstrainedId
     mdn_type: str
     mdn_url: str | None = None
     encryption_algorithm: str
@@ -346,13 +349,13 @@ class BaseRouteItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     route_id: str
-    trading_partner_id: str | None = None
+    trading_partner_id: ConstrainedId | None = None
     name: str
     destination_type: str
     destination_name: str
-    webhook_id: str | None = None
-    as2_partner_id: str | None = None
-    sftp_partner_id: str | None = None
+    webhook_id: ConstrainedId | None = None
+    as2_partner_id: ConstrainedId | None = None
+    sftp_partner_id: ConstrainedId | None = None
     status: str = Field(default="ACTIVE")
     active: bool = False
 
@@ -382,7 +385,7 @@ RouteItemResponse = Annotated[
 
 
 class OutboundMessageRequest(BaseModel):
-    trading_partner_id: str = Field(
+    trading_partner_id: ConstrainedId = Field(
         ..., description="The ERP's identifier for the routing rule (trading_partner_id)"
     )
     payload: dict[str, Any] | list[dict[str, Any]] = Field(

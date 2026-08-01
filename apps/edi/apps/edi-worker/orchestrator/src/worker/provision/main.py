@@ -4,10 +4,10 @@ import logging
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from dotenv import load_dotenv
+from worker.adapters.listen_notify_outbox_adapter import ListenNotifyOutboxAdapter
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from worker.adapters.listen_notify_outbox_adapter import ListenNotifyOutboxAdapter
 from worker.adapters.sqs_outbox import SqsOutboxAdapter
 from worker.core.service import ProvisioningWorkerService
 

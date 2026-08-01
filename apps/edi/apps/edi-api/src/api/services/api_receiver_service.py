@@ -34,7 +34,7 @@ class ApiReceiverService:
         4. Drop Outbox event for Worker to transform.
 
         Returns:
-            UUID: The generated trace_id for tracking.
+            str: The generated trace_id for tracking.
         """
         async with self.uow:
             logger.info(f"Received outbound JSON for partner: {trading_partner_id}")

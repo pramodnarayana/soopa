@@ -5,7 +5,7 @@ import os
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models import DatabaseShard, ShardRegistry, Tenant, TenantUser, User
+from database.models import App, DatabaseShard, ShardRegistry, Tenant, TenantUser, User
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select
@@ -56,10 +56,20 @@ async def seed_database() -> None:
             await session.flush()
             logger.info("Created Tenant %s (Host Company).", PLATFORM_TENANT_ID)
 
+        # Ensure App exists
+        app_result = await session.execute(select(App).filter_by(slug="platform"))
+        platform_app = app_result.scalar_one_or_none()
+
+        if not platform_app:
+            platform_app = App(slug="platform", name="Platform")
+            session.add(platform_app)
+            await session.flush()
+            logger.info("Created platform App.")
+
         # Ensure ShardRegistry exists
         ts_result = await session.execute(
             select(ShardRegistry).filter_by(
-                tenant_id=PLATFORM_TENANT_ID, app_id="platform", shard_id=shard.id
+                tenant_id=PLATFORM_TENANT_ID, app_id=platform_app.id, shard_id=shard.id
             )
         )
         tenant_shard = ts_result.scalar_one_or_none()
@@ -67,7 +77,7 @@ async def seed_database() -> None:
         if not tenant_shard:
             tenant_shard = ShardRegistry(
                 tenant_id=PLATFORM_TENANT_ID,
-                app_id="platform",
+                app_id=platform_app.id,
                 shard_id=shard.id,
             )
             session.add(tenant_shard)
