@@ -188,7 +188,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 entity = res.scalars().first()
 
                 if not entity:
-                    raise TransientProvisioningError(
+                    raise PermanentProvisioningError(
                         f"{global_model.__name__} {entity_id} not found in global DB for tenant {tenant_id}"
                     )
 
@@ -197,6 +197,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 logger.info(
                     f"Successfully replicated {global_model.__name__} {entity_id} to tenant {tenant_id}"
                 )
+            except PermanentProvisioningError:
+                await tenant_session.rollback()
+                raise
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(

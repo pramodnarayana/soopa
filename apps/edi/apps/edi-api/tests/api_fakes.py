@@ -31,7 +31,7 @@ class FakeGlobalStore:
 
     async def create_as2_identity(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd
-    ) -> uuid.UUID:
+    ) -> str:
         for p in self.partners:
             if p["tenant_id"] == tenant_id and p["cmd"].as2_id == cmd.as2_id:
                 from sqlalchemy.exc import IntegrityError
@@ -42,25 +42,25 @@ class FakeGlobalStore:
         return p_id
 
     async def update_as2_identity(
-        self, tenant_id: str, partner_id: uuid.UUID, cmd: UpdateAS2TradingPartnerCmd
+        self, tenant_id: str, partner_id: str, cmd: UpdateAS2TradingPartnerCmd
     ) -> None:
         for p in self.partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
                 p["updated_name"] = getattr(cmd, "name", p["cmd"].name)
                 break
 
-    async def delete_as2_identity(self, tenant_id: str, partner_id: uuid.UUID) -> None:
+    async def delete_as2_identity(self, tenant_id: str, partner_id: str) -> None:
         self.partners = [
             p for p in self.partners if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
         ]
 
-    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
+    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
         p_id = str(uuid.uuid4())
         self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
     async def update_sftp_partner(
-        self, tenant_id: str, partner_id: uuid.UUID, cmd: UpdateSFTPPartnerCmd
+        self, tenant_id: str, partner_id: str, cmd: UpdateSFTPPartnerCmd
     ) -> bool:
         for p in self.sftp_partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
@@ -72,7 +72,7 @@ class FakeGlobalStore:
                 return True
         return False
 
-    async def delete_sftp_partner(self, tenant_id: str, partner_id: uuid.UUID) -> None:
+    async def delete_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
         self.sftp_partners = [
             p
             for p in self.sftp_partners
@@ -81,13 +81,13 @@ class FakeGlobalStore:
 
     async def create_as2_partnership(
         self, tenant_id: str, cmd: CreateAS2PartnershipCmd
-    ) -> uuid.UUID:
+    ) -> str:
         p_id = str(uuid.uuid4())
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
     async def update_as2_partnership(
-        self, tenant_id: str, partnership_id: uuid.UUID, cmd: UpdateAS2PartnershipCmd
+        self, tenant_id: str, partnership_id: str, cmd: UpdateAS2PartnershipCmd
     ) -> bool:
         for p in self.partnerships:
             if p["id"] == partnership_id and p["tenant_id"] == tenant_id:
@@ -99,14 +99,14 @@ class FakeGlobalStore:
                 return True
         return False
 
-    async def delete_as2_partnership(self, tenant_id: str, partnership_id: uuid.UUID) -> None:
+    async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         self.partnerships = [
             p
             for p in self.partnerships
             if not (p["id"] == partnership_id and p["tenant_id"] == tenant_id)
         ]
 
-    async def get_as2_partner(self, tenant_id: str, partner_id: uuid.UUID) -> Any:
+    async def get_as2_partner(self, tenant_id: str, partner_id: str) -> Any:
         for p in self.partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
                 # Mock an AS2Partner DB object
@@ -127,7 +127,7 @@ class FakeGlobalStore:
                 return FakePartner()
         return None
 
-    async def get_as2_partnership(self, tenant_id: str, partnership_id: uuid.UUID) -> Any:
+    async def get_as2_partnership(self, tenant_id: str, partnership_id: str) -> Any:
         for p in self.partnerships:
             if p["id"] == partnership_id and p["tenant_id"] == tenant_id:
 
@@ -175,8 +175,8 @@ class FakeGlobalStore:
     async def publish_outbox_event(
         self,
         event: Any,
-        idempotency_key: uuid.UUID | None = None,
-    ) -> uuid.UUID:
+        idempotency_key: str | None = None,
+    ) -> str:
         key = idempotency_key or uuid.uuid4()
         self.outbox_events.append(
             {
@@ -189,7 +189,7 @@ class FakeGlobalStore:
         return key
 
     async def update_partner_status(
-        self, tenant_id: str, partner_id: uuid.UUID, status: str
+        self, tenant_id: str, partner_id: str, status: str
     ) -> None:
         for p in self.partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
@@ -219,8 +219,8 @@ class FakeGlobalStore:
         return self.partnerships
 
     async def get_as2_partners_by_ids(
-        self, tenant_id: str, ids: list[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+        self, tenant_id: str, ids: list[str]
+    ) -> dict[str, str]:
         return {
             p["id"]: p["cmd"].name
             for p in self.partners
@@ -228,8 +228,8 @@ class FakeGlobalStore:
         }
 
     async def get_sftp_partners_by_ids(
-        self, tenant_id: str, ids: list[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+        self, tenant_id: str, ids: list[str]
+    ) -> dict[str, str]:
         return {
             p["id"]: p["cmd"].name
             for p in self.sftp_partners
@@ -237,22 +237,22 @@ class FakeGlobalStore:
         }
 
     async def get_webhooks_by_ids(
-        self, tenant_id: str, ids: list[uuid.UUID]
-    ) -> dict[uuid.UUID, str]:
+        self, tenant_id: str, ids: list[str]
+    ) -> dict[str, str]:
         return {
             p["id"]: p["cmd"].name
             for p in self.webhooks
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
-    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> uuid.UUID:
+    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> str:
         r_id = str(uuid.uuid4())
         if not hasattr(self, "inbound_routes"):
             self.inbound_routes = []
         self.inbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
-    async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
+    async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> str:
         r_id = str(uuid.uuid4())
         if not hasattr(self, "outbound_routes"):
             self.outbound_routes = []
@@ -260,19 +260,19 @@ class FakeGlobalStore:
         return r_id
 
     async def update_inbound_route(
-        self, tenant_id: str, route_id: uuid.UUID, cmd: UpdateInboundRouteCmd
+        self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
     ) -> bool:
         return True
 
-    async def delete_inbound_route(self, tenant_id: str, route_id: uuid.UUID) -> bool:
+    async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
         return True
 
     async def update_outbound_route(
-        self, tenant_id: str, route_id: uuid.UUID, cmd: UpdateOutboundRouteCmd
+        self, tenant_id: str, route_id: str, cmd: UpdateOutboundRouteCmd
     ) -> bool:
         return True
 
-    async def delete_outbound_route(self, tenant_id: str, route_id: uuid.UUID) -> bool:
+    async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
         return True
 
     async def list_inbound_routes(self, tenant_id: str) -> list[Any]:
@@ -322,13 +322,13 @@ class FakeGlobalStore:
             if p["tenant_id"] == tenant_id
         ]
 
-    async def get_sftp_partner(self, tenant_id: str, partner_id: uuid.UUID) -> Any:
+    async def get_sftp_partner(self, tenant_id: str, partner_id: str) -> Any:
         for p in self.sftp_partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
                 return self._to_mock_sftp_partner(p)
         return None
 
-    async def get_webhook(self, tenant_id: str, partner_id: uuid.UUID) -> Any:
+    async def get_webhook(self, tenant_id: str, partner_id: str) -> Any:
         for p in self.webhooks:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
                 return self._to_mock_webhook(p)
@@ -360,12 +360,12 @@ class FakeTenantStore:
         self.sftp_partners = []
         self.webhooks = []
 
-    async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> uuid.UUID:
+    async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> str:
         r_id = str(uuid.uuid4())
         self.inbound_routes.append(FakeRoute(r_id, "1", cmd))
         return r_id
 
-    async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
+    async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> str:
         r_id = str(uuid.uuid4())
         self.outbound_routes.append(FakeRoute(r_id, "1", cmd))
         return r_id
@@ -373,12 +373,12 @@ class FakeTenantStore:
     async def get_all_routes(self) -> dict[str, list[Any]]:
         return {"inbound": self.inbound_routes, "outbound": self.outbound_routes}
 
-    async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
+    async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> str:
         p_id = str(uuid.uuid4())
         self.sftp_partners.append({"id": p_id, "cmd": cmd})
         return p_id
 
-    async def get_sftp_partner(self, partner_id: uuid.UUID) -> Any:
+    async def get_sftp_partner(self, partner_id: str) -> Any:
         for p in self.sftp_partners:
             if p["id"] == partner_id:
 
@@ -400,13 +400,13 @@ class FakeTenantStore:
     async def list_sftp_partners(self) -> Sequence[Any]:
         return self.sftp_partners
 
-    async def get_sftp_partners_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    async def get_sftp_partners_by_ids(self, ids: list[str]) -> dict[str, str]:
         return {p["id"]: p["cmd"].name for p in self.sftp_partners if p["id"] in ids}
 
     async def list_webhooks(self) -> Sequence[Any]:
         return self.webhooks
 
-    async def get_webhooks_by_ids(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    async def get_webhooks_by_ids(self, ids: list[str]) -> dict[str, str]:
         return {p["id"]: p["cmd"].name for p in self.webhooks if p["id"] in ids}
 
 

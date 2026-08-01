@@ -1,9 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createId } from '@paralleldrive/cuid2';
 import type { DbClient } from '@soopa/database';
-import { apiKeys, controlPlaneOutbox, eq } from '@soopa/database';
+import { apiKeys, controlPlaneOutbox, eq, generateId } from '@soopa/database';
 import { ApiKey } from '../../../domain/models/api-key.model.js';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import { IApiKeyRepository } from '../../../ports/outbound/api-key.repository.js';
 
 @Injectable()
@@ -54,7 +53,7 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
       // Process Outbox Events
       for (const event of apiKey.domainEvents) {
         await tx.insert(controlPlaneOutbox).values({
-          id: createId(),
+          id: generateId('evt'),
           idempotencyKey: `${event.eventName}_${apiKey.id}_${event.occurredOn.getTime()}`,
           tenantId: apiKey.tenantId,
           eventType: event.eventName,

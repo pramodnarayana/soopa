@@ -1,4 +1,6 @@
 import logging
+import uuid
+import hashlib
 
 from domain.events import (
     ProvisioningEvent,
@@ -36,7 +38,8 @@ class AS2PartnerService:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_as2_partner_created,
                 resource_id=str(partner_id),
-            )
+            ),
+            idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{partner_id}:{EdiEventType.edi_as2_partner_created.value}"))
         )
 
         return PartnerEntity(
@@ -57,12 +60,14 @@ class AS2PartnerService:
         if not updated_partner:
             raise ValueError("Partner not found after update")
 
+        cmd_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_as2_partner_updated,
                 resource_id=str(partner_id),
-            )
+            ),
+            idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{partner_id}:{EdiEventType.edi_as2_partner_updated.value}:{cmd_hash}"))
         )
 
         return PartnerEntity(
@@ -81,7 +86,8 @@ class AS2PartnerService:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_as2_partner_deleted,
                 resource_id=str(partner_id),
-            )
+            ),
+            idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{partner_id}:{EdiEventType.edi_as2_partner_deleted.value}"))
         )
 
     async def rotate_certificates(
@@ -100,12 +106,14 @@ class AS2PartnerService:
         if not updated_partner:
             raise ValueError("Partner not found after certificate rotation")
 
+        cmd_hash = hashlib.sha256(f"{new_public_cert}:{new_private_key_vault_ref}".encode()).hexdigest()
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_as2_partner_updated,
                 resource_id=str(partner_id),
-            )
+            ),
+            idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{partner_id}:{EdiEventType.edi_as2_partner_updated.value}:{cmd_hash}"))
         )
 
         return PartnerEntity(

@@ -14,7 +14,11 @@
       "description": "The tenant ID this event belongs to"
     },
     "eventType": {
-      "$ref": "event-type.json"
+      "anyOf": [
+        { "$ref": "ucp-events.json" },
+        { "$ref": "edi-events.json" },
+        { "$ref": "webhook-events.json" }
+      ]
     },
     "payload": {
       "type": "object",

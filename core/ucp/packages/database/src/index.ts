@@ -1,12 +1,8 @@
 export { and, eq, lte, sql } from 'drizzle-orm';
 export * from './constants.js';
 export * from './schema/index.js';
+export { generateId } from './utils/generate-id.js';
 
-import { createId } from '@paralleldrive/cuid2';
-
-export function generateId(prefix: string): string {
-  return `${prefix}_${createId()}`;
-}
 
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
@@ -19,3 +15,4 @@ export function createDbClient(connectionString: string) {
 }
 
 export type DbClient = ReturnType<typeof createDbClient>['db'];
+export type DbTransaction = Parameters<Parameters<DbClient['transaction']>[0]>[0];

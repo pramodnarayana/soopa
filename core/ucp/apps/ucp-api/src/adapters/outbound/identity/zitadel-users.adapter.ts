@@ -50,8 +50,9 @@ export class ZitadelUsersAdapter
           },
           email: {
             email: email,
-            isEmailVerified: false,
+            isEmailVerified: true,
           },
+          initialPassword: this.defaultUserPassword,
         }),
       });
 

@@ -14,8 +14,33 @@ export class Webhook extends AggregateRoot {
     super();
   }
 
+  static create(
+    id: string,
+    tenantId: string,
+    name: string,
+    url: string,
+    authHeaderVaultRef: string | null,
+  ): Webhook {
+    const webhook = new Webhook(
+      id,
+      tenantId,
+      name,
+      url,
+      authHeaderVaultRef,
+      true,
+      new Date(),
+      new Date(),
+    );
+    webhook.addDomainEvent({
+      eventName: 'webhook.created',
+      occurredOn: new Date(),
+      payload: { resource_id: id },
+    });
+    return webhook;
+  }
+
   update(props: { name?: string; url?: string; active?: boolean }): Webhook {
-    return new Webhook(
+    const webhook = new Webhook(
       this.id,
       this.tenantId,
       props.name !== undefined ? props.name : this.name,
@@ -25,5 +50,19 @@ export class Webhook extends AggregateRoot {
       this.createdAt,
       new Date(),
     );
+    webhook.addDomainEvent({
+      eventName: 'webhook.updated',
+      occurredOn: new Date(),
+      payload: { resource_id: this.id },
+    });
+    return webhook;
+  }
+
+  markDeleted(): void {
+    this.addDomainEvent({
+      eventName: 'webhook.deleted',
+      occurredOn: new Date(),
+      payload: { resource_id: this.id },
+    });
   }
 }

@@ -36,12 +36,12 @@ class FakeTenantRepository implements TenantRepository {
 describe('AuthenticateUseCase', () => {
   it('should provision a new user and tenant if user does not exist', async () => {
     const verifier = new FakeTokenVerifier();
-    verifier.claims = { sub: 'new-user', email: 'test@example.com', name: 'Test User' };
+    verifier.claims = { sub: 'new-user', email: 'test@example.com', name: 'Test User', tenant_id: 'org123' };
 
     const repo = new FakeTenantRepository();
     repo.provisioned = { userId: 'u1', tenantId: 't1' };
 
-    const useCase = new AuthenticateUseCase(verifier, repo);
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     const result = await useCase.execute('valid');
 
     expect(result).toEqual({
@@ -49,7 +49,9 @@ describe('AuthenticateUseCase', () => {
       tenantId: 't1',
       email: 'test@example.com',
       name: 'Test User',
-      roles: ['admin'],
+      roles: [],
+      rawRoles: [],
+      isPlatformAdmin: false,
     });
   });
 
@@ -59,6 +61,7 @@ describe('AuthenticateUseCase', () => {
       sub: 'existing-user',
       email: 'existing@example.com',
       name: 'Existing User',
+      tenant_id: 'org123',
     };
 
     const repo = new FakeTenantRepository();
@@ -69,7 +72,7 @@ describe('AuthenticateUseCase', () => {
     } satisfies UserData;
     repo.mappings['u2'] = 't2';
 
-    const useCase = new AuthenticateUseCase(verifier, repo);
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     const result = await useCase.execute('valid');
 
     expect(result).toEqual({
@@ -77,7 +80,9 @@ describe('AuthenticateUseCase', () => {
       tenantId: 't2',
       email: 'existing@example.com',
       name: 'Existing User DB',
-      roles: ['admin'],
+      roles: [],
+      rawRoles: [],
+      isPlatformAdmin: false,
     });
   });
 
@@ -87,6 +92,7 @@ describe('AuthenticateUseCase', () => {
       sub: 'existing-user',
       email: 'no-tenant@example.com',
       name: 'Existing User',
+      tenant_id: 'org123',
     };
 
     const repo = new FakeTenantRepository();
@@ -97,18 +103,18 @@ describe('AuthenticateUseCase', () => {
     } satisfies UserData;
     // No mapping set
 
-    const useCase = new AuthenticateUseCase(verifier, repo);
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     await expect(useCase.execute('valid')).rejects.toThrow(TenantMappingDomainError);
   });
 
   it('should fall back to sub if email is missing', async () => {
     const verifier = new FakeTokenVerifier();
-    verifier.claims = { sub: 'fallback-sub' };
+    verifier.claims = { sub: 'fallback-sub', tenant_id: 'org123' };
 
     const repo = new FakeTenantRepository();
     repo.provisioned = { userId: 'u4', tenantId: 't4' };
 
-    const useCase = new AuthenticateUseCase(verifier, repo);
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     const result = await useCase.execute('valid');
 
     expect(result.email).toBe('fallback-sub');

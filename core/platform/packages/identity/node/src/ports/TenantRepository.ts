@@ -9,7 +9,7 @@ export interface TenantRepository {
   provisionUserAndTenant(
     email: string,
     name: string,
-    zitadelOrgId?: string,
+    idpTenantId?: string,
   ): Promise<{ userId: string; tenantId: string }>;
   getTenantMappingForUser(userId: string): Promise<string | null>;
 }

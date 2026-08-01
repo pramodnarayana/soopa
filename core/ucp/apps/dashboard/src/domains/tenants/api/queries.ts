@@ -17,3 +17,11 @@ export const useGetTenants = () => {
     queryFn: () => apiClient.get<Tenant[]>('/tenants'),
   });
 };
+
+export const useGetTenant = (tenantId?: string) => {
+  return useQuery({
+    queryKey: ['tenant', tenantId],
+    queryFn: () => apiClient.get<Tenant>(`/tenants/${tenantId}`),
+    enabled: !!tenantId,
+  });
+};

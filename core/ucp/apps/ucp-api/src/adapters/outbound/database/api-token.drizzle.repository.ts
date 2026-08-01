@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
 import { and, apiTokens, eq } from '@soopa/database';
 import { ApiToken } from '../../../domain/models/api-token.model.js';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import type { IApiTokenRepository } from '../../../ports/outbound/api-token.repository.js';
 
 @Injectable()
@@ -56,9 +56,13 @@ export class ApiTokenDrizzleRepository implements IApiTokenRepository {
     return this.mapToDomain(row);
   }
 
-  async findByClientId(tenantId: string, clientId: string): Promise<ApiToken | null> {
+  async findByClientId(
+    tenantId: string,
+    clientId: string,
+  ): Promise<ApiToken | null> {
     const row = await this.db.query.apiTokens.findFirst({
-      where: (t, { eq, and }) => and(eq(t.clientId, clientId), eq(t.tenantId, tenantId)),
+      where: (t, { eq, and }) =>
+        and(eq(t.clientId, clientId), eq(t.tenantId, tenantId)),
     });
     if (!row) return null;
     return this.mapToDomain(row);

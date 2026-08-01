@@ -1,11 +1,13 @@
 import {
   controlPlaneOutbox,
   createDbClient,
-  tenantShards,
-  tenantSubscriptions,
+  generateId,
+  shardRegistry,
+  appSubscriptions,
   tenants,
   tenantUsers,
   users,
+  sql,
 } from '@soopa/database';
 import { v4 as uuidv4 } from 'uuid';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -24,13 +26,7 @@ describe('DrizzleTenantRepository', () => {
 
   beforeEach(async () => {
     // Clear out data to keep tests isolated.
-    // We only clear tenantUsers, users, tenants to avoid deleting other table data
-    await db.delete(controlPlaneOutbox);
-    await db.delete(tenantSubscriptions);
-    await db.delete(tenantUsers);
-    await db.delete(tenantShards);
-    await db.delete(tenants);
-    await db.delete(users);
+    await db.execute(sql`TRUNCATE TABLE ucp.tenants, ucp.users CASCADE`);
   });
 
   afterAll(async () => {
@@ -60,7 +56,7 @@ describe('DrizzleTenantRepository', () => {
 
   it('should handle getTenantMappingForUser for user with no mapping', async () => {
     const email = `test-${uuidv4()}@example.com`;
-    const [newUser] = await db.insert(users).values({ email, name: 'No Mapping User' }).returning();
+    const [newUser] = await db.insert(users).values({ id: generateId('usr'), email, name: 'No Mapping User' }).returning();
 
     const tenantId = await repo.getTenantMappingForUser(newUser.id);
     expect(tenantId).toBeNull();

@@ -43,7 +43,7 @@ describe('AuthGuard', () => {
       tenantId: 't1',
       email: 'test@test.com',
       name: 'Test',
-      roles: [],
+      roles: [], rawRoles: [], isPlatformAdmin: false,
     });
 
     const req = { headers: { authorization: 'Bearer valid-token' } };

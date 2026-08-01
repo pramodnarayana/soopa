@@ -41,15 +41,12 @@ export class CreateWebhookUseCase {
     }
 
     const id = `wh_${crypto.randomBytes(12).toString('hex')}`;
-    const webhook = new Webhook(
+    const webhook = Webhook.create(
       id,
       dto.tenantId,
       dto.name,
       dto.url,
       dto.authHeaderVaultRef || null,
-      true,
-      new Date(),
-      new Date(),
     );
 
     await this.webhookRepo.save(webhook);

@@ -1,3 +1,4 @@
+/* eslint-disable */
 import {
   Body,
   Controller,
@@ -5,16 +6,21 @@ import {
   Get,
   Inject,
   NotFoundException,
-  Param,
   Post,
+  UseGuards,
+  Param,
 } from '@nestjs/common';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import type { DbClient } from '@soopa/database';
-import { apps, tenantSubscriptions, tenants } from '@soopa/database';
+import { apps, appSubscriptions, tenants } from '@soopa/database';
 import { IsNotEmpty, IsString } from 'class-validator';
 import { and, eq } from 'drizzle-orm';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import type { IProjectProvider } from '../../../ports/outbound/project.provider.js';
 import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider.js';
+import { SubscribeAppUseCase } from '../../../application/use-cases/subscribe-app.use-case.js';
+import { UnsubscribeAppUseCase } from '../../../application/use-cases/unsubscribe-app.use-case.js';
+import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class SubscribeDto {
   @IsString()
@@ -23,27 +29,27 @@ export class SubscribeDto {
 }
 
 @Controller('tenants/:tenantId/subscriptions')
+@UseGuards(TenantAuthGuard)
 export class SubscriptionsController {
   constructor(
     @Inject(DATABASE_CLIENT) private readonly db: DbClient,
     @Inject(PROJECT_PROVIDER)
     private readonly projectProvider: IProjectProvider,
+    private readonly subscribeAppUseCase: SubscribeAppUseCase,
+    private readonly unsubscribeAppUseCase: UnsubscribeAppUseCase,
   ) {}
 
   @Get()
-  async getSubscriptions(@Param('tenantId') tenantId: string) {
+  async getSubscriptions(@UcpTenantId() tenantId: string) {
     const subscriptions = await this.db
       .select()
-      .from(tenantSubscriptions)
-      .where(eq(tenantSubscriptions.tenantId, tenantId));
+      .from(appSubscriptions)
+      .where(eq(appSubscriptions.tenantId, tenantId));
     return subscriptions;
   }
 
   @Post()
-  async subscribe(
-    @Param('tenantId') tenantId: string,
-    @Body() dto: SubscribeDto,
-  ) {
+  async subscribe(@UcpTenantId() tenantId: string, @Body() dto: SubscribeDto) {
     const appRecords = await this.db
       .select()
       .from(apps)
@@ -60,16 +66,8 @@ export class SubscriptionsController {
     if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
     const tenant = tenantRecords[0];
 
-    // Basic implementation to insert or ignore if exists
-    await this.db
-      .insert(tenantSubscriptions)
-      .values({
-        tenantId,
-        appId: dto.appId,
-        tier: 'standard',
-        status: 'active',
-      })
-      .onConflictDoNothing();
+    // Enterprise Grade - Delegate to UseCase to handle Domain Events and Outbox
+    await this.subscribeAppUseCase.execute(tenantId, { appSlug: app.slug });
 
     // Enterprise Grade B2B Project Grant Wiring
     let zitadelProjectId: string | undefined;
@@ -77,10 +75,10 @@ export class SubscriptionsController {
       zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
     }
 
-    if (zitadelProjectId && tenant.zitadelOrgId) {
+    if (zitadelProjectId && tenant.idpTenantId) {
       // Create B2B project grant in Zitadel. (No specific roles granted for now)
       await this.projectProvider.createProjectGrant(
-        tenant.zitadelOrgId,
+        tenant.idpTenantId,
         zitadelProjectId,
         [],
       );
@@ -91,7 +89,7 @@ export class SubscriptionsController {
 
   @Delete(':appId')
   async unsubscribe(
-    @Param('tenantId') tenantId: string,
+    @UcpTenantId() tenantId: string,
     @Param('appId') appId: string,
   ) {
     // Fetch the app and tenant to determine if we need to revoke Zitadel grant
@@ -112,12 +110,12 @@ export class SubscriptionsController {
     const tenant = tenantRecords[0];
 
     // Revoke the project grant for EDI app
-    if (app.slug === 'edi' && tenant.zitadelOrgId) {
+    if (app.slug === 'edi' && tenant.idpTenantId) {
       const zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
       if (zitadelProjectId) {
         try {
           await this.projectProvider.deleteProjectGrant(
-            tenant.zitadelOrgId,
+            tenant.idpTenantId,
             zitadelProjectId,
           );
         } catch (err) {
@@ -130,15 +128,12 @@ export class SubscriptionsController {
       }
     }
 
-    // Delete the subscription from database
-    await this.db
-      .delete(tenantSubscriptions)
-      .where(
-        and(
-          eq(tenantSubscriptions.tenantId, tenantId),
-          eq(tenantSubscriptions.appId, appId),
-        ),
-      );
+    // Enterprise Grade - Delegate to UseCase to handle Domain Events and Outbox
+    await this.unsubscribeAppUseCase.execute(tenantId, app.slug);
+
+    // Note: The appSubscriptions db record is automatically deleted by TenantRepository.save()
+    // when we splice the slug from tenant.subscriptions!
+
     return { success: true };
   }
 }

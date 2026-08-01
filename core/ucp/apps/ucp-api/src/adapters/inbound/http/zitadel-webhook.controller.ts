@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Headers,
   HttpCode,
   HttpStatus,
   Inject,
@@ -9,7 +10,8 @@ import {
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { createId } from '@paralleldrive/cuid2';
+import type { FastifyRequest } from 'fastify';
 import type { IUserRepository } from '../../../ports/outbound/user.repository.js';
 import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
 
@@ -41,7 +43,7 @@ export class ZitadelWebhookController {
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
     @Body() payload: ZitadelWebhookPayload,
-    @Req() request: Request,
+    @Req() request: FastifyRequest,
   ) {
     // Verify webhook authenticity
     // TODO: Implement proper webhook signature verification based on Zitadel's webhook security mechanism
@@ -89,8 +91,16 @@ export class ZitadelWebhookController {
           );
           return { status: 'skipped' };
         }
+
+        // Find existing user by Zitadel ID or email
+        let existingUser = await this.userRepo.findByIdpUserId(payload.userId);
+        if (!existingUser) {
+          existingUser = await this.userRepo.findByEmail(payload.email);
+        }
+
         await this.userRepo.upsertUser({
-          id: payload.userId,
+          id: existingUser?.id || createId(),
+          idpUserId: payload.userId,
           email: payload.email,
           name: `${payload.firstName} ${payload.lastName || ''}`.trim(),
         });
@@ -106,9 +116,20 @@ export class ZitadelWebhookController {
           );
           return { status: 'skipped' };
         }
+
+        const existingUser = await this.userRepo.findByIdpUserId(
+          payload.userId,
+        );
+        if (!existingUser) {
+          this.logger.warn(
+            `Skipping ${payload.eventType} for user ${payload.userId}: User not found locally`,
+          );
+          return { status: 'skipped' };
+        }
+
         await this.userRepo.upsertTenantUser({
           tenantId: payload.tenantId,
-          userId: payload.userId,
+          userId: existingUser.id,
           role: payload.role,
         });
       }
@@ -120,7 +141,13 @@ export class ZitadelWebhookController {
           );
           return { status: 'skipped' };
         }
-        await this.userRepo.removeTenantUser(payload.tenantId, payload.userId);
+
+        const existingUser = await this.userRepo.findByIdpUserId(
+          payload.userId,
+        );
+        if (!existingUser) return { status: 'skipped' };
+
+        await this.userRepo.removeTenantUser(payload.tenantId, existingUser.id);
       }
 
       // If user is completely removed, we might want to clean up tenantUsers then the user, but for now we rely on membership.removed

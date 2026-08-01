@@ -1,4 +1,6 @@
 import logging
+import uuid
+import hashlib
 
 from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
@@ -32,7 +34,8 @@ class InboundRouteService:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_inbound_route_created,
                 resource_id=str(route_id),
-            )
+            ),
+            idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_created.value}"))
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.INBOUND)
 
@@ -41,12 +44,14 @@ class InboundRouteService:
     ) -> bool:
         res = await self.uow.inbound_routes.update_inbound_route(tenant_id, route_id, cmd)
         if res:
+            cmd_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
             await self.uow.control_plane_outbox.publish_outbox_event(
                 ProvisioningEvent(
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_inbound_route_updated,
                     resource_id=str(route_id),
-                )
+                ),
+                idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_updated.value}:{cmd_hash}"))
             )
         return res
 
@@ -58,7 +63,8 @@ class InboundRouteService:
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_inbound_route_deleted,
                     resource_id=str(route_id),
-                )
+                ),
+                idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_deleted.value}"))
             )
         return res
 

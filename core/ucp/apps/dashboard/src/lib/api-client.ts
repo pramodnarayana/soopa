@@ -35,7 +35,7 @@ export const apiClient = {
     }
 
     const normalizedHeaders = new Headers(headers);
-    if (!normalizedHeaders.has('Content-Type')) {
+    if (!normalizedHeaders.has('Content-Type') && customConfig.body !== undefined) {
       normalizedHeaders.set('Content-Type', 'application/json');
     }
     if (globalToken && !normalizedHeaders.has('Authorization')) {

@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
 import { tenantUsers, users } from '@soopa/database';
-import { and, eq } from 'drizzle-orm';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { and, eq, inArray } from 'drizzle-orm';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import { IUserRepository } from '../../../ports/outbound/user.repository.js';
 
 @Injectable()
@@ -11,6 +11,7 @@ export class UserDrizzleRepository implements IUserRepository {
 
   async upsertUser(user: {
     id: string;
+    idpUserId?: string;
     email?: string;
     name: string;
   }): Promise<void> {
@@ -22,6 +23,7 @@ export class UserDrizzleRepository implements IUserRepository {
       .insert(users)
       .values({
         id: user.id,
+        idpUserId: user.idpUserId || null,
         email: user.email,
         name: user.name,
         updatedAt: new Date(),
@@ -29,11 +31,30 @@ export class UserDrizzleRepository implements IUserRepository {
       .onConflictDoUpdate({
         target: users.id,
         set: {
+          ...(user.idpUserId ? { idpUserId: user.idpUserId } : {}),
           email: user.email,
           name: user.name,
           updatedAt: new Date(),
         },
       });
+  }
+
+  async findByIdpUserId(idpUserId: string) {
+    const results = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.idpUserId, idpUserId))
+      .limit(1);
+    return results[0] || null;
+  }
+
+  async findByEmail(email: string) {
+    const results = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    return results[0] || null;
   }
 
   async upsertTenantUser(tenantUser: {
@@ -64,9 +85,29 @@ export class UserDrizzleRepository implements IUserRepository {
       );
   }
 
+  async deleteOrphanedUsers(userIds: string[]): Promise<void> {
+    if (userIds.length === 0) return;
+
+    await this.db.transaction(async (tx) => {
+      // Find which of these users still have tenant associations
+      const stillAssigned = await tx
+        .select({ userId: tenantUsers.userId })
+        .from(tenantUsers)
+        .where(inArray(tenantUsers.userId, userIds));
+
+      const assignedIds = new Set(stillAssigned.map((u) => u.userId));
+      const orphanedIds = userIds.filter((id) => !assignedIds.has(id));
+
+      if (orphanedIds.length > 0) {
+        await tx.delete(users).where(inArray(users.id, orphanedIds));
+      }
+    });
+  }
+
   async findUsersByTenant(tenantId: string): Promise<
     {
       id: string;
+      idpUserId: string | null;
       email: string;
       name: string;
       role: string;
@@ -76,6 +117,7 @@ export class UserDrizzleRepository implements IUserRepository {
     const results = await this.db
       .select({
         id: users.id,
+        idpUserId: users.idpUserId,
         email: users.email,
         name: users.name,
         role: tenantUsers.role,

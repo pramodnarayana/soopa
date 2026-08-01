@@ -6,7 +6,7 @@ export class HttpDashboardRepository implements IDashboardRepository {
 
   async getDashboardData(): Promise<DashboardData> {
     // The tenant proxy is mounted at /api/v1/tenants/:tenantId/edi
-    const url = `/v1/tenants/${this.tenantId}/edi/dashboard`;
+    const url = `/api/v1/tenants/${this.tenantId}/edi/dashboard`;
     return apiClient.get<DashboardData>(url);
   }
 }

@@ -57,12 +57,13 @@ async def e2e_context():
             await asyncio.sleep(1)
         except Exception as e:
             logging.warning(f"Could not setup queue: {e}")
+            pytest.skip("LocalStack is not available. Skipping integration test.")
 
     # Use a dedicated test queue so the integration test is isolated from production traffic.
     # Pass it to the handler constructor — no monkey-patching needed.
     worker_service = ProvisioningWorkerService(tenant_adapter, outbox_adapter, replication_adapter)
 
-    test_partner_id = uuid.uuid4()
+    test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
 
     from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant

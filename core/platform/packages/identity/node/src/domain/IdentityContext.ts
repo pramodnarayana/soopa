@@ -3,10 +3,11 @@ export interface TokenClaims {
   email?: string;
   preferred_username?: string;
   name?: string;
-  // Zitadel Organization ID (if present)
-  'urn:zitadel:iam:org:id'?: string;
+  // Identity Provider's Tenant/Org ID
+  idpTenantId?: string;
   // Fallback for custom tenant implementations
   tenant_id?: string;
+  [key: string]: unknown;
 }
 
 export interface IdentityContext {
@@ -15,4 +16,6 @@ export interface IdentityContext {
   email: string;
   name: string;
   roles: string[];
+  rawRoles: string[];
+  isPlatformAdmin: boolean;
 }

@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ucp-engine
-    env_file: .env
+    env_file: ../../.env
     ports:
       - "3001:3001"
       - "3002:3002"

@@ -28,13 +28,19 @@ export class GenerateApiTokenUseCase {
     @Inject(TENANT_REPOSITORY) private readonly tenantRepo: ITenantRepository,
   ) {}
 
-  async execute(dto: GenerateApiTokenDto): Promise<{ apiToken: ApiToken; rawSecret: string }> {
+  async execute(
+    dto: GenerateApiTokenDto,
+  ): Promise<{ apiToken: ApiToken; rawSecret: string }> {
     const tenant = await this.tenantRepo.findById(dto.tenantId);
     if (!tenant) {
       throw new NotFoundException(`Tenant with id ${dto.tenantId} not found`);
     }
 
-    const { apiToken, rawSecret } = ApiToken.generate(dto.tenantId, dto.name, dto.expiresAt);
+    const { apiToken, rawSecret } = ApiToken.generate(
+      dto.tenantId,
+      dto.name,
+      dto.expiresAt,
+    );
 
     await this.apiTokenRepo.save(apiToken);
 

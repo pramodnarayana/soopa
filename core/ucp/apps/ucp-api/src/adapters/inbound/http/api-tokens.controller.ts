@@ -10,6 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { GenerateApiTokenUseCase } from '../../../application/use-cases/generate-api-token.use-case.js';
 import type { IApiTokenRepository } from '../../../ports/outbound/api-token.repository.js';
@@ -42,7 +43,10 @@ export class ApiTokensController {
   ) {}
 
   @Post()
-  async generate(@Param('tenantId') tenantId: string, @Body() dto: GenerateApiTokenRequestDto) {
+  async generate(
+    @UcpTenantId() tenantId: string,
+    @Body() dto: GenerateApiTokenRequestDto,
+  ) {
     const result = await this.generateApiTokenUseCase.execute({
       tenantId,
       name: dto.name,
@@ -53,26 +57,30 @@ export class ApiTokensController {
       client_id: result.apiToken.clientId,
       name: result.apiToken.name,
       active: result.apiToken.active,
-      createdAt: result.apiToken.createdAt,
+      created_at: result.apiToken.createdAt,
+      last_used_at: null,
+      expires_at: result.apiToken.expiresAt,
       token: `soopa_live_${result.apiToken.clientId}_${result.rawSecret}`, // The split token to be used as Bearer
     };
   }
 
   @Get()
-  async findAll(@Param('tenantId') tenantId: string) {
+  async findAll(@UcpTenantId() tenantId: string) {
     const tokens = await this.tokenRepo.findAllByTenant(tenantId);
     return tokens.map((t) => ({
       id: t.id,
       client_id: t.clientId,
       name: t.name,
       active: t.active,
-      createdAt: t.createdAt,
+      created_at: t.createdAt,
+      last_used_at: null,
+      expires_at: t.expiresAt,
     }));
   }
 
   @Patch(':id')
   async update(
-    @Param('tenantId') tenantId: string,
+    @UcpTenantId() tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateApiTokenRequestDto,
   ) {
@@ -92,12 +100,14 @@ export class ApiTokensController {
       client_id: updatedToken.clientId,
       name: updatedToken.name,
       active: updatedToken.active,
-      createdAt: updatedToken.createdAt,
+      created_at: updatedToken.createdAt,
+      last_used_at: null,
+      expires_at: updatedToken.expiresAt,
     };
   }
 
   @Delete(':id')
-  async remove(@Param('tenantId') tenantId: string, @Param('id') id: string) {
+  async remove(@UcpTenantId() tenantId: string, @Param('id') id: string) {
     await this.tokenRepo.delete(tenantId, id);
   }
 }

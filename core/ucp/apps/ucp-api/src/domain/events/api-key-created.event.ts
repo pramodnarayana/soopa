@@ -1,8 +1,8 @@
-import { EventType } from '@soopa/schemas';
+import { UcpEventType } from '@soopa/schemas';
 import { DomainEvent } from './domain.event.js';
 
 export class ApiKeyCreatedEvent implements DomainEvent {
-  public readonly eventName = EventType.API_KEY_CREATED;
+  public readonly eventName = UcpEventType.API_KEY_CREATED;
   public readonly occurredOn = new Date();
   public readonly payload: Record<string, unknown>;
 

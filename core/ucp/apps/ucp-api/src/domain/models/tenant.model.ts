@@ -1,11 +1,12 @@
 import { TenantProvisionedEvent } from '../events/tenant-provisioned.event.js';
+import { AppSubscribedEvent } from '../events/app-subscribed.event.js';
+import { AppUnsubscribedEvent } from '../events/app-unsubscribed.event.js';
 import { AggregateRoot } from './aggregate-root.js';
 
 export class Tenant extends AggregateRoot {
   constructor(
     public readonly id: string,
     public name: string,
-    public readonly zitadelOrgId: string | null,
     public readonly idpTenantId: string | null,
     public status: 'active' | 'inactive',
     public readonly createdAt: Date,
@@ -18,7 +19,6 @@ export class Tenant extends AggregateRoot {
   static create(
     id: string,
     name: string,
-    zitadelOrgId: string | null,
     idpTenantId: string | null,
     subscriptions: string[] = [],
   ): Tenant {
@@ -26,7 +26,6 @@ export class Tenant extends AggregateRoot {
     const tenant = new Tenant(
       id,
       name,
-      zitadelOrgId,
       idpTenantId,
       'active',
       now,
@@ -45,6 +44,35 @@ export class Tenant extends AggregateRoot {
     }
     this.name = newName.trim();
     this.updatedAt = new Date();
+  }
+
+  subscribe(appSlug: string) {
+    if (this.status !== 'active') {
+      throw new Error(
+        'DomainException: Cannot subscribe inactive tenant to app',
+      );
+    }
+    if (this.subscriptions.includes(appSlug)) {
+      throw new Error(
+        `DomainException: Tenant is already subscribed to ${appSlug}`,
+      );
+    }
+    this.subscriptions.push(appSlug);
+    this.updatedAt = new Date();
+    this.addDomainEvent(new AppSubscribedEvent(this.id, this.name, appSlug));
+  }
+
+  unsubscribeFromApp(appSlug: string): void {
+    const index = this.subscriptions.indexOf(appSlug);
+    if (index > -1) {
+      this.subscriptions.splice(index, 1);
+      this.updatedAt = new Date();
+      this.addDomainEvent(new AppUnsubscribedEvent(this.id, appSlug));
+    } else {
+      throw new Error(
+        `DomainException: Tenant is not subscribed to ${appSlug}`,
+      );
+    }
   }
 
   changeStatus(newStatus: 'active' | 'inactive') {

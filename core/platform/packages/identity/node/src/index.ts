@@ -8,3 +8,4 @@ export * from './IdentityModule.js';
 export * from './middleware/AuthGuard.js';
 export * from './ports/TenantRepository.js';
 export * from './ports/TokenVerifier.js';
+export * from './utils/zitadel.js';

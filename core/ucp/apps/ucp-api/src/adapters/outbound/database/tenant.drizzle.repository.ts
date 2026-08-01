@@ -1,30 +1,32 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { createId } from '@paralleldrive/cuid2';
 import type { DbClient } from '@soopa/database';
 import {
   apiKeys,
+  appSubscriptions,
   apps,
   controlPlaneOutbox,
   eq,
-  tenantShards,
-  tenantSubscriptions,
-  tenants,
+  generateId,
+  shardRegistry,
   tenantUsers,
+  tenants,
 } from '@soopa/database';
-import { inArray } from 'drizzle-orm';
+import { inArray, or, sql, and } from 'drizzle-orm';
 import { Tenant } from '../../../domain/models/tenant.model.js';
-import { DATABASE_CLIENT } from '../../../infrastructure/database.module.js';
+import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
 
 @Injectable()
 export class TenantDrizzleRepository implements ITenantRepository {
   constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
-  private mapToDomain(row: typeof tenants.$inferSelect, subscriptions: string[] = []): Tenant {
+  private mapToDomain(
+    row: typeof tenants.$inferSelect,
+    subscriptions: string[] = [],
+  ): Tenant {
     return new Tenant(
       row.id,
       row.name,
-      row.zitadelOrgId,
       row.idpTenantId,
       row.status,
       row.createdAt,
@@ -34,13 +36,49 @@ export class TenantDrizzleRepository implements ITenantRepository {
   }
 
   async findById(id: string): Promise<Tenant | null> {
-    const [row] = await this.db.select().from(tenants).where(eq(tenants.id, id));
-    return row ? this.mapToDomain(row) : null;
+    const [row] = await this.db
+      .select()
+      .from(tenants)
+      .where(or(eq(tenants.id, id), eq(tenants.idpTenantId, id)));
+
+    if (!row) return null;
+
+    // Load subscriptions
+    const subsRows = await this.db
+      .select({ slug: apps.slug })
+      .from(appSubscriptions)
+      .innerJoin(apps, eq(appSubscriptions.appId, apps.id))
+      .where(eq(appSubscriptions.tenantId, row.id));
+
+    return this.mapToDomain(
+      row,
+      subsRows.map((s) => s.slug),
+    );
   }
 
   async findAll(): Promise<Tenant[]> {
     const rows = await this.db.select().from(tenants);
-    return rows.map((row) => this.mapToDomain(row));
+    if (rows.length === 0) return [];
+
+    const tenantIds = rows.map((r) => r.id);
+
+    // Batch fetch subscriptions to avoid N+1 anti-pattern
+    const subsRows = await this.db
+      .select({ tenantId: appSubscriptions.tenantId, slug: apps.slug })
+      .from(appSubscriptions)
+      .innerJoin(apps, eq(appSubscriptions.appId, apps.id))
+      .where(inArray(appSubscriptions.tenantId, tenantIds));
+
+    // Group subscriptions by tenant in memory
+    const subsMap = new Map<string, string[]>();
+    for (const sub of subsRows) {
+      if (!subsMap.has(sub.tenantId)) {
+        subsMap.set(sub.tenantId, []);
+      }
+      subsMap.get(sub.tenantId)!.push(sub.slug);
+    }
+
+    return rows.map((row) => this.mapToDomain(row, subsMap.get(row.id) || []));
   }
 
   async save(tenant: Tenant): Promise<Tenant> {
@@ -51,7 +89,6 @@ export class TenantDrizzleRepository implements ITenantRepository {
         .values({
           id: tenant.id,
           name: tenant.name,
-          zitadelOrgId: tenant.zitadelOrgId,
           idpTenantId: tenant.idpTenantId,
           status: tenant.status,
           createdAt: tenant.createdAt,
@@ -61,7 +98,6 @@ export class TenantDrizzleRepository implements ITenantRepository {
           target: tenants.id,
           set: {
             name: tenant.name,
-            zitadelOrgId: tenant.zitadelOrgId,
             idpTenantId: tenant.idpTenantId,
             status: tenant.status,
             updatedAt: new Date(),
@@ -69,28 +105,71 @@ export class TenantDrizzleRepository implements ITenantRepository {
         })
         .returning();
 
-      // 2. Save Subscriptions
-      if (tenant.subscriptions && tenant.subscriptions.length > 0) {
-        const dbApps = await tx.select().from(apps).where(inArray(apps.slug, tenant.subscriptions));
-        if (dbApps.length > 0) {
-          const subs = dbApps.map((app) => ({
+      // 2. Save Subscriptions (Enterprise Grade Symmetric Diff)
+      // Fetch current subscriptions from the DB
+      const existingSubsRows = await tx
+        .select({ appId: appSubscriptions.appId, slug: apps.slug })
+        .from(appSubscriptions)
+        .innerJoin(apps, eq(appSubscriptions.appId, apps.id))
+        .where(eq(appSubscriptions.tenantId, tenant.id));
+
+      const existingSlugs = new Set(existingSubsRows.map((r) => r.slug));
+      const targetSlugs = new Set(tenant.subscriptions || []);
+
+      // Calculate diffs
+      const slugsToAdd = [...targetSlugs].filter(
+        (slug) => !existingSlugs.has(slug),
+      );
+      const slugsToRemove = [...existingSlugs].filter(
+        (slug) => !targetSlugs.has(slug),
+      );
+
+      // Execute precise deletions
+      if (slugsToRemove.length > 0) {
+        const appsToRemove = existingSubsRows
+          .filter((r) => slugsToRemove.includes(r.slug))
+          .map((r) => r.appId);
+        await tx
+          .delete(appSubscriptions)
+          .where(
+            and(
+              eq(appSubscriptions.tenantId, tenant.id),
+              inArray(appSubscriptions.appId, appsToRemove),
+            ),
+          );
+      }
+
+      // Execute precise insertions
+      if (slugsToAdd.length > 0) {
+        const dbAppsToAdd = await tx
+          .select()
+          .from(apps)
+          .where(inArray(apps.slug, slugsToAdd));
+        if (dbAppsToAdd.length > 0) {
+          const subs = dbAppsToAdd.map((app) => ({
             tenantId: tenant.id,
             appId: app.id,
             tier: 'standard',
           }));
-          await tx.insert(tenantSubscriptions).values(subs).onConflictDoNothing();
+          await tx.insert(appSubscriptions).values(subs).onConflictDoNothing();
         }
       }
 
       // 3. Process Outbox Events (Domain Events)
       for (const event of tenant.domainEvents) {
+        const outboxId = generateId('evt');
         await tx.insert(controlPlaneOutbox).values({
-          id: createId(),
+          id: outboxId,
           idempotencyKey: `${event.eventName}_${tenant.id}_${event.occurredOn.getTime()}`,
           tenantId: tenant.id,
           eventType: event.eventName,
           payload: event.payload,
         });
+
+        // Fire Postgres NOTIFY so the OutboxListener instantly wakes up
+        await tx.execute(
+          sql`NOTIFY control_plane_outbox_channel, '${sql.raw(outboxId)}'`,
+        );
       }
 
       tenant.clearEvents();
@@ -107,14 +186,18 @@ export class TenantDrizzleRepository implements ITenantRepository {
       // Delete api_keys
       await tx.delete(apiKeys).where(eq(apiKeys.tenantId, id));
 
-      // Delete tenant_shards
-      await tx.delete(tenantShards).where(eq(tenantShards.tenantId, id));
+      // Delete shard_registry
+      await tx.delete(shardRegistry).where(eq(shardRegistry.tenantId, id));
 
       // Delete tenant_subscriptions
-      await tx.delete(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, id));
+      await tx
+        .delete(appSubscriptions)
+        .where(eq(appSubscriptions.tenantId, id));
 
       // Delete outbox events for this tenant
-      await tx.delete(controlPlaneOutbox).where(eq(controlPlaneOutbox.tenantId, id));
+      await tx
+        .delete(controlPlaneOutbox)
+        .where(eq(controlPlaneOutbox.tenantId, id));
 
       // Finally, delete the tenant itself
       await tx.delete(tenants).where(eq(tenants.id, id));

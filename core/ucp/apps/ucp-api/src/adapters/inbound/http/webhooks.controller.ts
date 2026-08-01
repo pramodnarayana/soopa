@@ -10,7 +10,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+} from 'class-validator';
 import { CreateWebhookUseCase } from '../../../application/use-cases/create-webhook.use-case.js';
 import type { IWebhookRepository } from '../../../ports/outbound/webhook.repository.js';
 import { WEBHOOK_REPOSITORY } from '../../../ports/outbound/webhook.repository.js';
@@ -56,7 +63,10 @@ export class WebhooksController {
   ) {}
 
   @Post()
-  async create(@Param('tenantId') tenantId: string, @Body() dto: CreateWebhookRequestDto) {
+  async create(
+    @UcpTenantId() tenantId: string,
+    @Body() dto: CreateWebhookRequestDto,
+  ) {
     const webhook = await this.createWebhookUseCase.execute({
       tenantId,
       name: dto.name,
@@ -74,7 +84,7 @@ export class WebhooksController {
   }
 
   @Get()
-  async findAll(@Param('tenantId') tenantId: string) {
+  async findAll(@UcpTenantId() tenantId: string) {
     const webhooks = await this.webhookRepo.findAllByTenant(tenantId);
     return webhooks.map((w) => ({
       id: w.id,
@@ -87,7 +97,7 @@ export class WebhooksController {
 
   @Patch(':id')
   async update(
-    @Param('tenantId') tenantId: string,
+    @UcpTenantId() tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateWebhookRequestDto,
   ) {
@@ -114,7 +124,7 @@ export class WebhooksController {
   }
 
   @Delete(':id')
-  async remove(@Param('tenantId') tenantId: string, @Param('id') id: string) {
+  async remove(@UcpTenantId() tenantId: string, @Param('id') id: string) {
     await this.webhookRepo.delete(tenantId, id);
   }
 }
