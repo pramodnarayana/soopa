@@ -5,6 +5,7 @@ import {
   createDbClient,
   DefaultTenants,
   EventTypes,
+  generateId,
   NotificationChannel,
   notificationTemplates,
 } from './index.js';
@@ -14,8 +15,7 @@ const { __dirname } = getEsmPaths(import.meta.url);
 
 // Try loading .env from current directory, else fallback
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config({ path: path.resolve(__dirname, '../../../../.env') }); // Root
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') }); // ucp/
+dotenv.config({ path: path.resolve(__dirname, '../../../../../.env') }); // Root
 const dbUrl = process.env.DATABASE_URL;
 
 if (!dbUrl) {
@@ -57,13 +57,13 @@ async function seed() {
     .insert(apps)
     .values([
       {
-        id: 'app_edi_123',
+        id: generateId('app'),
         name: 'EDI App',
         slug: 'edi',
         description: 'B2B EDI Network',
       },
       {
-        id: 'app_idp_123',
+        id: generateId('app'),
         name: 'IDP App',
         slug: 'idp',
         description: 'Document Processing',

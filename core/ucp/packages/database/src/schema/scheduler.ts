@@ -1,4 +1,3 @@
-import { createId } from '@paralleldrive/cuid2';
 import { index, integer, jsonb, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { ucpSchema } from './shared.js';
 
@@ -13,15 +12,14 @@ type JobStatusType = (typeof JobStatus)[keyof typeof JobStatus];
 export const scheduledJobs = ucpSchema.table(
   'scheduled_jobs',
   {
-    id: varchar('id', { length: 128 })
-      .primaryKey()
-      .$defaultFn(() => createId()),
+    // No $defaultFn — id is required. Callers MUST supply generateId('job').
+    id: varchar('id', { length: 128 }).primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
     payload: jsonb('payload').default({}).notNull(),
     status: varchar('status', { length: 50 })
       .notNull()
       .default(JobStatus.PENDING)
-      .$type<JobStatusType>(), // PENDING, RUNNING, COMPLETED, FAILED
+      .$type<JobStatusType>(),
     nextRunAt: timestamp('next_run_at'),
     intervalSeconds: integer('interval_seconds'),
     minIntervalSeconds: integer('min_interval_seconds'),

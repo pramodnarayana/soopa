@@ -22,9 +22,19 @@
     "db:migrate": "pnpm --filter @soopa/database db:migrate",
     "db:seed": "pnpm --filter @soopa/database db:seed",
     "db:clear-zitadel": "pnpm --filter @soopa/database db:clear-zitadel",
-    "infra-reset": "pnpm db:clear-zitadel && docker compose rm -s -v -f postgres_global edi_postgres_shard_1 localstack debezium_shard_1 vault cdcproxy && (docker volume rm soopa_mono_postgres_global_data soopa_mono_edi_postgres_shard_1_data soopa_mono_debezium_data postgres_global_data edi_postgres_shard_1_data debezium_data || true) && docker compose up -d --wait postgres_global edi_postgres_shard_1 localstack debezium_shard_1 vault cdcproxy && pnpm db:migrate && pnpm db:seed && cd apps/edi && make sqs-purge db-init",
-    "ucp-reset": "pnpm db:clear-zitadel && docker compose rm -s -v -f postgres_global edi_postgres_shard_1 localstack debezium_shard_1 vault cdcproxy && (docker volume rm soopa_mono_postgres_global_data soopa_mono_edi_postgres_shard_1_data soopa_mono_debezium_data postgres_global_data edi_postgres_shard_1_data debezium_data || true) && docker compose up -d --wait postgres_global edi_postgres_shard_1 localstack debezium_shard_1 vault cdcproxy && pnpm db:migrate && pnpm db:seed",
-    "soft-reset": "pnpm db:clear-zitadel && cd apps/edi && make sqs-purge",
+
+    "infra:phase1-cleanup": "pnpm db:clear-zitadel",
+    "infra:phase2-teardown": "docker compose rm -s -v -f postgres_global edi_postgres_shard_1 localstack debezium_shard_1 vault cdcproxy && (docker volume rm soopa_mono_postgres_global_data soopa_mono_edi_postgres_shard_1_data soopa_mono_debezium_data postgres_global_data edi_postgres_shard_1_data debezium_data || true)",
+    "infra:phase3-bootstrap": "docker compose up -d --wait postgres_global edi_postgres_shard_1 localstack debezium_shard_1 vault cdcproxy && pnpm db:migrate && pnpm db:seed",
+    "infra:phase4-init-edi": "cd apps/edi && make sqs-purge db-init",
+
+    "infra:start-identity": "docker compose up -d zitadel_postgres zitadel",
+    "infra:sync-identity": "tsx core/ucp/infra/zitadel/sync.ts",
+
+    "infra-reset": "pnpm infra:phase1-cleanup && pnpm infra:phase2-teardown && pnpm infra:phase3-bootstrap && pnpm infra:phase4-init-edi",
+    "ucp-reset": "pnpm infra:phase1-cleanup && pnpm infra:phase2-teardown && pnpm infra:phase3-bootstrap",
+    "soft-reset": "pnpm infra:phase1-cleanup && cd apps/edi && make sqs-purge",
+
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "deadcode": "pnpm deadcode:node && pnpm deadcode:python",
