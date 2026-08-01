@@ -37,7 +37,7 @@ class FakeGlobalStore:
                 from sqlalchemy.exc import IntegrityError
 
                 raise IntegrityError("mock error", params={}, orig=Exception("mock"))
-        p_id = uuid.uuid4()
+        p_id = str(uuid.uuid4())
         self.partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
@@ -55,7 +55,7 @@ class FakeGlobalStore:
         ]
 
     async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
+        p_id = str(uuid.uuid4())
         self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
@@ -82,7 +82,7 @@ class FakeGlobalStore:
     async def create_as2_partnership(
         self, tenant_id: str, cmd: CreateAS2PartnershipCmd
     ) -> uuid.UUID:
-        p_id = uuid.uuid4()
+        p_id = str(uuid.uuid4())
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
@@ -174,17 +174,15 @@ class FakeGlobalStore:
 
     async def publish_outbox_event(
         self,
-        tenant_id: str,
-        event_type: str,
-        payload: dict[str, Any],
+        event: Any,
         idempotency_key: uuid.UUID | None = None,
     ) -> uuid.UUID:
         key = idempotency_key or uuid.uuid4()
         self.outbox_events.append(
             {
-                "tenant_id": tenant_id,
-                "event_type": event_type,
-                "payload": payload,
+                "tenant_id": getattr(event, "tenant_id", None),
+                "event_type": getattr(event, "event_type", None),
+                "payload": event.model_dump(mode="json") if hasattr(event, "model_dump") else event,
                 "idempotency_key": key,
             }
         )
@@ -248,14 +246,14 @@ class FakeGlobalStore:
         }
 
     async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> uuid.UUID:
-        r_id = uuid.uuid4()
+        r_id = str(uuid.uuid4())
         if not hasattr(self, "inbound_routes"):
             self.inbound_routes = []
         self.inbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
     async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
-        r_id = uuid.uuid4()
+        r_id = str(uuid.uuid4())
         if not hasattr(self, "outbound_routes"):
             self.outbound_routes = []
         self.outbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
@@ -363,12 +361,12 @@ class FakeTenantStore:
         self.webhooks = []
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> uuid.UUID:
-        r_id = uuid.uuid4()
+        r_id = str(uuid.uuid4())
         self.inbound_routes.append(FakeRoute(r_id, "1", cmd))
         return r_id
 
     async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> uuid.UUID:
-        r_id = uuid.uuid4()
+        r_id = str(uuid.uuid4())
         self.outbound_routes.append(FakeRoute(r_id, "1", cmd))
         return r_id
 
@@ -376,7 +374,7 @@ class FakeTenantStore:
         return {"inbound": self.inbound_routes, "outbound": self.outbound_routes}
 
     async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> uuid.UUID:
-        p_id = uuid.uuid4()
+        p_id = str(uuid.uuid4())
         self.sftp_partners.append({"id": p_id, "cmd": cmd})
         return p_id
 

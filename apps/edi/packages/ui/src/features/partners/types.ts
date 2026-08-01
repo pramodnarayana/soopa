@@ -12,14 +12,14 @@ export interface BasePartner {
   id: string;
   name: string;
   type: PartnerType;
-  active?: boolean;
+  active?: boolean | null;
 }
 
 export interface AS2Partner extends BasePartner {
   type: 'AS2';
   as2_id: string;
   is_local: boolean;
-  url?: string;
+  url?: string | null;
 }
 
 export interface SFTPPartner extends BasePartner {
@@ -27,27 +27,25 @@ export interface SFTPPartner extends BasePartner {
   host: string;
   port: number;
   username: string;
-  inbound_remote_path?: string;
-  outbound_remote_path?: string;
+  inbound_remote_path?: string | null;
+  outbound_remote_path?: string | null;
 }
 
 export type Partner = AS2Partner | SFTPPartner;
 
-export interface Partnership {
+export interface AS2Partnership {
   id: string;
 
-  name?: string;
+  name?: string | null;
   local_partner_id: string;
   remote_partner_id: string;
-  host?: string;
-  port?: number;
-  credentials_vault_ref?: string;
+  credentials_vault_ref?: string | null;
   mdn_type: string;
-  mdn_url?: string;
+  mdn_url?: string | null;
   encryption_algorithm: string;
   signature_algorithm: string;
 
-  active?: boolean;
+  active?: boolean | null;
 }
 
 export interface CertificatesExport {
@@ -91,7 +89,7 @@ export interface UpdatePartnerPayload {
   credentials_vault_ref?: string;
 }
 
-export interface CreatePartnershipPayload {
+export interface CreateAS2PartnershipPayload {
   name?: string;
   local_partner_id: string;
   remote_partner_id: string;
@@ -113,7 +111,7 @@ export interface CreateSftpPartnerPayload {
   credentials_vault_ref?: string;
 }
 
-export interface UpdatePartnershipPayload {
+export interface UpdateAS2PartnershipPayload {
   name?: string;
   credentials_vault_ref?: string;
   mdn_type?: string;

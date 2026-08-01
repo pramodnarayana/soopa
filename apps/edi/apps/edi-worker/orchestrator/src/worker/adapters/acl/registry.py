@@ -4,6 +4,7 @@ from typing import Any
 from worker.adapters.acl.base import EventTranslator
 from worker.adapters.acl.ucp_translators import (
     TenantProvisionedTranslator,
+    WebhookEventTranslator,
 )
 
 logger = logging.getLogger(__name__)
@@ -13,11 +14,17 @@ class UcpEventNames:
     """Constants representing external UCP Event names."""
 
     TENANT_PROVISIONED = "tenant.provisioned"
+    WEBHOOK_CREATED = "webhook.created"
+    WEBHOOK_UPDATED = "webhook.updated"
+    WEBHOOK_DELETED = "webhook.deleted"
 
 
 # Registry mapping external event names to their concrete translator strategies
 _TRANSLATOR_REGISTRY: dict[str, EventTranslator] = {
     UcpEventNames.TENANT_PROVISIONED: TenantProvisionedTranslator(),
+    UcpEventNames.WEBHOOK_CREATED: WebhookEventTranslator(UcpEventNames.WEBHOOK_CREATED),
+    UcpEventNames.WEBHOOK_UPDATED: WebhookEventTranslator(UcpEventNames.WEBHOOK_UPDATED),
+    UcpEventNames.WEBHOOK_DELETED: WebhookEventTranslator(UcpEventNames.WEBHOOK_DELETED),
 }
 
 

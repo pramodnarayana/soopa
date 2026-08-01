@@ -4,6 +4,10 @@
 # EDI AS2 - Enterprise Task Runner
 # ==============================================================================
 
+# Load variables from root .env
+include ../../.env
+export $(shell awk -F= '/^[a-zA-Z_][a-zA-Z0-9_]*=/ {print $$1}' ../../.env)
+
 build:
 	@echo "=== Building Backend ==="
 	uv sync --dev --all-packages
@@ -45,11 +49,11 @@ dev:
 
 dev-as2:
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,383492001305198595,383492001305264131" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
+	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-api:
 	@echo "Starting API Gateway with hot-reload for local development..."
-	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,383492001305198595,383492001305264131" uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 
 dev-web:
 	@echo "Starting React Frontend with Vite..."

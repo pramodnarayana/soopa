@@ -5,7 +5,7 @@ import os
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models import DatabaseShard, Tenant, TenantShard, TenantUser, User
+from database.models import DatabaseShard, ShardRegistry, Tenant, TenantUser, User
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select
@@ -56,34 +56,25 @@ async def seed_database() -> None:
             await session.flush()
             logger.info("Created Tenant %s (Host Company).", PLATFORM_TENANT_ID)
 
-        # Ensure TenantShard exists
+        # Ensure ShardRegistry exists
         ts_result = await session.execute(
-            select(TenantShard).filter_by(tenant_id=PLATFORM_TENANT_ID, shard_id=shard.id)
+            select(ShardRegistry).filter_by(
+                tenant_id=PLATFORM_TENANT_ID, app_id="platform", shard_id=shard.id
+            )
         )
         tenant_shard = ts_result.scalar_one_or_none()
 
         if not tenant_shard:
-            tenant_shard = TenantShard(
+            tenant_shard = ShardRegistry(
                 tenant_id=PLATFORM_TENANT_ID,
+                app_id="platform",
                 shard_id=shard.id,
-                shard_schema="tenant_host",
-                tier="standard",
             )
             session.add(tenant_shard)
             await session.flush()
-            logger.info("Created TenantShard mapping for Tenant %s.", PLATFORM_TENANT_ID)
+            logger.info("Created ShardRegistry mapping for Tenant %s.", PLATFORM_TENANT_ID)
         else:
-            needs_repair = False
-            if tenant_shard.shard_schema != "tenant_host":
-                tenant_shard.shard_schema = "tenant_host"
-                needs_repair = True
-            if needs_repair:
-                session.add(tenant_shard)
-                await session.flush()
-                logger.info(
-                    "Repaired TenantShard schema to tenant_host for %s.",
-                    PLATFORM_TENANT_ID,
-                )
+            logger.info("ShardRegistry mapping already exists for Tenant %s.", PLATFORM_TENANT_ID)
 
         # 3. Seed Default User
         admin_email = os.getenv("SYSTEM_ADMIN_EMAIL")

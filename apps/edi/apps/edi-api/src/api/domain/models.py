@@ -6,7 +6,6 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 from enum import StrEnum
 from typing import Any
-from uuid import UUID
 
 from domain.models import ConnectionType, Direction, PartnerStatus
 
@@ -82,8 +81,8 @@ class UpdateAS2TradingPartnerCmd:
 
 @dataclass(frozen=True)
 class CreateAS2PartnershipCmd:
-    local_partner_id: UUID
-    remote_partner_id: UUID
+    local_partner_id: str
+    remote_partner_id: str
     name: str
     trading_partner_id: str | None = None
     credentials_vault_ref: str | None = None
@@ -98,8 +97,8 @@ class CreateAS2PartnershipCmd:
 @dataclass(frozen=True)
 class UpdateAS2PartnershipCmd:
     name: str | UnsetType = UNSET
-    local_partner_id: UUID | UnsetType = UNSET
-    remote_partner_id: UUID | UnsetType = UNSET
+    local_partner_id: str | UnsetType = UNSET
+    remote_partner_id: str | UnsetType = UNSET
     credentials_vault_ref: str | None | UnsetType = UNSET
     mdn_type: MDNType | UnsetType = UNSET
     mdn_url: str | None | UnsetType = UNSET
@@ -153,8 +152,8 @@ class CreateInboundRouteCmd:
     gs_receiver_id: str | None = None
     processing_mode: str = "TRANSFORM"
     webhook_id: str | None = None
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -168,8 +167,8 @@ class UpdateInboundRouteCmd:
     transaction_type: str | UnsetType = UNSET
     processing_mode: str | UnsetType = UNSET
     webhook_id: str | None | UnsetType = UNSET
-    as2_partner_id: UUID | None | UnsetType = UNSET
-    sftp_partner_id: UUID | None | UnsetType = UNSET
+    as2_partner_id: str | None | UnsetType = UNSET
+    sftp_partner_id: str | None | UnsetType = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -177,16 +176,16 @@ class UpdateInboundRouteCmd:
 class CreateOutboundRouteCmd:
     trading_partner_id: str
     name: str
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
 
 
 @dataclass(frozen=True)
 class UpdateOutboundRouteCmd:
     trading_partner_id: str | None | UnsetType = UNSET
     name: str | UnsetType = UNSET
-    as2_partner_id: UUID | None | UnsetType = UNSET
-    sftp_partner_id: UUID | None | UnsetType = UNSET
+    as2_partner_id: str | None | UnsetType = UNSET
+    sftp_partner_id: str | None | UnsetType = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -227,7 +226,7 @@ class UpdateOutboundEdiHeaderCmd:
 
 @dataclass(frozen=True)
 class PartnerEntity:
-    partner_id: UUID
+    partner_id: str
     tenant_id: str
     name: str
     type: ConnectionType
@@ -236,21 +235,21 @@ class PartnerEntity:
 
 @dataclass(frozen=True)
 class RouteEntity:
-    route_id: UUID
+    route_id: str
     tenant_id: str
     direction: Direction
 
 
 @dataclass(frozen=True)
 class BaseRouteListEntity:
-    route_id: UUID
+    route_id: str
     name: str
     trading_partner_id: str | None
     destination_type: str
     destination_name: str
     webhook_id: str | None
-    as2_partner_id: UUID | None
-    sftp_partner_id: UUID | None
+    as2_partner_id: str | None
+    sftp_partner_id: str | None
     active: bool
 
 
@@ -298,7 +297,7 @@ class CreateApiTokenCmd:
 class ApiTokenEntity:
     """Returned once after creation. client_secret is shown only this time."""
 
-    id: UUID
+    id: str
     tenant_id: str
     name: str
     client_id: str  # stored plaintext, safe to display in UI
@@ -308,8 +307,8 @@ class ApiTokenEntity:
 
 @dataclass(frozen=True)
 class EdiMessageDTO:
-    id: UUID
-    trace_id: UUID
+    id: str
+    trace_id: str
     direction: str
     connection_type: str | None = None
     sender_id: str | None = None
@@ -327,7 +326,7 @@ class EdiMessageDTO:
     signature_algorithm: str | None = None
     encryption_algorithm: str | None = None
     compression: str | None = None
-    inbound_route_id: UUID | None = None
+    inbound_route_id: str | None = None
     trading_partner_id: str | None = None
     status: str = "RECEIVED"
     edi_data: str | None = None
@@ -346,8 +345,8 @@ class EdiMessageDTO:
 
 @dataclass(frozen=True)
 class EdiJsonDTO:
-    id: UUID
-    trace_id: UUID
+    id: str
+    trace_id: str
     status: str
     trading_partner_id: str | None = None
     error_message: str | None = None
@@ -368,8 +367,8 @@ class EdiJsonDTO:
 
 @dataclass(frozen=True)
 class ApiGatewayDTO:
-    id: UUID
-    trace_id: UUID
+    id: str
+    trace_id: str
     event_type: str | None = None
     status: str | None = None
     error_message: str | None = None

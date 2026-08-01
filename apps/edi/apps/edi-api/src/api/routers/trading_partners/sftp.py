@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -69,7 +68,7 @@ async def test_sftp_connection(
     status_code=status.HTTP_200_OK,
 )
 async def test_existing_sftp_connection(
-    partner_id: UUID,
+    partner_id: str,
     request: TestSFTPConnectionRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -178,7 +177,7 @@ async def create_sftp_partner(
 
 @router.put("/sftp/{partner_id}", response_model=PartnerResponse)
 async def update_sftp_partner(
-    partner_id: UUID,
+    partner_id: str,
     request: UpdateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -218,7 +217,7 @@ async def update_sftp_partner(
 
 @router.delete("/sftp/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sftp_partner(
-    partner_id: UUID,
+    partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:

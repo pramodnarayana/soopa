@@ -1,8 +1,8 @@
 import logging
-from uuid import UUID
 
-from domain.events import ProvisioningEventType
+from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, PartnerStatus
+from soopa_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
@@ -43,9 +43,11 @@ class AS2PartnershipService:
             tenant_id=tenant_id, cmd=cmd
         )
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNERSHIP_CREATED,
-            payload={"resource_id": str(partner_id), "tenant_id": tenant_id},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_created,
+                resource_id=str(partner_id),
+            )
         )
 
         return PartnerEntity(
@@ -57,12 +59,12 @@ class AS2PartnershipService:
         )
 
     async def update_as2_partnership(
-        self, tenant_id: str, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+        self, tenant_id: str, partnership_id: str, cmd: UpdateAS2PartnershipCmd
     ) -> PartnerEntity:
-        check_ids: list[UUID] = []
-        if isinstance(cmd.local_partner_id, UUID):
+        check_ids: list[str] = []
+        if isinstance(cmd.local_partner_id, str):
             check_ids.append(cmd.local_partner_id)
-        if isinstance(cmd.remote_partner_id, UUID):
+        if isinstance(cmd.remote_partner_id, str):
             check_ids.append(cmd.remote_partner_id)
 
         if check_ids:
@@ -79,9 +81,11 @@ class AS2PartnershipService:
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNERSHIP_UPDATED,
-            payload={"resource_id": str(partnership_id), "tenant_id": tenant_id},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_updated,
+                resource_id=str(partnership_id),
+            )
         )
         updated = await self.uow.as2_partnerships.get_as2_partnership(tenant_id, partnership_id)
         if not updated:
@@ -95,11 +99,13 @@ class AS2PartnershipService:
             status=PartnerStatus.ACTIVE if updated.active else PartnerStatus.INACTIVE,
         )
 
-    async def delete_as2_partnership(self, tenant_id: str, partnership_id: UUID) -> None:
+    async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         logger.info(f"Deleting AS2 partnership {partnership_id} for tenant {tenant_id}")
         await self.uow.as2_partnerships.delete_as2_partnership(tenant_id, partnership_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNERSHIP_DELETED,
-            payload={"resource_id": str(partnership_id), "tenant_id": tenant_id},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_deleted,
+                resource_id=str(partnership_id),
+            )
         )

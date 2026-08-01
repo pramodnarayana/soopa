@@ -1,7 +1,6 @@
 import logging
 import uuid
 from typing import Any
-from uuid import UUID
 
 from pipeline.core.metadata_extractor import MetadataExtractorService
 
@@ -26,7 +25,7 @@ class ApiReceiverService:
         trading_partner_id: str,
         payload: dict[str, Any] | list[dict[str, Any]],
         transaction_type: str | None = None,
-    ) -> UUID:
+    ) -> str:
         """
         Orchestrates the outbound API flow:
         1. Validate Partnership by trading_partner_id.
@@ -83,7 +82,7 @@ class ApiReceiverService:
             business_metadata["_routing"] = {"trading_partner_id": trading_partner_id}
 
             # 2. Create Trace ID
-            trace_id = uuid.uuid4()
+            trace_id = str(uuid.uuid4())
             logger.info(f"Generated Trace ID: {trace_id}")
 
             # 3. Save EdiJson (Status: RECEIVED)
@@ -112,7 +111,7 @@ class ApiReceiverService:
                     "trading_partner_id": trading_partner_id,
                     "direction": "OUTBOUND",
                 },
-                idempotency_key=trace_id,
+                idempotency_key=str(trace_id),
             )
 
             await self.uow.commit()

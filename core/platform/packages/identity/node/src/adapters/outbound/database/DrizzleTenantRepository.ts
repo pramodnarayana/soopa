@@ -1,10 +1,17 @@
-import { createDbClient, tenants, tenantUsers, UserRoles, users } from '@soopa/database';
+import {
+  createDbClient,
+  generateId,
+  tenants,
+  tenantUsers,
+  UserRoles,
+  users,
+} from '@soopa/database';
 import { eq } from 'drizzle-orm';
 import { IdentityInfrastructureError } from '../../../domain/Errors.js';
 import type { TenantRepository, UserData } from '../../../ports/TenantRepository.js';
 
 export class DrizzleTenantRepository implements TenantRepository {
-  constructor(private readonly db: ReturnType<typeof createDbClient>['db']) {} // Inject Drizzle instance
+  constructor(private readonly db: ReturnType<typeof createDbClient>['db']) {}
 
   async findUserByEmail(email: string): Promise<UserData | null> {
     try {
@@ -31,28 +38,58 @@ export class DrizzleTenantRepository implements TenantRepository {
   async provisionUserAndTenant(
     email: string,
     name: string,
-    zitadelOrgId?: string,
+    idpTenantId?: string,
   ): Promise<{ userId: string; tenantId: string }> {
     try {
       type DbType = ReturnType<typeof createDbClient>['db'];
       type TxType = Parameters<Parameters<DbType['transaction']>[0]>[0];
       return await this.db.transaction(async (tx: TxType) => {
-        const [newUser] = await tx.insert(users).values({ email, name }).returning();
-        const [newTenant] = await tx
-          .insert(tenants)
-          .values({
-            name: `${name}'s Organization`,
-            zitadelOrgId: zitadelOrgId || null,
-          })
-          .returning();
+        const userId = generateId('usr');
+        const [newUser] = await tx.insert(users).values({ id: userId, email, name }).returning();
+
+        let tenantIdToLink: string;
+
+        if (idpTenantId) {
+          const existingTenants = await tx
+            .select()
+            .from(tenants)
+            .where(eq(tenants.idpTenantId as never, idpTenantId))
+            .limit(1);
+
+          if (existingTenants.length > 0) {
+            tenantIdToLink = existingTenants[0].id;
+          } else {
+            const newTenantId = generateId('ten');
+            const [newTenant] = await tx
+              .insert(tenants)
+              .values({
+                id: newTenantId,
+                name: `${name}'s Organization`,
+                idpTenantId,
+              })
+              .returning();
+            tenantIdToLink = newTenant.id;
+          }
+        } else {
+          const newTenantId = generateId('ten');
+          const [newTenant] = await tx
+            .insert(tenants)
+            .values({
+              id: newTenantId,
+              name: `${name}'s Organization`,
+              idpTenantId: null,
+            })
+            .returning();
+          tenantIdToLink = newTenant.id;
+        }
 
         await tx.insert(tenantUsers).values({
-          tenantId: newTenant.id,
+          tenantId: tenantIdToLink,
           userId: newUser.id,
           role: UserRoles.ADMIN,
         });
 
-        return { userId: newUser.id, tenantId: newTenant.id };
+        return { userId: newUser.id, tenantId: tenantIdToLink };
       });
     } catch (e: unknown) {
       let msg = typeof e === 'string' ? e : 'Unknown Error';

@@ -1,6 +1,5 @@
 import uuid
 from typing import Any
-from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     Boolean,
@@ -8,18 +7,18 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
-from sqlalchemy.sql import func, text
+from sqlalchemy.sql import text
 
 
 class AS2PartnerMixin:
     """Shared columns for AS2Partner across Global and Tenant schemas."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
+    def id(cls) -> Mapped[str]:
         return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+            String(128), primary_key=True, default=lambda: f"as2_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -71,9 +70,9 @@ class AS2PartnershipMixin:
     """Shared columns for AS2Partnership across Global and Tenant schemas."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
+    def id(cls) -> Mapped[str]:
         return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+            String(128), primary_key=True, default=lambda: f"as2p_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -113,9 +112,9 @@ class SFTPPartnerMixin:
     """Shared columns for SFTPPartner across Global and Tenant schemas."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
+    def id(cls) -> Mapped[str]:
         return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+            String(128), primary_key=True, default=lambda: f"sftp_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -187,9 +186,9 @@ class InboundRouteMixin:
     """Shared columns for InboundRoute across Global and Tenant schemas."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
+    def id(cls) -> Mapped[str]:
         return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+            String(128), primary_key=True, default=lambda: f"inb_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -233,9 +232,9 @@ class OutboundEdiHeaderMixin:
     """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
+    def id(cls) -> Mapped[str]:
         return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+            String(128), primary_key=True, default=lambda: f"out_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -287,9 +286,9 @@ class OutboundRouteMixin:
     """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
 
     @declared_attr
-    def id(cls) -> Mapped[PyUUID]:
+    def id(cls) -> Mapped[str]:
         return mapped_column(
-            UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+            String(128), primary_key=True, default=lambda: f"outh_{uuid.uuid4().hex}"
         )
 
     @declared_attr

@@ -1,11 +1,14 @@
 import uuid
 from typing import Any
-from uuid import UUID
 
 from database.base_repository import GlobalSqlAlchemyRepository, TenantSqlAlchemyRepository
 from database.models.control_plane import ControlPlaneOutbox
+from domain.events import ProvisioningEvent
 
-from api.ports.outbox_repository import OutboxRepositoryPort
+from api.ports.outbox_repository import (
+    ControlPlaneOutboxRepositoryPort,
+    DataPlaneOutboxRepositoryPort,
+)
 
 
 class SqlAlchemyOutboxRepositoryMixin:
@@ -15,17 +18,18 @@ class SqlAlchemyOutboxRepositoryMixin:
     async def publish_outbox_event(
         self,
         tenant_id: str,
-        event_type: str,
+        event_type: Any,
         payload: dict[str, Any],
-        idempotency_key: UUID | None = None,
-    ) -> UUID:
+        idempotency_key: str | None = None,
+    ) -> str:
         tid_str = tenant_id if tenant_id is not None else None
-        event_id = uuid.uuid4()
+        event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
+        event_id = str(uuid.uuid4())
         record = self.model_class(
             id=event_id,
             tenant_id=tid_str,
-            idempotency_key=idempotency_key or uuid.uuid4(),
-            event_type=event_type,
+            idempotency_key=idempotency_key or str(uuid.uuid4()),
+            event_type=event_type_str,
             payload=payload,
             status="PENDING",
         )
@@ -35,7 +39,7 @@ class SqlAlchemyOutboxRepositoryMixin:
 
 
 class SqlAlchemyControlPlaneOutboxRepository(
-    SqlAlchemyOutboxRepositoryMixin, GlobalSqlAlchemyRepository, OutboxRepositoryPort
+    SqlAlchemyOutboxRepositoryMixin, GlobalSqlAlchemyRepository, ControlPlaneOutboxRepositoryPort
 ):
     """
     Outbox repository for the Control Plane (Global DB).
@@ -47,9 +51,27 @@ class SqlAlchemyControlPlaneOutboxRepository(
         super().__init__(session)
         self.model_class = model_class
 
+    async def publish_outbox_event(  # type: ignore[override]
+        self,
+        event: ProvisioningEvent,
+        idempotency_key: str | None = None,
+    ) -> str:
+        from sqlalchemy import text
+
+        event_id = await super().publish_outbox_event(
+            tenant_id=event.tenant_id,
+            event_type=str(
+                event.event_type.value if hasattr(event.event_type, "value") else event.event_type
+            ),
+            payload=event.model_dump(mode="json"),
+            idempotency_key=idempotency_key,
+        )
+        await self.session.execute(text(f"NOTIFY edi_outbox_channel, '{event_id}'"))
+        return event_id
+
 
 class SqlAlchemyDataPlaneOutboxRepository(
-    SqlAlchemyOutboxRepositoryMixin, TenantSqlAlchemyRepository, OutboxRepositoryPort
+    SqlAlchemyOutboxRepositoryMixin, TenantSqlAlchemyRepository, DataPlaneOutboxRepositoryPort
 ):
     """
     Outbox repository for the Data Plane (Tenant Shard).

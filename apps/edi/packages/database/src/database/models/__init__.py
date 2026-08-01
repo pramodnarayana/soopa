@@ -1,13 +1,14 @@
 from .control_plane import (
+    App,
     AS2Partner,
     AS2Partnership,
     ControlPlaneOutbox,
     DatabaseShard,
     EdiGlobalBase,
     GlobalRegistry,
+    ShardRegistry,
     SystemAuditLog,
     Tenant,
-    TenantShard,
     TenantUser,
     UcpBase,
     User,
@@ -39,12 +40,13 @@ from .scheduled_job import ScheduledJob
 
 __all__ = [
     # Global
+    "App",
     "GlobalRegistry",
     "UcpBase",
     "EdiGlobalBase",
     "DatabaseShard",
     "Tenant",
-    "TenantShard",
+    "ShardRegistry",
     "User",
     "TenantUser",
     "AS2Partner",

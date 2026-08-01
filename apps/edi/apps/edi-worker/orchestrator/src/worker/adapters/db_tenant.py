@@ -1,7 +1,7 @@
 import contextlib
 
 from database.connection import DatabaseRouter
-from database.models import DatabaseShard, Tenant, TenantShard
+from database.models import App, DatabaseShard, ShardRegistry, Tenant
 from sqlalchemy import select
 
 from worker.ports.tenant import TenantPort
@@ -16,7 +16,12 @@ class SqlAlchemyTenantAdapter(TenantPort):
         global_gen = self.db_router.get_global_session()
         global_session = await global_gen.__anext__()
         try:
-            stmt = select(Tenant.id).join(TenantShard).join(DatabaseShard)
+            stmt = (
+                select(Tenant.id)
+                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+                .join(App, App.id == ShardRegistry.app_id)
+                .where(App.slug == "edi")
+            )
             result = await global_session.execute(stmt)
             return [str(t_id) for t_id in result.scalars().all()]
         finally:
@@ -32,14 +37,17 @@ class SqlAlchemyTenantAdapter(TenantPort):
         try:
             stmt = (
                 select(Tenant, DatabaseShard)
-                .join(TenantShard, Tenant.id == TenantShard.tenant_id)
-                .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
-                .where(Tenant.id == tenant_id)
+                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+                .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
+                .join(App, App.id == ShardRegistry.app_id)
+                .where(Tenant.id == tenant_id, App.slug == "edi")
             )
             result = await global_session.execute(stmt)
             row = result.first()
             if not row:
-                raise ValueError(f"Tenant {tenant_id} not found or mapped to a shard in Global DB")
+                raise ValueError(
+                    f"Tenant {tenant_id} not found or mapped to an EDI shard in Global DB"
+                )
             _, shard_obj = row
             self._cache[tenant_id] = (str(shard_obj.name), str(shard_obj.dsn))
             return self._cache[tenant_id]

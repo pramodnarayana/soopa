@@ -88,7 +88,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
 
         # Create Webhook (Global DB)
         webhook = Webhook(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             tenant_id=tenant_id,
             name="E2E Webhook",
             url="http://127.0.0.1:9999/webhook",

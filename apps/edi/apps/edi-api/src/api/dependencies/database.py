@@ -2,7 +2,7 @@ import contextlib
 from collections.abc import AsyncGenerator
 
 from database.base_repository import GlobalSession
-from database.models import DatabaseShard, Tenant, TenantShard
+from database.models import App, DatabaseShard, ShardRegistry, Tenant
 from database.session import get_global_session
 from fastapi import Depends, Request
 from sqlalchemy import select
@@ -33,9 +33,10 @@ async def get_tenant_session_for_id(
 
     stmt = (
         select(Tenant, DatabaseShard)
-        .join(TenantShard, Tenant.id == TenantShard.tenant_id)
-        .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
-        .where(Tenant.id == tenant_id)
+        .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+        .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
+        .join(App, App.id == ShardRegistry.app_id)
+        .where(Tenant.id == tenant_id, App.slug == "edi")
     )
     result = await global_session.execute(stmt)
     row = result.one_or_none()

@@ -3,7 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard, Tenant, TenantShard
+from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
+from sqlalchemy import select
 from sqlalchemy.engine.url import make_url
 
 from worker.adapters.sqs_poller import poll_sqs_queue
@@ -90,11 +91,13 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
     global_session.add(tenant)
     await global_session.commit()
 
-    tenant_shard = TenantShard(
+    app_res = await global_session.execute(select(App).where(App.slug == "edi"))
+    edi_app = app_res.scalars().first()
+
+    tenant_shard = ShardRegistry(
         tenant_id=tenant.id,
+        app_id=edi_app.id,
         shard_id=shard.id,
-        tier="standard",
-        shard_schema=f"tenant_test_{suffix}",
     )
     global_session.add(tenant_shard)
     await global_session.commit()
@@ -119,7 +122,10 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
         global_gen2 = router.get_global_session()
         global_session2 = await global_gen2.__anext__()
 
-        tenant_shard_to_delete = await global_session2.get(TenantShard, (tenant_id, shard.id))
+        app_res = await global_session2.execute(select(App).where(App.slug == "edi"))
+        edi_app = app_res.scalars().first()
+
+        tenant_shard_to_delete = await global_session2.get(ShardRegistry, (tenant_id, edi_app.id))
         if tenant_shard_to_delete:
             await global_session2.delete(tenant_shard_to_delete)
             await global_session2.flush()
@@ -179,7 +185,10 @@ async def test_poll_sqs_queue():
     mock_sqs.receive_message.side_effect = [
         {
             "Messages": [
-                {"ReceiptHandle": "1", "Body": '{"payload": {"trace_id": "123"}, "tenant_id": "999"}'}
+                {
+                    "ReceiptHandle": "1",
+                    "Body": '{"payload": {"trace_id": "123"}, "tenant_id": "999"}',
+                }
             ]
         },
         {"Messages": [{"ReceiptHandle": "2", "Body": "not json"}]},

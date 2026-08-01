@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from 'react';
 import { useAS2PartnershipsQuery, useAS2PartnersQuery } from '../api/partnerHooks';
-import type { Partner, Partnership } from '../types';
+import type { AS2Partnership, Partner } from '../types';
 
 // ─────────────────────────────────────────────
 // Context contract — read-only data only.
@@ -10,7 +10,7 @@ import type { Partner, Partnership } from '../types';
 
 interface AS2PartnersContextType {
   partners: Partner[];
-  partnerships: Partnership[];
+  partnerships: AS2Partnership[];
   isLoading: boolean;
   error: Error | null;
   partnersLoading: boolean;
@@ -72,4 +72,4 @@ export function useAS2Partners() {
 }
 
 // Re-export domain types so consumers don't need a second import path
-export type { Partner, Partnership };
+export type { AS2Partnership, Partner };

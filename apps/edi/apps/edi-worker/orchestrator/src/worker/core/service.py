@@ -4,10 +4,13 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from domain.events import (
+    LegacyUcpEventType,
     ProvisioningEvent,
     ProvisioningEventType,
 )
 from pydantic import TypeAdapter, ValidationError
+from soopa_schemas.edi_events import EdiEventType
+from soopa_schemas.webhook_events import WebhookEventType
 
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
 from worker.ports.outbox import OutboxPort
@@ -67,37 +70,40 @@ class ProvisioningWorkerService:
 
         self._handlers: dict[ProvisioningEventType, Callable[[str, str], Awaitable[None]]] = {
             # AS2 Partner
-            ProvisioningEventType.AS2_PARTNER_CREATED: self.replication_port.replicate_as2_partner,
-            ProvisioningEventType.AS2_PARTNER_UPDATED: self.replication_port.replicate_as2_partner,
-            ProvisioningEventType.AS2_PARTNER_DELETED: self.replication_port.delete_as2_partner,
+            EdiEventType.edi_as2_partner_created: self.replication_port.replicate_as2_partner,
+            EdiEventType.edi_as2_partner_updated: self.replication_port.replicate_as2_partner,
+            EdiEventType.edi_as2_partner_deleted: self.replication_port.delete_as2_partner,
             # AS2 Partnership
-            ProvisioningEventType.AS2_PARTNERSHIP_CREATED: self.replication_port.replicate_as2_partnership,
-            ProvisioningEventType.AS2_PARTNERSHIP_UPDATED: self.replication_port.replicate_as2_partnership,
-            ProvisioningEventType.AS2_PARTNERSHIP_DELETED: self.replication_port.delete_as2_partnership,
+            EdiEventType.edi_as2_partnership_created: self.replication_port.replicate_as2_partnership,
+            EdiEventType.edi_as2_partnership_updated: self.replication_port.replicate_as2_partnership,
+            EdiEventType.edi_as2_partnership_deleted: self.replication_port.delete_as2_partnership,
             # SFTP Partner
-            ProvisioningEventType.SFTP_PARTNER_CREATED: self.replication_port.replicate_sftp_partner,
-            ProvisioningEventType.SFTP_PARTNER_UPDATED: self.replication_port.replicate_sftp_partner,
-            ProvisioningEventType.SFTP_PARTNER_DELETED: self.replication_port.delete_sftp_partner,
+            EdiEventType.edi_sftp_partner_created: self.replication_port.replicate_sftp_partner,
+            EdiEventType.edi_sftp_partner_updated: self.replication_port.replicate_sftp_partner,
+            EdiEventType.edi_sftp_partner_deleted: self.replication_port.delete_sftp_partner,
             # Webhook
-            ProvisioningEventType.WEBHOOK_CREATED: self.replication_port.replicate_webhook,
-            ProvisioningEventType.WEBHOOK_UPDATED: self.replication_port.replicate_webhook,
-            ProvisioningEventType.WEBHOOK_DELETED: self.replication_port.delete_webhook,
+            WebhookEventType.webhook_created: self.replication_port.replicate_webhook,
+            WebhookEventType.webhook_updated: self.replication_port.replicate_webhook,
+            WebhookEventType.webhook_deleted: self.replication_port.delete_webhook,
             # Inbound Route
-            ProvisioningEventType.INBOUND_ROUTE_CREATED: self.replication_port.replicate_inbound_route,
-            ProvisioningEventType.INBOUND_ROUTE_UPDATED: self.replication_port.replicate_inbound_route,
-            ProvisioningEventType.INBOUND_ROUTE_DELETED: self.replication_port.delete_inbound_route,
+            EdiEventType.edi_inbound_route_created: self.replication_port.replicate_inbound_route,
+            EdiEventType.edi_inbound_route_updated: self.replication_port.replicate_inbound_route,
+            EdiEventType.edi_inbound_route_deleted: self.replication_port.delete_inbound_route,
             # Outbound Route
-            ProvisioningEventType.OUTBOUND_ROUTE_CREATED: self.replication_port.replicate_outbound_route,
-            ProvisioningEventType.OUTBOUND_ROUTE_UPDATED: self.replication_port.replicate_outbound_route,
-            ProvisioningEventType.OUTBOUND_ROUTE_DELETED: self.replication_port.delete_outbound_route,
+            EdiEventType.edi_outbound_route_created: self.replication_port.replicate_outbound_route,
+            EdiEventType.edi_outbound_route_updated: self.replication_port.replicate_outbound_route,
+            EdiEventType.edi_outbound_route_deleted: self.replication_port.delete_outbound_route,
             # Outbound EDI Header
-            ProvisioningEventType.OUTBOUND_EDI_HEADER_CREATED: self.replication_port.replicate_outbound_edi_header,
-            ProvisioningEventType.OUTBOUND_EDI_HEADER_UPDATED: self.replication_port.replicate_outbound_edi_header,
-            ProvisioningEventType.OUTBOUND_EDI_HEADER_DELETED: self.replication_port.delete_outbound_edi_header,
+            EdiEventType.edi_header_created: self.replication_port.replicate_outbound_edi_header,
+            EdiEventType.edi_header_updated: self.replication_port.replicate_outbound_edi_header,
+            EdiEventType.edi_header_deleted: self.replication_port.delete_outbound_edi_header,
         }
 
     async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
         if tenant_id == "0":
+            logger.info(
+                f"Tenant '0' detected. Broadcasting global platform event {replicate_fn.__name__} to all tenant databases"
+            )
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []
             for t_id in all_tenants:
@@ -134,8 +140,13 @@ class ProvisioningWorkerService:
                 ) from e
 
             try:
-                if parsed_event.event_type == ProvisioningEventType.PROVISION_ALL_TENANTS:
+                if parsed_event.event_type == LegacyUcpEventType.PROVISION_ALL_TENANTS:
                     await handle_provision_all_tenants(self, parsed_event, str(event.id))
+                elif parsed_event.event_type == LegacyUcpEventType.PROVISION_TENANT:
+                    logger.info(f"Provisioning tenant configuration for {parsed_event.tenant_id}")
+                    await self.replication_port.replicate_tenant_configuration(
+                        parsed_event.tenant_id
+                    )
                 else:
                     if parsed_event.resource_id is None:
                         raise PermanentProvisioningError(

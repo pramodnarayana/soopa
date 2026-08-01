@@ -1,6 +1,5 @@
 import logging
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -27,7 +26,7 @@ router = APIRouter(tags=["Partners — AS2"])
     response_model=CertificateExportResponse,
 )
 async def export_as2_certificates(
-    partner_id: UUID,
+    partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
@@ -84,7 +83,7 @@ async def export_as2_certificates(
     response_model=AS2TradingPartnerResponse,
 )
 async def rotate_as2_certificates(
-    partner_id: UUID,
+    partner_id: str,
     request: RotateCertificateRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),

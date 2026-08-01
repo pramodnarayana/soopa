@@ -1,8 +1,9 @@
 import logging
 from collections.abc import Sequence
-from uuid import UUID
 
+from domain.events import ProvisioningEvent
 from domain.models import OutboundEdiHeaderDomainModel
+from soopa_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
@@ -23,19 +24,57 @@ class EdiHeaderService:
 
     async def create_outbound_edi_header(
         self, tenant_id: str, cmd: CreateOutboundEdiHeaderCmd
-    ) -> UUID:
+    ) -> str:
         logger.info(
             f"Creating Outbound EDI Header for trading partner {cmd.trading_partner_id} in tenant {tenant_id}"
         )
-        return await self.uow.edi_headers.create_outbound_edi_header(tenant_id=tenant_id, cmd=cmd)
+        header_id = await self.uow.edi_headers.create_outbound_edi_header(
+            tenant_id=tenant_id, cmd=cmd
+        )
+
+        await self.uow.control_plane_outbox.publish_outbox_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_header_created,
+                resource_id=str(header_id),
+            )
+        )
+        logger.info(f"Published OUTBOUND_EDI_HEADER_CREATED outbox event for {header_id}")
+        return header_id
 
     async def update_outbound_edi_header(
-        self, tenant_id: str, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+        self, tenant_id: str, header_id: str, cmd: UpdateOutboundEdiHeaderCmd
     ) -> bool:
-        return await self.uow.edi_headers.update_outbound_edi_header(tenant_id, header_id, cmd)
+        logger.info(f"Updating Outbound EDI Header {header_id} in tenant {tenant_id}")
+        success = await self.uow.edi_headers.update_outbound_edi_header(tenant_id, header_id, cmd)
 
-    async def delete_outbound_edi_header(self, tenant_id: str, header_id: UUID) -> bool:
-        return await self.uow.edi_headers.delete_outbound_edi_header(tenant_id, header_id)
+        if success:
+            await self.uow.control_plane_outbox.publish_outbox_event(
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_header_updated,
+                    resource_id=str(header_id),
+                )
+            )
+            logger.info(f"Published OUTBOUND_EDI_HEADER_UPDATED outbox event for {header_id}")
+
+        return success
+
+    async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> bool:
+        logger.info(f"Deleting Outbound EDI Header {header_id} in tenant {tenant_id}")
+        success = await self.uow.edi_headers.delete_outbound_edi_header(tenant_id, header_id)
+
+        if success:
+            await self.uow.control_plane_outbox.publish_outbox_event(
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_header_deleted,
+                    resource_id=str(header_id),
+                )
+            )
+            logger.info(f"Published OUTBOUND_EDI_HEADER_DELETED outbox event for {header_id}")
+
+        return success
 
     async def get_outbound_edi_headers(
         self, tenant_id: str

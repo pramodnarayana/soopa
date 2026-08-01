@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import TypeAdapter
@@ -111,7 +110,7 @@ async def create_outbound_route(
 
 @router.patch("/inbound/{route_id}", status_code=status.HTTP_200_OK)
 async def update_inbound_route(
-    route_id: UUID,
+    route_id: str,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -147,7 +146,7 @@ async def update_inbound_route(
 
 @router.delete("/inbound/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_inbound_route(
-    route_id: UUID,
+    route_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
@@ -164,7 +163,7 @@ async def delete_inbound_route(
 
 @router.patch("/outbound/{route_id}", status_code=status.HTTP_200_OK)
 async def update_outbound_route(
-    route_id: UUID,
+    route_id: str,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -193,7 +192,7 @@ async def update_outbound_route(
 
 @router.delete("/outbound/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_outbound_route(
-    route_id: UUID,
+    route_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:

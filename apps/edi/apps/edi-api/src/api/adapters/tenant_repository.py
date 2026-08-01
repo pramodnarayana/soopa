@@ -3,7 +3,6 @@ from typing import Any
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     Tenant,
-    TenantShard,
 )
 from sqlalchemy import select
 
@@ -20,10 +19,16 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort, GlobalSqlAlchemyRepositor
         if not tenant:
             return None
 
-        # Fetch the tenant shard configuration to get the allow_private_as2 flag
-        shard_result = await self.session.execute(
-            select(TenantShard).where(TenantShard.tenant_id == tenant_id)
-        )
-        tenant_shard = shard_result.scalar_one_or_none()
+        return {"allow_private_as2": False}
 
-        return {"allow_private_as2": tenant_shard.allow_private_as2 if tenant_shard else False}
+    async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
+        result = await self.session.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = result.scalar_one_or_none()
+        if not tenant:
+            return None
+
+        return {
+            "id": tenant.id,
+            "idp_tenant_id": tenant.idp_tenant_id,
+            "name": tenant.name,
+        }

@@ -1,6 +1,5 @@
 import logging
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
@@ -37,7 +36,7 @@ router = APIRouter(tags=["Platform Partners - AS2 Partnerships"])
     status_code=status.HTTP_200_OK,
 )
 async def test_as2_partnership_connection(
-    partnership_id: UUID,
+    partnership_id: str,
     request: TestAS2ConnectionRequest | None = None,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     as2_tester: AS2TesterPort = Depends(get_as2_tester),
@@ -189,7 +188,7 @@ async def create_platform_as2_partnership(
 
 @router.put("/as2/partnerships/{partnership_id}", response_model=AS2PartnershipResponse)
 async def update_platform_as2_partnership(
-    partnership_id: UUID,
+    partnership_id: str,
     request: UpdateAS2PartnershipRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
@@ -257,7 +256,7 @@ async def update_platform_as2_partnership(
     response_class=Response,
 )
 async def delete_platform_as2_partnership(
-    partnership_id: UUID,
+    partnership_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     try:

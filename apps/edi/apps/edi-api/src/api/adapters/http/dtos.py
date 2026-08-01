@@ -1,5 +1,4 @@
 from typing import Annotated, Any, Literal
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -27,8 +26,8 @@ class CreateAS2TradingPartnerRequest(BaseModel):
 
 class CreateAS2PartnershipRequest(BaseModel):
     name: str = Field(..., max_length=255, description="Name for the partnership")
-    local_partner_id: UUID = Field(..., description="ID of the local identity")
-    remote_partner_id: UUID = Field(..., description="ID of the remote identity")
+    local_partner_id: str = Field(..., description="ID of the local identity")
+    remote_partner_id: str = Field(..., description="ID of the remote identity")
     credentials_vault_ref: str | None = Field(
         None, max_length=512, description="Vault reference for basic auth"
     )
@@ -100,8 +99,8 @@ class UpdateAS2TradingPartnerRequest(BaseModel):
 
 class UpdateAS2PartnershipRequest(BaseModel):
     name: str | None = Field(None, max_length=255)
-    local_partner_id: UUID | None = None
-    remote_partner_id: UUID | None = None
+    local_partner_id: str | None = None
+    remote_partner_id: str | None = None
     credentials_vault_ref: str | None = Field(None, max_length=255)
     mdn_type: Literal["SYNC", "ASYNC", "NONE"] | None = Field(None)
     mdn_url: HttpUrl | None = Field(None)
@@ -152,11 +151,11 @@ class CreateInboundRouteRequest(BaseModel):
     processing_mode: Literal["TRANSFORM", "PASSTHROUGH"] = Field(
         "TRANSFORM", description="Processing Mode"
     )
-    webhook_id: UUID | None = Field(
+    webhook_id: str | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
-    as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
-    sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
+    as2_partner_id: str | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
+    sftp_partner_id: str | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
 
 
 class CreateOutboundRouteRequest(BaseModel):
@@ -164,8 +163,8 @@ class CreateOutboundRouteRequest(BaseModel):
         ..., max_length=255, description="The ERP's identifier for this route"
     )
     name: str = Field(..., max_length=255, description="Name of the route")
-    as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
+    as2_partner_id: str | None = Field(None, description="ID of AS2 Partner for routing")
+    sftp_partner_id: str | None = Field(None, description="ID of SFTP Partner for routing")
 
     @model_validator(mode="after")
     def check_exactly_one_destination(self) -> "CreateOutboundRouteRequest":
@@ -250,11 +249,11 @@ class UpdateRouteRequest(BaseModel):
     processing_mode: Literal["TRANSFORM", "PASSTHROUGH"] | None = Field(
         None, description="Processing Mode"
     )
-    webhook_id: UUID | None = Field(
+    webhook_id: str | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
-    as2_partner_id: UUID | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: UUID | None = Field(None, description="ID of SFTP Partner for routing")
+    as2_partner_id: str | None = Field(None, description="ID of AS2 Partner for routing")
+    sftp_partner_id: str | None = Field(None, description="ID of SFTP Partner for routing")
 
 
 # ---------------------------------------------------------------------------
@@ -263,8 +262,8 @@ class UpdateRouteRequest(BaseModel):
 
 
 class PartnerResponse(BaseModel):
-    partner_id: UUID
-    id: UUID | None = None
+    partner_id: str
+    id: str | None = None
     tenant_id: str
     name: str
     type: str  # AS2, SFTP, WEBHOOK
@@ -338,7 +337,7 @@ class AS2PartnershipResponse(BaseModel):
 
 
 class RouteResponse(BaseModel):
-    route_id: UUID
+    route_id: str
     tenant_id: str
     direction: str  # INBOUND, OUTBOUND
 
@@ -346,14 +345,14 @@ class RouteResponse(BaseModel):
 class BaseRouteItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    route_id: UUID
+    route_id: str
     trading_partner_id: str | None = None
     name: str
     destination_type: str
     destination_name: str
-    webhook_id: UUID | None = None
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
+    webhook_id: str | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
     status: str = Field(default="ACTIVE")
     active: bool = False
 
@@ -395,7 +394,7 @@ class OutboundMessageRequest(BaseModel):
 
 
 class OutboundMessageResponse(BaseModel):
-    trace_id: UUID = Field(..., description="The Trace ID to track the message lifecycle")
+    trace_id: str = Field(..., description="The Trace ID to track the message lifecycle")
     status: str = Field(default="ACCEPTED")
 
 

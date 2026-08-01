@@ -63,7 +63,7 @@ def test_create_as2_partnership(client, mock_uow):
 
 
 def test_update_as2_partnership(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     mock_uow.as2_partnerships.get_as2_partnership.return_value = {"id": str(pid)}
     client.put(
         f"/api/v1/platform/trading-partners/as2/partnerships/{pid}",
@@ -72,5 +72,5 @@ def test_update_as2_partnership(client, mock_uow):
 
 
 def test_delete_as2_partnership(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     client.delete(f"/api/v1/platform/trading-partners/as2/partnerships/{pid}")

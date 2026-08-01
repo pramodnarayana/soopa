@@ -1,8 +1,8 @@
 import logging
-from uuid import UUID
 
-from domain.events import ProvisioningEventType
+from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
+from soopa_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
@@ -28,40 +28,46 @@ class InboundRouteService:
         logger.info(f"Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
         route_id = await self.uow.inbound_routes.create_inbound_route(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.INBOUND_ROUTE_CREATED,
-            payload={"resource_id": str(route_id), "tenant_id": tenant_id},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_inbound_route_created,
+                resource_id=str(route_id),
+            )
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.INBOUND)
 
     async def update_inbound_route(
-        self, tenant_id: str, route_id: UUID, cmd: UpdateInboundRouteCmd
+        self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
     ) -> bool:
         res = await self.uow.inbound_routes.update_inbound_route(tenant_id, route_id, cmd)
         if res:
             await self.uow.control_plane_outbox.publish_outbox_event(
-                tenant_id=tenant_id,
-                event_type=ProvisioningEventType.INBOUND_ROUTE_UPDATED,
-                payload={"resource_id": str(route_id), "tenant_id": tenant_id},
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_inbound_route_updated,
+                    resource_id=str(route_id),
+                )
             )
         return res
 
-    async def delete_inbound_route(self, tenant_id: str, route_id: UUID) -> bool:
+    async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
         res = await self.uow.inbound_routes.delete_inbound_route(tenant_id, route_id)
         if res:
             await self.uow.control_plane_outbox.publish_outbox_event(
-                tenant_id=tenant_id,
-                event_type=ProvisioningEventType.INBOUND_ROUTE_DELETED,
-                payload={"resource_id": str(route_id), "tenant_id": tenant_id},
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_inbound_route_deleted,
+                    resource_id=str(route_id),
+                )
             )
         return res
 
     async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteListEntity]:
         inbound = await self.uow.inbound_routes.list_inbound_routes(tenant_id)
 
-        as2_ids: set[UUID] = set()
-        sftp_ids: set[UUID] = set()
-        webhook_ids: set[UUID] = set()
+        as2_ids: set[str] = set()
+        sftp_ids: set[str] = set()
+        webhook_ids: set[str] = set()
 
         for r in inbound:
             if r.as2_partner_id:

@@ -1,6 +1,5 @@
 import logging
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -110,7 +109,7 @@ async def get_transaction_thread(
 
 @router.get("/{trace_id}", response_model=TransactionDetailResponse)
 async def get_transaction(
-    trace_id: UUID,
+    trace_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
     global_session: AsyncSession = Depends(get_global_session),

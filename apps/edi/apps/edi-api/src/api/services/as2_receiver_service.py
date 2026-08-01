@@ -8,7 +8,7 @@ from typing import Any
 from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
-from database.models.control_plane import DatabaseShard, Tenant, TenantShard
+from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
 from domain.events import PipelineEventType
 from security.smime import decrypt_payload, verify_signature
 from sqlalchemy import select
@@ -346,7 +346,7 @@ class As2ReceiverService:
         logger.info(f"Saved AS2 payload ({isa_sender}->{isa_receiver}) to Tenant {true_tenant_id}")
 
         edi_record = {
-            "trace_id": uuid.uuid4(),
+            "trace_id": str(uuid.uuid4()),
             "direction": "INBOUND",
             "connection_type": "AS2",
             "sender_id": isa_sender,
@@ -364,9 +364,10 @@ class As2ReceiverService:
         # 3. Save directly to the true Tenant's Data Plane Shard
         stmt = (
             select(Tenant, DatabaseShard)
-            .join(TenantShard, Tenant.id == TenantShard.tenant_id)
-            .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
-            .where(Tenant.id == true_tenant_id)
+            .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+            .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
+            .join(App, App.id == ShardRegistry.app_id)
+            .where(Tenant.id == true_tenant_id, App.slug == "edi")
         )
         result = await self.global_session.execute(stmt)
         row = result.first()

@@ -2,15 +2,15 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import { useToastMutation } from '../../../hooks/use-toast-mutation';
 import type {
+  AS2Partnership,
   CertificatesExport,
+  CreateAS2PartnershipPayload,
   CreatePartnerPayload,
-  CreatePartnershipPayload,
   CreateSftpPartnerPayload,
   Partner,
-  Partnership,
   RotateCertPayload,
+  UpdateAS2PartnershipPayload,
   UpdatePartnerPayload,
-  UpdatePartnershipPayload,
 } from '../types';
 // ─────────────────────────────────────────────
 // Query Key Factory
@@ -33,7 +33,12 @@ export const partnersKeys = {
 // Queries
 // ─────────────────────────────────────────────
 
-import { PartnersArraySchema, PartnershipsArraySchema } from './partnerSchemas';
+import {
+  AS2PartnershipSchema,
+  AS2PartnershipsArraySchema,
+  PartnerSchema,
+  PartnersArraySchema,
+} from './partnerSchemas';
 
 export function useAS2PartnersQuery() {
   const api = useEdiNetwork();
@@ -50,9 +55,9 @@ export function useAS2PartnershipsQuery() {
   const api = useEdiNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartnerships(),
-    queryFn: async (): Promise<Partnership[]> => {
+    queryFn: async (): Promise<AS2Partnership[]> => {
       const res = await api.get('/platform/trading-partners/as2/partnerships');
-      return PartnershipsArraySchema.parse(res.data);
+      return AS2PartnershipsArraySchema.parse(res.data);
     },
   });
 }
@@ -78,7 +83,10 @@ export function useTenantPartnersQuery() {
     queryKey: partnersKeys.tenant(),
     queryFn: async (): Promise<Partner[]> => {
       const res = await api.get('/trading-partners');
-      return PartnersArraySchema.parse(res.data);
+      // Some properties might be aliased like partner_id -> id. Wait, let's parse them properly.
+      return PartnersArraySchema.parse(
+        res.data.map((p: any) => ({ ...p, id: p.partner_id || p.id })),
+      );
     },
   });
 }
@@ -95,11 +103,8 @@ export function useCreateAS2PartnerMutation() {
       if (!payload.is_local && !payload.public_cert_pem?.trim()) {
         throw new Error('Remote AS2 partners require a public certificate.');
       }
-      const res = await api.post<Partner>(
-        '/platform/trading-partners/as2/trading-partners',
-        payload,
-      );
-      return res.data;
+      const res = await api.post('/platform/trading-partners/as2/trading-partners', payload);
+      return PartnerSchema.parse(res.data);
     },
     'Trading partner created successfully.',
     [partnersKeys.platformPartners()],
@@ -111,11 +116,8 @@ export function useUpdateAS2PartnerMutation() {
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
-      const res = await api.put<Partner>(
-        `/platform/trading-partners/as2/trading-partners/${id}`,
-        payload,
-      );
-      return res.data;
+      const res = await api.put(`/platform/trading-partners/as2/trading-partners/${id}`, payload);
+      return PartnerSchema.parse(res.data);
     },
     'Partner updated successfully.',
     [partnersKeys.platformPartners()],
@@ -152,15 +154,12 @@ export function useCreateAS2PartnershipMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(
-    async (payload: CreatePartnershipPayload) => {
+    async (payload: CreateAS2PartnershipPayload) => {
       if (!payload.local_partner_id || !payload.remote_partner_id) {
         throw new Error('Both a local and remote trading partner must be selected.');
       }
-      const res = await api.post<Partnership>(
-        '/platform/trading-partners/as2/partnerships',
-        payload,
-      );
-      return res.data;
+      const res = await api.post('/platform/trading-partners/as2/partnerships', payload);
+      return AS2PartnershipSchema.parse(res.data);
     },
     'Partnership created successfully.',
     [partnersKeys.platformPartnerships()],
@@ -171,12 +170,9 @@ export function useUpdateAS2PartnershipMutation() {
   const api = useEdiNetwork();
 
   return useToastMutation(
-    async ({ id, payload }: { id: string; payload: UpdatePartnershipPayload }) => {
-      const res = await api.put<Partnership>(
-        `/platform/trading-partners/as2/partnerships/${id}`,
-        payload,
-      );
-      return res.data;
+    async ({ id, payload }: { id: string; payload: UpdateAS2PartnershipPayload }) => {
+      const res = await api.put(`/platform/trading-partners/as2/partnerships/${id}`, payload);
+      return AS2PartnershipSchema.parse(res.data);
     },
 
     'Partnership updated successfully.',
@@ -205,8 +201,8 @@ export function useCreateSftpPartnerMutation() {
 
   return useToastMutation(
     async (payload: CreateSftpPartnerPayload) => {
-      const res = await api.post<Partner>('/trading-partners/sftp', payload);
-      return res.data;
+      const res = await api.post('/trading-partners/sftp', payload);
+      return PartnerSchema.parse(res.data);
     },
     'SFTP Partner created successfully.',
     [partnersKeys.tenant()],
@@ -218,8 +214,8 @@ export function useUpdateSftpPartnerMutation() {
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
-      const res = await api.put<Partner>(`/trading-partners/sftp/${id}`, payload);
-      return res.data;
+      const res = await api.put(`/trading-partners/sftp/${id}`, payload);
+      return PartnerSchema.parse(res.data);
     },
     'SFTP Partner updated successfully.',
     [partnersKeys.tenant()],
@@ -246,11 +242,11 @@ export function useRotateCertificatesMutation() {
   const api = useEdiNetwork();
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: RotateCertPayload }) => {
-      const res = await api.post<Partner>(
+      const res = await api.post(
         `/platform/trading-partners/as2/certificates/${id}/rotate`,
         payload,
       );
-      return res.data;
+      return PartnerSchema.parse(res.data);
     },
     'Certificate operation successful.',
     [partnersKeys.all],

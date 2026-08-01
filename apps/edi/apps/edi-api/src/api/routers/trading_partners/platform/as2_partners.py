@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from config.settings import get_settings
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -65,7 +64,7 @@ logger = logging.getLogger(__name__)
     response_model=CertificateExportResponse,
 )
 async def export_platform_as2_certificates(
-    partner_id: UUID,
+    partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     profile: dict[str, Any] = Depends(get_current_user_profile),
@@ -258,7 +257,7 @@ async def list_platform_as2_partners(
 
 @router.put("/as2/trading-partners/{partner_id}", response_model=AS2TradingPartnerResponse)
 async def update_platform_as2_partner(
-    partner_id: UUID,
+    partner_id: str,
     request: UpdateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
@@ -297,7 +296,7 @@ async def update_platform_as2_partner(
 
 @router.delete("/as2/trading-partners/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_platform_as2_partner(
-    partner_id: UUID,
+    partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an AS2 partner."""

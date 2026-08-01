@@ -1,13 +1,12 @@
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     DateTime,
     Integer,
     String,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 
@@ -15,8 +14,8 @@ class OutboxMixin:
     """Shared columns for Outbox across Global and Tenant schemas."""
 
     @declared_attr
-    def idempotency_key(cls) -> Mapped[PyUUID]:
-        return mapped_column(UUID(as_uuid=True), nullable=False, unique=True)
+    def idempotency_key(cls) -> Mapped[str]:
+        return mapped_column(String(128), nullable=False, unique=True)
 
     @declared_attr
     def event_type(cls) -> Mapped[str]:
@@ -37,6 +36,10 @@ class OutboxMixin:
     @declared_attr
     def published_at(cls) -> Mapped[datetime | None]:
         return mapped_column(DateTime(timezone=True), nullable=True)
+
+    @declared_attr
+    def error_reason(cls) -> Mapped[str | None]:
+        return mapped_column(String, nullable=True)
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:

@@ -1,6 +1,3 @@
-import uuid
-from uuid import UUID
-
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import AS2Partner, AS2Partnership
 from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
@@ -28,7 +25,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         repo = PartnershipRepository(self.session)
         return await repo.get_partnership_by_as2_ids(as2_from, as2_to)
 
-    async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> UUID:
+    async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> str:
         tid_str = tenant_id
         local_r = await self.session.execute(
             select(AS2Partner).where(
@@ -49,9 +46,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         if not local_partner or not remote_partner:
             raise ValueError("Local or Remote partner not found")
 
-        partnership_id = uuid.uuid4()
         record = AS2Partnership(
-            id=partnership_id,
             tenant_id=tid_str,
             name=cmd.name,
             local_partner_id=cmd.local_partner_id,
@@ -64,10 +59,10 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         )
         self.session.add(record)
         await self.session.flush()
-        return partnership_id
+        return record.id
 
     async def update_as2_partnership(
-        self, tenant_id: str, partnership_id: UUID, cmd: UpdateAS2PartnershipCmd
+        self, tenant_id: str, partnership_id: str, cmd: UpdateAS2PartnershipCmd
     ) -> None:
         tid_str = tenant_id
         result = await self.session.execute(
@@ -110,7 +105,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     setattr(partnership, field.name, value)
         await self.session.flush()
 
-    async def delete_as2_partnership(self, tenant_id: str, partnership_id: UUID) -> None:
+    async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         tid_str = tenant_id
         await self.session.execute(
             delete(AS2Partnership).where(
@@ -120,7 +115,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         await self.session.flush()
 
     async def get_as2_partnership(
-        self, tenant_id: str, partnership_id: UUID
+        self, tenant_id: str, partnership_id: str
     ) -> AS2PartnershipDomainModel | None:
         tid_str = tenant_id
         result = await self.session.execute(
@@ -131,7 +126,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         record = result.scalar_one_or_none()
         return AS2PartnershipDomainModel.model_validate(record) if record else None
 
-    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         if not ids:
             return {}
         tid_str = tenant_id

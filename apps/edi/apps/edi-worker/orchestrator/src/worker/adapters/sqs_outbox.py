@@ -37,6 +37,9 @@ class SqsOutboxAdapter(OutboxPort):
     def __init__(self, queue_name: str = "edi-tenant-sync.fifo"):
         self.queue_name = queue_name
         self.endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
+        # Fallback for local development if missing
+        if not self.endpoint_url and os.environ.get("ENVIRONMENT", "local") == "local":
+            self.endpoint_url = "http://localhost:4566"
         self.region = "us-east-1"
         self.session = aioboto3.Session()
 
@@ -115,6 +118,7 @@ class SqsOutboxAdapter(OutboxPort):
                 return
 
             event = SqsEvent(message_id=message_id, receipt_handle=receipt_handle, body=body)
+            logger.info(f"Picked up SQS event {message_id}")
 
             try:
                 yield event

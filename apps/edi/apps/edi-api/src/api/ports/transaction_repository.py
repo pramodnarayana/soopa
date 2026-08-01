@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from typing import Any, Protocol
-from uuid import UUID
 
 
 class TransactionRepositoryPort(Protocol):
@@ -8,27 +7,27 @@ class TransactionRepositoryPort(Protocol):
     Port for the Data Plane transaction repository, handling Operational Data.
     """
 
-    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
         """
         Saves a new EdiMessage record to the Data Plane.
         """
         ...
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: UUID
-    ) -> UUID:
+        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
+    ) -> str:
         """
         Publishes an event to the outbox for background processing.
         """
         ...
 
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
         """
         Saves a new EdiJson record to the Data Plane.
         """
         ...
 
-    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
         """
         Saves a new ApiGateway record to the Data Plane.
         """
@@ -64,7 +63,7 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def get_transaction(self, tenant_id: str, trace_id: UUID) -> Any | None:
+    async def get_transaction(self, tenant_id: str, trace_id: str) -> Any | None:
         """
         Retrieves a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
         """
