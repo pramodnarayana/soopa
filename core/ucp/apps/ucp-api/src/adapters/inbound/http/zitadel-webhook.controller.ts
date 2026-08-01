@@ -8,6 +8,7 @@ import {
   Logger,
   Post,
   Req,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
@@ -121,10 +122,12 @@ export class ZitadelWebhookController {
           payload.userId,
         );
         if (!existingUser) {
-          this.logger.warn(
-            `Skipping ${payload.eventType} for user ${payload.userId}: User not found locally`,
+          this.logger.error(
+            `Out-of-order event ${payload.eventType} for user ${payload.userId}: User not found locally, requesting retry`,
           );
-          return { status: 'skipped' };
+          throw new ServiceUnavailableException(
+            'User not yet synchronized, retry required',
+          );
         }
 
         await this.userRepo.upsertTenantUser({

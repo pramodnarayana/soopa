@@ -34,8 +34,15 @@ export class ZitadelJwksVerifier implements TokenVerifier {
           this.userinfoCache.delete(key);
         }
       }
+      // If still over limit after expiry-based eviction, delete oldest entries
       if (this.userinfoCache.size > this.MAX_CACHE_SIZE) {
-        this.userinfoCache.clear();
+        const entriesToDelete = this.userinfoCache.size - this.MAX_CACHE_SIZE;
+        let deleted = 0;
+        for (const key of this.userinfoCache.keys()) {
+          if (deleted >= entriesToDelete) break;
+          this.userinfoCache.delete(key);
+          deleted++;
+        }
       }
     }
   }
@@ -73,13 +80,13 @@ export class ZitadelJwksVerifier implements TokenVerifier {
         const userinfoUrl = this.options.userinfoUrl ?? `${this.options.issuer}/oidc/v1/userinfo`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
+
         try {
           const response = await fetch(userinfoUrl, {
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal,
           });
-          
+
           if (response.ok) {
             const userinfo = (await response.json()) as Record<string, unknown>;
             Object.assign(claims, userinfo);
@@ -91,13 +98,21 @@ export class ZitadelJwksVerifier implements TokenVerifier {
               this.evictIfNeeded();
             }
           } else {
-            console.error('[ZitadelJwksVerifier] Failed to fetch userinfo, status:', response.status);
+            throw new IdentityInfrastructureError(
+              `Failed to fetch userinfo from Zitadel: HTTP ${response.status}`,
+            );
           }
         } catch (e: unknown) {
           if (e instanceof Error && e.name === 'AbortError') {
-            console.error('[ZitadelJwksVerifier] Userinfo request timed out after 5 seconds');
+            throw new IdentityInfrastructureError(
+              'Userinfo request timed out after 5 seconds',
+            );
+          } else if (e instanceof IdentityInfrastructureError) {
+            throw e;
           } else {
-            console.error('[ZitadelJwksVerifier] Failed to fetch userinfo request', e);
+            throw new IdentityInfrastructureError(
+              `Failed to fetch userinfo: ${e instanceof Error ? e.message : String(e)}`,
+            );
           }
         } finally {
           clearTimeout(timeoutId);
@@ -106,13 +121,14 @@ export class ZitadelJwksVerifier implements TokenVerifier {
     }
 
     const mappedClaims: TokenClaims = {
+      ...claims, // Spread all custom claims first
+      // Explicit mappings take precedence
       sub: claims.sub,
       email: claims.email as string | undefined,
       preferred_username: claims.preferred_username as string | undefined,
       name: claims.name as string | undefined,
       idpTenantId: (claims['urn:zitadel:iam:org:id'] || claims.tenant_id) as string | undefined,
       tenant_id: claims.tenant_id as string | undefined,
-      ...claims, // Spread all custom claims like roles for downstream UseCases
     };
 
     return mappedClaims;

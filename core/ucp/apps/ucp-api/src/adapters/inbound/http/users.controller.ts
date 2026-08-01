@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
-import { createId } from '@paralleldrive/cuid2';
+import { generateId } from '@soopa/database';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 import { ZitadelUserState } from '../../../domain/enums/zitadel-user-state.enum.js';
 import type { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
@@ -119,7 +119,7 @@ export class UsersController {
     );
 
     // Dual-write immediately so the UI is responsive, webhook will act as fallback for out-of-band changes
-    const localUserId = createId();
+    const localUserId = generateId('usr');
     await this.userRepo.upsertUser({
       id: localUserId,
       idpUserId: result.userId,
@@ -150,17 +150,9 @@ export class UsersController {
       throw new BadRequestException('Tenant has no associated organization');
     }
 
-    // Verify user belongs to this tenant
+    // Verify user belongs to this tenant and get user details
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
-    if (!userBelongsToTenant) {
-      throw new NotFoundException('User not found in this tenant');
-    }
-
-    // Find the user's Zitadel ID
-    const user = await this.userRepo
-      .findUsersByTenant(tenantId)
-      .then((users) => users.find((u) => u.id === userId));
+    const user = tenantUsers.find((u) => u.id === userId);
     if (!user || !user.idpUserId) {
       throw new NotFoundException(
         'User identity mapping not found in this tenant',
@@ -179,6 +171,7 @@ export class UsersController {
     await this.userRepo.upsertUser({
       id: userId,
       idpUserId: user.idpUserId,
+      email: user.email,
       name: `${dto.firstName} ${dto.lastName}`.trim(),
     });
 
@@ -204,17 +197,9 @@ export class UsersController {
       throw new BadRequestException('Tenant has no associated organization');
     }
 
-    // Verify user belongs to this tenant
+    // Verify user belongs to this tenant and get user details
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
-    if (!userBelongsToTenant) {
-      throw new NotFoundException('User not found in this tenant');
-    }
-
-    // Find the user's Zitadel ID
-    const user = await this.userRepo
-      .findUsersByTenant(tenantId)
-      .then((users) => users.find((u) => u.id === userId));
+    const user = tenantUsers.find((u) => u.id === userId);
     if (!user || !user.idpUserId) {
       throw new NotFoundException(
         'User identity mapping not found in this tenant',
@@ -234,17 +219,9 @@ export class UsersController {
     @UcpTenantId() tenantId: string,
     @Param('id') userId: string,
   ) {
-    // Verify user belongs to this tenant
+    // Verify user belongs to this tenant and get user details
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
-    if (!userBelongsToTenant) {
-      throw new NotFoundException('User not found in this tenant');
-    }
-
-    // Find the user's Zitadel ID
-    const user = await this.userRepo
-      .findUsersByTenant(tenantId)
-      .then((users) => users.find((u) => u.id === userId));
+    const user = tenantUsers.find((u) => u.id === userId);
     if (!user || !user.idpUserId) {
       throw new NotFoundException(
         'User identity mapping not found in this tenant',

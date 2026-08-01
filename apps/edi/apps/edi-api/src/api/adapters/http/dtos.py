@@ -2,8 +2,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
 
-# Reusable constrained identifier type for all ID fields
-ConstrainedId = Annotated[str, StringConstraints(min_length=1, max_length=128)]
+# Reusable constrained identifier type for request ID fields (up to 255 chars for String(255) columns)
+ConstrainedId = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -326,10 +326,10 @@ class CertificateExportResponse(BaseModel):
 class AS2PartnershipResponse(BaseModel):
     id: str
     tenant_id: str | None
-    trading_partner_id: ConstrainedId | None = None
+    trading_partner_id: str | None = None
     name: str | None = None
-    local_partner_id: ConstrainedId
-    remote_partner_id: ConstrainedId
+    local_partner_id: str
+    remote_partner_id: str
     mdn_type: str
     mdn_url: str | None = None
     encryption_algorithm: str
@@ -349,13 +349,13 @@ class BaseRouteItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     route_id: str
-    trading_partner_id: ConstrainedId | None = None
+    trading_partner_id: str | None = None
     name: str
     destination_type: str
     destination_name: str
-    webhook_id: ConstrainedId | None = None
-    as2_partner_id: ConstrainedId | None = None
-    sftp_partner_id: ConstrainedId | None = None
+    webhook_id: str | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
     status: str = Field(default="ACTIVE")
     active: bool = False
 

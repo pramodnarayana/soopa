@@ -16,9 +16,7 @@ import { API_TOKEN_REPOSITORY } from '../ports/outbound/api-token.repository.js'
 import { OUTBOX_REPOSITORY } from '../ports/outbound/control-plane-outbox.repository.js';
 import { TARGET_CONTROL_PLANE_OUTBOX_REPOSITORY } from '../ports/outbound/target-control-plane-outbox.repository.js';
 import { APP_SUBSCRIPTION_REPOSITORY } from '../ports/outbound/app-subscription.repository.js';
-
 import { DATABASE_CLIENT } from './database.constants.js';
-export { DATABASE_CLIENT };
 
 const databaseProvider = {
   provide: DATABASE_CLIENT,

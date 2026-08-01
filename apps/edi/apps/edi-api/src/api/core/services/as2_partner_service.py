@@ -1,6 +1,8 @@
 import logging
 import uuid
 import hashlib
+import json
+import dataclasses
 
 from domain.events import (
     ProvisioningEvent,
@@ -60,7 +62,8 @@ class AS2PartnerService:
         if not updated_partner:
             raise ValueError("Partner not found after update")
 
-        cmd_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
+        cmd_dict = dataclasses.asdict(cmd) if dataclasses.is_dataclass(cmd) else cmd.__dict__
+        cmd_hash = hashlib.sha256(json.dumps(cmd_dict, sort_keys=True).encode()).hexdigest()
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,
@@ -106,7 +109,8 @@ class AS2PartnerService:
         if not updated_partner:
             raise ValueError("Partner not found after certificate rotation")
 
-        cmd_hash = hashlib.sha256(f"{new_public_cert}:{new_private_key_vault_ref}".encode()).hexdigest()
+        cmd_data = {"new_public_cert": new_public_cert, "new_private_key_vault_ref": new_private_key_vault_ref}
+        cmd_hash = hashlib.sha256(json.dumps(cmd_data, sort_keys=True).encode()).hexdigest()
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,

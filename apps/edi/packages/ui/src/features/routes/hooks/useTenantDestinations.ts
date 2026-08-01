@@ -29,7 +29,8 @@ export function useTenantDestinations(direction: Direction) {
 
         const rawWebhooks = RawWebhooksArrayResponseSchema.parse(webhooksRes.data);
         const webhooks = rawWebhooks.map((w) => mapRawWebhook(w, tenantId));
-        const partners = PartnersArraySchema.parse(partnersRes.data.map(normalizePartnerResponse));
+        const partnersData = Array.isArray(partnersRes.data) ? partnersRes.data : [];
+        const partners = PartnersArraySchema.parse(partnersData.map(normalizePartnerResponse));
 
         return [
           ...webhooks.map((d) => ({ id: d.id, name: d.name, type: d.type })),
@@ -42,7 +43,8 @@ export function useTenantDestinations(direction: Direction) {
         ];
       } else {
         const partnersRes = await ediApi.get('/trading-partners');
-        const data = PartnersArraySchema.parse(partnersRes.data.map(normalizePartnerResponse));
+        const partnersData = Array.isArray(partnersRes.data) ? partnersRes.data : [];
+        const data = PartnersArraySchema.parse(partnersData.map(normalizePartnerResponse));
         return data.map((d) => ({
           id: d.id,
           name: d.name,

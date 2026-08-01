@@ -1,4 +1,4 @@
-import { TenantMappingDomainError } from '../domain/Errors.js';
+import { MissingIdentityTenantError, TenantMappingDomainError } from '../domain/Errors.js';
 import type { IdentityContext } from '../domain/IdentityContext.js';
 import type { TenantRepository } from '../ports/TenantRepository.js';
 import type { TokenVerifier } from '../ports/TokenVerifier.js';
@@ -21,14 +21,12 @@ export class AuthenticateUseCase {
 
     const email = claims.email || claims.preferred_username || claims.sub;
     const name = claims.name || email.split('@')[0];
-    
-    console.log('[AuthenticateUseCase] Raw Claims:', JSON.stringify(claims, null, 2));
 
     // Use the robust utility to resolve the external Identity Provider ID
-    const idpTenantId = resolveZitadelOrgId(claims) || claims.tenant_id;
+    const idpTenantId: string | undefined = resolveZitadelOrgId(claims) || claims.tenant_id;
 
     if (!idpTenantId) {
-      throw new Error(`DomainException: Missing Zitadel Organization ID for user ${email}`);
+      throw new MissingIdentityTenantError(email);
     }
 
     // Determine PlatformAdmin role

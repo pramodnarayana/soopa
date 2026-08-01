@@ -52,6 +52,14 @@ _tenant_mapping_cache: dict[str, tuple[str, float]] = {}  # {ucp_tenant_id: (idp
 _CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
+def invalidate_tenant_mapping_cache(tenant_id: str) -> None:
+    """
+    Invalidate a specific tenant mapping entry from the cache.
+    Should be called after tenant updates or deletions to ensure consistency.
+    """
+    _tenant_mapping_cache.pop(tenant_id, None)
+
+
 async def get_current_tenant_id(
     request: Request,
     identity: IdentityContext = Depends(get_identity_context),

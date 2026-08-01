@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
-import { TenantMappingDomainError } from '../src/domain/Errors.js';
+import { MissingIdentityTenantError, TenantMappingDomainError } from '../src/domain/Errors.js';
 import type { TokenClaims } from '../src/domain/IdentityContext.js';
 import type { TenantRepository, UserData } from '../src/ports/TenantRepository.js';
 import type { TokenVerifier } from '../src/ports/TokenVerifier.js';
@@ -119,5 +119,85 @@ describe('AuthenticateUseCase', () => {
 
     expect(result.email).toBe('fallback-sub');
     expect(result.name).toBe('fallback-sub');
+  });
+
+  it('should detect PlatformAdmin from urn:zitadel:iam:org:project:roles', async () => {
+    const verifier = new FakeTokenVerifier();
+    verifier.claims = {
+      sub: 'admin-user',
+      email: 'admin@example.com',
+      name: 'Admin User',
+      tenant_id: 'org123',
+      'urn:zitadel:iam:org:project:roles': { PlatformAdmin: {} },
+    };
+
+    const repo = new FakeTenantRepository();
+    repo.provisioned = { userId: 'u5', tenantId: 't5' };
+
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
+    const result = await useCase.execute('valid');
+
+    expect(result.isPlatformAdmin).toBe(true);
+    expect(result.roles).toContain('PlatformAdmin');
+    expect(result.rawRoles).toContain('PlatformAdmin');
+  });
+
+  it('should detect PlatformAdmin from audience-scoped roles', async () => {
+    const verifier = new FakeTokenVerifier();
+    verifier.claims = {
+      sub: 'admin-user-2',
+      email: 'admin2@example.com',
+      name: 'Admin User 2',
+      tenant_id: 'org456',
+      'urn:zitadel:iam:org:project:id:test-audience:roles': { PlatformAdmin: {}, OtherRole: {} },
+    };
+
+    const repo = new FakeTenantRepository();
+    repo.provisioned = { userId: 'u6', tenantId: 't6' };
+
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
+    const result = await useCase.execute('valid');
+
+    expect(result.isPlatformAdmin).toBe(true);
+    expect(result.roles).toContain('PlatformAdmin');
+    expect(result.rawRoles).toContain('PlatformAdmin');
+    expect(result.rawRoles).toContain('OtherRole');
+  });
+
+  it('should throw MissingIdentityTenantError when organization ID and tenant_id are both missing', async () => {
+    const verifier = new FakeTokenVerifier();
+    verifier.claims = {
+      sub: 'no-org-user',
+      email: 'noorg@example.com',
+      name: 'No Org User',
+    };
+
+    const repo = new FakeTenantRepository();
+    repo.provisioned = { userId: 'u7', tenantId: 't7' };
+
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
+
+    await expect(useCase.execute('valid')).rejects.toThrow(MissingIdentityTenantError);
+    await expect(useCase.execute('valid')).rejects.toThrow('Missing Zitadel Organization ID for user noorg@example.com');
+  });
+
+  it('should not provision user when missing tenant information', async () => {
+    const verifier = new FakeTokenVerifier();
+    verifier.claims = {
+      sub: 'no-tenant-data',
+      email: 'notenantdata@example.com',
+    };
+
+    const repo = new FakeTenantRepository();
+    let provisionCalled = false;
+    repo.provisionUserAndTenant = async () => {
+      provisionCalled = true;
+      return { userId: 'should-not-be-called', tenantId: 'should-not-be-called' };
+    };
+
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
+
+    await expect(useCase.execute('valid')).rejects.toThrow(MissingIdentityTenantError);
+    expect(provisionCalled).toBe(false);
   });
 });

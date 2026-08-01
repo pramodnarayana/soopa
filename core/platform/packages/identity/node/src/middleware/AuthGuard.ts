@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthenticateUseCase } from '../application/Authenticate.js';
-import { IdentityInfrastructureError, TenantMappingDomainError } from '../domain/Errors.js';
+import { IdentityInfrastructureError, MissingIdentityTenantError, TenantMappingDomainError } from '../domain/Errors.js';
 import type { IdentityContext as Identity } from '../domain/IdentityContext.js';
 import { identityContextStorage } from '../domain/IdentityContextStorage.js';
 
@@ -65,6 +65,8 @@ export class AuthGuard implements CanActivate {
 
       if (err instanceof TenantMappingDomainError) {
         throw new ForbiddenException('User is not assigned to a tenant.');
+      } else if (err instanceof MissingIdentityTenantError) {
+        throw new UnauthorizedException('Missing identity tenant information.');
       } else if (err instanceof IdentityInfrastructureError) {
         throw new InternalServerErrorException('An internal identity error occurred.');
       }

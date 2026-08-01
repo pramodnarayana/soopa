@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -106,12 +105,18 @@ import { WEBHOOK_REPOSITORY } from './ports/outbound/webhook.repository.js';
       provide: ZitadelJwksVerifier,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
+        const projectId = config.get<string>('ZITADEL_UCP_PROJECT_ID');
+        if (!projectId || projectId.trim() === '') {
+          throw new Error(
+            'ZITADEL_UCP_PROJECT_ID is required but not configured',
+          );
+        }
         return new ZitadelJwksVerifier({
           issuer: config.get<string>(
             'ZITADEL_URL',
             'http://ucp.localhost:8080',
           ),
-          audience: config.get<string>('ZITADEL_UCP_PROJECT_ID', ''),
+          audience: projectId,
         });
       },
     },
@@ -130,8 +135,14 @@ import { WEBHOOK_REPOSITORY } from './ports/outbound/webhook.repository.js';
         repo: DrizzleTenantRepository,
         config: ConfigService,
       ) => {
+        const projectId = config.get<string>('ZITADEL_UCP_PROJECT_ID');
+        if (!projectId || projectId.trim() === '') {
+          throw new Error(
+            'ZITADEL_UCP_PROJECT_ID is required but not configured',
+          );
+        }
         return new AuthenticateUseCase(verifier, repo, {
-          audience: config.get<string>('ZITADEL_UCP_PROJECT_ID', ''),
+          audience: projectId,
         });
       },
     },

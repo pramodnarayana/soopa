@@ -5,6 +5,7 @@ import { useUcpNetwork } from '../../../contexts/UcpNetworkContext';
 import { useToastMutation } from '../../../hooks/use-toast-mutation';
 import type { CreateWebhookEndpointPayload, Webhook } from '../types';
 import {
+  RawWebhook,
   RawWebhookResponseSchema,
   RawWebhooksArrayResponseSchema,
   WebhookSchema,
@@ -15,7 +16,7 @@ export const webhooksKeys = {
   tenant: (tenantId: string) => [...webhooksKeys.all, tenantId] as const,
 };
 
-export function mapRawWebhook(raw: any, tenantId: string): Webhook {
+export function mapRawWebhook(raw: RawWebhook, tenantId: string): Webhook {
   return WebhookSchema.parse({
     id: raw.id,
     name: raw.name,

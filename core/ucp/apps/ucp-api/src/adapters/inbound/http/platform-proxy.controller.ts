@@ -1,4 +1,13 @@
-import { All, Controller, Logger, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  All,
+  BadGatewayException,
+  Controller,
+  GatewayTimeoutException,
+  Logger,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PlatformAuthGuard } from './guards/platform-auth.guard.js';
 
@@ -15,6 +24,11 @@ const HOP_BY_HOP_HEADERS = new Set([
   'proxy-authenticate',
 ]);
 
+const ENTITY_HEADERS = new Set([
+  'content-length',
+  'content-encoding',
+]);
+
 @Controller('api/v1/platform')
 @UseGuards(PlatformAuthGuard)
 export class PlatformProxyController {
@@ -27,9 +41,11 @@ export class PlatformProxyController {
 
     const forwardHeaders: Record<string, string> = {};
     for (const [key, value] of Object.entries(req.headers)) {
+      const lowerKey = key.toLowerCase();
       if (
-        !HOP_BY_HOP_HEADERS.has(key.toLowerCase()) &&
-        key !== 'host' &&
+        !HOP_BY_HOP_HEADERS.has(lowerKey) &&
+        !ENTITY_HEADERS.has(lowerKey) &&
+        lowerKey !== 'host' &&
         value !== undefined
       ) {
         forwardHeaders[key] = Array.isArray(value) ? value.join(', ') : value;
@@ -37,14 +53,29 @@ export class PlatformProxyController {
     }
 
     const hasBody = req.body !== undefined && req.body !== null;
-    const response = await fetch(url, {
-      method: req.method,
-      headers: forwardHeaders,
-      body: hasBody ? JSON.stringify(req.body) : undefined,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: hasBody ? JSON.stringify(req.body) : undefined,
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.name === 'AbortError' || error.name === 'TimeoutError')
+      ) {
+        this.logger.error(`Upstream request timeout for ${url}`);
+        throw new GatewayTimeoutException('Upstream request timed out');
+      }
+      this.logger.error(`Upstream request failed for ${url}:`, error);
+      throw new BadGatewayException('Upstream service unavailable');
+    }
 
     for (const [key, value] of response.headers.entries()) {
-      if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+      const lowerKey = key.toLowerCase();
+      if (!HOP_BY_HOP_HEADERS.has(lowerKey) && !ENTITY_HEADERS.has(lowerKey)) {
         void res.header(key, value);
       }
     }

@@ -10,22 +10,8 @@ import { GlobalExceptionFilter } from './adapters/inbound/http/filters/global-ex
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({
-      logger: {
-        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? {
-                target: 'pino-pretty',
-                options: {
-                  colorize: true,
-                  translateTime: 'SYS:standard',
-                  ignore: 'pid,hostname',
-                },
-              }
-            : undefined,
-      },
-    }),
+    new FastifyAdapter(),
+    { bufferLogs: true },
   );
 
   app.useLogger(app.get(Logger));
@@ -39,11 +25,13 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
-  console.log(
-    `\n🚀 UCP Backend API (Fastify) is running on: http://localhost:${port}`,
+
+  const logger = app.get(Logger);
+  logger.log(
+    `UCP Backend API (Fastify) is running on: http://localhost:${port}`,
   );
-  console.log(
-    `🌐 Platform Dashboard (Frontend) is running on: ${process.env.FRONTEND_URL || 'http://localhost:5173'}\n`,
+  logger.log(
+    `Platform Dashboard (Frontend) is running on: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`,
   );
 }
 void bootstrap();

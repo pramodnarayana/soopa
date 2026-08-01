@@ -52,23 +52,34 @@ export class DrizzleTenantRepository implements TenantRepository {
         if (idpTenantId) {
           // Atomic insert with onConflictDoNothing to avoid select-then-insert race
           const newTenantId = generateId('ten');
-          await tx
+          const insertResult = await tx
             .insert(tenants)
             .values({
               id: newTenantId,
               name: `${name}'s Organization`,
               idpTenantId,
             })
-            .onConflictDoNothing({ target: tenants.idpTenantId });
+            .onConflictDoNothing({ target: tenants.idpTenantId })
+            .returning();
 
-          // Fetch the existing or newly inserted tenant
-          const [tenant] = await tx
-            .select()
-            .from(tenants)
-            .where(eq(tenants.idpTenantId as never, idpTenantId))
-            .limit(1);
+          // If insert returned a row, use it; otherwise fetch the existing tenant
+          if (insertResult.length > 0) {
+            tenantIdToLink = insertResult[0].id;
+          } else {
+            const existingTenant = await tx
+              .select()
+              .from(tenants)
+              .where(eq(tenants.idpTenantId as never, idpTenantId))
+              .limit(1);
 
-          tenantIdToLink = tenant.id;
+            if (existingTenant.length === 0) {
+              throw new IdentityInfrastructureError(
+                `Failed to provision tenant: idpTenantId ${idpTenantId} conflict but tenant not found`,
+              );
+            }
+
+            tenantIdToLink = existingTenant[0].id;
+          }
         } else {
           const newTenantId = generateId('ten');
           const [newTenant] = await tx

@@ -7,6 +7,7 @@ import {
   generateId,
   webhooks,
 } from '@soopa/database';
+import { sql } from 'drizzle-orm';
 import { Webhook } from '../../../domain/models/webhook.model.js';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import type { IWebhookRepository } from '../../../ports/outbound/webhook.repository.js';
@@ -54,16 +55,22 @@ export class WebhookDrizzleRepository implements IWebhookRepository {
         });
 
       for (const event of webhook.domainEvents) {
+        const outboxId = generateId('evt');
         await tx.insert(controlPlaneOutbox).values({
-          id: generateId('evt'),
+          id: outboxId,
           idempotencyKey: `${event.eventName}_${webhook.id}_${event.occurredOn.getTime()}`,
           tenantId: webhook.tenantId,
           eventType: event.eventName,
           payload: event.payload,
         });
+
+        // Fire Postgres NOTIFY so the OutboxListener instantly wakes up
+        await tx.execute(
+          sql`SELECT pg_notify('control_plane_outbox_channel', ${outboxId})`,
+        );
       }
-      webhook.clearEvents();
     });
+    webhook.clearEvents();
   }
 
   async findById(tenantId: string, id: string): Promise<Webhook | null> {
@@ -84,16 +91,26 @@ export class WebhookDrizzleRepository implements IWebhookRepository {
 
   async delete(tenantId: string, id: string): Promise<void> {
     await this.db.transaction(async (tx) => {
-      await tx
+      const result = await tx
         .delete(webhooks)
-        .where(and(eq(webhooks.id, id), eq(webhooks.tenantId, tenantId)));
-      await tx.insert(controlPlaneOutbox).values({
-        id: generateId('evt'),
-        idempotencyKey: `webhook.deleted_${id}_${Date.now()}`,
-        tenantId,
-        eventType: 'webhook.deleted',
-        payload: { resource_id: id },
-      });
+        .where(and(eq(webhooks.id, id), eq(webhooks.tenantId, tenantId)))
+        .returning({ id: webhooks.id });
+
+      if (result.length > 0) {
+        const outboxId = generateId('evt');
+        await tx.insert(controlPlaneOutbox).values({
+          id: outboxId,
+          idempotencyKey: `webhook.deleted_${id}_${tenantId}`,
+          tenantId,
+          eventType: 'webhook.deleted',
+          payload: { resource_id: id },
+        });
+
+        // Fire Postgres NOTIFY so the OutboxListener instantly wakes up
+        await tx.execute(
+          sql`SELECT pg_notify('control_plane_outbox_channel', ${outboxId})`,
+        );
+      }
     });
   }
 }

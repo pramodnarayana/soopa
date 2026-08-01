@@ -11,3 +11,10 @@ export class TenantMappingDomainError extends Error {
     this.name = 'TenantMappingDomainError';
   }
 }
+
+export class MissingIdentityTenantError extends Error {
+  constructor(email: string) {
+    super(`Missing Zitadel Organization ID for user ${email}`);
+    this.name = 'MissingIdentityTenantError';
+  }
+}

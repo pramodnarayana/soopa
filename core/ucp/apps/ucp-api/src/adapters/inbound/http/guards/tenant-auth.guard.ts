@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
@@ -10,6 +11,8 @@ import { AuthenticateUseCase, IdentityContext } from '@soopa/identity';
 
 @Injectable()
 export class TenantAuthGuard implements CanActivate {
+  private readonly logger = new Logger(TenantAuthGuard.name);
+
   constructor(private readonly authenticateUseCase: AuthenticateUseCase) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -60,7 +63,7 @@ export class TenantAuthGuard implements CanActivate {
       if (error instanceof ForbiddenException) {
         throw error;
       }
-      console.error('[TenantAuthGuard] Authentication failed:', error);
+      this.logger.error('Authentication failed');
       throw new UnauthorizedException('Invalid JWT token');
     }
   }

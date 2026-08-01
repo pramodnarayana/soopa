@@ -84,7 +84,9 @@ export function useTenantPartnersQuery() {
     queryKey: partnersKeys.tenant(),
     queryFn: async (): Promise<Partner[]> => {
       const res = await api.get('/trading-partners');
-      return PartnersArraySchema.parse(res.data.map(normalizePartnerResponse));
+      const rawData = Array.isArray(res.data) ? res.data : [];
+      const normalizedData = rawData.map(normalizePartnerResponse);
+      return PartnersArraySchema.parse(normalizedData);
     },
   });
 }

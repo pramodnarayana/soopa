@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
-import { IdentityInfrastructureError, TenantMappingDomainError } from '../src/domain/Errors.js';
+import { IdentityInfrastructureError, MissingIdentityTenantError, TenantMappingDomainError } from '../src/domain/Errors.js';
 import { AuthGuard } from '../src/middleware/AuthGuard.js';
 
 describe('AuthGuard', () => {
@@ -73,6 +73,15 @@ describe('AuthGuard', () => {
 
     const context = createMockContext({ authorization: 'Bearer token' });
     await expect(guard.canActivate(context)).rejects.toThrow(InternalServerErrorException);
+  });
+
+  it('should throw UnauthorizedException on MissingIdentityTenantError', async () => {
+    vi.spyOn(useCase, 'execute').mockRejectedValueOnce(
+      new MissingIdentityTenantError('test@example.com'),
+    );
+
+    const context = createMockContext({ authorization: 'Bearer token' });
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
   it('should throw UnauthorizedException on other errors', async () => {

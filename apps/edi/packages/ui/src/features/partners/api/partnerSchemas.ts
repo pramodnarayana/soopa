@@ -44,7 +44,8 @@ export const AS2PartnershipsArraySchema = z.array(AS2PartnershipSchema);
 
 export function normalizePartnerResponse(raw: unknown): unknown {
   if (typeof raw === 'object' && raw !== null && 'partner_id' in raw) {
-    return { ...(raw as any), id: (raw as any).partner_id || (raw as any).id };
+    const obj = raw as Record<string, unknown>;
+    return { ...obj, id: obj.partner_id || obj.id };
   }
   return raw;
 }

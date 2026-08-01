@@ -19,19 +19,24 @@ export class UserDrizzleRepository implements IUserRepository {
       throw new Error(`Email is required for user ${user.id}`);
     }
 
+    if (!user.idpUserId) {
+      throw new Error(
+        `idpUserId is required for upsert to prevent duplicate users`,
+      );
+    }
+
     await this.db
       .insert(users)
       .values({
         id: user.id,
-        idpUserId: user.idpUserId || null,
+        idpUserId: user.idpUserId,
         email: user.email,
         name: user.name,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: users.id,
+        target: users.idpUserId,
         set: {
-          ...(user.idpUserId ? { idpUserId: user.idpUserId } : {}),
           email: user.email,
           name: user.name,
           updatedAt: new Date(),

@@ -39,7 +39,28 @@ export class TenantDrizzleRepository implements ITenantRepository {
     const [row] = await this.db
       .select()
       .from(tenants)
-      .where(or(eq(tenants.id, id), eq(tenants.idpTenantId, id)));
+      .where(eq(tenants.id, id));
+
+    if (!row) return null;
+
+    // Load subscriptions
+    const subsRows = await this.db
+      .select({ slug: apps.slug })
+      .from(appSubscriptions)
+      .innerJoin(apps, eq(appSubscriptions.appId, apps.id))
+      .where(eq(appSubscriptions.tenantId, row.id));
+
+    return this.mapToDomain(
+      row,
+      subsRows.map((s) => s.slug),
+    );
+  }
+
+  async findByIdpTenantId(idpTenantId: string): Promise<Tenant | null> {
+    const [row] = await this.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.idpTenantId, idpTenantId));
 
     if (!row) return null;
 
@@ -168,7 +189,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
 
         // Fire Postgres NOTIFY so the OutboxListener instantly wakes up
         await tx.execute(
-          sql`NOTIFY control_plane_outbox_channel, '${sql.raw(outboxId)}'`,
+          sql`SELECT pg_notify('control_plane_outbox_channel', ${outboxId})`,
         );
       }
 

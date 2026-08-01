@@ -1,6 +1,8 @@
 import logging
 import uuid
 import hashlib
+import json
+import dataclasses
 
 from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
@@ -44,7 +46,8 @@ class InboundRouteService:
     ) -> bool:
         res = await self.uow.inbound_routes.update_inbound_route(tenant_id, route_id, cmd)
         if res:
-            cmd_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
+            cmd_dict = dataclasses.asdict(cmd) if dataclasses.is_dataclass(cmd) else cmd.__dict__
+            cmd_hash = hashlib.sha256(json.dumps(cmd_dict, sort_keys=True).encode()).hexdigest()
             await self.uow.control_plane_outbox.publish_outbox_event(
                 ProvisioningEvent(
                     tenant_id=tenant_id,
