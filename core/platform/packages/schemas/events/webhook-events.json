@@ -1,0 +1,9 @@
+{
+  "$id": "https://soopa.com/schemas/events/webhook-events.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WebhookEventType",
+  "type": "string",
+  "enum": ["webhook.created", "webhook.updated", "webhook.deleted"],
+  "tsEnumNames": ["WEBHOOK_CREATED", "WEBHOOK_UPDATED", "WEBHOOK_DELETED"],
+  "description": "Webhook configuration events replicated to the Data Plane"
+}

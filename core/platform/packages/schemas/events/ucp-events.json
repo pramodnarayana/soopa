@@ -1,0 +1,9 @@
+{
+  "$id": "https://soopa.com/schemas/events/ucp-events.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UcpEventType",
+  "type": "string",
+  "enum": ["tenant.provisioned", "app.subscribed", "app.unsubscribed", "api_key.created"],
+  "tsEnumNames": ["TENANT_PROVISIONED", "APP_SUBSCRIBED", "APP_UNSUBSCRIBED", "API_KEY_CREATED"],
+  "description": "Internal events published by the Universal Control Plane"
+}
