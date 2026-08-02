@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -9,7 +8,6 @@ import { AwsControlPlaneEventRouterUseCase } from '../../application/use-cases/a
 import { InternalControlPlaneEventRouterUseCase } from '../../application/use-cases/internal-control-plane-event-router.use-case.js';
 import { ProcessControlPlaneOutboxEventUseCase } from '../../application/use-cases/process-control-plane-outbox-event.use-case.js';
 import { CONTROL_PLANE_EVENT_ROUTER } from '../../ports/outbound/control-plane-event-router.port.js';
-import { DatabaseModule } from '../database.module.js';
 
 const mode = process.env.CONTROL_PLANE_SYNC_MODE || 'internal';
 

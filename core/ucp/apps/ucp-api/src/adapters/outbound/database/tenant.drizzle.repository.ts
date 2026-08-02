@@ -39,10 +39,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
 
     const slugs = await this.loadSubscriptionSlugs(row.id);
 
-    return this.mapToDomain(
-      row,
-      slugs,
-    );
+    return this.mapToDomain(row, slugs);
   }
 
   async findByIdpTenantId(idpTenantId: string): Promise<Tenant | null> {
@@ -52,10 +49,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
 
     const slugs = await this.loadSubscriptionSlugs(row.id);
 
-    return this.mapToDomain(
-      row,
-      slugs,
-    );
+    return this.mapToDomain(row, slugs);
   }
 
   async findAll(): Promise<Tenant[]> {
@@ -84,7 +78,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
   }
 
   async save(tenant: Tenant): Promise<Tenant> {
-    return await this.db.transaction(async (tx) => {
+    const resultRow = await this.db.transaction(async (tx) => {
       // 1. Save Tenant
       const [row] = await tx
         .insert(tenants)

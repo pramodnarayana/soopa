@@ -20,9 +20,7 @@ export class UserDrizzleRepository implements IUserRepository {
     }
 
     if (!user.idpUserId) {
-      throw new Error(
-        `idpUserId is required for upsert to prevent duplicate users`,
-      );
+      throw new Error(`idpUserId is required for upsert to prevent duplicate users`);
     }
 
     await this.db
@@ -54,11 +52,7 @@ export class UserDrizzleRepository implements IUserRepository {
   }
 
   async findByEmail(email: string) {
-    const results = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
+    const results = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
     return results[0] || null;
   }
 
@@ -85,25 +79,20 @@ export class UserDrizzleRepository implements IUserRepository {
   async removeTenantUser(tenantId: string, userId: string): Promise<void> {
     await this.db
       .delete(tenantUsers)
-      .where(
-        and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.userId, userId)),
-      );
+      .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.userId, userId)));
   }
 
   async deleteOrphanedUsers(userIds: string[]): Promise<void> {
     if (userIds.length === 0) return;
 
-    await this.db.delete(users).where(
-      and(
-        inArray(users.id, userIds),
-        notExists(
-          this.db
-            .select()
-            .from(tenantUsers)
-            .where(eq(tenantUsers.userId, users.id))
-        )
-      )
-    );
+    await this.db
+      .delete(users)
+      .where(
+        and(
+          inArray(users.id, userIds),
+          notExists(this.db.select().from(tenantUsers).where(eq(tenantUsers.userId, users.id))),
+        ),
+      );
   }
 
   async findUsersByTenant(tenantId: string): Promise<

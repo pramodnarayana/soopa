@@ -1,12 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConfigKey } from '../../../domain/enums/config-keys.enum.js';
+import {
+  type IControlPlaneOutboxRepository,
+  OUTBOX_REPOSITORY,
+} from '../../../ports/outbound/control-plane-outbox.repository.js';
 import type { IEventPublisher } from '../../../ports/outbound/event-publisher.port.js';
 import { type IMessageBus, MESSAGE_BUS } from '../../../ports/outbound/message.bus.js';
-import {
-  type IOutboxRepository,
-  OUTBOX_REPOSITORY,
-} from '../../../ports/outbound/outbox.repository.js';
 
 @Injectable()
 export class AwsSnsPublisherAdapter implements IEventPublisher {
@@ -14,7 +14,8 @@ export class AwsSnsPublisherAdapter implements IEventPublisher {
 
   constructor(
     @Inject(MESSAGE_BUS) private readonly messageBus: IMessageBus,
-    @Inject(OUTBOX_REPOSITORY) private readonly outboxRepo: IOutboxRepository,
+    @Inject(OUTBOX_REPOSITORY)
+    private readonly outboxRepo: IControlPlaneOutboxRepository,
     private readonly configService: ConfigService,
   ) {}
 

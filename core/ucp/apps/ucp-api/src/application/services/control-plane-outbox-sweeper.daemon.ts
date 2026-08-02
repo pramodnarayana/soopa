@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ConfigKey } from '../../domain/enums/config-keys.enum.js';
 import {
   type IControlPlaneOutboxRepository,
   OUTBOX_REPOSITORY,

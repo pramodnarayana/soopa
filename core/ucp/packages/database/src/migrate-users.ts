@@ -13,7 +13,7 @@ if (!dbUrl) {
   process.exit(1);
 }
 
-const { db, pool } = createDbClient(dbUrl);
+const { db } = createDbClient(dbUrl);
 
 async function migrate() {
   console.log('Starting user migration...');

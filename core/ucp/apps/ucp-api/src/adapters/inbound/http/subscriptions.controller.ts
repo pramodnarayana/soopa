@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   Body,
   Controller,
@@ -10,10 +9,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { createId } from '@paralleldrive/cuid2';
 import type { DbClient } from '@soopa/database';
-import { appSubscriptions, apps, tenants } from '@soopa/database';
+import { appSubscriptions, apps, controlPlaneOutbox, tenants } from '@soopa/database';
 import { IsNotEmpty, IsString } from 'class-validator';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { SubscribeAppUseCase } from '../../../application/use-cases/subscribe-app.use-case.js';
 import { UnsubscribeAppUseCase } from '../../../application/use-cases/unsubscribe-app.use-case.js';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
@@ -37,6 +38,7 @@ export class SubscriptionsController {
     private readonly projectProvider: IProjectProvider,
     private readonly subscribeAppUseCase: SubscribeAppUseCase,
     private readonly unsubscribeAppUseCase: UnsubscribeAppUseCase,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   @Get()
@@ -77,10 +79,10 @@ export class SubscriptionsController {
 
     if (zitadelProjectId) {
       // Use outbox for retryable Zitadel syncing
-      const { v4: uuidv4 } = require('uuid');
-      await this.db.insert(require('@soopa/database').controlPlaneOutbox).values({
-        id: uuidv4(),
-        idempotencyKey: uuidv4(),
+      const eventId = createId();
+      await this.db.insert(controlPlaneOutbox).values({
+        id: eventId,
+        idempotencyKey: createId(),
         tenantId: tenantId,
         eventType: 'Idp.GrantProjectAccess',
         payload: {
@@ -91,10 +93,7 @@ export class SubscriptionsController {
         status: 'PENDING',
       });
       // Trigger the local outbox consumer
-      require('@nestjs/event-emitter').EventEmitter2.prototype.emit?.(
-        'outbox.event.created',
-        uuidv4(),
-      );
+      this.eventEmitter.emit('outbox.event.created', eventId);
     }
 
     return { success: true };
@@ -127,10 +126,10 @@ export class SubscriptionsController {
       const zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
       if (zitadelProjectId) {
         // Use outbox for retryable Zitadel syncing
-        const { v4: uuidv4 } = require('uuid');
-        await this.db.insert(require('@soopa/database').controlPlaneOutbox).values({
-          id: uuidv4(),
-          idempotencyKey: uuidv4(),
+        const eventId = createId();
+        await this.db.insert(controlPlaneOutbox).values({
+          id: eventId,
+          idempotencyKey: createId(),
           tenantId: tenantId,
           eventType: 'Idp.RevokeProjectAccess',
           payload: {
@@ -139,6 +138,8 @@ export class SubscriptionsController {
           },
           status: 'PENDING',
         });
+        // Trigger the local outbox consumer
+        this.eventEmitter.emit('outbox.event.created', eventId);
       }
     }
 

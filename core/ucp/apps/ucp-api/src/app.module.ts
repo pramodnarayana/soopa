@@ -37,6 +37,7 @@ import { MESSAGE_BUS } from './ports/outbound/message.bus.js';
 import { ORGANIZATION_PROVIDER } from './ports/outbound/organization.provider.js';
 import { PROJECT_PROVIDER } from './ports/outbound/project.provider.js';
 import { USER_IDENTITY_PROVIDER } from './ports/outbound/user-identity.provider.js';
+
 function requireProjectId(config: ConfigService): string {
   const projectId = config.get<string>('ZITADEL_UCP_PROJECT_ID');
   if (!projectId || projectId.trim() === '') {
@@ -95,10 +96,7 @@ function requireProjectId(config: ConfigService): string {
       useFactory: (config: ConfigService) => {
         const projectId = requireProjectId(config);
         return new ZitadelJwksVerifier({
-          issuer: config.get<string>(
-            'ZITADEL_URL',
-            'http://ucp.localhost:8080',
-          ),
+          issuer: config.get<string>('ZITADEL_URL', 'http://ucp.localhost:8080'),
           audience: projectId,
         });
       },

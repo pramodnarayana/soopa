@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { DbClient } from '@soopa/database';
@@ -16,7 +15,6 @@ import {
 import {
   type IControlPlaneOutboxRepository,
   OUTBOX_REPOSITORY,
-  type OutboxEvent,
 } from '../../ports/outbound/control-plane-outbox.repository.js';
 
 @Injectable()
@@ -85,7 +83,7 @@ export class ProcessControlPlaneOutboxEventUseCase {
             id: event.id,
             tenantId: event.tenantId,
             eventType: event.eventType,
-            payload: event.payload,
+            payload: event.payload as Record<string, unknown>,
           });
         }
 

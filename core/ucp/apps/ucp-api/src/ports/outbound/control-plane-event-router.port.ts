@@ -1,4 +1,3 @@
-/* eslint-disable */
 export const CONTROL_PLANE_EVENT_ROUTER = 'CONTROL_PLANE_EVENT_ROUTER';
 
 export interface IControlPlaneEventRouter {
@@ -6,6 +5,6 @@ export interface IControlPlaneEventRouter {
     id: string;
     tenantId: string | null;
     eventType: string;
-    payload: any;
+    payload: Record<string, unknown>;
   }): Promise<void>;
 }

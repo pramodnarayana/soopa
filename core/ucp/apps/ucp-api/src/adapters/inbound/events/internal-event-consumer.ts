@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { ProcessOutboxEventUseCase } from '../../../application/use-cases/process-outbox-event.use-case.js';
+import { ProcessControlPlaneOutboxEventUseCase } from '../../../application/use-cases/process-control-plane-outbox-event.use-case.js';
 import {
   type IProjectProvider,
   PROJECT_PROVIDER,
@@ -11,8 +11,9 @@ export class InternalEventConsumer {
   private readonly logger = new Logger(InternalEventConsumer.name);
 
   constructor(
-    private readonly outboxProcessor: ProcessOutboxEventUseCase,
-    @Inject(PROJECT_PROVIDER) private readonly projectProvider: IProjectProvider,
+    private readonly outboxProcessor: ProcessControlPlaneOutboxEventUseCase,
+    @Inject(PROJECT_PROVIDER)
+    private readonly projectProvider: IProjectProvider,
   ) {}
 
   @OnEvent('outbox.event.created')
@@ -53,10 +54,7 @@ export class InternalEventConsumer {
         event.payload.projectId,
       );
     } catch (e) {
-      this.logger.error(
-        `Revoke project access failed for tenant ${event.payload.idpTenantId}`,
-        e,
-      );
+      this.logger.error(`Revoke project access failed for tenant ${event.payload.idpTenantId}`, e);
     }
   }
 }

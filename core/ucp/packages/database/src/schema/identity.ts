@@ -1,14 +1,5 @@
 import { sql } from 'drizzle-orm';
-import {
-  boolean,
-  index,
-  jsonb,
-  pgPolicy,
-  primaryKey,
-  text,
-  timestamp,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { index, jsonb, pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { ucpSchema } from './shared.js';
 
 // User roles are dynamically managed in Zitadel; we store the raw string keys here.

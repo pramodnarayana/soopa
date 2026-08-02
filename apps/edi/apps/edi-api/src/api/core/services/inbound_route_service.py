@@ -1,8 +1,8 @@
-import logging
-import uuid
+import dataclasses
 import hashlib
 import json
-import dataclasses
+import logging
+import uuid
 
 from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
@@ -10,6 +10,7 @@ from soopa_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
+    UNSET,
     CreateInboundRouteCmd,
     InboundRouteListEntity,
     RouteEntity,
@@ -37,7 +38,11 @@ class InboundRouteService:
                 event_type=EdiEventType.edi_inbound_route_created,
                 resource_id=str(route_id),
             ),
-            idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_created.value}"))
+            idempotency_key=str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_created.value}"
+                )
+            ),
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.INBOUND)
 
@@ -47,6 +52,7 @@ class InboundRouteService:
         res = await self.uow.inbound_routes.update_inbound_route(tenant_id, route_id, cmd)
         if res:
             cmd_dict = dataclasses.asdict(cmd) if dataclasses.is_dataclass(cmd) else cmd.__dict__
+            cmd_dict = {k: v for k, v in cmd_dict.items() if v is not UNSET}
             cmd_hash = hashlib.sha256(json.dumps(cmd_dict, sort_keys=True).encode()).hexdigest()
             await self.uow.control_plane_outbox.publish_outbox_event(
                 ProvisioningEvent(
@@ -54,7 +60,12 @@ class InboundRouteService:
                     event_type=EdiEventType.edi_inbound_route_updated,
                     resource_id=str(route_id),
                 ),
-                idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_updated.value}:{cmd_hash}"))
+                idempotency_key=str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_DNS,
+                        f"{route_id}:{EdiEventType.edi_inbound_route_updated.value}:{cmd_hash}",
+                    )
+                ),
             )
         return res
 
@@ -67,7 +78,12 @@ class InboundRouteService:
                     event_type=EdiEventType.edi_inbound_route_deleted,
                     resource_id=str(route_id),
                 ),
-                idempotency_key=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_deleted.value}"))
+                idempotency_key=str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_DNS,
+                        f"{route_id}:{EdiEventType.edi_inbound_route_deleted.value}",
+                    )
+                ),
             )
         return res
 

@@ -1,16 +1,6 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  OnApplicationBootstrap,
-  OnApplicationShutdown,
-} from '@nestjs/common';
-import { Client } from 'pg';
+import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { Client, type Notification } from 'pg';
 import { ProcessControlPlaneOutboxEventUseCase } from '../../../application/use-cases/process-control-plane-outbox-event.use-case.js';
-import {
-  EVENT_PUBLISHER,
-  type IEventPublisher,
-} from '../../../ports/outbound/event-publisher.port.js';
 
 @Injectable()
 export class ControlPlaneOutboxListenerAdapter
@@ -62,16 +52,14 @@ export class ControlPlaneOutboxListenerAdapter
         }
       });
 
-      this.client.on('notification', async (msg: any) => {
+      this.client.on('notification', (msg: Notification) => {
         if (msg.channel === 'control_plane_outbox_channel') {
-          const eventId = msg.payload;
+          const eventId = msg.payload as string;
           this.logger.log(`Received outbox event notification for id: ${eventId}`);
           if (eventId) {
-            try {
-              await this.outboxProcessor.execute(eventId);
-            } catch (e) {
+            this.outboxProcessor.execute(eventId).catch((e) => {
               this.logger.error(`Failed to process event ${eventId}`, e);
-            }
+            });
           }
         }
       });
@@ -107,26 +95,13 @@ export class ControlPlaneOutboxListenerAdapter
       `Reconnecting to PostgreSQL in ${backoffMs}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
     );
 
-    setTimeout(async () => {
-      if (this.isShuttingDown) {
-        this.isReconnecting = false;
-        return;
-      }
-
-      try {
-        // Create a new client since the old one is no longer usable
-        const connectionString = process.env.DATABASE_URL;
-        if (!connectionString) {
-          throw new Error('DATABASE_URL is not set');
-        }
-        this.client = new Client({ connectionString });
-        this.isReconnecting = false;
-        await this.connect();
-      } catch (error) {
-        this.logger.error('Reconnection failed', error);
-        this.isReconnecting = false;
+    setTimeout(() => {
+      this.isReconnecting = false;
+      this.client = new Client({ connectionString: process.env.DATABASE_URL });
+      this.connect().catch((error) => {
+        this.logger.error('Failed to reconnect to PostgreSQL', error);
         this.handleDisconnect();
-      }
+      });
     }, backoffMs);
   }
 }

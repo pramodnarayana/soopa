@@ -1,8 +1,7 @@
-/* eslint-disable */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
 import { sql } from 'drizzle-orm';
-import { integer, jsonb, pgSchema, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { type AnyPgTable, integer, jsonb, pgSchema, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import { ITargetControlPlaneOutboxRepository } from '../../../ports/outbound/target-control-plane-outbox.repository.js';
 
@@ -20,13 +19,13 @@ export class TargetControlPlaneOutboxDrizzleRepository
   private readonly logger = new Logger(TargetControlPlaneOutboxDrizzleRepository.name);
 
   // Cache the dynamically generated schema objects to prevent memory leaks
-  private readonly schemaCache = new Map<string, any>();
+  private readonly schemaCache = new Map<string, AnyPgTable>();
 
   constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
   private getTargetOutboxTable(appSlug: string) {
     if (this.schemaCache.has(appSlug)) {
-      return this.schemaCache.get(appSlug);
+      return this.schemaCache.get(appSlug)!;
     }
     const targetSchema = pgSchema(appSlug);
     const targetOutbox = targetSchema.table('outbox', {

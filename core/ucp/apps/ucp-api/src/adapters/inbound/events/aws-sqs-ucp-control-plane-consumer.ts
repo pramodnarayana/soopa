@@ -1,4 +1,9 @@
-import { DeleteMessageCommand, ReceiveMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import {
+  DeleteMessageCommand,
+  type Message,
+  ReceiveMessageCommand,
+  SQSClient,
+} from '@aws-sdk/client-sqs';
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProcessControlPlaneOutboxEventUseCase } from '../../../application/use-cases/process-control-plane-outbox-event.use-case.js';
@@ -36,7 +41,9 @@ export class AwsSqsUcpControlPlaneConsumer
     });
 
     this.isRunning = true;
-    this.pollQueue();
+    this.pollQueue().catch((err) => {
+      this.logger.error('Unhandled error in SQS polling loop', err);
+    });
   }
 
   onApplicationShutdown() {
@@ -62,25 +69,26 @@ export class AwsSqsUcpControlPlaneConsumer
             await this.processMessage(message);
           }
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         // If it's a shutdown abort, ignore
         if (!this.isRunning) break;
-        this.logger.error(`Error polling SQS queue: ${error.message}`, error.stack);
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(`Error polling SQS queue: ${err.message}`, err.stack);
         // Sleep briefly to avoid tight error loops
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
   }
 
-  private async processMessage(message: any) {
+  private async processMessage(message: Message) {
     if (!this.sqsClient || !this.queueUrl) return;
 
     try {
       this.logger.debug(`[AWS MESSAGE BUS] Received SQS message ${message.MessageId}`);
 
-      let payload;
+      let payload: unknown;
       try {
-        payload = JSON.parse(message.Body);
+        payload = JSON.parse(message.Body ?? '{}');
       } catch (e) {
         this.logger.error(`Failed to parse SQS message body: ${message.Body}`);
         // If we can't parse it, it's a poison pill, delete it (or leave it for DLQ if we prefer)
@@ -90,15 +98,22 @@ export class AwsSqsUcpControlPlaneConsumer
       // The event ID should be passed in the payload or retrieved from the outbox event payload
       // SQS messages from SNS wrap the message in an outer envelope.
       // E.g. SNS envelope has .Message string which contains our actual JSON payload.
-      let actualEvent;
-      if (payload.Type === 'Notification' && payload.Message) {
-        actualEvent = JSON.parse(payload.Message);
+      let actualEvent: Record<string, unknown>;
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        'Type' in payload &&
+        payload.Type === 'Notification' &&
+        'Message' in payload &&
+        typeof payload.Message === 'string'
+      ) {
+        actualEvent = JSON.parse(payload.Message) as Record<string, unknown>;
       } else {
-        actualEvent = payload;
+        actualEvent = payload as Record<string, unknown>;
       }
 
       // Use actualEvent.id as the outbox event ID for both SNS-wrapped and direct messages
-      const outboxEventId = actualEvent.id;
+      const outboxEventId = actualEvent?.id as string | undefined;
 
       if (outboxEventId) {
         await this.outboxProcessor.execute(outboxEventId);
@@ -117,10 +132,11 @@ export class AwsSqsUcpControlPlaneConsumer
         }),
       );
       this.logger.debug(`[AWS MESSAGE BUS] Deleted message ${message.MessageId}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
-        `[AWS MESSAGE BUS] Failed to process message ${message.MessageId}: ${error.message}`,
-        error.stack,
+        `[AWS MESSAGE BUS] Failed to process message ${message.MessageId}: ${err.message}`,
+        err.stack,
       );
       // Let it time out and go back to queue or DLQ
     }

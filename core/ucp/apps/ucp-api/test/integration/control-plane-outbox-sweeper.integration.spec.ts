@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlPlaneOutboxSweeperDaemon } from '../../src/application/services/control-plane-outbox-sweeper.daemon.js';
@@ -41,6 +42,12 @@ describe('ControlPlaneOutboxSweeperDaemon', () => {
           provide: ProcessControlPlaneOutboxEventUseCase,
           useValue: {
             execute: useCaseExecuteSpy,
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: vi.fn().mockReturnValue(undefined),
           },
         },
       ],

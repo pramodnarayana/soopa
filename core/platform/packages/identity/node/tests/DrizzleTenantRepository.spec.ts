@@ -1,14 +1,4 @@
-import {
-  controlPlaneOutbox,
-  createDbClient,
-  generateId,
-  shardRegistry,
-  appSubscriptions,
-  tenants,
-  tenantUsers,
-  users,
-  sql,
-} from '@soopa/database';
+import { createDbClient, generateId, sql, users } from '@soopa/database';
 import { v4 as uuidv4 } from 'uuid';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleTenantRepository } from '../src/adapters/outbound/database/DrizzleTenantRepository.js';
@@ -56,7 +46,10 @@ describe('DrizzleTenantRepository', () => {
 
   it('should handle getTenantMappingForUser for user with no mapping', async () => {
     const email = `test-${uuidv4()}@example.com`;
-    const [newUser] = await db.insert(users).values({ id: generateId('usr'), email, name: 'No Mapping User' }).returning();
+    const [newUser] = await db
+      .insert(users)
+      .values({ id: generateId('usr'), email, name: 'No Mapping User' })
+      .returning();
 
     const tenantId = await repo.getTenantMappingForUser(newUser.id);
     expect(tenantId).toBeNull();

@@ -1,7 +1,4 @@
-/* eslint-disable */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { DbClient } from '@soopa/database';
-import { DATABASE_CLIENT } from '../../infrastructure/database.constants.js';
 import {
   APP_SUBSCRIPTION_REPOSITORY,
   type IAppSubscriptionRepository,
@@ -27,7 +24,7 @@ export class InternalControlPlaneEventRouterUseCase implements IControlPlaneEven
     id: string;
     tenantId: string | null;
     eventType: string;
-    payload: any;
+    payload: Record<string, unknown>;
   }): Promise<void> {
     this.logger.debug(`Routing event ${event.eventType} via Internal Data Plane Router...`);
 

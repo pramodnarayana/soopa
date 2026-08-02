@@ -1,9 +1,8 @@
-/* eslint-disable */
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
-import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
-import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { IsArray, IsNotEmpty, IsString } from 'class-validator';
 import { GenerateApiKeyUseCase } from '../../../application/use-cases/generate-api-key.use-case.js';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
+import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class CreateApiKeyRequestDto {
   @IsString()
@@ -22,10 +21,7 @@ export class ApiKeysController {
   constructor(private readonly generateApiKeyUseCase: GenerateApiKeyUseCase) {}
 
   @Post()
-  async generate(
-    @UcpTenantId() tenantId: string,
-    @Body() dto: CreateApiKeyRequestDto,
-  ) {
+  async generate(@UcpTenantId() tenantId: string, @Body() dto: CreateApiKeyRequestDto) {
     const result = await this.generateApiKeyUseCase.execute({
       tenantId,
       name: dto.name,
