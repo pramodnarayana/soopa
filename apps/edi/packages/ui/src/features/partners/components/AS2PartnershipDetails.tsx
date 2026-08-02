@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@soopa/ui/components/ui/select';
 import { CheckCircle2, Loader2, Trash2, XCircle, Zap } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Combobox } from '../../../components/ui/combobox';
 import { EdiEditorPane } from '../../../components/ui/edi-editor-pane';
@@ -73,10 +73,15 @@ export function AS2PartnershipDetails({
     }
   }, [mdnType, mdnUrl, setValue, platformSettings]);
 
+  // Track previous partnership ID to detect when the selected partnership changes
+  const previousPartnershipIdRef = useRef(as2Partnership.id);
+
   // Sync form when as2Partnership changes (e.g. refetched)
-  // Only reset when partnership ID changes or form is pristine (not dirty)
+  // Reset when partnership ID changes (even if dirty) or when form is pristine (not dirty)
   useEffect(() => {
-    if (!isDirty) {
+    const partnershipIdChanged = previousPartnershipIdRef.current !== as2Partnership.id;
+
+    if (partnershipIdChanged || !isDirty) {
       reset({
         name: as2Partnership.name || '',
         local_partner_id: as2Partnership.local_partner_id,
@@ -87,6 +92,8 @@ export function AS2PartnershipDetails({
         signature_algorithm: as2Partnership.signature_algorithm || 'SHA256',
       }, { keepDirty: false });
     }
+
+    previousPartnershipIdRef.current = as2Partnership.id;
   }, [as2Partnership.id, as2Partnership, reset, isDirty]);
   interface AS2PartnershipFormData {
     name: string;

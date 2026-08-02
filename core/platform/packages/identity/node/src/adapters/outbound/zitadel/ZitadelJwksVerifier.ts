@@ -97,7 +97,12 @@ export class ZitadelJwksVerifier implements TokenVerifier {
               expiry: Math.min(Date.now() + this.USERINFO_TTL_MS, tokenExpMs),
             });
             this.evictIfNeeded();
+          } else if (response.status >= 400 && response.status < 500) {
+            // 4xx client errors (401, 403, etc.) indicate authentication/authorization failures
+            // Skip userinfo enrichment and proceed with base token claims
+            // This allows the verification to complete with available claims
           } else {
+            // 5xx server errors are infrastructure issues
             throw new IdentityInfrastructureError(
               `Failed to fetch userinfo from Zitadel: HTTP ${response.status}`,
             );

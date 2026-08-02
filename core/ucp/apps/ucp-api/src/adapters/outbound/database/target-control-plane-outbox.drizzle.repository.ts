@@ -74,7 +74,9 @@ export class TargetControlPlaneOutboxDrizzleRepository
           })
           .onConflictDoNothing();
 
-        await tx.execute(sql`SELECT pg_notify(${appSlug + '_outbox_channel'}, ${event.id})`);
+        await tx.execute(
+          sql`SELECT pg_notify(${appSlug + '_outbox_channel'}, ${event.id})`,
+        );
       });
 
       this.logger.debug(`Published event ${event.id} to ${appSlug}.outbox`);

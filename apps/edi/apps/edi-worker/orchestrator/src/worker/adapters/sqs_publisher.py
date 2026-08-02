@@ -65,8 +65,8 @@ class SqsPublisherAdapter(MessagePublisherPort):
                 # FIFO queues require MessageGroupId; standard queues do not support it
                 if queue_name.endswith(".fifo"):
                     entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
-                    if msg.idempotency_key:
-                        entry["MessageDeduplicationId"] = msg.idempotency_key
+                    dedup_id = msg.idempotency_key or msg.message_id or str(uuid.uuid4())
+                    entry["MessageDeduplicationId"] = dedup_id
 
                 entries.append(entry)
 

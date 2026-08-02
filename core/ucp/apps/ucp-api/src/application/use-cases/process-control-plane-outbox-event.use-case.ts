@@ -31,7 +31,7 @@ export class ProcessControlPlaneOutboxEventUseCase {
   ) {}
 
   async execute(eventId: string): Promise<void> {
-    // Phase 1: Load and lock the event in a short transaction
+    // Phase 1: Load and lock the event in a short transaction, claim it if eligible
     const event = await this.db.transaction(async (tx) => {
       const [evt] = await tx
         .select()
@@ -44,10 +44,16 @@ export class ProcessControlPlaneOutboxEventUseCase {
         return null;
       }
 
-      if (evt.status === 'PROCESSED') {
-        this.logger.log(`Event ${eventId} is already processed.`);
+      if (evt.status === 'PROCESSED' || evt.status === 'PROCESSING') {
+        this.logger.log(`Event ${eventId} is already ${evt.status.toLowerCase()}.`);
         return null;
       }
+
+      // Claim the event by setting status to PROCESSING while we hold the lock
+      await tx
+        .update(controlPlaneOutbox)
+        .set({ status: 'PROCESSING', updatedAt: new Date() })
+        .where(eq(controlPlaneOutbox.id, eventId));
 
       return evt;
     });
