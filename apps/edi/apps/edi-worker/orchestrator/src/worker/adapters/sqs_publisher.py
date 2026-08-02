@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -64,8 +65,8 @@ class SqsPublisherAdapter(MessagePublisherPort):
                 # FIFO queues require MessageGroupId; standard queues do not support it
                 if queue_name.endswith(".fifo"):
                     entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
-                    if msg.idempotency_key:
-                        entry["MessageDeduplicationId"] = msg.idempotency_key
+                    dedup_id = msg.idempotency_key or msg.message_id or str(uuid.uuid4())
+                    entry["MessageDeduplicationId"] = dedup_id
 
                 entries.append(entry)
 
@@ -113,9 +114,10 @@ class SqsPublisherAdapter(MessagePublisherPort):
                 if queue_name.endswith(".fifo"):
                     partition_key = event.get("partition_key")
                     kwargs["MessageGroupId"] = partition_key if partition_key else "default"
-                    idempotency_key = event.get("idempotency_key")
-                    if idempotency_key:
-                        kwargs["MessageDeduplicationId"] = idempotency_key
+                    idempotency_key = (
+                        event.get("idempotency_key") or event.get("id") or str(uuid.uuid4())
+                    )
+                    kwargs["MessageDeduplicationId"] = idempotency_key
 
                 await sqs.send_message(**kwargs)
         except Exception:

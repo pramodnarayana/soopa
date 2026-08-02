@@ -1,4 +1,8 @@
-from api.dependencies.auth import get_current_tenant_id, require_platform_admin
+from api.dependencies.auth import (
+    get_current_tenant_id,
+    get_current_user_profile,
+    require_platform_admin,
+)
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_as2_tester, get_vault
 
@@ -17,6 +21,7 @@ from collections.abc import Callable
 import pytest
 from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from api.main import app
 
@@ -79,8 +84,13 @@ def client_factory(fake_uow: FakeControlPlaneUnitOfWork) -> Callable[..., TestCl
         fake_tester = FakeAS2Tester(transport_ok=transport_ok, result=result)
 
         app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
-        app.dependency_overrides[get_current_tenant_id] = lambda: "0"
-        app.dependency_overrides[require_platform_admin] = lambda: "0"
+        app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
+        app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
+        app.dependency_overrides[get_current_user_profile] = lambda: {
+            "sub": "admin",
+            "tenant_id": PLATFORM_TENANT_ID,
+            "permissions": ["*"],
+        }
         app.dependency_overrides[get_vault] = lambda: FakeVault()
         app.dependency_overrides[get_as2_tester] = lambda: fake_tester
 
@@ -229,7 +239,7 @@ def test_test_as2_partnership_not_found(client_factory):
     client = client_factory()
 
     response = client.post(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{uuid.uuid4()}/test"
+        f"/api/v1/platform/trading-partners/as2/partnerships/{str(uuid.uuid4())}/test"
     )
 
     assert response.status_code == 404

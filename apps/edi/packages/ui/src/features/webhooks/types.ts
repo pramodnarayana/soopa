@@ -1,6 +1,6 @@
 export interface Webhook {
   id: string;
-  tenant_id?: number;
+  tenant_id?: string | number;
   name: string;
   type: 'WEBHOOK';
   status: 'ACTIVE' | 'INACTIVE';

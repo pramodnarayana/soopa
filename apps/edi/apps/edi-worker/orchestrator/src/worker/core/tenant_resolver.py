@@ -1,6 +1,8 @@
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard, Tenant, TenantShard
+from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
 from sqlalchemy import select
+
+from worker.core.constants import EDI_APP_SLUG
 
 
 class TenantResolver:
@@ -42,9 +44,10 @@ class TenantResolver:
         try:
             stmt = (
                 select(Tenant, DatabaseShard)
-                .join(TenantShard, Tenant.id == TenantShard.tenant_id)
-                .join(DatabaseShard, TenantShard.shard_id == DatabaseShard.id)
-                .where(Tenant.id == tid_str)
+                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+                .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
+                .join(App, App.id == ShardRegistry.app_id)
+                .where(Tenant.id == tid_str, App.slug == EDI_APP_SLUG)
             )
             result = await global_session.execute(stmt)
             row = result.first()

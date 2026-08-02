@@ -1,11 +1,10 @@
 import asyncio
 import contextlib
 import logging
-import os
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models import DatabaseShard, Tenant, TenantShard, TenantUser, User
+from database.models import Tenant
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select
@@ -27,90 +26,14 @@ async def seed_database() -> None:
     session = await async_gen.__anext__()
 
     try:
-        # 1. Seed Database Shards
-        logger.info("Seeding Database Shards...")
-        shard_result = await session.execute(select(DatabaseShard).filter_by(name="shard_1"))
-        shard = shard_result.scalar_one_or_none()
-
-        if not shard or not shard.id:
-            shard = DatabaseShard(
-                name="shard_1",
-                dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
-            )
-            session.add(shard)
-            await session.flush()  # To get the ID
-            logger.info("Created shard_1.")
-
-        # 2. Seed Default Tenant 0
-        logger.info("Seeding Host Company as Tenant %s...", PLATFORM_TENANT_ID)
+        # 1. Assert Core Platform Infrastructure Exists (Read-Only)
+        logger.info("Asserting Platform Infrastructure (Tenant %s)...", PLATFORM_TENANT_ID)
         tenant_result = await session.execute(select(Tenant).filter_by(id=PLATFORM_TENANT_ID))
         tenant_obj = tenant_result.scalar_one_or_none()
-
         if not tenant_obj:
-            # Tenant 0 is the host company
-            tenant_obj = Tenant(
-                id=PLATFORM_TENANT_ID,
-                name="Host Company",
+            logger.warning(
+                "Platform Master Tenant not found! Ensure UCP seed.ts has been run first."
             )
-            session.add(tenant_obj)
-            await session.flush()
-            logger.info("Created Tenant %s (Host Company).", PLATFORM_TENANT_ID)
-
-        # Ensure TenantShard exists
-        ts_result = await session.execute(
-            select(TenantShard).filter_by(tenant_id=PLATFORM_TENANT_ID, shard_id=shard.id)
-        )
-        tenant_shard = ts_result.scalar_one_or_none()
-
-        if not tenant_shard:
-            tenant_shard = TenantShard(
-                tenant_id=PLATFORM_TENANT_ID,
-                shard_id=shard.id,
-                shard_schema="tenant_host",
-                tier="standard",
-            )
-            session.add(tenant_shard)
-            await session.flush()
-            logger.info("Created TenantShard mapping for Tenant %s.", PLATFORM_TENANT_ID)
-        else:
-            needs_repair = False
-            if tenant_shard.shard_schema != "tenant_host":
-                tenant_shard.shard_schema = "tenant_host"
-                needs_repair = True
-            if needs_repair:
-                session.add(tenant_shard)
-                await session.flush()
-                logger.info(
-                    "Repaired TenantShard schema to tenant_host for %s.",
-                    PLATFORM_TENANT_ID,
-                )
-
-        # 3. Seed Default User
-        admin_email = os.getenv("SYSTEM_ADMIN_EMAIL")
-        admin_name = os.getenv("SYSTEM_ADMIN_NAME", "System Admin")
-
-        if admin_email:
-            logger.info("Seeding Default Admin User...")
-            user_result = await session.execute(select(User).filter_by(email=admin_email))
-            user = user_result.scalar_one_or_none()
-
-            if not user or not user.id:
-                user = User(email=admin_email, name=admin_name)
-                session.add(user)
-                await session.flush()
-                logger.info("Created Admin User.")
-
-            # Map user to Tenant PLATFORM_TENANT_ID idempotently
-            mapping_result = await session.execute(
-                select(TenantUser).filter_by(tenant_id=tenant_obj.id, user_id=user.id)
-            )
-            tenant_user = mapping_result.scalar_one_or_none()
-            if not tenant_user:
-                tenant_user = TenantUser(tenant_id=tenant_obj.id, user_id=user.id, role="admin")
-                session.add(tenant_user)
-                logger.info("Mapped Admin User to Tenant %s.", PLATFORM_TENANT_ID)
-        else:
-            logger.info("SYSTEM_ADMIN_EMAIL not provided. Skipping default admin creation.")
 
         # 4. Seed Core System Jobs
         logger.info("Seeding Core System Jobs...")

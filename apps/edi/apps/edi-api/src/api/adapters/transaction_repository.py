@@ -1,7 +1,6 @@
 import uuid
 from collections.abc import Sequence
 from typing import Any
-from uuid import UUID
 
 from database.base_repository import TenantSession, TenantSqlAlchemyRepository
 from database.models.data_plane import EdiMessage
@@ -20,20 +19,20 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     def __init__(self, session: TenantSession) -> None:
         TenantSqlAlchemyRepository.__init__(self, session)
 
-    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
         tid_str = tenant_id if tenant_id is not None else None
         msg = EdiMessage(tenant_id=tid_str, **payload)
         self.session.add(msg)
         await self.session.flush()
-        return msg.id
+        return str(msg.id)
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: UUID
-    ) -> UUID:
+        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
+    ) -> str:
         from database.models.data_plane import DataPlaneOutbox
 
         tid_str = tenant_id if tenant_id is not None else None
-        event_id = uuid.uuid4()
+        event_id = str(uuid.uuid4())
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tid_str,
@@ -44,25 +43,25 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
         self.session.add(record)
         await self.session.flush()
-        return event_id
+        return str(event_id)
 
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
         from database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
         msg = EdiJson(tenant_id=tid_str, **payload)
         self.session.add(msg)
         await self.session.flush()
-        return msg.id
+        return str(msg.id)
 
-    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> UUID:
+    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
         from database.models.data_plane import ApiGateway
 
         tid_str = tenant_id if tenant_id is not None else None
         log = ApiGateway(tenant_id=tid_str, **payload)
         self.session.add(log)
         await self.session.flush()
-        return log.id
+        return str(log.id)
 
     async def list_transactions(
         self,
@@ -271,7 +270,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_transaction(self, tenant_id: str, trace_id: UUID) -> TransactionDetailDTO | None:
+    async def get_transaction(self, tenant_id: str, trace_id: str) -> TransactionDetailDTO | None:
 
         from database.models.data_plane import ApiGateway, EdiJson, EdiMessage
 
@@ -301,8 +300,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         return TransactionDetailDTO(
             edi_message=EdiMessageDTO(
-                id=edi_msg.id,
-                trace_id=edi_msg.trace_id,
+                id=str(edi_msg.id),
+                trace_id=str(edi_msg.trace_id),
                 direction=edi_msg.direction,
                 connection_type=edi_msg.connection_type,
                 sender_id=edi_msg.sender_id,
@@ -338,8 +337,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             ),
             edi_jsons=[
                 EdiJsonDTO(
-                    id=j.id,
-                    trace_id=j.trace_id,
+                    id=str(j.id),
+                    trace_id=str(j.trace_id),
                     status=j.status,
                     trading_partner_id=getattr(j, "trading_partner_id", None),
                     error_message=getattr(j, "error_message", None),
@@ -363,8 +362,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             ],
             api_gateways=[
                 ApiGatewayDTO(
-                    id=g.id,
-                    trace_id=g.trace_id,
+                    id=str(g.id),
+                    trace_id=str(g.trace_id),
                     event_type=getattr(g, "event_type", None),
                     status=getattr(g, "status", None),
                     error_message=getattr(g, "error_message", None),

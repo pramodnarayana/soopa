@@ -1,6 +1,4 @@
-import uuid
 from collections.abc import Sequence
-from uuid import UUID
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.encryption import db_encryption
@@ -24,10 +22,8 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
     # ------------------------------------------------------------------------
     # SFTP Partners (Now in Control Plane)
     # ------------------------------------------------------------------------
-    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> UUID:
-        partner_id = uuid.uuid4()
+    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
         record = SFTPPartner(
-            id=partner_id,
             tenant_id=tenant_id,
             name=cmd.name,
             host=cmd.host,
@@ -46,10 +42,10 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         )
         self.session.add(record)
         await self.session.flush()
-        return partner_id
+        return record.id
 
     async def get_sftp_partner(
-        self, tenant_id: str, partner_id: UUID
+        self, tenant_id: str, partner_id: str
     ) -> SFTPPartnerDomainModel | None:
         result = await self.session.execute(
             select(SFTPPartner).where(
@@ -66,7 +62,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         return [SFTPPartnerDomainModel.model_validate(r) for r in result.scalars().all()]
 
     async def update_sftp_partner(
-        self, tenant_id: str, partner_id: UUID, cmd: UpdateSFTPPartnerCmd
+        self, tenant_id: str, partner_id: str, cmd: UpdateSFTPPartnerCmd
     ) -> None:
         result = await self.session.execute(
             select(SFTPPartner).where(
@@ -91,7 +87,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
                     setattr(partner, key, value)
         await self.session.flush()
 
-    async def delete_sftp_partner(self, tenant_id: str, partner_id: UUID) -> None:
+    async def delete_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
         await self.session.execute(
             delete(SFTPPartner).where(
                 SFTPPartner.id == partner_id, SFTPPartner.tenant_id == tenant_id
@@ -99,7 +95,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         )
         await self.session.flush()
 
-    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         if not ids:
             return {}
         result = await self.session.execute(

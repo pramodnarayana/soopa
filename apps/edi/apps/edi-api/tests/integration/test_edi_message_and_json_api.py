@@ -67,7 +67,7 @@ async def test_edi_message_explorer_and_detail(
     # Expose the tenant ID resolved by the authentication fixture
     tenant_id = "1"
 
-    trace_id = uuid.uuid4()
+    trace_id = str(uuid.uuid4())
     sender_id = f"SENDER_{str(uuid.uuid4())[:6]}"
     receiver_id = f"RECV_{str(uuid.uuid4())[:6]}"
     msg_id_val = f"MSG_{str(uuid.uuid4())[:6]}"

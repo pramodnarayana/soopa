@@ -12,7 +12,7 @@ class TradingPartnerRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def find_by_as2_id(self, tenant_id: int, as2_id: str) -> AS2Partner | None:
+    async def find_by_as2_id(self, tenant_id: str, as2_id: str) -> AS2Partner | None:
 
         result = await self.session.execute(
             select(AS2Partner).where(
@@ -68,7 +68,7 @@ class InboundRouteRepository:
         self,
         isa_sender_id: str,
         isa_receiver_id: str,
-        tenant_id: int,
+        tenant_id: str,
         transaction_type: str | None = None,
     ) -> Any | None:
         from .models.control_plane import InboundRoute
@@ -78,7 +78,7 @@ class InboundRouteRepository:
             InboundRoute.isa_receiver_id == isa_receiver_id,
             InboundRoute.active.is_(True),
         ]
-        if tenant_id != 0:
+        if tenant_id and tenant_id != "0":
             conditions.append(InboundRoute.tenant_id == tenant_id)
         if transaction_type:
             conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
@@ -96,7 +96,7 @@ class EdiMessageRepository:
 
     async def save_message(
         self,
-        tenant_id: int,
+        tenant_id: str,
         trace_id: UUID,
         direction: str,
         connection_type: str,

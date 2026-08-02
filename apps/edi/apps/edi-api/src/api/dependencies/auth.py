@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 
 from config.settings import get_settings
@@ -46,43 +47,72 @@ async def get_raw_jwt(
 
 logger = logging.getLogger(__name__)
 
+# Simple TTL cache for UCP tenant ID -> IdP tenant ID mapping
+_tenant_mapping_cache: dict[
+    str, tuple[str, float]
+] = {}  # {ucp_tenant_id: (idp_tenant_id, expiry_timestamp)}
+_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
+def invalidate_tenant_mapping_cache(tenant_id: str) -> None:
+    """
+    Invalidate a specific tenant mapping entry from the cache.
+    Should be called after tenant updates or deletions to ensure consistency.
+    """
+    _tenant_mapping_cache.pop(tenant_id, None)
+
 
 async def get_current_tenant_id(
     request: Request,
     identity: IdentityContext = Depends(get_identity_context),
+    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
 ) -> str:
-    """Extracts tenant ID dynamically from the URL and enforces Zero Trust ACL."""
-    tenant_id = request.path_params.get("tenant_id")
+    # Extract tenant ID:
+    # 1. Header (Internal UCP ID passed by Gateway)
+    # 2. Path param (Fallback if external caller)
+    tenant_id = request.headers.get("x-tenant-id") or request.path_params.get("tenant_id")
+
     is_platform_admin = (
         "PlatformAdmin" in identity.roles or PLATFORM_TENANT_ID in identity.authorized_tenants
     )
 
-    logger.debug(
-        f"get_current_tenant_id: tenant_id={tenant_id}, roles={identity.roles}, authorized_tenants={identity.authorized_tenants}, is_platform_admin={is_platform_admin}"
-    )
-
     if not tenant_id:
         if is_platform_admin:
-            logger.info(
-                f"get_current_tenant_id: No tenant_id in path, but user is platform admin. Returning '{PLATFORM_TENANT_ID}'."
-            )
             return PLATFORM_TENANT_ID
-        logger.warning(
-            f"get_current_tenant_id: Raising 400 Bad Request because tenant_id is missing and user is not platform admin. Roles: {identity.roles}"
-        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tenant ID missing from request path.",
+            detail="Tenant ID missing from request.",
         )
 
-    if tenant_id not in identity.authorized_tenants and not is_platform_admin:
-        logger.warning(
-            f"get_current_tenant_id: Raising 403 Forbidden because {tenant_id} is not in {identity.authorized_tenants} and user is not platform admin."
-        )
+    # 1. Fast Path: If they passed the Zitadel ID directly and it matches
+    if tenant_id in identity.authorized_tenants:
+        return str(tenant_id)
+
+    # 2. Translate internal UCP ID (`ten_...`) to verify against JWT (Zitadel ID)
+    # Check cache first
+    current_time = time.time()
+    cached_entry = _tenant_mapping_cache.get(tenant_id)
+    if cached_entry:
+        idp_tenant_id, expiry = cached_entry
+        if current_time < expiry and idp_tenant_id in identity.authorized_tenants:
+            return str(tenant_id)
+
+    # Cache miss or expired, fetch from repository
+    tenant_record = await tenant_repo.get_tenant(tenant_id)
+    if tenant_record and tenant_record.get("idp_tenant_id"):
+        # Update cache
+        idp_tenant_id = tenant_record["idp_tenant_id"]
+        _tenant_mapping_cache[tenant_id] = (idp_tenant_id, current_time + _CACHE_TTL_SECONDS)
+
+        if idp_tenant_id in identity.authorized_tenants:
+            return str(tenant_id)
+
+    if not is_platform_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Token does not grant cryptographic roles for tenant {tenant_id}.",
+            detail=f"Token does not grant access to tenant {tenant_id}.",
         )
+
     return str(tenant_id)
 
 
@@ -112,12 +142,7 @@ async def get_current_user_profile(
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     auth_service: AuthorizationService = Depends(get_authorization_service),
 ) -> dict[str, Any]:
-    if not tenant_id.isdigit():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid tenant ID format. Expected numeric tenant identifier.",
-        )
-
+    # UCP Tenant IDs are strings like `ten_...` so we no longer check .isdigit()
     roles = token_payload.get("roles", [])
     if isinstance(roles, dict):
         roles = list(roles.keys())

@@ -1,3 +1,5 @@
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
 
@@ -30,10 +32,10 @@ async def list_trading_partners(
 ) -> Any:
     """Lists all tenant trading partners (AS2 and SFTP)."""
     async with uow:
-        # AS2 partners are global platform entities (tenant_id = "0") or tenant-specific
+        # AS2 partners are global platform entities (tenant_id = PLATFORM_TENANT_ID) or tenant-specific
         as2_partners = list(await uow.as2_partners.list_as2_partners(tenant_id))
-        if tenant_id != "0":
-            as2_partners_global = await uow.as2_partners.list_as2_partners("0")
+        if tenant_id != PLATFORM_TENANT_ID:
+            as2_partners_global = await uow.as2_partners.list_as2_partners(PLATFORM_TENANT_ID)
             as2_partners = as2_partners + list(as2_partners_global)
 
         sftp_partners = await uow.sftp_partners.list_sftp_partners(tenant_id)

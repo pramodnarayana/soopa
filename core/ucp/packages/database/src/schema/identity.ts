@@ -1,26 +1,15 @@
-import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
-import {
-  boolean,
-  index,
-  jsonb,
-  pgPolicy,
-  primaryKey,
-  text,
-  timestamp,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { index, jsonb, pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { ucpSchema } from './shared.js';
 
 // User roles are dynamically managed in Zitadel; we store the raw string keys here.
 
 export const tenants = ucpSchema.table('tenants', {
-  id: varchar('id', { length: 128 })
-    .primaryKey()
-    .$defaultFn(() => createId()),
+  // No $defaultFn — id is required at the TypeScript level. Callers MUST supply
+  // a prefixed ID via generateId('ten') from @soopa/database.
+  id: varchar('id', { length: 128 }).primaryKey(),
   name: text('name').notNull(),
-  zitadelOrgId: varchar('zitadel_org_id', { length: 255 }), // Nullable if JIT provisioned without explicit org ID
-  idpTenantId: varchar('idp_tenant_id', { length: 255 }).unique(), // Added to match Python model
+  idpTenantId: varchar('idp_tenant_id', { length: 255 }).unique(),
   status: varchar('status', { length: 50 })
     .notNull()
     .default('active')
@@ -29,23 +18,25 @@ export const tenants = ucpSchema.table('tenants', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const tenantShards = ucpSchema
+export const shardRegistry = ucpSchema
   .table(
-    'tenant_shards',
+    'shard_registry',
     {
       tenantId: varchar('tenant_id', { length: 128 })
         .notNull()
         .references(() => tenants.id),
+      appId: varchar('app_id', { length: 128 }).notNull(),
       shardId: varchar('shard_id', { length: 128 }).notNull(),
-      shardSchema: varchar('shard_schema', { length: 255 }).notNull().default('public'),
-      tier: varchar('tier', { length: 50 }).notNull().default('standard'),
-      allowPrivateAs2: boolean('allow_private_as2').notNull().default(false),
+      status: varchar('status', { length: 50 })
+        .notNull()
+        .default('active')
+        .$type<'active' | 'inactive'>(),
       createdAt: timestamp('created_at').defaultNow().notNull(),
     },
     (table) => {
       return {
-        pk: primaryKey({ columns: [table.tenantId, table.shardId] }),
-        rlsPolicy: pgPolicy('tenant_shards_isolation', {
+        pk: primaryKey({ columns: [table.tenantId, table.appId] }),
+        rlsPolicy: pgPolicy('shard_registry_isolation', {
           as: 'permissive',
           for: 'all',
           to: 'public',
@@ -57,10 +48,9 @@ export const tenantShards = ucpSchema
   .enableRLS();
 
 export const users = ucpSchema.table('users', {
-  id: varchar('id', { length: 128 })
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  idpUserId: varchar('idp_user_id', { length: 255 }).unique(), // Added to match Python model
+  // No $defaultFn — id is required. Callers MUST supply generateId('usr').
+  id: varchar('id', { length: 128 }).primaryKey(),
+  idpUserId: varchar('idp_user_id', { length: 255 }).unique(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: text('name').notNull(),
   status: varchar('status', { length: 50 })
@@ -104,9 +94,8 @@ export const apiKeys = ucpSchema
   .table(
     'api_keys',
     {
-      id: varchar('id', { length: 128 })
-        .primaryKey()
-        .$defaultFn(() => createId()),
+      // No $defaultFn — id is required. Callers MUST supply generateId('key').
+      id: varchar('id', { length: 128 }).primaryKey(),
       tenantId: varchar('tenant_id', { length: 128 })
         .notNull()
         .references(() => tenants.id),

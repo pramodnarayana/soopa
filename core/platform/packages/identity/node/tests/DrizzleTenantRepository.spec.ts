@@ -1,12 +1,4 @@
-import {
-  controlPlaneOutbox,
-  createDbClient,
-  tenantShards,
-  tenantSubscriptions,
-  tenants,
-  tenantUsers,
-  users,
-} from '@soopa/database';
+import { createDbClient, generateId, sql, users } from '@soopa/database';
 import { v4 as uuidv4 } from 'uuid';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleTenantRepository } from '../src/adapters/outbound/database/DrizzleTenantRepository.js';
@@ -23,34 +15,32 @@ describe('DrizzleTenantRepository', () => {
   });
 
   beforeEach(async () => {
-    // Clear out data to keep tests isolated.
-    // We only clear tenantUsers, users, tenants to avoid deleting other table data
-    await db.delete(controlPlaneOutbox);
-    await db.delete(tenantSubscriptions);
-    await db.delete(tenantUsers);
-    await db.delete(tenantShards);
-    await db.delete(tenants);
-    await db.delete(users);
+    // Clear out data to keep tests isolated
+    await db.execute(sql`TRUNCATE TABLE ucp.tenants, ucp.users CASCADE`);
   });
 
   afterAll(async () => {
-    // Close connection if needed (pg-postgres doesn't expose a close on the drizzle instance directly,
-    // but the node process will exit when tests finish)
+    // pg pool exits when the process ends
   });
 
-  it('should provision user and tenant correctly', async () => {
+  it('should find user by idpUserId', async () => {
     const email = `test-${uuidv4()}@example.com`;
-    const result = await repo.provisionUserAndTenant(email, 'Test Org', 'zitadel-org-1');
+    const idpUserId = `idp_${uuidv4()}`;
+    const [newUser] = await db
+      .insert(users)
+      .values({ id: generateId('usr'), email, name: 'Test User', idpUserId })
+      .returning();
 
-    expect(result.userId).toBeDefined();
-    expect(result.tenantId).toBeDefined();
+    const user = await repo.findUserByIdpId(idpUserId);
 
-    const user = await repo.findUserByEmail(email);
     expect(user).toBeDefined();
+    expect(user?.id).toBe(newUser.id);
     expect(user?.email).toBe(email);
+  });
 
-    const tenantId = await repo.getTenantMappingForUser(result.userId);
-    expect(tenantId).toBe(result.tenantId);
+  it('findUserByIdpId should return null for non-existent user', async () => {
+    const user = await repo.findUserByIdpId('doesnotexist');
+    expect(user).toBeNull();
   });
 
   it('should handle findUserByEmail for non-existent user', async () => {
@@ -60,7 +50,10 @@ describe('DrizzleTenantRepository', () => {
 
   it('should handle getTenantMappingForUser for user with no mapping', async () => {
     const email = `test-${uuidv4()}@example.com`;
-    const [newUser] = await db.insert(users).values({ email, name: 'No Mapping User' }).returning();
+    const [newUser] = await db
+      .insert(users)
+      .values({ id: generateId('usr'), email, name: 'No Mapping User' })
+      .returning();
 
     const tenantId = await repo.getTenantMappingForUser(newUser.id);
     expect(tenantId).toBeNull();
@@ -79,20 +72,20 @@ describe('DrizzleTenantRepository', () => {
     );
   });
 
-  it('should throw IdentityInfrastructureError on DB failure for provision', async () => {
+  it('should throw IdentityInfrastructureError on DB failure for findUserByIdpId', async () => {
     const badDb = {
-      transaction: () => {
-        throw new Error('DB Error');
-      },
+      select: () => ({
+        from: () => ({ where: () => ({ limit: () => Promise.reject(new Error('DB Error')) }) }),
+      }),
     } as unknown as ReturnType<typeof createDbClient>['db'];
     const badRepo = new DrizzleTenantRepository(badDb);
 
-    await expect(badRepo.provisionUserAndTenant('test@example.com', 'Test')).rejects.toThrow(
-      'Failed to provision user and tenant: DB Error',
+    await expect(badRepo.findUserByIdpId('test-idp-id')).rejects.toThrow(
+      'Failed to fetch user by IDP ID: DB Error',
     );
   });
 
-  it('should throw IdentityInfrastructureError on DB failure for get mapping', async () => {
+  it('should throw IdentityInfrastructureError on DB failure for getTenantMappingForUser', async () => {
     const badDb = {
       select: () => {
         throw new Error('DB Error');

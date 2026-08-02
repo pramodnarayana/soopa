@@ -5,9 +5,9 @@ import { getEsmPaths } from './utils/esm-paths.js';
 const { __dirname } = getEsmPaths(import.meta.url);
 
 // Try loading .env from package root
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 // Also try loading root .env if running from workspace
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../../../.env') });
 
 const token = process.env.ZITADEL_API_TOKEN;
 const apiUrl = process.env.ZITADEL_API_URL;
@@ -74,13 +74,46 @@ async function clearZitadelTenants() {
     });
 
     if (!res.ok) {
-      console.error('Failed to fetch orgs:', await res.text());
+      // A 401/unauthenticated response means the token is stale (e.g. Zitadel was
+      // re-initialized and issued a new machine key). Treat as clean slate.
+      if (res.status === 401 || res.status === 403) {
+        console.log(
+          'Zitadel returned an auth error (token may be stale after re-init). Assuming clean slate — skipping cleanup.',
+        );
+        process.exit(0);
+      }
+      const body = await res.text();
+      // Also handle Zitadel gRPC-gateway auth error code 16 in the JSON body
+      try {
+        const json = JSON.parse(body) as { code?: number };
+        if (json.code === 16) {
+          console.log(
+            'Zitadel returned token invalid error (code 16). Assuming clean slate — skipping cleanup.',
+          );
+          process.exit(0);
+        }
+      } catch {
+        // Not JSON — fall through to error
+      }
+      console.error('Failed to fetch orgs:', body);
       process.exit(1);
     }
 
     const data = (await res.json()) as { result?: ZitadelOrg[] };
     orgs = data.result || [];
   } catch (err) {
+    // If Zitadel is not running (e.g. during infra-reset before containers are up),
+    // treat it as a clean slate — nothing to clear. Exit successfully so the reset chain
+    // can continue to docker compose up and recreate everything from scratch.
+    const isNetworkError =
+      err instanceof TypeError &&
+      (err.message.includes('fetch failed') || err.message.includes('ECONNREFUSED'));
+    if (isNetworkError) {
+      console.log(
+        'Zitadel is not reachable (connection refused). Assuming clean slate — skipping cleanup.',
+      );
+      process.exit(0);
+    }
     console.error('Error fetching orgs:', err);
     process.exit(1);
   }

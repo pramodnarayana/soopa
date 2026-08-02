@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from uuid import UUID
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
@@ -19,7 +18,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyReposit
         result = await self.session.execute(select(Webhook).where(Webhook.tenant_id == tenant_id))
         return [WebhookDomainModel.model_validate(r) for r in result.scalars().all()]
 
-    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[UUID]) -> dict[UUID, str]:
+    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         if not ids:
             return {}
         result = await self.session.execute(

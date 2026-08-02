@@ -1,10 +1,10 @@
 import logging
-from uuid import UUID
 
 from domain.events import (
-    ProvisioningEventType,
+    ProvisioningEvent,
 )
 from domain.models import ConnectionType, PartnerStatus
+from soopa_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
@@ -26,15 +26,18 @@ class AS2PartnerService:
         self.uow = uow
 
     async def create_as2_partner(
-        self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd
+        self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str | None = None
     ) -> PartnerEntity:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
         partner_id = await self.uow.as2_partners.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNER_CREATED,
-            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partner_created,
+                resource_id=str(partner_id),
+            ),
+            idempotency_key=idempotency_key,
         )
 
         return PartnerEntity(
@@ -46,7 +49,11 @@ class AS2PartnerService:
         )
 
     async def update_as2_partner(
-        self, tenant_id: str, partner_id: UUID, cmd: UpdateAS2TradingPartnerCmd
+        self,
+        tenant_id: str,
+        partner_id: str,
+        cmd: UpdateAS2TradingPartnerCmd,
+        idempotency_key: str | None = None,
     ) -> PartnerEntity:
         logger.info(f"Updating AS2 partner {partner_id} for tenant {tenant_id}")
         await self.uow.as2_partners.update_as2_identity(tenant_id, partner_id, cmd)
@@ -56,9 +63,12 @@ class AS2PartnerService:
             raise ValueError("Partner not found after update")
 
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
-            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partner_updated,
+                resource_id=str(partner_id),
+            ),
+            idempotency_key=idempotency_key,
         )
 
         return PartnerEntity(
@@ -69,21 +79,27 @@ class AS2PartnerService:
             status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
         )
 
-    async def delete_as2_partner(self, tenant_id: str, partner_id: UUID) -> None:
+    async def delete_as2_partner(
+        self, tenant_id: str, partner_id: str, idempotency_key: str | None = None
+    ) -> None:
         logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
         await self.uow.as2_partners.delete_as2_identity(tenant_id, partner_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNER_DELETED,
-            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partner_deleted,
+                resource_id=str(partner_id),
+            ),
+            idempotency_key=idempotency_key,
         )
 
     async def rotate_certificates(
         self,
         tenant_id: str,
-        partner_id: UUID,
+        partner_id: str,
         new_public_cert: str,
         new_private_key_vault_ref: str | None,
+        idempotency_key: str | None = None,
     ) -> PartnerEntity:
         logger.info(f"Rotating certificates for AS2 partner {partner_id} for tenant {tenant_id}")
         await self.uow.as2_partners.rotate_as2_certificates(
@@ -95,9 +111,12 @@ class AS2PartnerService:
             raise ValueError("Partner not found after certificate rotation")
 
         await self.uow.control_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type=ProvisioningEventType.AS2_PARTNER_UPDATED,
-            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partner_updated,
+                resource_id=str(partner_id),
+            ),
+            idempotency_key=idempotency_key,
         )
 
         return PartnerEntity(

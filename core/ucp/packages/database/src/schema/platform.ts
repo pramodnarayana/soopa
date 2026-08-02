@@ -1,12 +1,10 @@
-import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
 import { index, jsonb, pgPolicy, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { ucpSchema } from './shared.js';
 
 export const databaseShards = ucpSchema.table('database_shards', {
-  id: varchar('id', { length: 128 })
-    .primaryKey()
-    .$defaultFn(() => createId()),
+  // No $defaultFn — id is required. Callers MUST supply generateId('shard').
+  id: varchar('id', { length: 128 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
   dsn: varchar('dsn', { length: 1024 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -23,9 +21,8 @@ export const systemAuditLog = ucpSchema
   .table(
     'system_audit_log',
     {
-      id: varchar('id', { length: 128 })
-        .primaryKey()
-        .$defaultFn(() => createId()),
+      // No $defaultFn — id is required. Callers MUST supply generateId('aud').
+      id: varchar('id', { length: 128 }).primaryKey(),
       traceId: varchar('trace_id', { length: 128 }).notNull(),
       tenantId: varchar('tenant_id', { length: 128 }).notNull(),
       event: varchar('event', { length: 100 }).notNull(),

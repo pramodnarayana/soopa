@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from typing import Protocol
-from uuid import UUID
 
 from domain.models import OutboundEdiHeaderDomainModel
 
@@ -13,11 +12,11 @@ from api.domain.models import (
 class EdiHeaderRepositoryPort(Protocol):
     async def create_outbound_edi_header(
         self, tenant_id: str, cmd: CreateOutboundEdiHeaderCmd
-    ) -> UUID: ...
+    ) -> str: ...
     async def update_outbound_edi_header(
-        self, tenant_id: str, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+        self, tenant_id: str, header_id: str, cmd: UpdateOutboundEdiHeaderCmd
     ) -> bool: ...
-    async def delete_outbound_edi_header(self, tenant_id: str, header_id: UUID) -> bool: ...
+    async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> bool: ...
     async def get_outbound_edi_headers(
         self, tenant_id: str
     ) -> Sequence[OutboundEdiHeaderDomainModel]: ...

@@ -1,25 +1,74 @@
-import { All, Controller, Next, Req, Res, UseGuards } from '@nestjs/common';
-import type { NextFunction, Request, Response } from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import { All, Controller, Logger, Req, Res, UseGuards } from '@nestjs/common';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 const EDI_API_URL = process.env.EDI_API_URL || 'http://localhost:8001';
 
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'te',
+  'trailer',
+  'upgrade',
+  'proxy-authorization',
+  'proxy-authenticate',
+]);
+
 @Controller('api/v1/tenants/:tenantId/edi')
 @UseGuards(TenantAuthGuard)
 export class TenantProxyController {
-  private proxy = createProxyMiddleware({
-    target: EDI_API_URL,
-    changeOrigin: true,
-    pathRewrite: (path) => {
-      // Replace the /api/v1/tenants/:tenantId/edi prefix with /api/v1
-      // Example: /api/v1/tenants/123/edi/transactions -> /api/v1/transactions
-      return path.replace(/^\/api\/v1\/tenants\/[^/]+\/edi/, '/api/v1');
-    },
-  });
+  private readonly logger = new Logger(TenantProxyController.name);
 
   @All('*')
-  proxyToEdi(@Req() req: Request, @Res() res: Response, @Next() next: NextFunction) {
-    void this.proxy(req, res, next);
+  async proxyToEdi(
+    @Req() req: FastifyRequest & { ucpTenantId?: string },
+    @Res() res: FastifyReply,
+  ) {
+    const params = req.params as Record<string, string>;
+    const tenantId = params.tenantId;
+
+    // Rewrite: /api/v1/tenants/:tenantId/edi/foo -> /api/v1/foo
+    const rewrittenPath = req.url.replace(
+      `/api/v1/tenants/${tenantId}/edi`,
+      '/api/v1',
+    );
+    const url = `${EDI_API_URL}${rewrittenPath}`;
+
+    this.logger.log(
+      `[PROXY] ${req.method} ${req.url} -> ${url} (tenant=${req.ucpTenantId})`,
+    );
+
+    const forwardHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (
+        !HOP_BY_HOP_HEADERS.has(key.toLowerCase()) &&
+        key !== 'host' &&
+        value !== undefined
+      ) {
+        forwardHeaders[key] = Array.isArray(value) ? value.join(', ') : value;
+      }
+    }
+
+    // Inject the resolved internal tenant ID for the downstream EDI API
+    if (req.ucpTenantId) {
+      forwardHeaders['x-tenant-id'] = req.ucpTenantId;
+    }
+
+    const hasBody = req.body !== undefined && req.body !== null;
+    const response = await fetch(url, {
+      method: req.method,
+      headers: forwardHeaders,
+      body: hasBody ? JSON.stringify(req.body) : undefined,
+    });
+
+    for (const [key, value] of response.headers.entries()) {
+      if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+        void res.header(key, value);
+      }
+    }
+
+    const responseBody = await response.arrayBuffer();
+    return res.status(response.status).send(Buffer.from(responseBody));
   }
 }

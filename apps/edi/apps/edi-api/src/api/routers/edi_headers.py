@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
@@ -26,7 +25,7 @@ class OutboundEdiHeaderItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     name: str
     trading_partner_id: str | None = None
     isa_sender_id: str
@@ -88,7 +87,7 @@ async def create_edi_header(
 
 @router.patch("/{header_id}", status_code=status.HTTP_200_OK)
 async def update_edi_header(
-    header_id: UUID,
+    header_id: str,
     request: UpdateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -125,7 +124,7 @@ async def update_edi_header(
 
 @router.delete("/{header_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_edi_header(
-    header_id: UUID,
+    header_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:

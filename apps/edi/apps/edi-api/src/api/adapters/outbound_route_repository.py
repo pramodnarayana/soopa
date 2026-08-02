@@ -1,6 +1,3 @@
-import uuid
-from uuid import UUID
-
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     AS2Partner,
@@ -8,6 +5,7 @@ from database.models.control_plane import (
     SFTPPartner,
 )
 from domain.models import OutboundRouteDomainModel
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 
 from api.domain.models import (
@@ -24,7 +22,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         GlobalSqlAlchemyRepository.__init__(self, session)
 
     async def get_outbound_route(
-        self, tenant_id: str, route_id: UUID
+        self, tenant_id: str, route_id: str
     ) -> OutboundRouteDomainModel | None:
         stmt = select(OutboundRoute).where(
             OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
@@ -46,7 +44,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         return OutboundRouteDomainModel.model_validate(record) if record else None
 
     async def _validate_outbound_destination(
-        self, tenant_id: str, as2_id: UUID | None, sftp_id: UUID | None
+        self, tenant_id: str, as2_id: str | None, sftp_id: str | None
     ) -> None:
         destinations = [d for d in (as2_id, sftp_id) if d is not None]
         if len(destinations) != 1:
@@ -56,7 +54,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             result = await self.session.execute(
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
-                    AS2Partner.tenant_id.in_([tenant_id, "0"]),
+                    AS2Partner.tenant_id.in_([tenant_id, PLATFORM_TENANT_ID]),
                 )
             )
             if not result.scalar_one_or_none():
@@ -75,14 +73,12 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                     f"SFTP partner {sftp_id} not found or does not belong to this tenant"
                 )
 
-    async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> UUID:
+    async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> str:
         await self._validate_outbound_destination(
             tenant_id, cmd.as2_partner_id, cmd.sftp_partner_id
         )
 
-        route_id = uuid.uuid4()
         record_route = OutboundRoute(
-            id=route_id,
             tenant_id=tenant_id,
             trading_partner_id=cmd.trading_partner_id,
             name=cmd.name,
@@ -91,10 +87,10 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         )
         self.session.add(record_route)
         await self.session.flush()
-        return route_id
+        return record_route.id
 
     async def update_outbound_route(
-        self, tenant_id: str, route_id: UUID, cmd: UpdateOutboundRouteCmd
+        self, tenant_id: str, route_id: str, cmd: UpdateOutboundRouteCmd
     ) -> bool:
         result = await self.session.execute(
             select(OutboundRoute).where(
@@ -124,7 +120,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         await self.session.flush()
         return True
 
-    async def delete_outbound_route(self, tenant_id: str, route_id: UUID) -> bool:
+    async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
         result = await self.session.execute(
             delete(OutboundRoute).where(
                 OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id

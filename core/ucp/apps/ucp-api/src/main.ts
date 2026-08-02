@@ -1,51 +1,39 @@
 import { NestFactory } from '@nestjs/core';
-import * as express from 'express';
-import { NextFunction, Request, Response } from 'express';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
+import { Logger } from 'nestjs-pino';
+import { GlobalExceptionFilter } from './adapters/inbound/http/filters/global-exception.filter.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter(),
+    { bufferLogs: true },
+  );
 
-  // Enterprise-Grade Zero-Copy Proxy:
-  // Conditionally apply body parser ONLY to non-proxy routes.
-  // This allows http-proxy-middleware to stream raw TCP socket data directly
-  // to the backend without allocating memory or double-serializing.
-  const jsonParser = express.json();
-  const urlencodedParser = express.urlencoded({ extended: true });
-
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    // Skip body parsing for all EDI proxy routes
-    if (
-      req.originalUrl.includes('/api/v1/platform') ||
-      req.originalUrl.match(/\/api\/v1\/tenants\/[^/]+\/edi/)
-    ) {
-      next();
-    } else {
-      jsonParser(req, res, (err) => {
-        if (err) return next(err);
-        urlencodedParser(req, res, next);
-      });
-    }
-  });
-
-  // Add HTTP Request Logging
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const start = Date.now();
-    res.on('finish', () => {
-      const duration = Date.now() - start;
-      console.log(`[HTTP] ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
-    });
-    next();
-  });
+  app.useLogger(app.get(Logger));
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   app.enableCors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
   });
+
+  app.enableShutdownHooks();
+
   const port = process.env.PORT ?? 3000;
-  await app.listen(port);
-  console.log(`\n🚀 UCP Backend API is running on: http://localhost:${port}`);
-  console.log(
-    `🌐 Platform Dashboard (Frontend) is running on: ${process.env.FRONTEND_URL || 'http://localhost:5173'}\n`,
+  await app.listen(port, '0.0.0.0');
+
+  const logger = app.get(Logger);
+  logger.log(
+    `UCP Backend API (Fastify) is running on: http://localhost:${port}`,
+  );
+  logger.log(
+    `Platform Dashboard (Frontend) is running on: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`,
   );
 }
 void bootstrap();

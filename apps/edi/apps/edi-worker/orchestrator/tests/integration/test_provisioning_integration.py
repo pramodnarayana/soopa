@@ -2,22 +2,20 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models.control_plane import AS2Partner, ControlPlaneOutbox
 from database.models.data_plane import AS2Partner as TenantAS2Partner
-from domain.events import ProvisioningEventType
 from dotenv import load_dotenv
+from soopa_schemas.edi_events import EdiEventType
 from sqlalchemy import delete, select
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from worker.adapters.sqs_outbox import SqsOutboxAdapter
 from worker.adapters.sqs_publisher import SqsPublisherAdapter
-from worker.core.control_plane_outbox_relay import ControlPlaneOutboxRelayService
 from worker.core.service import ProvisioningWorkerService
 
 load_dotenv()
@@ -59,18 +57,16 @@ async def e2e_context():
             await asyncio.sleep(1)
         except Exception as e:
             logging.warning(f"Could not setup queue: {e}")
+            pytest.skip("LocalStack is not available. Skipping integration test.")
 
     # Use a dedicated test queue so the integration test is isolated from production traffic.
     # Pass it to the handler constructor — no monkey-patching needed.
     worker_service = ProvisioningWorkerService(tenant_adapter, outbox_adapter, replication_adapter)
-    sweeper_handler = ControlPlaneOutboxRelayService(
-        db_router, message_publisher, queue_name=queue_name
-    )
 
-    test_partner_id = uuid.uuid4()
+    test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
 
-    from database.models.control_plane import DatabaseShard, Tenant, TenantShard
+    from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
 
     async for session in db_router.get_global_session():
         tenant = Tenant(id=test_tenant_id, name="Test Tenant")
@@ -92,11 +88,21 @@ async def e2e_context():
             session.add(shard)
             await session.commit()
 
-        tenant_shard = TenantShard(
+        app_res = await session.execute(select(App).where(App.slug == "edi"))
+        edi_app = app_res.scalars().first()
+        if not edi_app:
+            edi_app = App(
+                slug="edi",
+                name="EDI Application",
+                description="EDI Processing Engine",
+            )
+            session.add(edi_app)
+            await session.commit()
+
+        tenant_shard = ShardRegistry(
             tenant_id=test_tenant_id,
+            app_id=edi_app.id,
             shard_id=shard.id,
-            shard_schema="tenant_" + test_tenant_id[:8],
-            tier="standard",
         )
         session.add(tenant_shard)
 
@@ -113,22 +119,25 @@ async def e2e_context():
     yield {
         "db_router": db_router,
         "worker_service": worker_service,
-        "sweeper_handler": sweeper_handler,
+        "message_publisher": message_publisher,
         "partner_id": test_partner_id,
         "tenant_id": test_tenant_id,
         "outbox_adapter": outbox_adapter,
+        "queue_name": queue_name,
     }
 
     # Cleanup
     async for session in db_router.get_global_session():
         await session.execute(
             delete(ControlPlaneOutbox).where(
-                ControlPlaneOutbox.event_type == ProvisioningEventType.AS2_PARTNER_CREATED.value,
+                ControlPlaneOutbox.event_type == EdiEventType.edi_as2_partner_created.value,
                 ControlPlaneOutbox.tenant_id == test_tenant_id,
             )
         )
         await session.execute(delete(AS2Partner).where(AS2Partner.id == test_partner_id))
-        await session.execute(delete(TenantShard).where(TenantShard.tenant_id == test_tenant_id))
+        await session.execute(
+            delete(ShardRegistry).where(ShardRegistry.tenant_id == test_tenant_id)
+        )
         await session.execute(delete(Tenant).where(Tenant.id == test_tenant_id))
         await session.commit()
 
@@ -166,36 +175,19 @@ async def test_provisioning_replication_e2e_flow(e2e_context):
     ctx = e2e_context
     db_router = ctx["db_router"]
     worker_service = ctx["worker_service"]
-    sweeper_handler = ctx["sweeper_handler"]
+    message_publisher = ctx["message_publisher"]
+    queue_name = ctx["queue_name"]
     partner_id = ctx["partner_id"]
     tenant_id = ctx["tenant_id"]
 
-    # 1. API creates an event in the outbox — event_type lives on the outbox row,
-    #    NOT in the payload dict. The sweeper is responsible for injecting it into
-    #    the SQS message body. Writing it here would mask the publisher contract.
-    event_id = uuid.uuid4()
-    async for session in db_router.get_global_session():
-        outbox_event = ControlPlaneOutbox(
-            id=event_id,
-            tenant_id=tenant_id,
-            idempotency_key=uuid.uuid4(),
-            event_type=ProvisioningEventType.AS2_PARTNER_CREATED.value,
-            payload={"tenant_id": tenant_id, "resource_id": str(partner_id)},
-            status="PENDING",
-            created_at=datetime.now(UTC),
-        )
-        session.add(outbox_event)
-        await session.commit()
+    # 1. Simulate the UCP API (AwsControlPlaneEventRouter) publishing directly to the SNS/SQS topic
+    payload = {
+        "tenant_id": tenant_id,
+        "event_type": EdiEventType.edi_as2_partner_created.value,
+        "resource_id": str(partner_id),
+    }
 
-    # 2. Sweeper runs
-    await sweeper_handler.relay_pending_events()
-    async for session in db_router.get_global_session():
-        res = await session.execute(
-            select(ControlPlaneOutbox).where(ControlPlaneOutbox.id == event_id)
-        )
-        swept_event = res.scalars().first()
-        assert swept_event is not None
-        assert swept_event.status == "PROCESSED"
+    await message_publisher.publish(queue_name, payload)
 
     await asyncio.sleep(2)  # Give LocalStack SQS a moment to make the message visible
 

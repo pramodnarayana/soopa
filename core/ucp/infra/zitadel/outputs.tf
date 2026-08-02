@@ -29,3 +29,7 @@ output "edi_api_client_id" {
   value     = zitadel_application_api.edi_api.client_id
   sensitive = true
 }
+
+output "platform_admin_id" {
+  value = zitadel_human_user.platform_admin.id
+}

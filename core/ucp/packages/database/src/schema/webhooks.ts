@@ -1,4 +1,3 @@
-import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
 import { boolean, index, pgPolicy, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
@@ -8,9 +7,8 @@ export const webhooks = ucpSchema
   .table(
     'webhooks',
     {
-      id: varchar('id', { length: 128 })
-        .primaryKey()
-        .$defaultFn(() => createId()),
+      // No $defaultFn — id is required. Callers MUST supply generateId('wh').
+      id: varchar('id', { length: 128 }).primaryKey(),
       tenantId: varchar('tenant_id', { length: 128 })
         .notNull()
         .references(() => tenants.id, { onDelete: 'cascade' }),

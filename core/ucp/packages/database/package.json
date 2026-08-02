@@ -17,10 +17,12 @@
     "@paralleldrive/cuid2": "^3.3.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
+    "@types/uuid": "^11.0.0",
     "drizzle-kit": "^0.30.5",
     "tsx": "^4.23.1",
     "typescript": "~6.0.2"

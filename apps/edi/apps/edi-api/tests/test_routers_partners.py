@@ -1,6 +1,7 @@
 import pytest
 from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from api.dependencies.auth import get_current_tenant_id, require_platform_admin
 from api.dependencies.database import get_control_plane_uow, get_data_plane_uow
@@ -19,7 +20,7 @@ def client(fake_uow):
     app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
     app.dependency_overrides[get_data_plane_uow] = lambda: fake_uow
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
-    app.dependency_overrides[require_platform_admin] = lambda: "0"
+    app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "user"}
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private"]

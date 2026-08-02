@@ -28,12 +28,13 @@ from api.routers import (
     routes,
     trading_partners,
     transactions,
-    webhooks,
 )
 from api.routers import (
     platform as platform_admin,
 )
+from api.routers.tenant import dashboard
 from api.routers.trading_partners import as2_receive, platform
+from api.routers.webhooks import webhook
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,8 @@ async def validation_exception_handler(
 
 app.include_router(cdc_relay.router)
 app.include_router(trading_partners.router)
-app.include_router(webhooks.router)
+# NOTE: Webhooks are now owned exclusively by the UCP API (GET/POST/PATCH/DELETE /api/v1/tenants/:id/webhooks)
+# The edi-api no longer exposes a /webhooks endpoint.
 app.include_router(platform.router)
 app.include_router(platform_admin.router)
 app.include_router(routes.router)
@@ -108,6 +110,8 @@ app.include_router(as2_receive.router, prefix="/api/v1")
 app.include_router(edi_json.router)
 app.include_router(transactions.router)
 app.include_router(explorer.router)
+app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(webhook.router)
 
 
 @app.get("/api/me", tags=["Identity"])

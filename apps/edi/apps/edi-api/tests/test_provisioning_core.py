@@ -68,7 +68,9 @@ async def test_create_as2_partner(as2_partner_service: AS2PartnerService, global
 
     assert len(global_repo.partners) == 1
     assert len(global_repo.outbox_events) == 1
-    assert global_repo.outbox_events[0]["event_type"] == "AS2_PARTNER_CREATED"
+    from soopa_schemas.edi_events import EdiEventType
+
+    assert global_repo.outbox_events[0]["event_type"] == EdiEventType.edi_as2_partner_created
     assert global_repo.outbox_events[0]["tenant_id"] == "1"
 
 
@@ -134,14 +136,14 @@ async def test_list_routes(mock_uow, global_repo):
             self.gs_sender_id = "S1"
             self.gs_receiver_id = "R1"
             self.transaction_type = "850"
-            self.trading_partner_id = uuid.uuid4()
+            self.trading_partner_id = str(uuid.uuid4())
             self.isa_sender_qualifier = "ZZ"
             self.isa_receiver_qualifier = "ZZ"
             self.default_standard = "x12"
             self.default_version = "004010"
 
-    global_repo.inbound_routes = [FakeRoute(uuid.uuid4(), as2_id, sftp_id, None)]
-    global_repo.outbound_routes = [FakeRoute(uuid.uuid4(), as2_id, None, None)]
+    global_repo.inbound_routes = [FakeRoute(str(uuid.uuid4()), as2_id, sftp_id, None)]
+    global_repo.outbound_routes = [FakeRoute(str(uuid.uuid4()), as2_id, None, None)]
 
     inbound_service = InboundRouteService(uow=mock_uow)
     outbound_service = OutboundRouteService(uow=mock_uow)
@@ -168,7 +170,7 @@ async def test_create_inbound_route(mock_uow, global_repo):
         isa_receiver_id="receiver",
         transaction_type="850",
     )
-    route = await service.create_inbound_route(tenant_id=1, cmd=cmd)
+    route = await service.create_inbound_route(tenant_id="1", cmd=cmd)
     assert route.direction == "INBOUND"
     assert len(global_repo.inbound_routes) == 1
 
@@ -184,12 +186,12 @@ async def test_update_inbound_route(mock_uow, global_repo):
         trading_partner_id=UNSET,
         isa_sender_id="new sender",
     )
-    route_id = uuid.uuid4()
+    route_id = str(uuid.uuid4())
     # Mocking or depending on FakeGlobalStore to have an update method
     # Actually FakeGlobalStore probably doesn't implement update_inbound_route properly if it was missing.
     # We will just pass because it's a fake
     try:
-        res = await service.update_inbound_route(tenant_id=1, route_id=route_id, cmd=cmd)
+        res = await service.update_inbound_route(tenant_id="1", route_id=route_id, cmd=cmd)
         assert res is not None
     except NotImplementedError:
         pass
@@ -201,9 +203,9 @@ async def test_create_outbound_route(mock_uow, global_repo):
     cmd = CreateOutboundRouteCmd(
         trading_partner_id="PARTNER_123",
         name="Outbound Route",
-        as2_partner_id=uuid.uuid4(),
+        as2_partner_id=str(uuid.uuid4()),
     )
-    route = await service.create_outbound_route(tenant_id=1, cmd=cmd)
+    route = await service.create_outbound_route(tenant_id="1", cmd=cmd)
 
     assert route.direction == "OUTBOUND"
     assert len(global_repo.outbound_routes) == 1

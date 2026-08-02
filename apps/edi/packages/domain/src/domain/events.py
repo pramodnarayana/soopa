@@ -1,6 +1,9 @@
 from enum import StrEnum
 
 from pydantic import BaseModel
+from soopa_schemas.edi_events import EdiEventType
+from soopa_schemas.ucp_events import UcpEventType
+from soopa_schemas.webhook_events import WebhookEventType
 
 
 class PipelineEventType(StrEnum):
@@ -11,31 +14,20 @@ class PipelineEventType(StrEnum):
     DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
 
 
-class ProvisioningEventType(StrEnum):
-    AS2_PARTNER_CREATED = "AS2_PARTNER_CREATED"
-    AS2_PARTNER_UPDATED = "AS2_PARTNER_UPDATED"
-    AS2_PARTNER_DELETED = "AS2_PARTNER_DELETED"
-    AS2_PARTNERSHIP_CREATED = "AS2_PARTNERSHIP_CREATED"
-    AS2_PARTNERSHIP_UPDATED = "AS2_PARTNERSHIP_UPDATED"
-    AS2_PARTNERSHIP_DELETED = "AS2_PARTNERSHIP_DELETED"
-    SFTP_PARTNER_CREATED = "SFTP_PARTNER_CREATED"
-    SFTP_PARTNER_UPDATED = "SFTP_PARTNER_UPDATED"
-    SFTP_PARTNER_DELETED = "SFTP_PARTNER_DELETED"
-    WEBHOOK_CREATED = "WEBHOOK_CREATED"
-    WEBHOOK_UPDATED = "WEBHOOK_UPDATED"
-    WEBHOOK_DELETED = "WEBHOOK_DELETED"
-    INBOUND_ROUTE_CREATED = "INBOUND_ROUTE_CREATED"
-    INBOUND_ROUTE_UPDATED = "INBOUND_ROUTE_UPDATED"
-    INBOUND_ROUTE_DELETED = "INBOUND_ROUTE_DELETED"
-    OUTBOUND_ROUTE_CREATED = "OUTBOUND_ROUTE_CREATED"
-    OUTBOUND_ROUTE_UPDATED = "OUTBOUND_ROUTE_UPDATED"
-    OUTBOUND_ROUTE_DELETED = "OUTBOUND_ROUTE_DELETED"
-    OUTBOUND_EDI_HEADER_CREATED = "OUTBOUND_EDI_HEADER_CREATED"
-    OUTBOUND_EDI_HEADER_UPDATED = "OUTBOUND_EDI_HEADER_UPDATED"
-    OUTBOUND_EDI_HEADER_DELETED = "OUTBOUND_EDI_HEADER_DELETED"
-
-    # Legacy / UCP System Events
+# Legacy UCP events used by the worker for full sync
+class LegacyUcpEventType(StrEnum):
     PROVISION_ALL_TENANTS = "tenant.provision_all"
+    PROVISION_TENANT = "tenant.provision"
+
+
+ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType | LegacyUcpEventType
+
+ALL_PROVISIONING_EVENT_TYPES = (
+    [e.value for e in EdiEventType]
+    + [e.value for e in WebhookEventType]
+    + [e.value for e in UcpEventType]
+    + [e.value for e in LegacyUcpEventType]
+)
 
 
 class ProvisioningEvent(BaseModel):

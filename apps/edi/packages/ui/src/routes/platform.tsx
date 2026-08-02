@@ -108,7 +108,7 @@ export function AppLayout() {
             Configuration
           </div>
           <NavItem icon={Server} label="Trading Partners" to="/platform/partners" />
-          <NavItem icon={Network} label="Partnerships" to="/platform/partnerships" />
+          <NavItem icon={Network} label="AS2 Partnerships" to="/platform/as2-partnerships" />
 
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
             System Admin

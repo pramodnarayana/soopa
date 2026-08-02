@@ -58,6 +58,23 @@ export const useToggleTenantUserStatus = () => {
       action: 'activate' | 'deactivate';
     }) => apiClient.patch(`/tenants/${tenantId}/users/${userId}/status`, { action }),
     onSuccess: (_, variables) => {
+      // Optimistically update the cache to bypass Zitadel's eventual consistency delay on read models
+      queryClient.setQueryData(
+        ['tenants', variables.tenantId, 'users'],
+        (oldData: { id: string; state: string; [key: string]: unknown }[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.map((user) => {
+            if (user.id === variables.userId) {
+              return {
+                ...user,
+                state:
+                  variables.action === 'activate' ? 'USER_STATE_ACTIVE' : 'USER_STATE_INACTIVE',
+              };
+            }
+            return user;
+          });
+        },
+      );
       void queryClient.invalidateQueries({ queryKey: ['tenants', variables.tenantId, 'users'] });
     },
   });

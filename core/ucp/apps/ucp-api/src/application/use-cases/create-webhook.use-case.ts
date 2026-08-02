@@ -34,25 +34,22 @@ export class CreateWebhookUseCase {
     @Inject(TENANT_REPOSITORY) private readonly tenantRepo: ITenantRepository,
   ) {}
 
-  async execute(dto: CreateWebhookDto): Promise<Webhook> {
+  async execute(dto: CreateWebhookDto, idempotencyKey?: string): Promise<Webhook> {
     const tenant = await this.tenantRepo.findById(dto.tenantId);
     if (!tenant) {
       throw new NotFoundException(`Tenant with id ${dto.tenantId} not found`);
     }
 
     const id = `wh_${crypto.randomBytes(12).toString('hex')}`;
-    const webhook = new Webhook(
+    const webhook = Webhook.create(
       id,
       dto.tenantId,
       dto.name,
       dto.url,
       dto.authHeaderVaultRef || null,
-      true,
-      new Date(),
-      new Date(),
     );
 
-    await this.webhookRepo.save(webhook);
+    await this.webhookRepo.save(webhook, idempotencyKey);
 
     return webhook;
   }

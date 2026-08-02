@@ -18,6 +18,7 @@ from database.models.data_plane import OutboundEdiHeader as TenantOutboundEdiHea
 from database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from database.models.data_plane import Webhook as TenantWebhook
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,8 @@ from worker.ports.replication import ReplicationPort
 from worker.ports.tenant import TenantPort
 
 logger = logging.getLogger(__name__)
+
+SHARED_TENANT_ID = PLATFORM_TENANT_ID
 
 
 class SqlAlchemyReplicationAdapter(ReplicationPort):
@@ -70,7 +73,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         # AS2 Partners
         tp_result = await global_session.execute(
             select(GlobalAS2Partner).where(
-                (GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id.is_(None))
+                (GlobalAS2Partner.tenant_id == tenant_id)
+                | (GlobalAS2Partner.tenant_id == SHARED_TENANT_ID)
             )
         )
         for tp in tp_result.scalars().all():
@@ -80,7 +84,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         ps_result = await global_session.execute(
             select(GlobalAS2Partnership).where(
                 (GlobalAS2Partnership.tenant_id == tenant_id)
-                | (GlobalAS2Partnership.tenant_id.is_(None))
+                | (GlobalAS2Partnership.tenant_id == SHARED_TENANT_ID)
             )
         )
         for ps in ps_result.scalars().all():
@@ -179,7 +183,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 stmt = select(global_model).where(global_model.id == entity_id)
                 if include_shared:
                     stmt = stmt.where(
-                        (global_model.tenant_id == tenant_id) | (global_model.tenant_id.is_(None))
+                        (global_model.tenant_id == tenant_id)
+                        | (global_model.tenant_id == SHARED_TENANT_ID)
                     )
                 else:
                     stmt = stmt.where(global_model.tenant_id == tenant_id)
@@ -188,13 +193,18 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 entity = res.scalars().first()
 
                 if not entity:
-                    logger.warning(
+                    raise PermanentProvisioningError(
                         f"{global_model.__name__} {entity_id} not found in global DB for tenant {tenant_id}"
                     )
-                    return
 
                 await self._upsert_entity(tenant_session, tenant_id, entity, tenant_model)
                 await tenant_session.commit()
+                logger.info(
+                    f"Successfully replicated {global_model.__name__} {entity_id} to tenant {tenant_id}"
+                )
+            except (TransientProvisioningError, PermanentProvisioningError):
+                await tenant_session.rollback()
+                raise
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
@@ -276,7 +286,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             for col in global_entity.__table__.columns
             if hasattr(global_entity, col.name) and col.name in tenant_columns
         }
-        data["tenant_id"] = tenant_id
+
+        # Enterprise Grade: Retain the source global entity's tenant_id (e.g., "0" for platform configs)
+        # to preserve shared ownership semantics across data plane shards.
+        # Fallback to the destination tenant_id only if strictly missing or null to satisfy shard DB constraints.
+        if data.get("tenant_id") is None:
+            data["tenant_id"] = tenant_id
 
         stmt = insert(tenant_model).values(**data)
         update_data = {k: v for k, v in data.items() if k != "id"}
@@ -287,6 +302,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     @asynccontextmanager
     async def _get_tenant_session(self, tenant_id: str) -> AsyncIterator[AsyncSession]:
         try:
+            logger.debug(f"Resolving database shard for tenant {tenant_id}...")
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
         except Exception as e:
             raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
@@ -305,6 +321,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     )
                 )
                 await tenant_session.commit()
+                logger.info(
+                    f"Successfully deleted {tenant_model.__name__} {entity_id} from tenant {tenant_id}"
+                )
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
@@ -324,7 +343,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         global_stmt = select(global_model.id).where(global_model.tenant_id == tenant_id)
         if include_shared:
             global_stmt = select(global_model.id).where(
-                (global_model.tenant_id == tenant_id) | (global_model.tenant_id.is_(None))
+                (global_model.tenant_id == tenant_id) | (global_model.tenant_id == SHARED_TENANT_ID)
             )
         global_ids_result = await global_session.execute(global_stmt)
         global_ids = set(global_ids_result.scalars().all())

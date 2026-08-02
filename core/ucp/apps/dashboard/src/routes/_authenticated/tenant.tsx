@@ -1,6 +1,9 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
-import { ChevronRight, Clock, LayoutDashboard, LogOut, Network } from 'lucide-react';
+import { ChevronRight, LayoutDashboard, LogOut, Network, Settings } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
+import { TenantContext } from '../../contexts/TenantContext';
+import { useGetTenant } from '../../domains/tenants/api/queries';
+import { resolveTenantId } from '../../lib/auth';
 
 export const Route = createFileRoute('/_authenticated/tenant')({
   component: TenantLayout,
@@ -44,30 +47,51 @@ function TenantSidebar() {
       <NavItem icon={LayoutDashboard} label="Dashboard" to="/tenant" exact />
 
       <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
-        EDI Network
+        EDI
       </div>
       <NavItem icon={Network} label="EDI Headers" to="/tenant/edi/headers" />
       <NavItem icon={Network} label="Routes" to="/tenant/edi/routes" />
-      <NavItem icon={Network} label="Webhooks" to="/tenant/edi/webhooks" />
 
       <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
-        Configuration
+        Developer Settings
       </div>
-      <NavItem icon={Clock} label="Tools" to="/tenant/edi/tools" />
+      <NavItem icon={Network} label="Webhooks" to="/tenant/developer/webhooks" />
+      <NavItem icon={Settings} label="API Tokens" to="/tenant/developer/api-tokens" />
+      <NavItem icon={Settings} label="EDI Tool" to="/tenant/edi/tool" />
     </>
   );
 }
 
 function TenantLayout() {
   const auth = useAuth();
+  const token = auth.user?.access_token ?? '';
+  const tenantId = resolveTenantId(token, auth.user?.profile ?? {});
+
+  const { data: tenant } = useGetTenant(tenantId ?? '');
+
+  if (auth.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50/50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (!tenantId) {
+    throw new Error(
+      'FATAL: Tenant ID is missing from both the access token and user profile. ' +
+        'This user may not be assigned to a Zitadel organization. ' +
+        `Access token present: ${!!token}, Profile keys: ${Object.keys(auth.user?.profile ?? {}).join(', ')}`,
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       {/* Sidebar - Clean White */}
       <aside className="w-72 border-r border-slate-200/60 bg-white flex flex-col fixed inset-y-0 z-50">
         <div className="h-20 flex items-center px-8 border-b border-slate-100/50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="20"
@@ -79,11 +103,11 @@ function TenantLayout() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1-1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
               </svg>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              Soopa <span className="font-medium text-slate-400">Tenant</span>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 truncate">
+              {tenant ? tenant.name : 'Loading...'}
             </h1>
           </div>
         </div>
@@ -115,7 +139,9 @@ function TenantLayout() {
       {/* Main Content Area */}
       <main className="flex-1 ml-72 bg-slate-50">
         <div className="max-w-[1400px] mx-auto p-8 lg:p-12">
-          <Outlet />
+          <TenantContext.Provider value={{ tenantId: tenant?.id ?? tenantId, token }}>
+            <Outlet />
+          </TenantContext.Provider>
         </div>
       </main>
     </div>

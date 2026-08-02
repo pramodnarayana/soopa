@@ -1,8 +1,8 @@
 import logging
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from api.adapters.http.dtos import (
     AS2TradingPartnerResponse,
@@ -27,7 +27,7 @@ router = APIRouter(tags=["Partners — AS2"])
     response_model=CertificateExportResponse,
 )
 async def export_as2_certificates(
-    partner_id: UUID,
+    partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
@@ -84,7 +84,7 @@ async def export_as2_certificates(
     response_model=AS2TradingPartnerResponse,
 )
 async def rotate_as2_certificates(
-    partner_id: UUID,
+    partner_id: str,
     request: RotateCertificateRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -97,7 +97,9 @@ async def rotate_as2_certificates(
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
-        actual_tenant_id = str(partner.tenant_id) if partner.tenant_id is not None else "0"
+        actual_tenant_id = (
+            str(partner.tenant_id) if partner.tenant_id is not None else PLATFORM_TENANT_ID
+        )
 
         if partner.is_local and "certificates:rotate" not in profile["permissions"]:
             raise HTTPException(

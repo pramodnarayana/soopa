@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from uuid import UUID
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import OutboundEdiHeader
@@ -16,20 +15,17 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
 
     async def create_outbound_edi_header(
         self, tenant_id: str, cmd: CreateOutboundEdiHeaderCmd
-    ) -> UUID:
-        import uuid
-
-        tid_str = tenant_id
-        header_id = uuid.uuid4()
+    ) -> str:
         import dataclasses
 
-        header = OutboundEdiHeader(id=header_id, tenant_id=tid_str, **dataclasses.asdict(cmd))
+        tid_str = tenant_id
+        header = OutboundEdiHeader(tenant_id=tid_str, **dataclasses.asdict(cmd))
         self.session.add(header)
         await self.session.flush()
-        return header_id
+        return header.id
 
     async def update_outbound_edi_header(
-        self, tenant_id: str, header_id: UUID, cmd: UpdateOutboundEdiHeaderCmd
+        self, tenant_id: str, header_id: str, cmd: UpdateOutboundEdiHeaderCmd
     ) -> bool:
         import dataclasses
 
@@ -53,7 +49,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         await self.session.flush()
         return (getattr(result, "rowcount", 0) or 0) > 0
 
-    async def delete_outbound_edi_header(self, tenant_id: str, header_id: UUID) -> bool:
+    async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> bool:
         tid_str = tenant_id
         stmt = delete(OutboundEdiHeader).where(
             OutboundEdiHeader.id == header_id,

@@ -5,7 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { FastifyRequest } from 'fastify';
 import { ApiKey } from '../../../domain/models/api-key.model.js';
 import type { IApiKeyRepository } from '../../../ports/outbound/api-key.repository.js';
 import { API_KEY_REPOSITORY } from '../../../ports/outbound/api-key.repository.js';
@@ -19,7 +19,7 @@ export class ApiKeyGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context
       .switchToHttp()
-      .getRequest<Request & { apiKey?: ApiKey }>();
+      .getRequest<FastifyRequest & { apiKey?: ApiKey }>();
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

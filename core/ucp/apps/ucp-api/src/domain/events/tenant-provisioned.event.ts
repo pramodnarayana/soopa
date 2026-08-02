@@ -1,8 +1,8 @@
-import { EventType } from '@soopa/schemas';
+import { UcpEventType } from '@soopa/schemas';
 import { DomainEvent } from './domain.event.js';
 
 export class TenantProvisionedEvent implements DomainEvent {
-  public readonly eventName = EventType.TENANT_PROVISIONED;
+  public readonly eventName = UcpEventType.TENANT_PROVISIONED;
   public readonly occurredOn: Date;
   public readonly payload: Record<string, unknown>;
 

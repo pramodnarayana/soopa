@@ -22,7 +22,10 @@ export class ApiToken extends AggregateRoot {
     expiresAt?: Date,
   ): { apiToken: ApiToken; rawSecret: string } {
     const rawSecret = crypto.randomBytes(32).toString('hex');
-    const secretHash = crypto.createHash('sha256').update(rawSecret).digest('hex');
+    const secretHash = crypto
+      .createHash('sha256')
+      .update(rawSecret)
+      .digest('hex');
     const clientId = `client_${crypto.randomBytes(12).toString('hex')}`;
     const id = `token_${crypto.randomBytes(12).toString('hex')}`;
 

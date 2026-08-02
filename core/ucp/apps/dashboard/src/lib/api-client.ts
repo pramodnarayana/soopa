@@ -3,6 +3,7 @@ const UCP_API_URL =
   'http://localhost:3000';
 
 let globalToken: string | null = null;
+
 class ApiError extends Error {
   public statusCode: number;
   public details?: unknown;
@@ -17,6 +18,10 @@ class ApiError extends Error {
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
+}
+
+function getIdempotencyKey(): string {
+  return crypto.randomUUID();
 }
 
 export const apiClient = {
@@ -35,11 +40,21 @@ export const apiClient = {
     }
 
     const normalizedHeaders = new Headers(headers);
-    if (!normalizedHeaders.has('Content-Type')) {
+    if (!normalizedHeaders.has('Content-Type') && customConfig.body !== undefined) {
       normalizedHeaders.set('Content-Type', 'application/json');
     }
     if (globalToken && !normalizedHeaders.has('Authorization')) {
       normalizedHeaders.set('Authorization', `Bearer ${globalToken}`);
+    }
+
+    // Inject strict idempotency key for mutating requests
+    const method = customConfig.method?.toUpperCase() || 'GET';
+    if (
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
+      !normalizedHeaders.has('Idempotency-Key')
+    ) {
+      const idempotencyKey = getIdempotencyKey();
+      normalizedHeaders.set('Idempotency-Key', idempotencyKey);
     }
 
     const config: RequestInit = {

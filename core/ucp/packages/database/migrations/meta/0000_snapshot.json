@@ -1,5 +1,5 @@
 {
-  "id": "0ad50ffb-b0e0-46df-947c-d27021c41cb4",
+  "id": "9a1a00a2-ebe5-46ee-91cf-3a0173d0ac1f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -95,8 +95,12 @@
           "tableFrom": "api_tokens",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -106,7 +110,9 @@
         "api_tokens_client_id_unique": {
           "name": "api_tokens_client_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["client_id"]
+          "columns": [
+            "client_id"
+          ]
         }
       },
       "policies": {
@@ -114,7 +120,9 @@
           "name": "api_tokens_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
+          "to": [
+            "public"
+          ],
           "using": "\"ucp\".\"api_tokens\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
@@ -187,8 +195,12 @@
           "tableFrom": "api_keys",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -198,27 +210,37 @@
         "api_keys_key_hash_unique": {
           "name": "api_keys_key_hash_unique",
           "nullsNotDistinct": false,
-          "columns": ["key_hash"]
+          "columns": [
+            "key_hash"
+          ]
         }
       },
       "policies": {
         "api_keys_isolation": {
           "name": "api_keys_isolation",
-          "as": "permissive",
-          "for": "all",
-          "to": "public",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
           "using": "\"ucp\".\"api_keys\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
       "isRLSEnabled": true
     },
-    "ucp.tenant_shards": {
-      "name": "tenant_shards",
+    "ucp.shard_registry": {
+      "name": "shard_registry",
       "schema": "ucp",
       "columns": {
         "tenant_id": {
           "name": "tenant_id",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "app_id": {
+          "name": "app_id",
           "type": "varchar(128)",
           "primaryKey": false,
           "notNull": true
@@ -229,26 +251,12 @@
           "primaryKey": false,
           "notNull": true
         },
-        "shard_schema": {
-          "name": "shard_schema",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'public'"
-        },
-        "tier": {
-          "name": "tier",
+        "status": {
+          "name": "status",
           "type": "varchar(50)",
           "primaryKey": false,
           "notNull": true,
-          "default": "'standard'"
-        },
-        "allow_private_as2": {
-          "name": "allow_private_as2",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "default": "'active'"
         },
         "created_at": {
           "name": "created_at",
@@ -260,31 +268,40 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tenant_shards_tenant_id_tenants_id_fk": {
-          "name": "tenant_shards_tenant_id_tenants_id_fk",
-          "tableFrom": "tenant_shards",
+        "shard_registry_tenant_id_tenants_id_fk": {
+          "name": "shard_registry_tenant_id_tenants_id_fk",
+          "tableFrom": "shard_registry",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "tenant_shards_tenant_id_shard_id_pk": {
-          "name": "tenant_shards_tenant_id_shard_id_pk",
-          "columns": ["tenant_id", "shard_id"]
+        "shard_registry_tenant_id_app_id_pk": {
+          "name": "shard_registry_tenant_id_app_id_pk",
+          "columns": [
+            "tenant_id",
+            "app_id"
+          ]
         }
       },
       "uniqueConstraints": {},
       "policies": {
-        "tenant_shards_isolation": {
-          "name": "tenant_shards_isolation",
+        "shard_registry_isolation": {
+          "name": "shard_registry_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
-          "using": "\"ucp\".\"tenant_shards\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+          "to": [
+            "public"
+          ],
+          "using": "\"ucp\".\"shard_registry\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
@@ -349,8 +366,12 @@
           "tableFrom": "tenant_users",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -359,8 +380,12 @@
           "tableFrom": "tenant_users",
           "tableTo": "users",
           "schemaTo": "ucp",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -368,7 +393,10 @@
       "compositePrimaryKeys": {
         "tenant_users_tenant_id_user_id_pk": {
           "name": "tenant_users_tenant_id_user_id_pk",
-          "columns": ["tenant_id", "user_id"]
+          "columns": [
+            "tenant_id",
+            "user_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -377,7 +405,9 @@
           "name": "tenant_users_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
+          "to": [
+            "public"
+          ],
           "using": "\"ucp\".\"tenant_users\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
@@ -399,12 +429,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "zitadel_org_id": {
-          "name": "zitadel_org_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
         },
         "idp_tenant_id": {
           "name": "idp_tenant_id",
@@ -441,7 +465,9 @@
         "tenants_idp_tenant_id_unique": {
           "name": "tenants_idp_tenant_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["idp_tenant_id"]
+          "columns": [
+            "idp_tenant_id"
+          ]
         }
       },
       "policies": {},
@@ -505,12 +531,16 @@
         "users_idp_user_id_unique": {
           "name": "users_idp_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["idp_user_id"]
+          "columns": [
+            "idp_user_id"
+          ]
         },
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["email"]
+          "columns": [
+            "email"
+          ]
         }
       },
       "policies": {},
@@ -602,15 +632,17 @@
           "name": "notification_templates_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
+          "to": [
+            "public"
+          ],
           "using": "\"ucp\".\"notification_templates\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
       "isRLSEnabled": true
     },
-    "ucp.outbox_events": {
-      "name": "outbox_events",
+    "ucp.outbox": {
+      "name": "outbox",
       "schema": "ucp",
       "columns": {
         "id": {
@@ -673,33 +705,41 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "outbox_events_tenant_id_tenants_id_fk": {
-          "name": "outbox_events_tenant_id_tenants_id_fk",
-          "tableFrom": "outbox_events",
+        "outbox_tenant_id_tenants_id_fk": {
+          "name": "outbox_tenant_id_tenants_id_fk",
+          "tableFrom": "outbox",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "outbox_events_idempotency_key_unique": {
-          "name": "outbox_events_idempotency_key_unique",
+        "outbox_idempotency_key_unique": {
+          "name": "outbox_idempotency_key_unique",
           "nullsNotDistinct": false,
-          "columns": ["idempotency_key"]
+          "columns": [
+            "idempotency_key"
+          ]
         }
       },
       "policies": {
-        "outbox_events_isolation": {
-          "name": "outbox_events_isolation",
+        "outbox_isolation": {
+          "name": "outbox_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
-          "using": "\"ucp\".\"outbox_events\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox_events\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()",
-          "withCheck": "\"ucp\".\"outbox_events\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox_events\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+          "to": [
+            "public"
+          ],
+          "using": "\"ucp\".\"outbox\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()",
+          "withCheck": "\"ucp\".\"outbox\".\"tenant_id\" IS NULL OR \"ucp\".\"outbox\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
       "checkConstraints": {},
@@ -742,7 +782,9 @@
         "database_shards_name_unique": {
           "name": "database_shards_name_unique",
           "nullsNotDistinct": false,
-          "columns": ["name"]
+          "columns": [
+            "name"
+          ]
         }
       },
       "policies": {},
@@ -874,9 +916,11 @@
       "policies": {
         "system_audit_log_isolation": {
           "name": "system_audit_log_isolation",
-          "as": "permissive",
-          "for": "all",
-          "to": "public",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
           "using": "\"ucp\".\"system_audit_log\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },
@@ -1038,73 +1082,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "ucp.apps": {
-      "name": "apps",
-      "schema": "ucp",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(128)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "apps_slug_unique": {
-          "name": "apps_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": ["slug"]
-        }
-      },
-      "policies": {
-        "apps_isolation": {
-          "name": "apps_isolation",
-          "as": "permissive",
-          "for": "all",
-          "to": "public",
-          "using": "app.bypass_rls()"
-        },
-        "apps_read": {
-          "name": "apps_read",
-          "as": "permissive",
-          "for": "select",
-          "to": "public",
-          "using": "true"
-        }
-      },
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "ucp.tenant_subscriptions": {
-      "name": "tenant_subscriptions",
+    "ucp.app_subscriptions": {
+      "name": "app_subscriptions",
       "schema": "ucp",
       "columns": {
         "tenant_id": {
@@ -1156,41 +1135,126 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tenant_subscriptions_tenant_id_tenants_id_fk": {
-          "name": "tenant_subscriptions_tenant_id_tenants_id_fk",
-          "tableFrom": "tenant_subscriptions",
+        "app_subscriptions_tenant_id_tenants_id_fk": {
+          "name": "app_subscriptions_tenant_id_tenants_id_fk",
+          "tableFrom": "app_subscriptions",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "tenant_subscriptions_app_id_apps_id_fk": {
-          "name": "tenant_subscriptions_app_id_apps_id_fk",
-          "tableFrom": "tenant_subscriptions",
+        "app_subscriptions_app_id_apps_id_fk": {
+          "name": "app_subscriptions_app_id_apps_id_fk",
+          "tableFrom": "app_subscriptions",
           "tableTo": "apps",
           "schemaTo": "ucp",
-          "columnsFrom": ["app_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "app_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "tenant_subscriptions_tenant_id_app_id_pk": {
-          "name": "tenant_subscriptions_tenant_id_app_id_pk",
-          "columns": ["tenant_id", "app_id"]
+        "app_subscriptions_tenant_id_app_id_pk": {
+          "name": "app_subscriptions_tenant_id_app_id_pk",
+          "columns": [
+            "tenant_id",
+            "app_id"
+          ]
         }
       },
       "uniqueConstraints": {},
       "policies": {
-        "tenant_subscriptions_isolation": {
-          "name": "tenant_subscriptions_isolation",
+        "app_subscriptions_isolation": {
+          "name": "app_subscriptions_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
-          "using": "\"ucp\".\"tenant_subscriptions\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+          "to": [
+            "public"
+          ],
+          "using": "\"ucp\".\"app_subscriptions\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()",
+          "withCheck": "\"ucp\".\"app_subscriptions\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "ucp.apps": {
+      "name": "apps",
+      "schema": "ucp",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(128)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "apps_slug_unique": {
+          "name": "apps_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {
+        "apps_isolation": {
+          "name": "apps_isolation",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "public"
+          ],
+          "using": "app.bypass_rls()"
+        },
+        "apps_read": {
+          "name": "apps_read",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "public"
+          ],
+          "using": "true"
         }
       },
       "checkConstraints": {},
@@ -1275,8 +1339,12 @@
           "tableFrom": "webhooks",
           "tableTo": "tenants",
           "schemaTo": "ucp",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1288,7 +1356,9 @@
           "name": "webhooks_isolation",
           "as": "PERMISSIVE",
           "for": "ALL",
-          "to": ["public"],
+          "to": [
+            "public"
+          ],
           "using": "\"ucp\".\"webhooks\".\"tenant_id\" = app.current_tenant_id() OR app.bypass_rls()"
         }
       },

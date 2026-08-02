@@ -9,8 +9,11 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { generateId } from '@soopa/database';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { ToggleUserStatusUseCase } from '../../../application/use-cases/toggle-user-status.use-case.js';
 import { ZitadelUserState } from '../../../domain/enums/zitadel-user-state.enum.js';
 import type { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
 import { TENANT_REPOSITORY } from '../../../ports/outbound/tenant.repository.js';
@@ -18,6 +21,8 @@ import type { IUserRepository } from '../../../ports/outbound/user.repository.js
 import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
 import type { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider.js';
 import { USER_IDENTITY_PROVIDER } from '../../../ports/outbound/user-identity.provider.js';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
+import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class CreateUserDto {
   @IsString()
@@ -59,16 +64,18 @@ export class UpdateUserDto {
 }
 
 @Controller('tenants/:tenantId/users')
+@UseGuards(TenantAuthGuard)
 export class UsersController {
   constructor(
     @Inject(USER_IDENTITY_PROVIDER)
     private readonly userIdentityProvider: IUserIdentityProvider,
     @Inject(TENANT_REPOSITORY) private readonly tenantRepo: ITenantRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
+    private readonly toggleUserStatusUseCase: ToggleUserStatusUseCase,
   ) {}
 
   @Get()
-  async getUsers(@Param('tenantId') tenantId: string) {
+  async getUsers(@UcpTenantId() tenantId: string) {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
@@ -85,7 +92,7 @@ export class UsersController {
           displayName: u.name,
           firstName,
           lastName,
-          state: ZitadelUserState.ACTIVE, // Stubbed for local model
+          state: u.status === 'inactive' ? ZitadelUserState.INACTIVE : ZitadelUserState.ACTIVE,
           role: u.role,
           createdAt: u.createdAt,
         };
@@ -94,19 +101,16 @@ export class UsersController {
   }
 
   @Post()
-  async createUser(
-    @Param('tenantId') tenantId: string,
-    @Body() dto: CreateUserDto,
-  ) {
+  async createUser(@UcpTenantId() tenantId: string, @Body() dto: CreateUserDto) {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    if (!tenant.zitadelOrgId) {
+    if (!tenant.idpTenantId) {
       throw new BadRequestException('Tenant has no associated organization');
     }
 
     const result = await this.userIdentityProvider.inviteUser(
-      tenant.zitadelOrgId,
+      tenant.idpTenantId,
       dto.email,
       dto.role,
       dto.firstName,
@@ -114,44 +118,47 @@ export class UsersController {
     );
 
     // Dual-write immediately so the UI is responsive, webhook will act as fallback for out-of-band changes
+    const localUserId = generateId('usr');
     await this.userRepo.upsertUser({
-      id: result.userId,
+      id: localUserId,
+      idpUserId: result.userId,
       email: dto.email,
       name: `${dto.firstName} ${dto.lastName}`.trim(),
     });
 
     await this.userRepo.upsertTenantUser({
       tenantId: tenant.id,
-      userId: result.userId,
+      userId: localUserId,
       role: dto.role,
     });
 
-    return result;
+    // Return the local UCP identity to the client
+    return { ...result, userId: localUserId, idpUserId: result.userId };
   }
 
-  @Patch(':userId')
+  @Patch(':id')
   async updateUser(
-    @Param('tenantId') tenantId: string,
-    @Param('userId') userId: string,
+    @UcpTenantId() tenantId: string,
+    @Param('id') userId: string,
     @Body() dto: UpdateUserDto,
   ) {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    if (!tenant.zitadelOrgId) {
+    if (!tenant.idpTenantId) {
       throw new BadRequestException('Tenant has no associated organization');
     }
 
-    // Verify user belongs to this tenant
+    // Verify user belongs to this tenant and get user details
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
-    if (!userBelongsToTenant) {
-      throw new NotFoundException('User not found in this tenant');
+    const user = tenantUsers.find((u) => u.id === userId);
+    if (!user || !user.idpUserId) {
+      throw new NotFoundException('User identity mapping not found in this tenant');
     }
 
     await this.userIdentityProvider.updateUser(
-      userId,
-      tenant.zitadelOrgId,
+      user.idpUserId,
+      tenant.idpTenantId,
       dto.firstName,
       dto.lastName,
       dto.role,
@@ -160,6 +167,8 @@ export class UsersController {
     // Dual-write to sync local read model
     await this.userRepo.upsertUser({
       id: userId,
+      idpUserId: user.idpUserId,
+      email: user.email,
       name: `${dto.firstName} ${dto.lastName}`.trim(),
     });
 
@@ -172,47 +181,26 @@ export class UsersController {
     return { success: true };
   }
 
-  @Patch(':userId/status')
-  async toggleUserStatus(
-    @Param('tenantId') tenantId: string,
-    @Param('userId') userId: string,
+  @Patch(':id/status')
+  async toggleStatus(
+    @UcpTenantId() tenantId: string,
+    @Param('id') userId: string,
     @Body() dto: ToggleUserStatusDto,
   ) {
-    const tenant = await this.tenantRepo.findById(tenantId);
-    if (!tenant) throw new NotFoundException('Tenant not found');
-
-    if (!tenant.zitadelOrgId) {
-      throw new BadRequestException('Tenant has no associated organization');
-    }
-
-    // Verify user belongs to this tenant
-    const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
-    if (!userBelongsToTenant) {
-      throw new NotFoundException('User not found in this tenant');
-    }
-
-    await this.userIdentityProvider.toggleUserStatus(
-      userId,
-      tenant.zitadelOrgId,
-      dto.action,
-    );
+    await this.toggleUserStatusUseCase.execute(tenantId, userId, dto.action);
     return { success: true };
   }
 
-  @Delete(':userId')
-  async deleteUser(
-    @Param('tenantId') tenantId: string,
-    @Param('userId') userId: string,
-  ) {
-    // Verify user belongs to this tenant
+  @Delete(':id')
+  async deleteUser(@UcpTenantId() tenantId: string, @Param('id') userId: string) {
+    // Verify user belongs to this tenant and get user details
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const userBelongsToTenant = tenantUsers.some((u) => u.id === userId);
-    if (!userBelongsToTenant) {
-      throw new NotFoundException('User not found in this tenant');
+    const user = tenantUsers.find((u) => u.id === userId);
+    if (!user || !user.idpUserId) {
+      throw new NotFoundException('User identity mapping not found in this tenant');
     }
 
-    await this.userIdentityProvider.deleteUser(userId);
+    await this.userIdentityProvider.deleteUser(user.idpUserId);
 
     // Update local read model
     await this.userRepo.removeTenantUser(tenantId, userId);

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { generateId } from '@soopa/database';
 import { IsNotEmpty, IsString } from 'class-validator';
-import * as crypto from 'crypto';
 import { Tenant } from '../../domain/models/tenant.model.js';
 import type { IOrganizationProvider } from '../../ports/outbound/organization.provider.js';
 import { ORGANIZATION_PROVIDER } from '../../ports/outbound/organization.provider.js';
@@ -25,18 +25,18 @@ export class ProvisionTenantUseCase {
     private readonly userIdentityProvider: IUserIdentityProvider,
   ) {}
 
-  async execute(dto: ProvisionTenantDto): Promise<Tenant> {
+  async execute(dto: ProvisionTenantDto, idempotencyKey?: string): Promise<Tenant> {
     // 1. Call Zitadel to create an Organization
     const { orgId } = await this.organizationProvider.createOrganization(dto.name);
 
     // 2. Generate a local ID for the tenant
-    const localId = `ten_${crypto.randomBytes(8).toString('hex')}`;
+    const localId = generateId('ten');
 
-    // 3. Create Tenant Domain Entity
-    const tenant = Tenant.create(localId, dto.name, orgId, null, []);
+    // 3. Create Tenant Domain Entity (mapping Zitadel orgId to our generic idpTenantId)
+    const tenant = Tenant.create(localId, dto.name, orgId, []);
 
     // 4. Save to DB (Repository handles Transaction and Outbox automatically)
-    await this.tenantRepo.save(tenant);
+    await this.tenantRepo.save(tenant, idempotencyKey);
 
     return tenant;
   }

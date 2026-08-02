@@ -12,7 +12,7 @@ describe('ZitadelJwksVerifier', () => {
     const verifier = new ZitadelJwksVerifier({ issuer: 'https://iss.com', audience: 'aud' });
 
     vi.mocked(jose.jwtVerify).mockResolvedValue({
-      payload: { sub: 'test-user', email: 'test@test.com' },
+      payload: { sub: 'test-user', email: 'test@test.com', 'urn:zitadel:iam:org:project:roles': {} },
       protectedHeader: { alg: 'RS256' },
     } as any);
 

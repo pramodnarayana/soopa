@@ -6,7 +6,8 @@ import { defineConfig } from 'vite';
 
 // https://vite.dev/config/
 export default defineConfig({
-  envDir: '../../',
+  envDir: '../../../../',
+  envPrefix: ['VITE_', 'ZITADEL_'],
   plugins: [TanStackRouterVite(), react(), tailwindcss()],
   resolve: {
     alias: {

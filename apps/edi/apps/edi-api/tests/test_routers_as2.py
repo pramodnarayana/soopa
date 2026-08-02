@@ -44,7 +44,7 @@ def client(mock_uow, mock_vault):
 
 
 def test_export_as2_certificates(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
 
     mock_partner = mock_uow.as2_partners.get_as2_partner.return_value
     mock_partner.public_cert_pem = "cert_pem"
@@ -58,7 +58,7 @@ def test_export_as2_certificates(client, mock_uow):
 
 
 def test_rotate_as2_certificates(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
 
     mock_partner = mock_uow.as2_partners.get_as2_partner.return_value
     mock_partner.public_cert_pem = "cert_pem"
@@ -85,13 +85,13 @@ def test_create_edi_header(client, mock_uow):
 
 
 def test_update_edi_header(client, mock_uow):
-    hid = uuid4()
+    hid = str(uuid4())
     mock_uow.transactions.get_edi_header.return_value = {"id": str(hid)}
     client.patch(f"/api/v1/edi-headers/{hid}", json={"status": "PROCESSING"})
 
 
 def test_delete_edi_header(client, mock_uow):
-    hid = uuid4()
+    hid = str(uuid4())
     client.delete(f"/api/v1/edi-headers/{hid}")
 
 
@@ -112,7 +112,7 @@ def test_create_as2_partnership(client, mock_uow):
 
 
 def test_update_as2_partnership(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     mock_uow.as2_partnerships.get_as2_partnership.return_value = {"id": str(pid)}
     client.put(
         f"/api/v1/trading-partners/as2/partnerships/{pid}", json={"trading_partner_id": "tp1"}
@@ -120,7 +120,7 @@ def test_update_as2_partnership(client, mock_uow):
 
 
 def test_delete_as2_partnership(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     client.delete(f"/api/v1/trading-partners/as2/partnerships/{pid}")
 
 
@@ -143,7 +143,7 @@ def test_create_as2_partner(client, mock_uow):
 
 
 def test_update_as2_partner(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     mock_partner = mock_uow.as2_partners.get_as2_partner.return_value
     mock_partner.id = pid
     client.put(
@@ -152,5 +152,5 @@ def test_update_as2_partner(client, mock_uow):
 
 
 def test_delete_as2_partner(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     client.delete(f"/api/v1/trading-partners/as2/trading-partners/{pid}")

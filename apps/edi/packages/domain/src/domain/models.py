@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Direction(StrEnum):
@@ -46,13 +46,20 @@ class RecordStatus(StrEnum):
 class EdiRecordBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str
-    trace_id: UUID
+    trace_id: str
     direction: Direction
     status: RecordStatus
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def coerce_to_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
 
 class EdiJsonDomainModel(EdiRecordBase):
@@ -76,7 +83,7 @@ class EdiMessageDomainModel(EdiRecordBase):
     receiver_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
-    inbound_route_id: UUID | None = None
+    inbound_route_id: str | None = None
     trading_partner_id: str | None = None
     edi_data: str | None = None  # Populated from DB or S3
     storage_uri: str | None = None
@@ -96,7 +103,7 @@ class ApiGatewayReceiptDomainModel(EdiRecordBase):
 class WebhookDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str
     name: str
     url: str
@@ -109,7 +116,7 @@ class WebhookDomainModel(BaseModel):
 class AS2PartnerDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str | None = None
     as2_id: str
     name: str
@@ -129,11 +136,11 @@ class AS2PartnerDomainModel(BaseModel):
 class AS2PartnershipDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str | None = None
     name: str
-    local_partner_id: UUID
-    remote_partner_id: UUID
+    local_partner_id: str
+    remote_partner_id: str
     credentials_vault_ref: str | None = None
     mdn_type: str
     mdn_url: str | None = None
@@ -148,7 +155,7 @@ class AS2PartnershipDomainModel(BaseModel):
 class SFTPPartnerDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str
     name: str
     host: str
@@ -167,7 +174,7 @@ class SFTPPartnerDomainModel(BaseModel):
 class InboundRouteDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str
     name: str
     trading_partner_id: str | None = None
@@ -177,9 +184,9 @@ class InboundRouteDomainModel(BaseModel):
     gs_receiver_id: str | None = None
     transaction_type: str | None = None
     processing_mode: ProcessingMode | None = None
-    webhook_id: UUID | None = None
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
+    webhook_id: str | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
     active: bool
     created_at: datetime
     updated_at: datetime
@@ -188,13 +195,13 @@ class InboundRouteDomainModel(BaseModel):
 class OutboundRouteDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str
     trading_partner_id: str
     name: str
     protocol: str | None = None
-    as2_partner_id: UUID | None = None
-    sftp_partner_id: UUID | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
     active: bool
     created_at: datetime
     updated_at: datetime
@@ -203,7 +210,7 @@ class OutboundRouteDomainModel(BaseModel):
 class OutboundEdiHeaderDomainModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     tenant_id: str
     name: str
     trading_partner_id: str

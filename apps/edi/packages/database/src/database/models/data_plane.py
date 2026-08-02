@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     BigInteger,
@@ -13,9 +12,9 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
-from sqlalchemy.sql import func, text
+from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
 from .common import OutboxMixin, TimestampMixin
@@ -82,11 +81,11 @@ class AS2Partner(TenantBase, TenantAwareMixin, AS2PartnerMixin, TimestampMixin):
 class AS2Partnership(TenantBase, TenantAwareMixin, AS2PartnershipMixin, TimestampMixin):
     __tablename__ = "as2_partnerships"
 
-    local_partner_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
+    local_partner_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
-    remote_partner_id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
+    remote_partner_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
 
@@ -109,11 +108,11 @@ class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMix
     webhook_id: Mapped[str | None] = mapped_column(
         String(128), ForeignKey("webhooks.id"), nullable=True
     )
-    as2_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
+    as2_partner_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("as2_partners.id"), nullable=True
     )
-    sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
+    sftp_partner_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -136,11 +135,11 @@ class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMix
 class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampMixin):
     __tablename__ = "outbound_routes"
 
-    as2_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("as2_partners.id"), nullable=True
+    as2_partner_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("as2_partners.id"), nullable=True
     )
-    sftp_partner_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sftp_partners.id"), nullable=True
+    sftp_partner_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -179,10 +178,10 @@ class OutboundEdiHeader(TenantBase, TenantAwareMixin, OutboundEdiHeaderMixin, Ti
 class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_messages"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
-    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
 
@@ -228,10 +227,10 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
 class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_json"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
-    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -261,10 +260,10 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
 class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "api_gateway"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
-    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -290,10 +289,10 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
 class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "jobs"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
-    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSFORM, DELIVER
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -303,8 +302,8 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
 class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
     __tablename__ = "outbox"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
 
     __table_args__ = (
@@ -320,7 +319,7 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
 class ProcessedEvent(TenantBase, TenantAwareMixin):
     __tablename__ = "processed_events"
 
-    idempotency_key: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), primary_key=True)
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -329,10 +328,10 @@ class ProcessedEvent(TenantBase, TenantAwareMixin):
 class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "audit_log"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
-    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     step: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -343,10 +342,10 @@ class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
 class AckReceipt(TenantBase, TenantAwareMixin):
     __tablename__ = "ack_receipts"
 
-    id: Mapped[PyUUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
-    trace_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # MDN, 997, CONTRL
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -1,45 +1,51 @@
 import { z } from 'zod';
-import type { AS2Partner, Partnership, SFTPPartner } from '../types';
+import type { AS2Partner, AS2Partnership, SFTPPartner } from '../types';
 
 export const AS2PartnerSchema: z.ZodType<AS2Partner> = z.object({
   id: z.string(),
   name: z.string(),
   type: z.literal('AS2'),
-  active: z.boolean().optional(),
+  active: z.boolean().nullish(),
   as2_id: z.string(),
   is_local: z.boolean(),
-  url: z.string().optional(),
+  url: z.string().nullish(),
 });
 
 export const SFTPPartnerSchema: z.ZodType<SFTPPartner> = z.object({
   id: z.string(),
   name: z.string(),
   type: z.literal('SFTP'),
-  active: z.boolean().optional(),
+  active: z.boolean().nullish(),
   host: z.string(),
   port: z.number(),
   username: z.string(),
-  inbound_remote_path: z.string().optional(),
-  outbound_remote_path: z.string().optional(),
+  inbound_remote_path: z.string().nullish(),
+  outbound_remote_path: z.string().nullish(),
 });
 
 export const PartnerSchema = z.union([AS2PartnerSchema, SFTPPartnerSchema]);
 
 export const PartnersArraySchema = z.array(PartnerSchema);
 
-export const PartnershipSchema: z.ZodType<Partnership> = z.object({
+export const AS2PartnershipSchema: z.ZodType<AS2Partnership> = z.object({
   id: z.string(),
-  name: z.string().optional(),
+  name: z.string().nullish(),
   local_partner_id: z.string(),
   remote_partner_id: z.string(),
-  host: z.string().optional(),
-  port: z.number().optional(),
-  credentials_vault_ref: z.string().optional(),
+  credentials_vault_ref: z.string().nullish(),
   mdn_type: z.string(),
-  mdn_url: z.string().optional(),
+  mdn_url: z.string().nullish(),
   encryption_algorithm: z.string(),
   signature_algorithm: z.string(),
-  active: z.boolean().optional(),
+  active: z.boolean().nullish(),
 });
 
-export const PartnershipsArraySchema = z.array(PartnershipSchema);
+export const AS2PartnershipsArraySchema = z.array(AS2PartnershipSchema);
+
+export function normalizePartnerResponse(raw: unknown): unknown {
+  if (typeof raw === 'object' && raw !== null && 'partner_id' in raw) {
+    const obj = raw as Record<string, unknown>;
+    return { ...obj, id: obj.partner_id || obj.id };
+  }
+  return raw;
+}

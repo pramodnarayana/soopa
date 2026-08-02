@@ -1,4 +1,3 @@
-import { createId } from '@paralleldrive/cuid2';
 import { sql } from 'drizzle-orm';
 import { pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
@@ -8,9 +7,8 @@ export const apps = ucpSchema
   .table(
     'apps',
     {
-      id: varchar('id', { length: 128 })
-        .primaryKey()
-        .$defaultFn(() => createId()),
+      // No $defaultFn — id is required. Callers MUST supply generateId('app').
+      id: varchar('id', { length: 128 }).primaryKey(),
       name: text('name').notNull(),
       slug: varchar('slug', { length: 255 }).notNull().unique(), // e.g., 'edi', 'idp'
       description: text('description'),
@@ -33,16 +31,16 @@ export const apps = ucpSchema
   )
   .enableRLS();
 
-const SubscriptionStatus = {
+export const SubscriptionStatus = {
   ACTIVE: 'active',
   SUSPENDED: 'suspended',
   CANCELLED: 'cancelled',
 } as const;
 export type SubscriptionStatusType = (typeof SubscriptionStatus)[keyof typeof SubscriptionStatus];
 
-export const tenantSubscriptions = ucpSchema
+export const appSubscriptions = ucpSchema
   .table(
-    'tenant_subscriptions',
+    'app_subscriptions',
     {
       tenantId: varchar('tenant_id', { length: 128 })
         .notNull()
@@ -62,11 +60,12 @@ export const tenantSubscriptions = ucpSchema
     (table) => {
       return {
         pk: primaryKey({ columns: [table.tenantId, table.appId] }),
-        rlsPolicy: pgPolicy('tenant_subscriptions_isolation', {
+        rlsPolicy: pgPolicy('app_subscriptions_isolation', {
           as: 'permissive',
           for: 'all',
           to: 'public',
           using: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
+          withCheck: sql`${table.tenantId} = app.current_tenant_id() OR app.bypass_rls()`,
         }),
       };
     },

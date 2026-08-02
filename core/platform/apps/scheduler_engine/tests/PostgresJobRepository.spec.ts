@@ -1,5 +1,4 @@
-import { createDbClient, JobStatus, scheduledJobs } from '@soopa/database';
-import crypto from 'crypto';
+import { createDbClient, generateId, JobStatus, scheduledJobs } from '@soopa/database';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PostgresJobRepository } from '../src/adapters/outbound/PostgresJobRepository.js';
 
@@ -19,8 +18,8 @@ describe('PostgresJobRepository', () => {
   });
 
   it('should claim next pending jobs and lock them', async () => {
-    const jobId1 = crypto.randomUUID();
-    const jobId2 = crypto.randomUUID();
+    const jobId1 = generateId('job');
+    const jobId2 = generateId('job');
 
     await db.insert(scheduledJobs).values([
       { id: jobId1, name: 'Job 1', targetQueue: 'q1', payload: {}, status: JobStatus.PENDING },
@@ -36,7 +35,7 @@ describe('PostgresJobRepository', () => {
   });
 
   it('should mark job as completed', async () => {
-    const jobId = crypto.randomUUID();
+    const jobId = generateId('job');
     await db.insert(scheduledJobs).values({
       id: jobId,
       name: 'Job',
@@ -56,7 +55,7 @@ describe('PostgresJobRepository', () => {
   });
 
   it('should mark job as failed', async () => {
-    const jobId = crypto.randomUUID();
+    const jobId = generateId('job');
     await db.insert(scheduledJobs).values({
       id: jobId,
       name: 'Job',
@@ -77,7 +76,7 @@ describe('PostgresJobRepository', () => {
   });
 
   it('should reschedule job', async () => {
-    const jobId = crypto.randomUUID();
+    const jobId = generateId('job');
     await db.insert(scheduledJobs).values({
       id: jobId,
       name: 'Job',
@@ -100,7 +99,7 @@ describe('PostgresJobRepository', () => {
   });
 
   it('should sweep stuck jobs', async () => {
-    const jobId = crypto.randomUUID();
+    const jobId = generateId('job');
     const oldDate = new Date(Date.now() - 5000); // Older than lockLeaseMs (1000)
 
     await db.insert(scheduledJobs).values({

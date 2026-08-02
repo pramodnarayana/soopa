@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from api.dependencies.auth import (
     get_current_tenant_id,
@@ -31,12 +32,12 @@ def mock_uow():
 
 @pytest.fixture
 def client(mock_uow):
-    app.dependency_overrides[get_current_tenant_id] = lambda: "0"
+    app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_control_plane_uow] = lambda: mock_uow
     app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
     app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "test"}
-    app.dependency_overrides[require_platform_admin] = lambda: "0"
+    app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }
@@ -63,7 +64,7 @@ def test_create_as2_partnership(client, mock_uow):
 
 
 def test_update_as2_partnership(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     mock_uow.as2_partnerships.get_as2_partnership.return_value = {"id": str(pid)}
     client.put(
         f"/api/v1/platform/trading-partners/as2/partnerships/{pid}",
@@ -72,5 +73,5 @@ def test_update_as2_partnership(client, mock_uow):
 
 
 def test_delete_as2_partnership(client, mock_uow):
-    pid = uuid4()
+    pid = str(uuid4())
     client.delete(f"/api/v1/platform/trading-partners/as2/partnerships/{pid}")

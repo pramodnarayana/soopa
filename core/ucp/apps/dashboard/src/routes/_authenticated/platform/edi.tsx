@@ -9,8 +9,7 @@ export const Route = createFileRoute('/_authenticated/platform/edi')({
 function EdiLayout() {
   const auth = useAuth();
   const token = auth.user?.access_token;
-  // Zitadel exposes the Org ID in the profile
-  const tenantId = (auth.user?.profile?.['urn:zitadel:iam:org:id'] as string) || 'default';
+  const tenantId = (auth.user?.profile?.idpTenantId || auth.user?.profile?.tenant_id) as string || 'default';
 
   const UCP_API_URL =
     (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
@@ -21,7 +20,7 @@ function EdiLayout() {
   const baseUrl = `${UCP_API_URL}/api/v1`;
 
   return (
-    <EdiUIProvider baseUrl={baseUrl} token={token} tenantId={tenantId}>
+    <EdiUIProvider baseUrl={baseUrl} ucpBaseUrl={UCP_API_URL} token={token} tenantId={tenantId}>
       <Outlet />
     </EdiUIProvider>
   );

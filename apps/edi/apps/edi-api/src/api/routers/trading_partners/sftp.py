@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +14,7 @@ from api.core.services import SFTPPartnerService
 from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
+from api.dependencies.headers import get_idempotency_key
 from api.dependencies.services import get_sftp_tester, get_vault
 from api.domain.models import (
     CreateSFTPPartnerCmd,
@@ -69,7 +69,7 @@ async def test_sftp_connection(
     status_code=status.HTTP_200_OK,
 )
 async def test_existing_sftp_connection(
-    partner_id: UUID,
+    partner_id: str,
     request: TestSFTPConnectionRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -122,6 +122,7 @@ async def test_existing_sftp_connection(
 async def create_sftp_partner(
     request: CreateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
@@ -148,7 +149,7 @@ async def create_sftp_partner(
         )
 
         try:
-            _ = await service.create_sftp_partner(tenant_id, cmd)
+            _ = await service.create_sftp_partner(tenant_id, cmd, idempotency_key=idempotency_key)
             await uow.commit()
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -178,9 +179,10 @@ async def create_sftp_partner(
 
 @router.put("/sftp/{partner_id}", response_model=PartnerResponse)
 async def update_sftp_partner(
-    partner_id: UUID,
+    partner_id: str,
     request: UpdateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
@@ -188,7 +190,9 @@ async def update_sftp_partner(
         service = SFTPPartnerService(uow=uow)
         cmd = UpdateSFTPPartnerCmd(**request.model_dump(exclude_unset=True))
         try:
-            _ = await service.update_sftp_partner(tenant_id, partner_id, cmd)
+            _ = await service.update_sftp_partner(
+                tenant_id, partner_id, cmd, idempotency_key=idempotency_key
+            )
             await uow.commit()
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -218,14 +222,18 @@ async def update_sftp_partner(
 
 @router.delete("/sftp/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sftp_partner(
-    partner_id: UUID,
+    partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an SFTP partner."""
     async with uow:
         try:
-            await uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
+            service = SFTPPartnerService(uow=uow)
+            await service.delete_sftp_partner(
+                tenant_id, partner_id, idempotency_key=idempotency_key
+            )
             await uow.commit()
         except IntegrityError as e:
             raise HTTPException(

@@ -36,7 +36,7 @@ async def test_rotate_certificates_success():
     mock_repo.get_as2_partner.return_value = mock_partner
 
     svc = AS2PartnerService(uow=make_mock_uow(mock_repo))
-    partner_id = uuid4()
+    partner_id = str(uuid4())
 
     result = await svc.rotate_certificates(
         tenant_id="1",
