@@ -72,6 +72,19 @@ export function AS2PartnershipDetails({
       setValue('mdn_url', platformSettings.available_as2_receive_urls[0], { shouldDirty: true });
     }
   }, [mdnType, mdnUrl, setValue, platformSettings]);
+
+  // Sync form when as2Partnership changes (e.g. refetched)
+  useEffect(() => {
+    reset({
+      name: as2Partnership.name || '',
+      local_partner_id: as2Partnership.local_partner_id,
+      remote_partner_id: as2Partnership.remote_partner_id,
+      mdn_type: as2Partnership.mdn_type || 'SYNC',
+      mdn_url: as2Partnership.mdn_url || '',
+      encryption_algorithm: as2Partnership.encryption_algorithm || 'AES256',
+      signature_algorithm: as2Partnership.signature_algorithm || 'SHA256',
+    }, { keepDirty: false });
+  }, [as2Partnership, reset]);
   interface AS2PartnershipFormData {
     name: string;
     local_partner_id: string;

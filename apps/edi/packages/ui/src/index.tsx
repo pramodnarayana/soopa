@@ -44,7 +44,7 @@ export function EdiUIProvider({
 }
 
 export { useEdiNetwork } from './contexts/EdiNetworkContext';
-export { useUcpNetwork } from './contexts/UcpNetworkContext';
+export { UcpNetworkProvider, useUcpNetwork } from './contexts/UcpNetworkContext';
 export { DashboardProvider } from './features/dashboard/api/DashboardContext';
 export type { IDashboardRepository } from './features/dashboard/api/IDashboardRepository';
 export type { DashboardData } from './features/dashboard/api/useDashboardData';

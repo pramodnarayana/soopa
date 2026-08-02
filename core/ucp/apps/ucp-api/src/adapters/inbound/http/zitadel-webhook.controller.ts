@@ -11,7 +11,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createId } from '@paralleldrive/cuid2';
+import { generateId } from '@soopa/database';
 import type { FastifyRequest } from 'fastify';
 import type { IUserRepository } from '../../../ports/outbound/user.repository.js';
 import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
@@ -100,7 +100,7 @@ export class ZitadelWebhookController {
         }
 
         await this.userRepo.upsertUser({
-          id: existingUser?.id || createId(),
+          id: existingUser?.id || generateId('usr'),
           idpUserId: payload.userId,
           email: payload.email,
           name: `${payload.firstName} ${payload.lastName || ''}`.trim(),

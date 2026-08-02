@@ -6,20 +6,20 @@ import {
   Get,
   Inject,
   NotFoundException,
+  Param,
   Post,
   UseGuards,
-  Param,
 } from '@nestjs/common';
-import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import type { DbClient } from '@soopa/database';
-import { apps, appSubscriptions, tenants } from '@soopa/database';
+import { appSubscriptions, apps, tenants } from '@soopa/database';
 import { IsNotEmpty, IsString } from 'class-validator';
 import { and, eq } from 'drizzle-orm';
+import { SubscribeAppUseCase } from '../../../application/use-cases/subscribe-app.use-case.js';
+import { UnsubscribeAppUseCase } from '../../../application/use-cases/unsubscribe-app.use-case.js';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import type { IProjectProvider } from '../../../ports/outbound/project.provider.js';
 import { PROJECT_PROVIDER } from '../../../ports/outbound/project.provider.js';
-import { SubscribeAppUseCase } from '../../../application/use-cases/subscribe-app.use-case.js';
-import { UnsubscribeAppUseCase } from '../../../application/use-cases/unsubscribe-app.use-case.js';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class SubscribeDto {
@@ -50,11 +50,7 @@ export class SubscriptionsController {
 
   @Post()
   async subscribe(@UcpTenantId() tenantId: string, @Body() dto: SubscribeDto) {
-    const appRecords = await this.db
-      .select()
-      .from(apps)
-      .where(eq(apps.id, dto.appId))
-      .limit(1);
+    const appRecords = await this.db.select().from(apps).where(eq(apps.id, dto.appId)).limit(1);
     if (!appRecords.length) throw new NotFoundException('App not found');
     const app = appRecords[0];
 
@@ -65,6 +61,10 @@ export class SubscriptionsController {
       .limit(1);
     if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
     const tenant = tenantRecords[0];
+
+    if (!tenant.idpTenantId) {
+      throw new NotFoundException('Tenant missing idpTenantId');
+    }
 
     // Enterprise Grade - Delegate to UseCase to handle Domain Events and Outbox
     await this.subscribeAppUseCase.execute(tenantId, { appSlug: app.slug });
@@ -75,12 +75,25 @@ export class SubscriptionsController {
       zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
     }
 
-    if (zitadelProjectId && tenant.idpTenantId) {
-      // Create B2B project grant in Zitadel. (No specific roles granted for now)
-      await this.projectProvider.createProjectGrant(
-        tenant.idpTenantId,
-        zitadelProjectId,
-        [],
+    if (zitadelProjectId) {
+      // Use outbox for retryable Zitadel syncing
+      const { v4: uuidv4 } = require('uuid');
+      await this.db.insert(require('@soopa/database').controlPlaneOutbox).values({
+        id: uuidv4(),
+        idempotencyKey: uuidv4(),
+        tenantId: tenantId,
+        eventType: 'Idp.GrantProjectAccess',
+        payload: {
+          idpTenantId: tenant.idpTenantId,
+          projectId: zitadelProjectId,
+          roles: [],
+        },
+        status: 'PENDING',
+      });
+      // Trigger the local outbox consumer
+      require('@nestjs/event-emitter').EventEmitter2.prototype.emit?.(
+        'outbox.event.created',
+        uuidv4(),
       );
     }
 
@@ -88,16 +101,9 @@ export class SubscriptionsController {
   }
 
   @Delete(':appId')
-  async unsubscribe(
-    @UcpTenantId() tenantId: string,
-    @Param('appId') appId: string,
-  ) {
+  async unsubscribe(@UcpTenantId() tenantId: string, @Param('appId') appId: string) {
     // Fetch the app and tenant to determine if we need to revoke Zitadel grant
-    const appRecords = await this.db
-      .select()
-      .from(apps)
-      .where(eq(apps.id, appId))
-      .limit(1);
+    const appRecords = await this.db.select().from(apps).where(eq(apps.id, appId)).limit(1);
     if (!appRecords.length) throw new NotFoundException('App not found');
     const app = appRecords[0];
 
@@ -109,27 +115,32 @@ export class SubscriptionsController {
     if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
     const tenant = tenantRecords[0];
 
-    // Revoke the project grant for EDI app
-    if (app.slug === 'edi' && tenant.idpTenantId) {
-      const zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
-      if (zitadelProjectId) {
-        try {
-          await this.projectProvider.deleteProjectGrant(
-            tenant.idpTenantId,
-            zitadelProjectId,
-          );
-        } catch (err) {
-          // Log the error but continue with database deletion
-          console.error(
-            `Warning: Failed to revoke project grant for tenant ${tenantId}`,
-            err,
-          );
-        }
-      }
+    if (!tenant.idpTenantId) {
+      throw new NotFoundException('Tenant missing idpTenantId');
     }
 
     // Enterprise Grade - Delegate to UseCase to handle Domain Events and Outbox
     await this.unsubscribeAppUseCase.execute(tenantId, app.slug);
+
+    // Revoke the project grant for EDI app
+    if (app.slug === 'edi') {
+      const zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
+      if (zitadelProjectId) {
+        // Use outbox for retryable Zitadel syncing
+        const { v4: uuidv4 } = require('uuid');
+        await this.db.insert(require('@soopa/database').controlPlaneOutbox).values({
+          id: uuidv4(),
+          idempotencyKey: uuidv4(),
+          tenantId: tenantId,
+          eventType: 'Idp.RevokeProjectAccess',
+          payload: {
+            idpTenantId: tenant.idpTenantId,
+            projectId: zitadelProjectId,
+          },
+          status: 'PENDING',
+        });
+      }
+    }
 
     // Note: The appSubscriptions db record is automatically deleted by TenantRepository.save()
     // when we splice the slug from tenant.subscriptions!

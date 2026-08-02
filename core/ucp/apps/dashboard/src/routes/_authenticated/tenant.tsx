@@ -1,8 +1,8 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
 import { ChevronRight, LayoutDashboard, LogOut, Network, Settings } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
-import { useGetTenant } from '../../domains/tenants/api/queries';
 import { TenantContext } from '../../contexts/TenantContext';
+import { useGetTenant } from '../../domains/tenants/api/queries';
 import { resolveTenantId } from '../../lib/auth';
 
 export const Route = createFileRoute('/_authenticated/tenant')({
@@ -66,15 +66,15 @@ function TenantLayout() {
   const auth = useAuth();
   const token = auth.user?.access_token ?? '';
   const tenantId = resolveTenantId(token, auth.user?.profile ?? {});
-  
+
   if (!tenantId) {
     throw new Error(
       'FATAL: Tenant ID is missing from both the access token and user profile. ' +
-      'This user may not be assigned to a Zitadel organization. ' +
-      `Access token present: ${!!token}, Profile keys: ${Object.keys(auth.user?.profile ?? {}).join(', ')}`,
+        'This user may not be assigned to a Zitadel organization. ' +
+        `Access token present: ${!!token}, Profile keys: ${Object.keys(auth.user?.profile ?? {}).join(', ')}`,
     );
   }
-  
+
   const { data: tenant } = useGetTenant(tenantId);
 
   return (

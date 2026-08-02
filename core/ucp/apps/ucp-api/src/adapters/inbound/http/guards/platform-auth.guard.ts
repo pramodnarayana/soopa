@@ -40,7 +40,7 @@ export class PlatformAuthGuard implements CanActivate {
       if (error instanceof ForbiddenException) {
         throw error;
       }
-      this.logger.error('Authentication failed', error);
+      this.logger.error('Authentication failed');
       throw new UnauthorizedException('Invalid JWT token');
     }
   }

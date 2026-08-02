@@ -42,7 +42,7 @@ class SqlAlchemyTenantAdapter(TenantPort):
                 .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
                 .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
                 .join(App, App.id == ShardRegistry.app_id)
-                .where(Tenant.id == tenant_id, App.slug == "edi")
+                .where(Tenant.id == tenant_id, App.slug == EDI_APP_SLUG)
             )
             result = await global_session.execute(stmt)
             row = result.first()

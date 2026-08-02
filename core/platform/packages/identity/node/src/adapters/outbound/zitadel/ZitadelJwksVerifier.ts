@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { IdentityInfrastructureError } from '../../../domain/Errors.js';
 import type { TokenClaims } from '../../../domain/IdentityContext.js';
@@ -64,11 +65,11 @@ export class ZitadelJwksVerifier implements TokenVerifier {
       !claims['urn:zitadel:iam:org:project:roles'] &&
       !claims[`urn:zitadel:iam:org:project:id:${this.options.audience}:roles`]
     ) {
-      const jti = claims.jti as string | undefined;
+      const cacheKey = (claims.jti as string | undefined) ?? crypto.createHash('sha256').update(token).digest('hex');
       let cachedData: Record<string, unknown> | null = null;
       
-      if (jti) {
-        const cached = this.userinfoCache.get(jti);
+      if (cacheKey) {
+        const cached = this.userinfoCache.get(cacheKey);
         if (cached && Date.now() < cached.expiry) {
           cachedData = cached.data;
         }
@@ -90,8 +91,8 @@ export class ZitadelJwksVerifier implements TokenVerifier {
           if (response.ok) {
             const userinfo = (await response.json()) as Record<string, unknown>;
             Object.assign(claims, userinfo);
-            if (jti) {
-              this.userinfoCache.set(jti, {
+            if (cacheKey) {
+              this.userinfoCache.set(cacheKey, {
                 data: userinfo,
                 expiry: Date.now() + this.USERINFO_TTL_MS,
               });

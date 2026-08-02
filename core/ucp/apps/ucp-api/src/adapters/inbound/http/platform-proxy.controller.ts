@@ -24,10 +24,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   'proxy-authenticate',
 ]);
 
-const ENTITY_HEADERS = new Set([
-  'content-length',
-  'content-encoding',
-]);
+const ENTITY_HEADERS = new Set(['content-length', 'content-encoding']);
 
 @Controller('api/v1/platform')
 @UseGuards(PlatformAuthGuard)

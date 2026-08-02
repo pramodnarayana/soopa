@@ -55,9 +55,11 @@ export function CreateAS2PartnershipModal({ availablePartners }: CreateAS2Partne
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    const trimmedName = name?.trim();
+
     createPartnership.mutate(
       {
-        name: name || undefined,
+        name: trimmedName || undefined,
         local_partner_id: localPartnerId,
         remote_partner_id: remotePartnerId,
         mdn_type: mdnType,

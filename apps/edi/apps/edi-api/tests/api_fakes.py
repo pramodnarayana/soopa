@@ -29,9 +29,7 @@ class FakeGlobalStore:
         self.webhooks = []
         self.outbox_events = []
 
-    async def create_as2_identity(
-        self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd
-    ) -> str:
+    async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
         for p in self.partners:
             if p["tenant_id"] == tenant_id and p["cmd"].as2_id == cmd.as2_id:
                 from sqlalchemy.exc import IntegrityError
@@ -79,9 +77,7 @@ class FakeGlobalStore:
             if not (p["id"] == partner_id and p["tenant_id"] == tenant_id)
         ]
 
-    async def create_as2_partnership(
-        self, tenant_id: str, cmd: CreateAS2PartnershipCmd
-    ) -> str:
+    async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> str:
         p_id = str(uuid.uuid4())
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
@@ -177,7 +173,9 @@ class FakeGlobalStore:
         event: Any,
         idempotency_key: str | None = None,
     ) -> str:
-        key = idempotency_key or uuid.uuid4()
+        key = idempotency_key or str(uuid.uuid4())
+        if any(e.get("idempotency_key") == key for e in self.outbox_events):
+            raise ValueError(f"Idempotency key {key} already exists")
         self.outbox_events.append(
             {
                 "tenant_id": getattr(event, "tenant_id", None),
@@ -188,9 +186,7 @@ class FakeGlobalStore:
         )
         return key
 
-    async def update_partner_status(
-        self, tenant_id: str, partner_id: str, status: str
-    ) -> None:
+    async def update_partner_status(self, tenant_id: str, partner_id: str, status: str) -> None:
         for p in self.partners:
             if p["id"] == partner_id and p["tenant_id"] == tenant_id:
                 p["status"] = status
@@ -218,27 +214,21 @@ class FakeGlobalStore:
     async def list_partnerships(self) -> list[Any]:
         return self.partnerships
 
-    async def get_as2_partners_by_ids(
-        self, tenant_id: str, ids: list[str]
-    ) -> dict[str, str]:
+    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
             p["id"]: p["cmd"].name
             for p in self.partners
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
-    async def get_sftp_partners_by_ids(
-        self, tenant_id: str, ids: list[str]
-    ) -> dict[str, str]:
+    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
             p["id"]: p["cmd"].name
             for p in self.sftp_partners
             if p["id"] in ids and p["tenant_id"] == tenant_id
         }
 
-    async def get_webhooks_by_ids(
-        self, tenant_id: str, ids: list[str]
-    ) -> dict[str, str]:
+    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
             p["id"]: p["cmd"].name
             for p in self.webhooks

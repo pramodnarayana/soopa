@@ -5,7 +5,7 @@ import { useUcpNetwork } from '../../../contexts/UcpNetworkContext';
 import { useToastMutation } from '../../../hooks/use-toast-mutation';
 import type { CreateWebhookEndpointPayload, Webhook } from '../types';
 import {
-  RawWebhook,
+  type RawWebhook,
   RawWebhookResponseSchema,
   RawWebhooksArrayResponseSchema,
   WebhookSchema,

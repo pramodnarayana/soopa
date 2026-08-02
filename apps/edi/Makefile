@@ -49,11 +49,15 @@ dev:
 	@echo "Starting API and Workers concurrently..."
 	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,orch,as2,comp" "make dev-api" "make dev-worker-orchestrator" "make dev-as2" "make dev-worker-compute"
 
-dev-as2:
+check-env:
+	@if [ -z "$(ZITADEL_EDI_PROJECT_ID)" ]; then echo "Error: ZITADEL_EDI_PROJECT_ID is not set" >&2; exit 1; fi
+	@if [ -z "$(ZITADEL_UCP_PROJECT_ID)" ]; then echo "Error: ZITADEL_UCP_PROJECT_ID is not set" >&2; exit 1; fi
+
+dev-as2: check-env
 	@echo "Starting AS2 Server with hot-reload for local development..."
 	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
 
-dev-api:
+dev-api: check-env
 	@echo "Starting API Gateway with hot-reload for local development..."
 	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 

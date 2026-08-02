@@ -28,6 +28,8 @@ from worker.ports.tenant import TenantPort
 
 logger = logging.getLogger(__name__)
 
+SHARED_TENANT_ID = "0"
+
 
 class SqlAlchemyReplicationAdapter(ReplicationPort):
     def __init__(self, db_router: DatabaseRouter, tenant_port: TenantPort):
@@ -70,7 +72,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         # AS2 Partners
         tp_result = await global_session.execute(
             select(GlobalAS2Partner).where(
-                (GlobalAS2Partner.tenant_id == tenant_id) | (GlobalAS2Partner.tenant_id == "0")
+                (GlobalAS2Partner.tenant_id == tenant_id)
+                | (GlobalAS2Partner.tenant_id == SHARED_TENANT_ID)
             )
         )
         for tp in tp_result.scalars().all():
@@ -80,7 +83,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         ps_result = await global_session.execute(
             select(GlobalAS2Partnership).where(
                 (GlobalAS2Partnership.tenant_id == tenant_id)
-                | (GlobalAS2Partnership.tenant_id == "0")
+                | (GlobalAS2Partnership.tenant_id == SHARED_TENANT_ID)
             )
         )
         for ps in ps_result.scalars().all():
@@ -179,7 +182,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 stmt = select(global_model).where(global_model.id == entity_id)
                 if include_shared:
                     stmt = stmt.where(
-                        (global_model.tenant_id == tenant_id) | (global_model.tenant_id == "0")
+                        (global_model.tenant_id == tenant_id)
+                        | (global_model.tenant_id == SHARED_TENANT_ID)
                     )
                 else:
                     stmt = stmt.where(global_model.tenant_id == tenant_id)
@@ -188,7 +192,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 entity = res.scalars().first()
 
                 if not entity:
-                    raise PermanentProvisioningError(
+                    raise TransientProvisioningError(
                         f"{global_model.__name__} {entity_id} not found in global DB for tenant {tenant_id}"
                     )
 
@@ -197,7 +201,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 logger.info(
                     f"Successfully replicated {global_model.__name__} {entity_id} to tenant {tenant_id}"
                 )
-            except PermanentProvisioningError:
+            except TransientProvisioningError:
                 await tenant_session.rollback()
                 raise
             except Exception as e:
@@ -333,7 +337,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         global_stmt = select(global_model.id).where(global_model.tenant_id == tenant_id)
         if include_shared:
             global_stmt = select(global_model.id).where(
-                (global_model.tenant_id == tenant_id) | (global_model.tenant_id == "0")
+                (global_model.tenant_id == tenant_id) | (global_model.tenant_id == SHARED_TENANT_ID)
             )
         global_ids_result = await global_session.execute(global_stmt)
         global_ids = set(global_ids_result.scalars().all())

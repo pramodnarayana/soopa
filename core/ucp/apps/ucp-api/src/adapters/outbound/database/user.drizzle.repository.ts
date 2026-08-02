@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
 import { tenantUsers, users } from '@soopa/database';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, notExists } from 'drizzle-orm';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import { IUserRepository } from '../../../ports/outbound/user.repository.js';
 
@@ -93,20 +93,17 @@ export class UserDrizzleRepository implements IUserRepository {
   async deleteOrphanedUsers(userIds: string[]): Promise<void> {
     if (userIds.length === 0) return;
 
-    await this.db.transaction(async (tx) => {
-      // Find which of these users still have tenant associations
-      const stillAssigned = await tx
-        .select({ userId: tenantUsers.userId })
-        .from(tenantUsers)
-        .where(inArray(tenantUsers.userId, userIds));
-
-      const assignedIds = new Set(stillAssigned.map((u) => u.userId));
-      const orphanedIds = userIds.filter((id) => !assignedIds.has(id));
-
-      if (orphanedIds.length > 0) {
-        await tx.delete(users).where(inArray(users.id, orphanedIds));
-      }
-    });
+    await this.db.delete(users).where(
+      and(
+        inArray(users.id, userIds),
+        notExists(
+          this.db
+            .select()
+            .from(tenantUsers)
+            .where(eq(tenantUsers.userId, users.id))
+        )
+      )
+    );
   }
 
   async findUsersByTenant(tenantId: string): Promise<

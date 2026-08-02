@@ -90,6 +90,14 @@ async def e2e_context():
 
         app_res = await session.execute(select(App).where(App.slug == "edi"))
         edi_app = app_res.scalars().first()
+        if not edi_app:
+            edi_app = App(
+                slug="edi",
+                name="EDI Application",
+                description="EDI Processing Engine",
+            )
+            session.add(edi_app)
+            await session.commit()
 
         tenant_shard = ShardRegistry(
             tenant_id=test_tenant_id,
