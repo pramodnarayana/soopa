@@ -2,6 +2,7 @@ from typing import Any
 
 from config.settings import get_settings
 from fastapi import APIRouter, Depends, HTTPException, status
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.exc import IntegrityError
 
 from api.adapters.http.dtos import (
@@ -13,7 +14,9 @@ from api.adapters.http.dtos import (
 )
 from api.core.services import AS2PartnerService
 from api.core.uow import ControlPlaneUnitOfWork
+from api.dependencies.auth import get_current_user_profile
 from api.dependencies.database import get_control_plane_uow
+from api.dependencies.headers import get_idempotency_key
 from api.dependencies.services import get_vault
 from api.domain.certificate import generate_self_signed_cert
 from api.domain.models import (
@@ -54,7 +57,6 @@ async def generate_certificate(
 import logging
 
 from api.adapters.http.dtos import CertificateExportResponse
-from api.dependencies.auth import get_current_user_profile, get_raw_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +68,15 @@ logger = logging.getLogger(__name__)
 async def export_platform_as2_certificates(
     partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
-    token_payload: dict[str, Any] = Depends(get_raw_jwt),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """Exports current and previous certificates for a Platform AS2 partner."""
     async with uow:
-        partner = await uow.as2_partners.get_as2_partner(tenant_id="0", partner_id=partner_id)
+        partner = await uow.as2_partners.get_as2_partner(
+            tenant_id=PLATFORM_TENANT_ID, partner_id=partner_id
+        )
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
@@ -152,6 +156,8 @@ async def delete_certificate_secret(
 async def create_platform_as2_partner(
     request: CreateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    idempotency_key: str | None = Depends(get_idempotency_key),
+    profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """
@@ -204,14 +210,20 @@ async def create_platform_as2_partner(
                 private_key_vault_ref=private_key_vault_ref,
             )
 
-            # Use tenant_id="0" for global platform partners
+            # Use tenant_id=PLATFORM_TENANT_ID for global platform partners
             svc = AS2PartnerService(uow=uow)
-            entity = await svc.create_as2_partner(tenant_id="0", cmd=cmd)
+            entity = await svc.create_as2_partner(
+                tenant_id=PLATFORM_TENANT_ID,
+                cmd=cmd,
+                idempotency_key=idempotency_key,
+            )
 
             await uow.commit()
             commit_success = True
 
-            p = await uow.as2_partners.get_as2_partner(tenant_id="0", partner_id=entity.partner_id)
+            p = await uow.as2_partners.get_as2_partner(
+                tenant_id=PLATFORM_TENANT_ID, partner_id=entity.partner_id
+            )
             if not p:
                 raise HTTPException(status_code=500, detail="Partner creation failed")
 
@@ -241,7 +253,7 @@ async def list_platform_as2_partners(
     Returns all global AS2 partners (tenant_id = 0).
     """
     async with uow:
-        partners = await uow.as2_partners.list_as2_partners(tenant_id="0")
+        partners = await uow.as2_partners.list_as2_partners(tenant_id=PLATFORM_TENANT_ID)
         return [
             AS2TradingPartnerResponse(
                 id=str(p.id),
@@ -260,6 +272,7 @@ async def update_platform_as2_partner(
     partner_id: str,
     request: UpdateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> Any:
     """Updates a global AS2 partner."""
     async with uow:
@@ -272,9 +285,14 @@ async def update_platform_as2_partner(
         )
         try:
             svc = AS2PartnerService(uow=uow)
-            await svc.update_as2_partner(tenant_id="0", partner_id=partner_id, cmd=cmd)
+            await svc.update_as2_partner(
+                tenant_id=PLATFORM_TENANT_ID,
+                partner_id=partner_id,
+                cmd=cmd,
+                idempotency_key=idempotency_key,
+            )
             updated_partner = await uow.as2_partners.get_as2_partner(
-                tenant_id="0", partner_id=partner_id
+                tenant_id=PLATFORM_TENANT_ID, partner_id=partner_id
             )
             if not updated_partner:
                 raise HTTPException(status_code=404, detail="Partner not found after update")
@@ -298,12 +316,17 @@ async def update_platform_as2_partner(
 async def delete_platform_as2_partner(
     partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> None:
     """Deletes an AS2 partner."""
     async with uow:
         svc = AS2PartnerService(uow=uow)
         try:
-            await svc.delete_as2_partner(tenant_id="0", partner_id=partner_id)
+            await svc.delete_as2_partner(
+                tenant_id=PLATFORM_TENANT_ID,
+                partner_id=partner_id,
+                idempotency_key=idempotency_key,
+            )
             await uow.commit()
         except Exception as e:
             if "IntegrityError" in str(type(e)):

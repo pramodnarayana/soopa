@@ -10,33 +10,20 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
   constructor(@Inject(DATABASE_CLIENT) private readonly db: DbClient) {}
 
   private mapToDomain(row: typeof apiKeys.$inferSelect): ApiKey {
-    return new ApiKey(
-      row.id,
-      row.tenantId,
-      row.name,
-      row.keyHash,
-      row.scopes,
-      row.createdAt,
-    );
+    return new ApiKey(row.id, row.tenantId, row.name, row.keyHash, row.scopes, row.createdAt);
   }
 
   async findByKeyHash(keyHash: string): Promise<ApiKey | null> {
-    const [row] = await this.db
-      .select()
-      .from(apiKeys)
-      .where(eq(apiKeys.keyHash, keyHash));
+    const [row] = await this.db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
     return row ? this.mapToDomain(row) : null;
   }
 
   async findByTenantId(tenantId: string): Promise<ApiKey[]> {
-    const rows = await this.db
-      .select()
-      .from(apiKeys)
-      .where(eq(apiKeys.tenantId, tenantId));
+    const rows = await this.db.select().from(apiKeys).where(eq(apiKeys.tenantId, tenantId));
     return rows.map((row) => this.mapToDomain(row));
   }
 
-  async save(apiKey: ApiKey): Promise<ApiKey> {
+  async save(apiKey: ApiKey, idempotencyKey?: string): Promise<ApiKey> {
     const result = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(apiKeys)
@@ -51,10 +38,15 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
         .returning();
 
       // Process Outbox Events
+      let index = 0;
       for (const event of apiKey.domainEvents) {
+        const finalIdempotencyKey = idempotencyKey
+          ? `${idempotencyKey}_${index}`
+          : `${event.eventName}_${apiKey.id}_${event.occurredOn.getTime()}`;
+
         await tx.insert(controlPlaneOutbox).values({
           id: generateId('evt'),
-          idempotencyKey: `${event.eventName}_${apiKey.id}_${event.occurredOn.getTime()}`,
+          idempotencyKey: finalIdempotencyKey,
           tenantId: apiKey.tenantId,
           eventType: event.eventName,
           payload: {
@@ -62,6 +54,7 @@ export class ApiKeyDrizzleRepository implements IApiKeyRepository {
             payload: event.payload,
           },
         });
+        index++;
       }
 
       return this.mapToDomain(row);

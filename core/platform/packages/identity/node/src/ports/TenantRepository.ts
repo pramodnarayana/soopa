@@ -6,10 +6,10 @@ export interface UserData {
 
 export interface TenantRepository {
   findUserByEmail(email: string): Promise<UserData | null>;
-  provisionUserAndTenant(
-    email: string,
-    name: string,
-    idpTenantId?: string,
-  ): Promise<{ userId: string; tenantId: string }>;
+  /**
+   * Retrieves a user by their external IdP user ID (sub).
+   * This is a read-only operation. JIT provisioning is an anti-pattern and should not be done here.
+   */
+  findUserByIdpId(idpUserId: string): Promise<UserData | null>;
   getTenantMappingForUser(userId: string): Promise<string | null>;
 }

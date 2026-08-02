@@ -58,7 +58,9 @@ class ListenNotifyOutboxAdapter(OutboxPort):
         try:
             if self.listener_connection:
                 try:
-                    await self.listener_connection.remove_listener("edi_outbox_channel", self._on_notify)
+                    await self.listener_connection.remove_listener(
+                        "edi_outbox_channel", self._on_notify
+                    )
                 except Exception as e:
                     logger.warning(f"Error removing listener: {e}")
                 try:
@@ -126,7 +128,7 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                 event_id,
             )
 
-        # Connection and lock released here
+            # Connection and lock released here
 
             # Let all events pass through to the Anti-Corruption Layer
             # The core ProvisioningWorkerService will filter out what it doesn't need.

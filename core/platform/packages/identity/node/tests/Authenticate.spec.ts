@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { AuthenticateUseCase } from '../src/application/Authenticate.js';
-import { MissingIdentityTenantError, TenantMappingDomainError } from '../src/domain/Errors.js';
+import {
+  MissingIdentityTenantError,
+  MissingUserDomainError,
+  TenantMappingDomainError,
+} from '../src/domain/Errors.js';
 import type { TokenClaims } from '../src/domain/IdentityContext.js';
 import type { TenantRepository, UserData } from '../src/ports/TenantRepository.js';
 import type { TokenVerifier } from '../src/ports/TokenVerifier.js';
 
-// Fake implementations instead of magic mocks
+// Fake implementations — no mocks
 class FakeTokenVerifier implements TokenVerifier {
   public claims: Record<string, unknown> = {};
   public async verify(token: string): Promise<TokenClaims> {
@@ -17,45 +21,38 @@ class FakeTokenVerifier implements TokenVerifier {
 class FakeTenantRepository implements TenantRepository {
   public users: Record<string, UserData> = {};
   public mappings: Record<string, string> = {};
-  public provisioned: { userId: string; tenantId: string } | null = null;
 
   async findUserByEmail(email: string): Promise<UserData | null> {
     return this.users[email] ?? null;
   }
 
-  async provisionUserAndTenant(_email: string, _name: string, _zitadelOrgId?: string) {
-    if (!this.provisioned) throw new Error('provisioned stub not set');
-    return this.provisioned;
+  async findUserByIdpId(idpUserId: string): Promise<UserData | null> {
+    return this.users[idpUserId] ?? null;
   }
 
-  async getTenantMappingForUser(userId: string) {
+  async getTenantMappingForUser(userId: string): Promise<string | null> {
     return this.mappings[userId] || null;
   }
 }
 
 describe('AuthenticateUseCase', () => {
-  it('should provision a new user and tenant if user does not exist', async () => {
+  it('should throw MissingUserDomainError if user is not synced (no JIT)', async () => {
     const verifier = new FakeTokenVerifier();
-    verifier.claims = { sub: 'new-user', email: 'test@example.com', name: 'Test User', tenant_id: 'org123' };
+    verifier.claims = {
+      sub: 'new-user',
+      email: 'new@example.com',
+      name: 'New User',
+      tenant_id: 'org123',
+    };
 
     const repo = new FakeTenantRepository();
-    repo.provisioned = { userId: 'u1', tenantId: 't1' };
-
+    // No user in DB -> MissingUserDomainError
     const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
-    const result = await useCase.execute('valid');
 
-    expect(result).toEqual({
-      userId: 'u1',
-      tenantId: 't1',
-      email: 'test@example.com',
-      name: 'Test User',
-      roles: [],
-      rawRoles: [],
-      isPlatformAdmin: false,
-    });
+    await expect(useCase.execute('valid')).rejects.toThrow(MissingUserDomainError);
   });
 
-  it('should return existing user and tenant if they exist', async () => {
+  it('should return context if user exists and has a tenant mapping', async () => {
     const verifier = new FakeTokenVerifier();
     verifier.claims = {
       sub: 'existing-user',
@@ -65,7 +62,7 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.users['existing@example.com'] = {
+    repo.users['existing-user'] = {
       id: 'u2',
       name: 'Existing User DB',
       email: 'existing@example.com',
@@ -96,7 +93,7 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.users['no-tenant@example.com'] = {
+    repo.users['existing-user'] = {
       id: 'u3',
       name: 'User 3',
       email: 'no-tenant@example.com',
@@ -112,16 +109,22 @@ describe('AuthenticateUseCase', () => {
     verifier.claims = { sub: 'fallback-sub', tenant_id: 'org123' };
 
     const repo = new FakeTenantRepository();
-    repo.provisioned = { userId: 'u4', tenantId: 't4' };
+    repo.users['fallback-sub'] = {
+      id: 'u4',
+      name: 'User 4',
+      email: 'fallback-sub',
+    } satisfies UserData;
 
-    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
-    const result = await useCase.execute('valid');
+    // PlatformAdmin — allowed with empty tenantId
+    const useCase = new AuthenticateUseCase(verifier, repo, {
+      audience: 'test-audience',
+    });
 
-    expect(result.email).toBe('fallback-sub');
-    expect(result.name).toBe('fallback-sub');
+    // Will throw TenantMappingDomainError since no tenant and not a platform admin
+    await expect(useCase.execute('valid')).rejects.toThrow(TenantMappingDomainError);
   });
 
-  it('should detect PlatformAdmin from urn:zitadel:iam:org:project:roles', async () => {
+  it('PlatformAdmin should authenticate even without a tenant mapping', async () => {
     const verifier = new FakeTokenVerifier();
     verifier.claims = {
       sub: 'admin-user',
@@ -132,8 +135,13 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.provisioned = { userId: 'u5', tenantId: 't5' };
+    repo.users['admin-user'] = {
+      id: 'u5',
+      name: 'Admin User',
+      email: 'admin@example.com',
+    } satisfies UserData;
 
+    // No tenant mapping — platform admin bypasses the check
     const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     const result = await useCase.execute('valid');
 
@@ -153,7 +161,11 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.provisioned = { userId: 'u6', tenantId: 't6' };
+    repo.users['admin-user-2'] = {
+      id: 'u6',
+      name: 'Admin User 2',
+      email: 'admin2@example.com',
+    } satisfies UserData;
 
     const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     const result = await useCase.execute('valid');
@@ -173,32 +185,10 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    repo.provisioned = { userId: 'u7', tenantId: 't7' };
-
     const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
 
     await expect(useCase.execute('valid')).rejects.toThrow(MissingIdentityTenantError);
     await expect(useCase.execute('valid')).rejects.toThrow('Missing Zitadel Organization ID');
-  });
-
-  it('should not provision user when missing tenant information', async () => {
-    const verifier = new FakeTokenVerifier();
-    verifier.claims = {
-      sub: 'no-tenant-data',
-      email: 'notenantdata@example.com',
-    };
-
-    const repo = new FakeTenantRepository();
-    let provisionCalled = false;
-    repo.provisionUserAndTenant = async () => {
-      provisionCalled = true;
-      return { userId: 'should-not-be-called', tenantId: 'should-not-be-called' };
-    };
-
-    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
-
-    await expect(useCase.execute('valid')).rejects.toThrow(MissingIdentityTenantError);
-    expect(provisionCalled).toBe(false);
   });
 
   it('should resolve organization ID from role claims when tenant_id is missing', async () => {
@@ -211,17 +201,18 @@ describe('AuthenticateUseCase', () => {
     };
 
     const repo = new FakeTenantRepository();
-    let capturedOrgId: string | undefined;
-    repo.provisionUserAndTenant = async (_email: string, _name: string, zitadelOrgId?: string) => {
-      capturedOrgId = zitadelOrgId;
-      return { userId: 'u8', tenantId: 't8' };
-    };
+    repo.users['role-org-user'] = {
+      id: 'u7',
+      name: 'Role Org User',
+      email: 'roleorg@example.com',
+    } satisfies UserData;
 
+    // PlatformAdmin bypasses tenant check
     const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
     const result = await useCase.execute('valid');
 
-    expect(capturedOrgId).toBe('org789');
-    expect(result.userId).toBe('u8');
-    expect(result.tenantId).toBe('t8');
+    expect(result.isPlatformAdmin).toBe(true);
+    expect(result.userId).toBe('u7');
+    expect(result.tenantId).toBe('');
   });
 });

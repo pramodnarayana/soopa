@@ -14,6 +14,7 @@ from api.core.services import InboundRouteService, OutboundRouteService
 from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
+from api.dependencies.headers import get_idempotency_key
 from api.domain.models import (
     UNSET,
     CreateInboundRouteCmd,
@@ -51,6 +52,7 @@ async def list_routes(
 async def create_inbound_route(
     request: CreateInboundRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
@@ -73,7 +75,7 @@ async def create_inbound_route(
             sftp_partner_id=request.sftp_partner_id,
         )
 
-        entity = await service.create_inbound_route(tenant_id, cmd)
+        entity = await service.create_inbound_route(tenant_id, cmd, idempotency_key=idempotency_key)
         await uow.commit()
 
         return RouteResponse(
@@ -85,6 +87,7 @@ async def create_inbound_route(
 async def create_outbound_route(
     request: CreateOutboundRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
@@ -100,7 +103,9 @@ async def create_outbound_route(
             sftp_partner_id=request.sftp_partner_id,
         )
 
-        entity = await service.create_outbound_route(tenant_id, cmd)
+        entity = await service.create_outbound_route(
+            tenant_id, cmd, idempotency_key=idempotency_key
+        )
         await uow.commit()
 
         return RouteResponse(
@@ -113,6 +118,7 @@ async def update_inbound_route(
     route_id: str,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
@@ -137,7 +143,9 @@ async def update_inbound_route(
             active=dump.get("active", UNSET),
         )
 
-        success = await service.update_inbound_route(tenant_id, route_id, cmd)
+        success = await service.update_inbound_route(
+            tenant_id, route_id, cmd, idempotency_key=idempotency_key
+        )
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
         await uow.commit()
@@ -148,6 +156,7 @@ async def update_inbound_route(
 async def delete_inbound_route(
     route_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """
@@ -155,7 +164,9 @@ async def delete_inbound_route(
     """
     async with uow:
         service = InboundRouteService(uow=uow)
-        success = await service.delete_inbound_route(tenant_id, route_id)
+        success = await service.delete_inbound_route(
+            tenant_id, route_id, idempotency_key=idempotency_key
+        )
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
         await uow.commit()
@@ -166,6 +177,7 @@ async def update_outbound_route(
     route_id: str,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
@@ -183,7 +195,9 @@ async def update_outbound_route(
             active=dump.get("active", UNSET),
         )
 
-        success = await service.update_outbound_route(tenant_id, route_id, cmd)
+        success = await service.update_outbound_route(
+            tenant_id, route_id, cmd, idempotency_key=idempotency_key
+        )
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
         await uow.commit()
@@ -194,6 +208,7 @@ async def update_outbound_route(
 async def delete_outbound_route(
     route_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """
@@ -201,7 +216,9 @@ async def delete_outbound_route(
     """
     async with uow:
         service = OutboundRouteService(uow=uow)
-        success = await service.delete_outbound_route(tenant_id, route_id)
+        success = await service.delete_outbound_route(
+            tenant_id, route_id, idempotency_key=idempotency_key
+        )
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
         await uow.commit()

@@ -11,9 +11,9 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { generateId } from '@soopa/database';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { ToggleUserStatusUseCase } from '../../../application/use-cases/toggle-user-status.use-case.js';
 import { ZitadelUserState } from '../../../domain/enums/zitadel-user-state.enum.js';
 import type { ITenantRepository } from '../../../ports/outbound/tenant.repository.js';
 import { TENANT_REPOSITORY } from '../../../ports/outbound/tenant.repository.js';
@@ -21,6 +21,7 @@ import type { IUserRepository } from '../../../ports/outbound/user.repository.js
 import { USER_REPOSITORY } from '../../../ports/outbound/user.repository.js';
 import type { IUserIdentityProvider } from '../../../ports/outbound/user-identity.provider.js';
 import { USER_IDENTITY_PROVIDER } from '../../../ports/outbound/user-identity.provider.js';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class CreateUserDto {
@@ -70,6 +71,7 @@ export class UsersController {
     private readonly userIdentityProvider: IUserIdentityProvider,
     @Inject(TENANT_REPOSITORY) private readonly tenantRepo: ITenantRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
+    private readonly toggleUserStatusUseCase: ToggleUserStatusUseCase,
   ) {}
 
   @Get()
@@ -90,7 +92,7 @@ export class UsersController {
           displayName: u.name,
           firstName,
           lastName,
-          state: ZitadelUserState.ACTIVE, // Stubbed for local model
+          state: u.status === 'inactive' ? ZitadelUserState.INACTIVE : ZitadelUserState.ACTIVE,
           role: u.role,
           createdAt: u.createdAt,
         };
@@ -99,10 +101,7 @@ export class UsersController {
   }
 
   @Post()
-  async createUser(
-    @UcpTenantId() tenantId: string,
-    @Body() dto: CreateUserDto,
-  ) {
+  async createUser(@UcpTenantId() tenantId: string, @Body() dto: CreateUserDto) {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
@@ -154,9 +153,7 @@ export class UsersController {
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
     const user = tenantUsers.find((u) => u.id === userId);
     if (!user || !user.idpUserId) {
-      throw new NotFoundException(
-        'User identity mapping not found in this tenant',
-      );
+      throw new NotFoundException('User identity mapping not found in this tenant');
     }
 
     await this.userIdentityProvider.updateUser(
@@ -190,42 +187,17 @@ export class UsersController {
     @Param('id') userId: string,
     @Body() dto: ToggleUserStatusDto,
   ) {
-    const tenant = await this.tenantRepo.findById(tenantId);
-    if (!tenant) throw new NotFoundException('Tenant not found');
-
-    if (!tenant.idpTenantId) {
-      throw new BadRequestException('Tenant has no associated organization');
-    }
-
-    // Verify user belongs to this tenant and get user details
-    const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
-    const user = tenantUsers.find((u) => u.id === userId);
-    if (!user || !user.idpUserId) {
-      throw new NotFoundException(
-        'User identity mapping not found in this tenant',
-      );
-    }
-
-    await this.userIdentityProvider.toggleUserStatus(
-      user.idpUserId,
-      tenant.idpTenantId,
-      dto.action,
-    );
+    await this.toggleUserStatusUseCase.execute(tenantId, userId, dto.action);
     return { success: true };
   }
 
   @Delete(':id')
-  async deleteUser(
-    @UcpTenantId() tenantId: string,
-    @Param('id') userId: string,
-  ) {
+  async deleteUser(@UcpTenantId() tenantId: string, @Param('id') userId: string) {
     // Verify user belongs to this tenant and get user details
     const tenantUsers = await this.userRepo.findUsersByTenant(tenantId);
     const user = tenantUsers.find((u) => u.id === userId);
     if (!user || !user.idpUserId) {
-      throw new NotFoundException(
-        'User identity mapping not found in this tenant',
-      );
+      throw new NotFoundException('User identity mapping not found in this tenant');
     }
 
     await this.userIdentityProvider.deleteUser(user.idpUserId);

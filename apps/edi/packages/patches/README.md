@@ -28,5 +28,6 @@ Or explicitly:
 
 ```python
 from patches.paramiko import apply_legacy_algorithm_support
+
 apply_legacy_algorithm_support()
 ```

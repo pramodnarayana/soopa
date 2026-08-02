@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from api.dependencies.auth import (
     get_current_tenant_id,
@@ -31,12 +32,12 @@ def mock_uow():
 
 @pytest.fixture
 def client(mock_uow):
-    app.dependency_overrides[get_current_tenant_id] = lambda: "0"
+    app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_control_plane_uow] = lambda: mock_uow
     app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
     app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
     app.dependency_overrides[get_raw_jwt] = lambda: {"sub": "test"}
-    app.dependency_overrides[require_platform_admin] = lambda: "0"
+    app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }

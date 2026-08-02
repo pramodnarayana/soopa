@@ -18,6 +18,7 @@ from database.models.data_plane import OutboundEdiHeader as TenantOutboundEdiHea
 from database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from database.models.data_plane import Webhook as TenantWebhook
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,7 @@ from worker.ports.tenant import TenantPort
 
 logger = logging.getLogger(__name__)
 
-SHARED_TENANT_ID = "0"
+SHARED_TENANT_ID = PLATFORM_TENANT_ID
 
 
 class SqlAlchemyReplicationAdapter(ReplicationPort):
@@ -285,7 +286,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             for col in global_entity.__table__.columns
             if hasattr(global_entity, col.name) and col.name in tenant_columns
         }
-        data["tenant_id"] = tenant_id
+
+        # Enterprise Grade: Retain the source global entity's tenant_id (e.g., "0" for platform configs)
+        # to preserve shared ownership semantics across data plane shards.
+        # Fallback to the destination tenant_id only if strictly missing or null to satisfy shard DB constraints.
+        if data.get("tenant_id") is None:
+            data["tenant_id"] = tenant_id
 
         stmt = insert(tenant_model).values(**data)
         update_data = {k: v for k, v in data.items() if k != "id"}

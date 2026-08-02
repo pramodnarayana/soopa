@@ -337,7 +337,9 @@ class As2ReceiverService:
         if not true_tenant_id and partnership.tenant_id is not None:
             true_tenant_id = str(partnership.tenant_id)
 
-        if not true_tenant_id or true_tenant_id == "0":
+        from identity.domain.identity_context import PLATFORM_TENANT_ID
+
+        if not true_tenant_id or true_tenant_id == PLATFORM_TENANT_ID:
             logger.error(
                 f"Cannot save payload. No tenant could be identified for ISA {isa_sender} -> {isa_receiver}"
             )

@@ -6,6 +6,7 @@ from database.models.control_plane import (
     Webhook,
 )
 from domain.models import InboundRouteDomainModel
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
 
 from api.domain.models import (
@@ -46,7 +47,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             result = await self.session.execute(
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
-                    AS2Partner.tenant_id.in_([tenant_id, "0"]),
+                    AS2Partner.tenant_id.in_([tenant_id, PLATFORM_TENANT_ID]),
                 )
             )
             if not result.scalar_one_or_none():

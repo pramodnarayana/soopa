@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { DbClient } from '@soopa/database';
 import { tenantUsers, users } from '@soopa/database';
 import { and, eq, inArray, notExists } from 'drizzle-orm';
+import { User } from '../../../domain/models/user.model.js';
 import { DATABASE_CLIENT } from '../../../infrastructure/database.constants.js';
 import { IUserRepository } from '../../../ports/outbound/user.repository.js';
 
@@ -42,6 +43,34 @@ export class UserDrizzleRepository implements IUserRepository {
       });
   }
 
+  async findById(userId: string): Promise<User | null> {
+    const results = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+
+    const raw = results[0];
+    if (!raw) return null;
+
+    return new User(
+      raw.id,
+      raw.idpUserId,
+      raw.email,
+      raw.name,
+      raw.status,
+      raw.createdAt,
+      raw.updatedAt,
+    );
+  }
+
+  async save(user: User): Promise<void> {
+    await this.db
+      .update(users)
+      .set({
+        name: user.name,
+        status: user.status,
+        updatedAt: user.updatedAt,
+      })
+      .where(eq(users.id, user.id));
+  }
+
   async findByIdpUserId(idpUserId: string) {
     const results = await this.db
       .select()
@@ -76,6 +105,10 @@ export class UserDrizzleRepository implements IUserRepository {
       });
   }
 
+  async updateUserStatus(userId: string, status: 'active' | 'inactive'): Promise<void> {
+    await this.db.update(users).set({ status, updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
   async removeTenantUser(tenantId: string, userId: string): Promise<void> {
     await this.db
       .delete(tenantUsers)
@@ -101,6 +134,7 @@ export class UserDrizzleRepository implements IUserRepository {
       idpUserId: string | null;
       email: string;
       name: string;
+      status: string;
       role: string;
       createdAt: Date;
     }[]
@@ -111,6 +145,7 @@ export class UserDrizzleRepository implements IUserRepository {
         idpUserId: users.idpUserId,
         email: users.email,
         name: users.name,
+        status: users.status,
         role: tenantUsers.role,
         createdAt: tenantUsers.createdAt,
       })

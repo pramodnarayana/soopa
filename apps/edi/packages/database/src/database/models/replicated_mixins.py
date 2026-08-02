@@ -188,7 +188,7 @@ class InboundRouteMixin:
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"inb_{uuid.uuid4().hex}"
+            String(128), primary_key=True, default=lambda: f"inbrt_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -234,7 +234,7 @@ class OutboundEdiHeaderMixin:
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"out_{uuid.uuid4().hex}"
+            String(128), primary_key=True, default=lambda: f"outhdr_{uuid.uuid4().hex}"
         )
 
     @declared_attr
@@ -288,7 +288,7 @@ class OutboundRouteMixin:
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"outh_{uuid.uuid4().hex}"
+            String(128), primary_key=True, default=lambda: f"outrt_{uuid.uuid4().hex}"
         )
 
     @declared_attr

@@ -1,6 +1,4 @@
-import hashlib
 import logging
-import uuid
 
 from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, PartnerStatus
@@ -25,7 +23,9 @@ class SFTPPartnerService:
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
-    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> PartnerEntity:
+    async def create_sftp_partner(
+        self, tenant_id: str, cmd: CreateSFTPPartnerCmd, idempotency_key: str | None = None
+    ) -> PartnerEntity:
         logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
         partner_id = await self.uow.sftp_partners.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
@@ -34,9 +34,7 @@ class SFTPPartnerService:
                 event_type=EdiEventType.edi_sftp_partner_created,
                 resource_id=str(partner_id),
             ),
-            idempotency_key=str(
-                uuid.uuid5(uuid.NAMESPACE_DNS, f"{partner_id}-SFTP_PARTNER_CREATED")
-            ),
+            idempotency_key=idempotency_key,
         )
 
         return PartnerEntity(
@@ -48,7 +46,11 @@ class SFTPPartnerService:
         )
 
     async def update_sftp_partner(
-        self, tenant_id: str, partner_id: str, cmd: UpdateSFTPPartnerCmd
+        self,
+        tenant_id: str,
+        partner_id: str,
+        cmd: UpdateSFTPPartnerCmd,
+        idempotency_key: str | None = None,
     ) -> PartnerEntity:
         logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
         existing = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
@@ -74,16 +76,13 @@ class SFTPPartnerService:
             tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
         )
 
-        update_hash = hashlib.sha256(str(cmd).encode()).hexdigest()
         await self.uow.control_plane_outbox.publish_outbox_event(
             event=ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_sftp_partner_updated,
                 resource_id=str(partner_id),
             ),
-            idempotency_key=str(
-                uuid.uuid5(uuid.NAMESPACE_DNS, f"{partner_id}-SFTP_PARTNER_UPDATED-{update_hash}")
-            ),
+            idempotency_key=idempotency_key,
         )
         updated_partner = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
         if not updated_partner:
@@ -97,4 +96,18 @@ class SFTPPartnerService:
             else str(updated_partner.name),
             type=ConnectionType.SFTP,
             status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
+        )
+
+    async def delete_sftp_partner(
+        self, tenant_id: str, partner_id: str, idempotency_key: str | None = None
+    ) -> None:
+        logger.info(f"Deleting SFTP partner {partner_id} for tenant {tenant_id}")
+        await self.uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
+        await self.uow.control_plane_outbox.publish_outbox_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_sftp_partner_deleted,
+                resource_id=str(partner_id),
+            ),
+            idempotency_key=idempotency_key,
         )

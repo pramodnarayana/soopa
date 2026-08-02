@@ -6,7 +6,13 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { AuthenticateUseCase, IdentityContext } from '@soopa/identity';
+import {
+  AuthenticateUseCase,
+  IdentityContext,
+  MissingIdentityTenantError,
+  MissingUserDomainError,
+  TenantMappingDomainError,
+} from '@soopa/identity';
 import type { FastifyRequest } from 'fastify';
 
 @Injectable()
@@ -32,7 +38,7 @@ export class PlatformAuthGuard implements CanActivate {
       request.identityContext = identityContext;
 
       if (!identityContext.isPlatformAdmin) {
-        throw new ForbiddenException('User is not a Platform Administrator');
+        throw new ForbiddenException('Platform Administrator privileges required');
       }
 
       return true;
@@ -40,9 +46,32 @@ export class PlatformAuthGuard implements CanActivate {
       if (error instanceof ForbiddenException) {
         throw error;
       }
-      this.logger.error(
-        `Authentication failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      if (error instanceof MissingUserDomainError) {
+        this.logger.warn(`Platform access denied — user not synced: ${error.message}`);
+        throw new ForbiddenException(
+          'Your account is still being provisioned. Please try again in a few moments.',
+        );
+      }
+      if (error instanceof TenantMappingDomainError) {
+        this.logger.warn(`Platform access denied — user has no tenant mapping: ${error.message}`);
+        throw new ForbiddenException('User is not assigned to any tenant.');
+      }
+      if (error instanceof MissingIdentityTenantError) {
+        this.logger.warn(`Platform access denied — token missing org context: ${error.message}`);
+        throw new UnauthorizedException(
+          'Token is missing organization context. Please log in again.',
+        );
+      }
+
+      // Log the real error — never swallow silently
+      if (error instanceof Error) {
+        this.logger.error(
+          `Authentication failed: [${error.constructor.name}] ${error.message}`,
+          error.stack,
+        );
+      } else {
+        this.logger.error(`Authentication failed (unknown error type):`, error);
+      }
       throw new UnauthorizedException('Invalid JWT token');
     }
   }

@@ -8,6 +8,7 @@ from domain.events import (
     ProvisioningEvent,
     ProvisioningEventType,
 )
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 from soopa_schemas.edi_events import EdiEventType
 from soopa_schemas.webhook_events import WebhookEventType
@@ -100,9 +101,9 @@ class ProvisioningWorkerService:
         }
 
     async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
-        if tenant_id == "0":
+        if tenant_id == PLATFORM_TENANT_ID:
             logger.info(
-                f"Tenant '0' detected. Broadcasting global platform event {replicate_fn.__name__} to all tenant databases"
+                f"Master Tenant detected. Broadcasting global platform event {replicate_fn.__name__} to all tenant databases"
             )
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []

@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     BigInteger,
@@ -15,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
-from sqlalchemy.sql import func, text
+from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
 from .common import OutboxMixin, TimestampMixin
@@ -179,7 +178,9 @@ class OutboundEdiHeader(TenantBase, TenantAwareMixin, OutboundEdiHeaderMixin, Ti
 class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_messages"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True, server_default=text("gen_random_uuid()::text"))
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+    )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
@@ -226,7 +227,9 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
 class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_json"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True, server_default=text("gen_random_uuid()::text"))
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+    )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
@@ -257,7 +260,9 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
 class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "api_gateway"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True, server_default=text("gen_random_uuid()::text"))
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+    )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -284,7 +289,9 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
 class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "jobs"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True, server_default=text("gen_random_uuid()::text"))
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+    )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSFORM, DELIVER
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
@@ -321,7 +328,9 @@ class ProcessedEvent(TenantBase, TenantAwareMixin):
 class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "audit_log"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True, server_default=text("gen_random_uuid()::text"))
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+    )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     step: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -333,7 +342,9 @@ class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
 class AckReceipt(TenantBase, TenantAwareMixin):
     __tablename__ = "ack_receipts"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True, server_default=text("gen_random_uuid()::text"))
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+    )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # MDN, 997, CONTRL
     status: Mapped[str] = mapped_column(String(50), nullable=False)

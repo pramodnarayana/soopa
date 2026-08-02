@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
 import { IsArray, IsNotEmpty, IsString } from 'class-validator';
 import { GenerateApiKeyUseCase } from '../../../application/use-cases/generate-api-key.use-case.js';
 import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
@@ -21,12 +21,19 @@ export class ApiKeysController {
   constructor(private readonly generateApiKeyUseCase: GenerateApiKeyUseCase) {}
 
   @Post()
-  async generate(@UcpTenantId() tenantId: string, @Body() dto: CreateApiKeyRequestDto) {
-    const result = await this.generateApiKeyUseCase.execute({
-      tenantId,
-      name: dto.name,
-      scopes: dto.scopes,
-    });
+  async generate(
+    @UcpTenantId() tenantId: string,
+    @Body() dto: CreateApiKeyRequestDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const result = await this.generateApiKeyUseCase.execute(
+      {
+        tenantId,
+        name: dto.name,
+        scopes: dto.scopes,
+      },
+      idempotencyKey,
+    );
 
     // We return the rawSecret ONCE to the user.
     return {

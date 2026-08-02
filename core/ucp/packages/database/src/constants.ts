@@ -12,7 +12,7 @@ export const NotificationChannel = {
 } as const;
 
 export const DefaultTenants = {
-  SOOPA_PLATFORM: 'SOOPA_PLATFORM',
+  SOOPA_PLATFORM: 'ten_000000000000000000000000', // True Enterprise Canonical Master Tenant ID
 } as const;
 
 export const EventTypes = {

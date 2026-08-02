@@ -1,5 +1,7 @@
 import os
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+
 os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 import asyncio
@@ -192,11 +194,11 @@ async def platform_client(
     app.dependency_overrides[get_global_session] = override_get_global_session
     app.dependency_overrides[get_tenant_session] = override_get_tenant_session
     app.dependency_overrides[get_vault] = lambda: override_get_vault
-    app.dependency_overrides[get_current_tenant_id] = lambda: "0"
-    app.dependency_overrides[require_platform_admin] = lambda: "0"
+    app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
+    app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "admin-user",
-        "tenant_id": "0",
+        "tenant_id": PLATFORM_TENANT_ID,
         "permissions": ["*"],
     }
 

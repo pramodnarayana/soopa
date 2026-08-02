@@ -25,7 +25,7 @@ class OutboundRouteService:
         self.uow = uow
 
     async def create_outbound_route(
-        self, tenant_id: str, cmd: CreateOutboundRouteCmd
+        self, tenant_id: str, cmd: CreateOutboundRouteCmd, idempotency_key: str | None = None
     ) -> RouteEntity:
         logger.info(
             f"Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}"
@@ -38,12 +38,17 @@ class OutboundRouteService:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_outbound_route_created,
                 resource_id=str(route_id),
-            )
+            ),
+            idempotency_key=idempotency_key,
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.OUTBOUND)
 
     async def update_outbound_route(
-        self, tenant_id: str, route_id: str, cmd: UpdateOutboundRouteCmd
+        self,
+        tenant_id: str,
+        route_id: str,
+        cmd: UpdateOutboundRouteCmd,
+        idempotency_key: str | None = None,
     ) -> bool:
         res = await self.uow.outbound_routes.update_outbound_route(tenant_id, route_id, cmd)
         if res:
@@ -52,11 +57,14 @@ class OutboundRouteService:
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_outbound_route_updated,
                     resource_id=str(route_id),
-                )
+                ),
+                idempotency_key=idempotency_key,
             )
         return res
 
-    async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
+    async def delete_outbound_route(
+        self, tenant_id: str, route_id: str, idempotency_key: str | None = None
+    ) -> bool:
         res = await self.uow.outbound_routes.delete_outbound_route(tenant_id, route_id)
         if res:
             await self.uow.control_plane_outbox.publish_outbox_event(
@@ -64,7 +72,8 @@ class OutboundRouteService:
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_outbound_route_deleted,
                     resource_id=str(route_id),
-                )
+                ),
+                idempotency_key=idempotency_key,
             )
         return res
 

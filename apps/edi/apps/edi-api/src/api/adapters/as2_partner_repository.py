@@ -4,6 +4,7 @@ from typing import Any
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import AS2Partner
 from domain.models import AS2PartnerDomainModel
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
 
 from api.domain.models import CreateAS2TradingPartnerCmd, UpdateAS2TradingPartnerCmd
@@ -75,7 +76,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
                 AS2Partner.id == partner_id,
                 or_(
                     AS2Partner.tenant_id == tid_str,
-                    AS2Partner.tenant_id == "0",
+                    AS2Partner.tenant_id == PLATFORM_TENANT_ID,
                     AS2Partner.tenant_id.is_(None),
                 ),
             )
@@ -86,8 +87,10 @@ class SqlAlchemyAS2TradingPartnerRepository(
     async def get_as2_partner_for_write(self, tenant_id: str, partner_id: str) -> Any:
         tid_str = tenant_id
         conds = [AS2Partner.id == partner_id]
-        if tid_str == "0":
-            conds.append(or_(AS2Partner.tenant_id == "0", AS2Partner.tenant_id.is_(None)))
+        if tid_str == PLATFORM_TENANT_ID:
+            conds.append(
+                or_(AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.tenant_id.is_(None))
+            )
         else:
             conds.append(AS2Partner.tenant_id == tid_str)
         result = await self.session.execute(select(AS2Partner).where(*conds))
@@ -95,8 +98,10 @@ class SqlAlchemyAS2TradingPartnerRepository(
 
     async def list_as2_partners(self, tenant_id: str) -> Sequence[AS2PartnerDomainModel]:
         tid_str = tenant_id
-        if tid_str == "0":
-            where_clause = or_(AS2Partner.tenant_id == "0", AS2Partner.tenant_id.is_(None))
+        if tid_str == PLATFORM_TENANT_ID:
+            where_clause = or_(
+                AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.tenant_id.is_(None)
+            )
         else:
             where_clause = AS2Partner.tenant_id == tid_str
         result = await self.session.execute(select(AS2Partner).where(where_clause))
@@ -105,8 +110,10 @@ class SqlAlchemyAS2TradingPartnerRepository(
     async def delete_as2_identity(self, tenant_id: str, partner_id: str) -> None:
         tid_str = tenant_id
         conds = [AS2Partner.id == partner_id]
-        if tid_str == "0":
-            conds.append(or_(AS2Partner.tenant_id == "0", AS2Partner.tenant_id.is_(None)))
+        if tid_str == PLATFORM_TENANT_ID:
+            conds.append(
+                or_(AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.tenant_id.is_(None))
+            )
         else:
             conds.append(AS2Partner.tenant_id == tid_str)
         await self.session.execute(delete(AS2Partner).where(*conds))
@@ -121,7 +128,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
                 AS2Partner.id.in_(ids),
                 or_(
                     AS2Partner.tenant_id == tid_str,
-                    AS2Partner.tenant_id == "0",
+                    AS2Partner.tenant_id == PLATFORM_TENANT_ID,
                     AS2Partner.tenant_id.is_(None),
                 ),
             )

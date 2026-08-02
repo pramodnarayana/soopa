@@ -6,4 +6,6 @@ import { ShardAllocatorService } from './services/shard-allocator.service.js';
   providers: [ShardAllocatorService],
   exports: [ShardAllocatorService],
 })
-export class ApplicationModule {}
+export class ApplicationModule {
+  constructor(private readonly shardAllocator: ShardAllocatorService) {}
+}

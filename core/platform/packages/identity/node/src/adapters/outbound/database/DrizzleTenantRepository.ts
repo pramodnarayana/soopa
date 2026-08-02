@@ -1,11 +1,4 @@
-import {
-  createDbClient,
-  generateId,
-  tenants,
-  tenantUsers,
-  UserRoles,
-  users,
-} from '@soopa/database';
+import { createDbClient, tenantUsers, users } from '@soopa/database';
 import { eq } from 'drizzle-orm';
 import { IdentityInfrastructureError } from '../../../domain/Errors.js';
 import type { TenantRepository, UserData } from '../../../ports/TenantRepository.js';
@@ -22,96 +15,28 @@ export class DrizzleTenantRepository implements TenantRepository {
         .limit(1);
       return existingUser.length > 0 ? existingUser[0] : null;
     } catch (e: unknown) {
-      let msg = typeof e === 'string' ? e : 'Unknown Error';
-      if (e instanceof Error) msg = e.message;
-      else if (typeof e === 'object' && e !== null) {
-        try {
-          msg = JSON.stringify(e, Object.getOwnPropertyNames(e));
-        } catch {
-          msg = '[Unserializable Error Object]';
-        }
-      }
-      throw new IdentityInfrastructureError(`Failed to fetch user by email: ${msg}`);
+      throw new IdentityInfrastructureError(
+        `Failed to fetch user by email: ${this.serializeError(e)}`,
+      );
     }
   }
 
-  async provisionUserAndTenant(
-    email: string,
-    name: string,
-    idpTenantId?: string,
-  ): Promise<{ userId: string; tenantId: string }> {
+  /**
+   * Retrieves a user by their external IdP user ID (sub).
+   * This is a read-only operation. JIT provisioning is an anti-pattern and should not be done here.
+   */
+  async findUserByIdpId(idpUserId: string): Promise<UserData | null> {
     try {
-      type DbType = ReturnType<typeof createDbClient>['db'];
-      type TxType = Parameters<Parameters<DbType['transaction']>[0]>[0];
-      return await this.db.transaction(async (tx: TxType) => {
-        const userId = generateId('usr');
-        const [newUser] = await tx.insert(users).values({ id: userId, email, name }).returning();
-
-        let tenantIdToLink: string;
-
-        if (idpTenantId) {
-          // Atomic insert with onConflictDoNothing to avoid select-then-insert race
-          const newTenantId = generateId('ten');
-          const insertResult = await tx
-            .insert(tenants)
-            .values({
-              id: newTenantId,
-              name: `${name}'s Organization`,
-              idpTenantId,
-            })
-            .onConflictDoNothing({ target: tenants.idpTenantId })
-            .returning();
-
-          // If insert returned a row, use it; otherwise fetch the existing tenant
-          if (insertResult.length > 0) {
-            tenantIdToLink = insertResult[0].id;
-          } else {
-            const existingTenant = await tx
-              .select()
-              .from(tenants)
-              .where(eq(tenants.idpTenantId as never, idpTenantId))
-              .limit(1);
-
-            if (existingTenant.length === 0) {
-              throw new IdentityInfrastructureError(
-                `Failed to provision tenant: idpTenantId ${idpTenantId} conflict but tenant not found`,
-              );
-            }
-
-            tenantIdToLink = existingTenant[0].id;
-          }
-        } else {
-          const newTenantId = generateId('ten');
-          const [newTenant] = await tx
-            .insert(tenants)
-            .values({
-              id: newTenantId,
-              name: `${name}'s Organization`,
-              idpTenantId: null,
-            })
-            .returning();
-          tenantIdToLink = newTenant.id;
-        }
-
-        await tx.insert(tenantUsers).values({
-          tenantId: tenantIdToLink,
-          userId: newUser.id,
-          role: UserRoles.ADMIN,
-        });
-
-        return { userId: newUser.id, tenantId: tenantIdToLink };
-      });
+      const byIdp = await this.db
+        .select()
+        .from(users)
+        .where(eq(users.idpUserId as never, idpUserId))
+        .limit(1);
+      return byIdp.length > 0 ? byIdp[0] : null;
     } catch (e: unknown) {
-      let msg = typeof e === 'string' ? e : 'Unknown Error';
-      if (e instanceof Error) msg = e.message;
-      else if (typeof e === 'object' && e !== null) {
-        try {
-          msg = JSON.stringify(e, Object.getOwnPropertyNames(e));
-        } catch {
-          msg = '[Unserializable Error Object]';
-        }
-      }
-      throw new IdentityInfrastructureError(`Failed to provision user and tenant: ${msg}`);
+      throw new IdentityInfrastructureError(
+        `Failed to fetch user by IDP ID: ${this.serializeError(e)}`,
+      );
     }
   }
 
@@ -124,16 +49,22 @@ export class DrizzleTenantRepository implements TenantRepository {
         .limit(1);
       return mapping.length > 0 ? mapping[0].tenantId : null;
     } catch (e: unknown) {
-      let msg = typeof e === 'string' ? e : 'Unknown Error';
-      if (e instanceof Error) msg = e.message;
-      else if (typeof e === 'object' && e !== null) {
-        try {
-          msg = JSON.stringify(e, Object.getOwnPropertyNames(e));
-        } catch {
-          msg = '[Unserializable Error Object]';
-        }
-      }
-      throw new IdentityInfrastructureError(`Failed to fetch tenant mapping: ${msg}`);
+      throw new IdentityInfrastructureError(
+        `Failed to fetch tenant mapping: ${this.serializeError(e)}`,
+      );
     }
+  }
+
+  private serializeError(e: unknown): string {
+    if (typeof e === 'string') return e;
+    if (e instanceof Error) return e.message;
+    if (typeof e === 'object' && e !== null) {
+      try {
+        return JSON.stringify(e, Object.getOwnPropertyNames(e));
+      } catch {
+        return '[Unserializable Error Object]';
+      }
+    }
+    return 'Unknown Error';
   }
 }

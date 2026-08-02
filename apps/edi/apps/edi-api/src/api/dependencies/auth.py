@@ -48,7 +48,9 @@ async def get_raw_jwt(
 logger = logging.getLogger(__name__)
 
 # Simple TTL cache for UCP tenant ID -> IdP tenant ID mapping
-_tenant_mapping_cache: dict[str, tuple[str, float]] = {}  # {ucp_tenant_id: (idp_tenant_id, expiry_timestamp)}
+_tenant_mapping_cache: dict[
+    str, tuple[str, float]
+] = {}  # {ucp_tenant_id: (idp_tenant_id, expiry_timestamp)}
 _CACHE_TTL_SECONDS = 300  # 5 minutes
 
 

@@ -17,7 +17,7 @@ export class DeleteTenantUseCase {
     private readonly organizationProvider: IOrganizationProvider,
   ) {}
 
-  async execute(tenantId: string): Promise<void> {
+  async execute(tenantId: string, idempotencyKey?: string): Promise<void> {
     const tenant = await this.tenantRepo.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
@@ -27,7 +27,7 @@ export class DeleteTenantUseCase {
 
     // 2. Delete tenant and all its strictly dependent infrastructure resources
     // (api_keys, shards, outbox events, and the tenant_users bridge records)
-    await this.tenantRepo.delete(tenantId);
+    await this.tenantRepo.delete(tenantId, idempotencyKey);
 
     // 3. Delete any users that no longer belong to any active tenants
     if (userIds.length > 0) {

@@ -27,9 +27,9 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
     except Exception as e:
         # Check for SQLSTATE codes indicating missing database objects:
         # 42P01 = undefined_table, 3F000 = invalid_schema_name
-        sqlstate = getattr(e, 'orig', e)
-        pgcode = getattr(sqlstate, 'pgcode', None)
-        if pgcode in ('42P01', '3F000'):
+        sqlstate = getattr(e, "orig", e)
+        pgcode = getattr(sqlstate, "pgcode", None)
+        if pgcode in ("42P01", "3F000"):
             logger.info("ucp.database_shards does not exist yet. Falling back to default shards.")
         else:
             logger.error(f"Failed to query database_shards from global DB: {e}")

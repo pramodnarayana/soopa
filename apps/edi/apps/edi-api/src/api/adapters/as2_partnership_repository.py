@@ -1,6 +1,7 @@
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import AS2Partner, AS2Partnership
 from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 
 from api.domain.models import CreateAS2PartnershipCmd, UnsetType, UpdateAS2PartnershipCmd
@@ -30,7 +31,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         local_r = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == cmd.local_partner_id,
-                AS2Partner.tenant_id.in_([tid_str, "0"]),
+                AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
             )
         )
         local_partner = local_r.scalar_one_or_none()
@@ -38,7 +39,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         remote_r = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == cmd.remote_partner_id,
-                AS2Partner.tenant_id.in_([tid_str, "0"]),
+                AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
             )
         )
         remote_partner = remote_r.scalar_one_or_none()
@@ -77,7 +78,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     r = await self.session.execute(
                         select(AS2Partner.id).where(
                             AS2Partner.id == cmd.local_partner_id,
-                            AS2Partner.tenant_id.in_([tid_str, "0"]),
+                            AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
                         )
                     )
                     if not r.scalar_one_or_none():
@@ -88,7 +89,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
                     r = await self.session.execute(
                         select(AS2Partner.id).where(
                             AS2Partner.id == cmd.remote_partner_id,
-                            AS2Partner.tenant_id.in_([tid_str, "0"]),
+                            AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
                         )
                     )
                     if not r.scalar_one_or_none():
@@ -133,7 +134,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         result = await self.session.execute(
             select(AS2Partner.id, AS2Partner.name).where(
                 AS2Partner.id.in_(ids),
-                AS2Partner.tenant_id.in_([tid_str, "0"]),
+                AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
             )
         )
         return {row.id: row.name for row in result.all()}

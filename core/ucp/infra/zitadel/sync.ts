@@ -26,6 +26,7 @@ try {
     ZITADEL_UCP_API_CLIENT_ID: tfOutput.ucp_api_client_id?.value,
     ZITADEL_EDI_API_CLIENT_ID: tfOutput.edi_api_client_id?.value,
     ZITADEL_API_TOKEN: tfOutput.ucp_backend_pat_token?.value,
+    ZITADEL_PLATFORM_ADMIN_ID: tfOutput.platform_admin_id?.value,
   };
 
   if (!fs.existsSync(envPath)) {

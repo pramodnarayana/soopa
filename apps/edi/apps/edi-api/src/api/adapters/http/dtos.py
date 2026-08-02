@@ -157,8 +157,12 @@ class CreateInboundRouteRequest(BaseModel):
     webhook_id: ConstrainedId | None = Field(
         None, description="ID of Webhook Partner for transformation routing"
     )
-    as2_partner_id: ConstrainedId | None = Field(None, description="ID of AS2 Partner for Direct Bridging")
-    sftp_partner_id: ConstrainedId | None = Field(None, description="ID of SFTP Partner for Direct Bridging")
+    as2_partner_id: ConstrainedId | None = Field(
+        None, description="ID of AS2 Partner for Direct Bridging"
+    )
+    sftp_partner_id: ConstrainedId | None = Field(
+        None, description="ID of SFTP Partner for Direct Bridging"
+    )
 
 
 class CreateOutboundRouteRequest(BaseModel):
@@ -167,7 +171,9 @@ class CreateOutboundRouteRequest(BaseModel):
     )
     name: str = Field(..., max_length=255, description="Name of the route")
     as2_partner_id: ConstrainedId | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: ConstrainedId | None = Field(None, description="ID of SFTP Partner for routing")
+    sftp_partner_id: ConstrainedId | None = Field(
+        None, description="ID of SFTP Partner for routing"
+    )
 
     @model_validator(mode="after")
     def check_exactly_one_destination(self) -> "CreateOutboundRouteRequest":
@@ -256,7 +262,9 @@ class UpdateRouteRequest(BaseModel):
         None, description="ID of Webhook Partner for transformation routing"
     )
     as2_partner_id: ConstrainedId | None = Field(None, description="ID of AS2 Partner for routing")
-    sftp_partner_id: ConstrainedId | None = Field(None, description="ID of SFTP Partner for routing")
+    sftp_partner_id: ConstrainedId | None = Field(
+        None, description="ID of SFTP Partner for routing"
+    )
 
 
 # ---------------------------------------------------------------------------

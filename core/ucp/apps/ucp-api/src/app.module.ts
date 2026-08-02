@@ -5,6 +5,7 @@ import { createDbClient } from '@soopa/database';
 import { AuthenticateUseCase, DrizzleTenantRepository, ZitadelJwksVerifier } from '@soopa/identity';
 import { LoggerModule } from 'nestjs-pino';
 import * as path from 'path';
+import { InternalEventConsumer } from './adapters/inbound/events/internal-event-consumer.js';
 import { ApiKeysController } from './adapters/inbound/http/api-keys.controller.js';
 import { ApiTokensController } from './adapters/inbound/http/api-tokens.controller.js';
 import { AppsController } from './adapters/inbound/http/apps.controller.js';
@@ -29,6 +30,7 @@ import { GenerateApiKeyUseCase } from './application/use-cases/generate-api-key.
 import { GenerateApiTokenUseCase } from './application/use-cases/generate-api-token.use-case.js';
 import { ProvisionTenantUseCase } from './application/use-cases/provision-tenant.use-case.js';
 import { SubscribeAppUseCase } from './application/use-cases/subscribe-app.use-case.js';
+import { ToggleUserStatusUseCase } from './application/use-cases/toggle-user-status.use-case.js';
 import { UnsubscribeAppUseCase } from './application/use-cases/unsubscribe-app.use-case.js';
 import { DATABASE_CLIENT } from './infrastructure/database.constants.js';
 import { DatabaseModule } from './infrastructure/database.module.js';
@@ -127,6 +129,7 @@ function requireProjectId(config: ConfigService): string {
     ProvisionTenantUseCase,
     SubscribeAppUseCase,
     UnsubscribeAppUseCase,
+    ToggleUserStatusUseCase,
     DeleteTenantUseCase,
     GenerateApiKeyUseCase,
     GenerateApiTokenUseCase,
@@ -148,6 +151,9 @@ function requireProjectId(config: ConfigService): string {
       provide: USER_IDENTITY_PROVIDER,
       useClass: ZitadelUsersAdapter,
     },
+    InternalEventConsumer,
   ],
 })
-export class AppModule {}
+export class AppModule {
+  constructor(private readonly internalEventConsumer: InternalEventConsumer) {}
+}

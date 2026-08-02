@@ -3,6 +3,8 @@ from collections.abc import Sequence
 from dataclasses import asdict, replace
 from typing import Any
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+
 from api.domain.models import (
     UNSET,
     CreateAS2PartnershipCmd,
@@ -430,7 +432,7 @@ class MockSession:
             class P:
                 def __init__(self):
                     self.id = "123"
-                    self.tenant_id = "0"
+                    self.tenant_id = PLATFORM_TENANT_ID
                     self.name = "Test Partnership"
                     self.local_partner_id = "456"
                     self.remote_partner_id = "789"
@@ -447,7 +449,7 @@ class MockSession:
             class T:
                 def __init__(self):
                     self.id = "123"
-                    self.tenant_id = "0"
+                    self.tenant_id = PLATFORM_TENANT_ID
                     self.name = "Test"
                     self.as2_id = "TEST"
                     self.is_local = True

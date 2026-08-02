@@ -30,18 +30,15 @@ export class GenerateApiKeyUseCase {
 
   async execute(
     dto: GenerateApiKeyDto,
+    idempotencyKey?: string,
   ): Promise<{ apiKey: ApiKey; rawSecret: string }> {
     const tenant = await this.tenantRepo.findById(dto.tenantId);
     if (!tenant) {
       throw new NotFoundException(`Tenant with id ${dto.tenantId} not found`);
     }
 
-    const { apiKey, rawSecret } = ApiKey.generate(
-      dto.tenantId,
-      dto.name,
-      dto.scopes,
-    );
-    const savedKey = await this.apiKeyRepo.save(apiKey);
+    const { apiKey, rawSecret } = ApiKey.generate(dto.tenantId, dto.name, dto.scopes);
+    const savedKey = await this.apiKeyRepo.save(apiKey, idempotencyKey);
 
     return { apiKey: savedKey, rawSecret };
   }

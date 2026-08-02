@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Inject,
   NotFoundException,
   Param,
@@ -51,7 +52,11 @@ export class SubscriptionsController {
   }
 
   @Post()
-  async subscribe(@UcpTenantId() tenantId: string, @Body() dto: SubscribeDto) {
+  async subscribe(
+    @UcpTenantId() tenantId: string,
+    @Body() dto: SubscribeDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const appRecords = await this.db.select().from(apps).where(eq(apps.id, dto.appId)).limit(1);
     if (!appRecords.length) throw new NotFoundException('App not found');
     const app = appRecords[0];
@@ -79,10 +84,13 @@ export class SubscriptionsController {
     if (zitadelProjectId) {
       // Use outbox for retryable Zitadel syncing
       const eventId = createId();
-      const idempotencyKey = `Idp.GrantProjectAccess:${tenantId}:${zitadelProjectId}`;
+      const finalIdempotencyKey = idempotencyKey
+        ? `${idempotencyKey}_IdpGrant_${eventId}` // Scope it to this specific event so retries don't violate the DB unique constraint
+        : `Idp.GrantProjectAccess:${tenantId}:${zitadelProjectId}:${eventId}`;
+
       await this.db.insert(controlPlaneOutbox).values({
         id: eventId,
-        idempotencyKey: idempotencyKey,
+        idempotencyKey: finalIdempotencyKey,
         tenantId: tenantId,
         eventType: 'Idp.GrantProjectAccess',
         payload: {
@@ -100,7 +108,11 @@ export class SubscriptionsController {
   }
 
   @Delete(':appId')
-  async unsubscribe(@UcpTenantId() tenantId: string, @Param('appId') appId: string) {
+  async unsubscribe(
+    @UcpTenantId() tenantId: string,
+    @Param('appId') appId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     // Fetch the app and tenant to determine if we need to revoke Zitadel grant
     const appRecords = await this.db.select().from(apps).where(eq(apps.id, appId)).limit(1);
     if (!appRecords.length) throw new NotFoundException('App not found');
@@ -126,10 +138,13 @@ export class SubscriptionsController {
       if (zitadelProjectId) {
         // Use outbox for retryable Zitadel syncing
         const eventId = createId();
-        const idempotencyKey = `Idp.RevokeProjectAccess:${tenantId}:${zitadelProjectId}`;
+        const finalIdempotencyKey = idempotencyKey
+          ? `${idempotencyKey}_IdpRevoke_${eventId}`
+          : `Idp.RevokeProjectAccess:${tenantId}:${zitadelProjectId}:${eventId}`;
+
         await this.db.insert(controlPlaneOutbox).values({
           id: eventId,
-          idempotencyKey: idempotencyKey,
+          idempotencyKey: finalIdempotencyKey,
           tenantId: tenantId,
           eventType: 'Idp.RevokeProjectAccess',
           payload: {

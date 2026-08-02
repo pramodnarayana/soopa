@@ -41,3 +41,9 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-08-01
 - **Description**: The system suffers from Identity formatting fragmentation across bounded contexts. The EDI Context defaults to standard UUIDs (e.g., `d7b4e9a0...`), the UCP Context utilizes prefixed, human-readable IDs (e.g., `ten_...`, `wh_...`), and the UI previously contained legacy references to auto-incrementing integers. This causes type mismatch errors (e.g., Pydantic UUID validation rejecting string IDs) and requires complex mapping layers.
 - **Action Item**: Establish and enforce a single, global Enterprise Identification Standard. Prefixed IDs (like Stripe's `cus_xyz123`) mapping to UUIDv7/KSUIDs internally are the gold standard. Every bounded context, database schema, and DTO must strictly adhere to the unified ID format, eliminating all implicit type coercion or cross-boundary cast failures.
+
+## [Architecture] Outbox Management & Architectural Inconsistency (Python vs TypeScript)
+
+- **Date Added**: 2026-08-02
+- **Description**: The Python EDI API and TypeScript UCP API use different architectural patterns for managing Domain Events / Outbox records. The Python EDI API uses a Service/Transaction Script pattern where the Service layer explicitly manages the outbox via `publish_outbox_event(...)`. The TypeScript UCP API uses a strict Domain-Driven Design (DDD) Hexagonal architecture where Aggregate Roots internally queue events, which are implicitly pulled and saved to the outbox by the Drizzle Repository during a `.save()` operation.
+- **Action Item**: Both APIs should ideally align on a single, monorepo-wide architectural standard for event-driven mutation (e.g., standardizing on strict DDD Aggregate Roots across both languages) to ensure concepts like Client-Side Idempotency flow uniformly through the layers.

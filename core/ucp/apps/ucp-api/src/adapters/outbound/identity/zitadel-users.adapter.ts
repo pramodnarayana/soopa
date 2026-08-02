@@ -8,10 +8,7 @@ import { IUserIdentityProvider } from '../../../ports/outbound/user-identity.pro
 import { ZitadelBaseClient } from './zitadel-base.client.js';
 
 @Injectable()
-export class ZitadelUsersAdapter
-  extends ZitadelBaseClient
-  implements IUserIdentityProvider
-{
+export class ZitadelUsersAdapter extends ZitadelBaseClient implements IUserIdentityProvider {
   private maskEmail(email: string): string {
     const parts = email.split('@');
     if (parts.length !== 2) return email;
@@ -29,9 +26,7 @@ export class ZitadelUsersAdapter
     firstName: string,
     lastName: string,
   ): Promise<{ userId: string }> {
-    this.logger.log(
-      `Creating user ${this.maskEmail(email)} in org ${orgId} with role ${role}`,
-    );
+    this.logger.log(`Creating user ${this.maskEmail(email)} in org ${orgId} with role ${role}`);
 
     try {
       // 1. Create Human User in the specific Organization
@@ -79,8 +74,7 @@ export class ZitadelUsersAdapter
         await this.handleResponseError(grantSearchRes, 'fetch project grants');
 
       const grantSearchData = (await grantSearchRes.json()) as unknown;
-      const parsedGrantData =
-        ZitadelProjectGrantsResponseSchema.parse(grantSearchData);
+      const parsedGrantData = ZitadelProjectGrantsResponseSchema.parse(grantSearchData);
       const projectGrant = parsedGrantData.result?.find(
         (g: ZitadelProjectGrant) => g.grantedOrgId === orgId,
       );
@@ -95,23 +89,18 @@ export class ZitadelUsersAdapter
       const grantId = projectGrant.grantId || projectGrant.id;
 
       // 3. Grant the Role to the User on the Project Grant
-      this.logger.log(
-        `Assigning role [${role}] to user ${userId} via Project Grant ${grantId}`,
-      );
-      const userGrantRes = await this.fetchWithAuth(
-        `/management/v1/users/${userId}/grants`,
-        {
-          method: 'POST',
-          headers: {
-            'x-zitadel-orgid': orgId,
-          },
-          body: JSON.stringify({
-            projectId: this.ucpProjectId,
-            projectGrantId: grantId,
-            roleKeys: [role],
-          }),
+      this.logger.log(`Assigning role [${role}] to user ${userId} via Project Grant ${grantId}`);
+      const userGrantRes = await this.fetchWithAuth(`/management/v1/users/${userId}/grants`, {
+        method: 'POST',
+        headers: {
+          'x-zitadel-orgid': orgId,
         },
-      );
+        body: JSON.stringify({
+          projectId: this.ucpProjectId,
+          projectGrantId: grantId,
+          roleKeys: [role],
+        }),
+      });
 
       if (!userGrantRes.ok) {
         const errorText = await userGrantRes.text();
@@ -120,10 +109,7 @@ export class ZitadelUsersAdapter
 
       return { userId };
     } catch (error) {
-      this.logger.error(
-        `Error creating user ${this.maskEmail(email)} in org ${orgId}`,
-        error,
-      );
+      this.logger.error(`Error creating user ${this.maskEmail(email)} in org ${orgId}`, error);
       throw error;
     }
   }
@@ -139,21 +125,18 @@ export class ZitadelUsersAdapter
 
     try {
       // 1. Update profile
-      const profileRes = await this.fetchWithAuth(
-        `/management/v1/users/${userId}/profile`,
-        {
-          method: 'PUT',
-          headers: {
-            'x-zitadel-orgid': orgId,
-          },
-          body: JSON.stringify({
-            firstName,
-            lastName,
-            displayName: `${firstName} ${lastName}`,
-            preferredLanguage: 'en',
-          }),
+      const profileRes = await this.fetchWithAuth(`/management/v1/users/${userId}/profile`, {
+        method: 'PUT',
+        headers: {
+          'x-zitadel-orgid': orgId,
         },
-      );
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          displayName: `${firstName} ${lastName}`,
+          preferredLanguage: 'en',
+        }),
+      });
 
       if (!profileRes.ok) {
         const err = await profileRes.text();
@@ -167,21 +150,17 @@ export class ZitadelUsersAdapter
       }
 
       // 2. Update role
-      const grantsRes = await this.fetchWithAuth(
-        `/management/v1/users/grants/_search`,
-        {
-          method: 'POST',
-          headers: {
-            'x-zitadel-orgid': orgId,
-          },
-          body: JSON.stringify({ queries: [{ userIdQuery: { userId } }] }),
+      const grantsRes = await this.fetchWithAuth(`/management/v1/users/grants/_search`, {
+        method: 'POST',
+        headers: {
+          'x-zitadel-orgid': orgId,
         },
-      );
+        body: JSON.stringify({ queries: [{ userIdQuery: { userId } }] }),
+      });
 
       if (grantsRes.ok) {
         const grantsData = (await grantsRes.json()) as unknown;
-        const parsedGrantsData =
-          ZitadelProjectGrantsResponseSchema.parse(grantsData);
+        const parsedGrantsData = ZitadelProjectGrantsResponseSchema.parse(grantsData);
         const grant = parsedGrantsData.result?.find(
           (g: ZitadelProjectGrant) => g.projectId === this.ucpProjectId,
         );
@@ -209,14 +188,10 @@ export class ZitadelUsersAdapter
           );
 
           if (!grantSearchRes.ok)
-            await this.handleResponseError(
-              grantSearchRes,
-              'fetch project grants fallback',
-            );
+            await this.handleResponseError(grantSearchRes, 'fetch project grants fallback');
 
           const grantSearchData = (await grantSearchRes.json()) as unknown;
-          const parsedGrantSearchData =
-            ZitadelProjectGrantsResponseSchema.parse(grantSearchData);
+          const parsedGrantSearchData = ZitadelProjectGrantsResponseSchema.parse(grantSearchData);
           const projectGrant = parsedGrantSearchData.result?.find(
             (g: ZitadelProjectGrant) => g.grantedOrgId === orgId,
           );
@@ -238,10 +213,7 @@ export class ZitadelUsersAdapter
               },
             );
             if (!createGrantRes.ok)
-              await this.handleResponseError(
-                createGrantRes,
-                'create user grant fallback',
-              );
+              await this.handleResponseError(createGrantRes, 'create user grant fallback');
           } else {
             throw new HttpException(
               'No project grant found for this tenant',
@@ -261,12 +233,9 @@ export class ZitadelUsersAdapter
   async deleteUser(userId: string): Promise<void> {
     this.logger.log(`Deleting user ${userId} from Zitadel`);
 
-    const response = await this.fetchWithAuth(
-      `/management/v1/users/${userId}`,
-      {
-        method: 'DELETE',
-      },
-    );
+    const response = await this.fetchWithAuth(`/management/v1/users/${userId}`, {
+      method: 'DELETE',
+    });
 
     if (!response.ok) await this.handleResponseError(response, 'delete user');
   }
@@ -278,18 +247,29 @@ export class ZitadelUsersAdapter
   ): Promise<void> {
     this.logger.log(`Toggling user ${userId} status: ${action}`);
 
-    const endpoint = action === 'activate' ? '_activate' : '_deactivate';
-    const response = await this.fetchWithAuth(
-      `/management/v1/users/${userId}/${endpoint}`,
-      {
-        method: 'POST',
-        headers: {
-          'x-zitadel-orgid': orgId,
-        },
+    const endpoint = action === 'activate' ? '_reactivate' : '_deactivate';
+    const response = await this.fetchWithAuth(`/management/v1/users/${userId}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'x-zitadel-orgid': orgId,
       },
-    );
+    });
 
-    if (!response.ok)
-      await this.handleResponseError(response, `${action} user`);
+    if (!response.ok) {
+      const responseBody = await response.text();
+      // Handle idempotency gracefully
+      if (
+        (action === 'deactivate' && responseBody.includes('User already inactive')) ||
+        (action === 'activate' && responseBody.includes('User already active'))
+      ) {
+        this.logger.log(`User ${userId} is already ${action}d, ignoring error.`);
+        return;
+      }
+
+      throw new HttpException(
+        `Failed to ${action} user: ${responseBody}`,
+        response.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

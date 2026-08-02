@@ -21,3 +21,12 @@ export class MissingIdentityTenantError extends Error {
     this.email = email;
   }
 }
+
+export class MissingUserDomainError extends Error {
+  constructor(idpUserId: string) {
+    super(
+      `User with IdP ID ${idpUserId} not found. Account is still being provisioned or user does not exist.`,
+    );
+    this.name = 'MissingUserDomainError';
+  }
+}

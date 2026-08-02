@@ -77,7 +77,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
     return rows.map((row) => this.mapToDomain(row, subsMap.get(row.id) || []));
   }
 
-  async save(tenant: Tenant): Promise<Tenant> {
+  async save(tenant: Tenant, idempotencyKey?: string): Promise<Tenant> {
     const resultRow = await this.db.transaction(async (tx) => {
       // 1. Save Tenant
       const [row] = await tx
@@ -145,11 +145,16 @@ export class TenantDrizzleRepository implements ITenantRepository {
       }
 
       // 3. Process Outbox Events (Domain Events)
+      let index = 0;
       for (const event of tenant.domainEvents) {
         const outboxId = generateId('evt');
+        const finalIdempotencyKey = idempotencyKey
+          ? `${idempotencyKey}_${index}`
+          : `${event.eventName}_${tenant.id}_${event.occurredOn.getTime()}`;
+
         await tx.insert(controlPlaneOutbox).values({
           id: outboxId,
-          idempotencyKey: `${event.eventName}_${tenant.id}_${event.occurredOn.getTime()}`,
+          idempotencyKey: finalIdempotencyKey,
           tenantId: tenant.id,
           eventType: event.eventName,
           payload: event.payload,
@@ -157,6 +162,7 @@ export class TenantDrizzleRepository implements ITenantRepository {
 
         // Fire Postgres NOTIFY so the OutboxListener instantly wakes up
         await tx.execute(sql`SELECT pg_notify('control_plane_outbox_channel', ${outboxId})`);
+        index++;
       }
 
       return row;

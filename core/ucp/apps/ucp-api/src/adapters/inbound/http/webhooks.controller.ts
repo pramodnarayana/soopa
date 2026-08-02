@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Inject,
   NotFoundException,
   Param,
@@ -10,17 +11,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
-import {
-  IsBoolean,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUrl,
-} from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
 import { CreateWebhookUseCase } from '../../../application/use-cases/create-webhook.use-case.js';
 import type { IWebhookRepository } from '../../../ports/outbound/webhook.repository.js';
 import { WEBHOOK_REPOSITORY } from '../../../ports/outbound/webhook.repository.js';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class CreateWebhookRequestDto {
@@ -66,13 +61,17 @@ export class WebhooksController {
   async create(
     @UcpTenantId() tenantId: string,
     @Body() dto: CreateWebhookRequestDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    const webhook = await this.createWebhookUseCase.execute({
-      tenantId,
-      name: dto.name,
-      url: dto.url,
-      authHeaderVaultRef: dto.authHeaderVaultRef,
-    });
+    const webhook = await this.createWebhookUseCase.execute(
+      {
+        tenantId,
+        name: dto.name,
+        url: dto.url,
+        authHeaderVaultRef: dto.authHeaderVaultRef,
+      },
+      idempotencyKey,
+    );
 
     return {
       id: webhook.id,
@@ -100,6 +99,7 @@ export class WebhooksController {
     @UcpTenantId() tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateWebhookRequestDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const webhook = await this.webhookRepo.findById(tenantId, id);
     if (!webhook) {
@@ -112,7 +112,7 @@ export class WebhooksController {
       active: dto.active,
     });
 
-    await this.webhookRepo.save(updatedWebhook);
+    await this.webhookRepo.save(updatedWebhook, idempotencyKey);
 
     return {
       id: updatedWebhook.id,
@@ -124,7 +124,11 @@ export class WebhooksController {
   }
 
   @Delete(':id')
-  async remove(@UcpTenantId() tenantId: string, @Param('id') id: string) {
-    await this.webhookRepo.delete(tenantId, id);
+  async remove(
+    @UcpTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    await this.webhookRepo.delete(tenantId, id, idempotencyKey);
   }
 }

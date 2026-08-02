@@ -38,9 +38,9 @@ class TokenClaims(BaseModel):
                         for org_id in orgs:
                             authorized_tenants.add(str(org_id))
 
-            # NOTE: The string "0" is used as a reserved sentinel value to represent
-            # platform-admin/instance-owner privileges. Downstream code checks for
-            # exact match of "0" in authorized_tenants to grant platform-wide access.
+            # NOTE: The canonical ID "ten_000000000000000000000000" is used as a reserved sentinel value to represent
+            # platform-admin privileges. Downstream code checks for
+            # exact match of this ID in authorized_tenants to grant platform-wide access.
             # This is an intentional convention and not a verification of the actual
             # Zitadel instance-owner organization ID.
 
@@ -62,7 +62,7 @@ class TokenClaims(BaseModel):
 
 
 # The canonical tenant ID used to represent the global platform administrator scope.
-PLATFORM_TENANT_ID = "0"
+PLATFORM_TENANT_ID = "ten_000000000000000000000000"
 
 
 class IdentityContext(BaseModel):

@@ -1,8 +1,4 @@
-import dataclasses
-import hashlib
-import json
 import logging
-import uuid
 
 from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
@@ -10,7 +6,6 @@ from soopa_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
-    UNSET,
     CreateInboundRouteCmd,
     InboundRouteListEntity,
     RouteEntity,
@@ -29,7 +24,9 @@ class InboundRouteService:
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
-    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> RouteEntity:
+    async def create_inbound_route(
+        self, tenant_id: str, cmd: CreateInboundRouteCmd, idempotency_key: str | None = None
+    ) -> RouteEntity:
         logger.info(f"Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
         route_id = await self.uow.inbound_routes.create_inbound_route(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
@@ -38,38 +35,32 @@ class InboundRouteService:
                 event_type=EdiEventType.edi_inbound_route_created,
                 resource_id=str(route_id),
             ),
-            idempotency_key=str(
-                uuid.uuid5(
-                    uuid.NAMESPACE_DNS, f"{route_id}:{EdiEventType.edi_inbound_route_created.value}"
-                )
-            ),
+            idempotency_key=idempotency_key,
         )
         return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.INBOUND)
 
     async def update_inbound_route(
-        self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
+        self,
+        tenant_id: str,
+        route_id: str,
+        cmd: UpdateInboundRouteCmd,
+        idempotency_key: str | None = None,
     ) -> bool:
         res = await self.uow.inbound_routes.update_inbound_route(tenant_id, route_id, cmd)
         if res:
-            cmd_dict = dataclasses.asdict(cmd) if dataclasses.is_dataclass(cmd) else cmd.__dict__
-            cmd_dict = {k: v for k, v in cmd_dict.items() if v is not UNSET}
-            cmd_hash = hashlib.sha256(json.dumps(cmd_dict, sort_keys=True).encode()).hexdigest()
             await self.uow.control_plane_outbox.publish_outbox_event(
                 ProvisioningEvent(
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_inbound_route_updated,
                     resource_id=str(route_id),
                 ),
-                idempotency_key=str(
-                    uuid.uuid5(
-                        uuid.NAMESPACE_DNS,
-                        f"{route_id}:{EdiEventType.edi_inbound_route_updated.value}:{cmd_hash}",
-                    )
-                ),
+                idempotency_key=idempotency_key,
             )
         return res
 
-    async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
+    async def delete_inbound_route(
+        self, tenant_id: str, route_id: str, idempotency_key: str | None = None
+    ) -> bool:
         res = await self.uow.inbound_routes.delete_inbound_route(tenant_id, route_id)
         if res:
             await self.uow.control_plane_outbox.publish_outbox_event(
@@ -78,12 +69,7 @@ class InboundRouteService:
                     event_type=EdiEventType.edi_inbound_route_deleted,
                     resource_id=str(route_id),
                 ),
-                idempotency_key=str(
-                    uuid.uuid5(
-                        uuid.NAMESPACE_DNS,
-                        f"{route_id}:{EdiEventType.edi_inbound_route_deleted.value}",
-                    )
-                ),
+                idempotency_key=idempotency_key,
             )
         return res
 

@@ -1,7 +1,6 @@
 import uuid
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     Boolean,
@@ -13,7 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, registry
-from sqlalchemy.sql import func, text
+from sqlalchemy.sql import text
 
 from .common import OutboxMixin, TimestampMixin
 from .replicated_mixins import (

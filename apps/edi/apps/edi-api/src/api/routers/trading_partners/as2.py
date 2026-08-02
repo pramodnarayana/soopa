@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from api.adapters.http.dtos import (
     AS2TradingPartnerResponse,
@@ -96,7 +97,9 @@ async def rotate_as2_certificates(
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
 
-        actual_tenant_id = str(partner.tenant_id) if partner.tenant_id is not None else "0"
+        actual_tenant_id = (
+            str(partner.tenant_id) if partner.tenant_id is not None else PLATFORM_TENANT_ID
+        )
 
         if partner.is_local and "certificates:rotate" not in profile["permissions"]:
             raise HTTPException(
