@@ -4,9 +4,8 @@ from database.connection import DatabaseRouter
 from database.models import App, DatabaseShard, ShardRegistry, Tenant
 from sqlalchemy import select
 
+from worker.core.constants import EDI_APP_SLUG
 from worker.ports.tenant import TenantPort
-
-EDI_APP_SLUG = "edi"
 
 
 class SqlAlchemyTenantAdapter(TenantPort):

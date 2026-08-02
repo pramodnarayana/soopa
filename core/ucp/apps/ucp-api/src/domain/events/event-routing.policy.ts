@@ -29,7 +29,21 @@ export const EVENT_ROUTING_POLICY: Record<string, EventRoutingScope> = {
   [EdiEventType.AS2_PARTNER_CREATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
   [EdiEventType.AS2_PARTNER_UPDATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
   [EdiEventType.AS2_PARTNER_DELETED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.AS2_PARTNERSHIP_CREATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.AS2_PARTNERSHIP_UPDATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.AS2_PARTNERSHIP_DELETED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.SFTP_PARTNER_CREATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.SFTP_PARTNER_UPDATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.SFTP_PARTNER_DELETED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
   [EdiEventType.INBOUND_ROUTE_CREATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.INBOUND_ROUTE_UPDATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.INBOUND_ROUTE_DELETED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.OUTBOUND_ROUTE_CREATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.OUTBOUND_ROUTE_UPDATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.OUTBOUND_ROUTE_DELETED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.HEADER_CREATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.HEADER_UPDATED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
+  [EdiEventType.HEADER_DELETED]: EventRoutingScope.EXTERNAL_DATA_PLANE,
 };
 
 export function getEventRoutingScope(eventType: string): EventRoutingScope | undefined {

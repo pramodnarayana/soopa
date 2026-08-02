@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { IOrganizationProvider } from '../../ports/outbound/organization.provider.js';
 import { ORGANIZATION_PROVIDER } from '../../ports/outbound/organization.provider.js';
 import type { ITenantRepository } from '../../ports/outbound/tenant.repository.js';
@@ -8,6 +8,8 @@ import { USER_REPOSITORY } from '../../ports/outbound/user.repository.js';
 
 @Injectable()
 export class DeleteTenantUseCase {
+  private readonly logger = new Logger(DeleteTenantUseCase.name);
+
   constructor(
     @Inject(TENANT_REPOSITORY) private readonly tenantRepo: ITenantRepository,
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
@@ -37,7 +39,7 @@ export class DeleteTenantUseCase {
       try {
         await this.organizationProvider.deleteOrganization(tenant.idpTenantId);
       } catch (err) {
-        console.error(
+        this.logger.error(
           `Warning: Failed to delete organization ${tenant.idpTenantId} from Zitadel`,
           err,
         );

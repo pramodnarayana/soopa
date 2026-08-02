@@ -13,6 +13,7 @@ export class ControlPlaneOutboxListenerAdapter
   private reconnectAttempts = 0;
   private readonly maxReconnectAttempts = 10;
   private readonly baseBackoffMs = 1000;
+  private isHealthy = true;
 
   constructor(private readonly outboxProcessor: ProcessControlPlaneOutboxEventUseCase) {
     const connectionString = process.env.DATABASE_URL;
@@ -29,6 +30,10 @@ export class ControlPlaneOutboxListenerAdapter
   async onApplicationShutdown() {
     this.isShuttingDown = true;
     await this.client.end();
+  }
+
+  getHealth(): boolean {
+    return this.isHealthy;
   }
 
   private async connect() {
@@ -86,6 +91,7 @@ export class ControlPlaneOutboxListenerAdapter
       this.logger.error(
         `Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`,
       );
+      this.isHealthy = false;
       this.isReconnecting = false;
       return;
     }
@@ -95,13 +101,27 @@ export class ControlPlaneOutboxListenerAdapter
       `Reconnecting to PostgreSQL in ${backoffMs}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
     );
 
-    setTimeout(() => {
-      this.isReconnecting = false;
+    setTimeout(async () => {
+      // Clean up the old client before replacing it
+      try {
+        this.client.removeAllListeners();
+        await this.client.end().catch(() => {
+          // Ignore errors on cleanup of failed client
+        });
+      } catch {
+        // Ignore cleanup errors
+      }
+
       this.client = new Client({ connectionString: process.env.DATABASE_URL });
-      this.connect().catch((error) => {
+
+      try {
+        await this.connect();
+      } catch (error) {
         this.logger.error('Failed to reconnect to PostgreSQL', error);
         this.handleDisconnect();
-      });
+      } finally {
+        this.isReconnecting = false;
+      }
     }, backoffMs);
   }
 }

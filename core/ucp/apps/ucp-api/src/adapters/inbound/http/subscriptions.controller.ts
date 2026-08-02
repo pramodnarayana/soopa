@@ -80,9 +80,10 @@ export class SubscriptionsController {
     if (zitadelProjectId) {
       // Use outbox for retryable Zitadel syncing
       const eventId = createId();
+      const idempotencyKey = `Idp.GrantProjectAccess:${tenantId}:${zitadelProjectId}`;
       await this.db.insert(controlPlaneOutbox).values({
         id: eventId,
-        idempotencyKey: createId(),
+        idempotencyKey: idempotencyKey,
         tenantId: tenantId,
         eventType: 'Idp.GrantProjectAccess',
         payload: {
@@ -127,9 +128,10 @@ export class SubscriptionsController {
       if (zitadelProjectId) {
         // Use outbox for retryable Zitadel syncing
         const eventId = createId();
+        const idempotencyKey = `Idp.RevokeProjectAccess:${tenantId}:${zitadelProjectId}`;
         await this.db.insert(controlPlaneOutbox).values({
           id: eventId,
-          idempotencyKey: createId(),
+          idempotencyKey: idempotencyKey,
           tenantId: tenantId,
           eventType: 'Idp.RevokeProjectAccess',
           payload: {

@@ -1,12 +1,13 @@
 /**
  * Resolves the UCP API URL from environment variables.
- * Falls back to localhost:3000 if not configured.
+ * Throws if VITE_UCP_API_URL is not configured.
  */
 export function getUcpApiUrl(): string {
-  return (
-    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
-    'http://localhost:3000'
-  );
+  const url = (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL;
+  if (!url) {
+    throw new Error('VITE_UCP_API_URL is not configured');
+  }
+  return url;
 }
 
 /**

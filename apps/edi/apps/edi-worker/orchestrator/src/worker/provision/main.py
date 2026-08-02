@@ -72,6 +72,7 @@ async def main() -> None:
 
         # Close adapter resources
         await internal_outbox.close()
+        await aws_outbox.close()
 
 
 if __name__ == "__main__":

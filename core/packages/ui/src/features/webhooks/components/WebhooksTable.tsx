@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
 import type { WebhookHookConfig } from '../api/webhookHooks';
 import { useDeleteWebhookMutation, useUpdateWebhookMutation } from '../api/webhookHooks';
 import type { Webhook } from '../types';
@@ -55,27 +56,29 @@ function DeleteWebhookDialog({ config, webhook, open, onOpenChange }: DeleteWebh
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete Webhook</DialogTitle>
-          <DialogDescription asChild>
-            <div className="space-y-3 text-sm text-slate-600">
-              <p>
-                This action is{' '}
-                <span className="font-semibold text-slate-900">permanent and irreversible</span>.
-              </p>
-              <p>To confirm, type the exact webhook URL:</p>
-              <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
-                {confirmValue}
-              </code>
-              <Input
-                id="delete-webhook-confirm-input"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="Paste the webhook URL to confirm"
-                className="font-mono text-sm"
-                autoComplete="off"
-              />
-            </div>
+          <DialogDescription>
+            This action is permanent and irreversible.
           </DialogDescription>
         </DialogHeader>
+        <div className="space-y-3 text-sm text-slate-600">
+          <p>To confirm, type the exact webhook URL:</p>
+          <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
+            {confirmValue}
+          </code>
+          <Label htmlFor="delete-webhook-confirm-input">Confirmation</Label>
+          <Input
+            id="delete-webhook-confirm-input"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="Paste the webhook URL to confirm"
+            className="font-mono text-sm"
+            autoComplete="off"
+            aria-describedby="delete-webhook-warning"
+          />
+          <p id="delete-webhook-warning" className="sr-only">
+            Warning: This action is permanent and irreversible.
+          </p>
+        </div>
         {deleteMutation.error && (
           <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
             {deleteMutation.error.message}

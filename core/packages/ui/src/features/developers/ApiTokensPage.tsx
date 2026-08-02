@@ -233,17 +233,17 @@ function DeleteTokenDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete API Token</DialogTitle>
+          <DialogDescription>
+            This action is permanent and irreversible. Any integrations using this token will
+            immediately fail.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm text-slate-600">
-          <p>
-            This action is{' '}
-            <span className="font-semibold text-slate-900">permanent and irreversible</span>. Any
-            integrations using this token will immediately fail.
-          </p>
           <p>To confirm, type the token name:</p>
           <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
             {token.name}
           </code>
+          <Label htmlFor={`delete-token-confirm-${token.id}`}>Confirmation</Label>
           <Input
             id={`delete-token-confirm-${token.id}`}
             value={confirmText}
@@ -251,7 +251,12 @@ function DeleteTokenDialog({
             placeholder="Type token name to confirm"
             className="font-mono text-sm"
             autoComplete="off"
+            aria-describedby={`delete-token-warning-${token.id}`}
           />
+          <p id={`delete-token-warning-${token.id}`} className="sr-only">
+            Warning: This action is permanent and irreversible. Any integrations using this token
+            will immediately fail.
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

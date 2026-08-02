@@ -2,7 +2,7 @@ from database.connection import DatabaseRouter
 from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
 from sqlalchemy import select
 
-from worker.adapters.db_tenant import EDI_APP_SLUG
+from worker.core.constants import EDI_APP_SLUG
 
 
 class TenantResolver:

@@ -42,6 +42,7 @@ export class InternalEventConsumer {
         `Failed to grant project access for tenant ${event.payload.idpTenantId}`,
         e,
       );
+      throw e;
     }
   }
 
@@ -55,6 +56,7 @@ export class InternalEventConsumer {
       );
     } catch (e) {
       this.logger.error(`Revoke project access failed for tenant ${event.payload.idpTenantId}`, e);
+      throw e;
     }
   }
 }

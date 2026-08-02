@@ -43,6 +43,13 @@ class SqsOutboxAdapter(OutboxPort):
         self.region = "us-east-1"
         self.session = aioboto3.Session()
 
+    async def close(self) -> None:
+        """Close the adapter and release all resources."""
+        # aioboto3 sessions are lightweight and don't hold persistent connections
+        # The session itself doesn't need explicit cleanup, but we provide this
+        # method for interface consistency with other adapters
+        logger.info("Closed SqsOutboxAdapter resources")
+
     @asynccontextmanager
     async def process_next_event(self) -> AsyncIterator[OutboxEvent | None]:
         async with self.session.client(

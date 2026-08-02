@@ -97,12 +97,18 @@ export class PostgresJobRepository {
         );
       return result.rowCount;
     } catch (err: unknown) {
-      const errorMsg =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null
-            ? JSON.stringify(err)
-            : String(err);
+      let errorMsg: string;
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      } else if (typeof err === 'object' && err !== null) {
+        try {
+          errorMsg = JSON.stringify(err);
+        } catch {
+          errorMsg = String(err);
+        }
+      } else {
+        errorMsg = String(err);
+      }
       const error = err instanceof Error ? err : new Error(errorMsg);
       console.error('Deep Drizzle Error Details:', error, 'Cause:', error.cause);
       throw error;
