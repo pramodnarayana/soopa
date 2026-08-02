@@ -104,7 +104,7 @@ export class PostgresJobRepository {
         try {
           errorMsg = JSON.stringify(err);
         } catch {
-          errorMsg = String(err);
+          errorMsg = 'Unknown object error';
         }
       } else {
         errorMsg = String(err);

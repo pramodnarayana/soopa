@@ -64,16 +64,15 @@ export class SubscriptionsController {
     if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
     const tenant = tenantRecords[0];
 
-    if (!tenant.idpTenantId) {
-      throw new NotFoundException('Tenant missing idpTenantId');
-    }
-
     // Enterprise Grade - Delegate to UseCase to handle Domain Events and Outbox
     await this.subscribeAppUseCase.execute(tenantId, { appSlug: app.slug });
 
     // Enterprise Grade B2B Project Grant Wiring
     let zitadelProjectId: string | undefined;
     if (app.slug === 'edi') {
+      if (!tenant.idpTenantId) {
+        throw new NotFoundException('Tenant missing idpTenantId');
+      }
       zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
     }
 
@@ -115,15 +114,14 @@ export class SubscriptionsController {
     if (!tenantRecords.length) throw new NotFoundException('Tenant not found');
     const tenant = tenantRecords[0];
 
-    if (!tenant.idpTenantId) {
-      throw new NotFoundException('Tenant missing idpTenantId');
-    }
-
     // Enterprise Grade - Delegate to UseCase to handle Domain Events and Outbox
     await this.unsubscribeAppUseCase.execute(tenantId, app.slug);
 
     // Revoke the project grant for EDI app
     if (app.slug === 'edi') {
+      if (!tenant.idpTenantId) {
+        throw new NotFoundException('Tenant missing idpTenantId');
+      }
       const zitadelProjectId = process.env.ZITADEL_EDI_PROJECT_ID;
       if (zitadelProjectId) {
         // Use outbox for retryable Zitadel syncing

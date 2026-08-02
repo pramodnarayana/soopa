@@ -101,27 +101,30 @@ export class ControlPlaneOutboxListenerAdapter
       `Reconnecting to PostgreSQL in ${backoffMs}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
     );
 
-    setTimeout(async () => {
-      // Clean up the old client before replacing it
-      try {
-        this.client.removeAllListeners();
-        await this.client.end().catch(() => {
-          // Ignore errors on cleanup of failed client
+    setTimeout(() => {
+      void (async () => {
+        // Clean up the old client before replacing it
+        try {
+          this.client.removeAllListeners();
+          await this.client.end().catch(() => {
+            // Ignore errors on cleanup of failed client
+          });
+        } catch {
+          // Ignore cleanup errors
+        }
+
+        this.client = new Client({
+          connectionString: process.env.DATABASE_URL,
         });
-      } catch {
-        // Ignore cleanup errors
-      }
 
-      this.client = new Client({ connectionString: process.env.DATABASE_URL });
-
-      try {
-        await this.connect();
-      } catch (error) {
-        this.logger.error('Failed to reconnect to PostgreSQL', error);
-        this.handleDisconnect();
-      } finally {
-        this.isReconnecting = false;
-      }
+        try {
+          await this.connect();
+        } catch (error) {
+          this.logger.error('Failed to reconnect to PostgreSQL', error);
+          this.isReconnecting = false;
+          this.handleDisconnect();
+        }
+      })();
     }, backoffMs);
   }
 }

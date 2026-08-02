@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Direction(StrEnum):
@@ -52,6 +53,13 @@ class EdiRecordBase(BaseModel):
     status: RecordStatus
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def coerce_to_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
 
 class EdiJsonDomainModel(EdiRecordBase):

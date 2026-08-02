@@ -65,14 +65,14 @@ export class ZitadelJwksVerifier implements TokenVerifier {
       !claims['urn:zitadel:iam:org:project:roles'] &&
       !claims[`urn:zitadel:iam:org:project:id:${this.options.audience}:roles`]
     ) {
-      const cacheKey = (claims.jti as string | undefined) ?? crypto.createHash('sha256').update(token).digest('hex');
+      const cacheKey =
+        (claims.jti as string | undefined) ??
+        crypto.createHash('sha256').update(token).digest('hex');
       let cachedData: Record<string, unknown> | null = null;
-      
-      if (cacheKey) {
-        const cached = this.userinfoCache.get(cacheKey);
-        if (cached && Date.now() < cached.expiry) {
-          cachedData = cached.data;
-        }
+
+      const cached = this.userinfoCache.get(cacheKey);
+      if (cached && Date.now() < cached.expiry) {
+        cachedData = cached.data;
       }
 
       if (cachedData) {
@@ -91,13 +91,12 @@ export class ZitadelJwksVerifier implements TokenVerifier {
           if (response.ok) {
             const userinfo = (await response.json()) as Record<string, unknown>;
             Object.assign(claims, userinfo);
-            if (cacheKey) {
-              this.userinfoCache.set(cacheKey, {
-                data: userinfo,
-                expiry: Date.now() + this.USERINFO_TTL_MS,
-              });
-              this.evictIfNeeded();
-            }
+            const tokenExpMs = typeof claims.exp === 'number' ? claims.exp * 1000 : Infinity;
+            this.userinfoCache.set(cacheKey, {
+              data: userinfo,
+              expiry: Math.min(Date.now() + this.USERINFO_TTL_MS, tokenExpMs),
+            });
+            this.evictIfNeeded();
           } else {
             throw new IdentityInfrastructureError(
               `Failed to fetch userinfo from Zitadel: HTTP ${response.status}`,
@@ -105,9 +104,7 @@ export class ZitadelJwksVerifier implements TokenVerifier {
           }
         } catch (e: unknown) {
           if (e instanceof Error && e.name === 'AbortError') {
-            throw new IdentityInfrastructureError(
-              'Userinfo request timed out after 5 seconds',
-            );
+            throw new IdentityInfrastructureError('Userinfo request timed out after 5 seconds');
           } else if (e instanceof IdentityInfrastructureError) {
             throw e;
           } else {

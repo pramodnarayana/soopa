@@ -6,8 +6,8 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
 import { AuthenticateUseCase, IdentityContext } from '@soopa/identity';
+import type { FastifyRequest } from 'fastify';
 
 @Injectable()
 export class PlatformAuthGuard implements CanActivate {
@@ -40,7 +40,9 @@ export class PlatformAuthGuard implements CanActivate {
       if (error instanceof ForbiddenException) {
         throw error;
       }
-      this.logger.error('Authentication failed');
+      this.logger.error(
+        `Authentication failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw new UnauthorizedException('Invalid JWT token');
     }
   }

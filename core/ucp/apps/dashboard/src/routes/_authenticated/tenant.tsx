@@ -67,6 +67,16 @@ function TenantLayout() {
   const token = auth.user?.access_token ?? '';
   const tenantId = resolveTenantId(token, auth.user?.profile ?? {});
 
+  const { data: tenant } = useGetTenant(tenantId ?? '');
+
+  if (auth.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50/50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
   if (!tenantId) {
     throw new Error(
       'FATAL: Tenant ID is missing from both the access token and user profile. ' +
@@ -74,8 +84,6 @@ function TenantLayout() {
         `Access token present: ${!!token}, Profile keys: ${Object.keys(auth.user?.profile ?? {}).join(', ')}`,
     );
   }
-
-  const { data: tenant } = useGetTenant(tenantId);
 
   return (
     <div className="min-h-screen flex bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">

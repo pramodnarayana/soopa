@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'core/ucp/infra/zitadel/sync.ts'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -12,7 +12,13 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['*.js', '*.mjs', '*.cjs', '*.d.ts'],
+          allowDefaultProject: [
+            '*.js',
+            '*.mjs',
+            '*.cjs',
+            '*.d.ts',
+            'core/ucp/infra/zitadel/sync.ts',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },

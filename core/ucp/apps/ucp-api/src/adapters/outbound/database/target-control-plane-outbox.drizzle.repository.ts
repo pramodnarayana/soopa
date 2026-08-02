@@ -60,20 +60,21 @@ export class TargetControlPlaneOutboxDrizzleRepository
       const targetOutbox = this.getTargetOutboxTable(appSlug);
 
       await this.db.transaction(async (tx) => {
-        await tx.insert(targetOutbox).values({
-          id: event.id,
-          idempotencyKey: event.id, // using event id as idempotency key for this fan-out
-          tenantId: event.tenantId,
-          eventType: event.eventType,
-          payload: event.payload,
-          status: 'PENDING',
-          attempts: 0,
-          createdAt: new Date(),
-        });
+        await tx
+          .insert(targetOutbox)
+          .values({
+            id: event.id,
+            idempotencyKey: event.id, // using event id as idempotency key for this fan-out
+            tenantId: event.tenantId,
+            eventType: event.eventType,
+            payload: event.payload,
+            status: 'PENDING',
+            attempts: 0,
+            createdAt: new Date(),
+          })
+          .onConflictDoNothing();
 
-        await tx.execute(
-          sql`NOTIFY ${sql.raw(appSlug + '_outbox_channel')}, '${sql.raw(event.id)}'`,
-        );
+        await tx.execute(sql`SELECT pg_notify(${appSlug + '_outbox_channel'}, ${event.id})`);
       });
 
       this.logger.debug(`Published event ${event.id} to ${appSlug}.outbox`);
