@@ -50,6 +50,35 @@ class ListenNotifyOutboxAdapter(OutboxPort):
         logger.info("Started polling Postgres LISTEN for PROVISION events")
         self._initialized = True
 
+    async def close(self) -> None:
+        """Close the adapter and release all resources."""
+        if not self._initialized:
+            return
+
+        try:
+            if self.listener_connection:
+                try:
+                    await self.listener_connection.remove_listener("edi_outbox_channel", self._on_notify)
+                except Exception as e:
+                    logger.warning(f"Error removing listener: {e}")
+                try:
+                    await self.listener_connection.close()
+                except Exception as e:
+                    logger.warning(f"Error closing listener connection: {e}")
+                self.listener_connection = None
+
+            if self.pool:
+                try:
+                    await self.pool.close()
+                except Exception as e:
+                    logger.warning(f"Error closing pool: {e}")
+                self.pool = None
+
+            self._initialized = False
+            logger.info("Closed ListenNotifyOutboxAdapter resources")
+        except Exception as e:
+            logger.exception(f"Error during adapter close: {e}")
+
     def _on_notify(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
     ) -> None:
@@ -72,19 +101,32 @@ class ListenNotifyOutboxAdapter(OutboxPort):
             yield None
             return
 
-        async with self.pool.acquire() as connection, connection.transaction():
-            row = await connection.fetchrow(
-                "SELECT id, tenant_id, event_type, payload, status FROM edi.outbox WHERE id = $1 FOR UPDATE SKIP LOCKED",
-                event_id,
-            )
+        # First transaction: claim the event by changing status to PROCESSING
+        async with self.pool.acquire() as connection:
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    "SELECT id, tenant_id, event_type, payload, status, idempotency_key FROM edi.outbox WHERE id = $1 FOR UPDATE SKIP LOCKED",
+                    event_id,
+                )
 
-            if not row or row["status"] != "PENDING":
-                logger.debug(f"Event {event_id} already processed or not found.")
-                yield None
-                return
+                if not row or row["status"] != "PENDING":
+                    logger.debug(f"Event {event_id} already processed or not found.")
+                    yield None
+                    return
+
+                # Claim the event
+                await connection.execute(
+                    "UPDATE edi.outbox SET status = 'PROCESSING' WHERE id = $1",
+                    event_id,
+                )
+
+            # Connection and lock released here
 
             # Let all events pass through to the Anti-Corruption Layer
             # The core ProvisioningWorkerService will filter out what it doesn't need.
+
+            error_message = None
+            processing_failed = False
 
             try:
                 payload_data = (
@@ -116,18 +158,31 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                 )
                 yield event
 
-                # If successful, mark as PROCESSED
-                logger.info(f"Successfully processed outbox event {event_id}, marking as PROCESSED")
-                await connection.execute(
-                    "UPDATE edi.outbox SET status = 'PROCESSED', error_reason = NULL WHERE id = $1",
-                    event_id,
-                )
             except Exception as e:
                 logger.exception(f"Error processing Postgres outbox event {event_id}: {e}")
-                # Mark as FAILED and record error reason
-                await connection.execute(
-                    "UPDATE edi.outbox SET status = 'FAILED', attempts = attempts + 1, error_reason = $1 WHERE id = $2",
-                    str(e),
-                    event_id,
-                )
-                raise
+                error_message = str(e)
+                processing_failed = True
+
+        # Second transaction: mark the event as PROCESSED or FAILED
+        if not self.pool:
+            return
+
+        async with self.pool.acquire() as connection:
+            async with connection.transaction():
+                if processing_failed:
+                    await connection.execute(
+                        "UPDATE edi.outbox SET status = 'FAILED', attempts = attempts + 1, error_reason = $1 WHERE id = $2",
+                        error_message,
+                        event_id,
+                    )
+                    logger.info(f"Marked outbox event {event_id} as FAILED")
+                else:
+                    logger.info(f"Successfully processed outbox event {event_id}, marking as PROCESSED")
+                    await connection.execute(
+                        "UPDATE edi.outbox SET status = 'PROCESSED', error_reason = NULL WHERE id = $1",
+                        event_id,
+                    )
+
+        # Re-raise the exception after persisting the failure
+        if processing_failed and error_message:
+            raise Exception(error_message)

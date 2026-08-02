@@ -54,7 +54,7 @@ export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhoo
             <Network className="w-5 h-5 text-indigo-600" />
             Add Webhook
           </DialogTitle>
-          <DialogDescription render={<span />}>
+          <DialogDescription>
             Register an HTTPS endpoint to receive platform events.
           </DialogDescription>
         </DialogHeader>
@@ -81,6 +81,11 @@ export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhoo
               required
             />
           </div>
+          {createMutation.error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              {createMutation.error.message}
+            </div>
+          )}
         </form>
 
         <DialogFooter>

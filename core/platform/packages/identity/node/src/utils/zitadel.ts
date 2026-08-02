@@ -10,9 +10,7 @@
  */
 export function extractZitadelOrgIdFromRoles(payload: Record<string, unknown>): string | undefined {
   const rolesClaims = Object.keys(payload).filter(
-    (k) =>
-      k === 'urn:zitadel:iam:org:project:roles' ||
-      (k.startsWith('urn:zitadel:iam:org:project:') && k.endsWith(':roles')),
+    (k) => k.startsWith('urn:zitadel:iam:org:project:') && k.endsWith(':roles'),
   );
 
   for (const claim of rolesClaims) {
@@ -21,8 +19,10 @@ export function extractZitadelOrgIdFromRoles(payload: Record<string, unknown>): 
 
     for (const orgMap of Object.values(roles)) {
       if (!orgMap || typeof orgMap !== 'object') continue;
-      const orgId = Object.keys(orgMap)[0];
-      if (orgId) return orgId;
+      const orgIds = Object.keys(orgMap);
+      // Reject ambiguous claims with multiple organizations
+      if (orgIds.length > 1) return undefined;
+      if (orgIds.length === 1) return orgIds[0];
     }
   }
 

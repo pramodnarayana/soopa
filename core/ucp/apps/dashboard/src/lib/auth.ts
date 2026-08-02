@@ -1,12 +1,28 @@
 /**
+ * Resolves the UCP API URL from environment variables.
+ * Falls back to localhost:3000 if not configured.
+ */
+export function getUcpApiUrl(): string {
+  return (
+    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
+    'http://localhost:3000'
+  );
+}
+
+/**
  * Decodes a JWT payload without verifying the signature.
  * Verification is performed server-side by the UCP API.
  * Used client-side only to extract non-sensitive claims (e.g. tenant/org ID).
  */
 export function parseJwtPayload(token: string): Record<string, unknown> {
   try {
-    const base64 = token.split('.')[1];
-    if (!base64) return {};
+    const base64url = token.split('.')[1];
+    if (!base64url) return {};
+    // Normalize base64url to standard Base64: replace '-' with '+', '_' with '/', and restore padding
+    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+      base64url.length + ((4 - (base64url.length % 4)) % 4),
+      '='
+    );
     return JSON.parse(atob(base64)) as Record<string, unknown>;
   } catch {
     return {};

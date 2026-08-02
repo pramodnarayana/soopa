@@ -13,8 +13,11 @@ export class TenantMappingDomainError extends Error {
 }
 
 export class MissingIdentityTenantError extends Error {
+  public readonly email?: string;
+
   constructor(email: string) {
-    super(`Missing Zitadel Organization ID for user ${email}`);
+    super('Missing Zitadel Organization ID');
     this.name = 'MissingIdentityTenantError';
+    this.email = email;
   }
 }

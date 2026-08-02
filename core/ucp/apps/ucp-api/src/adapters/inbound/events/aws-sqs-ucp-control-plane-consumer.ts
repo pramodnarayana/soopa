@@ -1,5 +1,3 @@
-/* eslint-disable */
-
 import { DeleteMessageCommand, ReceiveMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -99,11 +97,8 @@ export class AwsSqsUcpControlPlaneConsumer
         actualEvent = payload;
       }
 
-      // We expect actualEvent to have `payload.id` representing the outbox event ID
-      const eventId = actualEvent.id; // Or however we mapped it.
-
-      // For this hackathon, we assume the message payload has `id` mapped to the outbox event ID.
-      const outboxEventId = payload.id;
+      // Use actualEvent.id as the outbox event ID for both SNS-wrapped and direct messages
+      const outboxEventId = actualEvent.id;
 
       if (outboxEventId) {
         await this.outboxProcessor.execute(outboxEventId);

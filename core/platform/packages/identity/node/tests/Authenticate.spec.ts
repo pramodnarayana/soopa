@@ -178,7 +178,7 @@ describe('AuthenticateUseCase', () => {
     const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
 
     await expect(useCase.execute('valid')).rejects.toThrow(MissingIdentityTenantError);
-    await expect(useCase.execute('valid')).rejects.toThrow('Missing Zitadel Organization ID for user noorg@example.com');
+    await expect(useCase.execute('valid')).rejects.toThrow('Missing Zitadel Organization ID');
   });
 
   it('should not provision user when missing tenant information', async () => {
@@ -199,5 +199,29 @@ describe('AuthenticateUseCase', () => {
 
     await expect(useCase.execute('valid')).rejects.toThrow(MissingIdentityTenantError);
     expect(provisionCalled).toBe(false);
+  });
+
+  it('should resolve organization ID from role claims when tenant_id is missing', async () => {
+    const verifier = new FakeTokenVerifier();
+    verifier.claims = {
+      sub: 'role-org-user',
+      email: 'roleorg@example.com',
+      name: 'Role Org User',
+      'urn:zitadel:iam:org:project:roles': { PlatformAdmin: { org789: 'example.com' } },
+    };
+
+    const repo = new FakeTenantRepository();
+    let capturedOrgId: string | undefined;
+    repo.provisionUserAndTenant = async (_email: string, _name: string, zitadelOrgId?: string) => {
+      capturedOrgId = zitadelOrgId;
+      return { userId: 'u8', tenantId: 't8' };
+    };
+
+    const useCase = new AuthenticateUseCase(verifier, repo, { audience: 'test-audience' });
+    const result = await useCase.execute('valid');
+
+    expect(capturedOrgId).toBe('org789');
+    expect(result.userId).toBe('u8');
+    expect(result.tenantId).toBe('t8');
   });
 });

@@ -111,12 +111,13 @@ import { WEBHOOK_REPOSITORY } from './ports/outbound/webhook.repository.js';
             'ZITADEL_UCP_PROJECT_ID is required but not configured',
           );
         }
+        const trimmedProjectId = projectId.trim();
         return new ZitadelJwksVerifier({
           issuer: config.get<string>(
             'ZITADEL_URL',
             'http://ucp.localhost:8080',
           ),
-          audience: projectId,
+          audience: trimmedProjectId,
         });
       },
     },
@@ -141,8 +142,9 @@ import { WEBHOOK_REPOSITORY } from './ports/outbound/webhook.repository.js';
             'ZITADEL_UCP_PROJECT_ID is required but not configured',
           );
         }
+        const trimmedProjectId = projectId.trim();
         return new AuthenticateUseCase(verifier, repo, {
-          audience: projectId,
+          audience: trimmedProjectId,
         });
       },
     },

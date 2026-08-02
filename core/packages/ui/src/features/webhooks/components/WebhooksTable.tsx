@@ -55,25 +55,32 @@ function DeleteWebhookDialog({ config, webhook, open, onOpenChange }: DeleteWebh
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete Webhook</DialogTitle>
-          <DialogDescription render={<div className="space-y-3 text-sm text-slate-600" />}>
-            <p>
-              This action is{' '}
-              <span className="font-semibold text-slate-900">permanent and irreversible</span>.
-            </p>
-            <p>To confirm, type the exact webhook URL:</p>
-            <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
-              {confirmValue}
-            </code>
-            <Input
-              id="delete-webhook-confirm-input"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="Paste the webhook URL to confirm"
-              className="font-mono text-sm"
-              autoComplete="off"
-            />
+          <DialogDescription asChild>
+            <div className="space-y-3 text-sm text-slate-600">
+              <p>
+                This action is{' '}
+                <span className="font-semibold text-slate-900">permanent and irreversible</span>.
+              </p>
+              <p>To confirm, type the exact webhook URL:</p>
+              <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
+                {confirmValue}
+              </code>
+              <Input
+                id="delete-webhook-confirm-input"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="Paste the webhook URL to confirm"
+                className="font-mono text-sm"
+                autoComplete="off"
+              />
+            </div>
           </DialogDescription>
         </DialogHeader>
+        {deleteMutation.error && (
+          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            {deleteMutation.error.message}
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
             Cancel
@@ -98,9 +105,13 @@ function WebhookRowActions({ config, webhook }: { config: WebhookHookConfig; web
   const updateMutation = useUpdateWebhookMutation(config);
   const isActive = webhook.active;
 
-  const handleToggleActive = (e: React.MouseEvent) => {
+  const handleToggleActive = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    updateMutation.mutate({ id: webhook.id, payload: { active: !isActive } });
+    try {
+      await updateMutation.mutateAsync({ id: webhook.id, payload: { active: !isActive } });
+    } catch {
+      // surfaced by mutation
+    }
   };
 
   return (
@@ -116,10 +127,20 @@ function WebhookRowActions({ config, webhook }: { config: WebhookHookConfig; web
           aria-checked={isActive}
           onClick={handleToggleActive}
           disabled={updateMutation.isPending}
-          title={isActive ? 'Deactivate Webhook' : 'Activate Webhook'}
+          title={
+            updateMutation.error
+              ? updateMutation.error.message
+              : isActive
+                ? 'Deactivate Webhook'
+                : 'Activate Webhook'
+          }
           aria-label={isActive ? 'Deactivate Webhook' : 'Activate Webhook'}
           className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${
-            isActive ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-300'
+            updateMutation.error
+              ? 'bg-red-50 border-red-200'
+              : isActive
+                ? 'bg-emerald-50 border-emerald-200'
+                : 'bg-slate-100 border-slate-300'
           } ${updateMutation.isPending ? 'opacity-50 cursor-wait' : ''}`}
         >
           <span

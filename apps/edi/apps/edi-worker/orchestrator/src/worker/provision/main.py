@@ -70,6 +70,9 @@ async def main() -> None:
         with contextlib.suppress(asyncio.CancelledError):
             await asyncio.gather(internal_task, aws_task, sweeper_task, return_exceptions=True)
 
+        # Close adapter resources
+        await internal_outbox.close()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

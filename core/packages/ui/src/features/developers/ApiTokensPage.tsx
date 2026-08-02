@@ -233,26 +233,26 @@ function DeleteTokenDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete API Token</DialogTitle>
-          <DialogDescription render={<div className="space-y-3 text-sm text-slate-600" />}>
-            <p>
-              This action is{' '}
-              <span className="font-semibold text-slate-900">permanent and irreversible</span>. Any
-              integrations using this token will immediately fail.
-            </p>
-            <p>To confirm, type the token name:</p>
-            <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
-              {token.name}
-            </code>
-            <Input
-              id={`delete-token-confirm-${token.id}`}
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="Type token name to confirm"
-              className="font-mono text-sm"
-              autoComplete="off"
-            />
-          </DialogDescription>
         </DialogHeader>
+        <div className="space-y-3 text-sm text-slate-600">
+          <p>
+            This action is{' '}
+            <span className="font-semibold text-slate-900">permanent and irreversible</span>. Any
+            integrations using this token will immediately fail.
+          </p>
+          <p>To confirm, type the token name:</p>
+          <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
+            {token.name}
+          </code>
+          <Input
+            id={`delete-token-confirm-${token.id}`}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="Type token name to confirm"
+            className="font-mono text-sm"
+            autoComplete="off"
+          />
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
@@ -437,7 +437,11 @@ function TokenDetails({ token, config }: { token: ApiToken; config: ApiTokenHook
   const handleSave = async () => {
     const trimmed = name.trim();
     if (trimmed && trimmed !== token.name) {
-      await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
+      try {
+        await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
+      } catch {
+        // surfaced by mutation
+      }
     }
   };
 
@@ -536,7 +540,7 @@ const columns = [
 ];
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
-export interface ApiTokensPageProps extends ApiTokenHookConfig {}
+export type ApiTokensPageProps = ApiTokenHookConfig;
 
 /**
  * Platform-level API Tokens management page.

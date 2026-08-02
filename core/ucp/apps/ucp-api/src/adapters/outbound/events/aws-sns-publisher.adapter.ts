@@ -1,5 +1,3 @@
-/* eslint-disable */
-// @ts-nocheck
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConfigKey } from '../../../domain/enums/config-keys.enum.js';

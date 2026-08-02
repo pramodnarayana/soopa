@@ -6,7 +6,7 @@ import { useWebhooksQuery } from './api/webhookHooks';
 import { CreateWebhookDialog } from './components/CreateWebhookDialog';
 import { WebhooksTable } from './components/WebhooksTable';
 
-export interface WebhooksPageProps extends WebhookHookConfig {}
+export type WebhooksPageProps = WebhookHookConfig;
 
 /**
  * Platform-level Webhooks management page.

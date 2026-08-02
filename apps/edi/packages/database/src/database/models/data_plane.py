@@ -296,7 +296,7 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
     __tablename__ = "outbox"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=func.gen_random_uuid()
+        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
 
     __table_args__ = (

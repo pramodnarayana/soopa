@@ -1,5 +1,3 @@
-/* eslint-disable */
-// @ts-nocheck
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ProcessOutboxEventUseCase } from '../../../application/use-cases/process-outbox-event.use-case.js';
@@ -32,19 +30,33 @@ export class InternalEventConsumer {
     payload: { idpTenantId: string; projectId: string; roles: string[] };
   }) {
     this.logger.log(`Granting project access for tenant ${event.payload.idpTenantId}`);
-    await this.projectProvider.createProjectGrant(
-      event.payload.idpTenantId,
-      event.payload.projectId,
-      event.payload.roles || [],
-    );
+    try {
+      await this.projectProvider.createProjectGrant(
+        event.payload.idpTenantId,
+        event.payload.projectId,
+        event.payload.roles || [],
+      );
+    } catch (e) {
+      this.logger.error(
+        `Failed to grant project access for tenant ${event.payload.idpTenantId}`,
+        e,
+      );
+    }
   }
 
   @OnEvent('Idp.RevokeProjectAccess')
   async handleRevokeProjectAccess(event: { payload: { idpTenantId: string; projectId: string } }) {
     this.logger.log(`Revoking project access for tenant ${event.payload.idpTenantId}`);
-    await this.projectProvider.deleteProjectGrant(
-      event.payload.idpTenantId,
-      event.payload.projectId,
-    );
+    try {
+      await this.projectProvider.deleteProjectGrant(
+        event.payload.idpTenantId,
+        event.payload.projectId,
+      );
+    } catch (e) {
+      this.logger.error(
+        `Revoke project access failed for tenant ${event.payload.idpTenantId}`,
+        e,
+      );
+    }
   }
 }

@@ -29,8 +29,9 @@ SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   -- Only permit bypass for roles with BYPASSRLS attribute or superuser
-  RETURN pg_has_role(current_user, 'pg_database_owner', 'MEMBER')
-         OR (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user);
+  -- Use session_user (not current_user) to check the invoking session role
+  RETURN pg_has_role(session_user, 'pg_database_owner', 'MEMBER')
+         OR (SELECT rolbypassrls FROM pg_roles WHERE rolname = session_user);
 END;
 $$;
 

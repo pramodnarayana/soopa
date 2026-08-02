@@ -1,6 +1,7 @@
 import { WebhooksPage } from '@soopa/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTenantContext } from '../../../../contexts/TenantContext';
+import { getUcpApiUrl } from '../../../../lib/auth';
 
 export const Route = createFileRoute('/_authenticated/tenant/developer/webhooks')({
   component: WebhooksRoute,
@@ -9,9 +10,5 @@ export const Route = createFileRoute('/_authenticated/tenant/developer/webhooks'
 function WebhooksRoute() {
   const { tenantId, token } = useTenantContext();
 
-  const UCP_API_URL =
-    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
-    'http://localhost:3000';
-
-  return <WebhooksPage baseUrl={UCP_API_URL} tenantId={tenantId} token={token} />;
+  return <WebhooksPage baseUrl={getUcpApiUrl()} tenantId={tenantId} token={token} />;
 }

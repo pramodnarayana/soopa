@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   ArgumentsHost,
   Catch,
@@ -25,6 +24,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       message = typeof res === 'string' ? res : (res as any).message || JSON.stringify(res);
       stack = exception.stack || '';
     } else if (exception instanceof Error) {
@@ -33,7 +33,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     // Enterprise-grade logging via Pino (built into Fastify)
-    this.logger.error(`[HTTP ${status}] ${request.method} ${request.url} - ${message}`, stack);
+    // Sanitize URL to remove query string for security
+    const sanitizedPath = request.url.split('?')[0];
+    this.logger.error(`[HTTP ${status}] ${request.method} ${sanitizedPath} - ${message}`, stack);
 
     void reply.status(status).send({
       statusCode: status,
