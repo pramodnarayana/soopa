@@ -2,7 +2,10 @@ from unittest.mock import patch
 
 import pytest
 
+import worker.core.security
 from worker.core.security import get_safe_ip, ssrf_safe_context, validate_target_url
+
+worker.core.security.IS_DEV = False
 
 
 def test_validate_target_url_invalid_scheme():

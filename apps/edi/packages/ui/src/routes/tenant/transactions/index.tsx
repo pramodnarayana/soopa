@@ -291,7 +291,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                 onTraceClick ? (
                   <button
                     type="button"
-                    onClick={() => onTraceClick(item.trace_id!)}
+                    onClick={() => onTraceClick(item.trace_id as string)}
                     className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                     title="View Trace Timeline"
                   >
@@ -328,7 +328,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                 onTraceClick ? (
                   <button
                     type="button"
-                    onClick={() => onTraceClick(item.trace_id!)}
+                    onClick={() => onTraceClick(item.trace_id as string)}
                     className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                     title="View Trace Timeline"
                   >

@@ -155,4 +155,10 @@ def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) ->
     response = client.post("/internal/cdc/relay", json=payload)
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    assert len(memory_queue.sent_messages) == 0
+    assert len(memory_queue.sent_messages) == 1
+
+    from domain.events import MessageQueueName
+
+    queue_name, msg_payload = memory_queue.sent_messages[0]
+    assert queue_name == MessageQueueName.CDC_DLQ_QUEUE
+    assert msg_payload["error"].startswith("Outbox event missing trace_id")

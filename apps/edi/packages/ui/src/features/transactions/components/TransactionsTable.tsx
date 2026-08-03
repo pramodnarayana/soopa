@@ -6,7 +6,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { Database } from 'lucide-react';
-import React, { useState } from 'react';
+import React from 'react';
 import { Badge } from '../../../components/ui/badge';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 
@@ -36,20 +36,29 @@ function StatusBadge({ status }: { status?: string }) {
   if (!status) return null;
   const upper = status.toUpperCase();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (TRANSACTION_STATUS_GROUPS.SUCCESS.has(upper as any)) {
+  if (
+    TRANSACTION_STATUS_GROUPS.SUCCESS.has(
+      upper as Extract<keyof typeof TRANSACTION_STATUS_GROUPS, string> | string,
+    )
+  ) {
     return (
       <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
         {upper}
       </Badge>
     );
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (TRANSACTION_STATUS_GROUPS.ERROR.has(upper as any)) {
+  if (
+    TRANSACTION_STATUS_GROUPS.ERROR.has(
+      upper as Extract<keyof typeof TRANSACTION_STATUS_GROUPS, string> | string,
+    )
+  ) {
     return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">{upper}</Badge>;
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (TRANSACTION_STATUS_GROUPS.PENDING.has(upper as any)) {
+  if (
+    TRANSACTION_STATUS_GROUPS.PENDING.has(
+      upper as Extract<keyof typeof TRANSACTION_STATUS_GROUPS, string> | string,
+    )
+  ) {
     return (
       <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">{upper}</Badge>
     );
@@ -92,10 +101,10 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
   renderAction,
 }: TransactionsTableProps<T>) {
   const tanstackColumns = React.useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const columnHelper = createColumnHelper<any>();
+    const columnHelper = createColumnHelper<T>();
 
     const cols = columns.map((col) => {
+      // @ts-expect-error key is used as accessor
       return columnHelper.accessor(col.key, {
         header: col.label,
         cell: (info) => {
@@ -113,7 +122,9 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
           }
           return (
             <span className="text-slate-700 font-medium font-mono text-xs">
-              {value || <span className="text-slate-400 font-sans font-normal">—</span>}
+              {(value as string | React.ReactNode) || (
+                <span className="text-slate-400 font-sans font-normal">—</span>
+              )}
             </span>
           );
         },
