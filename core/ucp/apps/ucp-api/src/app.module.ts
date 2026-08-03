@@ -61,6 +61,7 @@ function requireProjectId(config: ConfigService): string {
     }),
     LoggerModule.forRoot({
       pinoHttp: {
+        autoLogging: false,
         transport:
           process.env.NODE_ENV !== 'production'
             ? {
@@ -68,7 +69,7 @@ function requireProjectId(config: ConfigService): string {
                 options: {
                   colorize: true,
                   translateTime: 'SYS:standard',
-                  ignore: 'pid,hostname',
+                  ignore: 'pid,hostname,req,res,responseTime',
                 },
               }
             : undefined,

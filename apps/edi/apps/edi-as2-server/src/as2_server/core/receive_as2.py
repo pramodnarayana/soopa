@@ -1,5 +1,6 @@
 import time
 import uuid
+from typing import Any
 
 from as2_core import (
     AS2MDN,
@@ -28,8 +29,8 @@ class ReceiveAS2UseCase:
         message_repo: IEdiMessageRepository,
         storage: IPayloadStorage,
         vault: IVaultService,
-        db_router=None,
-        global_session=None,
+        db_router: Any = None,
+        global_session: Any = None,
     ) -> None:
         self.tenant_repo = tenant_repo
         self.partner_repo = partner_repo
@@ -183,13 +184,15 @@ class ReceiveAS2UseCase:
 
                             # Recreate message_repo with a session for the resolved tenant
                             if self.db_router and self.global_session:
-                                from sqlalchemy import select
                                 from database.models import DatabaseShard, Tenant
-                                from ..adapters.repository import EdiMessageRepositoryAdapter
-                                import contextlib
+                                from sqlalchemy import select
 
-                                stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(
-                                    Tenant.id == int(tenant_id)
+                                from ..adapters.repository import EdiMessageRepositoryAdapter
+
+                                stmt = (
+                                    select(Tenant, DatabaseShard)
+                                    .join(DatabaseShard)
+                                    .where(Tenant.id == int(tenant_id))
                                 )
                                 result = await self.global_session.execute(stmt)
                                 row = result.first()

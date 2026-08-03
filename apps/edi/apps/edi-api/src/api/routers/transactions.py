@@ -70,7 +70,9 @@ async def list_transactions(
                     "sender_id": msg.sender_id,
                     "receiver_id": msg.receiver_id,
                     "status": msg.status,
-                    "edi_data": msg.edi_data,
+                    "edi_data": (msg.edi_data[:255] + "...")
+                    if msg.edi_data and len(msg.edi_data) > 255
+                    else msg.edi_data,
                     "created_at": msg.created_at.isoformat() if msg.created_at else None,
                 }
             )

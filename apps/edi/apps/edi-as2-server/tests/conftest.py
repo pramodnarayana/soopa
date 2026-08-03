@@ -177,8 +177,10 @@ class ISALookupConfig:
     Mutable container for controlling ISA lookup results per test.
     Tests can set these to control what scalar_one_or_none/fetchall return.
     """
+
     def __init__(self):
         import uuid
+
         # Default: single match found (existing behavior)
         self.scalar_result = str(uuid.uuid4())
         self.fetchall_result = [(uuid.uuid4(),)]
@@ -191,6 +193,7 @@ class ISALookupConfig:
     def set_single_match(self, tenant_id: str = None):
         """Configure ISA lookup to return a single match."""
         import uuid
+
         tid = tenant_id if tenant_id else str(uuid.uuid4())
         self.scalar_result = tid
         self.fetchall_result = [(uuid.UUID(tid) if tenant_id else uuid.uuid4(),)]
@@ -198,6 +201,7 @@ class ISALookupConfig:
     def set_multiple_matches(self):
         """Configure ISA lookup to return multiple matches (ambiguous)."""
         import uuid
+
         self.scalar_result = None  # scalar_one_or_none won't be used for ambiguity check
         self.fetchall_result = [(uuid.uuid4(),), (uuid.uuid4(),)]
 
@@ -257,8 +261,6 @@ async def as2_client(
 
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
-
-        import uuid
 
         from database.session import get_global_session, get_session
 

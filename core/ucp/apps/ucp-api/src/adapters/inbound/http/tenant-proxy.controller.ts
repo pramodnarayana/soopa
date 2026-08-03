@@ -15,27 +15,6 @@ const HOP_BY_HOP_HEADERS = new Set([
   'proxy-authenticate',
 ]);
 
-const SENSITIVE_HEADERS = new Set([
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'x-api-key',
-  'x-client-secret',
-  'proxy-authorization',
-]);
-
-function sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
-  const sanitized: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (SENSITIVE_HEADERS.has(key.toLowerCase())) {
-      sanitized[key] = '[REDACTED]';
-    } else {
-      sanitized[key] = value;
-    }
-  }
-  return sanitized;
-}
-
 @Controller('api/v1/tenants/:tenantId/edi')
 @UseGuards(TenantAuthGuard)
 export class TenantProxyController {

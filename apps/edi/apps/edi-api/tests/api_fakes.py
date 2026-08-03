@@ -36,7 +36,9 @@ class FakeGlobalStore:
             if p["tenant_id"] == tenant_id and p["cmd"].as2_id == cmd.as2_id:
                 from sqlalchemy.exc import IntegrityError
 
-                raise IntegrityError("mock error", params={}, orig=Exception("mock"))
+                raise IntegrityError(
+                    "mock error", params={}, orig=Exception("mock uq_tenant_as2_id")
+                )
         p_id = str(uuid.uuid4())
         self.partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id

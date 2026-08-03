@@ -2623,7 +2623,7 @@
       "elements": ["F1365", "F1207", "F1336"]
     },
     "EQD": {
-      "info": "EQD  Equipment Damage Information",
+      "info": "Equipment Damage Information",
       "elements": ["F302", "F303"]
     },
     "ER": {
@@ -3607,7 +3607,20 @@
     },
     "HI": {
       "info": "Health Care Information Codes",
-      "elements": []
+      "elements": [
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022",
+        "C022"
+      ]
     },
     "HL": {
       "info": "Hierarchical Level",
@@ -8153,6 +8166,7 @@
     }
   },
   "elements": {
+    "C022": "Health Care Code Information",
     "F1": "Route Code",
     "F100": "Currency Code",
     "F1000": "Service Characteristics Qualifier",

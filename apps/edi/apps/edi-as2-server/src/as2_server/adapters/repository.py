@@ -40,9 +40,7 @@ class AS2TenantRepositoryAdapter:
         if transaction_type:
             conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
 
-        result = await self.session.execute(
-            sql_select(InboundRoute.tenant_id).where(*conditions)
-        )
+        result = await self.session.execute(sql_select(InboundRoute.tenant_id).where(*conditions))
         tenant_rows = result.fetchall()
         if len(tenant_rows) > 1:
             raise ValueError(

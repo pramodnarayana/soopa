@@ -23,7 +23,9 @@ async def _quarantine(queue: MessageQueuePort, error_msg: str, payload: dict[str
         logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=500, detail="Failed to quarantine invalid event") from dlq_err
+        raise HTTPException(
+            status_code=500, detail="Failed to quarantine invalid event"
+        ) from dlq_err
 
 
 class DebeziumUnwrappedEvent(BaseModel):

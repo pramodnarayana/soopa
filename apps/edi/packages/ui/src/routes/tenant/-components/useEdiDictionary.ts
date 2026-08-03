@@ -66,6 +66,15 @@ export function useEdiDictionary(data: EdiDocument | EdiDocument[]) {
         let finalDict = baseRes.data;
 
         // 3. Try fetching version-specific override
+        // Update: use the existing x12.json by key unless distinct X12 5011 release data is available
+        if (standard === 'x12' && version === '5011') {
+          if (!isCancelled) {
+            setDictionary(finalDict);
+            setLoading(false);
+          }
+          return;
+        }
+
         try {
           const overrideRes = await axios.get<Partial<EdiDictionary>>(
             `/edidescription/${standard}_${version}.json`,

@@ -5,7 +5,8 @@ import xml.etree.ElementTree as ET
 
 def build_dictionary() -> None:
     xml_path = "libs/edi_grammar/src/edi_grammar/x12/5011/X12.Segment"
-    output_path = "frontend/web/public/edidescription/x12_5011.json"
+    # Note: 5011 is currently the base definition for X12, so we save it as x12.json
+    output_path = "frontend/web/public/edidescription/x12.json"
 
     if not os.path.exists(xml_path):
         print(f"Error: Could not find {xml_path}")

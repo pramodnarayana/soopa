@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -8,7 +9,42 @@ from api.dependencies.auth import get_current_tenant_id, get_current_user_profil
 from api.dependencies.database import get_tenant_session
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
+
+# ---------------------------------------------------------------------------
+# Logging — must survive uvicorn's dictConfig() override.
+# uvicorn calls logging.config.dictConfig() on startup which resets the root
+# logger's handlers. We therefore attach our handler to the root logger here
+# AND also hook into uvicorn's post-startup by setting propagate=True on all
+# app loggers so they bubble up to whatever handler uvicorn configures.
+# The cleanest solution: add a StreamHandler directly to the root logger so
+# it is always present regardless of which dictConfig uvicorn uses.
+# ---------------------------------------------------------------------------
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setLevel(logging.DEBUG)
+_handler.setFormatter(
+    logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+)
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# Only add if not already attached (guards against double-add on uvicorn --reload)
+if not any(
+    isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout
+    for h in root_logger.handlers
+):
+    root_logger.addHandler(_handler)
+
+# Silence noisy third-party loggers that would pollute the output
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+# Aggressively disable uvicorn access logs
+uvicorn_access = logging.getLogger("uvicorn.access")
+uvicorn_access.setLevel(logging.WARNING)
+uvicorn_access.propagate = False
+uvicorn_access.handlers.clear()
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter

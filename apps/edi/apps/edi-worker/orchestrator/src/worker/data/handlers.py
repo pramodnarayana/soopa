@@ -60,7 +60,9 @@ async def process_pipeline_event(
                     stmt = select(ProcessedEvent).where(ProcessedEvent.idempotency_key == key_str)
                     existing = await session.execute(stmt)
                     if existing.scalar_one_or_none():
-                        logger.info(f"Skipping duplicate event with idempotency_key={idempotency_key}")
+                        logger.info(
+                            f"Skipping duplicate event with idempotency_key={idempotency_key}"
+                        )
                         await session.commit()
                         return
 
@@ -110,7 +112,9 @@ async def process_pipeline_event(
                 # Commit transaction
                 await session.commit()
             except Exception as e:
-                logger.error(f"[WORKER] FAILURE in process_transformation for trace_id={trace_id}: {e}")
+                logger.error(
+                    f"[WORKER] FAILURE in process_transformation for trace_id={trace_id}: {e}"
+                )
                 await session.rollback()
                 raise
 
@@ -147,7 +151,9 @@ async def process_delivery(
                     return
 
                 # Check Outbox status
-                stmt_outbox = select(DataPlaneOutbox).where(DataPlaneOutbox.idempotency_key == key_str)
+                stmt_outbox = select(DataPlaneOutbox).where(
+                    DataPlaneOutbox.idempotency_key == key_str
+                )
                 outbox_record = (await session.execute(stmt_outbox)).scalar_one_or_none()
                 if outbox_record:
                     if outbox_record.status == "DELIVERING":
@@ -184,8 +190,12 @@ async def process_delivery(
                 as2_adapter = HttpxAS2DeliveryAdapter(validator=ssrf_safe_context)
 
                 strategies = {
-                    "webhook_id": WebhookDeliveryStrategy(repo_adapter, http_adapter, vault_adapter),
-                    "sftp_partner_id": SftpDeliveryStrategy(repo_adapter, sftp_adapter, vault_adapter),
+                    "webhook_id": WebhookDeliveryStrategy(
+                        repo_adapter, http_adapter, vault_adapter
+                    ),
+                    "sftp_partner_id": SftpDeliveryStrategy(
+                        repo_adapter, sftp_adapter, vault_adapter
+                    ),
                     "as2_partner_id": As2DeliveryStrategy(repo_adapter, as2_adapter, vault_adapter),
                 }
                 service = DeliveryRouter(

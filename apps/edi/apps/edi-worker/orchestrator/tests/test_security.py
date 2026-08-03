@@ -9,6 +9,7 @@ from worker.core.security import get_safe_ip, ssrf_safe_context, validate_target
 def disable_dev_mode(monkeypatch):
     """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
     import worker.core.security
+
     monkeypatch.setattr(worker.core.security, "IS_DEV", False)
 
 

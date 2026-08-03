@@ -14,7 +14,7 @@ from api.adapters.http.dtos import (
 )
 from api.core.services import AS2PartnerService
 from api.core.uow import ControlPlaneUnitOfWork
-from api.dependencies.auth import get_current_user_profile
+from api.dependencies.auth import get_platform_user_profile
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.headers import get_idempotency_key
 from api.dependencies.services import get_vault
@@ -69,7 +69,7 @@ async def export_platform_as2_certificates(
     partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    profile: dict[str, Any] = Depends(get_current_user_profile),
+    profile: dict[str, Any] = Depends(get_platform_user_profile),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """Exports current and previous certificates for a Platform AS2 partner."""
@@ -157,13 +157,19 @@ async def create_platform_as2_partner(
     request: CreateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """
     Creates a new Global AS2 Trading Partner (Local or Remote) in the Control Plane.
     If is_local is True, automatically generates a self-signed cert and stores private key in Vault.
     """
+    logger.info(
+        "[create_as2_partner] START name=%r as2_id=%r is_local=%r idempotency_key=%r",
+        request.name,
+        request.as2_id,
+        request.is_local,
+        idempotency_key,
+    )
     public_cert_pem = request.public_cert_pem
     private_key_vault_ref = request.private_key_vault_ref
     auto_generated = False
@@ -173,17 +179,14 @@ async def create_platform_as2_partner(
         async with uow:
             if request.is_local:
                 if private_key_vault_ref:
-                    # Pre-stored vault ref (from generate cert flow) — use as-is
-                    pass
+                    pass  # Pre-stored vault ref
                 elif request.private_key_pem:
-                    # User uploaded their own cert+key — store the private key in Vault
                     auto_generated = True
                     private_key_vault_ref = vault.store_private_key(
                         private_key_pem=request.private_key_pem.encode(),
                         alias_prefix=request.name.replace(" ", "_").lower(),
                     )
                 else:
-                    # No cert material provided at all — auto-generate a self-signed cert
                     auto_generated = True
                     private_key_bytes, public_cert_bytes = generate_self_signed_cert(
                         common_name=request.as2_id
@@ -194,7 +197,6 @@ async def create_platform_as2_partner(
                     )
                     public_cert_pem = public_cert_bytes.decode("utf-8")
 
-            # Auto-generate URL for local partners if not provided
             url = str(request.url) if request.url else None
             if request.is_local and not url:
                 settings = get_settings()
@@ -210,14 +212,12 @@ async def create_platform_as2_partner(
                 private_key_vault_ref=private_key_vault_ref,
             )
 
-            # Use tenant_id=PLATFORM_TENANT_ID for global platform partners
             svc = AS2PartnerService(uow=uow)
             entity = await svc.create_as2_partner(
                 tenant_id=PLATFORM_TENANT_ID,
                 cmd=cmd,
                 idempotency_key=idempotency_key,
             )
-
             await uow.commit()
             commit_success = True
 
@@ -228,7 +228,7 @@ async def create_platform_as2_partner(
                 raise HTTPException(status_code=500, detail="Partner creation failed")
 
             return AS2TradingPartnerResponse(
-                id=str(entity.partner_id),
+                id=str(p.id),
                 name=p.name,
                 as2_id=p.as2_id,
                 is_local=p.is_local,
@@ -238,9 +238,23 @@ async def create_platform_as2_partner(
     except Exception as e:
         if auto_generated and private_key_vault_ref and not commit_success:
             vault.delete_secret(private_key_vault_ref)
+        if isinstance(e, ValueError):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if isinstance(e, HTTPException):
+            raise
         if isinstance(e, IntegrityError):
+            constraint_name = ""
+            if hasattr(e, "orig") and e.orig is not None:
+                constraint_name = str(
+                    getattr(e.orig, "diag", None) and e.orig.diag.constraint_name or e.orig
+                )
+            if "uq_tenant_as2_id" in constraint_name:
+                raise HTTPException(
+                    status_code=400, detail="AS2 ID already exists for this tenant."
+                ) from e
             raise HTTPException(
-                status_code=400, detail="AS2 ID already exists for this tenant."
+                status_code=500,
+                detail=f"Database constraint violation: {constraint_name or str(e)}",
             ) from e
         raise
 

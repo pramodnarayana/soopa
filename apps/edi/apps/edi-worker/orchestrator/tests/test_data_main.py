@@ -27,6 +27,7 @@ SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hi
 
 def test_validate_target_url(monkeypatch):
     import worker.core.security
+
     monkeypatch.setattr(worker.core.security, "IS_DEV", False)
 
     assert validate_target_url("http://example.com") is True
