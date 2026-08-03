@@ -140,8 +140,8 @@ def test_cdc_relay_successful_provisioning_routing(memory_queue: InMemoryQueueAd
     }
 
 
-def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
-    """Payloads without trace_id must be skipped to prevent poison messages in SQS."""
+def test_cdc_relay_quarantines_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
+    """Payloads without trace_id are routed to CDC_DLQ_QUEUE to prevent poison messages in SQS."""
     payload = {
         "__op": "c",
         "__table": "outbox",

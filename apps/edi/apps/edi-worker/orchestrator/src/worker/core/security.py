@@ -116,10 +116,6 @@ def ssrf_safe_context(url: str) -> Iterator[None]:
     Context manager that pins the validated IP address for the given URL's hostname
     to prevent DNS rebinding SSRF attacks.
     """
-    if IS_DEV:
-        yield
-        return
-
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("Invalid URL scheme or hostname for SSRF validation")

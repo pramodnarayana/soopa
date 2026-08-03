@@ -15,6 +15,27 @@ const HOP_BY_HOP_HEADERS = new Set([
   'proxy-authenticate',
 ]);
 
+const SENSITIVE_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'x-client-secret',
+  'proxy-authorization',
+]);
+
+function sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (SENSITIVE_HEADERS.has(key.toLowerCase())) {
+      sanitized[key] = '[REDACTED]';
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 @Controller('api/v1/tenants/:tenantId/edi')
 @UseGuards(TenantAuthGuard)
 export class TenantProxyController {
@@ -50,15 +71,20 @@ export class TenantProxyController {
       req.method !== 'GET' && req.method !== 'HEAD' && req.body !== undefined && req.body !== null;
 
     this.logger.log(
-      `[PROXY OUTBOUND] ${req.method} ${url}\nHeaders: ${JSON.stringify(forwardHeaders)}\nBody: ${hasBody ? JSON.stringify(req.body) : 'none'}`,
+      `[PROXY OUTBOUND] ${req.method} ${url} (sanitized metadata only, body omitted)`,
     );
+
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 30000); // 30 second timeout
 
     try {
       const response = await fetch(url, {
         method: req.method,
         headers: forwardHeaders,
         body: hasBody ? JSON.stringify(req.body) : undefined,
+        signal: abortController.signal,
       });
+      clearTimeout(timeoutId);
 
       for (const [key, value] of response.headers.entries()) {
         if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
@@ -69,11 +95,12 @@ export class TenantProxyController {
       const responseBody = await response.arrayBuffer();
 
       this.logger.log(
-        `[PROXY RESPONSE] ${response.status} from ${url}\nHeaders: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`,
+        `[PROXY RESPONSE] ${response.status} from ${url} (metadata only, body omitted)`,
       );
 
       return res.status(response.status).send(Buffer.from(responseBody));
     } catch (error) {
+      clearTimeout(timeoutId);
       this.logger.error(`[PROXY ERROR] Failed to proxy to ${url}:`, error);
       return res.status(502).send({
         error: 'Bad Gateway',

@@ -28,12 +28,16 @@ class ReceiveAS2UseCase:
         message_repo: IEdiMessageRepository,
         storage: IPayloadStorage,
         vault: IVaultService,
+        db_router=None,
+        global_session=None,
     ) -> None:
         self.tenant_repo = tenant_repo
         self.partner_repo = partner_repo
         self.message_repo = message_repo
         self.storage = storage
         self.vault = vault
+        self.db_router = db_router
+        self.global_session = global_session
         self.tracer = ObservabilityProvider.tracer()
         self.metrics = ObservabilityProvider.metrics()
         self.logger = ObservabilityProvider.logger(__name__)
@@ -42,17 +46,25 @@ class ReceiveAS2UseCase:
         """
         Lightweight ISA parser to extract Sender and Receiver for routing
         without parsing the entire EDI structure.
+        Requires the complete fixed-length ISA envelope (106 chars) and all 16 elements.
         """
         try:
             content = pure_edi_bytes.decode("ascii", errors="ignore")
             if not content.startswith("ISA"):
                 return None
 
+            # Require complete ISA envelope (106 bytes fixed length)
+            if len(content) < 106:
+                self.logger.warning("isa_extraction_failed", error="ISA segment truncated")
+                return None
+
             element_separator = content[3]
             isa_segment = content[:106]
             elements = isa_segment.split(element_separator)
 
-            if len(elements) < 9:
+            # ISA must have exactly 16 elements (ISA01-ISA16)
+            if len(elements) < 16:
+                self.logger.warning("isa_extraction_failed", error="ISA missing required elements")
                 return None
 
             isa_sender = elements[6].strip()
@@ -153,26 +165,58 @@ class ReceiveAS2UseCase:
                 isa_headers = self._extract_isa_headers(processed_payload)
                 if isa_headers:
                     isa_sender, isa_receiver = isa_headers
-                    true_tenant_id = await self.tenant_repo.resolve_tenant_by_edi_identifiers(
-                        isa_sender, isa_receiver
-                    )
-                    if true_tenant_id:
-                        tenant_id = true_tenant_id
-                        logger = self.logger.bind(
-                            message_id=as2_msg.message_id, tenant_id=tenant_id
+                    try:
+                        true_tenant_id = await self.tenant_repo.resolve_tenant_by_edi_identifiers(
+                            isa_sender, isa_receiver
                         )
-                        logger.info(
-                            "as2_isa_routed_tenant",
+                        if true_tenant_id:
+                            tenant_id = true_tenant_id
+                            logger = self.logger.bind(
+                                message_id=as2_msg.message_id, tenant_id=tenant_id
+                            )
+                            logger.info(
+                                "as2_isa_routed_tenant",
+                                isa_sender=isa_sender,
+                                isa_receiver=isa_receiver,
+                                true_tenant_id=tenant_id,
+                            )
+
+                            # Recreate message_repo with a session for the resolved tenant
+                            if self.db_router and self.global_session:
+                                from sqlalchemy import select
+                                from database.models import DatabaseShard, Tenant
+                                from ..adapters.repository import EdiMessageRepositoryAdapter
+                                import contextlib
+
+                                stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(
+                                    Tenant.id == int(tenant_id)
+                                )
+                                result = await self.global_session.execute(stmt)
+                                row = result.first()
+                                if row:
+                                    tenant_obj, shard_obj = row
+                                    tenant_session_gen = self.db_router.get_tenant_session(
+                                        tenant_id=int(tenant_obj.id),
+                                        shard_key=str(shard_obj.name),
+                                        shard_url=str(shard_obj.dsn),
+                                    )
+                                    tenant_session = await tenant_session_gen.__anext__()
+                                    self.message_repo = EdiMessageRepositoryAdapter(tenant_session)
+                                    # Note: We rely on the outer try/finally to clean up the session
+                        else:
+                            logger.warning(
+                                "as2_isa_routing_failed_unmatched",
+                                isa_sender=isa_sender,
+                                isa_receiver=isa_receiver,
+                            )
+                    except ValueError as e:
+                        logger.error(
+                            "as2_isa_routing_ambiguous",
+                            error=str(e),
                             isa_sender=isa_sender,
                             isa_receiver=isa_receiver,
-                            true_tenant_id=tenant_id,
                         )
-                    else:
-                        logger.warning(
-                            "as2_isa_routing_failed_unmatched",
-                            isa_sender=isa_sender,
-                            isa_receiver=isa_receiver,
-                        )
+                        return generate_mdn(as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY)
 
         with self.tracer.start_span("as2.s3_upload"):
             # Upload the inner EDI payload (after decryption and verification extraction)

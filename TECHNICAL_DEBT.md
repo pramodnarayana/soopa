@@ -61,6 +61,7 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Action Item**: Refactor the remaining `webhooks` and `api-keys` controllers to delegate all business logic to dedicated Hexagonal `UseCase` classes, ensuring that the presentation layer strictly handles only HTTP validation and response mapping.
 
 ## [Frontend/Backend Alignment] End-to-End OpenAPI Auto-Generation
+
 - **Date Added**: 2026-08-03
 - **Description**: The UI currently relies on manually constructed API clients and disconnected TanStack routing configuration. This allows API contracts or payload structure changes in the backend (FastAPI/NestJS) to silently break the frontend at runtime (such as 404s on trace links) without being caught during the build process.
 - **Action Item**: Implement a strict end-to-end OpenAPI code generation pipeline (using a tool like Orval or tRPC) across the monorepo. This will auto-generate strictly typed React Query hooks and frontend API clients directly from the backend schemas, ensuring that any breaking changes in the API instantly fail the frontend TypeScript build at compile time.

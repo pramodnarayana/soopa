@@ -83,7 +83,7 @@ async def get_tenant_id_from_api_key(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked credentials.",
-            headers={"WWW-Authenticate": "X-API-Key"},
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # Populate cache (bounded eviction)

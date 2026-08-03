@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/internal/cdc", tags=["CDC Relay"])
 
 
+async def _quarantine(queue: MessageQueuePort, error_msg: str, payload: dict[str, Any]) -> None:
+    """
+    Helper to send invalid events to CDC DLQ, handling send failures.
+    """
+    try:
+        await queue.send(MessageQueueName.CDC_DLQ_QUEUE, {"error": error_msg, "payload": payload})
+    except Exception as dlq_err:
+        logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail="Failed to quarantine invalid event") from dlq_err
+
+
 class DebeziumUnwrappedEvent(BaseModel):
     """
     Pydantic model representing the unwrapped payload from Debezium HttpSink.
@@ -82,17 +95,7 @@ async def relay_cdc_event(
             logger.error(
                 f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
             )
-            try:
-                await queue.send(
-                    MessageQueueName.CDC_DLQ_QUEUE, {"error": str(e), "payload": raw_event}
-                )
-            except Exception as dlq_err:
-                logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
-                from fastapi import HTTPException
-
-                raise HTTPException(
-                    status_code=500, detail="Failed to quarantine invalid event"
-                ) from dlq_err
+            await _quarantine(queue, str(e), raw_event)
             # Quarantine succeeded, so skip invalid events; do not fail the entire batch.
             continue
 
@@ -105,10 +108,7 @@ async def relay_cdc_event(
             if not event.event_type:
                 error_msg = f"Outbox event missing event_type: {event.idempotency_key}"
                 logger.error(f"[CDC Relay] {error_msg}")
-                await queue.send(
-                    MessageQueueName.CDC_DLQ_QUEUE,
-                    {"error": error_msg, "payload": event.model_dump()},
-                )
+                await _quarantine(queue, error_msg, event.model_dump())
                 continue
 
             event_payload = event.payload
@@ -120,10 +120,7 @@ async def relay_cdc_event(
                         f"Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
                     )
                     logger.error(f"[CDC Relay] {error_msg}")
-                    await queue.send(
-                        MessageQueueName.CDC_DLQ_QUEUE,
-                        {"error": error_msg, "payload": event.model_dump()},
-                    )
+                    await _quarantine(queue, error_msg, event.model_dump())
                     continue
             else:
                 payload_dict = event_payload
@@ -138,10 +135,7 @@ async def relay_cdc_event(
                 if not trace_id:
                     error_msg = f"Outbox event missing trace_id in payload: {event.idempotency_key}"
                     logger.error(f"[CDC Relay] {error_msg}")
-                    await queue.send(
-                        MessageQueueName.CDC_DLQ_QUEUE,
-                        {"error": error_msg, "payload": event.model_dump()},
-                    )
+                    await _quarantine(queue, error_msg, event.model_dump())
                     continue
 
             message_body = {

@@ -16,7 +16,7 @@ class IEdiMessageRepository(Protocol):
     async def save_message(
         self,
         tenant_id: str,
-        trace_id: uuid.UUID,
+        trace_id: uuid.UUID | str,
         direction: str,
         connection_type: str,
         sender_id: str,
@@ -33,7 +33,10 @@ class IAS2TenantRepository(Protocol):
         ...
 
     async def resolve_tenant_by_edi_identifiers(
-        self, isa_sender: str, isa_receiver: str
+        self, isa_sender: str, isa_receiver: str, transaction_type: str | None = None
     ) -> str | None:
-        """Resolves the true tenant ID from the global inbound routes using ISA identifiers."""
+        """
+        Resolves the true tenant ID from the global inbound routes using ISA identifiers.
+        Raises ValueError if multiple active routes match (ambiguous resolution).
+        """
         ...

@@ -28,20 +28,28 @@ class AS2TenantRepositoryAdapter:
         return None
 
     async def resolve_tenant_by_edi_identifiers(
-        self, isa_sender: str, isa_receiver: str
+        self, isa_sender: str, isa_receiver: str, transaction_type: str | None = None
     ) -> str | None:
         from database.models.control_plane import InboundRoute
 
+        conditions = [
+            InboundRoute.isa_sender_id == isa_sender,
+            InboundRoute.isa_receiver_id == isa_receiver,
+            InboundRoute.active.is_(True),
+        ]
+        if transaction_type:
+            conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
+
         result = await self.session.execute(
-            sql_select(InboundRoute.tenant_id)
-            .where(InboundRoute.isa_sender_id == isa_sender)
-            .where(InboundRoute.isa_receiver_id == isa_receiver)
-            .where(InboundRoute.active.is_(True))
-            .limit(1)
+            sql_select(InboundRoute.tenant_id).where(*conditions)
         )
-        tenant_id = result.scalar_one_or_none()
-        if tenant_id:
-            return str(tenant_id)
+        tenant_rows = result.fetchall()
+        if len(tenant_rows) > 1:
+            raise ValueError(
+                f"Ambiguous inbound route match: multiple tenants for ISA {isa_sender}/{isa_receiver}"
+            )
+        if tenant_rows:
+            return str(tenant_rows[0][0])
         return None
 
 
@@ -63,7 +71,7 @@ class EdiMessageRepositoryAdapter:
     async def save_message(
         self,
         tenant_id: str,
-        trace_id: uuid.UUID,
+        trace_id: uuid.UUID | str,
         direction: str,
         connection_type: str,
         sender_id: str,

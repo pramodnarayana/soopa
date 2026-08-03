@@ -10,6 +10,10 @@ from api.ports.outbox_repository import (
     DataPlaneOutboxRepositoryPort,
 )
 
+# Shared prefix constants for Data Plane IDs
+DATA_PLANE_OUTBOX_EVENT_PREFIX = "edi_dobevt_"
+API_GATEWAY_ID_PREFIX = "apigw_"
+
 
 class SqlAlchemyOutboxRepositoryMixin:
     session: Any
@@ -89,4 +93,4 @@ class SqlAlchemyDataPlaneOutboxRepository(
 
         super().__init__(session)
         self.model_class = DataPlaneOutbox
-        self.id_prefix = "edi_dobevt_"
+        self.id_prefix = DATA_PLANE_OUTBOX_EVENT_PREFIX

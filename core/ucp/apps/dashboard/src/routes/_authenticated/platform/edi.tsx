@@ -16,8 +16,10 @@ function EdiLayout() {
     (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
     'http://localhost:3000';
 
-  // The UI components append /platform/... to the routes, so we just need /api/v1
-  // to ensure it hits the PlatformProxyController in NestJS which proxies /api/v1/platform
+  // The UI components append /platform/... to the routes, so we just need /api/v1/
+  // to ensure it hits the PlatformProxyController in NestJS which proxies /api/v1/platform.
+  // IMPORTANT: The trailing slash is required for correct relative path resolution by
+  // the UI components and the shared UI package contract.
   const baseUrl = `${UCP_API_URL}/api/v1/`;
 
   return (

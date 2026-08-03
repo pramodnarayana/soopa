@@ -262,10 +262,18 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def publish_outbox_event(
         self, idempotency_key: str, event_type: str, payload: dict[str, Any]
     ) -> None:
+        # Import the shared prefix constant
+        # Note: This creates a cross-package dependency but ensures consistency
+        try:
+            from api.adapters.outbox_repository import DATA_PLANE_OUTBOX_EVENT_PREFIX
+        except ImportError:
+            # Fallback for standalone pipeline package usage
+            DATA_PLANE_OUTBOX_EVENT_PREFIX = "edi_dobevt_"
+
         stmt = (
             insert(Outbox)
             .values(
-                id=f"edi_dobevt_{uuid.uuid4().hex}",
+                id=f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}",
                 idempotency_key=str(idempotency_key),
                 event_type=event_type,
                 payload=payload,
@@ -324,10 +332,15 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if (await self.session.execute(stmt)).scalar_one_or_none():
             return  # Skip insert
 
-        import uuid
+        # Import the shared prefix constant
+        try:
+            from api.adapters.outbox_repository import API_GATEWAY_ID_PREFIX
+        except ImportError:
+            # Fallback for standalone pipeline package usage
+            API_GATEWAY_ID_PREFIX = "apigw_"
 
         record = ApiGateway(
-            id=f"api_gw_{uuid.uuid4().hex}",
+            id=f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}",
             trace_id=str(trace_id),
             direction=direction,
             transaction_type=transaction_type,

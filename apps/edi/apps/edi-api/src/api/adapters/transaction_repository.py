@@ -32,10 +32,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
     ) -> str:
+        from api.adapters.outbox_repository import DATA_PLANE_OUTBOX_EVENT_PREFIX
         from database.models.data_plane import DataPlaneOutbox
 
         tid_str = tenant_id if tenant_id is not None else None
-        event_id = f"edi_dobevt_{uuid.uuid4().hex}"
+        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}"
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tid_str,
@@ -61,12 +62,13 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return str(msg.id)
 
     async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
+        from api.adapters.outbox_repository import API_GATEWAY_ID_PREFIX
         from database.models.data_plane import ApiGateway
 
         tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"apigw_{uuid.uuid4().hex}"
+            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}"
         log = ApiGateway(tenant_id=tid_str, **payload_copy)
         self.session.add(log)
         await self.session.flush()

@@ -2,10 +2,14 @@ from unittest.mock import patch
 
 import pytest
 
-import worker.core.security
 from worker.core.security import get_safe_ip, ssrf_safe_context, validate_target_url
 
-worker.core.security.IS_DEV = False
+
+@pytest.fixture(autouse=True)
+def disable_dev_mode(monkeypatch):
+    """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
+    import worker.core.security
+    monkeypatch.setattr(worker.core.security, "IS_DEV", False)
 
 
 def test_validate_target_url_invalid_scheme():

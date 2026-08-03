@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/u
 import { Activity, AlertCircle, CheckCircle2, Database, FileJson, Server } from 'lucide-react';
 import { Badge } from '../../../components/ui/badge';
 import { CodeViewer } from '../../../components/ui/code-viewer';
+import { TRANSACTION_STATUS_GROUPS } from '../constants';
 import type { TransactionDetailResponse } from '../types';
 
 interface Props {
@@ -48,20 +49,20 @@ export function TransactionTimeline({ transaction }: Props) {
 
   const isOutbound = msg.direction === 'OUTBOUND';
   const primaryStatus = isOutbound ? jsons[0]?.status || msg.status : msg.status;
-  const isFailed = ['FAILED', 'ERROR'].includes(primaryStatus?.toUpperCase() || '');
+  const isFailed = TRANSACTION_STATUS_GROUPS.ERROR.has(primaryStatus?.toUpperCase() || '');
   const colorClass = isFailed ? 'text-red-600' : 'text-emerald-600';
 
   const renderBadge = (status?: string) => {
     if (!status) return null;
     const upper = status.toUpperCase();
-    if (['RECEIVED', 'ACCEPTED', 'PARSED', 'TRANSFORMED', 'DELIVERED'].includes(upper)) {
+    if (TRANSACTION_STATUS_GROUPS.SUCCESS.has(upper)) {
       return (
         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
           SUCCESS ({upper})
         </Badge>
       );
     }
-    if (['FAILED', 'ERROR'].includes(upper)) {
+    if (TRANSACTION_STATUS_GROUPS.ERROR.has(upper)) {
       return (
         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
           FAILURE ({upper})

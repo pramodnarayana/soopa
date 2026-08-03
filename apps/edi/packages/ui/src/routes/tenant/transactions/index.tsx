@@ -21,6 +21,35 @@ export const Route = createRoute({
 
 type Direction = 'ALL' | 'INBOUND' | 'OUTBOUND';
 
+// ─── Shared trace action component ───────────────────────────────────────────
+
+function TraceAction({ traceId, onTraceClick }: { traceId: string; onTraceClick?: (traceId: string) => void }) {
+  if (onTraceClick) {
+    return (
+      <button
+        type="button"
+        onClick={() => onTraceClick(traceId)}
+        className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+        title="View Trace Timeline"
+      >
+        Trace
+        <ArrowRight className="h-3.5 w-3.5 ml-1" />
+      </button>
+    );
+  }
+  return (
+    <Link
+      to={'/tenant/transactions/$traceId'}
+      params={{ traceId }}
+      className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+      title="View Trace Timeline"
+    >
+      Trace
+      <ArrowRight className="h-3.5 w-3.5 ml-1" />
+    </Link>
+  );
+}
+
 // ─── Shared field renderers ───────────────────────────────────────────────────
 
 function FieldGrid({ items }: { items: { label: string; value: string | null | undefined }[] }) {
@@ -287,29 +316,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
             onLoadMore={() => setMessagesOffset((p) => p + LIMIT)}
             hasMore={(messagesData?.items.length ?? 0) === LIMIT}
             renderAction={(item) =>
-              item.trace_id ? (
-                onTraceClick ? (
-                  <button
-                    type="button"
-                    onClick={() => onTraceClick(item.trace_id as string)}
-                    className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                    title="View Trace Timeline"
-                  >
-                    Trace
-                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                  </button>
-                ) : (
-                  <Link
-                    to={'/tenant/transactions/$traceId'}
-                    params={{ traceId: item.trace_id }}
-                    className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                    title="View Trace Timeline"
-                  >
-                    Trace
-                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                  </Link>
-                )
-              ) : null
+              item.trace_id ? <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} /> : null
             }
           />
         </TabsContent>
@@ -324,29 +331,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
             onLoadMore={() => setJsonOffset((p) => p + LIMIT)}
             hasMore={(jsonData?.items.length ?? 0) === LIMIT}
             renderAction={(item) =>
-              item.trace_id ? (
-                onTraceClick ? (
-                  <button
-                    type="button"
-                    onClick={() => onTraceClick(item.trace_id as string)}
-                    className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                    title="View Trace Timeline"
-                  >
-                    Trace
-                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                  </button>
-                ) : (
-                  <Link
-                    to={'/tenant/transactions/$traceId'}
-                    params={{ traceId: item.trace_id }}
-                    className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                    title="View Trace Timeline"
-                  >
-                    Trace
-                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                  </Link>
-                )
-              ) : null
+              item.trace_id ? <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} /> : null
             }
           />
         </TabsContent>
