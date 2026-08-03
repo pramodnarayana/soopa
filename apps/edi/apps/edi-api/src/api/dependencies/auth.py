@@ -77,8 +77,6 @@ async def get_current_tenant_id(
     )
 
     if not tenant_id:
-        if is_platform_admin:
-            return PLATFORM_TENANT_ID
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tenant ID missing from request.",

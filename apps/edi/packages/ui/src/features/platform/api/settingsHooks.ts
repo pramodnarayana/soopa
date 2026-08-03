@@ -17,7 +17,7 @@ export const usePlatformSettings = () => {
   return useQuery({
     queryKey: ['platform-settings'],
     queryFn: async (): Promise<PlatformSettings> => {
-      const response = await api.get('/platform/trading-partners/config');
+      const response = await api.get('platform/trading-partners/config');
       return response.data as PlatformSettings;
     },
     // The configuration is static, so we can keep it cached indefinitely

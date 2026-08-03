@@ -1,6 +1,5 @@
 import contextlib
 import logging
-import uuid
 from typing import Any
 
 from database.models.control_plane import AS2Partner, SFTPPartner, Webhook
@@ -155,7 +154,7 @@ class RoutingResolutionService:
             pid = routing.get("trading_partner_id")
             if pid:
                 with contextlib.suppress(ValueError):
-                    partner_ids.append(uuid.UUID(pid))
+                    partner_ids.append(str(pid))
 
         if partner_ids:
             try:

@@ -11,7 +11,7 @@ export const useEdiHeaders = () => {
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: async (): Promise<EdiHeaderItem[]> => {
-      const response = await api.get<EdiHeaderItem[]>('/edi-headers');
+      const response = await api.get<EdiHeaderItem[]>('edi-headers');
       return response.data;
     },
   });
@@ -25,7 +25,7 @@ export const useCreateEdiHeaderMutation = () => {
 
   return useMutation({
     mutationFn: async (payload: CreateEdiHeaderPayload) => {
-      const response = await api.post<EdiHeaderItem>('/edi-headers', payload);
+      const response = await api.post<EdiHeaderItem>('edi-headers', payload);
       return response.data;
     },
     onSuccess: () => {

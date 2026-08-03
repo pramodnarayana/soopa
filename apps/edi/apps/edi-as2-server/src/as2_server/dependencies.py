@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from database.session import get_session
+from database.session import get_global_session, get_session
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +12,13 @@ from .adapters.repository import (
 from .adapters.vault import EnvironmentVaultService
 from .core.receive_as2 import ReceiveAS2UseCase
 
+GlobalSessionDep = Annotated[AsyncSession, Depends(get_global_session)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 def get_receive_as2_use_case(
     request: Request,
+    global_session: GlobalSessionDep,
     session: SessionDep,
 ) -> ReceiveAS2UseCase:
     """
@@ -28,8 +30,8 @@ def get_receive_as2_use_case(
         raise HTTPException(status_code=503, detail="S3 Storage not initialized")
 
     return ReceiveAS2UseCase(
-        tenant_repo=AS2TenantRepositoryAdapter(session),
-        partner_repo=TradingPartnerRepositoryAdapter(session),
+        tenant_repo=AS2TenantRepositoryAdapter(global_session),
+        partner_repo=TradingPartnerRepositoryAdapter(global_session),
         message_repo=EdiMessageRepositoryAdapter(session),
         storage=s3_storage,
         vault=EnvironmentVaultService(),

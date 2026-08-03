@@ -13,7 +13,7 @@ function EdiLayout() {
     (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
     'http://localhost:3000';
 
-  const baseUrl = `${UCP_API_URL}/api/v1/tenants/${tenantId}/edi`;
+  const baseUrl = `${UCP_API_URL}/api/v1/tenants/${tenantId}/edi/`;
 
   return (
     <EdiUIProvider baseUrl={baseUrl} ucpBaseUrl={UCP_API_URL} token={token} tenantId={tenantId}>

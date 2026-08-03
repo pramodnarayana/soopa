@@ -126,6 +126,16 @@ function TokenCredentialsModal({
           </div>
         </div>
 
+        <div className="p-4 mt-2 rounded-lg bg-indigo-50 border border-indigo-100 text-sm text-indigo-900">
+          <p className="font-semibold text-indigo-950 mb-1">Developer Note: How to authenticate</p>
+          <p className="text-indigo-800">
+            Include the Client Secret in your HTTP requests using the standard Authorization header:
+          </p>
+          <code className="block mt-2 p-2.5 bg-white rounded border border-indigo-100 font-mono text-xs text-indigo-950">
+            Authorization: Bearer {'<CLIENT_SECRET>'}
+          </code>
+        </div>
+
         <DialogFooter>
           <Button onClick={onClose}>I've saved the credentials</Button>
         </DialogFooter>

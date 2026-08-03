@@ -7,6 +7,7 @@ from as2_core import (
     Disposition,
     generate_mdn,
 )
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
 from security import decrypt_payload, verify_signature
 
@@ -36,6 +37,30 @@ class ReceiveAS2UseCase:
         self.tracer = ObservabilityProvider.tracer()
         self.metrics = ObservabilityProvider.metrics()
         self.logger = ObservabilityProvider.logger(__name__)
+
+    def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str] | None:
+        """
+        Lightweight ISA parser to extract Sender and Receiver for routing
+        without parsing the entire EDI structure.
+        """
+        try:
+            content = pure_edi_bytes.decode("ascii", errors="ignore")
+            if not content.startswith("ISA"):
+                return None
+
+            element_separator = content[3]
+            isa_segment = content[:106]
+            elements = isa_segment.split(element_separator)
+
+            if len(elements) < 9:
+                return None
+
+            isa_sender = elements[6].strip()
+            isa_receiver = elements[8].strip()
+            return isa_sender, isa_receiver
+        except Exception as e:
+            self.logger.warning("isa_extraction_failed", error=str(e))
+            return None
 
     async def execute(self, as2_msg: AS2Message) -> AS2MDN:
         start_time = time.perf_counter()
@@ -121,6 +146,33 @@ class ReceiveAS2UseCase:
                     else:
                         processed_payload = verified_payload
                         logger.info("as2_signature_verified")
+
+        # Dynamic Tenant Resolution via ISA payload routing
+        if tenant_id == str(PLATFORM_TENANT_ID) and "failed" not in disposition:
+            with self.tracer.start_span("as2.isa_routing"):
+                isa_headers = self._extract_isa_headers(processed_payload)
+                if isa_headers:
+                    isa_sender, isa_receiver = isa_headers
+                    true_tenant_id = await self.tenant_repo.resolve_tenant_by_edi_identifiers(
+                        isa_sender, isa_receiver
+                    )
+                    if true_tenant_id:
+                        tenant_id = true_tenant_id
+                        logger = self.logger.bind(
+                            message_id=as2_msg.message_id, tenant_id=tenant_id
+                        )
+                        logger.info(
+                            "as2_isa_routed_tenant",
+                            isa_sender=isa_sender,
+                            isa_receiver=isa_receiver,
+                            true_tenant_id=tenant_id,
+                        )
+                    else:
+                        logger.warning(
+                            "as2_isa_routing_failed_unmatched",
+                            isa_sender=isa_sender,
+                            isa_receiver=isa_receiver,
+                        )
 
         with self.tracer.start_span("as2.s3_upload"):
             # Upload the inner EDI payload (after decryption and verification extraction)

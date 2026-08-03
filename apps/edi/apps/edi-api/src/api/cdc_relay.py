@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from domain.events import MessageQueueName, PipelineEventType
+from domain.events import PIPELINE_EVENT_ROUTING_MAP, MessageQueueName
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -11,18 +11,6 @@ from api.ports.message_queue import MessageQueuePort
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal/cdc", tags=["CDC Relay"])
-
-# ---------------------------------------------------------------------------
-# Event-type routing constants — single source of truth.
-# Adding a new pipeline event type that belongs on the transform queue only
-# requires editing this set; no if/elif chains to update.
-# ---------------------------------------------------------------------------
-_TRANSFORM_QUEUE_EVENT_TYPES: frozenset[str] = frozenset(
-    {
-        PipelineEventType.TRANSFORM_EVENT,
-        PipelineEventType.COMPUTE_TRANSFORM_EVENT,
-    }
-)
 
 
 class DebeziumUnwrappedEvent(BaseModel):
@@ -71,7 +59,15 @@ async def relay_cdc_event(
         data = json.loads(body)
     except Exception as e:
         logger.error(f"[CDC Relay] CRITICAL: Failed to parse raw CDC bytes as JSON: {e}")
-        # In a full enterprise setup, this raw body would be pushed to an S3 Dead Letter bucket here.
+        try:
+            import base64
+
+            encoded_body = base64.b64encode(body).decode("utf-8")
+            await queue.send(
+                MessageQueueName.CDC_DLQ_QUEUE, {"error": str(e), "raw_body_base64": encoded_body}
+            )
+        except Exception as dlq_err:
+            logger.error(f"[CDC Relay] CRITICAL: Failed to write raw body to DLQ: {dlq_err}")
         return {"status": "ok"}
 
     # Normalize to a list
@@ -107,8 +103,11 @@ async def relay_cdc_event(
         if event.table == "outbox":
             # Outbox table routing logic
             if not event.event_type:
-                logger.warning(
-                    f"[CDC Relay] Outbox event missing event_type. Skipping: {event.idempotency_key}"
+                error_msg = f"Outbox event missing event_type: {event.idempotency_key}"
+                logger.error(f"[CDC Relay] {error_msg}")
+                await queue.send(
+                    MessageQueueName.CDC_DLQ_QUEUE,
+                    {"error": error_msg, "payload": event.model_dump()},
                 )
                 continue
 
@@ -117,31 +116,33 @@ async def relay_cdc_event(
                 try:
                     payload_dict = json.loads(event_payload)
                 except json.JSONDecodeError as e:
-                    logger.error(
-                        f"[CDC Relay] Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
+                    error_msg = (
+                        f"Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
+                    )
+                    logger.error(f"[CDC Relay] {error_msg}")
+                    await queue.send(
+                        MessageQueueName.CDC_DLQ_QUEUE,
+                        {"error": error_msg, "payload": event.model_dump()},
                     )
                     continue
             else:
                 payload_dict = event_payload
 
-            if event.event_type in (
-                _TRANSFORM_QUEUE_EVENT_TYPES | {PipelineEventType.DELIVER_EVENT}
-            ):
-                queue_name = (
-                    MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE
-                    if event.event_type in _TRANSFORM_QUEUE_EVENT_TYPES
-                    else MessageQueueName.DELIVER_QUEUE
-                )
+            queue_name = PIPELINE_EVENT_ROUTING_MAP.get(
+                event.event_type, MessageQueueName.PROVISIONING_QUEUE
+            )
 
+            if queue_name != MessageQueueName.PROVISIONING_QUEUE:
                 # Validate that the payload contains a trace_id required by data plane workers
                 trace_id = payload_dict.get("trace_id") if isinstance(payload_dict, dict) else None
                 if not trace_id:
-                    logger.error(
-                        f"[CDC Relay] Outbox event missing trace_id in payload: {event.idempotency_key}"
+                    error_msg = f"Outbox event missing trace_id in payload: {event.idempotency_key}"
+                    logger.error(f"[CDC Relay] {error_msg}")
+                    await queue.send(
+                        MessageQueueName.CDC_DLQ_QUEUE,
+                        {"error": error_msg, "payload": event.model_dump()},
                     )
                     continue
-            else:
-                queue_name = MessageQueueName.PROVISIONING_QUEUE
 
             message_body = {
                 "idempotency_key": event.idempotency_key,

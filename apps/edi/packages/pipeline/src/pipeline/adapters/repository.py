@@ -37,7 +37,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         result = await self.session.execute(
             select(EdiMessage)
-            .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+            .where(EdiMessage.trace_id == str(trace_id))
             .order_by(EdiMessage.created_at.desc())
             .limit(1)
         )
@@ -60,7 +60,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 EdiMessage.id
                 == (
                     select(EdiMessage.id)
-                    .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+                    .where(EdiMessage.trace_id == str(trace_id))
                     .order_by(EdiMessage.created_at.desc())
                     .limit(1)
                     .scalar_subquery()
@@ -87,7 +87,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 EdiMessage.id
                 == (
                     select(EdiMessage.id)
-                    .where(EdiMessage.trace_id == uuid.UUID(trace_id))
+                    .where(EdiMessage.trace_id == str(trace_id))
                     .order_by(EdiMessage.created_at.desc())
                     .limit(1)
                     .scalar_subquery()
@@ -124,7 +124,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             data_to_store = ""
 
         record_kwargs = {
-            "trace_id": uuid.UUID(trace_id),
+            "trace_id": str(trace_id),
             "direction": direction,
             "connection_type": connection_type,
             "edi_data": data_to_store,
@@ -140,6 +140,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         }
         if tenant_id is not None:
             record_kwargs["tenant_id"] = tenant_id
+
+        record_kwargs["id"] = f"edi_msg_{uuid.uuid4().hex}"
 
         record = EdiMessage(**record_kwargs)
         self.session.add(record)
@@ -179,7 +181,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         stmt = (
             select(EdiJson.id)
             .where(
-                EdiJson.trace_id == uuid.UUID(trace_id),
+                EdiJson.trace_id == str(trace_id),
                 EdiJson.direction == direction,
                 EdiJson.transaction_type == transaction_type,
                 EdiJson.business_metadata == business_metadata,
@@ -191,7 +193,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return str(existing_id)
 
         record_kwargs = {
-            "trace_id": uuid.UUID(trace_id),
+            "trace_id": str(trace_id),
             "direction": direction,
             "trading_partner_id": partnership_id,
             "transaction_type": transaction_type,
@@ -208,6 +210,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if tenant_id is not None:
             record_kwargs["tenant_id"] = tenant_id
 
+        record_kwargs["id"] = f"edi_json_{uuid.uuid4().hex}"
+
         record = EdiJson(**record_kwargs)
         self.session.add(record)
         await self.session.flush()
@@ -218,7 +222,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
         result = await self.session.execute(
             select(EdiJson)
-            .where(EdiJson.trace_id == uuid.UUID(trace_id))
+            .where(EdiJson.trace_id == str(trace_id))
             .order_by(EdiJson.created_at.desc())
             .limit(1)
         )
@@ -241,7 +245,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         from database.models.data_plane import EdiJson
 
         await self.session.execute(
-            update(EdiJson).where(EdiJson.trace_id == uuid.UUID(trace_id)).values(status=status)
+            update(EdiJson).where(EdiJson.trace_id == str(trace_id)).values(status=status)
         )
         await self.session.flush()
 
@@ -251,7 +255,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if not kwargs:
             return
         await self.session.execute(
-            update(EdiJson).where(EdiJson.trace_id == uuid.UUID(trace_id)).values(**kwargs)
+            update(EdiJson).where(EdiJson.trace_id == str(trace_id)).values(**kwargs)
         )
         await self.session.flush()
 
@@ -261,7 +265,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         stmt = (
             insert(Outbox)
             .values(
-                idempotency_key=uuid.UUID(idempotency_key),
+                id=f"edi_dobevt_{uuid.uuid4().hex}",
+                idempotency_key=str(idempotency_key),
                 event_type=event_type,
                 payload=payload,
                 status="PENDING",
@@ -279,7 +284,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 == (
                     select(EdiMessage.id)
                     .where(
-                        EdiMessage.trace_id == uuid.UUID(trace_id),
+                        EdiMessage.trace_id == str(trace_id),
                         EdiMessage.status == "PENDING_DELIVERY",
                     )
                     .order_by(EdiMessage.created_at.desc())
@@ -303,7 +308,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         transaction_type: str | None = None,
         webhook_url: str | None = None,
     ) -> None:
-        import uuid
 
         from database.models.data_plane import ApiGateway
 
@@ -311,7 +315,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         stmt = (
             select(ApiGateway.id)
             .where(
-                ApiGateway.trace_id == uuid.UUID(trace_id),
+                ApiGateway.trace_id == str(trace_id),
                 ApiGateway.direction == direction,
                 ApiGateway.payload == payload,
             )
@@ -320,8 +324,11 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if (await self.session.execute(stmt)).scalar_one_or_none():
             return  # Skip insert
 
+        import uuid
+
         record = ApiGateway(
-            trace_id=uuid.UUID(trace_id),
+            id=f"api_gw_{uuid.uuid4().hex}",
+            trace_id=str(trace_id),
             direction=direction,
             transaction_type=transaction_type,
             payload=payload,
@@ -335,7 +342,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
             select(ApiGateway)
-            .where(ApiGateway.trace_id == uuid.UUID(trace_id))
+            .where(ApiGateway.trace_id == str(trace_id))
             .order_by(ApiGateway.created_at.desc())
             .limit(1)
         )
@@ -373,7 +380,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             values["response"] = response
 
         await self.session.execute(
-            update(ApiGateway).where(ApiGateway.trace_id == uuid.UUID(trace_id)).values(**values)
+            update(ApiGateway).where(ApiGateway.trace_id == str(trace_id)).values(**values)
         )
         await self.session.flush()
 
@@ -385,7 +392,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 == (
                     select(ApiGateway.id)
                     .where(
-                        ApiGateway.trace_id == uuid.UUID(trace_id),
+                        ApiGateway.trace_id == str(trace_id),
                         ApiGateway.status == "PENDING_DELIVERY",
                     )
                     .order_by(ApiGateway.created_at.desc())
@@ -453,7 +460,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
     async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(OutboundRoute).where(OutboundRoute.id == uuid.UUID(route_id))
+            select(OutboundRoute).where(OutboundRoute.id == str(route_id))
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -497,7 +504,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         query = select(OutboundEdiHeader)
         if route_id:
             route_query = select(OutboundRoute.trading_partner_id, OutboundRoute.tenant_id).where(
-                OutboundRoute.id == uuid.UUID(route_id)
+                OutboundRoute.id == str(route_id)
             )
             if tenant_id is not None:
                 route_query = route_query.where(OutboundRoute.tenant_id == tenant_id)
@@ -543,7 +550,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
             select(SFTPPartner).where(
-                SFTPPartner.id == uuid.UUID(partner_id), SFTPPartner.active.is_(True)
+                SFTPPartner.id == str(partner_id), SFTPPartner.active.is_(True)
             )
         )
         record = result.scalar_one_or_none()
@@ -565,7 +572,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
     async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(
-            select(Webhook).where(Webhook.id == uuid.UUID(partner_id), Webhook.active.is_(True))
+            select(Webhook).where(Webhook.id == str(partner_id), Webhook.active.is_(True))
         )
         record = result.scalar_one_or_none()
         if not record:
@@ -581,7 +588,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             select(AS2Partner, AS2Partnership)
             .join(AS2Partnership, AS2Partnership.remote_partner_id == AS2Partner.id)
             .where(
-                AS2Partner.id == uuid.UUID(partner_id),
+                AS2Partner.id == str(partner_id),
                 AS2Partner.active.is_(True),
                 AS2Partnership.active.is_(True),
             )
@@ -609,7 +616,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         """Fetches the local (our) AS2 partner to retrieve signing key and cert refs."""
         result = await self.session.execute(
             select(AS2Partner).where(
-                AS2Partner.id == uuid.UUID(partner_id),
+                AS2Partner.id == str(partner_id),
                 AS2Partner.active.is_(True),
             )
         )

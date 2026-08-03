@@ -31,3 +31,9 @@ class IAS2TenantRepository(Protocol):
     async def resolve_tenant_id(self, as2_to: str) -> str | None:
         """Resolves the tenant ID by looking at the global trading partners."""
         ...
+
+    async def resolve_tenant_by_edi_identifiers(
+        self, isa_sender: str, isa_receiver: str
+    ) -> str | None:
+        """Resolves the true tenant ID from the global inbound routes using ISA identifiers."""
+        ...

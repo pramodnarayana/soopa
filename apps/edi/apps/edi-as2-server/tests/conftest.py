@@ -229,7 +229,7 @@ async def as2_client(
 
         import uuid
 
-        from database.session import get_session
+        from database.session import get_global_session, get_session
 
         from as2_server.main import app
 
@@ -237,11 +237,13 @@ async def as2_client(
             mock_session = AsyncMock()
             mock_result = MagicMock()
             mock_result.fetchall.return_value = [(uuid.uuid4(),)]
+            mock_result.scalar_one_or_none.return_value = str(uuid.uuid4())
             mock_session.execute.return_value = mock_result
             yield mock_session
 
         app.state.s3_storage = MockS3Storage()
         app.dependency_overrides[get_session] = override_get_session
+        app.dependency_overrides[get_global_session] = override_get_session
 
         # Mock the db_router on app state for the /ready probe
         app.state.db_router = AsyncMock()

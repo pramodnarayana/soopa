@@ -21,7 +21,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
         tid_str = tenant_id if tenant_id is not None else None
-        msg = EdiMessage(tenant_id=tid_str, **payload)
+        payload_copy = dict(payload)
+        if "id" not in payload_copy:
+            payload_copy["id"] = f"edi_msg_{uuid.uuid4().hex}"
+        msg = EdiMessage(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
         await self.session.flush()
         return str(msg.id)
@@ -32,7 +35,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         from database.models.data_plane import DataPlaneOutbox
 
         tid_str = tenant_id if tenant_id is not None else None
-        event_id = str(uuid.uuid4())
+        event_id = f"edi_dobevt_{uuid.uuid4().hex}"
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tid_str,
@@ -49,7 +52,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         from database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
-        msg = EdiJson(tenant_id=tid_str, **payload)
+        payload_copy = dict(payload)
+        if "id" not in payload_copy:
+            payload_copy["id"] = f"edi_json_{uuid.uuid4().hex}"
+        msg = EdiJson(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
         await self.session.flush()
         return str(msg.id)
@@ -58,7 +64,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         from database.models.data_plane import ApiGateway
 
         tid_str = tenant_id if tenant_id is not None else None
-        log = ApiGateway(tenant_id=tid_str, **payload)
+        payload_copy = dict(payload)
+        if "id" not in payload_copy:
+            payload_copy["id"] = f"apigw_{uuid.uuid4().hex}"
+        log = ApiGateway(tenant_id=tid_str, **payload_copy)
         self.session.add(log)
         await self.session.flush()
         return str(log.id)

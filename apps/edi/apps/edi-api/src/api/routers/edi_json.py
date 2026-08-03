@@ -24,9 +24,8 @@ async def submit_outbound_message(
     """
     Submits a JSON payload to be translated and transmitted via AS2.
 
-    Authentication: Two-part API key (no Zitadel / OAuth2 required).
-      X-Client-ID:     soopaedi_<tenant>_<suffix>
-      X-Client-Secret: <secret shown once at token creation>
+    Authentication: Single API Token via Bearer Authorization
+      Authorization: Bearer <client_id>_<client_secret>
     """
     service = ApiReceiverService(uow=uow)
 

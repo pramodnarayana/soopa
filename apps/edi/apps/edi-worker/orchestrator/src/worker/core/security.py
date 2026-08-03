@@ -6,7 +6,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from urllib.parse import urlparse
 
+from config.settings import get_settings
+
 logger = logging.getLogger(__name__)
+
+settings = get_settings()
+IS_DEV = settings.env == "development"
 
 
 def validate_target_url(url: str) -> bool:
@@ -47,8 +52,11 @@ def validate_target_url(url: str) -> bool:
                 or ip.is_reserved
                 or ip.is_multicast
             ):
-                logger.warning(f"SSRF check failed: resolved to private/internal IP {ip}")
-                return False
+                if IS_DEV and ip.is_loopback:
+                    pass
+                else:
+                    logger.warning(f"SSRF check failed: resolved to private/internal IP {ip}")
+                    return False
 
         return True
     except Exception as e:
@@ -95,6 +103,8 @@ def get_safe_ip(hostname: str) -> str | None:
         ip_str = str(sockaddr[0])
         ip = ipaddress.ip_address(ip_str)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            if IS_DEV and ip.is_loopback:
+                return ip_str
             return None
         return ip_str
     return None
@@ -106,6 +116,10 @@ def ssrf_safe_context(url: str) -> Iterator[None]:
     Context manager that pins the validated IP address for the given URL's hostname
     to prevent DNS rebinding SSRF attacks.
     """
+    if IS_DEV:
+        yield
+        return
+
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("Invalid URL scheme or hostname for SSRF validation")

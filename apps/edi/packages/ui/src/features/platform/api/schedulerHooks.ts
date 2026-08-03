@@ -7,7 +7,7 @@ export function useJobsQuery() {
   return useQuery({
     queryKey: ['scheduler', 'jobs'],
     queryFn: async (): Promise<JobResponse[]> => {
-      const res = await api.get<JobResponse[]>('/platform/scheduler/jobs');
+      const res = await api.get<JobResponse[]>('platform/scheduler/jobs');
       return res.data;
     },
     refetchInterval: 10000,
@@ -19,7 +19,7 @@ export function useConfigQuery() {
   return useQuery({
     queryKey: ['scheduler', 'config'],
     queryFn: async (): Promise<ConfigResponse[]> => {
-      const res = await api.get<ConfigResponse[]>('/platform/scheduler/config');
+      const res = await api.get<ConfigResponse[]>('platform/scheduler/config');
       return res.data;
     },
   });

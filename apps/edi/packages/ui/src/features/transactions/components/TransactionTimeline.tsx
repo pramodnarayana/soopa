@@ -232,7 +232,11 @@ export function TransactionTimeline({ transaction }: Props) {
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100">
           <CardTitle className={`text-lg ${deliveryColorClass}`}>
-            Delivered to{' '}
+            {isDelivered
+              ? 'Delivered to '
+              : isDeliveryFailed
+                ? 'Failed to deliver to '
+                : 'Delivering to '}
             {transaction.trading_partner_name ||
               (msg.connection_type && msg.connection_type !== 'UNKNOWN'
                 ? msg.connection_type

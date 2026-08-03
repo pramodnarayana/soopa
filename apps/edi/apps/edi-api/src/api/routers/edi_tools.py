@@ -9,7 +9,7 @@ from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/edi-tools", tags=["EDI Tools"])
+router = APIRouter(prefix="/edi-tools", tags=["EDI Tools"])
 
 
 class TransformRequest(BaseModel):

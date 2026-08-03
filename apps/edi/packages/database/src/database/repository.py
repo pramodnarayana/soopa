@@ -106,7 +106,10 @@ class EdiMessageRepository:
         status: str = "RECEIVED",
         message_id: str | None = None,
     ) -> EdiMessage:
+        import uuid
+
         record = EdiMessage(
+            id=f"edi_msg_{uuid.uuid4().hex}",
             tenant_id=tenant_id,
             trace_id=trace_id,
             direction=direction,

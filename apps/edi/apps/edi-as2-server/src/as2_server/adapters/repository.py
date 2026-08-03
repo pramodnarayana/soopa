@@ -27,6 +27,23 @@ class AS2TenantRepositoryAdapter:
             return str(tenant_rows[0][0])
         return None
 
+    async def resolve_tenant_by_edi_identifiers(
+        self, isa_sender: str, isa_receiver: str
+    ) -> str | None:
+        from database.models.control_plane import InboundRoute
+
+        result = await self.session.execute(
+            sql_select(InboundRoute.tenant_id)
+            .where(InboundRoute.isa_sender_id == isa_sender)
+            .where(InboundRoute.isa_receiver_id == isa_receiver)
+            .where(InboundRoute.active.is_(True))
+            .limit(1)
+        )
+        tenant_id = result.scalar_one_or_none()
+        if tenant_id:
+            return str(tenant_id)
+        return None
+
 
 class TradingPartnerRepositoryAdapter:
     def __init__(self, session: AsyncSession) -> None:

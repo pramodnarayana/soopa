@@ -45,7 +45,7 @@ export function useExplorerEdiMessages(
   const tenantId = useTenantId();
   return useExplorerQuery<ExplorerEdiMessage>(
     explorerKeys.messages(tenantId, filters),
-    '/explorer/edi-messages',
+    'explorer/edi-messages',
     filters,
     limit,
     offset,
@@ -62,7 +62,7 @@ export function useExplorerEdiJson(
   const tenantId = useTenantId();
   return useExplorerQuery<ExplorerEdiJson>(
     explorerKeys.json(tenantId, filters),
-    '/explorer/edi-json',
+    'explorer/edi-json',
     filters,
     limit,
     offset,

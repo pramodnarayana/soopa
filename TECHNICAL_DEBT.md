@@ -47,3 +47,20 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-08-02
 - **Description**: The Python EDI API and TypeScript UCP API use different architectural patterns for managing Domain Events / Outbox records. The Python EDI API uses a Service/Transaction Script pattern where the Service layer explicitly manages the outbox via `publish_outbox_event(...)`. The TypeScript UCP API uses a strict Domain-Driven Design (DDD) Hexagonal architecture where Aggregate Roots internally queue events, which are implicitly pulled and saved to the outbox by the Drizzle Repository during a `.save()` operation.
 - **Action Item**: Both APIs should ideally align on a single, monorepo-wide architectural standard for event-driven mutation (e.g., standardizing on strict DDD Aggregate Roots across both languages) to ensure concepts like Client-Side Idempotency flow uniformly through the layers.
+
+## [Infrastructure] Local Infrastructure Desync (Zitadel vs Postgres)
+
+- **Date Added**: 2026-08-02
+- **Description**: The local `infra-reset` script performs a partial teardown of the infrastructure. It wipes and recreates the UCP Postgres database volumes but does not wipe or fully re-sync the Terraform-provisioned Zitadel IdP. Relying on partial reset scripts causes schema drifts to manifest as "missing user domain" or 403 errors, leading to dangerous local state corruption and significant developer time waste.
+- **Action Item**: The local development infrastructure scripts (`pnpm infra-reset`, `pnpm db:seed`) must be completely atomic and idempotent. The reset scripts should either tear down Zitadel concurrently with Postgres, OR the seed script must dynamically interact with Zitadel APIs to reconstruct all required developer fixtures (test tenants, test users, project grants) so the local database is perfectly synced with the IdP state.
+
+## [Backend Architecture Alignment] Refactor API Keys and Webhooks to Hexagonal Architecture
+
+- **Date Added**: 2026-08-02
+- **Description**: The CRUD controllers for managing Webhooks and API Keys currently contain business logic directly in the endpoints or use an older procedural pattern. They do not fully adhere to the strict Hexagonal Architecture (Ports and Adapters) UseCase patterns established in newer areas of the codebase.
+- **Action Item**: Refactor the remaining `webhooks` and `api-keys` controllers to delegate all business logic to dedicated Hexagonal `UseCase` classes, ensuring that the presentation layer strictly handles only HTTP validation and response mapping.
+
+## [Frontend/Backend Alignment] End-to-End OpenAPI Auto-Generation
+- **Date Added**: 2026-08-03
+- **Description**: The UI currently relies on manually constructed API clients and disconnected TanStack routing configuration. This allows API contracts or payload structure changes in the backend (FastAPI/NestJS) to silently break the frontend at runtime (such as 404s on trace links) without being caught during the build process.
+- **Action Item**: Implement a strict end-to-end OpenAPI code generation pipeline (using a tool like Orval or tRPC) across the monorepo. This will auto-generate strictly typed React Query hooks and frontend API clients directly from the backend schemas, ensuring that any breaking changes in the API instantly fail the frontend TypeScript build at compile time.
