@@ -256,7 +256,7 @@ async def create_platform_as2_partner(
                 ) from e
             raise HTTPException(
                 status_code=500,
-                detail=f"Database constraint violation: {constraint_name or str(e)}",
+                detail="Database constraint violation",
             ) from e
         raise
 

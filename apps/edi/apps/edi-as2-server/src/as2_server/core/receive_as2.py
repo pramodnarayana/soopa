@@ -76,6 +76,13 @@ class ReceiveAS2UseCase:
             return None
 
     async def execute(self, as2_msg: AS2Message) -> AS2MDN:
+        from contextlib import AsyncExitStack
+
+        async with AsyncExitStack() as stack:
+            self._async_exit_stack = stack
+            return await self._execute_inner(as2_msg)
+
+    async def _execute_inner(self, as2_msg: AS2Message) -> AS2MDN:
         start_time = time.perf_counter()
 
         tenant_id = None
@@ -184,6 +191,8 @@ class ReceiveAS2UseCase:
 
                             # Recreate message_repo with a session for the resolved tenant
                             if self.db_router and self.global_session:
+                                from contextlib import aclosing
+
                                 from database.models import DatabaseShard, Tenant
                                 from sqlalchemy import select
 
@@ -192,20 +201,25 @@ class ReceiveAS2UseCase:
                                 stmt = (
                                     select(Tenant, DatabaseShard)
                                     .join(DatabaseShard)
-                                    .where(Tenant.id == int(tenant_id))
+                                    .where(Tenant.id == tenant_id)
                                 )
                                 result = await self.global_session.execute(stmt)
                                 row = result.first()
                                 if row:
                                     tenant_obj, shard_obj = row
                                     tenant_session_gen = self.db_router.get_tenant_session(
-                                        tenant_id=int(tenant_obj.id),
+                                        tenant_id=tenant_obj.id,
                                         shard_key=str(shard_obj.name),
                                         shard_url=str(shard_obj.dsn),
                                     )
+
+                                    from contextlib import aclosing
+
+                                    await self._async_exit_stack.enter_async_context(
+                                        aclosing(tenant_session_gen)
+                                    )
                                     tenant_session = await tenant_session_gen.__anext__()
                                     self.message_repo = EdiMessageRepositoryAdapter(tenant_session)
-                                    # Note: We rely on the outer try/finally to clean up the session
                         else:
                             logger.warning(
                                 "as2_isa_routing_failed_unmatched",

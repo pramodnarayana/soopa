@@ -36,29 +36,17 @@ function StatusBadge({ status }: { status?: string }) {
   if (!status) return null;
   const upper = status.toUpperCase();
 
-  if (
-    TRANSACTION_STATUS_GROUPS.SUCCESS.has(
-      upper as Extract<keyof typeof TRANSACTION_STATUS_GROUPS, string> | string,
-    )
-  ) {
+  if (TRANSACTION_STATUS_GROUPS.SUCCESS.has(upper)) {
     return (
       <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
         {upper}
       </Badge>
     );
   }
-  if (
-    TRANSACTION_STATUS_GROUPS.ERROR.has(
-      upper as Extract<keyof typeof TRANSACTION_STATUS_GROUPS, string> | string,
-    )
-  ) {
+  if (TRANSACTION_STATUS_GROUPS.ERROR.has(upper)) {
     return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">{upper}</Badge>;
   }
-  if (
-    TRANSACTION_STATUS_GROUPS.PENDING.has(
-      upper as Extract<keyof typeof TRANSACTION_STATUS_GROUPS, string> | string,
-    )
-  ) {
+  if (TRANSACTION_STATUS_GROUPS.PENDING.has(upper)) {
     return (
       <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">{upper}</Badge>
     );

@@ -3,6 +3,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from config.settings import AppSettings
+from database.constants import (
+    API_GATEWAY_ID_PREFIX,
+    DATA_PLANE_OUTBOX_EVENT_PREFIX,
+    EDI_JSON_ID_PREFIX,
+    EDI_MESSAGE_ID_PREFIX,
+)
 from database.encryption import db_encryption
 from database.models import ApiGateway, EdiMessage
 from database.models import DataPlaneOutbox as Outbox
@@ -141,7 +147,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if tenant_id is not None:
             record_kwargs["tenant_id"] = tenant_id
 
-        record_kwargs["id"] = f"edi_msg_{uuid.uuid4().hex}"
+        if "id" not in record_kwargs:
+            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}"
 
         record = EdiMessage(**record_kwargs)
         self.session.add(record)
@@ -210,7 +217,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if tenant_id is not None:
             record_kwargs["tenant_id"] = tenant_id
 
-        record_kwargs["id"] = f"edi_json_{uuid.uuid4().hex}"
+        if "id" not in record_kwargs:
+            record_kwargs["id"] = f"{EDI_JSON_ID_PREFIX}{uuid.uuid4().hex}"
 
         record = EdiJson(**record_kwargs)
         self.session.add(record)
@@ -262,13 +270,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
     async def publish_outbox_event(
         self, idempotency_key: str, event_type: str, payload: dict[str, Any]
     ) -> None:
-        # Import the shared prefix constant
-        # Note: This creates a cross-package dependency but ensures consistency
-        try:
-            from api.adapters.outbox_repository import DATA_PLANE_OUTBOX_EVENT_PREFIX
-        except ImportError:
-            # Fallback for standalone pipeline package usage
-            DATA_PLANE_OUTBOX_EVENT_PREFIX = "edi_dobevt_"
 
         stmt = (
             insert(Outbox)
@@ -331,13 +332,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         )
         if (await self.session.execute(stmt)).scalar_one_or_none():
             return  # Skip insert
-
-        # Import the shared prefix constant
-        try:
-            from api.adapters.outbox_repository import API_GATEWAY_ID_PREFIX
-        except ImportError:
-            # Fallback for standalone pipeline package usage
-            API_GATEWAY_ID_PREFIX = "apigw_"
 
         record = ApiGateway(
             id=f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}",

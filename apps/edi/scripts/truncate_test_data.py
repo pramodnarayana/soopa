@@ -37,7 +37,7 @@ async def truncate_database():
         await engine.dispose()
 
 
-def purge_sqs_queues():
+def purge_sqs_queues() -> bool:
     print(f"Connecting to SQS at {AWS_ENDPOINT}")
     sqs = boto3.client(
         "sqs",
@@ -58,22 +58,36 @@ def purge_sqs_queues():
         except ClientError as e:
             print(f"Could not purge queue {queue_name}: {e}")
             failed = True
-        except Exception as e:
+        except Exception:
             # Unexpected errors should propagate
             raise
 
     if failed:
-        print("WARNING: Some SQS queues failed to purge.")
+        print("ERROR: Some SQS queues failed to purge.")
+        return False
     else:
         print("SQS queues purged successfully.")
+        return True
 
 
 async def main():
     print("=== Truncating Test Data ===")
 
+    import urllib.parse
+
     # Safety guard: require local targets or explicit opt-in
-    db_is_local = "localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL
-    sqs_is_local = "localhost" in AWS_ENDPOINT or "127.0.0.1" in AWS_ENDPOINT
+    try:
+        db_host = urllib.parse.urlparse(DATABASE_URL).hostname
+    except Exception:
+        db_host = None
+
+    try:
+        sqs_host = urllib.parse.urlparse(AWS_ENDPOINT).hostname
+    except Exception:
+        sqs_host = None
+
+    db_is_local = db_host in ("localhost", "127.0.0.1")
+    sqs_is_local = sqs_host in ("localhost", "127.0.0.1")
     explicit_override = os.getenv("ALLOW_DESTRUCTIVE_OPERATIONS", "").lower() == "true"
 
     if not ((db_is_local and sqs_is_local) or explicit_override):
@@ -83,7 +97,11 @@ async def main():
         print("  Set ALLOW_DESTRUCTIVE_OPERATIONS=true to override this safety check.")
         return
 
-    purge_sqs_queues()
+    success = purge_sqs_queues()
+    if not success:
+        print("ERROR: Aborting truncate due to SQS purge failure.")
+        return
+
     await truncate_database()
     print("=== Done ===")
 

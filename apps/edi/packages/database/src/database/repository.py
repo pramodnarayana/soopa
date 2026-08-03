@@ -108,8 +108,10 @@ class EdiMessageRepository:
     ) -> EdiMessage:
         import uuid
 
+        from database.constants import EDI_MESSAGE_ID_PREFIX
+
         record = EdiMessage(
-            id=f"edi_msg_{uuid.uuid4().hex}",
+            id=f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}",
             tenant_id=tenant_id,
             trace_id=str(trace_id),
             direction=direction,

@@ -63,7 +63,6 @@ export class TenantProxyController {
         body: hasBody ? JSON.stringify(req.body) : undefined,
         signal: abortController.signal,
       });
-      clearTimeout(timeoutId);
 
       for (const [key, value] of response.headers.entries()) {
         if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
@@ -79,13 +78,14 @@ export class TenantProxyController {
 
       return res.status(response.status).send(Buffer.from(responseBody));
     } catch (error) {
-      clearTimeout(timeoutId);
       this.logger.error(`[PROXY ERROR] Failed to proxy to ${url}:`, error);
       return res.status(502).send({
         error: 'Bad Gateway',
         message: 'Failed to communicate with downstream EDI service',
         details: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

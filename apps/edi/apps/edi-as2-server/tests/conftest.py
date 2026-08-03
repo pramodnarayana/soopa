@@ -184,11 +184,13 @@ class ISALookupConfig:
         # Default: single match found (existing behavior)
         self.scalar_result = str(uuid.uuid4())
         self.fetchall_result = [(uuid.uuid4(),)]
+        self.first_result = None
 
     def set_no_match(self):
         """Configure ISA lookup to return no match."""
         self.scalar_result = None
         self.fetchall_result = []
+        self.first_result = None
 
     def set_single_match(self, tenant_id: str = None):
         """Configure ISA lookup to return a single match."""
@@ -197,6 +199,7 @@ class ISALookupConfig:
         tid = tenant_id if tenant_id else str(uuid.uuid4())
         self.scalar_result = tid
         self.fetchall_result = [(uuid.UUID(tid) if tenant_id else uuid.uuid4(),)]
+        self.first_result = None
 
     def set_multiple_matches(self):
         """Configure ISA lookup to return multiple matches (ambiguous)."""
@@ -204,6 +207,7 @@ class ISALookupConfig:
 
         self.scalar_result = None  # scalar_one_or_none won't be used for ambiguity check
         self.fetchall_result = [(uuid.uuid4(),), (uuid.uuid4(),)]
+        self.first_result = None
 
 
 @pytest_asyncio.fixture
@@ -275,7 +279,7 @@ async def as2_client(
             # Use the configurable results
             mock_result.fetchall.return_value = isa_lookup_config.fetchall_result
             mock_result.scalar_one_or_none.return_value = isa_lookup_config.scalar_result
-            mock_result.first.return_value = None  # For tenant shard lookup
+            mock_result.first.side_effect = lambda: isa_lookup_config.first_result
             mock_session.execute.return_value = mock_result
             yield mock_session
 

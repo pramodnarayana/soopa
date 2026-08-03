@@ -2,6 +2,9 @@ import uuid
 from typing import Any
 
 from database.base_repository import GlobalSqlAlchemyRepository, TenantSqlAlchemyRepository
+
+# Shared prefix constants for Data Plane IDs
+from database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from database.models.control_plane import ControlPlaneOutbox
 from domain.events import ProvisioningEvent
 
@@ -9,10 +12,6 @@ from api.ports.outbox_repository import (
     ControlPlaneOutboxRepositoryPort,
     DataPlaneOutboxRepositoryPort,
 )
-
-# Shared prefix constants for Data Plane IDs
-DATA_PLANE_OUTBOX_EVENT_PREFIX = "edi_dobevt_"
-API_GATEWAY_ID_PREFIX = "apigw_"
 
 
 class SqlAlchemyOutboxRepositoryMixin:

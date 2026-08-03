@@ -67,7 +67,13 @@ async def process_pipeline_event(
                         return
 
                     # Mark as processed in same transaction
-                    session.add(ProcessedEvent(idempotency_key=key_str))
+                    from sqlalchemy.dialects.postgresql import insert
+
+                    await session.execute(
+                        insert(ProcessedEvent)
+                        .values(idempotency_key=key_str)
+                        .on_conflict_do_nothing()
+                    )
                     await session.execute(
                         update(DataPlaneOutbox)
                         .where(DataPlaneOutbox.idempotency_key == key_str)
@@ -207,7 +213,13 @@ async def process_delivery(
                 await service.deliver(trace_id, idempotency_key=key_str)
 
                 if key_str:
-                    session.add(ProcessedEvent(idempotency_key=key_str))
+                    from sqlalchemy.dialects.postgresql import insert
+
+                    await session.execute(
+                        insert(ProcessedEvent)
+                        .values(idempotency_key=key_str)
+                        .on_conflict_do_nothing()
+                    )
                     await session.execute(
                         update(DataPlaneOutbox)
                         .where(DataPlaneOutbox.idempotency_key == key_str)
