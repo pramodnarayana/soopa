@@ -245,9 +245,11 @@ async def create_platform_as2_partner(
         if isinstance(e, IntegrityError):
             constraint_name = ""
             if hasattr(e, "orig") and e.orig is not None:
-                constraint_name = str(
-                    getattr(e.orig, "diag", None) and e.orig.diag.constraint_name or e.orig
-                )
+                diag = getattr(e.orig, "diag", None)
+                if diag is not None:
+                    constraint_name = str(getattr(diag, "constraint_name", e.orig))
+                else:
+                    constraint_name = str(e.orig)
             if "uq_tenant_as2_id" in constraint_name:
                 raise HTTPException(
                     status_code=400, detail="AS2 ID already exists for this tenant."
