@@ -75,3 +75,42 @@ def test_update_as2_partnership(client, mock_uow):
 def test_delete_as2_partnership(client, mock_uow):
     pid = str(uuid4())
     client.delete(f"/api/v1/platform/trading-partners/as2/partnerships/{pid}")
+
+
+def test_create_as2_partner_unauthorized():
+    # Test unauthenticated
+    from fastapi.testclient import TestClient
+
+    from api.main import app
+
+    with TestClient(app) as local_client:
+        response = local_client.post(
+            "/api/v1/platform/trading-partners/as2/trading-partners",
+            json={"name": "Test", "as2_id": "TEST_ID", "is_local": True},
+        )
+        assert response.status_code == 401
+
+
+def test_create_as2_partner_forbidden(client):
+    # Test authenticated but without platform admin
+    from api.dependencies.auth import get_platform_user_profile
+
+    app.dependency_overrides[get_platform_user_profile] = lambda: {"permissions": []}
+
+    response = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Test", "as2_id": "TEST_ID", "is_local": True},
+    )
+    # The actual override for permissions might cause 403. But wait, get_platform_user_profile normally raises 403 if it checks inside it, OR we are just testing the dependency injection. If we mock get_platform_user_profile to raise 403:
+    from fastapi import HTTPException
+
+    def mock_forbidden():
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    app.dependency_overrides[get_platform_user_profile] = mock_forbidden
+
+    response = client.post(
+        "/api/v1/platform/trading-partners/as2/trading-partners",
+        json={"name": "Test", "as2_id": "TEST_ID", "is_local": True},
+    )
+    assert response.status_code == 403

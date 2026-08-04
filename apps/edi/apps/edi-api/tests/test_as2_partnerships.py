@@ -1,6 +1,7 @@
 from api.dependencies.auth import (
     get_current_tenant_id,
     get_current_user_profile,
+    get_platform_user_profile,
     require_platform_admin,
 )
 from api.dependencies.database import get_control_plane_uow
@@ -86,9 +87,14 @@ def client_factory(fake_uow: FakeControlPlaneUnitOfWork) -> Callable[..., TestCl
         app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
         app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
         app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
+        app.dependency_overrides[get_platform_user_profile] = lambda: {
+            "sub": "test",
+            "tenant_id": "0",
+            "permissions": ["platform:admin"],
+        }
         app.dependency_overrides[get_current_user_profile] = lambda: {
-            "sub": "admin",
-            "tenant_id": PLATFORM_TENANT_ID,
+            "sub": "test",
+            "tenant_id": "1",
             "permissions": ["*"],
         }
         app.dependency_overrides[get_vault] = lambda: FakeVault()

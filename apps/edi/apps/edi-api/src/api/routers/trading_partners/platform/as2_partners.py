@@ -158,6 +158,7 @@ async def create_platform_as2_partner(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
     vault: VaultPort = Depends(get_vault),
+    _: Any = Depends(get_platform_user_profile),
 ) -> Any:
     """
     Creates a new Global AS2 Trading Partner (Local or Remote) in the Control Plane.

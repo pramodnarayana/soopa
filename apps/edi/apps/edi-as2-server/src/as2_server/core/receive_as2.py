@@ -50,13 +50,11 @@ class ReceiveAS2UseCase:
         Requires the complete fixed-length ISA envelope (106 chars) and all 16 elements.
         """
         try:
-            content = pure_edi_bytes.decode("ascii", errors="strict")
-            if not content.startswith("ISA"):
-                return None
-
-            # Require complete ISA envelope (106 bytes fixed length)
-            if len(content) < 106:
-                self.logger.warning("isa_extraction_failed", error="ISA segment truncated")
+            content = pure_edi_bytes[:106].decode("ascii", errors="strict")
+            if not content.startswith("ISA") or len(content) < 106:
+                self.logger.warning(
+                    "isa_extraction_failed", error="ISA segment missing or truncated"
+                )
                 return None
 
             element_separator = content[3]
@@ -261,6 +259,18 @@ class ReceiveAS2UseCase:
                             )
                             message_repo = new_repo
                             routed_tenant_session = tenant_session
+
+                            # 6. Re-resolve active partner for routed tenant
+                            partner = await self.partner_repo.find_by_as2_id(
+                                tenant_id, as2_msg.as2_from
+                            )
+                            if not partner or not partner.is_active:
+                                logger.warning(
+                                    "as2_isa_routed_partner_missing", as2_from=as2_msg.as2_from
+                                )
+                                return generate_mdn(
+                                    as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY
+                                )
 
                             logger.info(
                                 "as2_isa_routed_tenant",

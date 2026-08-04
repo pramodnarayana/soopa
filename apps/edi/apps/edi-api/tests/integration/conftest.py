@@ -130,7 +130,12 @@ async def client(override_get_global_session, override_get_tenant_session, overr
 
     from api.auth.api_key import get_tenant_id_from_api_key
     from api.core.uow import DataPlaneUnitOfWork
-    from api.dependencies.auth import get_current_tenant_id, get_current_user_profile
+    from api.dependencies.auth import (
+        get_current_tenant_id,
+        get_current_user_profile,
+        get_platform_user_profile,
+        require_platform_admin,
+    )
     from api.dependencies.database import (
         get_data_plane_uow,
         get_global_session,
@@ -146,10 +151,16 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     app.dependency_overrides[get_vault] = lambda: override_get_vault
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[get_tenant_id_from_api_key] = lambda: "1"
+    app.dependency_overrides[require_platform_admin] = lambda: "1"
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "test-user",
         "tenant_id": "1",
         "permissions": ["*"],
+    }
+    app.dependency_overrides[get_platform_user_profile] = lambda: {
+        "sub": "test-user",
+        "tenant_id": "1",
+        "permissions": ["platform:admin"],
     }
 
     async def _m2m_uow():
@@ -196,6 +207,13 @@ async def platform_client(
     app.dependency_overrides[get_vault] = lambda: override_get_vault
     app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
+    from api.dependencies.auth import get_platform_user_profile
+
+    app.dependency_overrides[get_platform_user_profile] = lambda: {
+        "sub": "admin-user",
+        "tenant_id": PLATFORM_TENANT_ID,
+        "permissions": ["platform:admin"],
+    }
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "admin-user",
         "tenant_id": PLATFORM_TENANT_ID,

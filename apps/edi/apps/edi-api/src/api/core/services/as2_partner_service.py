@@ -30,6 +30,42 @@ class AS2PartnerService:
     ) -> PartnerEntity:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
+        if idempotency_key:
+            from database.models.control_plane import ControlPlaneOutbox
+            from sqlalchemy import select
+
+            stmt = select(ControlPlaneOutbox).where(
+                ControlPlaneOutbox.idempotency_key == idempotency_key
+            )
+            result = await self.uow.global_session.execute(stmt)
+            existing_event = result.scalar_one_or_none()
+
+            if existing_event and existing_event.payload:
+                partner_id = existing_event.payload.get("resource_id")
+                if partner_id:
+                    existing_partner = await self.uow.as2_partners.get_as2_partner(
+                        tenant_id, partner_id
+                    )
+                    if existing_partner:
+                        if (
+                            existing_partner.name == cmd.name
+                            and existing_partner.as2_id == cmd.as2_id
+                        ):
+                            return PartnerEntity(
+                                partner_id=partner_id,
+                                tenant_id=tenant_id,
+                                name=existing_partner.name,
+                                type=ConnectionType.AS2,
+                                status=PartnerStatus.PROVISIONING,
+                            )
+                        else:
+                            from fastapi import HTTPException
+
+                            raise HTTPException(
+                                status_code=409,
+                                detail="Idempotency conflict: payload does not match existing request.",
+                            )
+
         partner_id = await self.uow.as2_partners.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(

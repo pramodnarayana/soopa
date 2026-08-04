@@ -1,5 +1,7 @@
 import contextlib
 import logging
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from config.settings import get_settings
@@ -18,7 +20,7 @@ from pipeline.core.delivery import (
     WebhookDeliveryStrategy,
 )
 from pipeline.core.transformation import InboundTransformService, OutboundTransformService
-from sqlalchemy import update
+from sqlalchemy import or_, update
 
 from worker.adapters.vault import WorkerVaultAdapter
 from worker.core.security import ssrf_safe_context
@@ -144,11 +146,6 @@ async def process_delivery(
             db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         ) as session_gen:
             async for session in session_gen:
-                import uuid
-                from datetime import UTC, datetime, timedelta
-
-                from sqlalchemy import or_, update
-
                 owner_token = str(uuid.uuid4())
                 now = datetime.now(UTC)
                 lease_expires = now + timedelta(minutes=5)
@@ -162,7 +159,6 @@ async def process_delivery(
                         or_(
                             DataPlaneOutbox.lease_expires_at.is_(None),
                             DataPlaneOutbox.lease_expires_at < now,
-                            DataPlaneOutbox.owner_token == owner_token,
                         ),
                     )
                     .values(
@@ -227,7 +223,7 @@ async def process_delivery(
                     await session.execute(
                         update(DataPlaneOutbox)
                         .where(DataPlaneOutbox.idempotency_key == key_str)
-                        .values(status="PROCESSED")
+                        .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
                     )
                 # Commit transaction
                 await session.commit()
@@ -238,7 +234,7 @@ async def process_delivery(
                         await session.execute(
                             update(DataPlaneOutbox)
                             .where(DataPlaneOutbox.idempotency_key == key_str)
-                            .values(status="FAILED")
+                            .values(status="FAILED", owner_token=None, lease_expires_at=None)
                         )
                         await session.commit()
                     except Exception as bookkeeping_error:
