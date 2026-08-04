@@ -264,7 +264,7 @@ class ReceiveAS2UseCase:
                             partner = await self.partner_repo.find_by_as2_id(
                                 tenant_id, as2_msg.as2_from
                             )
-                            if not partner or not partner.is_active:
+                            if not partner or not partner.active:
                                 logger.warning(
                                     "as2_isa_routed_partner_missing", as2_from=as2_msg.as2_from
                                 )
