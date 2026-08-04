@@ -15,7 +15,7 @@ class OutboxMixin:
 
     @declared_attr
     def idempotency_key(cls) -> Mapped[str]:
-        return mapped_column(String(128), nullable=False, unique=True)
+        return mapped_column(String(255), nullable=False, unique=True)
 
     @declared_attr
     def event_type(cls) -> Mapped[str]:
@@ -44,6 +44,14 @@ class OutboxMixin:
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
         return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    @declared_attr
+    def updated_at(cls) -> Mapped[datetime]:
+        return mapped_column(
+            DateTime(timezone=True),
+            default=lambda: datetime.now(UTC),
+            onupdate=lambda: datetime.now(UTC),
+        )
 
     @declared_attr
     def owner_token(cls) -> Mapped[str | None]:

@@ -70,16 +70,14 @@ async def proxy_to_edi(
     # Inject the resolved canonical tenant ID for the downstream EDI API.
     forward_headers["x-tenant-id"] = ucp_tenant_id
 
-    body = await request.body()
-    effective_body = None if (not body or request.method in {"GET", "HEAD", "OPTIONS"}) else body
-
+    # Stream the request body directly instead of buffering
     async with httpx.AsyncClient() as client:
         try:
             req = client.build_request(
                 method=request.method,
                 url=target_url,
                 headers=forward_headers,
-                content=effective_body,
+                content=request.stream(),
             )
             response = await client.send(req, stream=True)
 
@@ -88,8 +86,16 @@ async def proxy_to_edi(
                 if key.lower() not in HOP_BY_HOP_HEADERS:
                     res_headers[key] = value
 
-            content = await response.aread()
-            return Response(content=content, status_code=response.status_code, headers=res_headers)
+            # Stream the response back instead of buffering
+            async def stream_response():
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+
+            return Response(
+                content=stream_response(),
+                status_code=response.status_code,
+                headers=res_headers,
+            )
 
         except httpx.RequestError as exc:
             logger.error("[PROXY ERROR] Failed to proxy to %s: %s", target_url, exc)

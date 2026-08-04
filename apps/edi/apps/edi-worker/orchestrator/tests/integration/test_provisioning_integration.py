@@ -73,8 +73,9 @@ async def e2e_context():
 
 
     async for session in db_router.get_global_session():
-        tenant = Tenant(id=test_tenant_id, name="Test Tenant")
+        tenant = Tenant(id=test_tenant_id, name="Test Tenant", idp_tenant_id=f"idp_{test_tenant_id}")
         session.add(tenant)
+        await session.flush()
 
         shard_res = await session.execute(
             select(DatabaseShard).where(DatabaseShard.name == "shard_1")

@@ -14,6 +14,7 @@ class ZitadelClient:
         self.ucp_project_id = self.settings.zitadel_ucp_project_id
         # We can add default user password to config if needed, or rely on env
         self.default_user_password = "Password1!"
+        self._client: Optional[httpx.AsyncClient] = None
 
     def _assert_config(self) -> None:
         if not self.token:
@@ -21,20 +22,32 @@ class ZitadelClient:
         if not self.ucp_project_id:
             raise ValueError("ZITADEL_UCP_PROJECT_ID is not configured")
 
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or create a persistent AsyncClient with timeout configuration."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
+        return self._client
+
+    async def close(self) -> None:
+        """Close the persistent client connection."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
     async def fetch_with_auth(self, endpoint: str, method: str = "GET", json: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> httpx.Response:
         self._assert_config()
-        
+
         req_headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/json"
         }
         if headers:
             req_headers.update(headers)
-            
-        async with httpx.AsyncClient() as client:
-            url = f"{self.api_url}{endpoint}"
-            response = await client.request(method, url, headers=req_headers, json=json)
-            return response
+
+        client = self._get_client()
+        url = f"{self.api_url}{endpoint}"
+        response = await client.request(method, url, headers=req_headers, json=json)
+        return response
 
     async def handle_response_error(self, response: httpx.Response, action_context: str) -> None:
         error_text = response.text

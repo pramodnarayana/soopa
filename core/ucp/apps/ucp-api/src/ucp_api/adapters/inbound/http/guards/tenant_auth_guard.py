@@ -84,13 +84,18 @@ async def require_tenant_member(
 
     Raises:
         HTTP 401 — if the Bearer token is missing or invalid.
-        HTTP 403 — if the user is not authorized to access the requested tenant.
-        HTTP 404 — if the tenant cannot be resolved at all.
+        HTTP 403 — if the user is not authorized to access the requested tenant,
+                   or if the tenant cannot be resolved at all.
     """
     # Platform Admins bypass all tenant-level ACL checks.
+    # But we still need to normalize the tenant_id if it's an IdP Org ID.
     if identity.is_platform_admin:
+        # Try to resolve as IdP tenant ID first to get canonical UCP ID
+        resolved = await tenant_repo.find_by_idp_tenant_id(tenant_id)
+        canonical_tenant_id = resolved.id if resolved else tenant_id
+
         request.state.identity = identity
-        request.state.ucp_tenant_id = tenant_id
+        request.state.ucp_tenant_id = canonical_tenant_id
         return identity
 
     # Standard users: the token must carry the correct tenant context.

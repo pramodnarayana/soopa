@@ -59,6 +59,7 @@ class UserRepository(IUserRepository):
             db_user.email = user.email
             db_user.name = user.name
             db_user.idp_user_id = user.idp_user_id
+            db_user.status = user.status
         else:
             db_user = DbUser(
                 id=user.id,
@@ -87,4 +88,10 @@ class UserRepository(IUserRepository):
             and_(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user_id)
         )
         await self.session.execute(stmt)
+
+    async def has_any_tenant_memberships(self, user_id: str) -> bool:
+        """Check if a user has any remaining tenant memberships."""
+        stmt = select(TenantUser).where(TenantUser.user_id == user_id)
+        result = await self.session.execute(stmt)
+        return result.first() is not None
 

@@ -32,8 +32,13 @@ class DeleteUserUseCase:
                 f"User {command.user_id} not found or missing IDP mapping in tenant {command.tenant_id}"
             )
 
-        # 1. Delete from IDP
-        await self._idp.delete_user(user.idp_user_id)
-
-        # 2. Remove Local Tenant Membership
+        # 1. Remove tenant membership first
         await self._user_repo.remove_tenant_membership(command.tenant_id, command.user_id)
+
+        # 2. Check if user has any remaining memberships
+        has_memberships = await self._user_repo.has_any_tenant_memberships(command.user_id)
+
+        # 3. Only delete user (IDP and local DB) if orphaned
+        if not has_memberships:
+            await self._idp.delete_user(user.idp_user_id)
+            await self._user_repo.delete_orphaned_users([command.user_id])

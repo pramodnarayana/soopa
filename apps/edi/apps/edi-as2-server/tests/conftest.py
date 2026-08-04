@@ -178,7 +178,7 @@ class ISALookupConfig:
     Tests can set these to control what scalar_one_or_none/fetchall return.
     """
 
-    def __init__(self) -> "Any":
+    def __init__(self) -> None:
         import uuid
 
         # Default: single match found (existing behavior)
@@ -186,13 +186,13 @@ class ISALookupConfig:
         self.fetchall_result = [(uuid.uuid4(),)]
         self.first_result = None
 
-    def set_no_match(self) -> "Any":
+    def set_no_match(self) -> None:
         """Configure ISA lookup to return no match."""
         self.scalar_result = None
         self.fetchall_result = []
         self.first_result = None
 
-    def set_single_match(self, tenant_id: str = None) -> "Any":
+    def set_single_match(self, tenant_id: str = None) -> None:
         """Configure ISA lookup to return a single match."""
         import uuid
 
@@ -201,7 +201,7 @@ class ISALookupConfig:
         self.fetchall_result = [(uuid.UUID(tid) if tenant_id else uuid.uuid4(),)]
         self.first_result = None
 
-    def set_multiple_matches(self) -> "Any":
+    def set_multiple_matches(self) -> None:
         """Configure ISA lookup to return multiple matches (ambiguous)."""
         import uuid
 

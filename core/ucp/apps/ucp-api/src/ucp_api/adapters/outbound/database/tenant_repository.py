@@ -20,14 +20,14 @@ class TenantRepository(ITenantRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _map_to_domain(self, row: DbTenant, subscriptions: List[str] = None) -> Tenant:  # type: ignore
+    def _map_to_domain(self, row: DbTenant, subscriptions: Optional[List[str]] = None) -> Tenant:  # type: ignore
         return Tenant(
             id=row.id,
             name=row.name,
             idp_tenant_id=row.idp_tenant_id,
-            status="active", # Drizzle model had status, but python model might not
+            status=row.status if hasattr(row, 'status') else "active",
             created_at=row.created_at.replace(tzinfo=timezone.utc),
-            updated_at=row.created_at.replace(tzinfo=timezone.utc),
+            updated_at=(row.updated_at.replace(tzinfo=timezone.utc) if hasattr(row, 'updated_at') and row.updated_at else row.created_at.replace(tzinfo=timezone.utc)),
             subscriptions=subscriptions or [],
         )
 
@@ -55,10 +55,28 @@ class TenantRepository(ITenantRepository):
         stmt = select(DbTenant)
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
-        
+
+        if not rows:
+            return []
+
+        # Bulk-fetch all subscription slugs in one query
+        tenant_ids = [row.id for row in rows]
+        stmt_subs = (
+            select(AppSubscription.tenant_id, App.slug)
+            .select_from(AppSubscription)
+            .join(App, AppSubscription.app_id == App.id)
+            .where(AppSubscription.tenant_id.in_(tenant_ids))
+        )
+        subs_result = await self.session.execute(stmt_subs)
+
+        # Group slugs by tenant_id
+        subs_by_tenant: dict[str, List[str]] = {}
+        for tenant_id, slug in subs_result:
+            subs_by_tenant.setdefault(tenant_id, []).append(slug)
+
         tenants = []
         for row in rows:
-            subs = await self._load_subscription_slugs(row.id)
+            subs = subs_by_tenant.get(row.id, [])
             tenants.append(self._map_to_domain(row, subs))
         return tenants
 
@@ -112,12 +130,11 @@ class TenantRepository(ITenantRepository):
             self.session.add(sub)
 
         # 3. Process Outbox Events (Domain Events)
-        index = 0
-        for event in tenant.domain_events:
+        for index, event in enumerate(tenant.domain_events):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.__class__.__name__
-            final_idemp_key = f"{idempotency_key}_{index}" if idempotency_key else f"{event_name}_{tenant.id}_{datetime.now().timestamp()}"
-            
+            final_idemp_key = f"{idempotency_key}_{index}" if idempotency_key else f"{event_name}_{tenant.id}_{datetime.now(timezone.utc).timestamp()}"
+
             outbox_event = ControlPlaneOutbox(
                 id=outbox_id,
                 idempotency_key=final_idemp_key,
@@ -128,9 +145,9 @@ class TenantRepository(ITenantRepository):
             self.session.add(outbox_event)
             # Fire Postgres NOTIFY so the OutboxListener instantly wakes up
             await self.session.execute(
-                text(f"SELECT pg_notify('control_plane_outbox_channel', '{outbox_id}')")
+                text("SELECT pg_notify('control_plane_outbox_channel', :outbox_id)"),
+                {"outbox_id": outbox_id}
             )
-            index += 1
 
         tenant.clear_domain_events()
 
