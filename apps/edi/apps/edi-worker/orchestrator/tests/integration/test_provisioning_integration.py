@@ -6,16 +6,15 @@ import uuid
 import pytest
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from ucp_models.subscriptions import App
-from ucp_models.infrastructure import ShardRegistry
-from ucp_models.infrastructure import DatabaseShard
-from ucp_models.identity import Tenant
-from ucp_models.events import ControlPlaneOutbox
 from database.models.control_plane import AS2Partner
 from database.models.data_plane import AS2Partner as TenantAS2Partner
 from dotenv import load_dotenv
 from soopa_schemas.edi_events import EdiEventType
 from sqlalchemy import delete, select
+from ucp_models.events import ControlPlaneOutbox
+from ucp_models.identity import Tenant
+from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
@@ -71,9 +70,10 @@ async def e2e_context():
     test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
 
-
     async for session in db_router.get_global_session():
-        tenant = Tenant(id=test_tenant_id, name="Test Tenant", idp_tenant_id=f"idp_{test_tenant_id}")
+        tenant = Tenant(
+            id=test_tenant_id, name="Test Tenant", idp_tenant_id=f"idp_{test_tenant_id}"
+        )
         session.add(tenant)
         await session.flush()
 

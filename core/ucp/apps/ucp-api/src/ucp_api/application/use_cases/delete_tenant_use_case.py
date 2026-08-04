@@ -7,6 +7,7 @@ from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
 
 logger = logging.getLogger(__name__)
 
+
 class DeleteTenantUseCase:
     def __init__(
         self,

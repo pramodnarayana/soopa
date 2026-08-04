@@ -2,10 +2,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from platform_orm.models.core import UcpBase
 from sqlalchemy import JSON, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
-
-from platform_orm.models.core import UcpBase
 
 
 class ScheduledJob(UcpBase):

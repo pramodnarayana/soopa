@@ -1,8 +1,7 @@
 import uuid
 
-from database.models.control_plane import InboundRoute
+from database.models.control_plane import AS2Partner, InboundRoute
 from database.models.control_plane import AS2Partner as GlobalTradingPartner
-from database.models.control_plane import AS2Partner
 from database.repository import EdiMessageRepository as DbEdiMessageRepository
 from database.repository import TradingPartnerRepository as DbTradingPartnerRepository
 from sqlalchemy import select as sql_select

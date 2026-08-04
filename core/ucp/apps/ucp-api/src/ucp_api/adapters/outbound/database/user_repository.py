@@ -8,6 +8,7 @@ from ucp_api.domain.models.user import User
 from ucp_models.identity import User as DbUser
 from ucp_models.identity import TenantUser
 
+
 class UserRepository(IUserRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -20,7 +21,7 @@ class UserRepository(IUserRepository):
         )
         result = await self.session.execute(stmt)
         rows = result.all()
-        
+
         users = []
         for db_user, role in rows:
             u = User(
@@ -41,12 +42,7 @@ class UserRepository(IUserRepository):
             return
 
         stmt = delete(DbUser).where(
-            and_(
-                DbUser.id.in_(user_ids),
-                not_(
-                    exists().where(TenantUser.user_id == DbUser.id)
-                )
-            )
+            and_(DbUser.id.in_(user_ids), not_(exists().where(TenantUser.user_id == DbUser.id)))
         )
         await self.session.execute(stmt)
 
@@ -94,4 +90,3 @@ class UserRepository(IUserRepository):
         stmt = select(TenantUser).where(TenantUser.user_id == user_id)
         result = await self.session.execute(stmt)
         return result.first() is not None
-

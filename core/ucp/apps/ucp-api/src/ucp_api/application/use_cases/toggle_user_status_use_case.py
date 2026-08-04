@@ -28,7 +28,9 @@ class ToggleUserStatusUseCase:
     async def execute(self, command: ToggleUserStatusCommand) -> None:
         tenant = await self._tenant_repo.find_by_id(command.tenant_id)
         if not tenant or not tenant.idp_tenant_id:
-            raise ResourceNotFoundError(f"Tenant {command.tenant_id} not found or missing IDP organization")
+            raise ResourceNotFoundError(
+                f"Tenant {command.tenant_id} not found or missing IDP organization"
+            )
 
         tenant_users = await self._user_repo.find_users_by_tenant(command.tenant_id)
         user = next((u for u in tenant_users if u.id == command.user_id), None)

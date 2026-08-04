@@ -2,13 +2,13 @@ import contextlib
 from collections.abc import AsyncGenerator
 
 from database.base_repository import GlobalSession
-from ucp_models.subscriptions import App
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
-from ucp_models.identity import Tenant
 from database.session import get_global_session
 from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.identity import Tenant
+from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 from api.auth.api_key import get_tenant_id_from_api_key
 from api.core.uow import ControlPlaneUnitOfWork, DataPlaneUnitOfWork

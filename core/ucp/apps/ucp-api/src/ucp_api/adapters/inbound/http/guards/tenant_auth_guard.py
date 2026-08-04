@@ -107,8 +107,7 @@ async def require_tenant_member(
     # Fallback: the path param might be a Zitadel Org ID rather than our canonical ID.
     # Resolve it via the repository and re-check.
     logger.debug(
-        "Tenant ID mismatch — attempting IdP resolution. "
-        "requested=%s context=%s",
+        "Tenant ID mismatch — attempting IdP resolution. requested=%s context=%s",
         tenant_id,
         identity.tenant_id,
     )
@@ -123,8 +122,7 @@ async def require_tenant_member(
 
     if identity.tenant_id != resolved.id:
         logger.debug(
-            "IdP resolution succeeded but canonical ID mismatch. "
-            "context=%s resolved=%s",
+            "IdP resolution succeeded but canonical ID mismatch. context=%s resolved=%s",
             identity.tenant_id,
             resolved.id,
         )

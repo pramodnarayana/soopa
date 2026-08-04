@@ -10,16 +10,17 @@ from database.constants import (
     EDI_MESSAGE_ID_PREFIX,
 )
 from database.encryption import db_encryption
-from database.models.data_plane import ApiGateway, EdiMessage
-from database.models.data_plane import DataPlaneOutbox as Outbox
 from database.models.data_plane import (
+    ApiGateway,
     AS2Partner,
     AS2Partnership,
+    EdiMessage,
     InboundRoute,
     OutboundRoute,
     SFTPPartner,
     Webhook,
 )
+from database.models.data_plane import DataPlaneOutbox as Outbox
 from domain.models import EdiJsonDomainModel, EdiMessageDomainModel
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert

@@ -7,7 +7,7 @@ from typing import Any
 import jwt
 from jwt import PyJWKClient
 
-from identity.domain.identity_context import TokenClaims, PLATFORM_TENANT_ID
+from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
 from identity.ports.token_verifier import TokenVerifier
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class ZitadelTokenVerifier(TokenVerifier):
         # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
         roles_dict = payload.get("urn:zitadel:iam:org:project:roles")
         if roles_dict and isinstance(roles_dict, dict) and self._options.platform_org_id:
-            for role, orgs in roles_dict.items():
+            for _role, orgs in roles_dict.items():
                 if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
                     orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
 

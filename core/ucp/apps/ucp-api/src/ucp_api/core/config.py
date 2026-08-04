@@ -2,6 +2,7 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
+
 class Settings(BaseSettings):
     # AWS / SNS
     sns_tenant_events_topic_arn: str = ""
@@ -10,11 +11,11 @@ class Settings(BaseSettings):
     aws_access_key_id: str = "test"
     aws_secret_access_key: str = "test"
     use_localstack: bool = False
-    
+
     # Daemon / Sweep
     outbox_sweeper_batch_limit: int = 100
     outbox_sweeper_cron_interval: int = 5
-    
+
     # Zitadel Identity Provider
     zitadel_api_url: str = "http://ucp.localhost:8080"
     zitadel_api_token: str
@@ -26,7 +27,7 @@ class Settings(BaseSettings):
     zitadel_issuer: str = "http://ucp.localhost:8080"
 
     from pydantic import field_validator  # type: ignore
-    
+
     # Database
     database_url: str = ""
 
@@ -42,6 +43,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
 
 @lru_cache
 def get_settings() -> Settings:

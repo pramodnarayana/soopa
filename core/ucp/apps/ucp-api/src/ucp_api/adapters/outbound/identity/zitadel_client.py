@@ -6,6 +6,7 @@ from ucp_api.core.exceptions import IdentityProviderError
 
 logger = logging.getLogger(__name__)
 
+
 class ZitadelClient:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -34,13 +35,16 @@ class ZitadelClient:
             await self._client.aclose()
             self._client = None
 
-    async def fetch_with_auth(self, endpoint: str, method: str = "GET", json: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> httpx.Response:
+    async def fetch_with_auth(
+        self,
+        endpoint: str,
+        method: str = "GET",
+        json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> httpx.Response:
         self._assert_config()
 
-        req_headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json"
-        }
+        req_headers = {"Authorization": f"Bearer {self.token}", "Accept": "application/json"}
         if headers:
             req_headers.update(headers)
 
@@ -53,6 +57,5 @@ class ZitadelClient:
         error_text = response.text
         logger.error(f"Failed to {action_context}: {error_text}")
         raise IdentityProviderError(
-            message=f"Failed to {action_context}",
-            original_error=error_text
+            message=f"Failed to {action_context}", original_error=error_text
         )

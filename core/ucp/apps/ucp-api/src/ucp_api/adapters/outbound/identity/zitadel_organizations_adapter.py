@@ -7,10 +7,12 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+
 class CreateOrgResponse(BaseModel):
     id: str | None = None
     organization_id: str | None = Field(None, alias="organizationId")
     org_id: str | None = Field(None, alias="orgId")
+
 
 class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
     def __init__(self, project_provider: IProjectProvider) -> None:
@@ -22,9 +24,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
 
         try:
             response = await self.fetch_with_auth(
-                endpoint="/management/v1/orgs",
-                method="POST",
-                json={"name": name}
+                endpoint="/management/v1/orgs", method="POST", json={"name": name}
             )
 
             if response.status_code >= 400:
@@ -33,25 +33,21 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
             data = response.json()
             parsed_data = CreateOrgResponse.model_validate(data)
             org_id = parsed_data.id or parsed_data.organization_id or parsed_data.org_id
-            
+
             if not org_id:
                 raise ValueError("Org ID not returned from Zitadel")
-            
+
             logger.info(f"Created Organization in Zitadel with ID: {org_id}")
 
             grant_succeeded = False
             if self.ucp_project_id:
                 tenant_group = self.settings.zitadel_tenant_role_group
                 all_roles = await self.project_provider.get_roles()
-                tenant_role_keys = [
-                    role.key for role in all_roles if role.group == tenant_group
-                ]
+                tenant_role_keys = [role.key for role in all_roles if role.group == tenant_group]
 
                 try:
                     await self.project_provider.create_project_grant(
-                        org_id,
-                        self.ucp_project_id,
-                        tenant_role_keys
+                        org_id, self.ucp_project_id, tenant_role_keys
                     )
                     grant_succeeded = True
                 except Exception as error:
@@ -72,15 +68,13 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
         try:
             # First try admin v1 delete (which works cross-org)
             response = await self.fetch_with_auth(
-                endpoint=f"/admin/v1/orgs/{org_id}",
-                method="DELETE"
+                endpoint=f"/admin/v1/orgs/{org_id}", method="DELETE"
             )
 
             if response.status_code >= 400:
                 # Fallback to management v1 if admin fails
                 response = await self.fetch_with_auth(
-                    endpoint=f"/management/v1/orgs/{org_id}",
-                    method="DELETE"
+                    endpoint=f"/management/v1/orgs/{org_id}", method="DELETE"
                 )
 
             if response.status_code >= 400:

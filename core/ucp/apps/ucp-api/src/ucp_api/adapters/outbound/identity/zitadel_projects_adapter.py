@@ -13,8 +13,11 @@ from ucp_api.domain.dtos.zitadel_dtos import (
 
 logger = logging.getLogger(__name__)
 
+
 class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
-    async def create_project_grant(self, org_id: str, project_id: str, role_keys: List[str]) -> None:
+    async def create_project_grant(
+        self, org_id: str, project_id: str, role_keys: List[str]
+    ) -> None:
         logger.info(f"Creating project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}")
 
         try:
@@ -24,7 +27,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
                 json={
                     "grantedOrgId": org_id,
                     "roleKeys": role_keys,
-                }
+                },
             )
 
             if response.status_code >= 400:
@@ -43,7 +46,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             search_response = await self.fetch_with_auth(
                 endpoint=f"/management/v1/projects/{project_id}/grants/_search",
                 method="POST",
-                json={"queries": []}
+                json={"queries": []},
             )
 
             if search_response.status_code >= 400:
@@ -51,22 +54,20 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
 
             search_data = search_response.json()
             parsed_search_data = ZitadelProjectGrantsResponse.model_validate(search_data)
-            
-            grant = next(
-                (g for g in parsed_search_data.result if g.granted_org_id == org_id),
-                None
-            )
+
+            grant = next((g for g in parsed_search_data.result if g.granted_org_id == org_id), None)
 
             if not grant:
-                logger.warning(f"No project grant found for org {org_id} and project {project_id}. Skipping deletion.")
+                logger.warning(
+                    f"No project grant found for org {org_id} and project {project_id}. Skipping deletion."
+                )
                 return
 
             grant_id = grant.grant_id or grant.id
 
             # Delete the grant
             delete_response = await self.fetch_with_auth(
-                endpoint=f"/management/v1/projects/{project_id}/grants/{grant_id}",
-                method="DELETE"
+                endpoint=f"/management/v1/projects/{project_id}/grants/{grant_id}", method="DELETE"
             )
 
             if delete_response.status_code >= 400:
@@ -83,7 +84,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
         response = await self.fetch_with_auth(
             endpoint=f"/management/v1/projects/{self.ucp_project_id}/roles/_search",
             method="POST",
-            json={}
+            json={},
         )
 
         if response.status_code >= 400:
@@ -101,7 +102,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             endpoint="/management/v1/users/_search",
             method="POST",
             headers={"x-zitadel-orgid": org_id},
-            json={}
+            json={},
         )
 
         if response.status_code >= 400:
@@ -117,7 +118,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             grant_res = await self.fetch_with_auth(
                 endpoint=f"/management/v1/projects/{self.ucp_project_id}/grants/_search",
                 method="POST",
-                json={"queries": []}
+                json={"queries": []},
             )
             if grant_res.status_code < 400:
                 grant_data = grant_res.json()
@@ -133,7 +134,9 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
         users_with_roles = []
         for u in users:
             email = u.human.email.email if u.human and u.human.email else u.user_name
-            display_name = u.human.profile.display_name if u.human and u.human.profile else u.user_name
+            display_name = (
+                u.human.profile.display_name if u.human and u.human.profile else u.user_name
+            )
             first_name = u.human.profile.first_name if u.human and u.human.profile else None
             last_name = u.human.profile.last_name if u.human and u.human.profile else None
 
@@ -146,7 +149,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
                     lastName=last_name,
                     state=u.state,
                     role=role,
-                    createdAt=u.details.creation_date if u.details else None
+                    createdAt=u.details.creation_date if u.details else None,
                 )
             )
 

@@ -3,8 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from database.models.control_plane import InboundRoute
-from database.models.control_plane import AS2Partner
+from database.models.control_plane import AS2Partner, InboundRoute
 from database.repository import (
     EdiMessageRepository,
     TradingPartnerRepository,

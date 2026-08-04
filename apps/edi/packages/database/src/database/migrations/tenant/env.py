@@ -7,8 +7,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from database.models.data_plane import TenantBase
-import ucp_models
-import database.models
 
 config = context.config
 

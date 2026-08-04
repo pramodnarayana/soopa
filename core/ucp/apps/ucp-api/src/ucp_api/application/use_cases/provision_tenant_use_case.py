@@ -32,7 +32,9 @@ class ProvisionTenantUseCase:
         self.organization_provider = organization_provider
         self.user_identity_provider = user_identity_provider
 
-    async def execute(self, command: ProvisionTenantCommand, idempotency_key: Optional[str] = None) -> Tenant:
+    async def execute(
+        self, command: ProvisionTenantCommand, idempotency_key: Optional[str] = None
+    ) -> Tenant:
         # 1. Call Zitadel to create an Organization
         org_id, _ = await self.organization_provider.create_organization(command.name)
 

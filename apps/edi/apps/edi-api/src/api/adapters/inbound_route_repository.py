@@ -4,10 +4,10 @@ from database.models.control_plane import (
     InboundRoute,
     SFTPPartner,
 )
-from ucp_models.webhooks import Webhook
 from domain.models import InboundRouteDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
+from ucp_models.webhooks import Webhook
 
 from api.domain.models import (
     CreateInboundRouteCmd,

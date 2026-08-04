@@ -1,8 +1,8 @@
 import contextlib
 
 from database.connection import DatabaseRouter
-from ucp_models.identity import ApiToken
 from sqlalchemy.dialects.postgresql import insert
+from ucp_models.identity import ApiToken
 
 from worker.ports.api_token import ApiTokenPort
 

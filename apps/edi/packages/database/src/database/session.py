@@ -42,7 +42,6 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
 
     # Resolve Host Company (Tenant 0) dynamically from the Global DB
     from sqlalchemy import select
-
     from ucp_models.identity import Tenant
     from ucp_models.infrastructure import DatabaseShard
 

@@ -1,10 +1,9 @@
 from typing import Any
 
-from sqlalchemy import JSON, String
-from sqlalchemy.orm import Mapped, mapped_column
-
 from platform_orm.models.common import TimestampMixin
 from platform_orm.models.core import UcpBase
+from sqlalchemy import JSON, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class PlatformSettings(UcpBase, TimestampMixin):

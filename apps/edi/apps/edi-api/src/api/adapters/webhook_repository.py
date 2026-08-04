@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from domain.models import WebhookDomainModel
+from sqlalchemy import select
 from ucp_models.webhooks import (
     Webhook,
 )
-from domain.models import WebhookDomainModel
-from sqlalchemy import select
 
 from api.ports.webhook_repository import WebhookRepositoryPort
 

@@ -9,7 +9,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-import typing
+import edi_events
+import ucp_events
+import webhook_events
 
 
 class EventMessage(BaseModel):

@@ -3,12 +3,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from database.connection import DatabaseRouter
-from ucp_models.subscriptions import App
-from ucp_models.infrastructure import ShardRegistry
-from ucp_models.infrastructure import DatabaseShard
-from ucp_models.identity import Tenant
 from sqlalchemy import select
 from sqlalchemy.engine.url import make_url
+from ucp_models.identity import Tenant
+from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 from worker.adapters.sqs_poller import poll_sqs_queue
 from worker.core.security import validate_target_url

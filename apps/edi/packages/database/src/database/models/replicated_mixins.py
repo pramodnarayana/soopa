@@ -14,6 +14,7 @@ from sqlalchemy.sql import text
 
 class AS2PartnerMixin:
     """Shared columns for AS2Partner across Global and Tenant schemas."""
+
     ID_PREFIX = "as2"
 
     @declared_attr
@@ -69,6 +70,7 @@ class AS2PartnerMixin:
 
 class AS2PartnershipMixin:
     """Shared columns for AS2Partnership across Global and Tenant schemas."""
+
     ID_PREFIX = "as2p"
 
     @declared_attr
@@ -112,6 +114,7 @@ class AS2PartnershipMixin:
 
 class SFTPPartnerMixin:
     """Shared columns for SFTPPartner across Global and Tenant schemas."""
+
     ID_PREFIX = "sftp"
 
     @declared_attr
@@ -163,11 +166,14 @@ class SFTPPartnerMixin:
 
 class WebhookMixin:
     """Shared columns for Webhook across Global and Tenant schemas."""
+
     ID_PREFIX = "wh"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
-        return mapped_column(String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}")
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+        )
 
     @declared_attr
     def name(cls) -> Mapped[str]:
@@ -188,6 +194,7 @@ class WebhookMixin:
 
 class InboundRouteMixin:
     """Shared columns for InboundRoute across Global and Tenant schemas."""
+
     ID_PREFIX = "inbrt"
 
     @declared_attr
@@ -235,6 +242,7 @@ class InboundRouteMixin:
 
 class OutboundEdiHeaderMixin:
     """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
+
     ID_PREFIX = "outhdr"
 
     @declared_attr
@@ -290,6 +298,7 @@ class OutboundEdiHeaderMixin:
 
 class OutboundRouteMixin:
     """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
+
     ID_PREFIX = "outrt"
 
     @declared_attr

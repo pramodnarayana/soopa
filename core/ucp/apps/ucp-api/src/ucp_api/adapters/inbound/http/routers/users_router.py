@@ -1,4 +1,4 @@
-from typing import Any, Annotated
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 
@@ -31,17 +31,28 @@ from ucp_api.ports.outbound.user_repository import IUserRepository
 
 router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["Users"])
 
+
 # Dependency placeholders \u2014 overridden in main.py via dependency_overrides
 def get_tenant_repo() -> ITenantRepository:
     raise NotImplementedError()
+
+
 def get_user_repo() -> IUserRepository:
     raise NotImplementedError()
+
+
 def get_invite_user_use_case() -> InviteUserUseCase:
     raise NotImplementedError()
+
+
 def get_update_user_use_case() -> UpdateUserUseCase:
     raise NotImplementedError()
+
+
 def get_toggle_user_status_use_case() -> ToggleUserStatusUseCase:
     raise NotImplementedError()
+
+
 def get_delete_user_use_case() -> DeleteUserUseCase:
     raise NotImplementedError()
 
@@ -58,23 +69,25 @@ async def get_users(  # type: ignore
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     users = await user_repo.find_users_by_tenant(tenant_id)
-    
+
     result = []
     for u in users:
         name_parts = u.name.split(" ")
         first_name = name_parts[0] if name_parts else ""
         last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
-        
-        result.append({
-            "id": u.id,
-            "email": u.email,
-            "displayName": u.name,
-            "firstName": first_name,
-            "lastName": last_name,
-            "state": "USER_STATE_INACTIVE" if u.status == "inactive" else "USER_STATE_ACTIVE",
-            "role": getattr(u, "role", "Unknown"),
-            "createdAt": u.created_at.isoformat()
-        })
+
+        result.append(
+            {
+                "id": u.id,
+                "email": u.email,
+                "displayName": u.name,
+                "firstName": first_name,
+                "lastName": last_name,
+                "state": "USER_STATE_INACTIVE" if u.status == "inactive" else "USER_STATE_ACTIVE",
+                "role": getattr(u, "role", "Unknown"),
+                "createdAt": u.created_at.isoformat(),
+            }
+        )
 
     return {"result": result}
 
@@ -93,7 +106,7 @@ async def create_user(  # type: ignore
         last_name=dto.last_name,
         role=dto.role,
     )
-    
+
     try:
         user_id = await use_case.execute(command)
         return {"userId": user_id}
@@ -162,7 +175,7 @@ async def delete_user(  # type: ignore
         tenant_id=tenant_id,
         user_id=user_id,
     )
-    
+
     try:
         await use_case.execute(command)
         return {"success": True}

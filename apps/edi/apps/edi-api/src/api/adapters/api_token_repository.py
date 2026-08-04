@@ -1,10 +1,10 @@
 from datetime import UTC
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from sqlalchemy import or_, select, update
 from ucp_models.identity import (
     ApiToken,
 )
-from sqlalchemy import or_, select, update
 
 from api.ports.api_token_repository import ApiTokenRepositoryPort
 

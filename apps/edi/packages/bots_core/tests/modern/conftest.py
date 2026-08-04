@@ -1,4 +1,5 @@
 from typing import Any
+
 import pytest
 
 from bots_core.utils.botslib import botsglobal

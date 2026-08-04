@@ -1,12 +1,11 @@
 import os
-from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint
+from platform_orm.models.common import OutboxMixin, TimestampMixin
+from platform_orm.models.core import EdiGlobalBase
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
-from platform_orm.models.common import TimestampMixin, OutboxMixin
-from platform_orm.models.core import EdiGlobalBase, UcpBase
 from .replicated_mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,
@@ -148,7 +147,9 @@ class ControlPlaneOutbox(EdiGlobalBase, OutboxMixin):
     ID_PREFIX = "cp_edi_ob"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+        String(128),
+        primary_key=True,
+        default=lambda: f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
     )
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 

@@ -26,6 +26,7 @@ HOP_BY_HOP_HEADERS = {
     "host",
 }
 
+
 # Dependency placeholder — overridden in main.py via dependency_overrides
 def get_tenant_repo() -> ITenantRepository:
     raise NotImplementedError()  # noqa: E704
@@ -60,7 +61,9 @@ async def proxy_to_edi(
     if query:
         target_url += f"?{query}"
 
-    logger.info("[PROXY] %s %s -> %s (tenant=%s)", request.method, request.url, target_url, ucp_tenant_id)
+    logger.info(
+        "[PROXY] %s %s -> %s (tenant=%s)", request.method, request.url, target_url, ucp_tenant_id
+    )
 
     forward_headers: dict[str, str] = {}
     for key, value in request.headers.items():
@@ -103,4 +106,3 @@ async def proxy_to_edi(
                 status_code=502,
                 detail="Failed to communicate with downstream EDI service.",
             ) from exc
-
