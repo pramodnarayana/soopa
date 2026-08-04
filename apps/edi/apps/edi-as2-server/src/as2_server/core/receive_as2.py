@@ -50,7 +50,7 @@ class ReceiveAS2UseCase:
         Requires the complete fixed-length ISA envelope (106 chars) and all 16 elements.
         """
         try:
-            content = pure_edi_bytes.decode("ascii", strict=True)
+            content = pure_edi_bytes.decode("ascii", errors="strict")
             if not content.startswith("ISA"):
                 return None
 
