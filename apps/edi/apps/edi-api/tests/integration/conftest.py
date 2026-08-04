@@ -151,7 +151,7 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     app.dependency_overrides[get_vault] = lambda: override_get_vault
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[get_tenant_id_from_api_key] = lambda: "1"
-    app.dependency_overrides[require_platform_admin] = lambda: "1"
+    app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "test-user",
         "tenant_id": "1",
@@ -159,7 +159,7 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     }
     app.dependency_overrides[get_platform_user_profile] = lambda: {
         "sub": "test-user",
-        "tenant_id": "1",
+        "tenant_id": PLATFORM_TENANT_ID,
         "permissions": ["platform:admin"],
     }
 

@@ -93,16 +93,9 @@ def test_create_as2_partner_unauthorized():
 
 def test_create_as2_partner_forbidden(client):
     # Test authenticated but without platform admin
-    from api.dependencies.auth import get_platform_user_profile
-
-    app.dependency_overrides[get_platform_user_profile] = lambda: {"permissions": []}
-
-    response = client.post(
-        "/api/v1/platform/trading-partners/as2/trading-partners",
-        json={"name": "Test", "as2_id": "TEST_ID", "is_local": True},
-    )
-    # The actual override for permissions might cause 403. But wait, get_platform_user_profile normally raises 403 if it checks inside it, OR we are just testing the dependency injection. If we mock get_platform_user_profile to raise 403:
     from fastapi import HTTPException
+
+    from api.dependencies.auth import get_platform_user_profile
 
     def mock_forbidden():
         raise HTTPException(status_code=403, detail="Forbidden")

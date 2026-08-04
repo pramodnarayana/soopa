@@ -31,39 +31,71 @@ class AS2PartnerService:
         logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
 
         if idempotency_key:
+            import hashlib
+            import json
+
             from database.models.control_plane import ControlPlaneOutbox
-            from sqlalchemy import select
+            from fastapi import HTTPException
+            from sqlalchemy import insert, select
+            from sqlalchemy.exc import IntegrityError
 
-            stmt = select(ControlPlaneOutbox).where(
-                ControlPlaneOutbox.idempotency_key == idempotency_key
-            )
-            result = await self.uow.global_session.execute(stmt)
-            existing_event = result.scalar_one_or_none()
+            # Create normalized fingerprint excluding private key material
+            fingerprint_data = {
+                "tenant_id": tenant_id,
+                "name": cmd.name,
+                "as2_id": cmd.as2_id,
+                "is_local": cmd.is_local,
+                "url": cmd.url,
+                "public_cert_pem": cmd.public_cert_pem,
+                "public_cert_vault_ref": cmd.public_cert_vault_ref,
+                # Exclude private_key_vault_ref from fingerprint as it's raw private-key material
+            }
+            fingerprint = hashlib.sha256(
+                json.dumps(fingerprint_data, sort_keys=True).encode()
+            ).hexdigest()
 
-            if existing_event and existing_event.payload:
-                partner_id = existing_event.payload.get("resource_id")
-                if partner_id:
-                    existing_partner = await self.uow.as2_partners.get_as2_partner(
-                        tenant_id, partner_id
-                    )
-                    if existing_partner:
-                        if (
-                            existing_partner.name == cmd.name
-                            and existing_partner.as2_id == cmd.as2_id
-                        ):
+            # Try to atomically reserve the idempotency_key
+            try:
+                stmt = insert(ControlPlaneOutbox).values(
+                    id=f"reservation_{idempotency_key}",
+                    tenant_id=tenant_id,
+                    idempotency_key=idempotency_key,
+                    event_type="RESERVATION",
+                    payload={"fingerprint": fingerprint},
+                    status="RESERVED",
+                    attempts=0,
+                )
+                await self.uow.global_session.execute(stmt)
+                await self.uow.global_session.flush()
+            except IntegrityError:
+                # Idempotency key already exists, load it and validate
+                stmt = select(ControlPlaneOutbox).where(
+                    ControlPlaneOutbox.idempotency_key == idempotency_key
+                )
+                result = await self.uow.global_session.execute(stmt)
+                existing_event = result.scalar_one_or_none()
+
+                if existing_event and existing_event.payload:
+                    existing_fingerprint = existing_event.payload.get("fingerprint")
+                    if existing_fingerprint != fingerprint:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Idempotency conflict: payload does not match existing request.",
+                        )
+
+                    # Fingerprint matches, return the existing partner
+                    partner_id = existing_event.payload.get("resource_id")
+                    if partner_id:
+                        existing_partner = await self.uow.as2_partners.get_as2_partner(
+                            tenant_id, partner_id
+                        )
+                        if existing_partner:
                             return PartnerEntity(
                                 partner_id=partner_id,
                                 tenant_id=tenant_id,
                                 name=existing_partner.name,
                                 type=ConnectionType.AS2,
                                 status=PartnerStatus.PROVISIONING,
-                            )
-                        else:
-                            from fastapi import HTTPException
-
-                            raise HTTPException(
-                                status_code=409,
-                                detail="Idempotency conflict: payload does not match existing request.",
                             )
 
         partner_id = await self.uow.as2_partners.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
