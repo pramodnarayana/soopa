@@ -59,7 +59,9 @@ class TradingPartnerRepositoryAdapter:
         partner = await self.repo.find_by_as2_id(tenant_id, as2_id)
         if not partner:
             return None
-        return PartnerEntity(as2_id=partner.as2_id, public_cert_pem=partner.public_cert_pem)
+        return PartnerEntity(
+            as2_id=partner.as2_id, public_cert_pem=partner.public_cert_pem, active=partner.active
+        )
 
 
 class EdiMessageRepositoryAdapter:

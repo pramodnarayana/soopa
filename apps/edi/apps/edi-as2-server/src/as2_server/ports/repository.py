@@ -3,9 +3,12 @@ from typing import Protocol
 
 
 class PartnerEntity:
-    def __init__(self, as2_id: str, public_cert_pem: str | None = None) -> None:
+    def __init__(
+        self, as2_id: str, public_cert_pem: str | None = None, active: bool = False
+    ) -> None:
         self.as2_id = as2_id
         self.public_cert_pem = public_cert_pem
+        self.active = active
 
 
 class ITradingPartnerRepository(Protocol):
