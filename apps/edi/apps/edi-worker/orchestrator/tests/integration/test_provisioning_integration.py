@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 import uuid
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import pytest
 from config.settings import get_settings
@@ -27,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 @pytest.fixture
-async def e2e_context():
+async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     """
     Sets up the DatabaseRouter and SQS adapters for the E2E test.
     Cleans up inserted data at the end of the test.
@@ -170,7 +172,7 @@ async def e2e_context():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_provisioning_replication_e2e_flow(e2e_context):
+async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
     """
     Tests the full replication flow:
     1. API inserts an event into the Control Plane Outbox.

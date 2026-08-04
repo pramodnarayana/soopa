@@ -1,5 +1,6 @@
 import json
 import os
+import typing
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, text
@@ -20,12 +21,15 @@ class TenantRepository(ITenantRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _map_to_domain(self, row: DbTenant, subscriptions: Optional[List[str]] = None) -> Tenant:  # type: ignore
+    def _map_to_domain(self, row: DbTenant, subscriptions: Optional[List[str]] = None) -> Tenant:
         return Tenant(
             id=row.id,
             name=row.name,
             idp_tenant_id=row.idp_tenant_id,
-            status=row.status if hasattr(row, "status") else "active",
+            status=typing.cast(
+                typing.Literal["active", "inactive"],
+                row.status if hasattr(row, "status") else "active",
+            ),
             created_at=row.created_at.replace(tzinfo=timezone.utc),
             updated_at=(
                 row.updated_at.replace(tzinfo=timezone.utc)

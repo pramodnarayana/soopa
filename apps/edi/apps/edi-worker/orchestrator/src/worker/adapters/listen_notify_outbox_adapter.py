@@ -195,3 +195,23 @@ class ListenNotifyOutboxAdapter(OutboxPort):
         # Re-raise the exception after persisting the failure
         if processing_error is not None:
             raise processing_error
+
+    async def publish_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: str,
+        tenant_id: str,
+    ) -> None:
+        """Publishes an event to the outbox queue."""
+        if not self.pool:
+            raise RuntimeError("Adapter is not initialized")
+
+        async with self.pool.acquire() as connection:
+            await connection.execute(
+                "INSERT INTO edi.outbox (idempotency_key, event_type, payload, tenant_id, status) VALUES ($1, $2, $3, $4, 'PENDING')",
+                idempotency_key,
+                event_type,
+                json.dumps(payload),
+                tenant_id,
+            )

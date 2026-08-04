@@ -33,6 +33,7 @@ module = [
     "bots_core.utils.*",
     "bots_core.infrastructure.config.*",
     "bots_core.usersys.*",
+    "tests.*",
 ]
 ignore_errors = true
 

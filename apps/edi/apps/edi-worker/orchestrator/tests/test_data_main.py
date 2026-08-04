@@ -1,4 +1,7 @@
 import os
+import uuid
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,7 +30,7 @@ parsed_shard_1_url = make_url(raw_shard_1_url).set(drivername="postgresql+asyncp
 SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hide_password=False))
 
 
-def test_validate_target_url(monkeypatch):
+def test_validate_target_url(monkeypatch: MagicMock) -> None:
     import worker.core.security
 
     monkeypatch.setattr(worker.core.security, "IS_DEV", False)
@@ -44,7 +47,7 @@ def test_validate_target_url(monkeypatch):
 
 
 @pytest.fixture
-async def router():
+async def router() -> "AsyncGenerator[DatabaseRouter, None]":
     db_router = DatabaseRouter(GLOBAL_DB_URL, pool_size=2, max_overflow=2)
     yield db_router
     await db_router.close_all()
@@ -52,7 +55,7 @@ async def router():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_process_pipeline_event_no_message(router: DatabaseRouter):
+async def test_process_pipeline_event_no_message(router: DatabaseRouter) -> None:
     # Setup TenantResolver double (since we don't want to seed global DB for this simple test)
     resolver = AsyncMock()
     resolver.resolve.return_value = ("shard_1", SHARD_1_URL)
@@ -75,14 +78,12 @@ async def test_process_pipeline_event_no_message(router: DatabaseRouter):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.integration
-async def test_tenant_resolver_integration(router: DatabaseRouter):
+async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
     """
     Real narrow integration test. Connects to the database and tests real behavior.
     """
     global_gen = router.get_global_session()
     global_session = await global_gen.__anext__()
-
-    import uuid
 
     suffix = str(uuid.uuid4())[:8]
     shard_name = f"test_shard_{suffix}"
@@ -102,7 +103,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
 
     tenant_shard = ShardRegistry(
         tenant_id=tenant.id,
-        app_id=edi_app.id,
+        app_id=edi_app.id if edi_app is not None else None,
         shard_id=shard.id,
     )
     global_session.add(tenant_shard)
@@ -131,7 +132,9 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
         app_res = await global_session2.execute(select(App).where(App.slug == "edi"))
         edi_app = app_res.scalars().first()
 
-        tenant_shard_to_delete = await global_session2.get(ShardRegistry, (tenant_id, edi_app.id))
+        tenant_shard_to_delete = await global_session2.get(
+            ShardRegistry, (tenant_id, edi_app.id if edi_app is not None else None)
+        )
         if tenant_shard_to_delete:
             await global_session2.delete(tenant_shard_to_delete)
             await global_session2.flush()
@@ -152,7 +155,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.integration
-async def test_tenant_resolver_not_found(router: DatabaseRouter):
+async def test_tenant_resolver_not_found(router: DatabaseRouter) -> None:
     """
     Test TenantResolver when a tenant is not found in the live DB.
     """
@@ -161,7 +164,7 @@ async def test_tenant_resolver_not_found(router: DatabaseRouter):
         await resolver.resolve("-999")
 
 
-async def test_process_delivery_no_message(router: DatabaseRouter):
+async def test_process_delivery_no_message(router: DatabaseRouter) -> None:
     from worker.data.handlers import process_delivery
 
     resolver = AsyncMock()
@@ -181,7 +184,7 @@ async def test_process_delivery_no_message(router: DatabaseRouter):
 
 
 @pytest.mark.asyncio
-async def test_poll_sqs_queue():
+async def test_poll_sqs_queue() -> None:
     # Test the infrastructure polling loop.
     # We mock aioboto3 to return 1 message, then raise ValueError to break the infinite loop.
     mock_sqs = AsyncMock()
@@ -203,10 +206,10 @@ async def test_poll_sqs_queue():
     ]
 
     class MockClientContext:
-        async def __aenter__(self):
+        async def __aenter__(self) -> Any:
             return mock_sqs
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
+        async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
             pass
 
     mock_session = MagicMock()
@@ -241,7 +244,7 @@ async def test_poll_sqs_queue():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_main_execution_loop():
+async def test_main_execution_loop() -> None:
     from worker.data.main import main
 
     with (

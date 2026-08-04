@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy.orm import DeclarativeBase, registry
 
 GlobalRegistry = registry()
@@ -10,7 +12,7 @@ class UcpBase(DeclarativeBase):
     """
 
     registry = GlobalRegistry
-    __table_args__ = {"schema": "ucp"}
+    __table_args__: Any = {"schema": "ucp"}
 
 
 class EdiGlobalBase(DeclarativeBase):
@@ -20,4 +22,4 @@ class EdiGlobalBase(DeclarativeBase):
     """
 
     registry = GlobalRegistry
-    __table_args__ = {"schema": "edi"}
+    __table_args__: Any = {"schema": "edi"}

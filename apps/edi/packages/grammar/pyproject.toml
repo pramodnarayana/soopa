@@ -45,3 +45,13 @@ extend = "../../../../pyproject.toml"
 
 [tool.ruff.lint]
 ignore = ["F401", "F403", "F405"]
+
+[tool.mypy]
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "edi_grammar.*",
+]
+ignore_errors = true
+ignore_missing_imports = true

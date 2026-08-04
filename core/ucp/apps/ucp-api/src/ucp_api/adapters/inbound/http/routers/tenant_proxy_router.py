@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, AsyncGenerator
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
@@ -97,7 +97,7 @@ async def proxy_to_edi(
             res_headers[key] = value
 
     # Stream the response back instead of buffering
-    async def stream_response():
+    async def stream_response() -> AsyncGenerator[bytes, None]:
         try:
             async for chunk in response.aiter_raw():
                 yield chunk
