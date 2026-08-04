@@ -28,19 +28,29 @@ class AS2TenantRepositoryAdapter:
         return None
 
     async def resolve_tenant_by_edi_identifiers(
-        self, isa_sender: str, isa_receiver: str, transaction_type: str | None = None
+        self,
+        as2_peer_id: str,
+        isa_sender: str,
+        isa_receiver: str,
+        transaction_type: str | None = None,
     ) -> str | None:
-        from database.models.control_plane import InboundRoute
+        from database.models.control_plane import AS2Partner, InboundRoute
 
         conditions = [
             InboundRoute.isa_sender_id == isa_sender,
             InboundRoute.isa_receiver_id == isa_receiver,
             InboundRoute.active.is_(True),
+            AS2Partner.as2_id == as2_peer_id,
         ]
         if transaction_type:
             conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
 
-        result = await self.session.execute(sql_select(InboundRoute.tenant_id).where(*conditions))
+        stmt = (
+            sql_select(InboundRoute.tenant_id)
+            .join(AS2Partner, InboundRoute.as2_partner_id == AS2Partner.id)
+            .where(*conditions)
+        )
+        result = await self.session.execute(stmt)
         tenant_rows = result.fetchall()
         if len(tenant_rows) > 1:
             raise ValueError(

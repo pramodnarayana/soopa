@@ -178,6 +178,36 @@ async def create_platform_as2_partner(
 
     try:
         async with uow:
+            svc = AS2PartnerService(uow=uow)
+            if idempotency_key:
+                fingerprint_data = {
+                    "tenant_id": str(PLATFORM_TENANT_ID),
+                    "name": request.name,
+                    "as2_id": request.as2_id,
+                    "is_local": request.is_local,
+                    "url": str(request.url) if request.url else None,
+                    "public_cert_pem": request.public_cert_pem,
+                    "public_cert_vault_ref": request.public_cert_vault_ref,
+                }
+                existing_partner = await svc.check_and_reserve_idempotency(
+                    tenant_id=PLATFORM_TENANT_ID,
+                    request_data=fingerprint_data,
+                    idempotency_key=idempotency_key,
+                )
+                if existing_partner:
+                    p = await uow.as2_partners.get_as2_partner(
+                        PLATFORM_TENANT_ID, existing_partner.partner_id
+                    )
+                    if p:
+                        return AS2TradingPartnerResponse(
+                            id=str(p.id),
+                            name=p.name,
+                            as2_id=p.as2_id,
+                            is_local=p.is_local,
+                            url=p.url,
+                            active=p.active,
+                        )
+
             if request.is_local:
                 if private_key_vault_ref:
                     pass  # Pre-stored vault ref
@@ -213,7 +243,6 @@ async def create_platform_as2_partner(
                 private_key_vault_ref=private_key_vault_ref,
             )
 
-            svc = AS2PartnerService(uow=uow)
             entity = await svc.create_as2_partner(
                 tenant_id=PLATFORM_TENANT_ID,
                 cmd=cmd,
@@ -293,6 +322,7 @@ async def update_platform_as2_partner(
 ) -> Any:
     """Updates a global AS2 partner."""
     async with uow:
+        svc = AS2PartnerService(uow=uow)
         cmd = UpdateAS2TradingPartnerCmd(
             name=request.name,
             as2_id=request.as2_id,
@@ -301,7 +331,6 @@ async def update_platform_as2_partner(
             active=request.active,
         )
         try:
-            svc = AS2PartnerService(uow=uow)
             await svc.update_as2_partner(
                 tenant_id=PLATFORM_TENANT_ID,
                 partner_id=partner_id,

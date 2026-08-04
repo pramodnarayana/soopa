@@ -36,7 +36,11 @@ class IAS2TenantRepository(Protocol):
         ...
 
     async def resolve_tenant_by_edi_identifiers(
-        self, isa_sender: str, isa_receiver: str, transaction_type: str | None = None
+        self,
+        as2_peer_id: str,
+        isa_sender: str,
+        isa_receiver: str,
+        transaction_type: str | None = None,
     ) -> str | None:
         """
         Resolves the true tenant ID from the global inbound routes using ISA identifiers.

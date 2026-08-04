@@ -217,7 +217,9 @@ async def test_process_delivery_success(mock_vault, mock_webhook, mock_repo):
     # Mock claiming the row
     mock_claimed = MagicMock()
     mock_claimed.scalar_one_or_none.return_value = "fake-key"
-    mock_session.execute.return_value = mock_claimed
+    mock_update_result = MagicMock()
+    mock_update_result.rowcount = 1
+    mock_session.execute.side_effect = [mock_claimed, mock_update_result, mock_update_result]
     mock_repo.return_value.get_edi_message = AsyncMock()
     mock_repo.return_value.update_edi_message = AsyncMock()
     mock_repo.return_value.get_route = AsyncMock()
@@ -282,3 +284,69 @@ async def test_process_delivery_skip(mock_vault, mock_webhook, mock_repo):
 
     # Only the claim query executed, delivery strategy not called
     mock_webhook.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
+@patch("worker.data.handlers.WebhookDeliveryStrategy")
+@patch("worker.data.handlers.WorkerVaultAdapter")
+async def test_process_delivery_stale_update(mock_vault, mock_webhook, mock_repo, caplog):
+    import logging
+
+    from worker.data.handlers import process_delivery
+
+    resolver = AsyncMock()
+    resolver.resolve.return_value = ("shard_1", "fake_dsn")
+    db_router = MagicMock()
+
+    mock_session = AsyncMock()
+
+    async def fake_get_tenant_session(*args, **kwargs):
+        yield mock_session
+
+    db_router.get_tenant_session.side_effect = fake_get_tenant_session
+
+    # Mock claiming the row
+    mock_claimed = MagicMock()
+    mock_claimed.scalar_one_or_none.return_value = "fake-key"
+
+    # Mock the update result
+    mock_update_result = MagicMock()
+    mock_update_result.rowcount = 0
+
+    # Side effect for session.execute
+    # 1st call: claim lease
+    # 2nd call: update outbox (stale)
+    mock_session.execute.side_effect = [mock_claimed, mock_update_result]
+
+    mock_repo.return_value.get_edi_message = AsyncMock()
+    mock_repo.return_value.update_edi_message = AsyncMock()
+    mock_repo.return_value.get_route = AsyncMock()
+    mock_repo.return_value.get_partnership = AsyncMock()
+    mock_repo.return_value.get_edi_message.return_value = MagicMock(partner_id="p1", route_id="r1")
+    mock_repo.return_value.get_route.return_value = MagicMock(webhook_id="w1")
+
+    strategy_instance = AsyncMock()
+    strategy_instance.deliver.return_value = True
+    mock_webhook.return_value = strategy_instance
+
+    with caplog.at_level(logging.WARNING):
+        await process_delivery(
+            trace_id="trace-123",
+            event_type="DELIVER_WEBHOOK",
+            payload={"webhook_url": "http://test", "payload": {}},
+            tenant_id=1,
+            resolver=resolver,
+            db_router=db_router,
+            s3_bucket="test",
+            aws_endpoint=None,
+            idempotency_key="00000000-0000-0000-0000-000000000000",
+        )
+
+    # We expect a warning log about stale success update
+    assert (
+        "Stale success update for idempotency_key=00000000-0000-0000-0000-000000000000. Lease lost."
+        in caplog.text
+    )
+    # Should not have called execute for ProcessedEvent since rowcount == 0
+    assert mock_session.execute.call_count == 2

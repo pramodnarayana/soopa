@@ -215,27 +215,42 @@ async def process_delivery(
                 if key_str:
                     from sqlalchemy.dialects.postgresql import insert
 
-                    await session.execute(
-                        insert(ProcessedEvent)
-                        .values(idempotency_key=key_str)
-                        .on_conflict_do_nothing()
-                    )
-                    await session.execute(
+                    result = await session.execute(
                         update(DataPlaneOutbox)
-                        .where(DataPlaneOutbox.idempotency_key == key_str)
+                        .where(
+                            DataPlaneOutbox.idempotency_key == key_str,
+                            DataPlaneOutbox.owner_token == owner_token,
+                        )
                         .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
                     )
+                    if result.rowcount > 0:  # type: ignore[attr-defined]
+                        await session.execute(
+                            insert(ProcessedEvent)
+                            .values(idempotency_key=key_str)
+                            .on_conflict_do_nothing()
+                        )
+                    else:
+                        logger.warning(
+                            f"[WORKER] Stale success update for idempotency_key={key_str}. Lease lost."
+                        )
                 # Commit transaction
                 await session.commit()
             except Exception as delivery_error:
                 if key_str:
                     try:
                         await session.rollback()
-                        await session.execute(
+                        result = await session.execute(
                             update(DataPlaneOutbox)
-                            .where(DataPlaneOutbox.idempotency_key == key_str)
+                            .where(
+                                DataPlaneOutbox.idempotency_key == key_str,
+                                DataPlaneOutbox.owner_token == owner_token,
+                            )
                             .values(status="FAILED", owner_token=None, lease_expires_at=None)
                         )
+                        if result.rowcount == 0:  # type: ignore[attr-defined]
+                            logger.warning(
+                                f"[WORKER] Stale failure update for idempotency_key={key_str}. Lease lost."
+                            )
                         await session.commit()
                     except Exception as bookkeeping_error:
                         logger.error(

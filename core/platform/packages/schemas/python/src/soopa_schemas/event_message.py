@@ -12,15 +12,7 @@ from . import edi_events, ucp_events, webhook_events
 
 
 class EventMessage(BaseModel):
-    idempotencyKey: str = Field(..., description='Unique key for idempotency')
-    tenantId: str | None = Field(
-        None, description='The tenant ID this event belongs to'
-    )
-    eventType: (
-        ucp_events.UcpEventType
-        | edi_events.EdiEventType
-        | webhook_events.WebhookEventType
-    )
-    payload: dict[str, Any] = Field(
-        ..., description='The event payload, which varies by eventType'
-    )
+    idempotencyKey: str = Field(..., description="Unique key for idempotency")
+    tenantId: str | None = Field(None, description="The tenant ID this event belongs to")
+    eventType: ucp_events.UcpEventType | edi_events.EdiEventType | webhook_events.WebhookEventType
+    payload: dict[str, Any] = Field(..., description="The event payload, which varies by eventType")

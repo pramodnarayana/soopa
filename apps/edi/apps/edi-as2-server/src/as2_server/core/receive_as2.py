@@ -191,7 +191,9 @@ class ReceiveAS2UseCase:
                     isa_sender, isa_receiver = isa_headers
                     try:
                         true_tenant_id = await self.tenant_repo.resolve_tenant_by_edi_identifiers(
-                            isa_sender, isa_receiver
+                            as2_peer_id=as2_msg.as2_from,
+                            isa_sender=isa_sender,
+                            isa_receiver=isa_receiver,
                         )
                         if true_tenant_id:
                             # 1. Check if we have the necessary DB setup tools
