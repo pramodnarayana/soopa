@@ -27,6 +27,39 @@ class AS2TenantRepositoryAdapter:
             return str(tenant_rows[0][0])
         return None
 
+    async def resolve_tenant_by_edi_identifiers(
+        self,
+        as2_peer_id: str,
+        isa_sender: str,
+        isa_receiver: str,
+        transaction_type: str | None = None,
+    ) -> str | None:
+        from database.models.control_plane import AS2Partner, InboundRoute
+
+        conditions = [
+            InboundRoute.isa_sender_id == isa_sender,
+            InboundRoute.isa_receiver_id == isa_receiver,
+            InboundRoute.active.is_(True),
+            AS2Partner.as2_id == as2_peer_id,
+        ]
+        if transaction_type:
+            conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
+
+        stmt = (
+            sql_select(InboundRoute.tenant_id)
+            .join(AS2Partner, InboundRoute.as2_partner_id == AS2Partner.id)
+            .where(*conditions)
+        )
+        result = await self.session.execute(stmt)
+        tenant_rows = result.fetchall()
+        if len(tenant_rows) > 1:
+            raise ValueError(
+                f"Ambiguous inbound route match: multiple tenants for ISA {isa_sender}/{isa_receiver}"
+            )
+        if tenant_rows:
+            return str(tenant_rows[0][0])
+        return None
+
 
 class TradingPartnerRepositoryAdapter:
     def __init__(self, session: AsyncSession) -> None:
@@ -36,7 +69,9 @@ class TradingPartnerRepositoryAdapter:
         partner = await self.repo.find_by_as2_id(tenant_id, as2_id)
         if not partner:
             return None
-        return PartnerEntity(as2_id=partner.as2_id, public_cert_pem=partner.public_cert_pem)
+        return PartnerEntity(
+            as2_id=partner.as2_id, public_cert_pem=partner.public_cert_pem, active=partner.active
+        )
 
 
 class EdiMessageRepositoryAdapter:
@@ -46,7 +81,7 @@ class EdiMessageRepositoryAdapter:
     async def save_message(
         self,
         tenant_id: str,
-        trace_id: uuid.UUID,
+        trace_id: uuid.UUID | str,
         direction: str,
         connection_type: str,
         sender_id: str,

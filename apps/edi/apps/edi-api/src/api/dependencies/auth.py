@@ -77,8 +77,6 @@ async def get_current_tenant_id(
     )
 
     if not tenant_id:
-        if is_platform_admin:
-            return PLATFORM_TENANT_ID
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tenant ID missing from request.",
@@ -152,6 +150,27 @@ async def get_current_user_profile(
     return await auth_service.get_authorization_profile(
         tenant_id=tenant_id,
         is_platform_admin=is_platform_admin,
+        current_rls_tenant=None,
+        roles=roles,
+    )
+
+
+async def get_platform_user_profile(
+    tenant_id: str = Depends(require_platform_admin),
+    token_payload: dict[str, Any] = Depends(get_raw_jwt),
+    auth_service: AuthorizationService = Depends(get_authorization_service),
+) -> dict[str, Any]:
+    """
+    Dedicated dependency for Platform Admin routes.
+    It explicitly uses the trusted PLATFORM_TENANT_ID and bypasses any client-provided headers.
+    """
+    roles = token_payload.get("roles", [])
+    if isinstance(roles, dict):
+        roles = list(roles.keys())
+
+    return await auth_service.get_authorization_profile(
+        tenant_id=PLATFORM_TENANT_ID,
+        is_platform_admin=True,
         current_rls_tenant=None,
         roles=roles,
     )

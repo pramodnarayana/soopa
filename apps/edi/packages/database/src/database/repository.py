@@ -97,7 +97,7 @@ class EdiMessageRepository:
     async def save_message(
         self,
         tenant_id: str,
-        trace_id: UUID,
+        trace_id: UUID | str,
         direction: str,
         connection_type: str,
         edi_data: str,
@@ -106,9 +106,14 @@ class EdiMessageRepository:
         status: str = "RECEIVED",
         message_id: str | None = None,
     ) -> EdiMessage:
+        import uuid
+
+        from database.constants import EDI_MESSAGE_ID_PREFIX
+
         record = EdiMessage(
+            id=f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}",
             tenant_id=tenant_id,
-            trace_id=trace_id,
+            trace_id=str(trace_id),
             direction=direction,
             connection_type=connection_type,
             sender_id=sender_id,

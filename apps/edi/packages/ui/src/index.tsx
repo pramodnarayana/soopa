@@ -12,6 +12,8 @@ export { ExplorerPage } from './routes/tenant/explorer/index';
 export { TenantIndexPage } from './routes/tenant/index';
 export { PartnersPage } from './routes/tenant/partners';
 export { RoutesPageWrapper as RoutesPage } from './routes/tenant/routes';
+export { TransactionTracePage } from './routes/tenant/transactions/$traceId';
+export { TransactionsPage } from './routes/tenant/transactions/index';
 export { TenantUsers as UsersPage } from './routes/tenant/users';
 export { WebhooksPage } from './routes/tenant/webhooks';
 

@@ -8,8 +8,6 @@ from pydantic import BaseModel, Field
 
 
 class TenantProvisioned(BaseModel):
-    tenantId: str = Field(..., description='The unique identifier of the tenant')
-    name: str = Field(..., description='The name of the tenant')
-    appSlugs: list[str] = Field(
-        ..., description='List of app slugs the tenant is subscribed to'
-    )
+    tenantId: str = Field(..., description="The unique identifier of the tenant")
+    name: str = Field(..., description="The name of the tenant")
+    appSlugs: list[str] = Field(..., description="List of app slugs the tenant is subscribed to")

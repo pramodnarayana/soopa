@@ -2,6 +2,9 @@ import uuid
 from typing import Any
 
 from database.base_repository import GlobalSqlAlchemyRepository, TenantSqlAlchemyRepository
+
+# Shared prefix constants for Data Plane IDs
+from database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from database.models.control_plane import ControlPlaneOutbox
 from domain.events import ProvisioningEvent
 
@@ -14,6 +17,7 @@ from api.ports.outbox_repository import (
 class SqlAlchemyOutboxRepositoryMixin:
     session: Any
     model_class: Any
+    id_prefix: str = "obevt_"
 
     async def publish_outbox_event(
         self,
@@ -24,7 +28,7 @@ class SqlAlchemyOutboxRepositoryMixin:
     ) -> str:
         tid_str = tenant_id if tenant_id is not None else None
         event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
-        event_id = str(uuid.uuid4())
+        event_id = f"{self.id_prefix}{uuid.uuid4().hex}"
         record = self.model_class(
             id=event_id,
             tenant_id=tid_str,
@@ -50,6 +54,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
     def __init__(self, session: Any, model_class: Any = ControlPlaneOutbox) -> None:
         super().__init__(session)
         self.model_class = model_class
+        self.id_prefix = "edi_cobevt_"
 
     async def publish_outbox_event(  # type: ignore[override]
         self,
@@ -87,3 +92,4 @@ class SqlAlchemyDataPlaneOutboxRepository(
 
         super().__init__(session)
         self.model_class = DataPlaneOutbox
+        self.id_prefix = DATA_PLANE_OUTBOX_EVENT_PREFIX

@@ -46,7 +46,7 @@ export function useAS2PartnersQuery() {
   return useQuery({
     queryKey: partnersKeys.platformPartners(),
     queryFn: async (): Promise<Partner[]> => {
-      const res = await api.get('/platform/trading-partners/as2/trading-partners');
+      const res = await api.get('platform/trading-partners/as2/trading-partners');
       return PartnersArraySchema.parse(res.data);
     },
   });
@@ -57,7 +57,7 @@ export function useAS2PartnershipsQuery() {
   return useQuery({
     queryKey: partnersKeys.platformPartnerships(),
     queryFn: async (): Promise<AS2Partnership[]> => {
-      const res = await api.get('/platform/trading-partners/as2/partnerships');
+      const res = await api.get('platform/trading-partners/as2/partnerships');
       return AS2PartnershipsArraySchema.parse(res.data);
     },
   });
@@ -83,7 +83,7 @@ export function useTenantPartnersQuery() {
   return useQuery({
     queryKey: partnersKeys.tenant(),
     queryFn: async (): Promise<Partner[]> => {
-      const res = await api.get('/trading-partners');
+      const res = await api.get('trading-partners');
       const rawData = Array.isArray(res.data) ? res.data : [];
       const normalizedData = rawData.map(normalizePartnerResponse);
       return PartnersArraySchema.parse(normalizedData);
@@ -103,7 +103,7 @@ export function useCreateAS2PartnerMutation() {
       if (!payload.is_local && !payload.public_cert_pem?.trim()) {
         throw new Error('Remote AS2 partners require a public certificate.');
       }
-      const res = await api.post('/platform/trading-partners/as2/trading-partners', payload);
+      const res = await api.post('platform/trading-partners/as2/trading-partners', payload);
       return PartnerSchema.parse(res.data);
     },
     'Trading partner created successfully.',
@@ -116,7 +116,7 @@ export function useUpdateAS2PartnerMutation() {
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
-      const res = await api.put(`/platform/trading-partners/as2/trading-partners/${id}`, payload);
+      const res = await api.put(`platform/trading-partners/as2/trading-partners/${id}`, payload);
       return PartnerSchema.parse(res.data);
     },
     'Partner updated successfully.',
@@ -128,7 +128,7 @@ export function useDeleteAS2PartnerMutation() {
   const api = useEdiNetwork();
   return useToastMutation(
     async (id: string) => {
-      await api.delete(`/platform/trading-partners/as2/trading-partners/${id}`);
+      await api.delete(`platform/trading-partners/as2/trading-partners/${id}`);
     },
     'Partner deleted.',
     [partnersKeys.platformPartners()],
@@ -158,7 +158,7 @@ export function useCreateAS2PartnershipMutation() {
       if (!payload.local_partner_id || !payload.remote_partner_id) {
         throw new Error('Both a local and remote trading partner must be selected.');
       }
-      const res = await api.post('/platform/trading-partners/as2/partnerships', payload);
+      const res = await api.post('platform/trading-partners/as2/partnerships', payload);
       return AS2PartnershipSchema.parse(res.data);
     },
     'Partnership created successfully.',
@@ -171,7 +171,7 @@ export function useUpdateAS2PartnershipMutation() {
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdateAS2PartnershipPayload }) => {
-      const res = await api.put(`/platform/trading-partners/as2/partnerships/${id}`, payload);
+      const res = await api.put(`platform/trading-partners/as2/partnerships/${id}`, payload);
       return AS2PartnershipSchema.parse(res.data);
     },
 
@@ -185,7 +185,7 @@ export function useDeleteAS2PartnershipMutation() {
 
   return useToastMutation(
     async (id: string) => {
-      await api.delete(`/platform/trading-partners/as2/partnerships/${id}`);
+      await api.delete(`platform/trading-partners/as2/partnerships/${id}`);
     },
     'Partnership deleted successfully.',
     [partnersKeys.platformPartnerships()],
@@ -201,7 +201,7 @@ export function useCreateSftpPartnerMutation() {
 
   return useToastMutation(
     async (payload: CreateSftpPartnerPayload) => {
-      const res = await api.post('/trading-partners/sftp', payload);
+      const res = await api.post('trading-partners/sftp', payload);
       return PartnerSchema.parse(res.data);
     },
     'SFTP Partner created successfully.',
@@ -214,7 +214,7 @@ export function useUpdateSftpPartnerMutation() {
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
-      const res = await api.put(`/trading-partners/sftp/${id}`, payload);
+      const res = await api.put(`trading-partners/sftp/${id}`, payload);
       return PartnerSchema.parse(res.data);
     },
     'SFTP Partner updated successfully.',
@@ -227,7 +227,7 @@ export function useDeleteSftpPartner() {
 
   return useToastMutation(
     async (id: string) => {
-      await api.delete(`/trading-partners/sftp/${id}`);
+      await api.delete(`trading-partners/sftp/${id}`);
     },
     'SFTP Partner deleted successfully.',
     [partnersKeys.tenant()],

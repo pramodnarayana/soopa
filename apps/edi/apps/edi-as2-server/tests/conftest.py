@@ -172,6 +172,44 @@ def encrypted_as2_payload(receiver_keypair: KeyPair, edi_payload: bytes) -> byte
         os.unlink(in_f.name)
 
 
+class ISALookupConfig:
+    """
+    Mutable container for controlling ISA lookup results per test.
+    Tests can set these to control what scalar_one_or_none/fetchall return.
+    """
+
+    def __init__(self):
+        import uuid
+
+        # Default: single match found (existing behavior)
+        self.scalar_result = str(uuid.uuid4())
+        self.fetchall_result = [(uuid.uuid4(),)]
+        self.first_result = None
+
+    def set_no_match(self):
+        """Configure ISA lookup to return no match."""
+        self.scalar_result = None
+        self.fetchall_result = []
+        self.first_result = None
+
+    def set_single_match(self, tenant_id: str = None):
+        """Configure ISA lookup to return a single match."""
+        import uuid
+
+        tid = tenant_id if tenant_id else str(uuid.uuid4())
+        self.scalar_result = tid
+        self.fetchall_result = [(uuid.UUID(tid) if tenant_id else uuid.uuid4(),)]
+        self.first_result = None
+
+    def set_multiple_matches(self):
+        """Configure ISA lookup to return multiple matches (ambiguous)."""
+        import uuid
+
+        self.scalar_result = None  # scalar_one_or_none won't be used for ambiguity check
+        self.fetchall_result = [(uuid.uuid4(),), (uuid.uuid4(),)]
+        self.first_result = None
+
+
 @pytest_asyncio.fixture
 async def as2_client(
     sender_keypair: KeyPair, receiver_keypair: KeyPair
@@ -181,6 +219,7 @@ async def as2_client(
     - NoOp observability (no infra required)
     - Mocked database session
     - Sender's public cert available as a known Trading Partner
+    - ISA lookup results configurable via isa_lookup_config attribute
     """
     # Wire NoOp observability — tests run with zero telemetry infrastructure
     ObservabilityProvider.configure(
@@ -227,26 +266,33 @@ async def as2_client(
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
 
-        import uuid
-
-        from database.session import get_session
+        from database.session import get_global_session, get_session
 
         from as2_server.main import app
+
+        # Create configurable ISA lookup state
+        isa_lookup_config = ISALookupConfig()
 
         async def override_get_session() -> AsyncGenerator[AsyncMock, None]:
             mock_session = AsyncMock()
             mock_result = MagicMock()
-            mock_result.fetchall.return_value = [(uuid.uuid4(),)]
+            # Use the configurable results
+            mock_result.fetchall.return_value = isa_lookup_config.fetchall_result
+            mock_result.scalar_one_or_none.return_value = isa_lookup_config.scalar_result
+            mock_result.first.side_effect = lambda: isa_lookup_config.first_result
             mock_session.execute.return_value = mock_result
             yield mock_session
 
         app.state.s3_storage = MockS3Storage()
         app.dependency_overrides[get_session] = override_get_session
+        app.dependency_overrides[get_global_session] = override_get_session
 
         # Mock the db_router on app state for the /ready probe
         app.state.db_router = AsyncMock()
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Attach the config to the client so tests can modify it
+            client.isa_lookup_config = isa_lookup_config
             yield client
 
         app.dependency_overrides.clear()

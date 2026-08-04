@@ -16,7 +16,7 @@ IEA*1*000000001~"""
 
 def test_transform_edi_to_json_valid():
     response = client.post(
-        "/api/edi-tools/transform",
+        "/api/v1/edi-tools/transform",
         json={"action": "EDI_TO_JSON", "payload": SAMPLE_X12.decode("utf-8")},
     )
     assert response.status_code == 200
@@ -27,7 +27,7 @@ def test_transform_edi_to_json_valid():
 
 def test_transform_edi_to_json_invalid_edi():
     response = client.post(
-        "/api/edi-tools/transform", json={"action": "EDI_TO_JSON", "payload": "GARBAGE_PAYLOAD"}
+        "/api/v1/edi-tools/transform", json={"action": "EDI_TO_JSON", "payload": "GARBAGE_PAYLOAD"}
     )
     assert response.status_code == 200
     data = response.json()
@@ -38,7 +38,7 @@ def test_transform_edi_to_json_invalid_edi():
 def test_transform_json_to_edi_valid():
     # First get valid JSON
     res = client.post(
-        "/api/edi-tools/transform",
+        "/api/v1/edi-tools/transform",
         json={"action": "EDI_TO_JSON", "payload": SAMPLE_X12.decode("utf-8")},
     )
     import json
@@ -48,20 +48,18 @@ def test_transform_json_to_edi_valid():
 
     # Then transform back
     response = client.post(
-        "/api/edi-tools/transform", json={"action": "JSON_TO_EDI", "payload": ast_json}
+        "/api/v1/edi-tools/transform", json={"action": "JSON_TO_EDI", "payload": ast_json}
     )
     assert response.status_code == 200
     data = response.json()
 
-    # We must assert 'valid' is True, but right now there's an error about payload schema if we send ast_json directly
-    # Wait, ast_json is a string containing JSON.
     assert data["valid"] is True
     assert "ISA*00*" in data["result"]
 
 
 def test_transform_json_to_edi_invalid_json_format():
     response = client.post(
-        "/api/edi-tools/transform", json={"action": "JSON_TO_EDI", "payload": "{invalid json}"}
+        "/api/v1/edi-tools/transform", json={"action": "JSON_TO_EDI", "payload": "{invalid json}"}
     )
     assert response.status_code == 200
     data = response.json()
@@ -71,6 +69,6 @@ def test_transform_json_to_edi_invalid_json_format():
 
 def test_transform_invalid_action():
     response = client.post(
-        "/api/edi-tools/transform", json={"action": "INVALID_ACTION", "payload": "data"}
+        "/api/v1/edi-tools/transform", json={"action": "INVALID_ACTION", "payload": "data"}
     )
     assert response.status_code in (422, 400)

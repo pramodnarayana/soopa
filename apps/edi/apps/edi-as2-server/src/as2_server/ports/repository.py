@@ -3,9 +3,12 @@ from typing import Protocol
 
 
 class PartnerEntity:
-    def __init__(self, as2_id: str, public_cert_pem: str | None = None) -> None:
+    def __init__(
+        self, as2_id: str, public_cert_pem: str | None = None, active: bool = False
+    ) -> None:
         self.as2_id = as2_id
         self.public_cert_pem = public_cert_pem
+        self.active = active
 
 
 class ITradingPartnerRepository(Protocol):
@@ -16,7 +19,7 @@ class IEdiMessageRepository(Protocol):
     async def save_message(
         self,
         tenant_id: str,
-        trace_id: uuid.UUID,
+        trace_id: uuid.UUID | str,
         direction: str,
         connection_type: str,
         sender_id: str,
@@ -30,4 +33,17 @@ class IEdiMessageRepository(Protocol):
 class IAS2TenantRepository(Protocol):
     async def resolve_tenant_id(self, as2_to: str) -> str | None:
         """Resolves the tenant ID by looking at the global trading partners."""
+        ...
+
+    async def resolve_tenant_by_edi_identifiers(
+        self,
+        as2_peer_id: str,
+        isa_sender: str,
+        isa_receiver: str,
+        transaction_type: str | None = None,
+    ) -> str | None:
+        """
+        Resolves the true tenant ID from the global inbound routes using ISA identifiers.
+        Raises ValueError if multiple active routes match (ambiguous resolution).
+        """
         ...

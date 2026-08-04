@@ -1,4 +1,5 @@
 import logging
+import typing
 
 from domain.events import (
     ProvisioningEvent,
@@ -24,6 +25,61 @@ class AS2PartnerService:
 
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
+
+    async def check_and_reserve_idempotency(
+        self, tenant_id: str, request_data: dict[str, typing.Any], idempotency_key: str
+    ) -> PartnerEntity | None:
+        import hashlib
+        import json
+
+        from database.models.control_plane import ControlPlaneOutbox
+        from fastapi import HTTPException
+        from sqlalchemy import insert, select
+        from sqlalchemy.exc import IntegrityError
+
+        fingerprint = hashlib.sha256(json.dumps(request_data, sort_keys=True).encode()).hexdigest()
+
+        try:
+            insert_stmt = insert(ControlPlaneOutbox).values(
+                id=f"reservation_{idempotency_key}",
+                tenant_id=tenant_id,
+                idempotency_key=idempotency_key,
+                event_type="RESERVATION",
+                payload={"fingerprint": fingerprint},
+                status="RESERVED",
+                attempts=0,
+            )
+            await self.uow.global_session.execute(insert_stmt)
+            await self.uow.global_session.flush()
+        except IntegrityError:
+            select_stmt = select(ControlPlaneOutbox).where(
+                ControlPlaneOutbox.idempotency_key == idempotency_key
+            )
+            result = await self.uow.global_session.execute(select_stmt)
+            existing_event = result.scalar_one_or_none()
+
+            if existing_event and existing_event.payload:
+                existing_fingerprint = existing_event.payload.get("fingerprint")
+                if existing_fingerprint != fingerprint:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Idempotency conflict: payload does not match existing request.",
+                    ) from None
+
+                partner_id = existing_event.payload.get("resource_id")
+                if partner_id:
+                    existing_partner = await self.uow.as2_partners.get_as2_partner(
+                        tenant_id, partner_id
+                    )
+                    if existing_partner:
+                        return PartnerEntity(
+                            partner_id=partner_id,
+                            tenant_id=tenant_id,
+                            name=existing_partner.name,
+                            type=ConnectionType.AS2,
+                            status=PartnerStatus.PROVISIONING,
+                        )
+        return None
 
     async def create_as2_partner(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str | None = None

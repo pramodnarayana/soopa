@@ -1,9 +1,12 @@
 import contextlib
 import logging
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
+from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from pipeline.adapters.as2 import HttpxAS2DeliveryAdapter
 from pipeline.adapters.http import HttpxDeliveryAdapter
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
@@ -17,6 +20,7 @@ from pipeline.core.delivery import (
     WebhookDeliveryStrategy,
 )
 from pipeline.core.transformation import InboundTransformService, OutboundTransformService
+from sqlalchemy import or_, update
 
 from worker.adapters.vault import WorkerVaultAdapter
 from worker.core.security import ssrf_safe_context
@@ -38,86 +42,87 @@ async def process_pipeline_event(
 ) -> None:
     """Sets up the Hexagonal dependencies and executes TransformService or Saga Coordinator."""
     shard_name, shard_dsn = await resolver.resolve(tenant_id)
+    key_str = str(idempotency_key) if idempotency_key else None
 
-    tenant_gen = db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
-    session = await tenant_gen.__anext__()
-    try:
-        storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
-        repo_adapter = SqlAlchemyRepositoryAdapter(
-            session=session,
-            settings=get_settings(),
-            storage=storage_adapter,
-        )
-        transformer_adapter = BotsTransformerAdapter()
+    async with contextlib.aclosing(
+        db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
+    ) as session_gen:
+        async for session in session_gen:
+            try:
+                storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+                repo_adapter = SqlAlchemyRepositoryAdapter(
+                    session=session,
+                    settings=get_settings(),
+                    storage=storage_adapter,
+                )
+                transformer_adapter = BotsTransformerAdapter()
 
-        if idempotency_key:
-            import uuid
+                if key_str:
+                    from sqlalchemy.dialects.postgresql import insert
 
-            from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
-            from sqlalchemy import select, update
+                    # Atomically insert ProcessedEvent; if conflict, it returns nothing
+                    stmt = (
+                        insert(ProcessedEvent)
+                        .values(idempotency_key=key_str)
+                        .on_conflict_do_nothing()
+                        .returning(ProcessedEvent.idempotency_key)
+                    )
+                    result = await session.execute(stmt)
+                    if not result.scalar_one_or_none():
+                        logger.info(
+                            f"Skipping duplicate event with idempotency_key={idempotency_key}"
+                        )
+                        await session.commit()
+                        return
+                    await session.execute(
+                        update(DataPlaneOutbox)
+                        .where(DataPlaneOutbox.idempotency_key == key_str)
+                        .values(status="PROCESSED")
+                    )
 
-            key_uuid = uuid.UUID(idempotency_key)
+                from domain.events import PipelineEventType
 
-            # Check for duplicate
-            stmt = select(ProcessedEvent).where(ProcessedEvent.idempotency_key == key_uuid)
-            existing = await session.execute(stmt)
-            if existing.scalar_one_or_none():
-                logger.info(f"Skipping duplicate event with idempotency_key={idempotency_key}")
+                if event_type in (
+                    PipelineEventType.TRANSFORM_COMPLETED,
+                    PipelineEventType.DELIVERY_COMPLETED,
+                ):
+                    from pipeline.core.saga import TraceLifecycleService
+
+                    saga_service = TraceLifecycleService(repo_adapter)
+                    if event_type == PipelineEventType.TRANSFORM_COMPLETED:
+                        await saga_service.handle_transform_completed(payload)
+                    else:
+                        await saga_service.handle_delivery_completed(payload)
+                else:
+                    # Resolve direction first
+                    from domain.direction import MessageDirection
+
+                    direction_str = payload.get("direction", MessageDirection.INBOUND.value)
+                    direction = (
+                        MessageDirection.OUTBOUND
+                        if direction_str.upper() == MessageDirection.OUTBOUND.value
+                        else MessageDirection.INBOUND
+                    )
+
+                    # Execute pure domain logic
+                    service = (
+                        InboundTransformService(transformer_adapter, repo_adapter)
+                        if direction == MessageDirection.INBOUND
+                        else OutboundTransformService(transformer_adapter, repo_adapter)
+                    )
+                    logger.info(f"[WORKER] Transforming trace_id={trace_id}")
+
+                    await service.transform(trace_id)
+                    logger.info(f"[WORKER] SUCCESS transforming trace_id={trace_id}")
+
+                # Commit transaction
                 await session.commit()
-                return
-
-            # Mark as processed in same transaction
-            session.add(ProcessedEvent(idempotency_key=key_uuid))
-            await session.execute(
-                update(DataPlaneOutbox)
-                .where(DataPlaneOutbox.idempotency_key == key_uuid)
-                .values(status="PROCESSED")
-            )
-
-        from domain.events import PipelineEventType
-
-        if event_type in (
-            PipelineEventType.TRANSFORM_COMPLETED,
-            PipelineEventType.DELIVERY_COMPLETED,
-        ):
-            from pipeline.core.saga import TraceLifecycleService
-
-            saga_service = TraceLifecycleService(repo_adapter)
-            if event_type == PipelineEventType.TRANSFORM_COMPLETED:
-                await saga_service.handle_transform_completed(payload)
-            else:
-                await saga_service.handle_delivery_completed(payload)
-        else:
-            # Resolve direction first
-            from domain.direction import MessageDirection
-
-            direction_str = payload.get("direction", MessageDirection.INBOUND.value)
-            direction = (
-                MessageDirection.OUTBOUND
-                if direction_str.upper() == MessageDirection.OUTBOUND.value
-                else MessageDirection.INBOUND
-            )
-
-            # Execute pure domain logic
-            service = (
-                InboundTransformService(transformer_adapter, repo_adapter)
-                if direction == MessageDirection.INBOUND
-                else OutboundTransformService(transformer_adapter, repo_adapter)
-            )
-            print(f"[WORKER] Transforming trace_id={trace_id}")
-
-            await service.transform(trace_id)
-            print(f"[WORKER] SUCCESS transforming trace_id={trace_id}")
-
-        # Commit transaction
-        await session.commit()
-    except Exception as e:
-        print(f"[WORKER] FAILURE in process_transformation for trace_id={trace_id}: {e}")
-        await session.rollback()
-        raise
-    finally:
-        with contextlib.suppress(StopAsyncIteration):
-            await tenant_gen.__anext__()
+            except Exception as e:
+                logger.error(
+                    f"[WORKER] FAILURE in process_transformation for trace_id={trace_id}: {e}"
+                )
+                await session.rollback()
+                raise
 
 
 async def process_delivery(
@@ -133,99 +138,122 @@ async def process_delivery(
 ) -> None:
     """Sets up the Hexagonal dependencies and executes DeliveryService."""
     shard_name, shard_dsn = await resolver.resolve(tenant_id)
+    key_str = str(idempotency_key) if idempotency_key else None
 
-    tenant_gen = db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
-    session = await tenant_gen.__anext__()
-    try:
-        storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
-        repo_adapter = SqlAlchemyRepositoryAdapter(
-            session=session,
-            settings=get_settings(),
-            storage=storage_adapter,
-        )
-        http_adapter = HttpxDeliveryAdapter(validator=ssrf_safe_context)
-        sftp_adapter = ParamikoSftpDeliveryAdapter()
-        vault_adapter = WorkerVaultAdapter()
-        as2_adapter = HttpxAS2DeliveryAdapter(validator=ssrf_safe_context)
+    # Unit of Work 1: Persist DELIVERING state before network I/O
+    if key_str:
+        async with contextlib.aclosing(
+            db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
+        ) as session_gen:
+            async for session in session_gen:
+                owner_token = str(uuid.uuid4())
+                now = datetime.now(UTC)
+                lease_expires = now + timedelta(minutes=5)
 
-        if idempotency_key:
-            import uuid
-
-            from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
-            from sqlalchemy import select, update
-
-            key_uuid = uuid.UUID(idempotency_key)
-
-            # Check for duplicate
-            stmt = select(ProcessedEvent).where(ProcessedEvent.idempotency_key == key_uuid)
-            existing = await session.execute(stmt)
-            if existing.scalar_one_or_none():
-                logger.info(
-                    f"Skipping duplicate delivery event with idempotency_key={idempotency_key}"
-                )
-                await session.commit()
-                return
-
-            # Check Outbox status
-            stmt_outbox = select(DataPlaneOutbox).where(DataPlaneOutbox.idempotency_key == key_uuid)
-            outbox_record = (await session.execute(stmt_outbox)).scalar_one_or_none()
-            if outbox_record:
-                if outbox_record.status == "DELIVERING":
-                    logger.warning(
-                        f"Delivery {key_uuid} is in DELIVERING state (crash/timeout). Proceeding with retry downstream..."
+                # Atomically claim the delivery row
+                stmt = (
+                    update(DataPlaneOutbox)
+                    .where(
+                        DataPlaneOutbox.idempotency_key == key_str,
+                        DataPlaneOutbox.status != "PROCESSED",
+                        or_(
+                            DataPlaneOutbox.lease_expires_at.is_(None),
+                            DataPlaneOutbox.lease_expires_at < now,
+                        ),
                     )
-                elif outbox_record.status == "PROCESSED":
+                    .values(
+                        status="DELIVERING",
+                        owner_token=owner_token,
+                        lease_expires_at=lease_expires,
+                    )
+                    .returning(DataPlaneOutbox.idempotency_key)
+                )
+                result = await session.execute(stmt)
+                if not result.scalar_one_or_none():
+                    logger.info(
+                        f"Skipping delivery for idempotency_key={idempotency_key} (already processed or currently leased)"
+                    )
                     await session.commit()
                     return
 
-            # Persist "DELIVERING" state
-            await session.execute(
-                update(DataPlaneOutbox)
-                .where(DataPlaneOutbox.idempotency_key == key_uuid)
-                .values(status="DELIVERING")
-            )
-            await session.commit()
-
-        # Instantiate Domain Service
-        strategies = {
-            "webhook_id": WebhookDeliveryStrategy(repo_adapter, http_adapter, vault_adapter),
-            "sftp_partner_id": SftpDeliveryStrategy(repo_adapter, sftp_adapter, vault_adapter),
-            "as2_partner_id": As2DeliveryStrategy(repo_adapter, as2_adapter, vault_adapter),
-        }
-        service = DeliveryRouter(
-            repository=repo_adapter,
-            strategies=strategies,
-        )
-
-        try:
-            # Execute pure domain logic
-            await service.deliver(
-                trace_id, idempotency_key=str(key_uuid) if idempotency_key else None
-            )
-
-            if idempotency_key:
-                session.add(ProcessedEvent(idempotency_key=key_uuid))
-                await session.execute(
-                    update(DataPlaneOutbox)
-                    .where(DataPlaneOutbox.idempotency_key == key_uuid)
-                    .values(status="PROCESSED")
-                )
-            # Commit transaction
-            await session.commit()
-        except Exception:
-            if idempotency_key:
-                await session.rollback()
-                await session.execute(
-                    update(DataPlaneOutbox)
-                    .where(DataPlaneOutbox.idempotency_key == key_uuid)
-                    .values(status="FAILED")
-                )
                 await session.commit()
-            raise
 
-    except Exception:
-        await session.rollback()
-        raise
-    finally:
-        with contextlib.suppress(StopAsyncIteration):
-            await tenant_gen.__anext__()
+    # Unit of Work 2: Execute network delivery and persist outcome
+    async with contextlib.aclosing(
+        db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
+    ) as session_gen:
+        async for session in session_gen:
+            try:
+                storage_adapter = S3StorageAdapter(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+                repo_adapter = SqlAlchemyRepositoryAdapter(
+                    session=session,
+                    settings=get_settings(),
+                    storage=storage_adapter,
+                )
+                http_adapter = HttpxDeliveryAdapter(validator=ssrf_safe_context)
+                sftp_adapter = ParamikoSftpDeliveryAdapter()
+                vault_adapter = WorkerVaultAdapter()
+                as2_adapter = HttpxAS2DeliveryAdapter(validator=ssrf_safe_context)
+
+                strategies = {
+                    "webhook_id": WebhookDeliveryStrategy(
+                        repo_adapter, http_adapter, vault_adapter
+                    ),
+                    "sftp_partner_id": SftpDeliveryStrategy(
+                        repo_adapter, sftp_adapter, vault_adapter
+                    ),
+                    "as2_partner_id": As2DeliveryStrategy(repo_adapter, as2_adapter, vault_adapter),
+                }
+                service = DeliveryRouter(
+                    repository=repo_adapter,
+                    strategies=strategies,
+                )
+
+                # Execute pure domain logic
+                await service.deliver(trace_id, idempotency_key=key_str)
+
+                if key_str:
+                    from sqlalchemy.dialects.postgresql import insert
+
+                    result = await session.execute(
+                        update(DataPlaneOutbox)
+                        .where(
+                            DataPlaneOutbox.idempotency_key == key_str,
+                            DataPlaneOutbox.owner_token == owner_token,
+                        )
+                        .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
+                    )
+                    if result.rowcount > 0:  # type: ignore[attr-defined]
+                        await session.execute(
+                            insert(ProcessedEvent)
+                            .values(idempotency_key=key_str)
+                            .on_conflict_do_nothing()
+                        )
+                    else:
+                        logger.warning(
+                            f"[WORKER] Stale success update for idempotency_key={key_str}. Lease lost."
+                        )
+                # Commit transaction
+                await session.commit()
+            except Exception as delivery_error:
+                if key_str:
+                    try:
+                        await session.rollback()
+                        result = await session.execute(
+                            update(DataPlaneOutbox)
+                            .where(
+                                DataPlaneOutbox.idempotency_key == key_str,
+                                DataPlaneOutbox.owner_token == owner_token,
+                            )
+                            .values(status="FAILED", owner_token=None, lease_expires_at=None)
+                        )
+                        if result.rowcount == 0:  # type: ignore[attr-defined]
+                            logger.warning(
+                                f"[WORKER] Stale failure update for idempotency_key={key_str}. Lease lost."
+                            )
+                        await session.commit()
+                    except Exception as bookkeeping_error:
+                        logger.error(
+                            f"[WORKER] Failed to update outbox status after delivery error: {bookkeeping_error}"
+                        )
+                raise delivery_error

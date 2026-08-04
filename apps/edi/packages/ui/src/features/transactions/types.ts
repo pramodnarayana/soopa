@@ -10,6 +10,7 @@ export interface TransactionListItem {
   sender_id: string | null;
   receiver_id: string | null;
   status: string;
+  edi_data?: string | null;
   created_at: string;
 }
 

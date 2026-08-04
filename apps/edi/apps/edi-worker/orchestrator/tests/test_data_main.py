@@ -25,7 +25,11 @@ parsed_shard_1_url = make_url(raw_shard_1_url).set(drivername="postgresql+asyncp
 SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hide_password=False))
 
 
-def test_validate_target_url():
+def test_validate_target_url(monkeypatch):
+    import worker.core.security
+
+    monkeypatch.setattr(worker.core.security, "IS_DEV", False)
+
     assert validate_target_url("http://example.com") is True
     assert validate_target_url("http://127.0.0.1") is False
     assert validate_target_url("ftp://example.com") is False

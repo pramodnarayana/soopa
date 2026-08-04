@@ -1,4 +1,5 @@
 import eslint from '@eslint/js';
+import pluginRouter from '@tanstack/eslint-plugin-router';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -69,7 +70,11 @@ export default tseslint.config(
   },
   {
     files: ['apps/edi/packages/ui/src/**/*.ts', 'apps/edi/packages/ui/src/**/*.tsx'],
+    plugins: {
+      '@tanstack/router': pluginRouter,
+    },
     rules: {
+      ...pluginRouter.configs.recommended.rules,
       'no-restricted-imports': [
         'error',
         {

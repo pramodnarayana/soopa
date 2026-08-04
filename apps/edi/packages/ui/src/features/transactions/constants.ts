@@ -1,0 +1,5 @@
+export const TRANSACTION_STATUS_GROUPS = {
+  SUCCESS: new Set(['RECEIVED', 'ACCEPTED', 'PARSED', 'TRANSFORMED', 'DELIVERED']),
+  ERROR: new Set(['FAILED', 'ERROR']),
+  PENDING: new Set(['PENDING', 'PENDING_DELIVERY']),
+} as const;

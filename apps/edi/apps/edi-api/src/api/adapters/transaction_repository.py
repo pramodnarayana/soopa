@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from database.base_repository import TenantSession, TenantSqlAlchemyRepository
+from database.constants import EDI_JSON_ID_PREFIX, EDI_MESSAGE_ID_PREFIX
 from database.models.data_plane import EdiMessage
 from sqlalchemy import or_, select
 
@@ -21,7 +22,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
         tid_str = tenant_id if tenant_id is not None else None
-        msg = EdiMessage(tenant_id=tid_str, **payload)
+        payload_copy = dict(payload)
+        if "id" not in payload_copy:
+            payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}"
+        msg = EdiMessage(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
         await self.session.flush()
         return str(msg.id)
@@ -29,10 +33,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
     ) -> str:
+        from database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
         from database.models.data_plane import DataPlaneOutbox
 
         tid_str = tenant_id if tenant_id is not None else None
-        event_id = str(uuid.uuid4())
+        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}"
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tid_str,
@@ -49,16 +54,23 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         from database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
-        msg = EdiJson(tenant_id=tid_str, **payload)
+        payload_copy = dict(payload)
+        if "id" not in payload_copy:
+            payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}{uuid.uuid4().hex}"
+        msg = EdiJson(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
         await self.session.flush()
         return str(msg.id)
 
     async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
+        from database.constants import API_GATEWAY_ID_PREFIX
         from database.models.data_plane import ApiGateway
 
         tid_str = tenant_id if tenant_id is not None else None
-        log = ApiGateway(tenant_id=tid_str, **payload)
+        payload_copy = dict(payload)
+        if "id" not in payload_copy:
+            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}"
+        log = ApiGateway(tenant_id=tid_str, **payload_copy)
         self.session.add(log)
         await self.session.flush()
         return str(log.id)

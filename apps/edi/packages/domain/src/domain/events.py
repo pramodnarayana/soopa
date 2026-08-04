@@ -42,3 +42,12 @@ class MessageQueueName(StrEnum):
     PROVISIONING_QUEUE = "ProvisioningQueue"
     TRANSFORM_COMPUTE_QUEUE = "TransformComputeQueue"
     CDC_DLQ_QUEUE = "CDC-DLQ"
+
+
+PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {
+    PipelineEventType.TRANSFORM_EVENT: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
+    PipelineEventType.COMPUTE_TRANSFORM_EVENT: MessageQueueName.TRANSFORM_COMPUTE_QUEUE,
+    PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
+    PipelineEventType.DELIVER_EVENT: MessageQueueName.DELIVER_QUEUE,
+    PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
+}

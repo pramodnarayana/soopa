@@ -10,11 +10,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { GenerateApiTokenUseCase } from '../../../application/use-cases/generate-api-token.use-case.js';
 import type { IApiTokenRepository } from '../../../ports/outbound/api-token.repository.js';
 import { API_TOKEN_REPOSITORY } from '../../../ports/outbound/api-token.repository.js';
+import { UcpTenantId } from './decorators/ucp-tenant-id.decorator.js';
 import { TenantAuthGuard } from './guards/tenant-auth.guard.js';
 
 export class GenerateApiTokenRequestDto {
@@ -43,10 +43,7 @@ export class ApiTokensController {
   ) {}
 
   @Post()
-  async generate(
-    @UcpTenantId() tenantId: string,
-    @Body() dto: GenerateApiTokenRequestDto,
-  ) {
+  async generate(@UcpTenantId() tenantId: string, @Body() dto: GenerateApiTokenRequestDto) {
     const result = await this.generateApiTokenUseCase.execute({
       tenantId,
       name: dto.name,
@@ -60,7 +57,7 @@ export class ApiTokensController {
       created_at: result.apiToken.createdAt,
       last_used_at: null,
       expires_at: result.apiToken.expiresAt,
-      token: `soopa_live_${result.apiToken.clientId}_${result.rawSecret}`, // The split token to be used as Bearer
+      token: `${result.apiToken.clientId}_${result.rawSecret}`, // The split token to be used as Bearer
     };
   }
 

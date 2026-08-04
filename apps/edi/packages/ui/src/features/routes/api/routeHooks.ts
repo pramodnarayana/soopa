@@ -14,7 +14,7 @@ export function useRoutesQuery() {
   return useQuery({
     queryKey: ['routes', tenantId],
     queryFn: async (): Promise<RouteItem[]> => {
-      const res = await api.get<RouteItem[]>('/routes');
+      const res = await api.get<RouteItem[]>('routes');
       return res.data;
     },
   });
@@ -27,7 +27,7 @@ export function useCreateInboundRouteMutation() {
 
   return useMutation({
     mutationFn: async (payload: CreateInboundRoutePayload) => {
-      await api.post('/routes/inbound', payload);
+      await api.post('routes/inbound', payload);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });
@@ -42,7 +42,7 @@ export function useCreateOutboundRouteMutation() {
 
   return useMutation({
     mutationFn: async (payload: CreateOutboundRoutePayload) => {
-      await api.post('/routes/outbound', payload);
+      await api.post('routes/outbound', payload);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });
@@ -89,7 +89,7 @@ export function useDeleteRouteMutation() {
       direction: 'INBOUND' | 'OUTBOUND';
     }) => {
       const ep = direction === 'INBOUND' ? 'inbound' : 'outbound';
-      await api.delete(`/routes/${ep}/${routeId}`);
+      await api.delete(`routes/${ep}/${routeId}`);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['routes', tenantId] });

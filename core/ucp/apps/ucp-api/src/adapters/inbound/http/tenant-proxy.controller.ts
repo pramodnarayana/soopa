@@ -29,23 +29,14 @@ export class TenantProxyController {
     const tenantId = params.tenantId;
 
     // Rewrite: /api/v1/tenants/:tenantId/edi/foo -> /api/v1/foo
-    const rewrittenPath = req.url.replace(
-      `/api/v1/tenants/${tenantId}/edi`,
-      '/api/v1',
-    );
+    const rewrittenPath = req.url.replace(`/api/v1/tenants/${tenantId}/edi`, '/api/v1');
     const url = `${EDI_API_URL}${rewrittenPath}`;
 
-    this.logger.log(
-      `[PROXY] ${req.method} ${req.url} -> ${url} (tenant=${req.ucpTenantId})`,
-    );
+    this.logger.log(`[PROXY] ${req.method} ${req.url} -> ${url} (tenant=${req.ucpTenantId})`);
 
     const forwardHeaders: Record<string, string> = {};
     for (const [key, value] of Object.entries(req.headers)) {
-      if (
-        !HOP_BY_HOP_HEADERS.has(key.toLowerCase()) &&
-        key !== 'host' &&
-        value !== undefined
-      ) {
+      if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase()) && key !== 'host' && value !== undefined) {
         forwardHeaders[key] = Array.isArray(value) ? value.join(', ') : value;
       }
     }
@@ -55,20 +46,60 @@ export class TenantProxyController {
       forwardHeaders['x-tenant-id'] = req.ucpTenantId;
     }
 
-    const hasBody = req.body !== undefined && req.body !== null;
-    const response = await fetch(url, {
-      method: req.method,
-      headers: forwardHeaders,
-      body: hasBody ? JSON.stringify(req.body) : undefined,
-    });
+    const hasBody =
+      req.method !== 'GET' && req.method !== 'HEAD' && req.body !== undefined && req.body !== null;
 
-    for (const [key, value] of response.headers.entries()) {
-      if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
-        void res.header(key, value);
+    let forwardBody: Buffer | string | undefined;
+    if (hasBody) {
+      const reqWithRaw = req as FastifyRequest & { rawBody?: Buffer };
+      if (reqWithRaw.rawBody && Buffer.isBuffer(reqWithRaw.rawBody)) {
+        forwardBody = reqWithRaw.rawBody;
+      } else {
+        forwardBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        // If we fallback to serialization, the original content-length might be wrong.
+        delete forwardHeaders['content-length'];
+        if (typeof req.body !== 'string') {
+          forwardHeaders['content-type'] = 'application/json';
+        }
       }
     }
 
-    const responseBody = await response.arrayBuffer();
-    return res.status(response.status).send(Buffer.from(responseBody));
+    this.logger.log(
+      `[PROXY OUTBOUND] ${req.method} ${url} (sanitized metadata only, body omitted)`,
+    );
+
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 30000); // 30 second timeout
+
+    try {
+      const response = await fetch(url, {
+        method: req.method,
+        headers: forwardHeaders,
+        body: forwardBody as BodyInit | undefined,
+        signal: abortController.signal,
+      });
+
+      for (const [key, value] of response.headers.entries()) {
+        if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+          void res.header(key, value);
+        }
+      }
+
+      const responseBody = await response.arrayBuffer();
+
+      this.logger.log(
+        `[PROXY RESPONSE] ${response.status} from ${url} (metadata only, body omitted)`,
+      );
+
+      return res.status(response.status).send(Buffer.from(responseBody));
+    } catch (error) {
+      this.logger.error(`[PROXY ERROR] Failed to proxy to ${url}:`, error);
+      return res.status(502).send({
+        error: 'Bad Gateway',
+        message: 'Failed to communicate with downstream EDI service',
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 }

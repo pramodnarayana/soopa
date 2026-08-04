@@ -1,5 +1,12 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
-import { ChevronRight, LayoutDashboard, LogOut, Network, Settings } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  ChevronRight,
+  LayoutDashboard,
+  LogOut,
+  Network,
+  Settings,
+} from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
 import { TenantContext } from '../../contexts/TenantContext';
 import { useGetTenant } from '../../domains/tenants/api/queries';
@@ -49,6 +56,7 @@ function TenantSidebar() {
       <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
         EDI
       </div>
+      <NavItem icon={ArrowLeftRight} label="Transactions" to="/tenant/edi/transactions" />
       <NavItem icon={Network} label="EDI Headers" to="/tenant/edi/headers" />
       <NavItem icon={Network} label="Routes" to="/tenant/edi/routes" />
 

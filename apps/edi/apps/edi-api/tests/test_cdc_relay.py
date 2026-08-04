@@ -140,8 +140,8 @@ def test_cdc_relay_successful_provisioning_routing(memory_queue: InMemoryQueueAd
     }
 
 
-def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
-    """Payloads without trace_id must be skipped to prevent poison messages in SQS."""
+def test_cdc_relay_quarantines_missing_trace_id(memory_queue: InMemoryQueueAdapter) -> None:
+    """Payloads without trace_id are routed to CDC_DLQ_QUEUE to prevent poison messages in SQS."""
     payload = {
         "__op": "c",
         "__table": "outbox",
@@ -155,4 +155,10 @@ def test_cdc_relay_skips_missing_trace_id(memory_queue: InMemoryQueueAdapter) ->
     response = client.post("/internal/cdc/relay", json=payload)
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    assert len(memory_queue.sent_messages) == 0
+    assert len(memory_queue.sent_messages) == 1
+
+    from domain.events import MessageQueueName
+
+    queue_name, msg_payload = memory_queue.sent_messages[0]
+    assert queue_name == MessageQueueName.CDC_DLQ_QUEUE
+    assert msg_payload["error"].startswith("Outbox event missing trace_id")

@@ -1,10 +1,11 @@
 import Editor from '@monaco-editor/react';
 import { useMutation } from '@tanstack/react-query';
 import { createRoute } from '@tanstack/react-router';
-import axios from 'axios';
+
 import { AlertTriangle, CheckCircle, Copy, FileCode, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EdiEditorPane } from '../../components/ui/edi-editor-pane';
+import { useEdiNetwork } from '../../contexts/EdiNetworkContext';
 import { useToast } from '../../hooks/use-toast';
 import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
 import { Route as appRoute } from '../tenant';
@@ -47,6 +48,8 @@ export function EdiToolPage() {
 
   const { toast } = useToast();
 
+  const api = useEdiNetwork();
+
   interface TransformResponse {
     valid: boolean;
     result?: string;
@@ -55,7 +58,7 @@ export function EdiToolPage() {
 
   const transformMutation = useMutation({
     mutationFn: async (variables: { action: string; payload: string }) => {
-      const response = await axios.post<TransformResponse>('/api/edi-tools/transform', {
+      const response = await api.post<TransformResponse>('/edi-tools/transform', {
         action: variables.action,
         payload: variables.payload,
       });

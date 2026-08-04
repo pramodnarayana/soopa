@@ -21,9 +21,9 @@ async def test_process_pipeline_event_idempotency_duplicate(mock_s3, mock_transf
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
-    # We need to mock session.execute returning an existing duplicate
+    # We need to mock session.execute returning None to simulate duplicate (nothing inserted)
     mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = MagicMock()  # simulating existing record
+    mock_existing.scalar_one_or_none.return_value = None  # simulating duplicate
     mock_session.execute.return_value = mock_existing
 
     await process_pipeline_event(
@@ -59,9 +59,9 @@ async def test_process_pipeline_event_transform_completed(mock_trace, mock_s3, m
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_saga = AsyncMock()
     mock_trace.return_value = mock_saga
@@ -97,9 +97,9 @@ async def test_process_pipeline_event_delivery_completed(mock_trace, mock_s3, mo
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_saga = AsyncMock()
     mock_trace.return_value = mock_saga
@@ -135,9 +135,9 @@ async def test_process_pipeline_event_inbound(mock_inbound, mock_s3, mock_repo):
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_service = AsyncMock()
     mock_inbound.return_value = mock_service
@@ -174,9 +174,9 @@ async def test_process_pipeline_event_outbound(mock_outbound, mock_s3, mock_repo
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_service = AsyncMock()
     mock_outbound.return_value = mock_service
@@ -194,3 +194,159 @@ async def test_process_pipeline_event_outbound(mock_outbound, mock_s3, mock_repo
     )
     mock_outbound.assert_called_once()
     mock_service.transform.assert_called_once_with("trace-123")
+
+
+@pytest.mark.asyncio
+@patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
+@patch("worker.data.handlers.WebhookDeliveryStrategy")
+@patch("worker.data.handlers.WorkerVaultAdapter")
+async def test_process_delivery_success(mock_vault, mock_webhook, mock_repo):
+    from worker.data.handlers import process_delivery
+
+    resolver = AsyncMock()
+    resolver.resolve.return_value = ("shard_1", "fake_dsn")
+    db_router = MagicMock()
+
+    mock_session = AsyncMock()
+
+    async def fake_get_tenant_session(*args, **kwargs):
+        yield mock_session
+
+    db_router.get_tenant_session.side_effect = fake_get_tenant_session
+
+    # Mock claiming the row
+    mock_claimed = MagicMock()
+    mock_claimed.scalar_one_or_none.return_value = "fake-key"
+    mock_update_result = MagicMock()
+    mock_update_result.rowcount = 1
+    mock_session.execute.side_effect = [mock_claimed, mock_update_result, mock_update_result]
+    mock_repo.return_value.get_edi_message = AsyncMock()
+    mock_repo.return_value.update_edi_message = AsyncMock()
+    mock_repo.return_value.get_route = AsyncMock()
+    mock_repo.return_value.get_partnership = AsyncMock()
+    mock_repo.return_value.get_edi_message.return_value = MagicMock(partner_id="p1", route_id="r1")
+    mock_repo.return_value.get_route.return_value = MagicMock(webhook_id="w1")
+
+    strategy_instance = AsyncMock()
+    strategy_instance.deliver.return_value = True
+    mock_webhook.return_value = strategy_instance
+
+    await process_delivery(
+        trace_id="trace-123",
+        event_type="DELIVER_WEBHOOK",
+        payload={"webhook_url": "http://test", "payload": {}},
+        tenant_id=1,
+        resolver=resolver,
+        db_router=db_router,
+        s3_bucket="test",
+        aws_endpoint=None,
+        idempotency_key="00000000-0000-0000-0000-000000000000",
+    )
+
+    mock_session.commit.assert_called()
+    assert mock_session.execute.call_count >= 2
+
+
+@pytest.mark.asyncio
+@patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
+@patch("worker.data.handlers.WebhookDeliveryStrategy")
+@patch("worker.data.handlers.WorkerVaultAdapter")
+async def test_process_delivery_skip(mock_vault, mock_webhook, mock_repo):
+    from worker.data.handlers import process_delivery
+
+    resolver = AsyncMock()
+    resolver.resolve.return_value = ("shard_1", "fake_dsn")
+    db_router = MagicMock()
+
+    mock_session = AsyncMock()
+
+    async def fake_get_tenant_session(*args, **kwargs):
+        yield mock_session
+
+    db_router.get_tenant_session.side_effect = fake_get_tenant_session
+
+    # Mock skipping the row
+    mock_skipped = MagicMock()
+    mock_skipped.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_skipped
+
+    await process_delivery(
+        trace_id="trace-123",
+        event_type="DELIVER_WEBHOOK",
+        payload={"webhook_url": "http://test", "payload": {}},
+        tenant_id=1,
+        resolver=resolver,
+        db_router=db_router,
+        s3_bucket="test",
+        aws_endpoint=None,
+        idempotency_key="00000000-0000-0000-0000-000000000000",
+    )
+
+    # Only the claim query executed, delivery strategy not called
+    mock_webhook.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
+@patch("worker.data.handlers.WebhookDeliveryStrategy")
+@patch("worker.data.handlers.WorkerVaultAdapter")
+async def test_process_delivery_stale_update(mock_vault, mock_webhook, mock_repo, caplog):
+    import logging
+
+    from worker.data.handlers import process_delivery
+
+    resolver = AsyncMock()
+    resolver.resolve.return_value = ("shard_1", "fake_dsn")
+    db_router = MagicMock()
+
+    mock_session = AsyncMock()
+
+    async def fake_get_tenant_session(*args, **kwargs):
+        yield mock_session
+
+    db_router.get_tenant_session.side_effect = fake_get_tenant_session
+
+    # Mock claiming the row
+    mock_claimed = MagicMock()
+    mock_claimed.scalar_one_or_none.return_value = "fake-key"
+
+    # Mock the update result
+    mock_update_result = MagicMock()
+    mock_update_result.rowcount = 0
+
+    # Side effect for session.execute
+    # 1st call: claim lease
+    # 2nd call: update outbox (stale)
+    mock_session.execute.side_effect = [mock_claimed, mock_update_result]
+
+    mock_repo.return_value.get_edi_message = AsyncMock()
+    mock_repo.return_value.update_edi_message = AsyncMock()
+    mock_repo.return_value.get_route = AsyncMock()
+    mock_repo.return_value.get_partnership = AsyncMock()
+    mock_repo.return_value.get_edi_message.return_value = MagicMock(partner_id="p1", route_id="r1")
+    mock_repo.return_value.get_route.return_value = MagicMock(webhook_id="w1")
+
+    strategy_instance = AsyncMock()
+    strategy_instance.deliver.return_value = True
+    mock_webhook.return_value = strategy_instance
+
+    with caplog.at_level(logging.WARNING):
+        await process_delivery(
+            trace_id="trace-123",
+            event_type="DELIVER_WEBHOOK",
+            payload={"webhook_url": "http://test", "payload": {}},
+            tenant_id=1,
+            resolver=resolver,
+            db_router=db_router,
+            s3_bucket="test",
+            aws_endpoint=None,
+            idempotency_key="00000000-0000-0000-0000-000000000000",
+        )
+
+    # We expect a warning log about stale success update
+    assert (
+        "Stale success update for idempotency_key=00000000-0000-0000-0000-000000000000. Lease lost."
+        in caplog.text
+    )
+    # Should not have called execute for ProcessedEvent since rowcount == 0
+    assert mock_session.execute.call_count == 2

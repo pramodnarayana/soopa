@@ -40,7 +40,7 @@ export function useTransactions(params: {
       if (params.direction) searchParams.set('direction', params.direction);
 
       const response = await api.get<TransactionListResponse>(
-        `/transactions?${searchParams.toString()}`,
+        `transactions?${searchParams.toString()}`,
       );
       return response.data;
     },
@@ -54,7 +54,7 @@ export function useTransactionDetail(traceId: string) {
   return useQuery({
     queryKey: transactionsKeys.detail(tenantId, traceId),
     queryFn: async () => {
-      const response = await api.get<TransactionDetailResponse>(`/transactions/${traceId}`);
+      const response = await api.get<TransactionDetailResponse>(`transactions/${traceId}`);
       return response.data;
     },
     enabled: !!traceId,
@@ -72,7 +72,7 @@ export function useTransactionThread(key: string, value: string) {
       searchParams.set('key', key);
       searchParams.set('value', value);
       const response = await api.get<TransactionThreadResponse>(
-        `/transactions/thread?${searchParams.toString()}`,
+        `transactions/thread?${searchParams.toString()}`,
       );
       return response.data;
     },

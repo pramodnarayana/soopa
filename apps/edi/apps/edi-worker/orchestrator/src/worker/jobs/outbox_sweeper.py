@@ -5,7 +5,7 @@ import logging
 from database.connection import DatabaseRouter
 from database.models.control_plane import DatabaseShard
 from database.models.data_plane import DataPlaneOutbox
-from domain.events import MessageQueueName, PipelineEventType
+from domain.events import PIPELINE_EVENT_ROUTING_MAP, PipelineEventType
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,15 +14,6 @@ from worker.core.scheduler.models import Job
 from worker.ports.message_publisher import MessagePublisherPort
 
 logger = logging.getLogger(__name__)
-
-# Maps each pipeline event type to its target SQS queue
-_EVENT_QUEUE_MAP: dict[str, str] = {
-    PipelineEventType.TRANSFORM_EVENT: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
-    PipelineEventType.COMPUTE_TRANSFORM_EVENT: MessageQueueName.TRANSFORM_COMPUTE_QUEUE,
-    PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
-    PipelineEventType.DELIVER_EVENT: MessageQueueName.DELIVER_QUEUE,
-    PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
-}
 
 _BATCH_SIZE = 100
 _CONCURRENCY_LIMIT = 5
@@ -100,7 +91,7 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
             # Group events by target queue to utilize SQS send_message_batch
             batches_by_queue: dict[str, list[DataPlaneOutbox]] = {}
             for event in events:
-                queue_name = _EVENT_QUEUE_MAP.get(event.event_type)
+                queue_name = PIPELINE_EVENT_ROUTING_MAP.get(event.event_type)
                 if not queue_name:
                     logger.warning(
                         f"[DataPlaneOutboxSweeper] Unknown event_type={event.event_type!r} "

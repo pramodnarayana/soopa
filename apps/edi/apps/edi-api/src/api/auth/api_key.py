@@ -21,14 +21,13 @@ import logging
 from database.base_repository import GlobalSession
 from database.session import get_global_session
 from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import APIKeyHeader
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 
 logger = logging.getLogger(__name__)
 
-_client_id_header = APIKeyHeader(name="X-Client-ID", auto_error=False)
-_client_secret_header = APIKeyHeader(name="X-Client-Secret", auto_error=False)
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 # In-process cache: { client_id → (tenant_id, secret_hash) }
 # Short-circuits the DB lookup for repeated calls within the same process.
@@ -38,26 +37,34 @@ _MAX_CACHE_SIZE = 5000
 
 
 async def get_tenant_id_from_api_key(
-    client_id: str | None = Security(_client_id_header),
-    client_secret: str | None = Security(_client_secret_header),
+    auth: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),  # noqa: B008
     global_session: GlobalSession = Depends(get_global_session),  # noqa: B008
 ) -> str:
     """
-    Resolves a two-part API credential to a tenant_id.
+    Resolves a single API Bearer token to a tenant_id.
 
-    Expected headers:
-        X-Client-ID:     soopaedi_acme_a3f12b9c
-        X-Client-Secret: <client secret shown at token creation>
+    Expected header:
+        Authorization: Bearer <client_id>_<client_secret>
 
-    Raises HTTP 401 if either header is missing, the client_id doesn't exist,
-    or the secret doesn't match.
+    Raises HTTP 401 if the header is missing, the token is malformed,
+    the client_id doesn't exist, or the secret doesn't match.
     """
-    if not client_id or not client_secret:
+    if not auth or not auth.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing credentials. Provide X-Client-ID and X-Client-Secret headers.",
-            headers={"WWW-Authenticate": "X-API-Key"},
+            detail="Missing credentials. Provide Authorization: Bearer <token>",
+            headers={"WWW-Authenticate": "Bearer"},
         )
+
+    parts = auth.credentials.rsplit("_", 1)
+    if len(parts) != 2:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    client_id, client_secret = parts[0], parts[1]
 
     # Hash the secret before touching the DB (raw secret never persisted or logged)
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
@@ -76,7 +83,7 @@ async def get_tenant_id_from_api_key(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked credentials.",
-            headers={"WWW-Authenticate": "X-API-Key"},
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # Populate cache (bounded eviction)

@@ -12,7 +12,7 @@ export function useRoutesData() {
   return useQuery({
     queryKey: ['active-routes', tenantId],
     queryFn: async (): Promise<RouteItem[]> => {
-      const res = await api.get<RouteItem[]>('/routes');
+      const res = await api.get<RouteItem[]>('routes');
       return res.data;
     },
   });
