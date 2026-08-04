@@ -1,9 +1,9 @@
 from enum import StrEnum
 
+from platform_schemas.edi_events import EdiEventType
+from platform_schemas.ucp_events import UcpEventType
+from platform_schemas.webhook_events import WebhookEventType
 from pydantic import BaseModel
-from soopa_schemas.edi_events import EdiEventType
-from soopa_schemas.ucp_events import UcpEventType
-from soopa_schemas.webhook_events import WebhookEventType
 
 
 class PipelineEventType(StrEnum):

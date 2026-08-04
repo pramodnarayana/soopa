@@ -9,9 +9,9 @@ from domain.events import (
     ProvisioningEventType,
 )
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from platform_schemas.edi_events import EdiEventType
+from platform_schemas.webhook_events import WebhookEventType
 from pydantic import TypeAdapter, ValidationError
-from soopa_schemas.edi_events import EdiEventType
-from soopa_schemas.webhook_events import WebhookEventType
 
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
 from worker.ports.outbox import OutboxPort

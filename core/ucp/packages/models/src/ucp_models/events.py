@@ -15,7 +15,7 @@ class ControlPlaneOutbox(UcpBase, OutboxMixin):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
-    __table_args__ = (  # type: ignore
+    __table_args__ = (
         Index(
             "ix_global_outbox_pending",
             "status",
@@ -44,7 +44,7 @@ class SystemAuditLog(UcpBase):
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
 
-    __table_args__ = (  # type: ignore
+    __table_args__ = (
         Index("ix_system_audit_log_tenant_time", "tenant_id", "created_at"),
         {"schema": "ucp"},
     )

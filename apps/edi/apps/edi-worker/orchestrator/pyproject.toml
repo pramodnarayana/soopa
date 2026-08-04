@@ -14,7 +14,7 @@ dependencies = [
     "pipeline",
     "config",
     "domain",
-    "soopa_schemas",
+    "platform_schemas",
 ]
 
 [tool.uv.sources]
@@ -23,7 +23,7 @@ database = { workspace = true }
 pipeline = { workspace = true }
 config = { workspace = true }
 domain = { workspace = true }
-soopa_schemas = { workspace = true }
+platform_schemas = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

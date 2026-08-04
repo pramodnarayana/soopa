@@ -9,7 +9,7 @@
     "build": "tsc",
     "generate": "pnpm generate:ts && pnpm generate:py",
     "generate:ts": "json2ts -i 'events/*.json' -o src/generated --cwd events && for file in src/generated/*.d.ts; do mv \"$file\" \"${file%.d.ts}.ts\"; done && sed -i.bak 's/export const enum/export enum/g' src/generated/*.ts && rm -f src/generated/*.bak",
-    "generate:py": "mkdir -p python/src/soopa_schemas && uv run --with datamodel-code-generator datamodel-codegen --input events --output python/src/soopa_schemas --input-file-type jsonschema"
+    "generate:py": "mkdir -p python/src/platform_schemas && uv run --with datamodel-code-generator datamodel-codegen --input events --output python/src/platform_schemas --input-file-type jsonschema"
   },
   "devDependencies": {
     "json-schema-to-typescript": "^15.0.3",

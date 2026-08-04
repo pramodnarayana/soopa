@@ -42,7 +42,7 @@ class User(UcpBase):
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
-    __table_args__ = (  # type: ignore
+    __table_args__ = (
         Index("uq_users_email_lower", text("lower(email)"), unique=True),
         {"schema": "ucp"},
     )
@@ -59,7 +59,7 @@ class TenantUser(UcpBase):
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
 
-    __table_args__ = ({"schema": "ucp"},)  # type: ignore
+    __table_args__ = ({"schema": "ucp"},)
 
 
 class ApiToken(UcpBase):

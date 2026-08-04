@@ -2,7 +2,7 @@ import logging
 
 from domain.events import ProvisioningEvent
 from domain.models import ConnectionType, PartnerStatus
-from soopa_schemas.edi_events import EdiEventType
+from platform_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
