@@ -2,8 +2,8 @@ import logging
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response
-
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi.responses import StreamingResponse
 from identity.domain.identity_context import IdentityContext
 
 from ucp_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
@@ -41,7 +41,7 @@ async def proxy_to_edi(
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     path: str = Path(...),
-) -> Response:
+) -> StreamingResponse:
     """
     Transparently proxies requests to the downstream EDI API.
 
@@ -74,35 +74,39 @@ async def proxy_to_edi(
     forward_headers["x-tenant-id"] = ucp_tenant_id
 
     # Stream the request body directly instead of buffering
-    async with httpx.AsyncClient() as client:
+    client = httpx.AsyncClient()
+    try:
+        req = client.build_request(
+            method=request.method,
+            url=target_url,
+            headers=forward_headers,
+            content=request.stream(),
+        )
+        response = await client.send(req, stream=True)
+    except httpx.RequestError as exc:
+        await client.aclose()
+        logger.error("[PROXY ERROR] Failed to proxy to %s: %s", target_url, exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to communicate with downstream EDI service.",
+        ) from exc
+
+    res_headers: dict[str, str] = {}
+    for key, value in response.headers.items():
+        if key.lower() not in HOP_BY_HOP_HEADERS:
+            res_headers[key] = value
+
+    # Stream the response back instead of buffering
+    async def stream_response():
         try:
-            req = client.build_request(
-                method=request.method,
-                url=target_url,
-                headers=forward_headers,
-                content=request.stream(),
-            )
-            response = await client.send(req, stream=True)
+            async for chunk in response.aiter_raw():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
 
-            res_headers: dict[str, str] = {}
-            for key, value in response.headers.items():
-                if key.lower() not in HOP_BY_HOP_HEADERS:
-                    res_headers[key] = value
-
-            # Stream the response back instead of buffering
-            async def stream_response():
-                async for chunk in response.aiter_bytes():
-                    yield chunk
-
-            return Response(
-                content=stream_response(),
-                status_code=response.status_code,
-                headers=res_headers,
-            )
-
-        except httpx.RequestError as exc:
-            logger.error("[PROXY ERROR] Failed to proxy to %s: %s", target_url, exc)
-            raise HTTPException(
-                status_code=502,
-                detail="Failed to communicate with downstream EDI service.",
-            ) from exc
+    return StreamingResponse(
+        content=stream_response(),
+        status_code=response.status_code,
+        headers=res_headers,
+    )

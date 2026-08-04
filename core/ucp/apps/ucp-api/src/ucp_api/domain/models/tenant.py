@@ -9,6 +9,7 @@ from ucp_api.domain.events.tenant_events import (
     AppUnsubscribedEvent,
 )
 
+
 class Tenant(AggregateRoot):
     ID_PREFIX = "ten"
 
@@ -51,9 +52,7 @@ class Tenant(AggregateRoot):
         )
         tenant.add_domain_event(
             TenantProvisionedEvent(
-                tenant_id=id,
-                tenant_name=name,
-                subscriptions=tenant.subscriptions.copy()
+                tenant_id=id, tenant_name=name, subscriptions=tenant.subscriptions.copy()
             )
         )
         return tenant
@@ -69,27 +68,18 @@ class Tenant(AggregateRoot):
             raise AppSubscriptionError("Cannot subscribe an inactive tenant to an app.")
         if app_slug in self.subscriptions:
             raise AppSubscriptionError(f"Tenant is already subscribed to '{app_slug}'.")
-        
+
         self.subscriptions.append(app_slug)
         self.updated_at = datetime.now(timezone.utc)
         self.add_domain_event(
-            AppSubscribedEvent(
-                tenant_id=self.id,
-                tenant_name=self.name,
-                app_slug=app_slug
-            )
+            AppSubscribedEvent(tenant_id=self.id, tenant_name=self.name, app_slug=app_slug)
         )
 
     def unsubscribe_from_app(self, app_slug: str) -> None:
         try:
             self.subscriptions.remove(app_slug)
             self.updated_at = datetime.now(timezone.utc)
-            self.add_domain_event(
-                AppUnsubscribedEvent(
-                    tenant_id=self.id,
-                    app_slug=app_slug
-                )
-            )
+            self.add_domain_event(AppUnsubscribedEvent(tenant_id=self.id, app_slug=app_slug))
         except ValueError:
             raise AppSubscriptionError(f"Tenant is not subscribed to '{app_slug}'.")
 

@@ -11,9 +11,11 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from database.models import (
+from database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
+)
+from database.models.data_plane import (
     InboundRoute,
     Webhook,
 )

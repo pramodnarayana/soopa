@@ -1,12 +1,11 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from platform_orm.models.common import OutboxMixin
+from platform_orm.models.core import UcpBase
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
-
-from platform_orm.models.common import OutboxMixin
-from platform_orm.models.core import UcpBase
 
 
 class ControlPlaneOutbox(UcpBase, OutboxMixin):

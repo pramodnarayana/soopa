@@ -1,10 +1,8 @@
-
 from datetime import UTC, datetime
 
+from platform_orm.models.core import UcpBase
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
-
-from platform_orm.models.core import UcpBase
 
 
 class DatabaseShard(UcpBase):

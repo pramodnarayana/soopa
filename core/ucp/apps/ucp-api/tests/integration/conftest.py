@@ -1,5 +1,6 @@
 from typing import Any
 import os
+
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
@@ -117,7 +118,9 @@ async def client(db_session) -> "Any":  # type: ignore
     app.dependency_overrides[get_user_provider] = override_get_user_provider
     # Override the auth guard inner dependencies to bypass real JWT verification.
     # This correctly isolates the "boundary" (JWT token parsing) from the business logic.
-    app.dependency_overrides[platform_auth_guard.require_platform_admin] = _mock_platform_admin_guard
+    app.dependency_overrides[platform_auth_guard.require_platform_admin] = (
+        _mock_platform_admin_guard
+    )
     app.dependency_overrides[tenant_auth_guard.require_tenant_member] = _mock_tenant_member_guard
 
     transport = ASGITransport(app=app)

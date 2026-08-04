@@ -50,9 +50,7 @@ async def test_invite_user_success(
     mock_idp: IUserIdentityProvider,
 ) -> None:
     # Arrange
-    tenant = Tenant.create(
-        id="ten_123", name="Test", idp_tenant_id="org-123", subscriptions=[]
-    )
+    tenant = Tenant.create(id="ten_123", name="Test", idp_tenant_id="org-123", subscriptions=[])
     mock_tenant_repo.find_by_id = AsyncMock(return_value=tenant)  # type: ignore
     command = InviteUserCommand(
         tenant_id="ten_123",
@@ -72,7 +70,7 @@ async def test_invite_user_success(
     mock_idp.assign_tenant_role.assert_called_once_with(  # type: ignore
         user_id="idp-user-123", org_id="org-123", role="admin"
     )
-    
+
     saved_user = mock_user_repo.save.call_args[0][0]  # type: ignore
     assert saved_user.email == "test@example.com"
     assert saved_user.id == local_user_id

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 from ucp_api.domain.models.aggregate_root import AggregateRoot
 
+
 class User(AggregateRoot):
     ID_PREFIX = "usr"
 

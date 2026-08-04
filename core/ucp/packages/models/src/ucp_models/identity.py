@@ -1,11 +1,9 @@
-
 from datetime import UTC, datetime
 
+from platform_orm.models.core import UcpBase
 from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
-
-from platform_orm.models.core import UcpBase
 
 
 class Tenant(UcpBase):
@@ -68,6 +66,7 @@ class ApiToken(UcpBase):
     """
     Platform-managed API keys for machine-to-machine (ERP → Platform) authentication.
     """
+
     __tablename__ = "api_tokens"
     ID_PREFIX = "tok"
 

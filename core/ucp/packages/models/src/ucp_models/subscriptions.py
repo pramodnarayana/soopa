@@ -1,8 +1,6 @@
-
+from platform_orm.models.core import UcpBase
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
-
-from platform_orm.models.core import UcpBase
 
 
 class App(UcpBase):
