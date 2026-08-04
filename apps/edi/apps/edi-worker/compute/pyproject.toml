@@ -4,10 +4,12 @@ version = "0.1.0"
 description = "Heavy compute worker for EDI transformations"
 requires-python = ">=3.11"
 dependencies = [
+    "ucp_models",
     "transformer",
 ]
 
 [tool.uv.sources]
+ucp_models = { workspace = true }
 transformer = { workspace = true }
 
 [build-system]
@@ -21,6 +23,7 @@ packages = ["src/compute_worker"]
 venvPath = "../../../../.."
 venv = ".venv"
 extraPaths = [
+    "../../../../core/ucp/packages/models/src",
     "../../../../../core/platform/packages/identity/python/src",
     "../../../../../core/platform/packages/observability/python/src",
     "../../../../../core/platform/packages/schemas/python/src",

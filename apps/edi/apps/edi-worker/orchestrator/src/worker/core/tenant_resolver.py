@@ -1,5 +1,8 @@
 from database.connection import DatabaseRouter
-from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
+from ucp_models.subscriptions import App
+from ucp_models.infrastructure import ShardRegistry
+from ucp_models.infrastructure import DatabaseShard
+from ucp_models.identity import Tenant
 from sqlalchemy import select
 
 from worker.core.constants import EDI_APP_SLUG

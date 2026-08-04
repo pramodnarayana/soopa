@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import (
+from ucp_models.webhooks import (
     Webhook,
 )
 from domain.models import WebhookDomainModel

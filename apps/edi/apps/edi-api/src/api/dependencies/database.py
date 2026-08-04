@@ -2,7 +2,9 @@ import contextlib
 from collections.abc import AsyncGenerator
 
 from database.base_repository import GlobalSession
-from database.models import App, DatabaseShard, ShardRegistry, Tenant
+from ucp_models.subscriptions import App
+from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.identity import Tenant
 from database.session import get_global_session
 from fastapi import Depends, Request
 from sqlalchemy import select

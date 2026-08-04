@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from config.settings import AppSettings
-from database.models import ApiGateway
+from database.models.data_plane import ApiGateway
 from domain.direction import MessageDirection
 from domain.status import MessageStatus
 from fakes import InMemoryStorageAdapter

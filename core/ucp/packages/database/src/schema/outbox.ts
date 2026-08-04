@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { jsonb, pgPolicy, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { integer, jsonb, pgPolicy, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
 import { ucpSchema } from './shared.js';
 
@@ -25,6 +25,10 @@ export const controlPlaneOutbox = ucpSchema
         .notNull()
         .default(OutboxStatus.PENDING)
         .$type<OutboxStatusType>(),
+      attempts: integer('attempts').default(0).notNull(),
+      publishedAt: timestamp('published_at', { withTimezone: true }),
+      ownerToken: varchar('owner_token', { length: 128 }),
+      leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
       errorReason: text('error_reason'),
       createdAt: timestamp('created_at').defaultNow().notNull(),
       updatedAt: timestamp('updated_at').defaultNow().notNull(),

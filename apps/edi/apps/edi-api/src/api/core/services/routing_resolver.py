@@ -2,7 +2,8 @@ import contextlib
 import logging
 from typing import Any
 
-from database.models.control_plane import AS2Partner, SFTPPartner, Webhook
+from database.models.control_plane import AS2Partner, SFTPPartner
+from ucp_models.webhooks import Webhook
 from database.models.data_plane import InboundRoute, OutboundRoute
 from domain.models import ConnectionType, Direction
 from sqlalchemy import select

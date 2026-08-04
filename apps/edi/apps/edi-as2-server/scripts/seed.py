@@ -4,7 +4,7 @@ import logging
 
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models import Tenant
+from ucp_models.identity import Tenant
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select

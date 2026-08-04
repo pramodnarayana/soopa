@@ -5,7 +5,6 @@ services:
 
   edi_postgres_shard_1:
     image: postgres:15-alpine
-    container_name: edi_postgres_shard_1
     environment:
       POSTGRES_USER: edi
       POSTGRES_PASSWORD: edi_password
@@ -28,7 +27,6 @@ services:
 
   vault:
     image: hashicorp/vault:1.15
-    container_name: edi_vault
     ports:
     - 127.0.0.1:8200:8200
     environment:
@@ -47,7 +45,6 @@ services:
       retries: 5
   cdcproxy:
     image: nginx:alpine
-    container_name: edi_cdcproxy
     ports:
     - 8002:80
     command: "/bin/sh -c \"echo '\nserver {\n    listen 80;\n    location / {\n  \
@@ -58,7 +55,6 @@ services:
     - host.docker.internal:host-gateway
   debezium_shard_1:
     image: quay.io/debezium/server:2.7.3.Final
-    container_name: edi_debezium_shard_1
     environment:
     - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard_1
     - DEBEZIUM_SOURCE_DATABASE_PORT=5432

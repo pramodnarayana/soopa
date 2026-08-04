@@ -74,6 +74,11 @@ class IdentityContext(BaseModel):
     permissions: tuple[str, ...] = ()
     claims: dict[str, Any]
 
+    @property
+    def is_platform_admin(self) -> bool:
+        """True when the identity holds the reserved platform-admin sentinel tenant ID."""
+        return PLATFORM_TENANT_ID in self.authorized_tenants
+
 
 def identity_context_from_claims(claims: TokenClaims) -> IdentityContext:
     return IdentityContext(

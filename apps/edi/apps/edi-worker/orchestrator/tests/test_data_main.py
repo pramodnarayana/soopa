@@ -3,7 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from database.connection import DatabaseRouter
-from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
+from ucp_models.subscriptions import App
+from ucp_models.infrastructure import ShardRegistry
+from ucp_models.infrastructure import DatabaseShard
+from ucp_models.identity import Tenant
 from sqlalchemy import select
 from sqlalchemy.engine.url import make_url
 
@@ -87,11 +90,11 @@ async def test_tenant_resolver_integration(router: DatabaseRouter):
     tenant_name = f"Test Tenant_{suffix}"
 
     # 1. Insert a shard and a tenant into the real DB
-    shard = DatabaseShard(name=shard_name, dsn=SHARD_1_URL)
+    shard = DatabaseShard(id=f"shd_{suffix}", name=shard_name, dsn=SHARD_1_URL)
     global_session.add(shard)
     await global_session.commit()
 
-    tenant = Tenant(name=tenant_name)
+    tenant = Tenant(id=f"ten_{suffix}", name=tenant_name, idp_tenant_id=f"idp_{suffix}")
     global_session.add(tenant)
     await global_session.commit()
 

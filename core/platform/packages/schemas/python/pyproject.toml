@@ -21,7 +21,7 @@ extraPaths = [
     "../../identity/python/src",
     "../../observability/python/src",
     "src",
-    "../../../../../apps/edi/packages/database/src",
+    "../../../../../core/platform/packages/orm/src",
     "../../../../../apps/edi/packages/pipeline/src",
     "../../../../../apps/edi/packages/grammar/src",
     "../../../../../apps/edi/packages/config/src",

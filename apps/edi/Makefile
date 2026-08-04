@@ -47,7 +47,11 @@ check-all: format lint typecheck test
 
 dev:
 	@echo "Starting API and Workers concurrently..."
-	pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,orch,as2,comp" "make dev-api" "make dev-worker-orchestrator" "make dev-as2" "make dev-worker-compute"
+	exec pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,as2,orch,comp" \
+		"make dev-api" \
+		"make dev-as2" \
+		"make dev-worker-orchestrator" \
+		"make dev-worker-compute"
 
 check-env:
 	@if [ -z "$(ZITADEL_EDI_PROJECT_ID)" ]; then echo "Error: ZITADEL_EDI_PROJECT_ID is not set" >&2; exit 1; fi
@@ -55,11 +59,11 @@ check-env:
 
 dev-as2: check-env
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
+	exec env ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-api: check-env
 	@echo "Starting API Gateway with hot-reload for local development..."
-	ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+	exec env ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 
 dev-web:
 	@echo "Starting React Frontend with Vite..."
@@ -67,11 +71,11 @@ dev-web:
 
 dev-worker-orchestrator:
 	@echo "Starting Orchestrator Worker for local development..."
-	ENVIRONMENT=development PYTHONPATH=apps/edi-worker/orchestrator/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src:packages/scheduler/src uv run python apps/edi-worker/orchestrator/src/worker/main.py
+	exec env ENVIRONMENT=development PYTHONPATH=apps/edi-worker/orchestrator/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src:packages/scheduler/src uv run python apps/edi-worker/orchestrator/src/worker/main.py
 
 dev-worker-compute:
 	@echo "Starting Compute Worker for local development..."
-	ENVIRONMENT=development PYTHONPATH=apps/edi-worker/compute/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src uv run python apps/edi-worker/compute/src/compute_worker/main.py
+	exec env ENVIRONMENT=development PYTHONPATH=apps/edi-worker/compute/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src uv run python apps/edi-worker/compute/src/compute_worker/main.py
 
 db-init:
 	@echo "Waiting for databases to be ready..."

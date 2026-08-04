@@ -7,7 +7,7 @@ from typing import Any
 import jwt
 from jwt import PyJWKClient
 
-from identity.domain.identity_context import TokenClaims
+from identity.domain.identity_context import TokenClaims, PLATFORM_TENANT_ID
 from identity.ports.token_verifier import TokenVerifier
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,7 @@ class ZitadelTokenVerifierOptions:
     issuer: str
     audience: str | list[str]
     jwks_url: str | None = None
+    platform_org_id: str | None = None
 
 
 class ZitadelTokenVerifier(TokenVerifier):
@@ -53,6 +54,13 @@ class ZitadelTokenVerifier(TokenVerifier):
                 payload.update(userinfo)
             except Exception as e:
                 logger.warning("Failed to fetch userinfo", exc_info=e)
+
+        # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
+        roles_dict = payload.get("urn:zitadel:iam:org:project:roles")
+        if roles_dict and isinstance(roles_dict, dict) and self._options.platform_org_id:
+            for role, orgs in roles_dict.items():
+                if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
+                    orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
 
         return TokenClaims.model_validate(payload)
 

@@ -3,7 +3,7 @@ import datetime
 import logging
 
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard
+from ucp_models.infrastructure import DatabaseShard
 from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult

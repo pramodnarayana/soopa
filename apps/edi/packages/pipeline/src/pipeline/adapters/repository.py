@@ -10,8 +10,8 @@ from database.constants import (
     EDI_MESSAGE_ID_PREFIX,
 )
 from database.encryption import db_encryption
-from database.models import ApiGateway, EdiMessage
-from database.models import DataPlaneOutbox as Outbox
+from database.models.data_plane import ApiGateway, EdiMessage
+from database.models.data_plane import DataPlaneOutbox as Outbox
 from database.models.data_plane import (
     AS2Partner,
     AS2Partnership,

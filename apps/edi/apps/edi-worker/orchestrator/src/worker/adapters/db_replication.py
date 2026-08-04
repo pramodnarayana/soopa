@@ -4,13 +4,13 @@ from contextlib import aclosing, asynccontextmanager
 from typing import Any
 
 from database.connection import DatabaseRouter
-from database.models.control_plane import AS2Partner as GlobalAS2Partner
-from database.models.control_plane import AS2Partnership as GlobalAS2Partnership
-from database.models.control_plane import InboundRoute as GlobalInboundRoute
-from database.models.control_plane import OutboundEdiHeader as GlobalOutboundEdiHeader
-from database.models.control_plane import OutboundRoute as GlobalOutboundRoute
+from ucp_models.webhooks import Webhook as GlobalWebhook
 from database.models.control_plane import SFTPPartner as GlobalSFTPPartner
-from database.models.control_plane import Webhook as GlobalWebhook
+from database.models.control_plane import OutboundRoute as GlobalOutboundRoute
+from database.models.control_plane import OutboundEdiHeader as GlobalOutboundEdiHeader
+from database.models.control_plane import InboundRoute as GlobalInboundRoute
+from database.models.control_plane import AS2Partnership as GlobalAS2Partnership
+from database.models.control_plane import AS2Partner as GlobalAS2Partner
 from database.models.data_plane import AS2Partner as TenantAS2Partner
 from database.models.data_plane import AS2Partnership as TenantAS2Partnership
 from database.models.data_plane import InboundRoute as TenantInboundRoute

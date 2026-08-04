@@ -208,7 +208,8 @@ class ReceiveAS2UseCase:
                                 )
 
                             # 2. Resolve shard row
-                            from database.models import DatabaseShard, Tenant
+                            from ucp_models.infrastructure import DatabaseShard
+                            from ucp_models.identity import Tenant
                             from sqlalchemy import select
 
                             stmt = (

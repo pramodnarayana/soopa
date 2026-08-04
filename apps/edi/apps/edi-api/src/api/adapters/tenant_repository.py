@@ -1,7 +1,7 @@
 from typing import Any
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import (
+from ucp_models.identity import (
     Tenant,
 )
 from sqlalchemy import select

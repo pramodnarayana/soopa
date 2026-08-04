@@ -5,7 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ucp-engine
     env_file: ../../.env
     ports:
       - "3001:3001"
@@ -15,54 +14,3 @@ services:
         condition: service_healthy
       localstack:
         condition: service_started
-
-  zitadel_postgres:
-    image: postgres:16-alpine
-    container_name: zitadel-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-zitadel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      POSTGRES_DB: ${POSTGRES_DB:-zitadel}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-zitadel} -U ${POSTGRES_USER:-zitadel}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    volumes:
-      - zitadel_data:/var/lib/postgresql/data:rw
-
-  zitadel:
-    image: ghcr.io/zitadel/zitadel:v3.4.12
-    container_name: zitadel
-    restart: unless-stopped
-    command: start-from-init --config /zitadel-first-instance.yaml --masterkey "${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY must be set (32 bytes)}" --tlsMode disabled
-    environment:
-      ZITADEL_PORT: 8080
-      ZITADEL_EXTERNALDOMAIN: ucp.localhost
-      ZITADEL_EXTERNALPORT: 8080
-      ZITADEL_EXTERNALSECURE: false
-      ZITADEL_DATABASE_POSTGRES_HOST: zitadel_postgres
-      ZITADEL_DATABASE_POSTGRES_PORT: 5432
-      ZITADEL_DATABASE_POSTGRES_DATABASE: ${POSTGRES_DB:-zitadel}
-      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${POSTGRES_USER:-zitadel}
-      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_USER:-zitadel}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
-      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./zitadel-first-instance.yaml:/zitadel-first-instance.yaml:ro
-      - zitadel_machinekey:/machinekey
-    depends_on:
-      zitadel_postgres:
-        condition: service_healthy
-
-volumes:
-  zitadel_data:
-    name: zitadel_data
-  zitadel_machinekey:
-    name: zitadel_machinekey

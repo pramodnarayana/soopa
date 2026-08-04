@@ -6,7 +6,12 @@ import uuid
 import pytest
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models.control_plane import AS2Partner, ControlPlaneOutbox
+from ucp_models.subscriptions import App
+from ucp_models.infrastructure import ShardRegistry
+from ucp_models.infrastructure import DatabaseShard
+from ucp_models.identity import Tenant
+from ucp_models.events import ControlPlaneOutbox
+from database.models.control_plane import AS2Partner
 from database.models.data_plane import AS2Partner as TenantAS2Partner
 from dotenv import load_dotenv
 from soopa_schemas.edi_events import EdiEventType
@@ -66,7 +71,6 @@ async def e2e_context():
     test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
 
-    from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
 
     async for session in db_router.get_global_session():
         tenant = Tenant(id=test_tenant_id, name="Test Tenant")

@@ -1,7 +1,7 @@
 from datetime import UTC
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import (
+from ucp_models.identity import (
     ApiToken,
 )
 from sqlalchemy import or_, select, update

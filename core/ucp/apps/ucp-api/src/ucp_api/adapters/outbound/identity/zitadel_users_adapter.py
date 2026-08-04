@@ -1,0 +1,224 @@
+import logging
+from typing import Literal, Tuple
+from ucp_api.core.exceptions import IdentityProviderError
+
+from ucp_api.adapters.outbound.identity.zitadel_client import ZitadelClient
+from ucp_api.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp_api.domain.dtos.zitadel_dtos import (
+    ZitadelUser,
+    ZitadelProjectGrantsResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
+    def _mask_email(self, email: str) -> str:
+        parts = email.split("@")
+        if len(parts) != 2:
+            return email
+        local, domain = parts
+        if len(local) < 2:
+            return f"*@{domain}"
+        return f"{local[:2]}***@{domain}"
+
+    async def create_user(
+        self,
+        org_id: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+    ) -> str:
+        logger.info(f"Creating user {self._mask_email(email)} in org {org_id}")
+        try:
+            user_res = await self.fetch_with_auth(
+                endpoint="/management/v1/users/human",
+                method="POST",
+                headers={"x-zitadel-orgid": org_id},
+                json={
+                    "userName": email,
+                    "profile": {
+                        "firstName": first_name,
+                        "lastName": last_name,
+                        "displayName": f"{first_name} {last_name}",
+                        "preferredLanguage": "en",
+                    },
+                    "email": {
+                        "email": email,
+                        "isEmailVerified": True,
+                    },
+                    "initialPassword": self.default_user_password,
+                }
+            )
+
+            if user_res.status_code >= 400:
+                await self.handle_response_error(user_res, "create user")
+
+            data = user_res.json()
+            user_data = ZitadelUser.model_validate(data)
+            user_id = user_data.user_id or user_data.id
+            if not user_id:
+                raise ValueError("User ID not returned from Zitadel")
+            
+            logger.info(f"Created User {user_id} in Org {org_id}")
+            return user_id
+
+        except Exception as error:
+            logger.error(f"Error creating user {self._mask_email(email)} in org {org_id}: {error}")
+            raise error
+
+    async def _get_project_grant_id(self, org_id: str) -> str:
+        """Internal helper to get the UCP Project Grant ID for an organization."""
+        grant_search_res = await self.fetch_with_auth(
+            endpoint=f"/management/v1/projects/{self.ucp_project_id}/grants/_search",
+            method="POST",
+            json={"queries": []}
+        )
+        if grant_search_res.status_code >= 400:
+            await self.handle_response_error(grant_search_res, "fetch project grants")
+
+        grant_search_data = grant_search_res.json()
+        parsed_grant_data = ZitadelProjectGrantsResponse.model_validate(grant_search_data)
+        
+        project_grant = next(
+            (g for g in parsed_grant_data.result if g.granted_org_id == org_id),
+            None
+        )
+        if not project_grant:
+            raise IdentityProviderError(f"No UCP project grant found for org {org_id}")
+
+        grant_id = project_grant.grant_id or project_grant.id
+        if not grant_id:
+            raise IdentityProviderError("Grant ID missing in Zitadel response")
+            
+        return grant_id
+
+    async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+        logger.info(f"Assigning role [{role}] to user {user_id} in org {org_id}")
+        try:
+            grant_id = await self._get_project_grant_id(org_id)
+            user_grant_res = await self.fetch_with_auth(
+                endpoint=f"/management/v1/users/{user_id}/grants",
+                method="POST",
+                headers={"x-zitadel-orgid": org_id},
+                json={
+                    "projectId": self.ucp_project_id,
+                    "projectGrantId": grant_id,
+                    "roleKeys": [role],
+                }
+            )
+            if user_grant_res.status_code >= 400:
+                await self.handle_response_error(user_grant_res, "assign user role")
+        except Exception as error:
+            logger.error(f"Error assigning role for user {user_id} in org {org_id}: {error}")
+            raise error
+
+    async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+        logger.info(f"Updating role [{role}] for user {user_id} in org {org_id}")
+        try:
+            grants_res = await self.fetch_with_auth(
+                endpoint="/management/v1/users/grants/_search",
+                method="POST",
+                headers={"x-zitadel-orgid": org_id},
+                json={"queries": [{"userIdQuery": {"userId": user_id}}]}
+            )
+            if grants_res.status_code >= 400:
+                await self.handle_response_error(grants_res, "fetch user grants")
+
+            grants_data = grants_res.json()
+            parsed_grants = ZitadelProjectGrantsResponse.model_validate(grants_data)
+            
+            user_grant = next(
+                (g for g in parsed_grants.result if g.project_id == self.ucp_project_id),
+                None
+            )
+            
+            if user_grant:
+                # Update existing grant
+                update_res = await self.fetch_with_auth(
+                    endpoint=f"/management/v1/users/{user_id}/grants/{user_grant.id}",
+                    method="PUT",
+                    headers={"x-zitadel-orgid": org_id},
+                    json={"roleKeys": [role]}
+                )
+                if update_res.status_code >= 400:
+                    await self.handle_response_error(update_res, "update user role")
+            else:
+                # User had no grant, assign fresh
+                await self.assign_tenant_role(user_id, org_id, role)
+
+        except Exception as error:
+            logger.error(f"Error updating role for user {user_id} in org {org_id}: {error}")
+            raise error
+
+    async def update_user_profile(
+        self,
+        user_id: str,
+        org_id: str,
+        first_name: str,
+        last_name: str,
+    ) -> None:
+        logger.info(f"Updating profile for user {user_id} in org {org_id}")
+        try:
+            profile_res = await self.fetch_with_auth(
+                endpoint=f"/management/v1/users/{user_id}/profile",
+                method="PUT",
+                headers={"x-zitadel-orgid": org_id},
+                json={
+                    "firstName": first_name,
+                    "lastName": last_name,
+                    "displayName": f"{first_name} {last_name}",
+                    "preferredLanguage": "en",
+                }
+            )
+            if profile_res.status_code >= 400:
+                err = profile_res.text
+                if "Profile not changed" not in err:
+                    logger.error(f"Failed to update user profile: {err}")
+                    raise IdentityProviderError(
+                        message=f"Failed to update user profile: {err}",
+                        original_error=err
+                    )
+        except Exception as error:
+            logger.error(f"Error updating profile for user {user_id} in org {org_id}: {error}")
+            raise error
+
+    async def delete_user(self, user_id: str) -> None:
+        logger.info(f"Deleting user {user_id} from Zitadel")
+
+        response = await self.fetch_with_auth(
+            endpoint=f"/management/v1/users/{user_id}",
+            method="DELETE"
+        )
+
+        if response.status_code >= 400:
+            await self.handle_response_error(response, "delete user")
+
+    async def toggle_user_status(
+        self,
+        user_id: str,
+        org_id: str,
+        action: Literal["activate", "deactivate"],
+    ) -> None:
+        logger.info(f"Toggling user {user_id} status: {action}")
+
+        endpoint = "_reactivate" if action == "activate" else "_deactivate"
+        response = await self.fetch_with_auth(
+            endpoint=f"/management/v1/users/{user_id}/{endpoint}",
+            method="POST",
+            headers={"x-zitadel-orgid": org_id}
+        )
+
+        if response.status_code >= 400:
+            response_body = response.text
+            # Handle idempotency gracefully
+            if (
+                (action == "deactivate" and "User already inactive" in response_body) or
+                (action == "activate" and "User already active" in response_body)
+            ):
+                logger.info(f"User {user_id} is already {action}d, ignoring error.")
+                return
+
+            raise IdentityProviderError(
+                message=f"Failed to {action} user: {response_body}",
+                original_error=response_body
+            )

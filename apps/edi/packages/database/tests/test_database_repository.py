@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from database.models.control_plane import InboundRoute
 from database.models.control_plane import AS2Partner
 from database.repository import (
     EdiMessageRepository,
@@ -63,7 +64,6 @@ async def test_edi_message_repository_save_message() -> None:
 
 
 async def test_inbound_route_repository_get_inbound_route() -> None:
-    from database.models.control_plane import InboundRoute
     from database.repository import InboundRouteRepository
 
     mock_session = AsyncMock()
@@ -103,7 +103,6 @@ async def test_inbound_route_repository_get_inbound_route_no_match() -> None:
 
 
 async def test_inbound_route_repository_get_inbound_route_no_transaction_type() -> None:
-    from database.models.control_plane import InboundRoute
     from database.repository import InboundRouteRepository
 
     mock_session = AsyncMock()

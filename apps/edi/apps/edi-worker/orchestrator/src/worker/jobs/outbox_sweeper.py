@@ -3,7 +3,7 @@ import datetime
 import logging
 
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard
+from ucp_models.infrastructure import DatabaseShard
 from database.models.data_plane import DataPlaneOutbox
 from domain.events import PIPELINE_EVENT_ROUTING_MAP, PipelineEventType
 from sqlalchemy import select
