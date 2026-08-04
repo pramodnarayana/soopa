@@ -21,9 +21,9 @@ async def test_process_pipeline_event_idempotency_duplicate(mock_s3, mock_transf
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
-    # We need to mock session.execute returning an existing duplicate
+    # We need to mock session.execute returning None to simulate duplicate (nothing inserted)
     mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = MagicMock()  # simulating existing record
+    mock_existing.scalar_one_or_none.return_value = None  # simulating duplicate
     mock_session.execute.return_value = mock_existing
 
     await process_pipeline_event(
@@ -59,9 +59,9 @@ async def test_process_pipeline_event_transform_completed(mock_trace, mock_s3, m
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_saga = AsyncMock()
     mock_trace.return_value = mock_saga
@@ -97,9 +97,9 @@ async def test_process_pipeline_event_delivery_completed(mock_trace, mock_s3, mo
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_saga = AsyncMock()
     mock_trace.return_value = mock_saga
@@ -135,9 +135,9 @@ async def test_process_pipeline_event_inbound(mock_inbound, mock_s3, mock_repo):
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_service = AsyncMock()
     mock_inbound.return_value = mock_service
@@ -174,9 +174,9 @@ async def test_process_pipeline_event_outbound(mock_outbound, mock_s3, mock_repo
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
 
     # We mock it so it does not find a duplicate
-    mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
-    mock_session.execute.return_value = mock_existing
+    mock_inserted = MagicMock()
+    mock_inserted.scalar_one_or_none.return_value = "fake-key"
+    mock_session.execute.return_value = mock_inserted
 
     mock_service = AsyncMock()
     mock_outbound.return_value = mock_service

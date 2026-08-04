@@ -45,6 +45,14 @@ class OutboxMixin:
     def created_at(cls) -> Mapped[datetime]:
         return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
+    @declared_attr
+    def owner_token(cls) -> Mapped[str | None]:
+        return mapped_column(String(128), nullable=True)
+
+    @declared_attr
+    def lease_expires_at(cls) -> Mapped[datetime | None]:
+        return mapped_column(DateTime(timezone=True), nullable=True)
+
 
 class TimestampMixin:
     """Provides created_at and updated_at for configuration tables."""

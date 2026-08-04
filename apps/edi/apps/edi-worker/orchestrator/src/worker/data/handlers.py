@@ -18,7 +18,7 @@ from pipeline.core.delivery import (
     WebhookDeliveryStrategy,
 )
 from pipeline.core.transformation import InboundTransformService, OutboundTransformService
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from worker.adapters.vault import WorkerVaultAdapter
 from worker.core.security import ssrf_safe_context
@@ -56,24 +56,22 @@ async def process_pipeline_event(
                 transformer_adapter = BotsTransformerAdapter()
 
                 if key_str:
-                    # Check for duplicate
-                    stmt = select(ProcessedEvent).where(ProcessedEvent.idempotency_key == key_str)
-                    existing = await session.execute(stmt)
-                    if existing.scalar_one_or_none():
+                    from sqlalchemy.dialects.postgresql import insert
+
+                    # Atomically insert ProcessedEvent; if conflict, it returns nothing
+                    stmt = (
+                        insert(ProcessedEvent)
+                        .values(idempotency_key=key_str)
+                        .on_conflict_do_nothing()
+                        .returning(ProcessedEvent.idempotency_key)
+                    )
+                    result = await session.execute(stmt)
+                    if not result.scalar_one_or_none():
                         logger.info(
                             f"Skipping duplicate event with idempotency_key={idempotency_key}"
                         )
                         await session.commit()
                         return
-
-                    # Mark as processed in same transaction
-                    from sqlalchemy.dialects.postgresql import insert
-
-                    await session.execute(
-                        insert(ProcessedEvent)
-                        .values(idempotency_key=key_str)
-                        .on_conflict_do_nothing()
-                    )
                     await session.execute(
                         update(DataPlaneOutbox)
                         .where(DataPlaneOutbox.idempotency_key == key_str)
@@ -146,36 +144,42 @@ async def process_delivery(
             db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         ) as session_gen:
             async for session in session_gen:
-                # Check for duplicate
-                stmt = select(ProcessedEvent).where(ProcessedEvent.idempotency_key == key_str)
-                existing = await session.execute(stmt)
-                if existing.scalar_one_or_none():
+                import uuid
+                from datetime import UTC, datetime, timedelta
+
+                from sqlalchemy import or_, update
+
+                owner_token = str(uuid.uuid4())
+                now = datetime.now(UTC)
+                lease_expires = now + timedelta(minutes=5)
+
+                # Atomically claim the delivery row
+                stmt = (
+                    update(DataPlaneOutbox)
+                    .where(
+                        DataPlaneOutbox.idempotency_key == key_str,
+                        DataPlaneOutbox.status != "PROCESSED",
+                        or_(
+                            DataPlaneOutbox.lease_expires_at.is_(None),
+                            DataPlaneOutbox.lease_expires_at < now,
+                            DataPlaneOutbox.owner_token == owner_token,
+                        ),
+                    )
+                    .values(
+                        status="DELIVERING",
+                        owner_token=owner_token,
+                        lease_expires_at=lease_expires,
+                    )
+                    .returning(DataPlaneOutbox.idempotency_key)
+                )
+                result = await session.execute(stmt)
+                if not result.scalar_one_or_none():
                     logger.info(
-                        f"Skipping duplicate delivery event with idempotency_key={idempotency_key}"
+                        f"Skipping delivery for idempotency_key={idempotency_key} (already processed or currently leased)"
                     )
                     await session.commit()
                     return
 
-                # Check Outbox status
-                stmt_outbox = select(DataPlaneOutbox).where(
-                    DataPlaneOutbox.idempotency_key == key_str
-                )
-                outbox_record = (await session.execute(stmt_outbox)).scalar_one_or_none()
-                if outbox_record:
-                    if outbox_record.status == "DELIVERING":
-                        logger.warning(
-                            f"Delivery {key_str} is in DELIVERING state (crash/timeout). Proceeding with retry downstream..."
-                        )
-                    elif outbox_record.status == "PROCESSED":
-                        await session.commit()
-                        return
-
-                # Persist "DELIVERING" state
-                await session.execute(
-                    update(DataPlaneOutbox)
-                    .where(DataPlaneOutbox.idempotency_key == key_str)
-                    .values(status="DELIVERING")
-                )
                 await session.commit()
 
     # Unit of Work 2: Execute network delivery and persist outcome

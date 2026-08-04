@@ -49,6 +49,21 @@ export class TenantProxyController {
     const hasBody =
       req.method !== 'GET' && req.method !== 'HEAD' && req.body !== undefined && req.body !== null;
 
+    let forwardBody: Buffer | string | undefined;
+    if (hasBody) {
+      const reqWithRaw = req as FastifyRequest & { rawBody?: Buffer };
+      if (reqWithRaw.rawBody && Buffer.isBuffer(reqWithRaw.rawBody)) {
+        forwardBody = reqWithRaw.rawBody;
+      } else {
+        forwardBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        // If we fallback to serialization, the original content-length might be wrong.
+        delete forwardHeaders['content-length'];
+        if (typeof req.body !== 'string') {
+          forwardHeaders['content-type'] = 'application/json';
+        }
+      }
+    }
+
     this.logger.log(
       `[PROXY OUTBOUND] ${req.method} ${url} (sanitized metadata only, body omitted)`,
     );
@@ -60,7 +75,7 @@ export class TenantProxyController {
       const response = await fetch(url, {
         method: req.method,
         headers: forwardHeaders,
-        body: hasBody ? JSON.stringify(req.body) : undefined,
+        body: forwardBody as BodyInit | undefined,
         signal: abortController.signal,
       });
 
@@ -82,7 +97,6 @@ export class TenantProxyController {
       return res.status(502).send({
         error: 'Bad Gateway',
         message: 'Failed to communicate with downstream EDI service',
-        details: error instanceof Error ? error.message : String(error),
       });
     } finally {
       clearTimeout(timeoutId);

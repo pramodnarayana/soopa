@@ -164,11 +164,11 @@ async def create_platform_as2_partner(
     If is_local is True, automatically generates a self-signed cert and stores private key in Vault.
     """
     logger.info(
-        "[create_as2_partner] START name=%r as2_id=%r is_local=%r idempotency_key=%r",
+        "[create_as2_partner] START name=%r as2_id=%r is_local=%r has_idempotency_key=%r",
         request.name,
         request.as2_id,
         request.is_local,
-        idempotency_key,
+        bool(idempotency_key),
     )
     public_cert_pem = request.public_cert_pem
     private_key_vault_ref = request.private_key_vault_ref
