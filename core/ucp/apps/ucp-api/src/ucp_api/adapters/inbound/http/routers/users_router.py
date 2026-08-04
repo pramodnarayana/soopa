@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
 from identity.domain.identity_context import IdentityContext
 from ucp_api.adapters.inbound.http.dtos.user_dtos import (
@@ -59,16 +59,18 @@ def get_delete_user_use_case() -> DeleteUserUseCase:
 
 @router.get("/")
 async def get_users(  # type: ignore
+    request: Request,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     tenant_repo: ITenantRepository = Depends(get_tenant_repo),
     user_repo: IUserRepository = Depends(get_user_repo),
 ):
-    tenant = await tenant_repo.find_by_id(tenant_id)
+    canonical_tenant_id = request.state.ucp_tenant_id
+    tenant = await tenant_repo.find_by_id(canonical_tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    users = await user_repo.find_users_by_tenant(tenant_id)
+    users = await user_repo.find_users_by_tenant(canonical_tenant_id)
 
     result = []
     for u in users:
@@ -94,13 +96,15 @@ async def get_users(  # type: ignore
 
 @router.post("/")
 async def create_user(  # type: ignore
+    request: Request,
     dto: CreateUserRequest,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     use_case: InviteUserUseCase = Depends(get_invite_user_use_case),
 ):
+    canonical_tenant_id = request.state.ucp_tenant_id
     command = InviteUserCommand(
-        tenant_id=tenant_id,
+        tenant_id=canonical_tenant_id,
         email=dto.email,
         first_name=dto.first_name,
         last_name=dto.last_name,
@@ -118,14 +122,16 @@ async def create_user(  # type: ignore
 
 @router.patch("/{user_id}")
 async def update_user(  # type: ignore
+    request: Request,
     dto: UpdateUserRequest,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     user_id: str = Path(...),
     use_case: UpdateUserUseCase = Depends(get_update_user_use_case),
 ):
+    canonical_tenant_id = request.state.ucp_tenant_id
     command = UpdateUserCommand(
-        tenant_id=tenant_id,
+        tenant_id=canonical_tenant_id,
         user_id=user_id,
         first_name=dto.first_name,
         last_name=dto.last_name,
@@ -143,14 +149,16 @@ async def update_user(  # type: ignore
 
 @router.patch("/{user_id}/status")
 async def toggle_status(  # type: ignore
+    request: Request,
     dto: ToggleUserStatusRequest,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     user_id: str = Path(...),
     use_case: ToggleUserStatusUseCase = Depends(get_toggle_user_status_use_case),
 ):
+    canonical_tenant_id = request.state.ucp_tenant_id
     command = ToggleUserStatusCommand(
-        tenant_id=tenant_id,
+        tenant_id=canonical_tenant_id,
         user_id=user_id,
         action=dto.action,  # type: ignore
     )
@@ -166,13 +174,15 @@ async def toggle_status(  # type: ignore
 
 @router.delete("/{user_id}")
 async def delete_user(  # type: ignore
+    request: Request,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     user_id: str = Path(...),
     use_case: DeleteUserUseCase = Depends(get_delete_user_use_case),
 ):
+    canonical_tenant_id = request.state.ucp_tenant_id
     command = DeleteUserCommand(
-        tenant_id=tenant_id,
+        tenant_id=canonical_tenant_id,
         user_id=user_id,
     )
 

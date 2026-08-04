@@ -39,7 +39,7 @@ class ZitadelHuman(BaseModel):
 
 class ZitadelDetails(BaseModel):
     creation_date: Optional[str] = Field(None, alias="creationDate")
-    total_result: Optional[str] = Field(None, alias="totalResult")
+    total_result: Optional[int] = Field(None, alias="totalResult")
     view_timestamp: Optional[str] = Field(None, alias="viewTimestamp")
 
 class ZitadelRawUser(BaseModel):

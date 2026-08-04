@@ -93,6 +93,7 @@ class TenantRepository(ITenantRepository):
         if db_tenant:
             db_tenant.name = tenant.name
             db_tenant.idp_tenant_id = tenant.idp_tenant_id
+            db_tenant.status = tenant.status
         else:
             db_tenant = DbTenant(
                 id=tenant.id,

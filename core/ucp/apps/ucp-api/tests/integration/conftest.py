@@ -92,7 +92,7 @@ async def client(db_session) -> "Any":  # type: ignore
 
     def override_get_org_provider() -> "Any":
         mock = AsyncMock()
-        mock.create_organization.return_value = ("mock-org-123", "org-name")
+        mock.create_organization.return_value = ("mock-org-123", True)
         mock.delete_organization.return_value = None
         return mock
 
@@ -103,8 +103,10 @@ async def client(db_session) -> "Any":  # type: ignore
 
     def override_get_user_provider() -> "Any":
         mock = AsyncMock()
-        mock.invite_user.return_value = ("mock-user-123",)
-        mock.update_user.return_value = None
+        mock.create_user.return_value = "mock-user-123"
+        mock.assign_tenant_role.return_value = None
+        mock.update_tenant_role.return_value = None
+        mock.update_user_profile.return_value = None
         mock.delete_user.return_value = None
         return mock
 

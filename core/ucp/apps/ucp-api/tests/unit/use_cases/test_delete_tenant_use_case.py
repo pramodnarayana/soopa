@@ -79,6 +79,6 @@ async def test_delete_tenant_success(
 
     mock_tenant_repo.find_by_id.assert_called_once_with("ten_123")
     mock_user_repo.find_users_by_tenant.assert_called_once_with("ten_123")
-    mock_tenant_repo.delete.assert_called_once_with("ten_123", "idemp-key")
-    mock_user_repo.delete_orphaned_users.assert_called_once_with(["usr_1"])
-    mock_org_provider.delete_organization.assert_called_once_with("zitadel-org-123")
+    mock_tenant_repo.delete.assert_awaited_once_with("ten_123", "idemp-key")
+    mock_user_repo.delete_orphaned_users.assert_awaited_once_with(["usr_1"])
+    mock_org_provider.delete_organization.assert_awaited_once_with("zitadel-org-123")

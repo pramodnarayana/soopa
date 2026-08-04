@@ -188,6 +188,10 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
         )
 
         if response.status_code >= 400:
+            # Treat explicit not-found as successful idempotent deletion
+            if response.status_code == 404:
+                logger.info(f"User {user_id} not found in Zitadel, treating as already deleted")
+                return
             await self.handle_response_error(response, "delete user")
 
     async def toggle_user_status(

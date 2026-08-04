@@ -8,6 +8,11 @@ from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+# Import database models to ensure they are registered with GlobalRegistry
+import database.models.control_plane  # noqa: F401
+import database.models.platform_settings  # noqa: F401
+import database.models.data_plane  # noqa: F401
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
