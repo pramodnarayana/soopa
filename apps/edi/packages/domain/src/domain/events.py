@@ -1,8 +1,19 @@
 from enum import StrEnum
 
-from platform_schemas.ucp_events import UcpEventType
-from platform_schemas.webhook_events import WebhookEventType
 from pydantic import BaseModel
+
+
+class UcpEventType(StrEnum):
+    tenant_provisioned = "tenant.provisioned"
+    app_subscribed = "app.subscribed"
+    app_unsubscribed = "app.unsubscribed"
+    api_key_created = "api_key.created"
+
+
+class WebhookEventType(StrEnum):
+    webhook_created = "webhook.created"
+    webhook_updated = "webhook.updated"
+    webhook_deleted = "webhook.deleted"
 
 
 class EdiEventType(StrEnum):

@@ -14,7 +14,6 @@ dependencies = [
     "pipeline",
     "config",
     "domain",
-    "platform_schemas",
 ]
 
 [tool.uv.sources]
@@ -23,7 +22,6 @@ database = { workspace = true }
 pipeline = { workspace = true }
 config = { workspace = true }
 domain = { workspace = true }
-platform_schemas = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -61,7 +59,6 @@ extraPaths = [
     "../../../../core/ucp/packages/models/src",
     "../../../../../core/platform/packages/identity/python/src",
     "../../../../../core/platform/packages/observability/python/src",
-    "../../../../../core/platform/packages/schemas/python/src",
     "../../../packages/database/src",
     "../../../packages/pipeline/src",
     "../../../packages/grammar/src",

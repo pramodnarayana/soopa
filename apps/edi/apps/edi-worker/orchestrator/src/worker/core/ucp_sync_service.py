@@ -37,7 +37,7 @@ class UcpSyncWorkerService:
                 tenant_id=event.tenantId,
             )
         else:
-            logger.debug(f"No translation available for external event: {event.eventType.value}")
+            logger.debug(f"No translation available for external event: {event.eventType}")
 
     async def process_messages(self) -> None:
         """
@@ -48,14 +48,14 @@ class UcpSyncWorkerService:
                 return
 
             try:
-                handler = self._handlers.get(event.eventType.value)
+                handler = self._handlers.get(event.eventType)
                 if handler:
                     await handler(event)
                 else:
-                    logger.debug(f"Ignored unhandled UCP event type: {event.eventType.value}")
+                    logger.debug(f"Ignored unhandled UCP event type: {event.eventType}")
             except Exception as e:
                 logger.error(
-                    f"Failed to process UCP event {event.eventType.value} "
+                    f"Failed to process UCP event {event.eventType} "
                     f"(idempotency_key={event.idempotencyKey}): {e}"
                 )
                 raise

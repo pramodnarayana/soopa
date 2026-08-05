@@ -24,7 +24,6 @@ venv = ".venv"
 extraPaths = [
     "../identity/python/src",
     "../observability/python/src",
-    "../schemas/python/src",
     "src",
 ]
 

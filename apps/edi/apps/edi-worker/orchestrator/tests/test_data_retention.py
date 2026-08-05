@@ -29,14 +29,13 @@ async def test_data_retention_execute() -> None:
     db_router.get_global_session = get_global_session
 
     handler = DataRetentionCleanupJobHandler(db_router)
-    handler._cleanup_shard = AsyncMock(return_value=(15, 0))
 
-    job = Job(id=uuid.uuid4(), name="data_retention_cleanup", payload={}, interval_seconds=120)
+    with patch.object(handler, "_cleanup_shard", AsyncMock(return_value=(15, 0))) as mock_cleanup:
+        job = Job(id=uuid.uuid4(), name="data_retention_cleanup", payload={}, interval_seconds=120)
+        next_run = await handler.execute(job)
 
-    next_run = await handler.execute(job)
-
-    assert handler._cleanup_shard.await_count == 1
-    handler._cleanup_shard.assert_awaited_with("test_shard", "test_dsn")
+        assert mock_cleanup.await_count == 1
+        mock_cleanup.assert_awaited_with("test_shard", "test_dsn")
 
     assert next_run is None
 
@@ -61,12 +60,12 @@ async def test_data_retention_execute_exception_propagates() -> None:
     db_router.get_global_session = get_global_session
 
     handler = DataRetentionCleanupJobHandler(db_router)
-    handler._cleanup_shard = AsyncMock(side_effect=Exception("DB Down"))
 
-    job = Job(id=uuid.uuid4(), name="data_retention_cleanup", payload={}, interval_seconds=120)
+    with patch.object(handler, "_cleanup_shard", AsyncMock(side_effect=Exception("DB Down"))):
+        job = Job(id=uuid.uuid4(), name="data_retention_cleanup", payload={}, interval_seconds=120)
 
-    with pytest.raises(Exception, match="DB Down"):
-        await handler.execute(job)
+        with pytest.raises(Exception, match="DB Down"):
+            await handler.execute(job)
 
 
 @pytest.mark.asyncio

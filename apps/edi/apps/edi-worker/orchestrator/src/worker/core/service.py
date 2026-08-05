@@ -8,9 +8,9 @@ from domain.events import (
     LegacyUcpEventType,
     ProvisioningEvent,
     ProvisioningEventType,
+    WebhookEventType,
 )
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from platform_schemas.webhook_events import WebhookEventType
 from pydantic import TypeAdapter, ValidationError
 
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError

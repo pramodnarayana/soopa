@@ -35,14 +35,13 @@ async def test_outbox_sweeper_execute() -> None:
     db_router.get_global_session = get_global_session
 
     handler = DataPlaneOutboxSweeperJobHandler(db_router, message_publisher)
-    handler._sweep_shard = AsyncMock(return_value=5)
 
-    job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
+    with patch.object(handler, "_sweep_shard", AsyncMock(return_value=5)) as mock_sweep:
+        job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
+        next_run = await handler.execute(job)
 
-    next_run = await handler.execute(job)
-
-    assert handler._sweep_shard.await_count == 1
-    handler._sweep_shard.assert_awaited_with("test_shard", "test_dsn")
+        assert mock_sweep.await_count == 1
+        mock_sweep.assert_awaited_with("test_shard", "test_dsn")
 
     assert next_run is not None
     assert isinstance(next_run, datetime.datetime)
@@ -72,13 +71,13 @@ async def test_outbox_sweeper_execute_exception_caught() -> None:
     db_router.get_global_session = get_global_session
 
     handler = DataPlaneOutboxSweeperJobHandler(db_router, message_publisher)
-    handler._sweep_shard = AsyncMock(side_effect=Exception("Database down"))
 
-    job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
-
-    next_run = await handler.execute(job)
-
-    assert handler._sweep_shard.await_count == 1
+    with patch.object(
+        handler, "_sweep_shard", AsyncMock(side_effect=Exception("Database down"))
+    ) as mock_sweep:
+        job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
+        next_run = await handler.execute(job)
+        assert mock_sweep.await_count == 1
     assert next_run is not None
 
 
