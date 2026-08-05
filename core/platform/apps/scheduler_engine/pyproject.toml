@@ -1,0 +1,19 @@
+[project]
+name = "scheduler-engine"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "croniter>=6.2.4",
+    "platform-orm",
+    "punq>=0.8.0",
+    "sqlalchemy>=2.0.51",
+    "types-croniter>=6.2.4.20260711",
+    "ucp-models",
+]
+
+[tool.uv.sources]
+platform-orm = { workspace = true, editable = true }
+ucp-models = { workspace = true, editable = true }

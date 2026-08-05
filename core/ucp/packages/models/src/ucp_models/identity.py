@@ -30,8 +30,8 @@ class User(UcpBase):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
-    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
@@ -58,6 +58,9 @@ class TenantUser(UcpBase):
         String(128), ForeignKey("ucp.users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
     __table_args__ = ({"schema": "ucp"},)
 

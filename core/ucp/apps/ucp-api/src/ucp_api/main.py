@@ -1,3 +1,5 @@
+import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -5,7 +7,7 @@ import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from ucp_api.adapters.inbound.http.guards import tenant_auth_guard
 from ucp_api.adapters.inbound.http.routers import tenant_proxy_router, tenants_router, users_router
@@ -25,6 +27,13 @@ from ucp_api.application.use_cases.toggle_user_status_use_case import ToggleUser
 from ucp_api.application.use_cases.update_user_use_case import UpdateUserUseCase
 from ucp_api.core.container import get_db_session
 from ucp_api.core.exceptions import IdentityProviderError
+from ucp_api.application.workers.outbox_sweeper import ControlPlaneOutboxSweeper
+from ucp_api.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
+from ucp_api.adapters.outbound.messaging.postgres_notify_outbox_publisher import (
+    PostgresNotifyOutboxPublisher,
+)
+
+logger = logging.getLogger(__name__)
 
 # HTTPX client for Zitadel admin calls \u2014 closed on shutdown
 _zitadel_httpx_client = httpx.AsyncClient()
@@ -32,7 +41,32 @@ _zitadel_httpx_client = httpx.AsyncClient()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Setup session factory for background task
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url and database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    engine = create_async_engine(database_url, pool_pre_ping=True) if database_url else None
+
+    sweeper = None
+    if engine:
+        session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        sweeper = ControlPlaneOutboxSweeper(
+            repository=PostgresOutboxRepository(session_factory),
+            publisher=PostgresNotifyOutboxPublisher(session_factory),
+            poll_interval_seconds=int(os.environ.get("OUTBOX_POLL_INTERVAL_SECONDS", "2")),
+        )
+        sweeper.start()
+    else:
+        logger.warning("DATABASE_URL not set, ControlPlaneOutboxSweeper will not start.")
+
     yield
+
+    if sweeper:
+        await sweeper.stop()
+    if engine:
+        await engine.dispose()
+
     await _zitadel_httpx_client.aclose()
 
 

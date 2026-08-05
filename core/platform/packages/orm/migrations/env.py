@@ -1,11 +1,10 @@
 import asyncio
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -17,16 +16,18 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
 
-from platform_orm.models.core import UcpBase
+from ucp_models.events import *
 from ucp_models.identity import *
 from ucp_models.infrastructure import *
-from ucp_models.webhooks import *
 from ucp_models.subscriptions import *
-from ucp_models.events import *
+from ucp_models.webhooks import *
+
+from platform_orm.models.core import UcpBase
 
 target_metadata = UcpBase.metadata
 
@@ -67,7 +68,17 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    def include_name(name, type_, parent_names):
+        if type_ == "schema":
+            return name in [None, "edi", "ucp"]
+        return True
+
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_schemas=True,
+        include_name=include_name,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

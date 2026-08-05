@@ -100,7 +100,9 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
 
     app_res = await global_session.execute(select(App).where(App.slug == "edi"))
     edi_app = app_res.scalars().first()
+    created_edi_app = False
     if not edi_app:
+        created_edi_app = True
         edi_app = App(id=f"app_{suffix}", name="EDI", slug="edi", is_active=True)
         global_session.add(edi_app)
         await global_session.commit()
@@ -141,6 +143,12 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
         if tenant_shard_to_delete:
             await global_session2.delete(tenant_shard_to_delete)
             await global_session2.flush()
+
+        if created_edi_app:
+            app_to_delete = await global_session2.get(App, edi_app.id)
+            if app_to_delete:
+                await global_session2.delete(app_to_delete)
+                await global_session2.flush()
 
         tenant_to_delete = await global_session2.get(Tenant, tenant_id)
         if tenant_to_delete:

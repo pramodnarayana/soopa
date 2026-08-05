@@ -22,7 +22,9 @@ members = [
     "apps/edi/apps/edi-api",
     "apps/edi/apps/edi-as2-server",
     "apps/edi/apps/edi-worker/*",
-    "apps/edi/packages/*"
+    "apps/edi/packages/*",
+    "core/platform/apps/scheduler_engine",
+    "core/platform/apps/notification_engine",
 ]
 exclude = ["apps/edi/packages/ui"]
 
