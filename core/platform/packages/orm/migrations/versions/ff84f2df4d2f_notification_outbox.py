@@ -387,8 +387,12 @@ def downgrade() -> None:
         ),
         schema="ucp",
     )
-    op.drop_constraint("fk_tenant_users_user_id_users", "tenant_users", schema="ucp", type_="foreignkey")
-    op.drop_constraint("fk_tenant_users_tenant_id_tenants", "tenant_users", schema="ucp", type_="foreignkey")
+    op.drop_constraint(
+        "fk_tenant_users_user_id_users", "tenant_users", schema="ucp", type_="foreignkey"
+    )
+    op.drop_constraint(
+        "fk_tenant_users_tenant_id_tenants", "tenant_users", schema="ucp", type_="foreignkey"
+    )
     op.create_foreign_key(
         op.f("tenant_users_user_id_users_id_fk"),
         "tenant_users",
@@ -421,9 +425,18 @@ def downgrade() -> None:
         ),
         schema="ucp",
     )
-    op.drop_constraint("fk_shard_registry_shard_id_database_shards", "shard_registry", schema="ucp", type_="foreignkey")
-    op.drop_constraint("fk_shard_registry_app_id_apps", "shard_registry", schema="ucp", type_="foreignkey")
-    op.drop_constraint("fk_shard_registry_tenant_id_tenants", "shard_registry", schema="ucp", type_="foreignkey")
+    op.drop_constraint(
+        "fk_shard_registry_shard_id_database_shards",
+        "shard_registry",
+        schema="ucp",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        "fk_shard_registry_app_id_apps", "shard_registry", schema="ucp", type_="foreignkey"
+    )
+    op.drop_constraint(
+        "fk_shard_registry_tenant_id_tenants", "shard_registry", schema="ucp", type_="foreignkey"
+    )
     op.create_foreign_key(
         op.f("shard_registry_tenant_id_tenants_id_fk"),
         "shard_registry",
@@ -557,8 +570,15 @@ def downgrade() -> None:
         ),
         schema="ucp",
     )
-    op.drop_constraint("fk_app_subscriptions_tenant_id_tenants", "app_subscriptions", schema="ucp", type_="foreignkey")
-    op.drop_constraint("fk_app_subscriptions_app_id_apps", "app_subscriptions", schema="ucp", type_="foreignkey")
+    op.drop_constraint(
+        "fk_app_subscriptions_tenant_id_tenants",
+        "app_subscriptions",
+        schema="ucp",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        "fk_app_subscriptions_app_id_apps", "app_subscriptions", schema="ucp", type_="foreignkey"
+    )
     op.create_foreign_key(
         op.f("app_subscriptions_app_id_apps_id_fk"),
         "app_subscriptions",
@@ -581,7 +601,9 @@ def downgrade() -> None:
     op.create_index(
         op.f("api_tokens_tenant_idx"), "api_tokens", ["tenant_id"], unique=False, schema="ucp"
     )
-    op.drop_constraint("fk_api_keys_tenant_id_tenants", "api_keys", schema="ucp", type_="foreignkey")
+    op.drop_constraint(
+        "fk_api_keys_tenant_id_tenants", "api_keys", schema="ucp", type_="foreignkey"
+    )
     op.create_foreign_key(
         op.f("api_keys_tenant_id_tenants_id_fk"),
         "api_keys",

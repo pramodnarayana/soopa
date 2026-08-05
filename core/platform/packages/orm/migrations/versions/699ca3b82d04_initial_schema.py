@@ -277,7 +277,9 @@ def upgrade() -> None:
         sa.Column("idp_tenant_id", sa.String(length=255), nullable=True),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_tenant_id"),
@@ -291,7 +293,9 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_user_id"),
@@ -501,7 +505,9 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("user_id", sa.String(length=128), nullable=False),
         sa.Column("role", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["ucp.tenants.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["ucp.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("tenant_id", "user_id"),
