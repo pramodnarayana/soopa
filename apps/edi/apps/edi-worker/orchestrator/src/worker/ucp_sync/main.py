@@ -18,8 +18,9 @@ async def run_worker(service: UcpSyncWorkerService) -> None:
     while True:
         try:
             await service.process_messages()
-        except Exception as e:
-            logger.exception(f"Error in UCP sync loop: {e}")
+        except Exception:
+            logger.exception("Error in UCP sync loop")
+
             await asyncio.sleep(5)
 
 

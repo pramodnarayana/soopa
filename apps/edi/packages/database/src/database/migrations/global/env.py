@@ -3,15 +3,15 @@ from logging.config import fileConfig
 
 from alembic import context
 from config.settings import get_settings
-from platform_orm.models.core import GlobalRegistry
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import database models to ensure they are registered with GlobalRegistry
-import database.models.control_plane  # noqa: F401
-import database.models.data_plane  # noqa: F401
+import database.models.control_plane
+import database.models.data_plane
 import database.models.platform_settings  # noqa: F401
+from database.models.base import EdiGlobalBase
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -24,7 +24,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-target_metadata = GlobalRegistry.metadata
+target_metadata = EdiGlobalBase.registry.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

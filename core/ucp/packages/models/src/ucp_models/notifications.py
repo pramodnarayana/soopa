@@ -13,7 +13,7 @@ class NotificationTemplate(UcpBase):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True, autoincrement=False)
     tenant_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("ucp.tenants.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("platform.tenants.id", ondelete="CASCADE"), nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(50), nullable=False)

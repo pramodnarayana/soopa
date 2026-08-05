@@ -7,7 +7,7 @@ from api.core.services.sftp_partner_service import SFTPPartnerService
 __all__ = [
     "AS2PartnerService",
     "AS2PartnershipService",
-    "SFTPPartnerService",
     "InboundRouteService",
     "OutboundRouteService",
+    "SFTPPartnerService",
 ]

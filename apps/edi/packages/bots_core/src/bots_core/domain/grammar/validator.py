@@ -394,7 +394,7 @@ def checkstructure(grammar_obj, structure, mpath):
                 ),
                 {"grammar": grammar_obj.grammarname, "mpath": mpath, "record": str(i)[:100]},
             )
-        i[MPATH] = mpath + [i[ID]]
+        i[MPATH] = [*mpath, i[ID]]
         if LEVEL in i:
             checkstructure(grammar_obj, i[LEVEL], i[MPATH])
         structure[idx] = create_structure_node(i)
@@ -484,7 +484,7 @@ def checknestedcollision(grammar_obj, structure, collision=None):
                 isa_safeheadersegment = checknestedcollision(grammar_obj, i.level, levelcollision)
             else:
                 isa_safeheadersegment = checknestedcollision(
-                    grammar_obj, i.level, levelcollision + [i.id]
+                    grammar_obj, i.level, [*levelcollision, i.id]
                 )
         else:
             isa_safeheadersegment = False

@@ -19,12 +19,12 @@ async def test_process_api_edi_json_success():
     assert trace_id is not None
 
     mock_uow.transactions.create_edi_json.assert_awaited_once()
-    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    _create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
     assert create_kwargs["payload"]["transaction_type"] == "850"
 
     mock_uow.data_plane_outbox.publish_outbox_event.assert_awaited_once()
 
-    args, kwargs = mock_uow.data_plane_outbox.publish_outbox_event.call_args
+    _args, kwargs = mock_uow.data_plane_outbox.publish_outbox_event.call_args
     from domain.events import PipelineEventType
 
     assert kwargs["event_type"] == PipelineEventType.TRANSFORM_EVENT
@@ -44,7 +44,7 @@ async def test_process_api_edi_json_heading():
     )
     assert trace_id is not None
     mock_uow.transactions.create_edi_json.assert_awaited_once()
-    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    _create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
     assert create_kwargs["payload"]["transaction_type"] == "850"
 
 
@@ -57,7 +57,7 @@ async def test_process_api_edi_json_st_segment():
     )
     assert trace_id is not None
     mock_uow.transactions.create_edi_json.assert_awaited_once()
-    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    _create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
     assert create_kwargs["payload"]["transaction_type"] == "855"
 
 
@@ -74,7 +74,7 @@ async def test_process_api_edi_json_list_extraction():
     )
     assert trace_id is not None
     mock_uow.transactions.create_edi_json.assert_awaited_once()
-    create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
+    _create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
 
     # Assert business_metadata aggregation for lists
     assert create_kwargs["payload"]["business_metadata"] == {

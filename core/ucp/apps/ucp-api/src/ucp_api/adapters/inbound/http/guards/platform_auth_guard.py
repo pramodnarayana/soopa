@@ -19,6 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from identity.adapters.outbound.zitadel.jwks_token_verifier import ZitadelTokenVerifier
 from identity.application.authenticate import AuthenticationError, authenticate_bearer_token
 from identity.domain.identity_context import IdentityContext
+
 from ucp_api.core.container import get_token_verifier
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ async def _resolve_identity(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except Exception as exc:
-        logger.error("Unexpected error during token verification: %s", exc, exc_info=True)
+        logger.exception("Unexpected error during token verification")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid JWT token.",

@@ -49,7 +49,9 @@ def client(fake_uow):
 
         def retrieve_private_key(self, vault_ref: str) -> bytes:
             if vault_ref == "vault-error-ref":
-                raise Exception("Vault error")
+                from api.core.exceptions import VaultError
+
+                raise VaultError("Vault error")
             return b"fake_key"
 
         def delete_secret(self, vault_ref: str) -> None:
@@ -306,7 +308,11 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     resp = client.delete(f"/api/v1/trading-partners/sftp/{random_id}")
     assert resp.status_code == 400
 
-    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(side_effect=Exception("DB Error"))
+    from api.core.exceptions import OrchestrationError
+
+    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(
+        side_effect=OrchestrationError("DB Error")
+    )
     resp = client.delete(f"/api/v1/trading-partners/sftp/{random_id}")
     assert resp.status_code == 500
 
@@ -326,7 +332,9 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     p_id = response.json()["id"]
 
     # Test decrypt error
-    with patch("database.encryption.db_encryption.decrypt", side_effect=Exception("Decrypt error")):
+    with patch(
+        "database.encryption.db_encryption.decrypt", side_effect=ValueError("Decrypt error")
+    ):
         resp = client.post(
             f"/api/v1/trading-partners/{p_id}/sftp/test",
             json={

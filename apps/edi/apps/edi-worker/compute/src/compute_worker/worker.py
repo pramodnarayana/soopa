@@ -52,8 +52,9 @@ class SQSComputeWorker:
                     for message in messages:
                         await self._process_message(message, sqs)
 
-                except Exception as e:
-                    logger.error(f"Error in SQS polling loop: {e}")
+                except Exception:
+                    logger.exception("Error in SQS polling loop")
+
                     await asyncio.sleep(5)
 
     async def stop(self) -> None:
@@ -100,6 +101,7 @@ class SQSComputeWorker:
                 )
                 logger.debug(f"Deleted message for trace {trace_id} from queue")
 
-        except Exception as e:
-            logger.error(f"Failed to process EDI message: {e}")
+        except Exception:
+            logger.exception("Failed to process EDI message")
+
             # Message naturally returns to queue for Dead Letter Queue routing

@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import httpx
+
 from ucp_api.core.config import get_settings
 from ucp_api.core.exceptions import IdentityProviderError
 

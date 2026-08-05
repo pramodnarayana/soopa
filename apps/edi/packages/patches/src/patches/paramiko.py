@@ -49,7 +49,8 @@ def apply_legacy_algorithm_support() -> None:
         hasattr(paramiko.Transport, "_preferred_keys")
         and "ssh-rsa" not in paramiko.Transport._preferred_keys
     ):
-        paramiko.Transport._preferred_keys = paramiko.Transport._preferred_keys + (
+        paramiko.Transport._preferred_keys = (
+            *paramiko.Transport._preferred_keys,
             "ssh-rsa",
             "ssh-dss",
         )
@@ -58,7 +59,8 @@ def apply_legacy_algorithm_support() -> None:
         hasattr(paramiko.Transport, "_preferred_pubkeys")
         and "ssh-rsa" not in paramiko.Transport._preferred_pubkeys
     ):
-        paramiko.Transport._preferred_pubkeys = paramiko.Transport._preferred_pubkeys + (
+        paramiko.Transport._preferred_pubkeys = (
+            *paramiko.Transport._preferred_pubkeys,
             "ssh-rsa",
             "ssh-dss",
         )

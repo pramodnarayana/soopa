@@ -78,12 +78,12 @@ async def main():
     # Safety guard: require local targets or explicit opt-in
     try:
         db_host = urllib.parse.urlparse(DATABASE_URL).hostname
-    except Exception:
+    except Exception:  # noqa: BLE001
         db_host = None
 
     try:
         sqs_host = urllib.parse.urlparse(AWS_ENDPOINT).hostname
-    except Exception:
+    except Exception:  # noqa: BLE001
         sqs_host = None
 
     db_is_local = db_host in ("localhost", "127.0.0.1")

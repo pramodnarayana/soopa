@@ -40,8 +40,8 @@ class NotificationOutboxSweeper:
         while self.is_running:
             try:
                 await self.poll()
-            except Exception as e:
-                logger.error(f"Error in Notification outbox sweeper: {e}", exc_info=True)
+            except Exception:
+                logger.exception("Error in Notification outbox sweeper")
             await asyncio.sleep(self.poll_interval_seconds)
         logger.info("Notification Outbox Sweeper stopped.")
 
@@ -80,5 +80,5 @@ class NotificationOutboxSweeper:
 
             await self.repository.mark_completed(message.id, self.worker_id)
         except Exception as e:
-            logger.error(f"Failed to process outbox message {message.id}: {e}", exc_info=True)
+            logger.exception("Failed to process outbox message %s", message.id)
             await self.repository.mark_failed(message.id, self.worker_id, str(e))

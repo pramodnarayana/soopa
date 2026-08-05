@@ -111,7 +111,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
 
         # Create Local and Remote AS2 Partners for validation
         local_priv, local_cert = generate_self_signed_cert()
-        remote_priv, remote_cert = generate_self_signed_cert()
+        _remote_priv, remote_cert = generate_self_signed_cert()
 
         # Base64 encode certificates for database
         local_cert_b64 = base64.b64encode(local_cert).decode("utf-8")
@@ -215,7 +215,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
 
         try:
             await translate_svc.translate(trace_id, event_type=PipelineEventType.TRANSFORM_EVENT)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # If bots is not running, we mock it for the test
             if "Connection" in str(e):
                 from pipeline.ports.transformer import TransformerPort

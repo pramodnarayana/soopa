@@ -12,6 +12,7 @@ from api.adapters.http.dtos import (
     TestAS2ConnectionResponse,
     UpdateAS2PartnershipRequest,
 )
+from api.core.exceptions import OrchestrationError
 from api.core.services import AS2PartnershipService
 from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.database import get_control_plane_uow
@@ -92,7 +93,7 @@ async def test_as2_partnership_connection(
             remote_cert_pem = vault_port.retrieve_secret(remote_partner.public_cert_vault_ref)
         elif remote_partner.public_cert_pem:
             remote_cert_pem = remote_partner.public_cert_pem.encode()
-    except Exception as e:
+    except OrchestrationError as e:
         return TestAS2ConnectionResponse(
             success=False, reason=f"Failed to retrieve cryptographic material: {e}"
         )
@@ -249,7 +250,7 @@ async def update_platform_as2_partnership(
         ) from e
     except HTTPException:
         raise
-    except Exception as e:
+    except OrchestrationError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -269,7 +270,7 @@ async def delete_platform_as2_partnership(
                 tenant_id=PLATFORM_TENANT_ID, partnership_id=partnership_id
             )
             await uow.commit()
-    except Exception as err:
+    except OrchestrationError as err:
         logger.exception("Internal error deleting platform AS2 partnership")
         raise HTTPException(status_code=500, detail="An internal server error occurred.") from err
 

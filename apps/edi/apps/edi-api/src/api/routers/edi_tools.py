@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 from transformer.domain.exceptions import TransformationError
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
+from api.core.exceptions import OrchestrationError
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/edi-tools", tags=["EDI Tools"])
@@ -104,7 +106,15 @@ async def transform_payload(request: TransformRequest) -> TransformResponse:
             error=json.dumps({"status": "system_error", "message": str(e)}, indent=2),
         )
 
-    except Exception as e:
+    except json.JSONDecodeError as e:
+        logger.exception("JSON decoding failed")
+        return TransformResponse(
+            result=None,
+            valid=False,
+            error=json.dumps({"status": "invalid_json", "message": str(e)}, indent=2),
+        )
+
+    except OrchestrationError as e:
         logger.exception("Transformation failed")
         error_msg = str(e)
 

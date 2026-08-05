@@ -39,10 +39,11 @@ async def send_notification(
             data=payload.data,
         )
         await use_case.execute(event)
-        return {"status": "ACCEPTED"}
     except NotificationDispatchError as e:
         logger.warning(f"Notification dispatch failed due to domain error: {e}")
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Internal error dispatching notification: {e}", exc_info=True)
+        logger.exception("Internal error dispatching notification")
         raise HTTPException(status_code=500, detail="Internal Server Error") from e
+    else:
+        return {"status": "ACCEPTED"}

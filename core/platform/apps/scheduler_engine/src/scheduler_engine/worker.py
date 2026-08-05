@@ -38,8 +38,8 @@ class SchedulerWorker:
         while self.is_running:
             try:
                 await self.poll()
-            except Exception as e:
-                logger.error(f"Error in scheduler poll loop: {e}", exc_info=True)
+            except Exception:
+                logger.exception("Error in scheduler poll loop")
             await asyncio.sleep(self.poll_interval_seconds)
 
     async def stop(self) -> None:
@@ -88,7 +88,7 @@ class SchedulerWorker:
                 logger.info(f"Successfully completed job {job.name} ({job.id})")
 
         except Exception as e:
-            logger.error(f"Job {job.name} ({job.id}) execution failed: {e}", exc_info=True)
+            logger.exception("Job %s (%s) execution failed", job.name, job.id)
 
             if job.retry_count < job.max_retries:
                 backoff_seconds = 60 * (2**job.retry_count)

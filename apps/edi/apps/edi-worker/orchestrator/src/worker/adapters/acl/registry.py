@@ -43,8 +43,9 @@ def translate_external_event(event_type: str, payload: dict[str, Any]) -> dict[s
     if translator:
         try:
             return translator.translate(payload)
-        except Exception as e:
-            logger.exception(f"Error translating external event '{event_type}': {e}")
+        except Exception:
+            logger.exception(f"Error translating external event '{event_type}'")
+
             raise
 
     return None

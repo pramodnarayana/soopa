@@ -43,9 +43,9 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
                 async with sem:
                     try:
                         return await self._sweep_shard(shard_name, shard_dsn)
-                    except Exception as e:
-                        logger.error(
-                            f"[DataPlaneOutboxSweeper] Failed sweeping shard {shard_name}: {e}"
+                    except Exception:
+                        logger.exception(
+                            "[DataPlaneOutboxSweeper] Failed sweeping shard %s", shard_name
                         )
                         return 0
 

@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+
 from ucp_api.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,

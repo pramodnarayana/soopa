@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+
 from ucp_api.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp_api.core.exceptions import ResourceNotFoundError
 from ucp_api.domain.models.tenant import Tenant

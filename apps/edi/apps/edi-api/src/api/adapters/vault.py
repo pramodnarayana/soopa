@@ -37,7 +37,7 @@ class VaultAdapter:
                             backend_type="kv", path=self.mount_point, options={"version": "2"}
                         )
             except Exception as e:
-                logger.error("vault_connection_failed", error=str(e))
+                logger.exception("vault_connection_failed", error=str(e))
 
     def store_private_key(self, private_key_pem: bytes, alias_prefix: str = "as2_key") -> str:
         """
@@ -94,8 +94,8 @@ class VaultAdapter:
             self.client.secrets.kv.v2.delete_latest_versions(
                 path=vault_ref, mount_point=self.mount_point
             )
-        except Exception as e:
-            logger.error(f"Failed to delete secret from vault: {e}")
+        except Exception:
+            logger.exception("Failed to delete secret from vault")
 
 
 # Singleton instance

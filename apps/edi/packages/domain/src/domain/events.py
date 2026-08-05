@@ -45,19 +45,12 @@ class PipelineEventType(StrEnum):
     DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
 
 
-# Legacy UCP events used by the worker for full sync
-class LegacyUcpEventType(StrEnum):
-    PROVISION_ALL_TENANTS = "tenant.provision_all"
-    PROVISION_TENANT = "tenant.provision"
-
-
-ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType | LegacyUcpEventType
+ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType
 
 ALL_PROVISIONING_EVENT_TYPES = (
     [e.value for e in EdiEventType]
     + [e.value for e in WebhookEventType]
     + [e.value for e in UcpEventType]
-    + [e.value for e in LegacyUcpEventType]
 )
 
 

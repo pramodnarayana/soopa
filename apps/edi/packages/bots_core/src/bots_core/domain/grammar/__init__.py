@@ -7,4 +7,4 @@ from .formats import edifact, test, x12
 from .grammar import Grammar
 from .loader import grammarread
 
-__all__ = ["Grammar", "grammarread", "edifact", "x12", "test"]
+__all__ = ["Grammar", "edifact", "grammarread", "test", "x12"]

@@ -32,38 +32,26 @@ class AS2PartnerService:
         import hashlib
         import json
 
-        from database.models.control_plane import ControlPlaneOutbox
-        from fastapi import HTTPException
-        from sqlalchemy import insert, select
         from sqlalchemy.exc import IntegrityError
+
+        from api.core.exceptions import IdempotencyConflictError
 
         fingerprint = hashlib.sha256(json.dumps(request_data, sort_keys=True).encode()).hexdigest()
 
         try:
-            insert_stmt = insert(ControlPlaneOutbox).values(
-                id=f"reservation_{idempotency_key}",
-                tenant_id=tenant_id,
-                idempotency_key=idempotency_key,
-                event_type="RESERVATION",
-                payload={"fingerprint": fingerprint},
-                status="RESERVED",
-                attempts=0,
+            await self.uow.control_plane_outbox.create_reservation(
+                tenant_id, idempotency_key, fingerprint
             )
-            await self.uow.global_session.execute(insert_stmt)
-            await self.uow.global_session.flush()
         except IntegrityError:
-            select_stmt = select(ControlPlaneOutbox).where(
-                ControlPlaneOutbox.idempotency_key == idempotency_key
+            existing_event = await self.uow.control_plane_outbox.get_event_by_idempotency_key(
+                idempotency_key
             )
-            result = await self.uow.global_session.execute(select_stmt)
-            existing_event = result.scalar_one_or_none()
 
             if existing_event and existing_event.payload:
                 existing_fingerprint = existing_event.payload.get("fingerprint")
                 if existing_fingerprint != fingerprint:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Idempotency conflict: payload does not match existing request.",
+                    raise IdempotencyConflictError(
+                        "Idempotency conflict: payload does not match existing request."
                     ) from None
 
                 partner_id = existing_event.payload.get("resource_id")

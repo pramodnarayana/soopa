@@ -15,8 +15,6 @@ class SlackIntegrationPort(Protocol):
 class DeliveryError(Exception):
     """Raised when message delivery fails."""
 
-    pass
-
 
 class SlackDeliveryStrategy:
     def __init__(self, slack_integration: SlackIntegrationPort | None = None):

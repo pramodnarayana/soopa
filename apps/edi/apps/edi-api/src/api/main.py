@@ -133,6 +133,29 @@ async def validation_exception_handler(
     )
 
 
+from api.core.exceptions import OrchestrationError, VaultError
+
+
+@app.exception_handler(OrchestrationError)
+async def orchestration_exception_handler(
+    request: Request, exc: OrchestrationError
+) -> JSONResponse:
+    logger.error(f"OrchestrationError at {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(VaultError)
+async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
+    logger.error(f"VaultError at {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
+
+
 app.include_router(cdc_relay.router)
 app.include_router(trading_partners.router)
 # NOTE: Webhooks are now owned exclusively by the UCP API (GET/POST/PATCH/DELETE /api/v1/tenants/:id/webhooks)

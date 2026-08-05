@@ -117,9 +117,9 @@ async def process_pipeline_event(
 
                 # Commit transaction
                 await session.commit()
-            except Exception as e:
-                logger.error(
-                    f"[WORKER] FAILURE in process_transformation for trace_id={trace_id}: {e}"
+            except Exception:
+                logger.exception(
+                    "[WORKER] FAILURE in process_transformation for trace_id=%s", trace_id
                 )
                 await session.rollback()
                 raise
@@ -235,7 +235,7 @@ async def process_delivery(
                         )
                 # Commit transaction
                 await session.commit()
-            except Exception as delivery_error:
+            except Exception:
                 if key_str:
                     try:
                         await session.rollback()
@@ -252,8 +252,8 @@ async def process_delivery(
                                 f"[WORKER] Stale failure update for idempotency_key={key_str}. Lease lost."
                             )
                         await session.commit()
-                    except Exception as bookkeeping_error:
-                        logger.error(
-                            f"[WORKER] Failed to update outbox status after delivery error: {bookkeeping_error}"
+                    except Exception:
+                        logger.exception(
+                            "[WORKER] Failed to update outbox status after delivery error"
                         )
-                raise delivery_error
+                raise

@@ -59,8 +59,9 @@ def validate_target_url(url: str) -> bool:
                     return False
 
         return True
-    except Exception as e:
-        logger.error(f"SSRF validation error: {e}")
+    except Exception:
+        logger.exception("SSRF validation error")
+
         return False
 
 

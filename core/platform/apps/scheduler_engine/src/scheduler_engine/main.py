@@ -12,6 +12,9 @@ from scheduler_engine.worker import SchedulerWorker
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+# Hold strong references to background tasks to prevent GC (see RUF006)
+_background_tasks: set[asyncio.Task[None]] = set()
+
 
 async def main() -> None:
     # Load .env file from project root
@@ -54,11 +57,15 @@ async def main() -> None:
     # Graceful shutdown handler
     def handle_sigint() -> None:
         logger.info("Received SIGINT, stopping worker gracefully...")
-        asyncio.create_task(worker.stop())
+        task = asyncio.create_task(worker.stop())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     def handle_sigterm() -> None:
         logger.info("Received SIGTERM, stopping worker gracefully...")
-        asyncio.create_task(worker.stop())
+        task = asyncio.create_task(worker.stop())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, handle_sigint if sig == signal.SIGINT else handle_sigterm)

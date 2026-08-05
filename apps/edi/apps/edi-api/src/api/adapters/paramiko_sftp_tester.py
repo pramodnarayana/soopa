@@ -51,7 +51,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
                 key_io = io.StringIO(client_key_string)
                 try:
                     pkey: paramiko.PKey = paramiko.RSAKey.from_private_key(key_io)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     key_io.seek(0)
                     pkey = paramiko.Ed25519Key.from_private_key(key_io)
                 connect_kwargs["pkey"] = pkey
@@ -65,7 +65,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
 
             return True, None
         except Exception as e:
-            logger.error(f"SSH Connection failed for {host}:{port} - {e}")
+            logger.exception("SSH Connection failed for %s:%s", host, port)
             return False, str(e) or repr(e)
         finally:
             if sftp:

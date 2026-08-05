@@ -10,6 +10,7 @@ from api.adapters.http.dtos import (
     TestSFTPConnectionRequest,
     UpdateSFTPPartnerRequest,
 )
+from api.core.exceptions import OrchestrationError, VaultError
 from api.core.services import SFTPPartnerService
 from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
@@ -50,7 +51,7 @@ async def test_sftp_connection(
             client_key_string = await _get_client_key_from_vault(
                 request.credentials_vault_ref, vault_port
             )
-        except Exception as e:
+        except (ValueError, VaultError) as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 
     success, reason = await sftp_tester.test_connection(
@@ -86,7 +87,7 @@ async def test_existing_sftp_connection(
                 if partner.password_encrypted:
                     try:
                         request.password = db_encryption.decrypt(partner.password_encrypted)
-                    except Exception as e:
+                    except (ValueError, VaultError) as e:
                         return TestConnectionResponse(
                             success=False,
                             reason=f"Failed to decrypt stored password: {e}",
@@ -105,7 +106,7 @@ async def test_existing_sftp_connection(
             client_key_string = await _get_client_key_from_vault(
                 request.credentials_vault_ref, vault_port
             )
-        except Exception as e:
+        except (ValueError, VaultError) as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 
     success, reason = await sftp_tester.test_connection(
@@ -243,5 +244,5 @@ async def delete_sftp_partner(
             raise
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
+        except OrchestrationError as e:
+            raise OrchestrationError("Failed to update SFTP partner") from e

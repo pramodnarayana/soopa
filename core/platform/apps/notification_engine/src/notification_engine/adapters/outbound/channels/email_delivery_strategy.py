@@ -15,8 +15,6 @@ class EmailProviderPort(Protocol):
 class DeliveryError(Exception):
     """Raised when message delivery fails."""
 
-    pass
-
 
 class EmailDeliveryStrategy:
     def __init__(self, email_provider: EmailProviderPort | None = None):

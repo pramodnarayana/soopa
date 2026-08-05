@@ -61,25 +61,25 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                     await self.listener_connection.remove_listener(
                         "edi_outbox_channel", self._on_notify
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Error removing listener: {e}")
                 try:
                     await self.listener_connection.close()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Error closing listener connection: {e}")
                 self.listener_connection = None
 
             if self.pool:
                 try:
                     await self.pool.close()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Error closing pool: {e}")
                 self.pool = None
 
             self._initialized = False
             logger.info("Closed ListenNotifyOutboxAdapter resources")
-        except Exception as e:
-            logger.exception(f"Error during adapter close: {e}")
+        except Exception:
+            logger.exception("Error during adapter close")
 
     def _on_notify(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
@@ -168,7 +168,8 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                 yield event
 
             except Exception as e:
-                logger.exception(f"Error processing Postgres outbox event {event_id}: {e}")
+                logger.exception(f"Error processing Postgres outbox event {event_id}")
+
                 error_message = str(e)
                 processing_error = e
                 processing_failed = True

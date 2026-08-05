@@ -62,7 +62,7 @@ async def test_test_connection_build_fail(adapter):
     with patch("api.adapters.httpx_as2_tester.build_outbound_message") as mock_build:
         mock_build.side_effect = ValueError("build error")
 
-        success, reason, payload, mdn = await adapter.test_connection(
+        success, reason, _payload, _mdn = await adapter.test_connection(
             remote_url="http://test.com",
             as2_from="ME",
             as2_to="YOU",
@@ -91,7 +91,7 @@ async def test_test_connection_http_fail(adapter):
         mock_client.__aexit__.return_value = None
         mock_client_cls.return_value = mock_client
 
-        success, reason, payload, mdn = await adapter.test_connection(
+        success, reason, _payload, _mdn = await adapter.test_connection(
             remote_url="http://test.com",
             as2_from="ME",
             as2_to="YOU",
@@ -121,7 +121,7 @@ async def test_test_connection_http_500(adapter):
         mock_client.__aexit__.return_value = None
         mock_client_cls.return_value = mock_client
 
-        success, reason, payload, mdn = await adapter.test_connection(
+        success, reason, _payload, _mdn = await adapter.test_connection(
             remote_url="http://test.com",
             as2_from="ME",
             as2_to="YOU",
@@ -154,7 +154,7 @@ async def test_test_connection_parse_fail(adapter):
 
         mock_parse.side_effect = ValueError("parse fail")
 
-        success, reason, payload, mdn = await adapter.test_connection(
+        success, reason, _payload, _mdn = await adapter.test_connection(
             remote_url="http://test.com",
             as2_from="ME",
             as2_to="YOU",
@@ -183,7 +183,7 @@ async def test_test_connection_timeout(adapter):
         mock_client.__aexit__.return_value = None
         mock_client_cls.return_value = mock_client
 
-        success, reason, payload, mdn = await adapter.test_connection(
+        success, reason, _payload, _mdn = await adapter.test_connection(
             remote_url="http://test.com",
             as2_from="ME",
             as2_to="YOU",
@@ -212,7 +212,7 @@ async def test_test_connection_generic_exception(adapter):
         mock_client.__aexit__.return_value = None
         mock_client_cls.return_value = mock_client
 
-        success, reason, payload, mdn = await adapter.test_connection(
+        success, reason, _payload, _mdn = await adapter.test_connection(
             remote_url="http://test.com",
             as2_from="ME",
             as2_to="YOU",

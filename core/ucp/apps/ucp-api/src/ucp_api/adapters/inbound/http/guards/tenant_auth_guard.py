@@ -27,6 +27,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from identity.adapters.outbound.zitadel.jwks_token_verifier import ZitadelTokenVerifier
 from identity.application.authenticate import AuthenticationError, authenticate_bearer_token
 from identity.domain.identity_context import IdentityContext
+
 from ucp_api.core.container import get_token_verifier
 from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 
@@ -51,7 +52,7 @@ async def _resolve_identity(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except Exception as exc:
-        logger.error("Unexpected error during token verification: %s", exc, exc_info=True)
+        logger.exception("Unexpected error during token verification")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid JWT token.",
@@ -61,7 +62,7 @@ async def _resolve_identity(
 
 # Dependency injection placeholder — overridden in main.py
 def get_tenant_repo_for_guard() -> ITenantRepository:
-    raise NotImplementedError()  # noqa: E704
+    raise NotImplementedError()
 
 
 async def require_tenant_member(

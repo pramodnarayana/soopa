@@ -61,5 +61,8 @@ class NoOpLogger(ILogger):
     def error(self, event: str, **kwargs: Any) -> None:
         pass
 
+    def exception(self, event: str, **kwargs: Any) -> None:
+        pass
+
     def bind(self, **kwargs: Any) -> "NoOpLogger":
         return self

@@ -245,7 +245,7 @@ def test_test_as2_partnership_not_found(client_factory):
     client = client_factory()
 
     response = client.post(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{str(uuid.uuid4())}/test"
+        f"/api/v1/platform/trading-partners/as2/partnerships/{uuid.uuid4()!s}/test"
     )
 
     assert response.status_code == 404

@@ -99,13 +99,13 @@ class UpdateAS2PartnershipCmd:
     name: str | UnsetType = UNSET
     local_partner_id: str | UnsetType = UNSET
     remote_partner_id: str | UnsetType = UNSET
-    credentials_vault_ref: str | None | UnsetType = UNSET
+    credentials_vault_ref: str | UnsetType | None = UNSET
     mdn_type: MDNType | UnsetType = UNSET
-    mdn_url: str | None | UnsetType = UNSET
+    mdn_url: str | UnsetType | None = UNSET
     encryption_algorithm: EncryptionAlgorithm | UnsetType = UNSET
     signature_algorithm: SignatureAlgorithm | UnsetType = UNSET
 
-    advanced_flags: dict[str, Any] | None | UnsetType = UNSET
+    advanced_flags: dict[str, Any] | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -124,16 +124,16 @@ class CreateSFTPPartnerCmd:
 
 @dataclass(frozen=True)
 class UpdateSFTPPartnerCmd:
-    name: str | None | UnsetType = UNSET
-    host: str | None | UnsetType = UNSET
-    port: int | None | UnsetType = UNSET
-    username: str | None | UnsetType = UNSET
-    credentials_vault_ref: str | None | UnsetType = UNSET
-    inbound_remote_path: str | None | UnsetType = UNSET
-    outbound_remote_path: str | None | UnsetType = UNSET
-    active: bool | None | UnsetType = UNSET
-    password: str | None | UnsetType = UNSET
-    host_key: str | None | UnsetType = UNSET
+    name: str | UnsetType | None = UNSET
+    host: str | UnsetType | None = UNSET
+    port: int | UnsetType | None = UNSET
+    username: str | UnsetType | None = UNSET
+    credentials_vault_ref: str | UnsetType | None = UNSET
+    inbound_remote_path: str | UnsetType | None = UNSET
+    outbound_remote_path: str | UnsetType | None = UNSET
+    active: bool | UnsetType | None = UNSET
+    password: str | UnsetType | None = UNSET
+    host_key: str | UnsetType | None = UNSET
 
 
 # ---------------------------------------------------------------------------
@@ -159,16 +159,16 @@ class CreateInboundRouteCmd:
 @dataclass(frozen=True)
 class UpdateInboundRouteCmd:
     name: str | UnsetType = UNSET
-    trading_partner_id: str | None | UnsetType = UNSET
+    trading_partner_id: str | UnsetType | None = UNSET
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
-    gs_sender_id: str | None | UnsetType = UNSET
-    gs_receiver_id: str | None | UnsetType = UNSET
+    gs_sender_id: str | UnsetType | None = UNSET
+    gs_receiver_id: str | UnsetType | None = UNSET
     transaction_type: str | UnsetType = UNSET
     processing_mode: str | UnsetType = UNSET
-    webhook_id: str | None | UnsetType = UNSET
-    as2_partner_id: str | None | UnsetType = UNSET
-    sftp_partner_id: str | None | UnsetType = UNSET
+    webhook_id: str | UnsetType | None = UNSET
+    as2_partner_id: str | UnsetType | None = UNSET
+    sftp_partner_id: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -182,10 +182,10 @@ class CreateOutboundRouteCmd:
 
 @dataclass(frozen=True)
 class UpdateOutboundRouteCmd:
-    trading_partner_id: str | None | UnsetType = UNSET
+    trading_partner_id: str | UnsetType | None = UNSET
     name: str | UnsetType = UNSET
-    as2_partner_id: str | None | UnsetType = UNSET
-    sftp_partner_id: str | None | UnsetType = UNSET
+    as2_partner_id: str | UnsetType | None = UNSET
+    sftp_partner_id: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -206,12 +206,12 @@ class CreateOutboundEdiHeaderCmd:
 
 @dataclass(frozen=True)
 class UpdateOutboundEdiHeaderCmd:
-    name: str | None | UnsetType = UNSET
-    trading_partner_id: str | None | UnsetType = UNSET
+    name: str | UnsetType | None = UNSET
+    trading_partner_id: str | UnsetType | None = UNSET
     isa_sender_id: str | UnsetType = UNSET
-    isa_sender_qualifier: str | None | UnsetType = UNSET
+    isa_sender_qualifier: str | UnsetType | None = UNSET
     isa_receiver_id: str | UnsetType = UNSET
-    isa_receiver_qualifier: str | None | UnsetType = UNSET
+    isa_receiver_qualifier: str | UnsetType | None = UNSET
     gs_sender_id: str | UnsetType = UNSET
     gs_receiver_id: str | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET

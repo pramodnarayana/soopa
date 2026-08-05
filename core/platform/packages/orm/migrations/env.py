@@ -2,11 +2,10 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-import ucp_models.events  # noqa: F401
-import ucp_models.identity  # noqa: F401
-import ucp_models.infrastructure  # noqa: F401
-import ucp_models.notifications  # noqa: F401
-import ucp_models.subscriptions  # noqa: F401
+import ucp_models.events
+import ucp_models.infrastructure
+import ucp_models.notifications
+import ucp_models.subscriptions
 import ucp_models.webhooks  # noqa: F401
 from alembic import context
 from dotenv import load_dotenv
@@ -14,7 +13,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from platform_orm.models.core import UcpBase
+import platform_orm.models.identity
+import platform_orm.models.scheduling  # noqa: F401
+from platform_orm.models.core import PlatformBase
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
 
@@ -27,7 +28,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = UcpBase.metadata
+target_metadata = PlatformBase.metadata
 
 # Set database URL dynamically from DATABASE_URL
 database_url = os.environ.get("DATABASE_URL")
@@ -68,7 +69,7 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     def include_name(name, type_, parent_names):
         if type_ == "schema":
-            return name in [None, "edi", "ucp"]
+            return name in [None, "ucp", "platform"]
         return True
 
     context.configure(

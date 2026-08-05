@@ -12,6 +12,7 @@ from api.adapters.http.dtos import (
     GenerateCertResponse,
     UpdateAS2TradingPartnerRequest,
 )
+from api.core.exceptions import IdempotencyConflictError, OrchestrationError
 from api.core.services import AS2PartnerService
 from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_platform_user_profile
@@ -96,8 +97,8 @@ async def export_platform_as2_certificates(
                     response.private_key_pem = vault.retrieve_private_key(
                         partner.private_key_vault_ref
                     ).decode("utf-8")
-                except Exception as e:
-                    logger.error(f"Failed to retrieve private key from vault: {e}", exc_info=True)
+                except OrchestrationError as e:
+                    logger.exception("Failed to retrieve private key from vault")
                     raise HTTPException(
                         status_code=500, detail="Failed to retrieve private key from vault"
                     ) from e
@@ -107,10 +108,8 @@ async def export_platform_as2_certificates(
                     response.prev_private_key_pem = vault.retrieve_private_key(
                         partner.prev_private_key_vault_ref
                     ).decode("utf-8")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to retrieve prev private key from vault: {e}", exc_info=True
-                    )
+                except OrchestrationError as e:
+                    logger.exception("Failed to retrieve prev private key from vault")
                     raise HTTPException(
                         status_code=500,
                         detail="Failed to retrieve prev private key from vault",
@@ -130,17 +129,8 @@ async def delete_certificate_secret(
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
     async with uow:
-        from database.models.control_plane import AS2Partner
-        from sqlalchemy import or_, select
-
-        stmt = select(AS2Partner).where(
-            or_(
-                AS2Partner.private_key_vault_ref == vault_ref,
-                AS2Partner.prev_private_key_vault_ref == vault_ref,
-            )
-        )
-        res = await uow.global_session.execute(stmt)
-        if res.scalars().first() is not None:
+        in_use = await uow.as2_partners.is_vault_ref_in_use(vault_ref)
+        if in_use:
             raise HTTPException(
                 status_code=400, detail="Cannot delete a private key that is currently in use."
             )
@@ -265,30 +255,33 @@ async def create_platform_as2_partner(
                 url=p.url,
                 active=p.active,
             )
-    except Exception as e:
+    except IdempotencyConflictError as e:
         if auto_generated and private_key_vault_ref and not commit_success:
             vault.delete_secret(private_key_vault_ref)
-        if isinstance(e, ValueError):
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        if isinstance(e, HTTPException):
-            raise
-        if isinstance(e, IntegrityError):
-            constraint_name = ""
-            if hasattr(e, "orig") and e.orig is not None:
-                diag = getattr(e.orig, "diag", None)
-                if diag is not None:
-                    constraint_name = str(getattr(diag, "constraint_name", e.orig))
-                else:
-                    constraint_name = str(e.orig)
-            if "uq_tenant_as2_id" in constraint_name:
-                raise HTTPException(
-                    status_code=400, detail="AS2 ID already exists for this tenant."
-                ) from e
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        if auto_generated and private_key_vault_ref and not commit_success:
+            vault.delete_secret(private_key_vault_ref)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        if auto_generated and private_key_vault_ref and not commit_success:
+            vault.delete_secret(private_key_vault_ref)
+        constraint_name = ""
+        if hasattr(e, "orig") and e.orig is not None:
+            diag = getattr(e.orig, "diag", None)
+            if diag is not None:
+                constraint_name = str(getattr(diag, "constraint_name", e.orig))
+            else:
+                constraint_name = str(e.orig)
+        if "uq_tenant_as2_id" in constraint_name:
             raise HTTPException(
-                status_code=500,
-                detail="Database constraint violation",
+                status_code=400, detail="AS2 ID already exists for this tenant."
             ) from e
-        raise
+        raise HTTPException(status_code=500, detail="Database integrity error") from e
+    except OrchestrationError as e:
+        if auto_generated and private_key_vault_ref and not commit_success:
+            vault.delete_secret(private_key_vault_ref)
+        raise OrchestrationError("Failed to orchestrate AS2 partner creation") from e
 
 
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])
@@ -354,7 +347,7 @@ async def update_platform_as2_partner(
             )
         except HTTPException:
             raise
-        except Exception as e:
+        except OrchestrationError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -374,7 +367,7 @@ async def delete_platform_as2_partner(
                 idempotency_key=idempotency_key,
             )
             await uow.commit()
-        except Exception as e:
+        except OrchestrationError as e:
             if "IntegrityError" in str(type(e)):
                 raise HTTPException(
                     status_code=400, detail="Partner is in use and cannot be deleted."

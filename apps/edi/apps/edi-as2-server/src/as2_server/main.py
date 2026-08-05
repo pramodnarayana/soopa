@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.db_router = db_router
         print("LIFESPAN: DB Router initialized")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"LIFESPAN DB ROUTER ERROR: {e}")
 
     logger.info("edi_as2_server_started", env=settings.env)

@@ -19,3 +19,6 @@ dependencies = [
 [tool.uv.sources]
 platform-orm = { workspace = true }
 ucp-models = { workspace = true }
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"

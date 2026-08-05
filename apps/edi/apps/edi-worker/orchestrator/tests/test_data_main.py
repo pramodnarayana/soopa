@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from database.connection import DatabaseRouter
+from platform_orm.models.identity import Tenant
 from sqlalchemy import select
 from sqlalchemy.engine.url import make_url
-from ucp_models.identity import Tenant
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
@@ -134,7 +134,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
         assert shard_dsn == SHARD_1_URL
 
         # Resolving again should hit cache
-        resolved_shard_name2, shard_dsn2 = await resolver.resolve(tenant_id)
+        resolved_shard_name2, _shard_dsn2 = await resolver.resolve(tenant_id)
         assert resolved_shard_name2 == shard_name
     finally:
         # Cleanup

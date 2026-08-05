@@ -27,7 +27,7 @@ container = punq.Container()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Load .env file from project root
     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../../.env"))
     load_dotenv(dotenv_path)
@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     sweeper.stop()
     try:
         await asyncio.wait_for(sweeper_task, timeout=5.0)
-    except Exception:
+    except Exception:  # noqa: BLE001 - graceful shutdown; any failure is acceptable here
         logger.warning("Sweeper task did not shut down gracefully")
 
     await engine.dispose()

@@ -13,5 +13,5 @@ if "QueueUrls" in queues:
         try:
             sqs.purge_queue(QueueUrl=q)
             print(f"Purged {q}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Failed {q}: {e}")

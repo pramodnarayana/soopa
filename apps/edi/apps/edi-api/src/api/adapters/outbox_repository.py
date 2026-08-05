@@ -77,6 +77,30 @@ class SqlAlchemyControlPlaneOutboxRepository(
         )
         return event_id
 
+    async def get_event_by_idempotency_key(self, idempotency_key: str) -> Any | None:
+        from sqlalchemy import select
+
+        stmt = select(self.model_class).where(self.model_class.idempotency_key == idempotency_key)
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def create_reservation(
+        self, tenant_id: str, idempotency_key: str, fingerprint: str
+    ) -> None:
+        from sqlalchemy import insert
+
+        insert_stmt = insert(self.model_class).values(
+            id=f"reservation_{idempotency_key}",
+            tenant_id=tenant_id,
+            idempotency_key=idempotency_key,
+            event_type="RESERVATION",
+            payload={"fingerprint": fingerprint},
+            status="RESERVED",
+            attempts=0,
+        )
+        await self.session.execute(insert_stmt)
+        await self.session.flush()
+
 
 class SqlAlchemyDataPlaneOutboxRepository(
     SqlAlchemyOutboxRepositoryMixin, TenantSqlAlchemyRepository, DataPlaneOutboxRepositoryPort

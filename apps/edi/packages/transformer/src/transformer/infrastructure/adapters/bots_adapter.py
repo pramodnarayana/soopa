@@ -59,7 +59,7 @@ class BotsEDIAdapter(EDITransformerPort):
             ]
             return ast_dict, parsed_errors
         except Exception as e:
-            logger.error(f"Bots error during AST generation: {e}")
+            logger.exception("Bots error during AST generation")
             error_msg = str(e)
             parsed_errors = []
 
@@ -90,7 +90,7 @@ class BotsEDIAdapter(EDITransformerPort):
             ]
             return edi_str, parsed_errors
         except Exception as e:
-            logger.error(f"Bots error during EDI serialization: {e}")
+            logger.exception("Bots error during EDI serialization")
             raise TransformationError(f"EDI serialization failed: {e}") from e
 
     async def transform(

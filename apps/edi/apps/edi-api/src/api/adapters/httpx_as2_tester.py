@@ -92,7 +92,7 @@ class HttpxAS2TesterAdapter:
                 sign_fn=sign_fn,
                 encrypt_fn=encrypt_fn,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"as2_test_build_failed: {e}")
             return False, f"Failed to build AS2 message: {e}", payload_str, None
 
@@ -107,7 +107,7 @@ class HttpxAS2TesterAdapter:
             return False, f"Connection refused: {e}", payload_str, None
         except httpx.TimeoutException:
             return False, "Connection timed out after 30 seconds", payload_str, None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return False, f"HTTP error: {e}", payload_str, None
 
         raw_resp = response.content.decode("utf-8", errors="replace")
@@ -122,6 +122,6 @@ class HttpxAS2TesterAdapter:
             # Return raw disposition string — the caller decides if it is a success.
             # e.g. "automatic-action/MDN-sent-automatically; processed"
             return True, mdn.disposition or "", payload_str, full_mdn
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"as2_test_mdn_parse_failed error={e}")
             return False, f"MDN parse error: {e}", payload_str, full_mdn

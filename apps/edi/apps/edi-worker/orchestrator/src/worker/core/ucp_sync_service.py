@@ -53,9 +53,10 @@ class UcpSyncWorkerService:
                     await handler(event)
                 else:
                     logger.debug(f"Ignored unhandled UCP event type: {event.eventType}")
-            except Exception as e:
-                logger.error(
-                    f"Failed to process UCP event {event.eventType} "
-                    f"(idempotency_key={event.idempotencyKey}): {e}"
+            except Exception:
+                logger.exception(
+                    "Failed to process UCP event %s (idempotency_key=%s)",
+                    event.eventType,
+                    event.idempotencyKey,
                 )
                 raise

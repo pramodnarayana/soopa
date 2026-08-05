@@ -67,8 +67,13 @@ def test_create_as2_partnership(client, mock_uow):
 
 
 def test_update_as2_partnership(client, mock_uow):
+    from unittest.mock import MagicMock
+
     pid = str(uuid4())
-    mock_uow.as2_partnerships.get_as2_partnership.return_value = {"id": str(pid)}
+    mock_partner = MagicMock()
+    mock_partner.name = "Mock Name"
+    mock_partner.active = True
+    mock_uow.as2_partnerships.get_as2_partnership.return_value = mock_partner
     client.put(
         f"/api/v1/platform/trading-partners/as2/partnerships/{pid}",
         json={"trading_partner_id": "tp1"},

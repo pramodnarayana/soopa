@@ -61,8 +61,9 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
                 await asyncio.sleep(NORMAL_SWEEP_INTERVAL)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.exception(f"[Sweeper] Error in sweep: {e}")
+            except Exception:
+                logger.exception("[Sweeper] Error in sweep")
+
                 # Apply exponential backoff with jitter
                 jitter = random.uniform(0, 0.1 * failure_backoff)
                 delay = min(failure_backoff + jitter, MAX_BACKOFF)

@@ -33,9 +33,10 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
                 await self.handle_response_error(response, "create project grant")
 
             logger.info(f"Successfully granted Project {project_id} to Organization {org_id}")
-        except Exception as error:
-            logger.error(f"Error creating project grant for org {org_id}: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error creating project grant for org {org_id}")
+
+            raise
 
     async def delete_project_grant(self, org_id: str, project_id: str) -> None:
         logger.info(f"Deleting project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}")
@@ -73,9 +74,10 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
                 await self.handle_response_error(delete_response, "delete project grant")
 
             logger.info(f"Successfully revoked Project {project_id} from Organization {org_id}")
-        except Exception as error:
-            logger.error(f"Error deleting project grant for org {org_id}: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error deleting project grant for org {org_id}")
+
+            raise
 
     async def get_roles(self) -> list[ZitadelRole]:
         logger.info("Fetching roles for UCP Project")
@@ -123,8 +125,8 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
                 grant_data = grant_res.json()
                 parsed_grant_data = ZitadelProjectGrantsResponse.model_validate(grant_data)
                 grants = parsed_grant_data.result
-        except Exception:
-            logger.warning(f"Failed to fetch grants for org {org_id}")
+        except Exception:  # noqa: BLE001 - grant fetch is non-critical; empty grants is a safe fallback
+            logger.warning("Failed to fetch grants for org %s", org_id)
 
         # 3. Map grants to users in memory
         org_grant = next((g for g in grants if g.granted_org_id == org_id), None)

@@ -6,6 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from identity.domain.identity_context import IdentityContext
+
 from ucp_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from ucp_api.core.config import get_settings
 from ucp_api.ports.outbound.tenant_repository import ITenantRepository
@@ -29,7 +30,7 @@ HOP_BY_HOP_HEADERS = {
 
 # Dependency placeholder — overridden in main.py via dependency_overrides
 def get_tenant_repo() -> ITenantRepository:
-    raise NotImplementedError()  # noqa: E704
+    raise NotImplementedError()
 
 
 @router.api_route(
@@ -88,7 +89,7 @@ async def proxy_to_edi(
         response = await client.send(req, stream=True)
     except httpx.RequestError as exc:
         await client.aclose()
-        logger.error("[PROXY ERROR] Failed to proxy to %s: %s", target_url, exc)
+        logger.exception("[PROXY ERROR] Failed to proxy to %s", target_url)
         raise HTTPException(
             status_code=502,
             detail="Failed to communicate with downstream EDI service.",

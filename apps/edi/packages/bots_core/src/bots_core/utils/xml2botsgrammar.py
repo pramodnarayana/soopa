@@ -185,7 +185,7 @@ def recorddefs2string(recorddefs, targetNamespace):
 def structure2string(structure, targetNamespace, level=0):
     result = ""
     for segment in structure:
-        if LEVEL in segment and segment[LEVEL]:
+        if segment.get(LEVEL):
             result += (
                 level * "    "
                 + f"{{ID:'{targetNamespace}{segment[ID]}',MIN:{segment[MIN]},MAX:{segment[MAX]},LEVEL:[\n"

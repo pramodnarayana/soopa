@@ -4,6 +4,7 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
 import asyncio
 
 import pytest
@@ -45,6 +46,7 @@ async def db_engine(postgres_container):
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
         await conn.run_sync(GlobalRegistry.metadata.drop_all)
         await conn.run_sync(TenantBase.metadata.drop_all)
         await conn.run_sync(GlobalRegistry.metadata.create_all)

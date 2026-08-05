@@ -41,8 +41,8 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
     # Resolve Host Company (Tenant 0) dynamically from the Global DB
+    from platform_orm.models.identity import Tenant
     from sqlalchemy import select
-    from ucp_models.identity import Tenant
     from ucp_models.infrastructure import DatabaseShard
 
     global_gen = db_router.get_global_session()

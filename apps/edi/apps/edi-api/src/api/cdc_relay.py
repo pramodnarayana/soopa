@@ -20,7 +20,8 @@ async def _quarantine(queue: MessageQueuePort, error_msg: str, payload: dict[str
     try:
         await queue.send(MessageQueueName.CDC_DLQ_QUEUE, {"error": error_msg, "payload": payload})
     except Exception as dlq_err:
-        logger.error(f"[CDC Relay] Failed to write to CDC DLQ: {dlq_err}")
+        logger.exception("[CDC Relay] Failed to write to CDC DLQ")
+
         from fastapi import HTTPException
 
         raise HTTPException(
@@ -73,7 +74,8 @@ async def relay_cdc_event(
     try:
         data = json.loads(body)
     except Exception as e:
-        logger.error(f"[CDC Relay] CRITICAL: Failed to parse raw CDC bytes as JSON: {e}")
+        logger.exception("[CDC Relay] CRITICAL: Failed to parse raw CDC bytes as JSON")
+
         try:
             import base64
 
@@ -81,8 +83,9 @@ async def relay_cdc_event(
             await queue.send(
                 MessageQueueName.CDC_DLQ_QUEUE, {"error": str(e), "raw_body_base64": encoded_body}
             )
-        except Exception as dlq_err:
-            logger.error(f"[CDC Relay] CRITICAL: Failed to write raw body to DLQ: {dlq_err}")
+        except Exception:
+            logger.exception("[CDC Relay] CRITICAL: Failed to write raw body to DLQ")
+
         return {"status": "ok"}
 
     # Normalize to a list
@@ -94,8 +97,8 @@ async def relay_cdc_event(
         try:
             validated_events.append(DebeziumUnwrappedEvent(**raw_event))
         except (ValidationError, TypeError) as e:
-            logger.error(
-                f"[CDC Relay] Schema validation failed for event: {e}. Payload: {raw_event}"
+            logger.exception(
+                "[CDC Relay] Schema validation failed for event. Payload: %s", raw_event
             )
             await _quarantine(queue, str(e), raw_event)
             # Quarantine succeeded, so skip invalid events; do not fail the entire batch.
@@ -121,7 +124,7 @@ async def relay_cdc_event(
                     error_msg = (
                         f"Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
                     )
-                    logger.error(f"[CDC Relay] {error_msg}")
+                    logger.exception(f"[CDC Relay] {error_msg}")
                     await _quarantine(queue, error_msg, event.model_dump())
                     continue
             else:

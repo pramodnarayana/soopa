@@ -15,8 +15,6 @@ class InAppPersistencePort(Protocol):
 class DeliveryError(Exception):
     """Raised when message delivery fails."""
 
-    pass
-
 
 class InAppDeliveryStrategy:
     def __init__(self, persistence: InAppPersistencePort | None = None):

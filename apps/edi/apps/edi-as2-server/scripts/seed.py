@@ -6,8 +6,8 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from platform_orm.models.identity import Tenant
 from sqlalchemy.future import select
-from ucp_models.identity import Tenant
 
 load_dotenv()
 
@@ -38,13 +38,11 @@ async def seed_database() -> None:
         # 4. Seed Core System Jobs
         logger.info("Seeding Core System Jobs...")
         from dataclasses import dataclass
-        from datetime import UTC, datetime
 
-        from database.models.scheduled_job import ScheduledJob
+        from platform_orm.clients.scheduler import SchedulerClient
         from worker.core.scheduler.models import (
             AppNamespace,
             JobName,
-            JobStatus,
             TargetQueue,
             Timezone,
         )
@@ -78,51 +76,25 @@ async def seed_database() -> None:
             ),
         ]
 
-        now = datetime.now(UTC)
+        scheduler_client = SchedulerClient(session)
         for job_def in SYSTEM_JOB_REGISTRY:
-            job_result = await session.execute(
-                select(ScheduledJob).filter_by(name=job_def.name.value)
+            await scheduler_client.register_job(
+                name=job_def.name.value,
+                target_queue=str(job_def.target_queue),
+                app_namespace=str(job_def.app_namespace),
+                cron_expression=job_def.default_cron_expression,
+                default_timezone=str(job_def.default_timezone),
+                max_retries=job_def.max_retries,
             )
-            job = job_result.scalar_one_or_none()
-
-            if not job:
-                job = ScheduledJob(
-                    name=job_def.name.value,
-                    payload={},
-                    status=JobStatus.PENDING.value,
-                    target_queue=job_def.target_queue,
-                    app_namespace=job_def.app_namespace,
-                    interval_seconds=job_def.default_interval_seconds,
-                    cron_expression=job_def.default_cron_expression,
-                    timezone=job_def.default_timezone,
-                    min_interval_seconds=job_def.min_interval_seconds,
-                    max_interval_seconds=job_def.max_interval_seconds,
-                    retry_count=0,
-                    max_retries=job_def.max_retries,
-                    created_at=now,
-                    updated_at=now,
-                    next_run_at=now,
-                )
-                session.add(job)
-                logger.info(f"Created system job: {job_def.name.value}.")
-            else:
-                # Always sync canonical config bounds from the registry,
-                # ensuring existing rows stay consistent after schema migrations.
-                job.target_queue = job_def.target_queue
-                job.app_namespace = job_def.app_namespace
-                job.cron_expression = job_def.default_cron_expression
-                job.timezone = job_def.default_timezone
-                job.min_interval_seconds = job_def.min_interval_seconds
-                job.max_interval_seconds = job_def.max_interval_seconds
-                logger.info(f"Synced config for system job: {job_def.name.value}.")
-
+            logger.info(f"Registered system job via SchedulerClient: {job_def.name.value}.")
             await session.flush()
 
         await session.commit()
         logger.info("Database seed completed successfully.")
 
-    except Exception as e:
-        logger.error(f"Seed failed: {e}")
+    except Exception:
+        logger.exception("Seed failed")
+
         await session.rollback()
         raise
     finally:

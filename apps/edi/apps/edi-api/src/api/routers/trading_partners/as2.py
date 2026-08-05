@@ -9,6 +9,7 @@ from api.adapters.http.dtos import (
     CertificateExportResponse,
     RotateCertificateRequest,
 )
+from api.core.exceptions import OrchestrationError
 from api.core.services import AS2PartnerService
 from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
@@ -56,8 +57,8 @@ async def export_as2_certificates(
                     response.private_key_pem = vault.retrieve_private_key(
                         partner.private_key_vault_ref
                     ).decode("utf-8")
-                except Exception as e:
-                    logger.error(f"Failed to retrieve private key from vault: {e}", exc_info=True)
+                except OrchestrationError as e:
+                    logger.exception("Failed to retrieve private key from vault")
                     raise HTTPException(
                         status_code=500, detail="Failed to retrieve private key from vault"
                     ) from e
@@ -67,10 +68,8 @@ async def export_as2_certificates(
                     response.prev_private_key_pem = vault.retrieve_private_key(
                         partner.prev_private_key_vault_ref
                     ).decode("utf-8")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to retrieve prev private key from vault: {e}", exc_info=True
-                    )
+                except OrchestrationError as e:
+                    logger.exception("Failed to retrieve prev private key from vault")
                     raise HTTPException(
                         status_code=500,
                         detail="Failed to retrieve prev private key from vault",
@@ -148,7 +147,7 @@ async def rotate_as2_certificates(
             if private_key_vault_ref:
                 vault.delete_secret(private_key_vault_ref)
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except Exception as e:
+        except OrchestrationError as e:
             if private_key_vault_ref:
                 vault.delete_secret(private_key_vault_ref)
             raise HTTPException(status_code=500, detail="Internal server error") from e

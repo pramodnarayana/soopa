@@ -56,11 +56,13 @@ class SqsUcpListenerAdapter(UcpEventListenerPort):
                         QueueUrl=queue_url, ReceiptHandle=receipt_handle
                     )
 
-                except Exception as e:
-                    logger.error(f"Failed to process or parse UCP event message: {e}")
+                except Exception:
+                    logger.exception("Failed to process or parse UCP event message")
+
                     # Re-raise to prevent deletion (message goes to DLQ or becomes visible again)
                     raise
 
-            except ClientError as e:
-                logger.error(f"SQS ClientError in UCP listener: {e}")
+            except ClientError:
+                logger.exception("SQS ClientError in UCP listener")
+
                 raise

@@ -4,6 +4,7 @@ import pytest
 from database.session import get_global_session
 from fastapi.testclient import TestClient
 
+from api.core.exceptions import OrchestrationError
 from api.dependencies.services import get_vault
 from api.main import app
 
@@ -41,7 +42,7 @@ def test_as2_receive_value_error_generates_negative_mdn(client):
 def test_as2_receive_generic_exception_generates_negative_mdn(client):
     with patch("api.routers.trading_partners.as2_receive.As2ReceiverService") as mock_service_cls:
         mock_service = AsyncMock()
-        mock_service.process_inbound_message.side_effect = Exception("Internal explosion")
+        mock_service.process_inbound_message.side_effect = OrchestrationError("Internal explosion")
         mock_service_cls.return_value = mock_service
 
         response = client.post(

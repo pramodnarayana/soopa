@@ -4,6 +4,7 @@ from database.session import get_global_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.exceptions import OrchestrationError
 from api.dependencies.services import get_vault
 from api.ports.vault import VaultPort
 from api.services.as2_receiver_service import As2ReceiverService
@@ -68,8 +69,9 @@ async def receive_as2_message(
                 headers=mdn.headers,
             )
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Internal server error: {e}")
+    except OrchestrationError as e:
+        logger.exception("Internal server error")
+
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
             from as2_core import build_mdn
 

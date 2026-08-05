@@ -99,7 +99,7 @@ def test_getcount_leaf():
 
 
 def test_getcount_tree():
-    root, isa, gs, st, po1a, po1b, ctt = _build_order_tree()
+    _root, isa, _gs, _st, _po1a, _po1b, _ctt = _build_order_tree()
     # isa + gs + st + beg + po1a + po1b + ctt = 7
     assert isa.getcount() == 7
 
@@ -110,7 +110,7 @@ def test_getcount_tree():
 
 
 def test_getcountoccurrences_existing():
-    root, isa, gs, st, po1a, po1b, ctt = _build_order_tree()
+    _root, isa, _gs, _st, _po1a, _po1b, _ctt = _build_order_tree()
     assert (
         isa.getcountoccurrences(
             {"BOTSID": "ISA"}, {"BOTSID": "GS"}, {"BOTSID": "ST"}, {"BOTSID": "PO1"}
@@ -120,7 +120,7 @@ def test_getcountoccurrences_existing():
 
 
 def test_getcountoccurrences_none():
-    root, isa, *_ = _build_order_tree()
+    _root, isa, *_ = _build_order_tree()
     assert isa.getcountoccurrences({"BOTSID": "ISA"}, {"BOTSID": "MISSING"}) == 0
 
 
@@ -130,7 +130,7 @@ def test_getcountoccurrences_none():
 
 
 def test_getcountsum_basic():
-    root, isa, gs, st, po1a, po1b, ctt = _build_order_tree()
+    _root, isa, _gs, _st, _po1a, _po1b, _ctt = _build_order_tree()
     # Sum of PO102 over all PO1 segments: 10 + 5 = 15
     # getcountsum uses *mpaths
     total = isa.getcountsum(
@@ -143,7 +143,7 @@ def test_getcountsum_basic():
 
 
 def test_getcountsum_no_matches():
-    root, isa, *_ = _build_order_tree()
+    _root, isa, *_ = _build_order_tree()
     total = isa.getcountsum(
         {"BOTSID": "ISA"},
         {"BOTSID": "GS"},
@@ -158,7 +158,7 @@ def test_getcountsum_no_matches():
 
 
 def test_getnozero_nonzero_value():
-    root, isa, gs, st, po1a, *_ = _build_order_tree()
+    _root, isa, _gs, _st, _po1a, *_ = _build_order_tree()
     result = isa.getnozero(
         {"BOTSID": "ISA"}, {"BOTSID": "GS"}, {"BOTSID": "ST"}, {"BOTSID": "PO1", "PO102": None}
     )
@@ -166,7 +166,7 @@ def test_getnozero_nonzero_value():
 
 
 def test_getnozero_zero_returns_none():
-    root, isa, gs, st, po1a, po1b, ctt = _build_order_tree()
+    _root, _isa, _gs, _st, _po1a, po1b, _ctt = _build_order_tree()
     # po1b has PO104 = "0.00"
     result = po1b.getnozero({"BOTSID": "PO1", "PO104": None})
     assert result is None
@@ -217,14 +217,14 @@ def test_getdecimal_non_numeric_returns_zero():
 
 
 def test_getrecord_existing():
-    root, isa, gs, st, *_ = _build_order_tree()
+    _root, isa, _gs, _st, *_ = _build_order_tree()
     record = isa.getrecord({"BOTSID": "ISA"}, {"BOTSID": "GS"})
     assert record is not None
     assert record["BOTSID"] == "GS"
 
 
 def test_getrecord_not_found():
-    root, isa, *_ = _build_order_tree()
+    _root, isa, *_ = _build_order_tree()
     record = isa.getrecord({"BOTSID": "ISA"}, {"BOTSID": "MISSING"})
     assert record is None
 
@@ -235,7 +235,7 @@ def test_getrecord_not_found():
 
 
 def test_change_existing_field():
-    root, isa, gs, st, po1a, *_ = _build_order_tree()
+    _root, isa, _gs, _st, po1a, *_ = _build_order_tree()
     before = po1a.get({"BOTSID": "PO1", "PO104": None})
     assert before == "5.50"
     isa.change(
@@ -246,7 +246,7 @@ def test_change_existing_field():
 
 
 def test_change_nested():
-    root, isa, gs, st, po1a, *_ = _build_order_tree()
+    _root, _isa, _gs, st, _po1a, *_ = _build_order_tree()
     st.change(
         where=({"BOTSID": "ST"}, {"BOTSID": "BEG", "BEG03": "PO123"}),
         change={"BOTSID": "BEG", "BEG03": "NEW-PO"},
@@ -260,7 +260,7 @@ def test_change_nested():
 
 
 def test_delete_existing_child():
-    root, isa, gs, st, po1a, po1b, ctt = _build_order_tree()
+    _root, _isa, _gs, st, _po1a, _po1b, _ctt = _build_order_tree()
     before_count = len(st.children)
     # Delete CTT segment
     st.delete({"BOTSID": "ST"}, {"BOTSID": "CTT"})
@@ -269,7 +269,7 @@ def test_delete_existing_child():
 
 
 def test_delete_non_existing_silent():
-    root, isa, gs, st, *_ = _build_order_tree()
+    _root, _isa, _gs, st, *_ = _build_order_tree()
     before = len(st.children)
     st.delete({"BOTSID": "ST"}, {"BOTSID": "NONEXISTENT"})
     assert len(st.children) == before  # nothing deleted
@@ -281,7 +281,7 @@ def test_delete_non_existing_silent():
 
 
 def test_copynode_deep_copy():
-    root, isa, gs, st, po1a, *_ = _build_order_tree()
+    _root, _isa, _gs, _st, po1a, *_ = _build_order_tree()
     copy = po1a.copynode()
     assert copy.record == po1a.record
     assert copy is not po1a
@@ -289,7 +289,7 @@ def test_copynode_deep_copy():
 
 
 def test_copynode_children_copied():
-    root, isa, gs, st, *_ = _build_order_tree()
+    _root, _isa, _gs, st, *_ = _build_order_tree()
     copy = st.copynode()
     assert len(copy.children) == len(st.children)
 
@@ -315,7 +315,7 @@ def test_stripnode_removes_empty_children():
 
 
 def test_to_dict_from_dict_roundtrip():
-    root, isa, gs, st, po1a, *_ = _build_order_tree()
+    _root, isa, _gs, _st, _po1a, *_ = _build_order_tree()
     d = isa.to_dict()
     assert "ISA" in d
     assert "group_GS" in d
@@ -401,13 +401,13 @@ def test_linpos_without_info():
 
 
 def test_processqueries_no_crash():
-    root, isa, *_ = _build_order_tree()
+    _root, isa, *_ = _build_order_tree()
     # Should run without raising
     isa.processqueries({}, 1)
 
 
 def test_displayqueries_no_crash(capsys):
-    root, isa, *_ = _build_order_tree()
+    _root, isa, *_ = _build_order_tree()
     isa.displayqueries()
     # Just verify it doesn't crash; output goes to stdout
 
@@ -418,7 +418,7 @@ def test_displayqueries_no_crash(capsys):
 
 
 def test_collectlines_returns_list():
-    root, isa, gs, st, po1a, po1b, ctt = _build_order_tree()
+    _root, _isa, _gs, st, po1a, po1b, ctt = _build_order_tree()
     from bots_core.domain.models import StructureNode
 
     st.structure = StructureNode(id="ST", min_occ=1, max_occ=1, mpath=["ST"])

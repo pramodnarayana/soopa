@@ -3,6 +3,6 @@
 #   from database.models.control_plane import X
 #   from database.models.data_plane import Y
 
-from . import control_plane, data_plane, platform_settings
+from . import base, control_plane, data_plane, platform_settings
 
-__all__ = ["control_plane", "data_plane", "platform_settings"]
+__all__ = ["base", "control_plane", "data_plane", "platform_settings"]

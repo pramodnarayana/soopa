@@ -1,7 +1,6 @@
 """
 Bots node lib
 """
-# flake8: noqa:E501
 
 import decimal
 import logging
@@ -26,7 +25,7 @@ class Node:
     # slots: python optimalisation to preserve memory. Disadv.: no dynamic attr in this class
     # in tests: for normal translations less memory and faster;
     # no effect fo one-on-one translations.
-    __slots__ = ("record", "children", "_queries", "linpos_info", "structure", "is_array")
+    __slots__ = ("_queries", "children", "is_array", "linpos_info", "record", "structure")
 
     def __init__(self, record: dict = None, linpos_info: tuple = None, is_array: bool = True):
         self.record = record
@@ -570,7 +569,7 @@ class Node:
             for childnode in self.children:
                 # search recursive for rest of mpaths
                 for terug in childnode._getloopcore_including_mpath(mpaths[1:]):
-                    yield [self.record] + terug if terug is not None else None
+                    yield [self.record, *terug] if terug is not None else None
 
     def getnozero(self, *mpaths):
         """

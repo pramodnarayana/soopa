@@ -9,10 +9,10 @@ from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
 from domain.events import PipelineEventType
+from platform_orm.models.identity import Tenant
 from security.smime import decrypt_payload, verify_signature
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.identity import Tenant
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
@@ -213,12 +213,11 @@ class As2ReceiverService:
             )
             if decrypted:
                 return decrypted
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import logging
 
             logger = logging.getLogger(__name__)
             logger.debug(f"Initial decryption attempt failed (will try fallback): {e}")
-            pass
 
         # Fallback to prepending headers for openssl parsing
         smime_headers = self._reconstruct_smime_headers(original_headers)
@@ -232,7 +231,8 @@ class As2ReceiverService:
                 return decrypted
             raise ValueError("Decryption returned empty")
         except Exception as e:
-            logger.error(f"Decryption failed after fallback: {e}")
+            logger.exception("Decryption failed after fallback")
+
             raise ValueError(f"Decryption failed: {e}") from e
 
     def _reconstruct_smime_headers(self, headers: dict[str, str]) -> bytes:
@@ -277,7 +277,8 @@ class As2ReceiverService:
                 raise ValueError("Signature verification mathematically failed")
             return mic, verified_payload
         except Exception as e:
-            logger.error(f"Signature verification failed: {e}")
+            logger.exception("Signature verification failed")
+
             raise ValueError(f"Signature verification failed: {e}") from e
 
     def _extract_pure_edi(self, final_payload_bytes: bytes | str | Any) -> bytes:
@@ -327,9 +328,10 @@ class As2ReceiverService:
         # We MUST extract ISA headers here because if the AS2 Partnership is global (tenant_id = 0),
         # we need to find the true tenant ID by looking up the inbound route.
         try:
-            isa_sender, isa_receiver, transaction_type = self._extract_isa_headers(pure_edi_bytes)
+            isa_sender, isa_receiver, _transaction_type = self._extract_isa_headers(pure_edi_bytes)
         except Exception as e:
-            logger.error(f"Failed to extract ISA headers: {e}")
+            logger.exception("Failed to extract ISA headers")
+
             raise ValueError("Invalid EDI payload for routing") from e
 
         # 2. Query Global DB for the actual Tenant using ISA headers
@@ -379,7 +381,7 @@ class As2ReceiverService:
             logger.error(f"Tenant {true_tenant_id} not found in global DB")
             raise ValueError("Tenant routing failed")
 
-        tenant, shard = row
+        _tenant, shard = row
         async_gen_tenant = self.db_router.get_tenant_session(true_tenant_id, shard.name, shard.dsn)
         tenant_session = await anext(async_gen_tenant)
         try:

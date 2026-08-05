@@ -21,8 +21,8 @@ class DBEncryptionAdapter:
             try:
                 self._fernet = Fernet(key.encode("utf-8"))
                 self._initialized = True
-            except Exception as e:
-                logger.error(f"Failed to initialize Fernet with provided key: {e}")
+            except Exception:
+                logger.exception("Failed to initialize Fernet with provided key")
                 return None
         return self._fernet
 
@@ -37,7 +37,7 @@ class DBEncryptionAdapter:
         try:
             return self.fernet.decrypt(token.encode("utf-8")).decode("utf-8")
         except InvalidToken:
-            logger.error("Failed to decrypt database field. Invalid token.")
+            logger.exception("Failed to decrypt database field. Invalid token.")
             raise
 
 

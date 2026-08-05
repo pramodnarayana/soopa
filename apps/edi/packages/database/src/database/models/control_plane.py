@@ -1,11 +1,11 @@
 import os
 
 from platform_orm.models.common import OutboxMixin, TimestampMixin
-from platform_orm.models.core import EdiGlobalBase
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
+from .base import EdiGlobalBase
 from .replicated_mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,

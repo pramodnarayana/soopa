@@ -14,14 +14,14 @@ from api.ports.transaction_repository import TransactionRepositoryPort
 from api.ports.webhook_repository import WebhookRepositoryPort
 
 __all__ = [
-    "ApiTokenRepositoryPort",
-    "AS2TradingPartnerRepositoryPort",
     "AS2PartnershipRepositoryPort",
+    "AS2TradingPartnerRepositoryPort",
+    "ApiTokenRepositoryPort",
+    "ControlPlaneOutboxRepositoryPort",
+    "DataPlaneOutboxRepositoryPort",
     "EdiHeaderRepositoryPort",
     "InboundRouteRepositoryPort",
     "OutboundRouteRepositoryPort",
-    "ControlPlaneOutboxRepositoryPort",
-    "DataPlaneOutboxRepositoryPort",
     "SFTPPartnerRepositoryPort",
     "TenantRepositoryPort",
     "TransactionRepositoryPort",

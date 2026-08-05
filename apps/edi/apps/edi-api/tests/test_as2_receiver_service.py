@@ -90,7 +90,7 @@ async def test_process_inbound_message_success(service):
             mock_unbox.return_value = (b"unboxed_payload", "mic123")
             mock_extract.return_value = b"ISA*EDI"
 
-            body, mdn_headers = await service.process_inbound_message(headers, body_bytes)
+            body, _mdn_headers = await service.process_inbound_message(headers, body_bytes)
 
             assert "mic123" in body.decode()
             mock_save.assert_awaited_once_with(
@@ -244,6 +244,6 @@ async def test_save_transaction_success(service):
         assert res == "msg-1"
         mock_repo.create_edi_message.assert_awaited_once()
         mock_outbox.publish_outbox_event.assert_awaited_once()
-        args, kwargs = mock_outbox.publish_outbox_event.call_args
+        _args, kwargs = mock_outbox.publish_outbox_event.call_args
         assert kwargs["idempotency_key"] == "msg-1"
         mock_session.commit.assert_awaited_once()

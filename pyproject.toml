@@ -83,8 +83,8 @@ target-version = "py311"
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP", "B", "SIM"]
-ignore = ["E501", "B904", "E402"] # Handled by formatter / existing legacy code
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF"]
+ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301", "RUF012"] # Handled by formatter / existing legacy code
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments
@@ -98,8 +98,9 @@ ignore = ["E501", "B904", "E402"] # Handled by formatter / existing legacy code
 "core/ucp/apps/ucp-api/src/**/*.py" = ["B008", "E402"]
 "apps/edi/apps/edi-api/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores
-"apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405"]
-"apps/edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405"]
+"apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405", "BLE", "TRY"]
+"apps/edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405", "BLE", "TRY"]
+"apps/edi/packages/bots_core/src/bots_core/facade.py" = ["BLE", "TRY"]
 "apps/edi/packages/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]

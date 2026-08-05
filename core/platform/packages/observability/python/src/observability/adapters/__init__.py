@@ -6,9 +6,9 @@ from .prometheus import PrometheusMetrics
 from .structlog_adapter import StructlogLogger
 
 __all__ = [
-    "NoOpTracer",
-    "NoOpMetrics",
     "NoOpLogger",
+    "NoOpMetrics",
+    "NoOpTracer",
     "OtelTracer",
     "PrometheusMetrics",
     "StructlogLogger",

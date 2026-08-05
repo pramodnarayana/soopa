@@ -63,9 +63,10 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
             logger.info(f"Created User {user_id} in Org {org_id}")
             return user_id
 
-        except Exception as error:
-            logger.error(f"Error creating user {self._mask_email(email)} in org {org_id}: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error creating user {self._mask_email(email)} in org {org_id}")
+
+            raise
 
     async def _get_project_grant_id(self, org_id: str) -> str:
         """Internal helper to get the UCP Project Grant ID for an organization."""
@@ -108,9 +109,10 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
             )
             if user_grant_res.status_code >= 400:
                 await self.handle_response_error(user_grant_res, "assign user role")
-        except Exception as error:
-            logger.error(f"Error assigning role for user {user_id} in org {org_id}: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error assigning role for user {user_id} in org {org_id}")
+
+            raise
 
     async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
         logger.info(f"Updating role [{role}] for user {user_id} in org {org_id}")
@@ -145,9 +147,10 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
                 # User had no grant, assign fresh
                 await self.assign_tenant_role(user_id, org_id, role)
 
-        except Exception as error:
-            logger.error(f"Error updating role for user {user_id} in org {org_id}: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error updating role for user {user_id} in org {org_id}")
+
+            raise
 
     async def update_user_profile(
         self,
@@ -176,9 +179,10 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
                     raise IdentityProviderError(
                         message=f"Failed to update user profile: {err}", original_error=err
                     )
-        except Exception as error:
-            logger.error(f"Error updating profile for user {user_id} in org {org_id}: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error updating profile for user {user_id} in org {org_id}")
+
+            raise
 
     async def delete_user(self, user_id: str) -> None:
         logger.info(f"Deleting user {user_id} from Zitadel")

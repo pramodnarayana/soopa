@@ -5,9 +5,9 @@ from .sftp import SftpDeliveryStrategy
 from .webhook import WebhookDeliveryStrategy
 
 __all__ = [
-    "BaseDeliveryStrategy",
-    "WebhookDeliveryStrategy",
-    "SftpDeliveryStrategy",
     "As2DeliveryStrategy",
+    "BaseDeliveryStrategy",
     "DeliveryRouter",
+    "SftpDeliveryStrategy",
+    "WebhookDeliveryStrategy",
 ]

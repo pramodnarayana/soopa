@@ -5,6 +5,7 @@ os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
 import asyncio
 from unittest.mock import AsyncMock
 
@@ -12,10 +13,11 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from platform_orm.models.core import EdiGlobalBase, UcpBase
+from platform_orm.models.core import PlatformBase, UcpBase
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
+
 from ucp_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
 from ucp_api.main import (  # type: ignore
     app,
@@ -66,10 +68,11 @@ async def db_engine(postgres_container) -> "Any":  # type: ignore
     engine = create_async_engine(db_url, echo=False)
 
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
+        await conn.run_sync(PlatformBase.metadata.create_all)
         await conn.run_sync(UcpBase.metadata.create_all)
-        await conn.run_sync(EdiGlobalBase.metadata.create_all)
 
     yield engine
     await engine.dispose()

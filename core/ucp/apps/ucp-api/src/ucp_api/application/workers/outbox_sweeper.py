@@ -48,8 +48,8 @@ class ControlPlaneOutboxSweeper:
                 await self.poll()
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error(f"Error in outbox sweeper poll loop: {e}", exc_info=True)
+            except Exception:
+                logger.exception("Error in outbox sweeper poll loop")
 
             if self.is_running:
                 await asyncio.sleep(self.poll_interval_seconds)
@@ -80,8 +80,9 @@ class ControlPlaneOutboxSweeper:
             await self.repository.mark_completed(event.id, self.worker_id)
             logger.debug(f"Successfully processed outbox event {event.id} ({event.event_type})")
         except Exception as e:
-            logger.error(
-                f"Failed to process outbox event {event.id} ({event.event_type}): {e}",
-                exc_info=True,
+            logger.exception(
+                "Failed to process outbox event %s (%s)",
+                event.id,
+                event.event_type,
             )
             await self.repository.mark_failed(event.id, self.worker_id, str(e))

@@ -3,15 +3,16 @@ import os
 import typing
 from datetime import UTC
 
+from platform_orm.models.identity import ApiKey, ApiToken, TenantUser
+from platform_orm.models.identity import Tenant as DbTenant
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_api.domain.models.tenant import Tenant
-from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_models.events import ControlPlaneOutbox
-from ucp_models.identity import ApiKey, ApiToken, TenantUser
-from ucp_models.identity import Tenant as DbTenant
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
+
+from ucp_api.domain.models.tenant import Tenant
+from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 
 
 class TenantRepository(ITenantRepository):

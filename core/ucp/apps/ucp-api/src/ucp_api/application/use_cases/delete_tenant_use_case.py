@@ -34,11 +34,12 @@ class DeleteTenantUseCase:
             try:
                 await self.organization_provider.delete_organization(tenant.idp_tenant_id)
                 logger.info(f"Deleted Zitadel organization {tenant.idp_tenant_id}")
-            except Exception as err:
+            except Exception:
                 # If organization doesn't exist (404-like), treat as already deleted
                 # Otherwise propagate the error to prevent orphaned org
-                logger.error(
-                    f"Failed to delete organization {tenant.idp_tenant_id} from Zitadel: {err}"
+                logger.exception(
+                    "Failed to delete organization %s from Zitadel",
+                    tenant.idp_tenant_id,
                 )
                 # Re-raise to prevent local deletion if Zitadel cleanup failed
                 raise

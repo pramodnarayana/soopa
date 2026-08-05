@@ -5,7 +5,6 @@ from typing import Any
 
 from domain.events import (
     EdiEventType,
-    LegacyUcpEventType,
     ProvisioningEvent,
     ProvisioningEventType,
     WebhookEventType,
@@ -13,6 +12,7 @@ from domain.events import (
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 
+from worker.adapters.acl.ucp_translators import LegacyUcpEventType
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
 from worker.ports.outbox import OutboxPort
 from worker.ports.replication import ReplicationPort
@@ -110,10 +110,11 @@ class ProvisioningWorkerService:
             for t_id in all_tenants:
                 try:
                     await replicate_fn(t_id, *args)
-                except PermanentProvisioningError as e:
+                except PermanentProvisioningError:
                     # Log permanent errors but don't retry them
-                    logger.error(f"Permanent error for tenant {t_id}: {e}")
-                except Exception as e:
+                    logger.exception("Permanent error for tenant %s", t_id)
+
+                except Exception as e:  # noqa: BLE001
                     transient_errors.append(e)
             if transient_errors:
                 raise TransientProvisioningError(
@@ -135,7 +136,8 @@ class ProvisioningWorkerService:
                 parsed_event = self._event_adapter.validate_python(body)
             except ValidationError as e:
                 # If we don't know how to handle it, we permanently fail it so it goes to DLQ
-                logger.error(f"Validation error for event type '{event.event_type}': {e}")
+                logger.exception(f"Validation error for event type '{event.event_type}'")
+
                 raise PermanentProvisioningError(
                     f"Invalid provision event payload for {event.event_type}: {e}"
                 ) from e
@@ -171,7 +173,8 @@ class ProvisioningWorkerService:
             except TransientProvisioningError:
                 raise
             except Exception as e:
-                logger.error(f"Failed to process event {event.id}: {e}")
+                logger.exception(f"Failed to process event {event.id}")
+
                 raise TransientProvisioningError(f"Failed to process event {event.id}: {e}") from e
 
         return True

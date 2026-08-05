@@ -84,6 +84,16 @@ class SqlAlchemyAS2TradingPartnerRepository(
         record = result.scalar_one_or_none()
         return AS2PartnerDomainModel.model_validate(record) if record else None
 
+    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
+        stmt = select(AS2Partner).where(
+            or_(
+                AS2Partner.private_key_vault_ref == vault_ref,
+                AS2Partner.prev_private_key_vault_ref == vault_ref,
+            )
+        )
+        res = await self.session.execute(stmt)
+        return res.scalars().first() is not None
+
     async def get_as2_partner_for_write(self, tenant_id: str, partner_id: str) -> Any:
         tid_str = tenant_id
         conds = [AS2Partner.id == partner_id]

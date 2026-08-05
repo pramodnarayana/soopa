@@ -4,9 +4,9 @@ from collections.abc import AsyncGenerator
 from database.base_repository import GlobalSession
 from database.session import get_global_session
 from fastapi import Depends, Request
+from platform_orm.models.identity import Tenant
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.identity import Tenant
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
@@ -15,11 +15,11 @@ from api.core.uow import ControlPlaneUnitOfWork, DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 
 __all__ = [
-    "get_global_session",
-    "get_tenant_session",
     "get_control_plane_uow",
     "get_data_plane_uow",
+    "get_global_session",
     "get_m2m_data_plane_uow",
+    "get_tenant_session",
 ]
 
 

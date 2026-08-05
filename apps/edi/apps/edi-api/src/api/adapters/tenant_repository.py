@@ -1,10 +1,10 @@
 from typing import Any
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from sqlalchemy import select
-from ucp_models.identity import (
+from platform_orm.models.identity import (
     Tenant,
 )
+from sqlalchemy import select
 
 from api.ports.tenant_repository import TenantRepositoryPort
 

@@ -21,7 +21,7 @@ from .ports.tracer import ISpan, ITracer
 # Provider — the single composition root
 from .provider import ObservabilityProvider
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - intentionally grouped by layer: Ports → Provider → Adapters
     # Ports
     "ITracer",
     "ISpan",

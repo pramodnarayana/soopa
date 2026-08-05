@@ -3,23 +3,23 @@ from typing import Any
 from sqlalchemy.orm import DeclarativeBase, registry
 
 GlobalRegistry = registry()
+PlatformRegistry = GlobalRegistry
+UcpRegistry = GlobalRegistry
+
+
+class PlatformBase(DeclarativeBase):
+    """
+    Base class for Platform infrastructure models (Identity, Scheduling).
+    """
+
+    registry = PlatformRegistry
+    __table_args__: Any = {"schema": "platform"}
 
 
 class UcpBase(DeclarativeBase):
     """
-    Base class for models residing in the UCP boundary (e.g., identity, routing).
-    Uses the 'ucp' schema in the Global Control Plane DB.
+    Base class for UCP (Global Control Plane) models.
     """
 
-    registry = GlobalRegistry
+    registry = UcpRegistry
     __table_args__: Any = {"schema": "ucp"}
-
-
-class EdiGlobalBase(DeclarativeBase):
-    """
-    Base class for models residing in the EDI boundary (e.g., EDI configurations).
-    Uses the 'edi' schema in the Global Control Plane DB.
-    """
-
-    registry = GlobalRegistry
-    __table_args__: Any = {"schema": "edi"}

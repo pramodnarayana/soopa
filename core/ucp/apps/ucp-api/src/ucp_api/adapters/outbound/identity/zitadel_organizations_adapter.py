@@ -1,6 +1,7 @@
 import logging
 
 from pydantic import BaseModel, Field
+
 from ucp_api.adapters.outbound.identity.zitadel_client import ZitadelClient
 from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
 from ucp_api.ports.outbound.project_provider import IProjectProvider
@@ -50,17 +51,19 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
                         org_id, self.ucp_project_id, tenant_role_keys
                     )
                     grant_succeeded = True
-                except Exception as error:
-                    logger.error(
-                        f"Failed to grant UCP project to org {org_id}. "
+                except Exception:
+                    logger.exception(
+                        "Failed to grant UCP project to org %s. "
                         "The organization was created successfully but project grant failed. "
-                        f"Manual intervention or retry may be required: {error}"
+                        "Manual intervention or retry may be required.",
+                        org_id,
                     )
 
             return org_id, grant_succeeded
-        except Exception as error:
-            logger.error(f"Error creating organization in Zitadel: {error}")
-            raise error
+        except Exception:
+            logger.exception("Error creating organization in Zitadel")
+
+            raise
 
     async def delete_organization(self, org_id: str) -> None:
         logger.info(f"Deleting Organization in Zitadel: {org_id}")
@@ -81,6 +84,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
                 await self.handle_response_error(response, "delete org")
 
             logger.info(f"Successfully deleted Organization {org_id} from Zitadel")
-        except Exception as error:
-            logger.error(f"Error deleting organization {org_id} in Zitadel: {error}")
-            raise error
+        except Exception:
+            logger.exception(f"Error deleting organization {org_id} in Zitadel")
+
+            raise

@@ -1,11 +1,12 @@
 from datetime import UTC
 
+from platform_orm.models.identity import TenantUser
+from platform_orm.models.identity import User as DbUser
 from sqlalchemy import and_, delete, exists, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from ucp_api.domain.models.user import User
 from ucp_api.ports.outbound.user_repository import IUserRepository
-from ucp_models.identity import TenantUser
-from ucp_models.identity import User as DbUser
 
 
 class UserRepository(IUserRepository):
