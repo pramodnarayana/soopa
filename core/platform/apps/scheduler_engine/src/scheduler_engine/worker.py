@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from croniter import croniter
 
 from .domain.models import ScheduledJob
+from .ports.job_dispatcher import JobDispatcherPort
 from .ports.job_repository import JobRepositoryPort
 
 logger = logging.getLogger(__name__)
@@ -15,12 +16,14 @@ class SchedulerWorker:
     def __init__(
         self,
         repository: JobRepositoryPort,
+        dispatcher: JobDispatcherPort,
         worker_id: str | None = None,
         poll_interval_seconds: int = 5,
         max_concurrent_jobs: int = 10,
         lock_lease_ms: int = 300000,
     ):
         self.repository = repository
+        self.dispatcher = dispatcher
         self.worker_id = worker_id or str(uuid.uuid4())
         self.poll_interval_seconds = poll_interval_seconds
         self.max_concurrent_jobs = max_concurrent_jobs
@@ -70,8 +73,7 @@ class SchedulerWorker:
 
             logger.info(f"Dispatching job {job.name} ({job.id}) to queue {job.target_queue}")
 
-            # TODO: Actually dispatch to SQS / Webhook here using a Publisher port
-            # For now, we simulate success
+            await self.dispatcher.dispatch(job)
 
             # Calculate next run if recurring
             if job.cron_expression:

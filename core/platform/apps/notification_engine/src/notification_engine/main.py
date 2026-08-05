@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import os
 import sys
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import punq
@@ -9,18 +11,19 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .adapters.outbound.delivery_dispatcher import StrategyDeliveryDispatcher
+from .adapters.outbound.postgres_outbox_repository import PostgresOutboxRepository
 from .adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from .adapters.outbound.template_repository import SqlAlchemyTemplateRepository
 from .api.router import router
 from .application.dispatch_use_case import DispatchNotificationUseCase
+from .application.outbox_sweeper import NotificationOutboxSweeper
 from .ports.interfaces import DeliveryDispatcherPort, TemplateRendererPort, TemplateRepositoryPort
+from .ports.outbox_repository import NotificationOutboxRepositoryPort
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 container = punq.Container()
-
-from collections.abc import AsyncGenerator
 
 
 @asynccontextmanager
@@ -56,9 +59,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container.register(InAppDeliveryStrategy)
     container.register(SlackDeliveryStrategy)
     container.register(DeliveryDispatcherPort, StrategyDeliveryDispatcher)
+    container.register(NotificationOutboxRepositoryPort, PostgresOutboxRepository)
     container.register(DispatchNotificationUseCase)
 
+    # Start Outbox Sweeper
+    sweeper = NotificationOutboxSweeper(
+        repository=container.resolve(NotificationOutboxRepositoryPort),
+        dispatcher=container.resolve(DeliveryDispatcherPort),
+        poll_interval_seconds=int(os.environ.get("NOTIF_OUTBOX_POLL_INTERVAL", "2")),
+    )
+    sweeper_task = sweeper.start()
+
     yield
+
+    sweeper.stop()
+    try:
+        await asyncio.wait_for(sweeper_task, timeout=5.0)
+    except Exception:
+        logger.warning("Sweeper task did not shut down gracefully")
 
     await engine.dispose()
     logger.info("Database engine disposed.")

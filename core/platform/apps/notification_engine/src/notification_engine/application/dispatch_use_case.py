@@ -1,7 +1,9 @@
 import logging
+import os
 
 from ..domain.models import NotificationEvent
-from ..ports.interfaces import DeliveryDispatcherPort, TemplateRendererPort, TemplateRepositoryPort
+from ..ports.interfaces import TemplateRendererPort, TemplateRepositoryPort
+from ..ports.outbox_repository import NotificationOutboxRepositoryPort
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +13,11 @@ class DispatchNotificationUseCase:
         self,
         template_repo: TemplateRepositoryPort,
         template_renderer: TemplateRendererPort,
-        dispatcher: DeliveryDispatcherPort,
+        outbox_repo: NotificationOutboxRepositoryPort,
     ):
         self.template_repo = template_repo
         self.template_renderer = template_renderer
-        self.dispatcher = dispatcher
+        self.outbox_repo = outbox_repo
 
     async def execute(self, event: NotificationEvent) -> None:
         logger.info(
@@ -39,10 +41,16 @@ class DispatchNotificationUseCase:
                 else None
             )
 
-            await self.dispatcher.dispatch(
-                channel=channel,
+            from ucp_models.notifications import NotificationOutbox
+
+            outbox_msg = NotificationOutbox(
+                id=f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
                 tenant_id=event.tenant_id,
-                content=rendered_body,
-                subject=rendered_subject,
-                data=event.data,
+                payload={
+                    "channel": channel.value,
+                    "content": rendered_body,
+                    "subject": rendered_subject,
+                    "data": event.data,
+                },
             )
+            await self.outbox_repo.save(outbox_msg)

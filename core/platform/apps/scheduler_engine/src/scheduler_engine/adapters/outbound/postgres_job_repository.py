@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ...domain.models import ScheduledJob
@@ -20,7 +22,7 @@ class SqlAlchemyJobRepository:
             """)
             result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
             await session.commit()
-            return int(result.rowcount)  # type: ignore
+            return cast(CursorResult[Any], result).rowcount
 
     async def claim_next_jobs(
         self, worker_id: str, limit: int, lock_lease_ms: int

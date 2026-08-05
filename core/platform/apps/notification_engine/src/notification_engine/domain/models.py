@@ -1,27 +1,24 @@
-from enum import Enum
+from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
 
-
-class Channel(str, Enum):
+class Channel(StrEnum):
     EMAIL = "EMAIL"
     IN_APP = "IN_APP"
     SLACK = "SLACK"
 
 
-class NotificationEvent(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
+@dataclass(frozen=True)
+class NotificationEvent:
     tenant_id: str
     event_type: str
     channels: list[Channel]
-    data: dict[str, Any]
+    data: dict[str, Any] = field(default_factory=dict)
 
 
-class Template(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
+@dataclass(frozen=True)
+class Template:
     id: str
     tenant_id: str
     event_type: str

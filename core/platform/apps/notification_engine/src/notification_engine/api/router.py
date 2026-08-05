@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..application.dispatch_use_case import DispatchNotificationUseCase
+from ..domain.exceptions import NotificationDispatchError
 from ..domain.models import Channel, NotificationEvent
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ def get_dispatch_use_case() -> DispatchNotificationUseCase:
 @router.post("/send", status_code=status.HTTP_202_ACCEPTED)
 async def send_notification(
     payload: NotificationEventPayload,
-    use_case: DispatchNotificationUseCase = Depends(get_dispatch_use_case)
+    use_case: DispatchNotificationUseCase = Depends(get_dispatch_use_case),  # noqa: B008
 ) -> dict[str, str]:
     try:
         logger.info(f"Received notification dispatch request for eventType: {payload.eventType}")
@@ -39,6 +40,9 @@ async def send_notification(
         )
         await use_case.execute(event)
         return {"status": "ACCEPTED"}
+    except NotificationDispatchError as e:
+        logger.warning(f"Notification dispatch failed due to domain error: {e}")
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Failed to dispatch notification: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Internal error dispatching notification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error") from e

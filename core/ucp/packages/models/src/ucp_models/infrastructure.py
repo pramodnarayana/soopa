@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from platform_orm.models.core import UcpBase
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
@@ -40,7 +41,7 @@ class ScheduledJob(UcpBase):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, default={}, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default={}, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)

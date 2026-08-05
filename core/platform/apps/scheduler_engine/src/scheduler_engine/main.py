@@ -32,15 +32,19 @@ async def main() -> None:
 
     import punq
 
+    from .adapters.outbound.dummy_job_dispatcher import DummyJobDispatcher
     from .adapters.outbound.postgres_job_repository import SqlAlchemyJobRepository
+    from .ports.job_dispatcher import JobDispatcherPort
     from .ports.job_repository import JobRepositoryPort
 
     container = punq.Container()
     container.register(async_sessionmaker[AsyncSession], instance=session_factory)
     container.register(JobRepositoryPort, SqlAlchemyJobRepository)
+    container.register(JobDispatcherPort, DummyJobDispatcher)
 
     worker = SchedulerWorker(
         repository=container.resolve(JobRepositoryPort),
+        dispatcher=container.resolve(JobDispatcherPort),
         poll_interval_seconds=int(os.environ.get("SCHEDULER_POLL_INTERVAL_SECONDS", "5")),
         max_concurrent_jobs=int(os.environ.get("SCHEDULER_MAX_CONCURRENT_JOBS", "10")),
     )
