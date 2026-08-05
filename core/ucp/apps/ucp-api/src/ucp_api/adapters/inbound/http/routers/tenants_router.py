@@ -1,10 +1,7 @@
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from ucp_api.domain.models.tenant import Tenant
-
 from identity.domain.identity_context import IdentityContext
-
 from ucp_api.adapters.inbound.http.dtos.tenant_dtos import (
     ProvisionTenantRequest,
     TenantResponse,
@@ -18,6 +15,7 @@ from ucp_api.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantUseCase,
 )
 from ucp_api.core.config import get_settings
+from ucp_api.domain.models.tenant import Tenant
 from ucp_api.ports.outbound.project_provider import IProjectProvider
 from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 
@@ -41,7 +39,7 @@ def get_delete_tenant_use_case() -> DeleteTenantUseCase:
     raise NotImplementedError()
 
 
-@router.get("/", response_model=List[TenantResponse])
+@router.get("/", response_model=list[TenantResponse])
 async def find_all(  # type: ignore
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     tenant_repo: ITenantRepository = Depends(get_tenant_repo),
@@ -83,7 +81,7 @@ async def find_one(  # type: ignore
 async def provision(  # type: ignore
     dto: ProvisionTenantRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    idempotency_key: Optional[str] = Header(None, alias="idempotency-key"),
+    idempotency_key: str | None = Header(None, alias="idempotency-key"),
     use_case: ProvisionTenantUseCase = Depends(get_provision_tenant_use_case),
 ):
     command = ProvisionTenantCommand(name=dto.name)
@@ -96,7 +94,7 @@ async def update_name(  # type: ignore
     id: str,
     dto: UpdateTenantNameRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    idempotency_key: Optional[str] = Header(None, alias="idempotency-key"),
+    idempotency_key: str | None = Header(None, alias="idempotency-key"),
     tenant_repo: ITenantRepository = Depends(get_tenant_repo),
 ):
     tenant = await resolve_tenant(id, tenant_repo)
@@ -113,7 +111,7 @@ async def update_status(  # type: ignore
     id: str,
     dto: UpdateTenantStatusRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    idempotency_key: Optional[str] = Header(None, alias="idempotency-key"),
+    idempotency_key: str | None = Header(None, alias="idempotency-key"),
     tenant_repo: ITenantRepository = Depends(get_tenant_repo),
 ):
     tenant = await resolve_tenant(id, tenant_repo)
@@ -129,7 +127,7 @@ async def update_status(  # type: ignore
 async def delete(  # type: ignore
     id: str,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    idempotency_key: Optional[str] = Header(None, alias="idempotency-key"),
+    idempotency_key: str | None = Header(None, alias="idempotency-key"),
     tenant_repo: ITenantRepository = Depends(get_tenant_repo),
     use_case: DeleteTenantUseCase = Depends(get_delete_tenant_use_case),
 ):

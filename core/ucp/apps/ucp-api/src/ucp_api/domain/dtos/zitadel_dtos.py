@@ -1,61 +1,60 @@
 from pydantic import BaseModel, Field
-from typing import Optional
 
 
 class ZitadelRole(BaseModel):
     key: str
-    display_name: Optional[str] = Field(None, alias="displayName")
-    group: Optional[str] = None
+    display_name: str | None = Field(None, alias="displayName")
+    group: str | None = None
 
 
 class ZitadelProjectGrant(BaseModel):
-    grant_id: Optional[str] = Field(None, alias="grantId")
-    id: Optional[str] = None
-    granted_org_id: Optional[str] = Field(None, alias="grantedOrgId")
-    project_id: Optional[str] = Field(None, alias="projectId")
-    role_keys: Optional[list[str]] = Field(None, alias="roleKeys")
-    user_id: Optional[str] = Field(None, alias="userId")
+    grant_id: str | None = Field(None, alias="grantId")
+    id: str | None = None
+    granted_org_id: str | None = Field(None, alias="grantedOrgId")
+    project_id: str | None = Field(None, alias="projectId")
+    role_keys: list[str] | None = Field(None, alias="roleKeys")
+    user_id: str | None = Field(None, alias="userId")
 
 
 class ZitadelUser(BaseModel):
-    user_id: Optional[str] = Field(None, alias="userId")
-    id: Optional[str] = None
-    email: Optional[str] = None
-    display_name: Optional[str] = Field(None, alias="displayName")
-    first_name: Optional[str] = Field(None, alias="firstName")
-    last_name: Optional[str] = Field(None, alias="lastName")
-    state: Optional[str] = None
-    role: Optional[str] = None
-    created_at: Optional[str] = Field(None, alias="createdAt")
+    user_id: str | None = Field(None, alias="userId")
+    id: str | None = None
+    email: str | None = None
+    display_name: str | None = Field(None, alias="displayName")
+    first_name: str | None = Field(None, alias="firstName")
+    last_name: str | None = Field(None, alias="lastName")
+    state: str | None = None
+    role: str | None = None
+    created_at: str | None = Field(None, alias="createdAt")
 
 
 class ZitadelEmail(BaseModel):
-    email: Optional[str] = None
+    email: str | None = None
 
 
 class ZitadelProfile(BaseModel):
-    display_name: Optional[str] = Field(None, alias="displayName")
-    first_name: Optional[str] = Field(None, alias="firstName")
-    last_name: Optional[str] = Field(None, alias="lastName")
+    display_name: str | None = Field(None, alias="displayName")
+    first_name: str | None = Field(None, alias="firstName")
+    last_name: str | None = Field(None, alias="lastName")
 
 
 class ZitadelHuman(BaseModel):
-    email: Optional[ZitadelEmail] = None
-    profile: Optional[ZitadelProfile] = None
+    email: ZitadelEmail | None = None
+    profile: ZitadelProfile | None = None
 
 
 class ZitadelDetails(BaseModel):
-    creation_date: Optional[str] = Field(None, alias="creationDate")
-    total_result: Optional[int] = Field(None, alias="totalResult")
-    view_timestamp: Optional[str] = Field(None, alias="viewTimestamp")
+    creation_date: str | None = Field(None, alias="creationDate")
+    total_result: int | None = Field(None, alias="totalResult")
+    view_timestamp: str | None = Field(None, alias="viewTimestamp")
 
 
 class ZitadelRawUser(BaseModel):
     id: str
-    user_name: Optional[str] = Field(None, alias="userName")
-    state: Optional[str] = None
-    human: Optional[ZitadelHuman] = None
-    details: Optional[ZitadelDetails] = None
+    user_name: str | None = Field(None, alias="userName")
+    state: str | None = None
+    human: ZitadelHuman | None = None
+    details: ZitadelDetails | None = None
 
 
 class ZitadelRawUserSearchResponse(BaseModel):
@@ -63,10 +62,10 @@ class ZitadelRawUserSearchResponse(BaseModel):
 
 
 class ZitadelRolesResponse(BaseModel):
-    details: Optional[ZitadelDetails] = None
+    details: ZitadelDetails | None = None
     result: list[ZitadelRole] = Field(default_factory=list)
 
 
 class ZitadelProjectGrantsResponse(BaseModel):
-    details: Optional[ZitadelDetails] = None
+    details: ZitadelDetails | None = None
     result: list[ZitadelProjectGrant] = Field(default_factory=list)

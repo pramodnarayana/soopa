@@ -1,12 +1,12 @@
-import pytest
 from unittest.mock import AsyncMock, create_autospec
 
+import pytest
 from ucp_api.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
+from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_api.ports.outbound.user_identity_provider import IUserIdentityProvider
 
 

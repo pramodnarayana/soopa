@@ -74,7 +74,9 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
 
     async for session in db_router.get_global_session():
         tenant = Tenant(
-            id=test_tenant_id, name="Test Tenant", idp_tenant_id=f"idp_{test_tenant_id}"
+            id=test_tenant_id,
+            name=f"Test Tenant {test_tenant_id}",
+            idp_tenant_id=f"idp_{test_tenant_id}",
         )
         session.add(tenant)
         await session.flush()
@@ -86,6 +88,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
 
         if not shard:
             shard = DatabaseShard(
+                id=f"shard_{test_tenant_id}",
                 name="shard_1",
                 dsn=os.getenv(
                     "SHARD_1_URL",
@@ -99,9 +102,9 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
         edi_app = app_res.scalars().first()
         if not edi_app:
             edi_app = App(
+                id=f"app_{test_tenant_id}",
                 slug="edi",
                 name="EDI Application",
-                description="EDI Processing Engine",
             )
             session.add(edi_app)
             await session.commit()

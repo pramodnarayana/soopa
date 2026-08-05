@@ -1,16 +1,17 @@
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ucp_api.adapters.inbound.http.guards import tenant_auth_guard
 from ucp_api.adapters.inbound.http.routers import tenant_proxy_router, tenants_router, users_router
+from ucp_api.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp_api.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp_api.adapters.outbound.database.user_repository import UserRepository
 from ucp_api.adapters.outbound.identity.zitadel_client import ZitadelClient
@@ -19,19 +20,18 @@ from ucp_api.adapters.outbound.identity.zitadel_organizations_adapter import (
 )
 from ucp_api.adapters.outbound.identity.zitadel_projects_adapter import ZitadelProjectsAdapter
 from ucp_api.adapters.outbound.identity.zitadel_users_adapter import ZitadelUsersAdapter
+from ucp_api.adapters.outbound.messaging.postgres_notify_outbox_publisher import (
+    PostgresNotifyOutboxPublisher,
+)
 from ucp_api.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp_api.application.use_cases.delete_user_use_case import DeleteUserUseCase
 from ucp_api.application.use_cases.invite_user_use_case import InviteUserUseCase
 from ucp_api.application.use_cases.provision_tenant_use_case import ProvisionTenantUseCase
 from ucp_api.application.use_cases.toggle_user_status_use_case import ToggleUserStatusUseCase
 from ucp_api.application.use_cases.update_user_use_case import UpdateUserUseCase
+from ucp_api.application.workers.outbox_sweeper import ControlPlaneOutboxSweeper
 from ucp_api.core.container import get_db_session
 from ucp_api.core.exceptions import IdentityProviderError
-from ucp_api.application.workers.outbox_sweeper import ControlPlaneOutboxSweeper
-from ucp_api.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
-from ucp_api.adapters.outbound.messaging.postgres_notify_outbox_publisher import (
-    PostgresNotifyOutboxPublisher,
-)
 
 logger = logging.getLogger(__name__)
 

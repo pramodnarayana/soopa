@@ -1,13 +1,13 @@
-from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from datetime import UTC, datetime
+from typing import Literal
 
 from ucp_api.core.exceptions import AppSubscriptionError, TenantRenameError
-from ucp_api.domain.models.aggregate_root import AggregateRoot
 from ucp_api.domain.events.tenant_events import (
-    TenantProvisionedEvent,
     AppSubscribedEvent,
     AppUnsubscribedEvent,
+    TenantProvisionedEvent,
 )
+from ucp_api.domain.models.aggregate_root import AggregateRoot
 
 
 class Tenant(AggregateRoot):
@@ -17,11 +17,11 @@ class Tenant(AggregateRoot):
         self,
         id: str,
         name: str,
-        idp_tenant_id: Optional[str],
+        idp_tenant_id: str | None,
         status: Literal["active", "inactive"],
         created_at: datetime,
         updated_at: datetime,
-        subscriptions: Optional[List[str]] = None,
+        subscriptions: list[str] | None = None,
     ):
         super().__init__()
         self.id = id
@@ -37,10 +37,10 @@ class Tenant(AggregateRoot):
         cls,
         id: str,
         name: str,
-        idp_tenant_id: Optional[str],
-        subscriptions: Optional[List[str]] = None,
+        idp_tenant_id: str | None,
+        subscriptions: list[str] | None = None,
     ) -> "Tenant":
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         tenant = cls(
             id=id,
             name=name,
@@ -61,7 +61,7 @@ class Tenant(AggregateRoot):
         if not new_name or not new_name.strip():
             raise TenantRenameError("Tenant name cannot be empty.")
         self.name = new_name.strip()
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def subscribe(self, app_slug: str) -> None:
         if self.status != "active":
@@ -70,7 +70,7 @@ class Tenant(AggregateRoot):
             raise AppSubscriptionError(f"Tenant is already subscribed to '{app_slug}'.")
 
         self.subscriptions.append(app_slug)
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
         self.add_domain_event(
             AppSubscribedEvent(tenant_id=self.id, tenant_name=self.name, app_slug=app_slug)
         )
@@ -78,7 +78,7 @@ class Tenant(AggregateRoot):
     def unsubscribe_from_app(self, app_slug: str) -> None:
         try:
             self.subscriptions.remove(app_slug)
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)
             self.add_domain_event(AppUnsubscribedEvent(tenant_id=self.id, app_slug=app_slug))
         except ValueError:
             raise AppSubscriptionError(f"Tenant is not subscribed to '{app_slug}'.")
@@ -86,4 +86,4 @@ class Tenant(AggregateRoot):
     def change_status(self, new_status: Literal["active", "inactive"]) -> None:
         if self.status != new_status:
             self.status = new_status
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)

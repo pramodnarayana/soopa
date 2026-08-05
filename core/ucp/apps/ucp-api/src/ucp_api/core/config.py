@@ -1,12 +1,12 @@
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
 
 
 class Settings(BaseSettings):
     # AWS / SNS
     sns_tenant_events_topic_arn: str = ""
-    aws_endpoint_url: Optional[str] = None
+    aws_endpoint_url: str | None = None
     aws_region: str = "us-east-1"
     aws_access_key_id: str = "test"
     aws_secret_access_key: str = "test"

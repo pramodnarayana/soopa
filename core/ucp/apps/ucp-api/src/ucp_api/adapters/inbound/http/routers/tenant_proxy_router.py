@@ -1,11 +1,11 @@
 import logging
-from typing import Annotated, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import StreamingResponse
 from identity.domain.identity_context import IdentityContext
-
 from ucp_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from ucp_api.core.config import get_settings
 from ucp_api.ports.outbound.tenant_repository import ITenantRepository

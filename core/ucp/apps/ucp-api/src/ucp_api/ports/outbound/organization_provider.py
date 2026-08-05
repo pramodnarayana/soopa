@@ -1,8 +1,8 @@
-from typing import Protocol, Tuple
+from typing import Protocol
 
 
 class IOrganizationProvider(Protocol):
-    async def create_organization(self, name: str) -> Tuple[str, bool]:
+    async def create_organization(self, name: str) -> tuple[str, bool]:
         """Creates an organization and returns (org_id, grant_succeeded)"""
         ...
 

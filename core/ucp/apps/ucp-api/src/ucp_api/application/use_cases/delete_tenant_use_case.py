@@ -1,9 +1,9 @@
 import logging
-from typing import Optional
+
 from ucp_api.core.exceptions import ResourceNotFoundError
+from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
 from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_api.ports.outbound.user_repository import IUserRepository
-from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class DeleteTenantUseCase:
         self.user_repo = user_repo
         self.organization_provider = organization_provider
 
-    async def execute(self, tenant_id: str, idempotency_key: Optional[str] = None) -> None:
+    async def execute(self, tenant_id: str, idempotency_key: str | None = None) -> None:
         tenant = await self.tenant_repo.find_by_id(tenant_id)
         if not tenant:
             raise ResourceNotFoundError("Tenant not found")

@@ -1,9 +1,9 @@
 import logging
-from typing import Tuple
+
+from pydantic import BaseModel, Field
 from ucp_api.adapters.outbound.identity.zitadel_client import ZitadelClient
 from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
 from ucp_api.ports.outbound.project_provider import IProjectProvider
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
         super().__init__()
         self.project_provider = project_provider
 
-    async def create_organization(self, name: str) -> Tuple[str, bool]:
+    async def create_organization(self, name: str) -> tuple[str, bool]:
         logger.info(f"Provisioning Organization in Zitadel: {name}")
 
         try:

@@ -1,22 +1,21 @@
-from typing import Any
 import os
+from typing import Any
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
+from platform_orm.models.core import EdiGlobalBase, UcpBase
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
-from unittest.mock import AsyncMock
-
-from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-
 from ucp_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
 from ucp_api.main import (  # type: ignore
     app,
@@ -25,8 +24,6 @@ from ucp_api.main import (  # type: ignore
     get_project_provider,
     get_user_provider,
 )
-from platform_orm.models.core import UcpBase
-from platform_orm.models.core import EdiGlobalBase
 
 # ---------------------------------------------------------------------------
 # Shared mock identity \u2014 a Platform Admin used across all integration tests.

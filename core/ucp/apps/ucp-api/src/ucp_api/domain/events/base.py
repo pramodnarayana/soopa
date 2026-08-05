@@ -1,6 +1,7 @@
 """Base class for all domain events in the UCP domain model."""
 
 from abc import ABC
+
 from pydantic import BaseModel
 
 

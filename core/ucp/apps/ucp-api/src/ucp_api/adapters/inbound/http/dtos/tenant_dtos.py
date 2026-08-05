@@ -4,8 +4,6 @@ These Pydantic models are the API contract — they live at the HTTP boundary an
 must NOT be imported from the Application or Domain layers.
 """
 
-from typing import List, Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -32,9 +30,9 @@ class TenantResponse(BaseModel):
 
     id: str
     name: str
-    idp_tenant_id: Optional[str]
+    idp_tenant_id: str | None
     status: str
-    subscriptions: List[str]
+    subscriptions: list[str]
 
     @classmethod
     def from_domain(cls, tenant: object) -> "TenantResponse":

@@ -1,12 +1,10 @@
-from typing import List
-
 from ucp_api.domain.events.base import DomainEvent
 
 
 class TenantProvisionedEvent(DomainEvent):
     tenant_id: str
     tenant_name: str
-    subscriptions: List[str]
+    subscriptions: list[str]
 
 
 class AppSubscribedEvent(DomainEvent):

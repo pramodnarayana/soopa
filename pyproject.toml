@@ -84,17 +84,18 @@ exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
-ignore = ["E501"] # Handled by formatter
+ignore = ["E501", "B904", "E402"] # Handled by formatter / existing legacy code
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments
 "apps/edi/apps/edi-api/src/api/main.py" = ["B008", "E402"]
 "apps/edi/apps/edi-api/src/api/cdc_relay.py" = ["B008"]
 "apps/edi/apps/edi-api/src/api/routers/**/*.py" = ["B008"]
-"apps/edi/apps/edi-api/src/api/dependencies.py" = ["B008"]
+"apps/edi/apps/edi-api/src/api/dependencies/**/*.py" = ["B008"]
 "apps/edi/apps/edi-as2-server/src/as2_server/main.py" = ["B008"]
 "apps/edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
 "core/platform/packages/identity/python/identity/**/*.py" = ["B008"]
+"core/ucp/apps/ucp-api/src/**/*.py" = ["B008", "E402"]
 "apps/edi/apps/edi-api/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores
 "apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405"]

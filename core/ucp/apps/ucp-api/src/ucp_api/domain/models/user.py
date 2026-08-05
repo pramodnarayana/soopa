@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
-from typing import Literal, Optional
+from datetime import UTC, datetime
+from typing import Literal
+
 from ucp_api.domain.models.aggregate_root import AggregateRoot
 
 
@@ -9,7 +10,7 @@ class User(AggregateRoot):
     def __init__(
         self,
         id: str,
-        idp_user_id: Optional[str],
+        idp_user_id: str | None,
         email: str,
         name: str,
         status: Literal["active", "inactive"],
@@ -29,11 +30,11 @@ class User(AggregateRoot):
     def create(
         cls,
         id: str,
-        idp_user_id: Optional[str],
+        idp_user_id: str | None,
         email: str,
         name: str,
     ) -> "User":
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=id,
             idp_user_id=idp_user_id,
@@ -47,9 +48,9 @@ class User(AggregateRoot):
     def activate(self) -> None:
         if self.status != "active":
             self.status = "active"
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)
 
     def deactivate(self) -> None:
         if self.status != "inactive":
             self.status = "inactive"
-            self.updated_at = datetime.now(timezone.utc)
+            self.updated_at = datetime.now(UTC)

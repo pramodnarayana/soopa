@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
-
 from identity.domain.identity_context import IdentityContext
 from ucp_api.adapters.inbound.http.dtos.user_dtos import (
     CreateUserRequest,

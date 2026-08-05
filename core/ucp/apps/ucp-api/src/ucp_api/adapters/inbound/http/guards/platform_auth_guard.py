@@ -16,11 +16,9 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
+from identity.adapters.outbound.zitadel.jwks_token_verifier import ZitadelTokenVerifier
 from identity.application.authenticate import AuthenticationError, authenticate_bearer_token
 from identity.domain.identity_context import IdentityContext
-from identity.adapters.outbound.zitadel.jwks_token_verifier import ZitadelTokenVerifier
-
 from ucp_api.core.container import get_token_verifier
 
 logger = logging.getLogger(__name__)

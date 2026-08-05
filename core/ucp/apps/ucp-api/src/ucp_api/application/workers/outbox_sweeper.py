@@ -1,11 +1,12 @@
 import asyncio
 import logging
-from typing import Any
 import uuid
-from ...ports.outbox_repository import OutboxRepositoryPort
-from ...ports.outbox_publisher import OutboxPublisherPort
+from typing import Any
+
 from ucp_models.events import ControlPlaneOutbox
 
+from ...ports.outbox_publisher import OutboxPublisherPort
+from ...ports.outbox_repository import OutboxRepositoryPort
 
 logger = logging.getLogger(__name__)
 

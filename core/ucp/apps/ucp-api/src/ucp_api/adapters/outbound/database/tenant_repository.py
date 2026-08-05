@@ -1,27 +1,24 @@
 import json
 import os
 import typing
-from typing import Optional, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, text
-from datetime import timezone
+from datetime import UTC
 
-from ucp_api.ports.outbound.tenant_repository import ITenantRepository
+from sqlalchemy import delete, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_api.domain.models.tenant import Tenant
-from ucp_models.subscriptions import AppSubscription
-from ucp_models.subscriptions import App
-from ucp_models.infrastructure import ShardRegistry
-from ucp_models.identity import TenantUser
-from ucp_models.identity import Tenant as DbTenant
-from ucp_models.identity import ApiToken, ApiKey
+from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_models.events import ControlPlaneOutbox
+from ucp_models.identity import ApiKey, ApiToken, TenantUser
+from ucp_models.identity import Tenant as DbTenant
+from ucp_models.infrastructure import ShardRegistry
+from ucp_models.subscriptions import App, AppSubscription
 
 
 class TenantRepository(ITenantRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _map_to_domain(self, row: DbTenant, subscriptions: Optional[List[str]] = None) -> Tenant:
+    def _map_to_domain(self, row: DbTenant, subscriptions: list[str] | None = None) -> Tenant:
         return Tenant(
             id=row.id,
             name=row.name,
@@ -30,16 +27,16 @@ class TenantRepository(ITenantRepository):
                 typing.Literal["active", "inactive"],
                 row.status if hasattr(row, "status") else "active",
             ),
-            created_at=row.created_at.replace(tzinfo=timezone.utc),
+            created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=(
-                row.updated_at.replace(tzinfo=timezone.utc)
+                row.updated_at.replace(tzinfo=UTC)
                 if hasattr(row, "updated_at") and row.updated_at
-                else row.created_at.replace(tzinfo=timezone.utc)
+                else row.created_at.replace(tzinfo=UTC)
             ),
             subscriptions=subscriptions or [],
         )
 
-    async def find_by_id(self, id: str) -> Optional[Tenant]:
+    async def find_by_id(self, id: str) -> Tenant | None:
         stmt = select(DbTenant).where(DbTenant.id == id)
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
@@ -49,7 +46,7 @@ class TenantRepository(ITenantRepository):
         subs = await self._load_subscription_slugs(row.id)
         return self._map_to_domain(row, subs)
 
-    async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Optional[Tenant]:
+    async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Tenant | None:
         stmt = select(DbTenant).where(DbTenant.idp_tenant_id == idp_tenant_id)
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
@@ -59,7 +56,7 @@ class TenantRepository(ITenantRepository):
         subs = await self._load_subscription_slugs(row.id)
         return self._map_to_domain(row, subs)
 
-    async def find_all(self) -> List[Tenant]:
+    async def find_all(self) -> list[Tenant]:
         stmt = select(DbTenant)
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
@@ -78,7 +75,7 @@ class TenantRepository(ITenantRepository):
         subs_result = await self.session.execute(stmt_subs)
 
         # Group slugs by tenant_id
-        subs_by_tenant: dict[str, List[str]] = {}
+        subs_by_tenant: dict[str, list[str]] = {}
         for tenant_id, slug in subs_result:
             subs_by_tenant.setdefault(tenant_id, []).append(slug)
 
@@ -88,7 +85,7 @@ class TenantRepository(ITenantRepository):
             tenants.append(self._map_to_domain(row, subs))
         return tenants
 
-    async def save(self, tenant: Tenant, idempotency_key: Optional[str] = None) -> None:
+    async def save(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         # 1. Save Tenant
         stmt = select(DbTenant).where(DbTenant.id == tenant.id)
         result = await self.session.execute(stmt)
@@ -165,7 +162,7 @@ class TenantRepository(ITenantRepository):
                 {"outbox_id": outbox_id},
             )
 
-    async def delete(self, tenant_id: str, idempotency_key: Optional[str] = None) -> None:
+    async def delete(self, tenant_id: str, idempotency_key: str | None = None) -> None:
         await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))
         await self.session.execute(delete(ApiToken).where(ApiToken.tenant_id == tenant_id))
         await self.session.execute(delete(ApiKey).where(ApiKey.tenant_id == tenant_id))
@@ -180,7 +177,7 @@ class TenantRepository(ITenantRepository):
         )
         await self.session.execute(delete(DbTenant).where(DbTenant.id == tenant_id))
 
-    async def _load_subscription_slugs(self, tenant_id: str) -> List[str]:
+    async def _load_subscription_slugs(self, tenant_id: str) -> list[str]:
         stmt = (
             select(App.slug)
             .select_from(AppSubscription)

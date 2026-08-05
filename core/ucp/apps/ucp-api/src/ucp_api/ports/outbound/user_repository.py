@@ -1,14 +1,14 @@
-from typing import List, Protocol
+from typing import Protocol
 
 from ucp_api.domain.models.user import User
 
 
 class IUserRepository(Protocol):
-    async def find_users_by_tenant(self, tenant_id: str) -> List[User]:
+    async def find_users_by_tenant(self, tenant_id: str) -> list[User]:
         """Finds all users associated with a specific tenant"""
         ...
 
-    async def delete_orphaned_users(self, user_ids: List[str]) -> None:
+    async def delete_orphaned_users(self, user_ids: list[str]) -> None:
         """Deletes users if they are not associated with any active tenants"""
         ...
 

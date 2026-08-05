@@ -109,7 +109,7 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
     created_edi_app = False
     if not edi_app:
         created_edi_app = True
-        edi_app = App(id=f"app_{suffix}", name="EDI", slug="edi", is_active=True)
+        edi_app = App(id=f"app_{suffix}", name="EDI", slug="edi")
         global_session.add(edi_app)
         await global_session.commit()
 

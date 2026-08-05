@@ -1,9 +1,9 @@
 import json
 import logging
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp_models.events import ControlPlaneOutbox
-
 
 logger = logging.getLogger(__name__)
 

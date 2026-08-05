@@ -5,15 +5,14 @@ Single responsibility: own the SQLAlchemy engine + session factory and the
 ZitadelTokenVerifier singleton. All other wiring happens in main.py.
 """
 
+from collections.abc import AsyncGenerator
 from functools import lru_cache
-from typing import AsyncGenerator
-
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from identity.adapters.outbound.zitadel.jwks_token_verifier import (
     ZitadelTokenVerifier,
     ZitadelTokenVerifierOptions,
 )
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ucp_api.core.config import get_settings
 
@@ -40,9 +39,8 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     On any unhandled exception the transaction rolls back, preventing partial
     writes (e.g. Zitadel org created but DB tenant row missing).
     """
-    async with _async_session_maker() as session:
-        async with session.begin():
-            yield session
+    async with _async_session_maker() as session, session.begin():
+        yield session
 
 
 @lru_cache(maxsize=1)

@@ -1,22 +1,21 @@
 import logging
-from typing import List
 
 from ucp_api.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp_api.ports.outbound.project_provider import IProjectProvider
 from ucp_api.domain.dtos.zitadel_dtos import (
-    ZitadelRole,
-    ZitadelUser,
     ZitadelProjectGrantsResponse,
-    ZitadelRolesResponse,
     ZitadelRawUserSearchResponse,
+    ZitadelRole,
+    ZitadelRolesResponse,
+    ZitadelUser,
 )
+from ucp_api.ports.outbound.project_provider import IProjectProvider
 
 logger = logging.getLogger(__name__)
 
 
 class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
     async def create_project_grant(
-        self, org_id: str, project_id: str, role_keys: List[str]
+        self, org_id: str, project_id: str, role_keys: list[str]
     ) -> None:
         logger.info(f"Creating project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}")
 
@@ -78,7 +77,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             logger.error(f"Error deleting project grant for org {org_id}: {error}")
             raise error
 
-    async def get_roles(self) -> List[ZitadelRole]:
+    async def get_roles(self) -> list[ZitadelRole]:
         logger.info("Fetching roles for UCP Project")
 
         response = await self.fetch_with_auth(
@@ -94,7 +93,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
         parsed_data = ZitadelRolesResponse.model_validate(data)
         return parsed_data.result
 
-    async def get_users(self, org_id: str) -> List[ZitadelUser]:
+    async def get_users(self, org_id: str) -> list[ZitadelUser]:
         logger.info(f"Fetching users for org {org_id}")
 
         # 1. Fetch all users in the org

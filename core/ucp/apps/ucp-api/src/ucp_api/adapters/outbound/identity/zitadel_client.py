@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Optional, Dict
+from typing import Any
+
 import httpx
 from ucp_api.core.config import get_settings
 from ucp_api.core.exceptions import IdentityProviderError
@@ -15,7 +16,7 @@ class ZitadelClient:
         self.ucp_project_id = self.settings.zitadel_ucp_project_id
         # We can add default user password to config if needed, or rely on env
         self.default_user_password = "Password1!"
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     def _assert_config(self) -> None:
         if not self.token:
@@ -39,8 +40,8 @@ class ZitadelClient:
         self,
         endpoint: str,
         method: str = "GET",
-        json: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         self._assert_config()
 

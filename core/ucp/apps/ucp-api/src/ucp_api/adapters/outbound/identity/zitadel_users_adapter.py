@@ -1,13 +1,13 @@
 import logging
 from typing import Literal
-from ucp_api.core.exceptions import IdentityProviderError
 
 from ucp_api.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp_api.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp_api.core.exceptions import IdentityProviderError
 from ucp_api.domain.dtos.zitadel_dtos import (
-    ZitadelUser,
     ZitadelProjectGrantsResponse,
+    ZitadelUser,
 )
+from ucp_api.ports.outbound.user_identity_provider import IUserIdentityProvider
 
 logger = logging.getLogger(__name__)
 

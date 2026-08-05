@@ -1,19 +1,18 @@
-from typing import List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, and_, not_, exists
-from datetime import timezone
+from datetime import UTC
 
-from ucp_api.ports.outbound.user_repository import IUserRepository
+from sqlalchemy import and_, delete, exists, not_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_api.domain.models.user import User
-from ucp_models.identity import User as DbUser
+from ucp_api.ports.outbound.user_repository import IUserRepository
 from ucp_models.identity import TenantUser
+from ucp_models.identity import User as DbUser
 
 
 class UserRepository(IUserRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def find_users_by_tenant(self, tenant_id: str) -> List[User]:
+    async def find_users_by_tenant(self, tenant_id: str) -> list[User]:
         stmt = (
             select(DbUser, TenantUser.role)
             .join(TenantUser, TenantUser.user_id == DbUser.id)
@@ -30,14 +29,14 @@ class UserRepository(IUserRepository):
                 email=db_user.email,
                 name=db_user.name or "",
                 status=db_user.status,
-                created_at=db_user.created_at.replace(tzinfo=timezone.utc),
-                updated_at=db_user.updated_at.replace(tzinfo=timezone.utc),
+                created_at=db_user.created_at.replace(tzinfo=UTC),
+                updated_at=db_user.updated_at.replace(tzinfo=UTC),
             )
             u.role = role  # type: ignore
             users.append(u)
         return users
 
-    async def delete_orphaned_users(self, user_ids: List[str]) -> None:
+    async def delete_orphaned_users(self, user_ids: list[str]) -> None:
         if not user_ids:
             return
 

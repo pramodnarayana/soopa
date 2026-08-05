@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, create_autospec
 
+import pytest
 from ucp_api.application.use_cases.invite_user_use_case import (
     InviteUserCommand,
     InviteUserUseCase,

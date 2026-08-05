@@ -1,10 +1,9 @@
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 from ucp_api.domain.models.tenant import Tenant
-from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_api.ports.outbound.organization_provider import IOrganizationProvider
+from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_api.ports.outbound.user_identity_provider import IUserIdentityProvider
 
 
@@ -33,7 +32,7 @@ class ProvisionTenantUseCase:
         self.user_identity_provider = user_identity_provider
 
     async def execute(
-        self, command: ProvisionTenantCommand, idempotency_key: Optional[str] = None
+        self, command: ProvisionTenantCommand, idempotency_key: str | None = None
     ) -> Tenant:
         # 1. Call Zitadel to create an Organization
         org_id, _ = await self.organization_provider.create_organization(command.name)
