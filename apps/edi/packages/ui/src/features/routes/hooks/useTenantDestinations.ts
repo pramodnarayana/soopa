@@ -7,8 +7,8 @@ import {
   normalizePartnerResponse,
   PartnersArraySchema,
 } from '../../../features/partners/api/partnerSchemas';
-import { RawWebhooksArrayResponseSchema } from '../../../features/webhooks/api/webhookSchemas';
 import { mapRawWebhook } from '../../../features/webhooks/api/webhookHooks';
+import { RawWebhooksArrayResponseSchema } from '../../../features/webhooks/api/webhookSchemas';
 import { Direction } from '../types';
 
 export function useTenantDestinations(direction: Direction) {

@@ -35,12 +35,18 @@ def test_validate_target_url(monkeypatch: MagicMock) -> None:
 
     monkeypatch.setattr(worker.core.security, "IS_DEV", False)
 
-    assert validate_target_url("http://example.com") is True
-    assert validate_target_url("http://127.0.0.1") is False
-    assert validate_target_url("ftp://example.com") is False
-    assert validate_target_url("http://") is False
-    assert validate_target_url("http://192.168.1.1") is False
-    assert validate_target_url("http://10.0.0.1") is False
+    def mock_getaddrinfo(host, *args, **kwargs):
+        if host == "example.com":
+            return [(None, None, None, None, ("93.184.216.34", 80))]
+        return [(None, None, None, None, (host, 80))]
+
+    with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
+        assert validate_target_url("http://example.com") is True
+        assert validate_target_url("http://127.0.0.1") is False
+        assert validate_target_url("ftp://example.com") is False
+        assert validate_target_url("http://") is False
+        assert validate_target_url("http://192.168.1.1") is False
+        assert validate_target_url("http://10.0.0.1") is False
 
     with patch("socket.getaddrinfo", side_effect=Exception("mock err")):
         assert validate_target_url("http://example.com") is False

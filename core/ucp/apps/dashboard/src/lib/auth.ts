@@ -20,10 +20,10 @@ export function parseJwtPayload(token: string): Record<string, unknown> {
     const base64url = token.split('.')[1];
     if (!base64url) return {};
     // Normalize base64url to standard Base64: replace '-' with '+', '_' with '/', and restore padding
-    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(
-      base64url.length + ((4 - (base64url.length % 4)) % 4),
-      '='
-    );
+    const base64 = base64url
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(base64url.length + ((4 - (base64url.length % 4)) % 4), '=');
     return JSON.parse(atob(base64)) as Record<string, unknown>;
   } catch {
     return {};

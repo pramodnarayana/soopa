@@ -23,7 +23,13 @@ type Direction = 'ALL' | 'INBOUND' | 'OUTBOUND';
 
 // ─── Shared trace action component ───────────────────────────────────────────
 
-function TraceAction({ traceId, onTraceClick }: { traceId: string; onTraceClick?: (traceId: string) => void }) {
+function TraceAction({
+  traceId,
+  onTraceClick,
+}: {
+  traceId: string;
+  onTraceClick?: (traceId: string) => void;
+}) {
   if (onTraceClick) {
     return (
       <button
@@ -316,7 +322,9 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
             onLoadMore={() => setMessagesOffset((p) => p + LIMIT)}
             hasMore={(messagesData?.items.length ?? 0) === LIMIT}
             renderAction={(item) =>
-              item.trace_id ? <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} /> : null
+              item.trace_id ? (
+                <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
+              ) : null
             }
           />
         </TabsContent>
@@ -331,7 +339,9 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
             onLoadMore={() => setJsonOffset((p) => p + LIMIT)}
             hasMore={(jsonData?.items.length ?? 0) === LIMIT}
             renderAction={(item) =>
-              item.trace_id ? <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} /> : null
+              item.trace_id ? (
+                <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
+              ) : null
             }
           />
         </TabsContent>

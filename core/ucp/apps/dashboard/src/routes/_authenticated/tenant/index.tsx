@@ -11,10 +11,7 @@ export const Route = createFileRoute('/_authenticated/tenant/')({
 function TenantDashboard() {
   const { tenantId } = useTenantContext();
 
-  const dashboardRepository = useMemo(
-    () => new HttpDashboardRepository(tenantId),
-    [tenantId],
-  );
+  const dashboardRepository = useMemo(() => new HttpDashboardRepository(tenantId), [tenantId]);
 
   return (
     <DashboardProvider repository={dashboardRepository}>

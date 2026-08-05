@@ -82,15 +82,18 @@ export function AS2PartnershipDetails({
     const partnershipIdChanged = previousPartnershipIdRef.current !== as2Partnership.id;
 
     if (partnershipIdChanged || !isDirty) {
-      reset({
-        name: as2Partnership.name || '',
-        local_partner_id: as2Partnership.local_partner_id,
-        remote_partner_id: as2Partnership.remote_partner_id,
-        mdn_type: as2Partnership.mdn_type || 'SYNC',
-        mdn_url: as2Partnership.mdn_url || '',
-        encryption_algorithm: as2Partnership.encryption_algorithm || 'AES256',
-        signature_algorithm: as2Partnership.signature_algorithm || 'SHA256',
-      }, { keepDirty: false });
+      reset(
+        {
+          name: as2Partnership.name || '',
+          local_partner_id: as2Partnership.local_partner_id,
+          remote_partner_id: as2Partnership.remote_partner_id,
+          mdn_type: as2Partnership.mdn_type || 'SYNC',
+          mdn_url: as2Partnership.mdn_url || '',
+          encryption_algorithm: as2Partnership.encryption_algorithm || 'AES256',
+          signature_algorithm: as2Partnership.signature_algorithm || 'SHA256',
+        },
+        { keepDirty: false },
+      );
     }
 
     previousPartnershipIdRef.current = as2Partnership.id;

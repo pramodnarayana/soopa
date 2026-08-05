@@ -62,7 +62,7 @@ def upgrade() -> None:
         schema="ucp",
         postgresql_where=sa.text("status = 'PENDING'"),
     )
-    op.drop_table("alembic_version", schema="edi")
+    op.execute("DROP TABLE IF EXISTS edi.alembic_version")
     op.add_column(
         "outbox", sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False), schema="edi"
     )

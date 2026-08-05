@@ -10,7 +10,9 @@ const clientId = (import.meta.env as unknown as Record<string, string>).ZITADEL_
 const projectId = (import.meta.env as unknown as Record<string, string>).ZITADEL_UCP_PROJECT_ID;
 
 if (!authority || !clientId || !projectId) {
-  throw new Error("FATAL: Missing required Zitadel environment variables (ZITADEL_API_URL, ZITADEL_UCP_WEB_CLIENT_ID, ZITADEL_UCP_PROJECT_ID). Check the root .env file.");
+  throw new Error(
+    'FATAL: Missing required Zitadel environment variables (ZITADEL_API_URL, ZITADEL_UCP_WEB_CLIENT_ID, ZITADEL_UCP_PROJECT_ID). Check the root .env file.',
+  );
 }
 
 const oidcConfig = {
