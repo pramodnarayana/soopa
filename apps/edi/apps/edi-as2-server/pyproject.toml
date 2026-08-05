@@ -19,6 +19,7 @@ dependencies = [
     "config",
     "observability",
     "sqlalchemy>=2.0.0",
+    "orchestrator-worker",
 ]
 
 [tool.uv.sources]
@@ -28,6 +29,7 @@ security = { workspace = true }
 database = { workspace = true }
 config = { workspace = true }
 observability = { workspace = true }
+orchestrator-worker = { workspace = true }
 
 
 [build-system]

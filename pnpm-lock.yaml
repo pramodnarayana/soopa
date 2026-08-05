@@ -73,6 +73,30 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
+  apps/edi/apps/edi-api: {}
+
+  apps/edi/apps/edi-as2-server: {}
+
+  apps/edi/packages/as2_core: {}
+
+  apps/edi/packages/bots_core: {}
+
+  apps/edi/packages/config: {}
+
+  apps/edi/packages/database: {}
+
+  apps/edi/packages/domain: {}
+
+  apps/edi/packages/grammar: {}
+
+  apps/edi/packages/patches: {}
+
+  apps/edi/packages/pipeline: {}
+
+  apps/edi/packages/security: {}
+
+  apps/edi/packages/transformer: {}
+
   apps/edi/packages/ui:
     dependencies:
       '@hookform/resolvers':
@@ -276,6 +300,12 @@ importers:
         specifier: ~6.0.2
         version: 6.0.3
 
+  core/platform/apps/notification_engine: {}
+
+  core/platform/apps/scheduler_engine: {}
+
+  core/platform/packages/orm: {}
+
   core/platform/packages/schemas:
     devDependencies:
       json-schema-to-typescript:
@@ -390,6 +420,10 @@ importers:
       vite:
         specifier: ^8.1.1
         version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)
+
+  core/ucp/apps/ucp-api: {}
+
+  core/ucp/packages/models: {}
 
 packages:
 

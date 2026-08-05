@@ -17,5 +17,5 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-platform-orm = { workspace = true, editable = true }
-ucp-models = { workspace = true, editable = true }
+platform-orm = { workspace = true }
+ucp-models = { workspace = true }

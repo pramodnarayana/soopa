@@ -1,0 +1,11 @@
+{
+  "name": "@soopa/as2-core",
+  "private": true,
+  "scripts": {
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "MYPYPATH=src uv run mypy .",
+    "test": "uv run pytest || (ret=$?; [ $ret -eq 5 ] && exit 0 || exit $ret)",
+    "deadcode": "uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry ."
+  }
+}

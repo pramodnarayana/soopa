@@ -65,3 +65,9 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-08-03
 - **Description**: The UI currently relies on manually constructed API clients and disconnected TanStack routing configuration. This allows API contracts or payload structure changes in the backend (FastAPI/NestJS) to silently break the frontend at runtime (such as 404s on trace links) without being caught during the build process.
 - **Action Item**: Implement a strict end-to-end OpenAPI code generation pipeline (using a tool like Orval or tRPC) across the monorepo. This will auto-generate strictly typed React Query hooks and frontend API clients directly from the backend schemas, ensuring that any breaking changes in the API instantly fail the frontend TypeScript build at compile time.
+
+## [Testing] Missing Python Test Suites & Exit Code 5 Suppression
+
+- **Date Added**: 2026-08-05
+- **Description**: Several recently migrated or newly created Python packages (such as `patches`, `edi-grammar`, and `transformer`) currently have zero tests. To prevent Turborepo and the CI pipeline from failing when running `pytest` concurrently (which natively returns Exit Code 5 when no tests are collected), the `package.json` proxy scripts currently suppress this specific exit code (`uv run pytest || (ret=$?; [ $ret -eq 5 ] && exit 0 || exit $ret)`).
+- **Action Item**: Write actual unit and integration tests for all untested Python packages. Once all packages have legitimate tests, remove the Exit Code 5 suppression hack from the respective `package.json` files so that accidental test-suite drops correctly fail the CI pipeline.
