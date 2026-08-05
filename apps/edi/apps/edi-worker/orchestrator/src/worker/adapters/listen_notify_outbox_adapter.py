@@ -209,7 +209,7 @@ class ListenNotifyOutboxAdapter(OutboxPort):
 
         async with self.pool.acquire() as connection:
             await connection.execute(
-                "INSERT INTO edi.outbox (idempotency_key, event_type, payload, tenant_id, status) VALUES ($1, $2, $3, $4, 'PENDING')",
+                "INSERT INTO edi.outbox (idempotency_key, event_type, payload, tenant_id, status) VALUES ($1, $2, $3, $4, 'PENDING') ON CONFLICT (idempotency_key) DO NOTHING",
                 idempotency_key,
                 event_type,
                 json.dumps(payload),

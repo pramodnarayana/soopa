@@ -4,7 +4,7 @@ import typing
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, text
-from datetime import datetime, timezone
+from datetime import timezone
 
 from ucp_api.ports.outbound.tenant_repository import ITenantRepository
 from ucp_api.domain.models.tenant import Tenant
@@ -13,7 +13,7 @@ from ucp_models.subscriptions import App
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.identity import TenantUser
 from ucp_models.identity import Tenant as DbTenant
-from ucp_models.identity import ApiToken
+from ucp_models.identity import ApiToken, ApiKey
 from ucp_models.events import ControlPlaneOutbox
 
 
@@ -103,7 +103,9 @@ class TenantRepository(ITenantRepository):
                 id=tenant.id,
                 name=tenant.name,
                 idp_tenant_id=tenant.idp_tenant_id,
+                status=tenant.status,
                 created_at=tenant.created_at.replace(tzinfo=None),
+                updated_at=tenant.updated_at.replace(tzinfo=None),
             )
             self.session.add(db_tenant)
 
@@ -138,10 +140,15 @@ class TenantRepository(ITenantRepository):
         for index, event in enumerate(tenant.domain_events):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.__class__.__name__
+            if event_name == "TenantProvisionedEvent":
+                event_name = "tenant.provisioned"
+            elif event_name == "AppSubscribedEvent":
+                event_name = "app.subscribed"
+
             final_idemp_key = (
                 f"{idempotency_key}_{index}"
                 if idempotency_key
-                else f"{event_name}_{tenant.id}_{datetime.now(timezone.utc).timestamp()}"
+                else getattr(event, "id", f"{event_name}_{tenant.id}_{index}")
             )
 
             outbox_event = ControlPlaneOutbox(
@@ -158,11 +165,10 @@ class TenantRepository(ITenantRepository):
                 {"outbox_id": outbox_id},
             )
 
-        tenant.clear_domain_events()
-
     async def delete(self, tenant_id: str, idempotency_key: Optional[str] = None) -> None:
         await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))
         await self.session.execute(delete(ApiToken).where(ApiToken.tenant_id == tenant_id))
+        await self.session.execute(delete(ApiKey).where(ApiKey.tenant_id == tenant_id))
         await self.session.execute(
             delete(ShardRegistry).where(ShardRegistry.tenant_id == tenant_id)
         )

@@ -186,6 +186,8 @@ ALTER TABLE "ucp"."webhooks" ADD CONSTRAINT "webhooks_tenant_id_tenants_id_fk" F
 CREATE INDEX "api_tokens_tenant_idx" ON "ucp"."api_tokens" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "api_keys_tenant_idx" ON "ucp"."api_keys" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "tenant_users_user_id_idx" ON "ucp"."tenant_users" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_users_email_lower" ON "ucp"."users" (lower(email));--> statement-breakpoint
+CREATE INDEX "ix_global_outbox_pending" ON "ucp"."outbox" USING btree ("status","created_at") WHERE status = 'PENDING';--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_template_idx" ON "ucp"."notification_templates" USING btree ("tenant_id","event_type","channel");--> statement-breakpoint
 CREATE INDEX "ix_system_audit_log_tenant_time" ON "ucp"."system_audit_log" USING btree ("tenant_id","created_at");--> statement-breakpoint
 CREATE INDEX "ix_ucp_system_audit_log_trace_id" ON "ucp"."system_audit_log" USING btree ("trace_id");--> statement-breakpoint

@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { index, jsonb, pgPolicy, primaryKey, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import {
+  index,
+  jsonb,
+  pgPolicy,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { ucpSchema } from './shared.js';
 
 // User roles are dynamically managed in Zitadel; we store the raw string keys here.
@@ -47,19 +56,27 @@ export const shardRegistry = ucpSchema
   )
   .enableRLS();
 
-export const users = ucpSchema.table('users', {
-  // No $defaultFn — id is required. Callers MUST supply generateId('usr').
-  id: varchar('id', { length: 128 }).primaryKey(),
-  idpUserId: varchar('idp_user_id', { length: 255 }).unique(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  name: text('name').notNull(),
-  status: varchar('status', { length: 50 })
-    .notNull()
-    .default('active')
-    .$type<'active' | 'inactive'>(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+export const users = ucpSchema.table(
+  'users',
+  {
+    // No $defaultFn — id is required. Callers MUST supply generateId('usr').
+    id: varchar('id', { length: 128 }).primaryKey(),
+    idpUserId: varchar('idp_user_id', { length: 255 }).unique(),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    name: text('name').notNull(),
+    status: varchar('status', { length: 50 })
+      .notNull()
+      .default('active')
+      .$type<'active' | 'inactive'>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      emailLowerIdx: uniqueIndex('uq_users_email_lower').on(sql`lower(${table.email})`),
+    };
+  },
+);
 
 export const tenantUsers = ucpSchema
   .table(

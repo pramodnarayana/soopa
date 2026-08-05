@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, jsonb, pgPolicy, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgPolicy, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import { tenants } from './identity.js';
 import { ucpSchema } from './shared.js';
 
@@ -34,6 +34,9 @@ export const controlPlaneOutbox = ucpSchema
       updatedAt: timestamp('updated_at').defaultNow().notNull(),
     },
     (table) => [
+      index('ix_global_outbox_pending')
+        .on(table.status, table.createdAt)
+        .where(sql`${table.status} = 'PENDING'`),
       pgPolicy('outbox_isolation', {
         as: 'permissive',
         for: 'all',

@@ -100,10 +100,14 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
 
     app_res = await global_session.execute(select(App).where(App.slug == "edi"))
     edi_app = app_res.scalars().first()
+    if not edi_app:
+        edi_app = App(id=f"app_{suffix}", name="EDI", slug="edi", is_active=True)
+        global_session.add(edi_app)
+        await global_session.commit()
 
     tenant_shard = ShardRegistry(
         tenant_id=tenant.id,
-        app_id=edi_app.id if edi_app is not None else None,
+        app_id=edi_app.id,
         shard_id=shard.id,
     )
     global_session.add(tenant_shard)
@@ -131,10 +135,9 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
 
         app_res = await global_session2.execute(select(App).where(App.slug == "edi"))
         edi_app = app_res.scalars().first()
+        assert edi_app is not None
 
-        tenant_shard_to_delete = await global_session2.get(
-            ShardRegistry, (tenant_id, edi_app.id if edi_app is not None else None)
-        )
+        tenant_shard_to_delete = await global_session2.get(ShardRegistry, (tenant_id, edi_app.id))
         if tenant_shard_to_delete:
             await global_session2.delete(tenant_shard_to_delete)
             await global_session2.flush()

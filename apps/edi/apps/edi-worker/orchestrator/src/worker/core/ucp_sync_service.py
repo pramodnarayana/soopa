@@ -28,7 +28,7 @@ class UcpSyncWorkerService:
         }
 
     async def _handle_external_event(self, event: Any) -> None:
-        translated = translate_external_event(event.eventType.value, event.payload)
+        translated = translate_external_event(event.eventType, event.payload)
         if translated:
             await self.sync_outbox_port.publish_event(
                 event_type=translated["event_type"],

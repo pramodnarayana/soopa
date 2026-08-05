@@ -54,7 +54,9 @@ async def proxy_to_edi(
     ucp_tenant_id: str = getattr(request.state, "ucp_tenant_id", tenant_id)
 
     settings = get_settings()
-    edi_api_url = getattr(settings, "edi_api_url", "http://localhost:8001")
+    edi_api_url = getattr(settings, "edi_api_url", None)
+    if not edi_api_url or not edi_api_url.startswith("https://"):
+        raise HTTPException(status_code=500, detail="Secure proxy target not configured.")
 
     target_url = f"{edi_api_url.rstrip('/')}/api/v1/{path}"
     query = request.url.query
@@ -67,7 +69,8 @@ async def proxy_to_edi(
 
     forward_headers: dict[str, str] = {}
     for key, value in request.headers.items():
-        if key.lower() not in HOP_BY_HOP_HEADERS:
+        key_lower = key.lower()
+        if key_lower not in HOP_BY_HOP_HEADERS and key_lower not in ("authorization", "cookie"):
             forward_headers[key] = value
 
     # Inject the resolved canonical tenant ID for the downstream EDI API.

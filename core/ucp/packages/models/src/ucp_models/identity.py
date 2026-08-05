@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 
 from platform_orm.models.core import UcpBase
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.sql import text
 
 
 class Tenant(UcpBase):
@@ -71,7 +71,9 @@ class ApiToken(UcpBase):
     ID_PREFIX = "tok"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("ucp.tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     client_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -86,3 +88,27 @@ class ApiToken(UcpBase):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+    __table_args__ = ({"schema": "ucp"},)
+
+
+class ApiKey(UcpBase):
+    """
+    Platform-managed API keys.
+    """
+
+    __tablename__ = "api_keys"
+    ID_PREFIX = "key"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("ucp.tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    key_hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = ({"schema": "ucp"},)
