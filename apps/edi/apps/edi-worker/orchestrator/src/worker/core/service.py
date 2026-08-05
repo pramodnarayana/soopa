@@ -4,12 +4,12 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from domain.events import (
+    EdiEventType,
     LegacyUcpEventType,
     ProvisioningEvent,
     ProvisioningEventType,
 )
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from platform_schemas.edi_events import EdiEventType
 from platform_schemas.webhook_events import WebhookEventType
 from pydantic import TypeAdapter, ValidationError
 

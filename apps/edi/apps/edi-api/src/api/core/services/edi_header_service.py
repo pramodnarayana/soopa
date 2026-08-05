@@ -1,9 +1,8 @@
 import logging
 from collections.abc import Sequence
 
-from domain.events import ProvisioningEvent
+from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import OutboundEdiHeaderDomainModel
-from platform_schemas.edi_events import EdiEventType
 
 from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (

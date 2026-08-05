@@ -1,9 +1,29 @@
 from enum import StrEnum
 
-from platform_schemas.edi_events import EdiEventType
 from platform_schemas.ucp_events import UcpEventType
 from platform_schemas.webhook_events import WebhookEventType
 from pydantic import BaseModel
+
+
+class EdiEventType(StrEnum):
+    edi_as2_partner_created = "edi.as2_partner.created"
+    edi_as2_partner_updated = "edi.as2_partner.updated"
+    edi_as2_partner_deleted = "edi.as2_partner.deleted"
+    edi_as2_partnership_created = "edi.as2_partnership.created"
+    edi_as2_partnership_updated = "edi.as2_partnership.updated"
+    edi_as2_partnership_deleted = "edi.as2_partnership.deleted"
+    edi_sftp_partner_created = "edi.sftp_partner.created"
+    edi_sftp_partner_updated = "edi.sftp_partner.updated"
+    edi_sftp_partner_deleted = "edi.sftp_partner.deleted"
+    edi_inbound_route_created = "edi.inbound_route.created"
+    edi_inbound_route_updated = "edi.inbound_route.updated"
+    edi_inbound_route_deleted = "edi.inbound_route.deleted"
+    edi_outbound_route_created = "edi.outbound_route.created"
+    edi_outbound_route_updated = "edi.outbound_route.updated"
+    edi_outbound_route_deleted = "edi.outbound_route.deleted"
+    edi_header_created = "edi.header.created"
+    edi_header_updated = "edi.header.updated"
+    edi_header_deleted = "edi.header.deleted"
 
 
 class PipelineEventType(StrEnum):

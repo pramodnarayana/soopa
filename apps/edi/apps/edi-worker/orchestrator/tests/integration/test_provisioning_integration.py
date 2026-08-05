@@ -10,8 +10,8 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models.control_plane import AS2Partner
 from database.models.data_plane import AS2Partner as TenantAS2Partner
+from domain.events import EdiEventType
 from dotenv import load_dotenv
-from platform_schemas.edi_events import EdiEventType
 from sqlalchemy import delete, select
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.identity import Tenant

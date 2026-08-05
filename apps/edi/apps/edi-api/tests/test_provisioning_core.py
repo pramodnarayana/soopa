@@ -68,7 +68,7 @@ async def test_create_as2_partner(as2_partner_service: AS2PartnerService, global
 
     assert len(global_repo.partners) == 1
     assert len(global_repo.outbox_events) == 1
-    from platform_schemas.edi_events import EdiEventType
+    from domain.events import EdiEventType
 
     assert global_repo.outbox_events[0]["event_type"] == EdiEventType.edi_as2_partner_created
     assert global_repo.outbox_events[0]["tenant_id"] == "1"

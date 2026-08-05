@@ -1,7 +1,6 @@
 from typing import Any, Protocol
 
-from domain.events import ProvisioningEvent
-from platform_schemas.edi_events import EdiEventType
+from domain.events import EdiEventType, ProvisioningEvent
 
 
 class ControlPlaneOutboxRepositoryPort(Protocol):
