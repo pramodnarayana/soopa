@@ -21,11 +21,13 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
 
-from ucp_models.events import *
-from ucp_models.identity import *
-from ucp_models.infrastructure import *
-from ucp_models.subscriptions import *
-from ucp_models.webhooks import *
+# Import model modules for registration side effects
+import ucp_models.events  # noqa: F401
+import ucp_models.identity  # noqa: F401
+import ucp_models.infrastructure  # noqa: F401
+import ucp_models.notifications  # noqa: F401
+import ucp_models.subscriptions  # noqa: F401
+import ucp_models.webhooks  # noqa: F401
 
 from platform_orm.models.core import UcpBase
 

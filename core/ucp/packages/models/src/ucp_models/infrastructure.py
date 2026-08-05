@@ -41,9 +41,9 @@ class ScheduledJob(UcpBase):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default={}, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     min_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -54,7 +54,7 @@ class ScheduledJob(UcpBase):
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     locked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), nullable=False

@@ -81,9 +81,7 @@ class SqlAlchemyJobRepository:
                 {
                     "job_id": job_id,
                     "worker_id": worker_id,
-                    "next_run_at": next_run_at.replace(tzinfo=None)
-                    if next_run_at.tzinfo
-                    else next_run_at,
+                    "next_run_at": next_run_at,
                 },
             )
             await session.commit()
@@ -103,9 +101,7 @@ class SqlAlchemyJobRepository:
                     "job_id": job_id,
                     "worker_id": worker_id,
                     "retry_count": retry_count,
-                    "next_run_at": next_run_at.replace(tzinfo=None)
-                    if next_run_at.tzinfo
-                    else next_run_at,
+                    "next_run_at": next_run_at,
                 },
             )
             await session.commit()

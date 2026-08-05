@@ -19,14 +19,21 @@ class PostgresNotifyOutboxPublisher:
 
     async def publish(self, event: ControlPlaneOutbox) -> None:
         async with self.session_factory() as session:
+            # Prefer notifying with just the event ID to avoid payload size limits
             payload_str = json.dumps(
                 {
+                    "eventId": event.id,
                     "eventType": event.event_type,
-                    "payload": event.payload,
                     "tenantId": event.tenant_id,
-                    "idempotencyKey": event.idempotency_key,
                 }
             )
+
+            # Validate PostgreSQL NOTIFY 8000-byte payload limit
+            payload_bytes = payload_str.encode("utf-8")
+            if len(payload_bytes) > 8000:
+                raise ValueError(
+                    f"pg_notify payload exceeds 8000-byte limit: {len(payload_bytes)} bytes"
+                )
 
             # Using pg_notify
             query = text("SELECT pg_notify('control_plane_events', :payload)")

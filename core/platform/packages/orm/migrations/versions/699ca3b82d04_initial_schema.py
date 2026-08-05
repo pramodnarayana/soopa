@@ -164,7 +164,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("dsn", sa.String(length=1024), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name"),
         schema="ucp",
@@ -253,7 +253,7 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("event", sa.String(length=100), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         schema="ucp",
     )
@@ -277,8 +277,8 @@ def upgrade() -> None:
         sa.Column("idp_tenant_id", sa.String(length=255), nullable=True),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_tenant_id"),
         sa.UniqueConstraint("name"),
@@ -291,10 +291,9 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("email"),
         sa.UniqueConstraint("idp_user_id"),
         schema="ucp",
     )
@@ -490,7 +489,7 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("app_id", sa.String(length=128), nullable=False),
         sa.Column("shard_id", sa.String(length=128), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["app_id"], ["ucp.apps.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["shard_id"], ["ucp.database_shards.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tenant_id"], ["ucp.tenants.id"], ondelete="CASCADE"),
@@ -502,7 +501,7 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("user_id", sa.String(length=128), nullable=False),
         sa.Column("role", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["ucp.tenants.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["ucp.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("tenant_id", "user_id"),
@@ -597,4 +596,6 @@ def downgrade() -> None:
     )
     op.drop_index(op.f("ix_edi_as2_partners_tenant_id"), table_name="as2_partners", schema="edi")
     op.drop_table("as2_partners", schema="edi")
+    op.execute("DROP SCHEMA edi")
+    op.execute("DROP SCHEMA ucp")
     # ### end Alembic commands ###

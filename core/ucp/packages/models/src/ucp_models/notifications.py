@@ -2,19 +2,22 @@ from typing import Any
 
 from platform_orm.models.common import OutboxMixin
 from platform_orm.models.core import UcpBase
-from sqlalchemy import Boolean, Index, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 
 class NotificationTemplate(UcpBase):
     __tablename__ = "notification_templates"
+    ID_PREFIX = "notif_tmpl"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, autoincrement=False)
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("ucp.tenants.id", ondelete="CASCADE"), nullable=False
+    )
     event_type: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(50), nullable=False)
-    subject_template: Mapped[str] = mapped_column(Text, nullable=False)
+    subject_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

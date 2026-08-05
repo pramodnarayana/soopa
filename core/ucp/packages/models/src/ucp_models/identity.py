@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from platform_orm.models.core import UcpBase
-from sqlalchemy import DateTime, ForeignKey, Index, String, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,11 +30,11 @@ class User(UcpBase):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -59,7 +59,7 @@ class TenantUser(UcpBase):
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), server_default=func.now()
     )
 
     __table_args__ = ({"schema": "ucp"},)

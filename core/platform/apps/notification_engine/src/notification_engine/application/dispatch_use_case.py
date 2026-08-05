@@ -1,5 +1,8 @@
+import hashlib
 import logging
 import os
+
+from ucp_models.notifications import NotificationOutbox
 
 from ..domain.models import NotificationEvent
 from ..ports.interfaces import TemplateRendererPort, TemplateRepositoryPort
@@ -41,11 +44,16 @@ class DispatchNotificationUseCase:
                 else None
             )
 
-            from ucp_models.notifications import NotificationOutbox
+            # Generate deterministic idempotency key
+            event_id = event.data.get("event_id", "")
+            idempotency_input = f"{event.tenant_id}:{event.event_type}:{channel.value}:{event_id}"
+            idempotency_key = hashlib.sha256(idempotency_input.encode()).hexdigest()
 
             outbox_msg = NotificationOutbox(
                 id=f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
                 tenant_id=event.tenant_id,
+                event_type=event.event_type,
+                idempotency_key=idempotency_key,
                 payload={
                     "channel": channel.value,
                     "content": rendered_body,
