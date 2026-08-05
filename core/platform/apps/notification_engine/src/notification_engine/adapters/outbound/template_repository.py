@@ -19,7 +19,7 @@ class SqlAlchemyTemplateRepository:
                 DbTemplate.tenant_id == tenant_id,
                 DbTemplate.event_type == event_type,
                 DbTemplate.channel == channel.value,
-                DbTemplate.is_active == True,
+                DbTemplate.is_active,
             )
             result = await session.execute(stmt)
             db_template = result.scalars().first()

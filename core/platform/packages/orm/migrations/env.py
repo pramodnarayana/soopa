@@ -1,10 +1,22 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
+import ucp_models.events  # noqa: F401
+import ucp_models.identity  # noqa: F401
+import ucp_models.infrastructure  # noqa: F401
+import ucp_models.notifications  # noqa: F401
+import ucp_models.subscriptions  # noqa: F401
+import ucp_models.webhooks  # noqa: F401
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from platform_orm.models.core import UcpBase
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -14,22 +26,6 @@ config = context.config
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
-import os
-
-from dotenv import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
-
-# Import model modules for registration side effects
-import ucp_models.events  # noqa: F401
-import ucp_models.identity  # noqa: F401
-import ucp_models.infrastructure  # noqa: F401
-import ucp_models.notifications  # noqa: F401
-import ucp_models.subscriptions  # noqa: F401
-import ucp_models.webhooks  # noqa: F401
-
-from platform_orm.models.core import UcpBase
 
 target_metadata = UcpBase.metadata
 
