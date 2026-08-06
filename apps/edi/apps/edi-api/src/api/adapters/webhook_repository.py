@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from domain.models import WebhookDomainModel
-from platform_orm.models.observability import (
+from platform_orm.models import (
     Webhook,
 )
 from sqlalchemy import select

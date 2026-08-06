@@ -199,7 +199,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["webhook_id"],
-            ["ucp.webhooks.id"],
+            ["observability.webhooks.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
         schema="edi",

@@ -1,7 +1,7 @@
 from database.models.control_plane import AS2Partner, SFTPPartner
 from database.models.data_plane import InboundRoute, OutboundRoute
 from domain.models import ConnectionType
-from platform_orm.models.observability import Webhook
+from platform_orm.models import Webhook
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

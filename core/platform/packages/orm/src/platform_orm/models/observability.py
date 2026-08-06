@@ -27,7 +27,4 @@ class SystemAuditLog(ObservabilityBase):
     )
 
 
-class Webhook(ObservabilityBase, WebhookMixin, TimestampMixin):
-    __tablename__ = "webhooks"
 
-    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)

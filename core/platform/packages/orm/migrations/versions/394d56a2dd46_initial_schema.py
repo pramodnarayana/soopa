@@ -209,14 +209,14 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        schema="observability",
+        schema="ucp",
     )
     op.create_index(
         op.f("ix_ucp_webhooks_tenant_id"),
         "webhooks",
         ["tenant_id"],
         unique=False,
-        schema="observability",
+        schema="ucp",
     )
     op.create_table(
         "api_keys",
@@ -325,8 +325,8 @@ def downgrade() -> None:
     op.drop_table("api_tokens", schema="identity")
     op.drop_index(op.f("ix_platform_api_keys_tenant_id"), table_name="api_keys", schema="identity")
     op.drop_table("api_keys", schema="identity")
-    op.drop_index(op.f("ix_ucp_webhooks_tenant_id"), table_name="webhooks", schema="observability")
-    op.drop_table("webhooks", schema="observability")
+    op.drop_index(op.f("ix_ucp_webhooks_tenant_id"), table_name="webhooks", schema="ucp")
+    op.drop_table("webhooks", schema="ucp")
     op.drop_index(
         op.f("ix_ucp_system_audit_log_trace_id"),
         table_name="system_audit_log",

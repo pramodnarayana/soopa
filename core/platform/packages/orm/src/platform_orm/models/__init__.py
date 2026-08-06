@@ -10,8 +10,9 @@ from .core import (
 )
 from .identity import ApiKey, ApiToken, Tenant, TenantUser, User
 from .notifications import NotificationOutbox, NotificationTemplate
-from .observability import SystemAuditLog, Webhook
+from .observability import SystemAuditLog
 from .scheduling import ScheduledJob
+from .webhooks import Webhook
 
 __all__ = [
     "ApiKey",

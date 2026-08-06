@@ -18,7 +18,7 @@ from database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from database.models.data_plane import Webhook as TenantWebhook
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from platform_orm.models.observability import Webhook as GlobalWebhook
+from platform_orm.models import Webhook as GlobalWebhook
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
