@@ -3,12 +3,12 @@ import logging
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import ConnectionType, PartnerStatus
 
-from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateAS2PartnershipCmd,
     PartnerEntity,
     UpdateAS2PartnershipCmd,
 )
+from api.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = logging.getLogger(__name__)
 

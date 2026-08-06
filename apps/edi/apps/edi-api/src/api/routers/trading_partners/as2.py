@@ -9,9 +9,9 @@ from api.adapters.http.dtos import (
     CertificateExportResponse,
     RotateCertificateRequest,
 )
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.core.exceptions import OrchestrationError
 from api.core.services import AS2PartnerService
-from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_vault

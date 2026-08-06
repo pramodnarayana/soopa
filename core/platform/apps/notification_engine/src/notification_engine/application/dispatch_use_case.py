@@ -1,10 +1,7 @@
 import hashlib
 import logging
-import os
 
-from ucp_models.notifications import NotificationOutbox
-
-from ..domain.models import NotificationEvent
+from ..domain.models import NotificationEvent, NotificationOutboxEvent
 from ..ports.interfaces import TemplateRendererPort, TemplateRepositoryPort
 from ..ports.outbox_repository import NotificationOutboxRepositoryPort
 
@@ -49,8 +46,7 @@ class DispatchNotificationUseCase:
             idempotency_input = f"{event.tenant_id}:{event.event_type}:{channel.value}:{event_id}"
             idempotency_key = hashlib.sha256(idempotency_input.encode()).hexdigest()
 
-            outbox_msg = NotificationOutbox(
-                id=f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+            outbox_event = NotificationOutboxEvent(
                 tenant_id=event.tenant_id,
                 event_type=event.event_type,
                 idempotency_key=idempotency_key,
@@ -61,4 +57,4 @@ class DispatchNotificationUseCase:
                     "data": event.data,
                 },
             )
-            await self.outbox_repo.save(outbox_msg)
+            await self.outbox_repo.save(outbox_event)

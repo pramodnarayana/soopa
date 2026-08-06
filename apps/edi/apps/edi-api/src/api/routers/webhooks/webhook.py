@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from api.adapters.http.dtos import PartnerResponse
-from api.core.uow import ControlPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
 

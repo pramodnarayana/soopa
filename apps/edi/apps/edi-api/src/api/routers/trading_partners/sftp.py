@@ -10,9 +10,9 @@ from api.adapters.http.dtos import (
     TestSFTPConnectionRequest,
     UpdateSFTPPartnerRequest,
 )
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.core.exceptions import OrchestrationError, VaultError
 from api.core.services import SFTPPartnerService
-from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.headers import get_idempotency_key

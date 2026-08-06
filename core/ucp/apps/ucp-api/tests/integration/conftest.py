@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from platform_orm.models.core import PlatformBase, UcpBase
+from platform_orm.models.core import GlobalRegistry
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
@@ -71,8 +71,14 @@ async def db_engine(postgres_container) -> "Any":  # type: ignore
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
-        await conn.run_sync(PlatformBase.metadata.create_all)
-        await conn.run_sync(UcpBase.metadata.create_all)
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
+
+        # Ensure models are imported
+
+        await conn.run_sync(GlobalRegistry.metadata.create_all)
 
     yield engine
     await engine.dispose()

@@ -1,8 +1,8 @@
 from collections.abc import Callable
 
+from platform_orm.models.notifications import NotificationTemplate as DbTemplate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.notifications import NotificationTemplate as DbTemplate
 
 from ...domain.models import Channel, Template
 

@@ -4,11 +4,11 @@ from collections.abc import Sequence
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import OutboundEdiHeaderDomainModel
 
-from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
 )
+from api.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = logging.getLogger(__name__)
 

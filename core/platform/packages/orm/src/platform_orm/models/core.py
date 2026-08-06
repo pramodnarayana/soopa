@@ -7,13 +7,40 @@ PlatformRegistry = GlobalRegistry
 UcpRegistry = GlobalRegistry
 
 
-class PlatformBase(DeclarativeBase):
+class IdentityBase(DeclarativeBase):
     """
-    Base class for Platform infrastructure models (Identity, Scheduling).
+    Base class for Platform Identity infrastructure models.
     """
 
     registry = PlatformRegistry
-    __table_args__: Any = {"schema": "platform"}
+    __table_args__: Any = {"schema": "identity"}
+
+
+class SchedulingBase(DeclarativeBase):
+    """
+    Base class for Platform Scheduling infrastructure models.
+    """
+
+    registry = PlatformRegistry
+    __table_args__: Any = {"schema": "scheduling"}
+
+
+class NotificationBase(DeclarativeBase):
+    """
+    Base class for Platform Notification infrastructure models.
+    """
+
+    registry = PlatformRegistry
+    __table_args__: Any = {"schema": "notifications"}
+
+
+class ObservabilityBase(DeclarativeBase):
+    """
+    Base class for Platform Observability infrastructure models.
+    """
+
+    registry = PlatformRegistry
+    __table_args__: Any = {"schema": "observability"}
 
 
 class UcpBase(DeclarativeBase):

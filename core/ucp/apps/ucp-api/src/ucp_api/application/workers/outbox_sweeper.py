@@ -3,8 +3,7 @@ import logging
 import uuid
 from typing import Any
 
-from ucp_models.events import ControlPlaneOutbox
-
+from ...domain.models.outbox_event import OutboxEvent
 from ...ports.outbox_publisher import OutboxPublisherPort
 from ...ports.outbox_repository import OutboxRepositoryPort
 
@@ -74,7 +73,7 @@ class ControlPlaneOutboxSweeper:
             tasks = [self.process_event(event) for event in events]
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def process_event(self, event: ControlPlaneOutbox) -> None:
+    async def process_event(self, event: OutboxEvent) -> None:
         try:
             await self.publisher.publish(event)
             await self.repository.mark_completed(event.id, self.worker_id)

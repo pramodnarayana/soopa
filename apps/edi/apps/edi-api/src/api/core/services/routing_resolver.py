@@ -3,9 +3,7 @@ import logging
 from typing import Any
 
 from domain.models import ConnectionType, Direction
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.adapters.routing_resolver_repository import SqlAlchemyRoutingResolverRepository
 from api.ports.routing_resolver_repository import RoutingResolverRepositoryPort
 
 logger = logging.getLogger(__name__)
@@ -18,10 +16,8 @@ class RoutingResolutionService:
     details in the frontend UI.
     """
 
-    def __init__(self, global_session: AsyncSession, tenant_session: AsyncSession | None):
-        self.repository: RoutingResolverRepositoryPort = SqlAlchemyRoutingResolverRepository(
-            global_session, tenant_session
-        )
+    def __init__(self, repository: RoutingResolverRepositoryPort):
+        self.repository = repository
 
     async def resolve_routing_context(
         self, msg: Any, edi_jsons: list[Any]

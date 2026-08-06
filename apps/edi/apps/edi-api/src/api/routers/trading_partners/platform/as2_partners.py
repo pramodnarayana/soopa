@@ -12,9 +12,9 @@ from api.adapters.http.dtos import (
     GenerateCertResponse,
     UpdateAS2TradingPartnerRequest,
 )
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.core.exceptions import IdempotencyConflictError, OrchestrationError
 from api.core.services import AS2PartnerService
-from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_platform_user_profile
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.headers import get_idempotency_key

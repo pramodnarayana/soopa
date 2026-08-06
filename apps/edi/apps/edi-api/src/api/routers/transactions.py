@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.uow import DataPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_data_plane_uow, get_global_session
 
@@ -169,9 +169,11 @@ async def get_transaction(
                 }
             )
 
+        from api.adapters.routing_resolver_repository import SqlAlchemyRoutingResolverRepository
         from api.core.services.routing_resolver import RoutingResolutionService
 
-        resolver = RoutingResolutionService(global_session, uow.tenant_session)
+        resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, uow.tenant_session)
+        resolver = RoutingResolutionService(resolver_repo)
         trading_partner_name, new_conn_type = await resolver.resolve_routing_context(
             msg, result.edi_jsons or []
         )

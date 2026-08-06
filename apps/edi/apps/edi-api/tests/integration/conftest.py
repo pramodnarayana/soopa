@@ -47,6 +47,13 @@ async def db_engine(postgres_container):
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
+
+        # Ensure all models are imported so they are registered with GlobalRegistry
+
         await conn.run_sync(GlobalRegistry.metadata.drop_all)
         await conn.run_sync(TenantBase.metadata.drop_all)
         await conn.run_sync(GlobalRegistry.metadata.create_all)
@@ -131,8 +138,8 @@ def override_get_vault():
 async def client(override_get_global_session, override_get_tenant_session, override_get_vault):
     from httpx import ASGITransport, AsyncClient
 
+    from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
     from api.auth.api_key import get_tenant_id_from_api_key
-    from api.core.uow import DataPlaneUnitOfWork
     from api.dependencies.auth import (
         get_current_tenant_id,
         get_current_user_profile,

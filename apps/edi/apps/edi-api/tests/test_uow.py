@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from api.core.uow import ControlPlaneUnitOfWork, DataPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ from typing import Any
 
 from pipeline.core.metadata_extractor import MetadataExtractorService
 
-from api.core.uow import DataPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 
 logger = logging.getLogger(__name__)
 

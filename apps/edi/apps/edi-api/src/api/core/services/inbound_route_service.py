@@ -3,13 +3,13 @@ import logging
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
 
-from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateInboundRouteCmd,
     InboundRouteListEntity,
     RouteEntity,
     UpdateInboundRouteCmd,
 )
+from api.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = logging.getLogger(__name__)
 

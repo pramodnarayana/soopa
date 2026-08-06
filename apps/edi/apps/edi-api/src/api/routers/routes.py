@@ -10,8 +10,8 @@ from api.adapters.http.dtos import (
     RouteResponse,
     UpdateRouteRequest,
 )
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.core.services import InboundRouteService, OutboundRouteService
-from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.headers import get_idempotency_key

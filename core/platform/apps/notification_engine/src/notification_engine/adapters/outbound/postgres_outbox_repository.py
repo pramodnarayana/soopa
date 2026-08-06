@@ -3,11 +3,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+from platform_orm.models.notifications import NotificationOutbox
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.notifications import NotificationOutbox
 
+from ...domain.models import NotificationOutboxEvent
 from ...ports.outbox_repository import NotificationOutboxRepositoryPort
 
 logger = logging.getLogger(__name__)
@@ -17,9 +18,18 @@ class PostgresOutboxRepository(NotificationOutboxRepositoryPort):
     def __init__(self, session_factory: Callable[[], AsyncSession]):
         self.session_factory = session_factory
 
-    async def save(self, message: NotificationOutbox) -> None:
+    async def save(self, message: NotificationOutboxEvent) -> None:
+        import os
+
         async with self.session_factory() as session, session.begin():
-            session.add(message)
+            orm_msg = NotificationOutbox(
+                id=f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+                tenant_id=message.tenant_id,
+                event_type=message.event_type,
+                idempotency_key=message.idempotency_key,
+                payload=message.payload,
+            )
+            session.add(orm_msg)
 
     async def sweep_stuck_messages(self, lock_lease_ms: int) -> int:
         async with self.session_factory() as session, session.begin():
@@ -37,7 +47,7 @@ class PostgresOutboxRepository(NotificationOutboxRepositoryPort):
 
     async def claim_next_messages(
         self, worker_id: str, limit: int, lock_lease_ms: int
-    ) -> list[NotificationOutbox]:
+    ) -> list[NotificationOutboxEvent]:
         async with self.session_factory() as session, session.begin():
             # 1. Select for update skip locked
             stmt = (
@@ -67,7 +77,18 @@ class PostgresOutboxRepository(NotificationOutboxRepositoryPort):
                 .returning(NotificationOutbox)
             )
             updated = await session.execute(update_stmt)
-            return list(updated.scalars().all())
+            orm_messages = list(updated.scalars().all())
+
+            return [
+                NotificationOutboxEvent(
+                    id=msg.id,
+                    tenant_id=msg.tenant_id,
+                    event_type=msg.event_type,
+                    idempotency_key=msg.idempotency_key,
+                    payload=msg.payload,
+                )
+                for msg in orm_messages
+            ]
 
     async def mark_completed(self, message_id: str, worker_id: str) -> None:
         async with self.session_factory() as session, session.begin():

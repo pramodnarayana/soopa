@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from api.adapters.http.dtos import PartnerResponse
-from api.core.uow import ControlPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.routers.trading_partners import as2, sftp
 
 _PREFIX = "/api/v1/trading-partners"

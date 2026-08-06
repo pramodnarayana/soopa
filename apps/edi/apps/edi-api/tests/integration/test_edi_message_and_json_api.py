@@ -3,7 +3,7 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
-from api.core.uow import DataPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 
 pytestmark = pytest.mark.asyncio
 

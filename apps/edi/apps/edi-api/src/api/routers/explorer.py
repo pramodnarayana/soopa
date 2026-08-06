@@ -3,7 +3,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, field_validator
 
-from api.core.uow import DataPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_data_plane_uow
 

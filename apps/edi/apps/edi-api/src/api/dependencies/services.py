@@ -4,7 +4,7 @@ from typing import Annotated
 
 from database.base_repository import GlobalSession
 from database.session import get_global_session
-from fastapi import Depends
+from fastapi import Depends, Request
 
 from api.adapters.api_token_repository import SqlAlchemyApiTokenRepository
 from api.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
@@ -18,6 +18,7 @@ from api.ports.message_queue import MessageQueuePort
 from api.ports.sftp_tester import SftpTesterPort
 from api.ports.tenant_repository import TenantRepositoryPort
 from api.ports.vault import VaultPort
+from api.services.as2_receiver_service import As2ReceiverService
 
 
 @lru_cache
@@ -53,3 +54,22 @@ def get_api_token_repo(
 ) -> ApiTokenRepositoryPort:
     """Yields the API token repository bound to the global (control plane) session."""
     return SqlAlchemyApiTokenRepository(session)
+
+
+def get_as2_receiver_service(
+    request: Request,
+    global_session: Annotated[GlobalSession, Depends(get_global_session)],
+    vault: Annotated[VaultPort, Depends(get_vault)],
+) -> As2ReceiverService:
+    from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork
+    from api.adapters.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
+
+    control_plane_uow = SqlAlchemyControlPlaneUnitOfWork(global_session)
+    dp_factory = SqlAlchemyDataPlaneUnitOfWorkFactory(
+        global_session=global_session, db_router=request.app.state.db_router
+    )
+    return As2ReceiverService(
+        control_plane_uow=control_plane_uow,
+        dp_factory=dp_factory,
+        vault=vault,
+    )

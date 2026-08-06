@@ -7,8 +7,8 @@ from api.adapters.http.dtos import (
     CreateOutboundEdiHeaderRequest,
     UpdateOutboundEdiHeaderRequest,
 )
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.core.services.edi_header_service import EdiHeaderService
-from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
 from api.dependencies.database import get_control_plane_uow
 from api.domain.models import (

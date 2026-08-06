@@ -7,8 +7,8 @@ export interface JobResponse {
   cron_expression: string | null;
   timezone: string | null;
   next_run_at: string | null;
-  locked_at: string | null;
-  locked_by: string | null;
+  lease_expires_at: string | null;
+  owner_token: string | null;
   retry_count: number;
   interval_seconds: number | null;
   min_interval_seconds: number | null;

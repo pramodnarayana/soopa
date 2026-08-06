@@ -1,12 +1,9 @@
 import logging
 
-from database.session import get_global_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.exceptions import OrchestrationError
-from api.dependencies.services import get_vault
-from api.ports.vault import VaultPort
+from api.dependencies.services import get_as2_receiver_service
 from api.services.as2_receiver_service import As2ReceiverService
 
 logger = logging.getLogger(__name__)
@@ -17,8 +14,7 @@ router = APIRouter(tags=["Platform - AS2 Receive"])
 @router.post("/as2/receive")
 async def receive_as2_message(
     request: Request,
-    global_session: AsyncSession = Depends(get_global_session),
-    vault: VaultPort = Depends(get_vault),
+    service: As2ReceiverService = Depends(get_as2_receiver_service),
 ) -> Response:
     """
     AS2 HTTP Adapter.
@@ -26,11 +22,6 @@ async def receive_as2_message(
     """
     body_bytes = await request.body()
     headers = dict(request.headers)
-
-    # Instantiate the application service (Use Case)
-    service = As2ReceiverService(
-        global_session=global_session, vault=vault, db_router=request.app.state.db_router
-    )
 
     # Extract headers for MDN generation in case of failure
     as2_to_hdr = headers.get("as2-to") or headers.get("AS2-To")

@@ -1,19 +1,20 @@
 from typing import Any
 
-from platform_orm.models.common import OutboxMixin
-from platform_orm.models.core import UcpBase
 from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
+from platform_orm.models.common import OutboxMixin
+from platform_orm.models.core import NotificationBase
 
-class NotificationTemplate(UcpBase):
+
+class NotificationTemplate(NotificationBase):
     __tablename__ = "notification_templates"
     ID_PREFIX = "notif_tmpl"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True, autoincrement=False)
     tenant_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("platform.tenants.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -23,11 +24,11 @@ class NotificationTemplate(UcpBase):
 
     __table_args__: Any = (
         UniqueConstraint("tenant_id", "event_type", "channel", name="notification_template_idx"),
-        {"schema": "ucp"},
+        {"schema": "notifications"},
     )
 
 
-class NotificationOutbox(UcpBase, OutboxMixin):
+class NotificationOutbox(NotificationBase, OutboxMixin):
     __tablename__ = "notification_outbox"
     ID_PREFIX = "notif_ob"
 
@@ -41,7 +42,7 @@ class NotificationOutbox(UcpBase, OutboxMixin):
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
-        {"schema": "ucp"},
+        {"schema": "notifications"},
     )
 
     @property

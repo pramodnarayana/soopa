@@ -25,3 +25,12 @@ class Template:
     channel: Channel
     subject: str | None
     body_content: str
+
+
+@dataclass(frozen=True)
+class NotificationOutboxEvent:
+    tenant_id: str
+    event_type: str
+    idempotency_key: str
+    payload: dict[str, Any]
+    id: str | None = None

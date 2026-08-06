@@ -66,7 +66,7 @@ def _make_mock_gw() -> MagicMock:
 @pytest.fixture
 def base_mock_uow():
     """Fresh mock UoW for every test — prevents side_effect state leakage."""
-    from api.core.uow import DataPlaneUnitOfWork
+    from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 
     mock_msg = _make_mock_msg()
     mock_json = _make_mock_json()
@@ -135,7 +135,7 @@ def test_get_transaction_thread():
 
 
 def test_get_transaction_detail_sftp():
-    from api.core.uow import DataPlaneUnitOfWork
+    from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
     from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_msg = MagicMock()
@@ -178,7 +178,7 @@ def test_get_transaction_detail_sftp():
 
 
 def test_get_transaction_detail_fallback():
-    from api.core.uow import DataPlaneUnitOfWork
+    from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
     from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_msg = MagicMock()
@@ -226,7 +226,7 @@ def test_get_transaction_detail_fallback():
 
 
 def test_get_transaction_not_found():
-    from api.core.uow import DataPlaneUnitOfWork
+    from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
     from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_uow = DataPlaneUnitOfWork(tenant_session=AsyncMock())
@@ -244,7 +244,7 @@ def test_get_transaction_not_found():
 
 
 def test_get_transaction_webhook_fallback():
-    from api.core.uow import DataPlaneUnitOfWork
+    from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
     from api.dependencies.database import get_data_plane_uow, get_global_session
 
     mock_repo = AsyncMock()

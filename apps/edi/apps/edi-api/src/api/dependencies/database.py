@@ -1,5 +1,6 @@
 import contextlib
 from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from database.base_repository import GlobalSession
 from database.session import get_global_session
@@ -10,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
+from api.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 from api.auth.api_key import get_tenant_id_from_api_key
-from api.core.uow import ControlPlaneUnitOfWork, DataPlaneUnitOfWork
 from api.dependencies.auth import get_current_tenant_id
+from api.ports.uow import ControlPlaneUnitOfWorkPort
 
 __all__ = [
     "get_control_plane_uow",
@@ -67,8 +70,8 @@ async def get_tenant_session(
 
 
 async def get_control_plane_uow(
-    global_session: GlobalSession = Depends(get_global_session),
-) -> ControlPlaneUnitOfWork:
+    global_session: Annotated[GlobalSession, Depends(get_global_session)],
+) -> ControlPlaneUnitOfWorkPort:
     return ControlPlaneUnitOfWork(global_session=global_session)
 
 

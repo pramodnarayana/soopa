@@ -21,7 +21,7 @@ class ShardRegistry(UcpBase):
     __tablename__ = "shard_registry"
 
     tenant_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("platform.tenants.id", ondelete="CASCADE"), primary_key=True
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), primary_key=True
     )
     app_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("ucp.apps.id", ondelete="CASCADE"), primary_key=True

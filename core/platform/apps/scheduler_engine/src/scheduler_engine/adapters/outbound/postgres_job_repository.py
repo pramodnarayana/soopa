@@ -15,10 +15,10 @@ class SqlAlchemyJobRepository:
     async def sweep_stuck_jobs(self, lock_lease_ms: int) -> int:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE ucp.scheduled_jobs
-                SET status = 'PENDING', locked_at = NULL, locked_by = NULL
+                UPDATE scheduling.job
+                SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
                 WHERE status = 'RUNNING'
-                  AND locked_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
+                  AND lease_expires_at <= NOW()
             """)
             result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
             await session.commit()
@@ -29,13 +29,13 @@ class SqlAlchemyJobRepository:
     ) -> list[ScheduledJob]:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE ucp.scheduled_jobs
-                SET status = 'RUNNING', locked_at = NOW(), locked_by = :worker_id
+                UPDATE scheduling.job
+                SET status = 'RUNNING', lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
                 WHERE id IN (
-                    SELECT id FROM ucp.scheduled_jobs
-                    WHERE (status = 'PENDING' OR (status = 'RUNNING' AND locked_at < NOW() - interval '1 millisecond' * :lock_lease_ms))
-                      AND (next_run_at IS NULL OR next_run_at <= NOW())
-                    ORDER BY next_run_at ASC NULLS FIRST, created_at ASC
+                    SELECT id FROM scheduling.job
+                    WHERE (status = 'PENDING' OR (status = 'RUNNING' AND lease_expires_at < NOW()))
+                      AND next_run_at <= NOW()
+                    ORDER BY next_run_at ASC, id ASC
                     LIMIT :limit
                     FOR UPDATE SKIP LOCKED
                 )
@@ -72,9 +72,9 @@ class SqlAlchemyJobRepository:
     async def reschedule(self, job_id: str, worker_id: str, next_run_at: datetime) -> None:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE ucp.scheduled_jobs
-                SET status = 'PENDING', locked_at = NULL, locked_by = NULL, retry_count = 0, next_run_at = :next_run_at
-                WHERE id = :job_id AND status = 'RUNNING' AND locked_by = :worker_id
+                UPDATE scheduling.job
+                SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL, retry_count = 0, next_run_at = :next_run_at
+                WHERE id = :job_id AND status = 'RUNNING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
@@ -91,9 +91,9 @@ class SqlAlchemyJobRepository:
     ) -> None:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE ucp.scheduled_jobs
-                SET status = 'PENDING', locked_at = NULL, locked_by = NULL, retry_count = :retry_count, next_run_at = :next_run_at
-                WHERE id = :job_id AND status = 'RUNNING' AND locked_by = :worker_id
+                UPDATE scheduling.job
+                SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL, retry_count = :retry_count, next_run_at = :next_run_at
+                WHERE id = :job_id AND status = 'RUNNING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
@@ -109,9 +109,9 @@ class SqlAlchemyJobRepository:
     async def mark_completed(self, job_id: str, worker_id: str) -> None:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE ucp.scheduled_jobs
-                SET status = 'COMPLETED', locked_at = NULL, locked_by = NULL
-                WHERE id = :job_id AND status = 'RUNNING' AND locked_by = :worker_id
+                UPDATE scheduling.job
+                SET status = 'COMPLETED', lease_expires_at = NULL, owner_token = NULL
+                WHERE id = :job_id AND status = 'RUNNING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
@@ -125,9 +125,9 @@ class SqlAlchemyJobRepository:
     async def mark_failed(self, job_id: str, worker_id: str, error_message: str) -> None:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE ucp.scheduled_jobs
-                SET status = 'FAILED', locked_at = NULL, locked_by = NULL, error_message = :error_message
-                WHERE id = :job_id AND status = 'RUNNING' AND locked_by = :worker_id
+                UPDATE scheduling.job
+                SET status = 'FAILED', lease_expires_at = NULL, owner_token = NULL, error_message = :error_message
+                WHERE id = :job_id AND status = 'RUNNING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,

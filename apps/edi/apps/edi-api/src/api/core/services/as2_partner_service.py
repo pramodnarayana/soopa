@@ -7,12 +7,12 @@ from domain.events import (
 )
 from domain.models import ConnectionType, PartnerStatus
 
-from api.core.uow import ControlPlaneUnitOfWork
 from api.domain.models import (
     CreateAS2TradingPartnerCmd,
     PartnerEntity,
     UpdateAS2TradingPartnerCmd,
 )
+from api.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,6 @@ class AS2PartnerService:
         import hashlib
         import json
 
-        from sqlalchemy.exc import IntegrityError
-
         from api.core.exceptions import IdempotencyConflictError
 
         fingerprint = hashlib.sha256(json.dumps(request_data, sort_keys=True).encode()).hexdigest()
@@ -42,7 +40,7 @@ class AS2PartnerService:
             await self.uow.control_plane_outbox.create_reservation(
                 tenant_id, idempotency_key, fingerprint
             )
-        except IntegrityError:
+        except IdempotencyConflictError:
             existing_event = await self.uow.control_plane_outbox.get_event_by_idempotency_key(
                 idempotency_key
             )

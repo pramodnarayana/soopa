@@ -6,8 +6,8 @@ from database.models.control_plane import (
 )
 from domain.models import InboundRouteDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from platform_orm.models.observability import Webhook
 from sqlalchemy import delete, or_, select
-from ucp_models.webhooks import Webhook
 
 from api.domain.models import (
     CreateInboundRouteCmd,

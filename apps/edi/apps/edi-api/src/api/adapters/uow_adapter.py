@@ -19,9 +19,9 @@ from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
 from api.adapters.webhook_repository import SqlAlchemyWebhookRepository
 
 
-class ControlPlaneUnitOfWork:
+class SqlAlchemyControlPlaneUnitOfWork:
     """
-    Unit of Work for the Control Plane (Global Schema).
+    Concrete Unit of Work for the Control Plane (Global Schema).
     Manages transactions exclusively for global configuration and routing tables.
     """
 
@@ -71,9 +71,9 @@ class ControlPlaneUnitOfWork:
         await self.global_session.rollback()
 
 
-class DataPlaneUnitOfWork:
+class SqlAlchemyDataPlaneUnitOfWork:
     """
-    Unit of Work for the Data Plane (Tenant Schema).
+    Concrete Unit of Work for the Data Plane (Tenant Schema).
     Manages transactions exclusively for a specific tenant's data and message processing.
     """
 

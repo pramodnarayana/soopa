@@ -1,13 +1,13 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.core import PlatformBase
+from platform_orm.models.core import IdentityBase
 
 
-class Tenant(PlatformBase):
+class Tenant(IdentityBase):
     __tablename__ = "tenants"
     ID_PREFIX = "ten"
 
@@ -23,10 +23,10 @@ class Tenant(PlatformBase):
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    __table_args__ = ({"schema": "platform"},)
+    __table_args__ = ({"schema": "identity"},)
 
 
-class User(PlatformBase):
+class User(IdentityBase):
     __tablename__ = "users"
     ID_PREFIX = "usr"
 
@@ -45,29 +45,29 @@ class User(PlatformBase):
     )
 
     __table_args__ = (
-        Index("uq_users_email_lower", text("lower(email)"), unique=True),
-        {"schema": "platform"},
+        Index("uq_users_email_lower", func.lower(email), unique=True),
+        {"schema": "identity"},
     )
 
 
-class TenantUser(PlatformBase):
+class TenantUser(IdentityBase):
     __tablename__ = "tenant_users"
 
     tenant_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("platform.tenants.id", ondelete="CASCADE"), primary_key=True
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), primary_key=True
     )
     user_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("platform.users.id", ondelete="CASCADE"), primary_key=True
+        String(128), ForeignKey("identity.users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), server_default=func.now()
     )
 
-    __table_args__ = ({"schema": "platform"},)
+    __table_args__ = ({"schema": "identity"},)
 
 
-class ApiToken(PlatformBase):
+class ApiToken(IdentityBase):
     """
     Platform-managed API keys for machine-to-machine (ERP → Platform) authentication.
     """
@@ -78,7 +78,7 @@ class ApiToken(PlatformBase):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("platform.tenants.id", ondelete="CASCADE"),
+        ForeignKey("identity.tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -97,10 +97,10 @@ class ApiToken(PlatformBase):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    __table_args__ = ({"schema": "platform"},)
+    __table_args__ = ({"schema": "identity"},)
 
 
-class ApiKey(PlatformBase):
+class ApiKey(IdentityBase):
     """
     Platform-managed API keys.
     """
@@ -111,7 +111,7 @@ class ApiKey(PlatformBase):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("platform.tenants.id", ondelete="CASCADE"),
+        ForeignKey("identity.tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -122,4 +122,4 @@ class ApiKey(PlatformBase):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    __table_args__ = ({"schema": "platform"},)
+    __table_args__ = ({"schema": "identity"},)

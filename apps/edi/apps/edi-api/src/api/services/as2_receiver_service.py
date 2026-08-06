@@ -9,14 +9,10 @@ from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
 from domain.events import PipelineEventType
-from platform_orm.models.identity import Tenant
 from security.smime import decrypt_payload, verify_signature
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
-from ucp_models.subscriptions import App
 
-from api.core.uow import ControlPlaneUnitOfWork
+from api.ports.uow import ControlPlaneUnitOfWorkPort
+from api.ports.uow_factory import DataPlaneUnitOfWorkFactoryPort
 from api.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
@@ -28,11 +24,15 @@ class As2ReceiverService:
     Strictly follows Single Responsibility Principle and encapsulates business logic.
     """
 
-    def __init__(self, global_session: AsyncSession, vault: VaultPort, db_router: Any):
-        self.global_session = global_session
+    def __init__(
+        self,
+        control_plane_uow: ControlPlaneUnitOfWorkPort,
+        dp_factory: DataPlaneUnitOfWorkFactoryPort,
+        vault: VaultPort,
+    ):
+        self.control_plane_uow = control_plane_uow
+        self.dp_factory = dp_factory
         self.vault = vault
-        self.db_router = db_router
-        self.control_plane_uow = ControlPlaneUnitOfWork(global_session=global_session)
 
     async def process_inbound_message(
         self, headers: dict[str, str], body_bytes: bytes
@@ -367,30 +367,11 @@ class As2ReceiverService:
             "status": "RECEIVED",
         }
 
-        # 3. Save directly to the true Tenant's Data Plane Shard
-        stmt = (
-            select(Tenant, DatabaseShard)
-            .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
-            .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
-            .join(App, App.id == ShardRegistry.app_id)
-            .where(Tenant.id == true_tenant_id, App.slug == "edi")
-        )
-        result = await self.global_session.execute(stmt)
-        row = result.first()
-        if not row:
-            logger.error(f"Tenant {true_tenant_id} not found in global DB")
-            raise ValueError("Tenant routing failed")
-
-        _tenant, shard = row
-        async_gen_tenant = self.db_router.get_tenant_session(true_tenant_id, shard.name, shard.dsn)
-        tenant_session = await anext(async_gen_tenant)
-        try:
-            from api.adapters.outbox_repository import SqlAlchemyDataPlaneOutboxRepository
-            from api.adapters.transaction_repository import SqlAlchemyTransactionRepository
-
-            dp_repo = SqlAlchemyTransactionRepository(tenant_session)
-            outbox_repo = SqlAlchemyDataPlaneOutboxRepository(tenant_session)
-            msg_id = await dp_repo.create_edi_message(tenant_id=true_tenant_id, payload=edi_record)
+        # 3. Save directly to the true Tenant's Data Plane Shard using the factory
+        async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
+            msg_id = await dp_uow.transactions.create_edi_message(
+                tenant_id=true_tenant_id, payload=edi_record
+            )
 
             outbox_payload = {
                 "edi_message_id": str(msg_id),
@@ -399,15 +380,13 @@ class As2ReceiverService:
                 "receiver_id": isa_receiver,
                 "status": "RECEIVED",
             }
-            await outbox_repo.publish_outbox_event(
+            await dp_uow.data_plane_outbox.publish_outbox_event(
                 tenant_id=true_tenant_id,
                 event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload=outbox_payload,
                 idempotency_key=msg_id,
             )
 
-            await tenant_session.commit()
+            await dp_uow.commit()
 
             return str(msg_id)
-        finally:
-            await async_gen_tenant.aclose()

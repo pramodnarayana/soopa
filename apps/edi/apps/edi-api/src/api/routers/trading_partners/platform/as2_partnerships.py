@@ -12,9 +12,9 @@ from api.adapters.http.dtos import (
     TestAS2ConnectionResponse,
     UpdateAS2PartnershipRequest,
 )
+from api.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from api.core.exceptions import OrchestrationError
 from api.core.services import AS2PartnershipService
-from api.core.uow import ControlPlaneUnitOfWork
 from api.dependencies.database import get_control_plane_uow
 from api.dependencies.services import get_as2_tester, get_vault
 from api.domain.models import (

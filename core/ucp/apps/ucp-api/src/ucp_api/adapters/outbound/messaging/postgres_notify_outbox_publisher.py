@@ -3,7 +3,8 @@ import logging
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from ucp_models.events import ControlPlaneOutbox
+
+from ucp_api.domain.models.outbox_event import OutboxEvent
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class PostgresNotifyOutboxPublisher:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self.session_factory = session_factory
 
-    async def publish(self, event: ControlPlaneOutbox) -> None:
+    async def publish(self, event: OutboxEvent) -> None:
         async with self.session_factory() as session:
             # Prefer notifying with just the event ID to avoid payload size limits
             payload_str = json.dumps(

@@ -1,6 +1,7 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from ucp_models.events import ControlPlaneOutbox
+
+from ....domain.models.outbox_event import OutboxEvent
 
 
 class PostgresOutboxRepository:
@@ -11,9 +12,9 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'PENDING', locked_at = NULL, locked_by = NULL
+                SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
                 WHERE status = 'PROCESSING'
-                  AND locked_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
+                  AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
             """)
             result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
             await session.commit()
@@ -21,14 +22,14 @@ class PostgresOutboxRepository:
 
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int
-    ) -> list[ControlPlaneOutbox]:
+    ) -> list[OutboxEvent]:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'PROCESSING', locked_at = NOW(), locked_by = :worker_id
+                SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
                 WHERE id IN (
                     SELECT id FROM ucp.outbox
-                    WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND locked_at < NOW() - interval '1 millisecond' * :lock_lease_ms))
+                    WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
                     ORDER BY created_at ASC
                     LIMIT :limit
                     FOR UPDATE SKIP LOCKED
@@ -49,13 +50,12 @@ class PostgresOutboxRepository:
             for row in result:
                 mapping = row._mapping
                 events.append(
-                    ControlPlaneOutbox(
+                    OutboxEvent(
                         id=mapping["id"],
                         event_type=mapping["event_type"],
                         payload=mapping["payload"],
                         idempotency_key=mapping.get("idempotency_key"),
                         tenant_id=mapping.get("tenant_id"),
-                        status=mapping["status"],
                     )
                 )
             return events
@@ -64,8 +64,8 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'COMPLETED', locked_at = NULL, locked_by = NULL
-                WHERE id = :event_id AND status = 'PROCESSING' AND locked_by = :worker_id
+                SET status = 'COMPLETED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
+                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
@@ -80,8 +80,8 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'FAILED', locked_at = NULL, locked_by = NULL, error_message = :error_message
-                WHERE id = :event_id AND status = 'PROCESSING' AND locked_by = :worker_id
+                SET status = 'FAILED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,

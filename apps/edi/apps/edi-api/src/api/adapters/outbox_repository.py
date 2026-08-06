@@ -88,6 +88,9 @@ class SqlAlchemyControlPlaneOutboxRepository(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
     ) -> None:
         from sqlalchemy import insert
+        from sqlalchemy.exc import IntegrityError
+
+        from api.core.exceptions import IdempotencyConflictError
 
         insert_stmt = insert(self.model_class).values(
             id=f"reservation_{idempotency_key}",
@@ -98,8 +101,11 @@ class SqlAlchemyControlPlaneOutboxRepository(
             status="RESERVED",
             attempts=0,
         )
-        await self.session.execute(insert_stmt)
-        await self.session.flush()
+        try:
+            await self.session.execute(insert_stmt)
+            await self.session.flush()
+        except IntegrityError as e:
+            raise IdempotencyConflictError() from e
 
 
 class SqlAlchemyDataPlaneOutboxRepository(
