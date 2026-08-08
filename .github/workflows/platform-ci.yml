@@ -76,7 +76,7 @@ jobs:
       - name: Start Database
         run: |
           docker compose up -d postgres_global --wait
-          pnpm db:migrate
+          pnpm db:migrate:platform
           pnpm db:seed
 
       - name: Test (Node)

@@ -76,7 +76,7 @@ jobs:
 
       - name: Start Database
         run: |
-          docker compose up -d postgres_global edi_postgres_shard_1 localstack --wait
+          docker compose up -d postgres_global edi_postgres_shard localstack --wait
           pnpm db:migrate
           pnpm db:seed
           uv run --directory apps/edi/packages/database python -m database.run_migrations
