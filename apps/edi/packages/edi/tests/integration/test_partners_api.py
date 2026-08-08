@@ -17,14 +17,14 @@ async def test_create_and_get_sftp_partner(client: AsyncClient):
         "active": True,
     }
 
-    response = await client.post("/api/v1/trading-partners/sftp", json=payload)
+    response = await client.post("/api/v1/tenants/1/edi/trading-partners/sftp", json=payload)
     assert response.status_code == 201, response.text
     data = response.json()
     assert "id" in data
     partner_id = data["id"]
 
     # Test getting the partner back
-    response = await client.get("/api/v1/trading-partners")
+    response = await client.get("/api/v1/tenants/1/edi/trading-partners")
     assert response.status_code == 200, response.text
     fetched_list = response.json()
     fetched = next((p for p in fetched_list if p["id"] == partner_id), None)
@@ -41,7 +41,7 @@ async def test_create_and_get_sftp_partner(client: AsyncClient):
         # Missing host which is probably required
         "port": 22,
     }
-    response = await client.post("/api/v1/trading-partners/sftp", json=bad_payload)
+    response = await client.post("/api/v1/tenants/1/edi/trading-partners/sftp", json=bad_payload)
     assert response.status_code == 422  # Pydantic validation error
 
 
