@@ -4,13 +4,10 @@ from logging.config import fileConfig
 
 from alembic import context
 from dotenv import load_dotenv
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-import platform_orm.models.identity
-import platform_orm.models.notifications
-import platform_orm.models.scheduling  # noqa: F401
 from platform_orm.models.core import GlobalRegistry
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
@@ -65,7 +62,19 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     def include_name(name, type_, parent_names):
         if type_ == "schema":
-            return name in [None, "ucp", "platform"]
+            return name in [None, "ucp", "identity", "notifications", "scheduling", "observability"]
+        return True
+
+    def include_object(object, name, type_, reflected, compare_to):
+        if type_ == "table":
+            return getattr(object, "schema", None) in [
+                None,
+                "ucp",
+                "identity",
+                "notifications",
+                "scheduling",
+                "observability",
+            ]
         return True
 
     context.configure(
@@ -73,6 +82,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         include_schemas=True,
         include_name=include_name,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -92,7 +102,16 @@ async def run_async_migrations() -> None:
     )
 
     async with connectable.connect() as connection:
+        # Ensure schemas exist before running migrations
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS ucp;"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS platform;"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS identity;"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS notifications;"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling;"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS observability;"))
+
         await connection.run_sync(do_run_migrations)
+        await connection.commit()
 
     await connectable.dispose()
 

@@ -26,12 +26,10 @@
   "ignore": [
     "core/ucp/apps/dashboard/src/components/ui/**",
     "ecosystem.config.cjs",
-    "core/ucp/apps/ucp-api/test/**",
     "apps/edi/packages/ui/src/components/ui/**",
     "apps/edi/packages/ui/src/App.css",
     "apps/edi/packages/ui/src/App.tsx",
     "core/platform/packages/schemas/src/generated/event-type.d.ts",
-    "core/ucp/apps/ucp-api/src/adapters/inbound/http/api-key.guard.ts",
     "core/ucp/sdks/node/notification/src/index.ts",
     "apps/edi/packages/ui/src/features/**",
     "apps/edi/packages/ui/src/routes/**",

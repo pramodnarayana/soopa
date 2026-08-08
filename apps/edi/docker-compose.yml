@@ -3,7 +3,7 @@ version: '3.9'
 # - libs/identity/docker/docker-compose.yml
 services:
 
-  edi_postgres_shard_1:
+  edi_postgres_shard:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: edi
@@ -16,7 +16,7 @@ services:
     ports:
     - 5433:5432
     volumes:
-    - edi_postgres_shard_1_data:/var/lib/postgresql/data
+    - edi_postgres_shard_data:/var/lib/postgresql/data
     healthcheck:
       test:
       - CMD-SHELL
@@ -48,15 +48,15 @@ services:
     ports:
     - 8002:80
     command: "/bin/sh -c \"echo '\nserver {\n    listen 80;\n    location / {\n  \
-      \      proxy_pass http://host.docker.internal:8001;\n        proxy_set_header\
+      \      proxy_pass http://host.docker.internal:3000;\n        proxy_set_header\
       \ Connection \\\"\\\";\n        proxy_set_header Upgrade \\\"\\\";\n    }\n\
       }' > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'\""
     extra_hosts:
     - host.docker.internal:host-gateway
-  debezium_shard_1:
+  debezium_shard:
     image: quay.io/debezium/server:2.7.3.Final
     environment:
-    - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard_1
+    - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard
     - DEBEZIUM_SOURCE_DATABASE_PORT=5432
     - DEBEZIUM_SOURCE_DATABASE_USER=edi
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
@@ -68,9 +68,9 @@ services:
     - ./docker/debezium/application.properties:/debezium/conf/application.properties
     - debezium_data:/debezium/data
     depends_on:
-      edi_postgres_shard_1:
+      edi_postgres_shard:
         condition: service_healthy
 volumes:
-  edi_postgres_shard_1_data: null
+  edi_postgres_shard_data: null
   postgres_enterprise_1_data: null
   debezium_data: null

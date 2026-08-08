@@ -134,3 +134,63 @@ async def test_update_api_payload_status() -> None:
 
     mock_session.execute.assert_awaited_once()
     mock_session.flush.assert_awaited_once()
+
+
+async def test_get_as2_partner_inactive_raises() -> None:
+    from database.models.data_plane import AS2Partner, AS2Partnership
+
+    mock_session = AsyncMock()
+
+    mock_partner = MagicMock(spec=AS2Partner)
+    mock_partner.active = False
+
+    mock_partnership = MagicMock(spec=AS2Partnership)
+    mock_partnership.active = True
+
+    mock_result = MagicMock()
+    mock_result.first.return_value = (mock_partner, mock_partnership)
+    mock_session.execute.return_value = mock_result
+
+    adapter = make_adapter(mock_session)
+
+    with pytest.raises(ValueError, match="exists but is inactive"):
+        await adapter.get_as2_partner("as2_123")
+
+
+async def test_get_as2_partnership_inactive_raises() -> None:
+    from database.models.data_plane import AS2Partner, AS2Partnership
+
+    mock_session = AsyncMock()
+
+    mock_partner = MagicMock(spec=AS2Partner)
+    mock_partner.active = True
+
+    mock_partnership = MagicMock(spec=AS2Partnership)
+    mock_partnership.active = False
+
+    mock_result = MagicMock()
+    mock_result.first.return_value = (mock_partner, mock_partnership)
+    mock_session.execute.return_value = mock_result
+
+    adapter = make_adapter(mock_session)
+
+    with pytest.raises(ValueError, match="Partnership for as2_123 exists but is inactive"):
+        await adapter.get_as2_partner("as2_123")
+
+
+async def test_get_local_as2_partner_inactive_raises() -> None:
+    from database.models.data_plane import AS2Partner
+
+    mock_session = AsyncMock()
+
+    mock_partner = MagicMock(spec=AS2Partner)
+    mock_partner.active = False
+
+    mock_result = MagicMock()
+    mock_result.scalars().first.return_value = mock_partner
+    mock_session.execute.return_value = mock_result
+
+    adapter = make_adapter(mock_session)
+
+    with pytest.raises(ValueError, match="Local AS2 Partner as2_123 exists but is inactive"):
+        await adapter.get_local_as2_partner("as2_123")

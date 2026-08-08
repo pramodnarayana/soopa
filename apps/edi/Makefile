@@ -46,9 +46,8 @@ check-all: format lint typecheck test
 # --- Local Development Server ---
 
 dev:
-	@echo "Starting API and Workers concurrently..."
-	exec pnpm dlx concurrently --kill-others -c "blue,magenta,cyan,yellow" -n "api,as2,orch,comp" \
-		"make dev-api" \
+	@echo "Starting AS2 and Workers concurrently..."
+	exec pnpm dlx concurrently --kill-others -c "magenta,cyan,yellow" -n "as2,orch,comp" \
 		"make dev-as2" \
 		"make dev-worker-orchestrator" \
 		"make dev-worker-compute"
@@ -59,7 +58,7 @@ check-env:
 
 dev-as2: check-env
 	@echo "Starting AS2 Server with hot-reload for local development..."
-	exec env ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
+	exec env ENVIRONMENT=development IDENTITY_AUDIENCE="api-gateway,$(ZITADEL_EDI_PROJECT_ID),$(ZITADEL_UCP_PROJECT_ID)" PYTHONPATH=apps/edi-as2-server/src uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-api: check-env
 	@echo "Starting API Gateway with hot-reload for local development..."

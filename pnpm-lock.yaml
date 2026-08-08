@@ -73,8 +73,6 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
-  apps/edi/apps/edi-api: {}
-
   apps/edi/apps/edi-as2-server: {}
 
   apps/edi/packages/as2_core: {}
@@ -86,6 +84,8 @@ importers:
   apps/edi/packages/database: {}
 
   apps/edi/packages/domain: {}
+
+  apps/edi/packages/edi: {}
 
   apps/edi/packages/grammar: {}
 
@@ -421,9 +421,9 @@ importers:
         specifier: ^8.1.1
         version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)
 
-  core/ucp/apps/ucp-api: {}
-
   core/ucp/packages/models: {}
+
+  core/ucp/packages/ucp: {}
 
 packages:
 
