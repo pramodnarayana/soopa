@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 async def handle_provision_all_tenants(
     service: "ProvisioningWorkerService", event: ProvisioningEvent, event_id: str
 ) -> None:
-    logger.info(f"Processing provision event {event_id} for all tenants. Broadcasting...")
+    logger.info(
+        f"[DEV-LOG] Processing global provision event {event_id} for all tenants. Broadcasting..."
+    )
     try:
         all_tenant_ids = await service.tenant_port.get_all_tenant_ids()
         _semaphore = asyncio.Semaphore(10)
@@ -103,7 +105,7 @@ class ProvisioningWorkerService:
     async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
         if tenant_id == PLATFORM_TENANT_ID:
             logger.info(
-                f"Master Tenant detected. Broadcasting global platform event {replicate_fn.__name__} to all tenant databases"
+                f"[DEV-LOG] Master Tenant detected. Broadcasting global platform event {replicate_fn.__name__} to all tenant databases"
             )
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []
@@ -146,7 +148,9 @@ class ProvisioningWorkerService:
                 if parsed_event.event_type == LegacyUcpEventType.PROVISION_ALL_TENANTS:
                     await handle_provision_all_tenants(self, parsed_event, str(event.id))
                 elif parsed_event.event_type == LegacyUcpEventType.PROVISION_TENANT:
-                    logger.info(f"Provisioning tenant configuration for {parsed_event.tenant_id}")
+                    logger.info(
+                        f"[DEV-LOG] Provisioning tenant configuration for {parsed_event.tenant_id}"
+                    )
                     await self.replication_port.replicate_tenant_configuration(
                         parsed_event.tenant_id
                     )
@@ -163,7 +167,7 @@ class ProvisioningWorkerService:
                         )
 
                     logger.info(
-                        f"Processing {parsed_event.event_type} for resource {parsed_event.resource_id} in tenant {parsed_event.tenant_id}"
+                        f"[DEV-LOG] Dispatching {parsed_event.event_type} for resource {parsed_event.resource_id} in tenant {parsed_event.tenant_id}"
                     )
                     await self._broadcast_or_replicate(
                         parsed_event.tenant_id, handler, parsed_event.resource_id

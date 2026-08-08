@@ -597,8 +597,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             .join(AS2Partnership, AS2Partnership.remote_partner_id == AS2Partner.id)
             .where(
                 AS2Partner.id == str(partner_id),
-                AS2Partner.active.is_(True),
-                AS2Partnership.active.is_(True),
             )
         )
         result = await self.session.execute(stmt)
@@ -606,6 +604,12 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if not record:
             return None
         partner, partnership = record
+
+        if not partner.active:
+            raise ValueError(f"AS2 Partner {partner_id} exists but is inactive.")
+        if not partnership.active:
+            raise ValueError(f"AS2 Partnership for {partner_id} exists but is inactive.")
+
         return {
             "name": partner.name,
             "as2_id": partner.as2_id,
@@ -625,16 +629,19 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         result = await self.session.execute(
             select(AS2Partner).where(
                 AS2Partner.id == str(partner_id),
-                AS2Partner.active.is_(True),
             )
         )
-        record = result.scalar_one_or_none()
-        if not record:
+        partner = result.scalars().first()
+        if not partner:
             return None
+
+        if not partner.active:
+            raise ValueError(f"Local AS2 Partner {partner_id} exists but is inactive.")
+
         return {
-            "name": record.name,
-            "as2_id": record.as2_id,
-            "public_cert_pem": record.public_cert_pem,
-            "public_cert_vault_ref": record.public_cert_vault_ref,
-            "private_key_vault_ref": record.private_key_vault_ref,
+            "name": partner.name,
+            "as2_id": partner.as2_id,
+            "public_cert_pem": partner.public_cert_pem,
+            "public_cert_vault_ref": partner.public_cert_vault_ref,
+            "private_key_vault_ref": partner.private_key_vault_ref,
         }

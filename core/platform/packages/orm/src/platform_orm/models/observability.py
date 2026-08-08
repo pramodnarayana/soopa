@@ -1,10 +1,8 @@
 from datetime import UTC, datetime
 
-from database.models.replicated_mixins import WebhookMixin
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.common import TimestampMixin
 from platform_orm.models.core import ObservabilityBase
 
 
@@ -25,6 +23,3 @@ class SystemAuditLog(ObservabilityBase):
         Index("ix_system_audit_log_tenant_time", "tenant_id", "created_at"),
         {"schema": "observability"},
     )
-
-
-

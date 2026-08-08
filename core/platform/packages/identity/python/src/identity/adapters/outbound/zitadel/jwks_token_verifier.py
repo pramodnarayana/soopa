@@ -1,9 +1,11 @@
 import asyncio
 import hashlib
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import jwt
 from jwt import PyJWKClient
 
@@ -26,7 +28,8 @@ class ZitadelTokenVerifier(TokenVerifier):
         self._options = options
         self._jwks_url = options.jwks_url or f"{options.issuer}/oauth/v2/keys"
         self._jwks_client = PyJWKClient(self._jwks_url)
-        # Cache for userinfo to prevent network calls on every request: {jti: (userinfo_dict, timestamp)}
+        # Thread-safe async cache for userinfo to prevent network calls on every request
+        # Format: {jti: (userinfo_dict, timestamp)}
         self._userinfo_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
     async def verify(self, token: str) -> TokenClaims:
@@ -68,32 +71,33 @@ class ZitadelTokenVerifier(TokenVerifier):
         return await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)
 
     async def _get_cached_userinfo(self, token: str, jti: str) -> dict[str, Any]:
-        import json
-        import time
-        from urllib.request import Request, urlopen
-
         now = time.time()
-        # Check cache (1 hour TTL)
+
+        # Check TTL cache (O(1) access)
         if jti in self._userinfo_cache:
             userinfo, timestamp = self._userinfo_cache[jti]
             if now - timestamp < 3600:
                 return userinfo
+            else:
+                del self._userinfo_cache[jti]
 
-        # Fetch from Zitadel if not cached or expired
+        # Fetch from Zitadel asynchronously (no thread pool exhaustion)
         url = f"{self._options.issuer}/oidc/v1/userinfo"
-        req = Request(url, headers={"Authorization": f"Bearer {token}"})
+        headers = {"Authorization": f"Bearer {token}"}
 
-        def _fetch() -> dict[str, Any]:
-            with urlopen(req, timeout=5) as response:
-                return dict(json.loads(response.read().decode()))
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            userinfo = response.json()
 
-        userinfo = await asyncio.to_thread(_fetch)
-
-        # Update cache and prevent memory leaks
+        # Update cache
         self._userinfo_cache[jti] = (userinfo, now)
+
+        # O(1) eviction for maxsize
         if len(self._userinfo_cache) > 1000:
-            # Simple cleanup: keep newest 500
-            sorted_cache = sorted(self._userinfo_cache.items(), key=lambda x: x[1][1], reverse=True)
-            self._userinfo_cache = dict(sorted_cache[:500])
+            # Dictionaries in Python 3.7+ maintain insertion order.
+            # Delete the oldest key (the first one added)
+            oldest_key = next(iter(self._userinfo_cache))
+            del self._userinfo_cache[oldest_key]
 
         return userinfo

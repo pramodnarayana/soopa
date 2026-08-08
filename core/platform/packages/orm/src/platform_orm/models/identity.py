@@ -60,8 +60,14 @@ class TenantUser(IdentityBase):
         String(128), ForeignKey("identity.users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
+    active: Mapped[bool] = mapped_column(default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
     __table_args__ = ({"schema": "identity"},)
@@ -121,5 +127,11 @@ class ApiKey(IdentityBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+    active: Mapped[bool] = mapped_column(default=True, server_default="true")
 
     __table_args__ = ({"schema": "identity"},)

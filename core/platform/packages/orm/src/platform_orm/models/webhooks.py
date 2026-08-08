@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from database.models.replicated_mixins import WebhookMixin
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column

@@ -18,6 +18,7 @@ export { TenantUsers as UsersPage } from './routes/tenant/users';
 export { WebhooksPage } from './routes/tenant/webhooks';
 
 import { EdiNetworkProvider } from './contexts/EdiNetworkContext';
+import { EdiPlatformNetworkProvider } from './contexts/EdiPlatformNetworkContext';
 import { TenantProvider } from './contexts/TenantContext';
 import { UcpNetworkProvider } from './contexts/UcpNetworkContext';
 
@@ -25,27 +26,35 @@ export function EdiUIProvider({
   children,
   tenantId,
   baseUrl,
+  ediPlatformBaseUrl,
   ucpBaseUrl,
   token,
 }: {
   children: React.ReactNode;
   tenantId?: string;
   baseUrl: string;
+  ediPlatformBaseUrl: string;
   ucpBaseUrl: string;
   token?: string;
 }) {
   return (
     <TenantProvider tenantId={tenantId}>
       <UcpNetworkProvider baseUrl={ucpBaseUrl} token={token}>
-        <EdiNetworkProvider baseUrl={baseUrl} token={token}>
-          {children}
-        </EdiNetworkProvider>
+        <EdiPlatformNetworkProvider baseUrl={ediPlatformBaseUrl} token={token}>
+          <EdiNetworkProvider baseUrl={baseUrl} token={token}>
+            {children}
+          </EdiNetworkProvider>
+        </EdiPlatformNetworkProvider>
       </UcpNetworkProvider>
     </TenantProvider>
   );
 }
 
 export { useEdiNetwork } from './contexts/EdiNetworkContext';
+export {
+  EdiPlatformNetworkProvider,
+  useEdiPlatformNetwork,
+} from './contexts/EdiPlatformNetworkContext';
 export { UcpNetworkProvider, useUcpNetwork } from './contexts/UcpNetworkContext';
 export { DashboardProvider } from './features/dashboard/api/DashboardContext';
 export type { IDashboardRepository } from './features/dashboard/api/IDashboardRepository';

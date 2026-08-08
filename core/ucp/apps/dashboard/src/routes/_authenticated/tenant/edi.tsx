@@ -1,6 +1,10 @@
 import { EdiUIProvider, SFTPPartnersProvider } from '@soopa/edi-ui';
+import { AppNotSubscribed } from '@soopa/ui';
 import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { Loader2 } from 'lucide-react';
 import { useTenantContext } from '../../../contexts/TenantContext';
+import { useGetTenant } from '../../../domains/tenants/api/queries';
+import { config } from '../../../lib/config';
 
 export const Route = createFileRoute('/_authenticated/tenant/edi')({
   component: EdiLayout,
@@ -9,14 +13,32 @@ export const Route = createFileRoute('/_authenticated/tenant/edi')({
 function EdiLayout() {
   const { tenantId, token } = useTenantContext();
 
-  const UCP_API_URL =
-    (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
-    'http://localhost:3000';
+  const { data: tenant, isLoading } = useGetTenant(tenantId);
 
-  const baseUrl = `${UCP_API_URL}/api/v1/tenants/${tenantId}/edi/`;
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-full">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  const isEdiSubscribed = !!tenant?.subscriptions?.includes('edi');
+
+  if (!isEdiSubscribed) {
+    return <AppNotSubscribed appName="EDI" />;
+  }
+
+  const baseUrl = `${config.ucpApiUrl}/api/v1/tenants/${tenantId}/edi/`;
 
   return (
-    <EdiUIProvider baseUrl={baseUrl} ucpBaseUrl={UCP_API_URL} token={token} tenantId={tenantId}>
+    <EdiUIProvider
+      baseUrl={baseUrl}
+      ediPlatformBaseUrl={`${config.ucpApiUrl}/api/v1`}
+      ucpBaseUrl={`${config.ucpApiUrl}/api/v1`}
+      token={token}
+      tenantId={tenantId}
+    >
       <SFTPPartnersProvider>
         <Outlet />
       </SFTPPartnersProvider>

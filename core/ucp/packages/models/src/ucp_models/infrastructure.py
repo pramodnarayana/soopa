@@ -15,6 +15,12 @@ class DatabaseShard(UcpBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
 
 
 class ShardRegistry(UcpBase):
@@ -32,3 +38,9 @@ class ShardRegistry(UcpBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")

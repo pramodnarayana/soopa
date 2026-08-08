@@ -1,13 +1,11 @@
+import { config } from './config';
+
 /**
- * Resolves the UCP API URL from environment variables.
+ * Resolves the UCP API URL from config.
  * Throws if VITE_UCP_API_URL is not configured.
  */
 export function getUcpApiUrl(): string {
-  const url = (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL;
-  if (!url) {
-    throw new Error('VITE_UCP_API_URL is not configured');
-  }
-  return url;
+  return `${config.ucpApiUrl}/api/v1`;
 }
 
 /**
@@ -47,21 +45,22 @@ export function resolveTenantId(
   if (accessToken) {
     const payload = parseJwtPayload(accessToken);
 
-    // Priority 1: direct org ID claim (org-scoped login)
+    // Priority 1: canonical injected tenant ID (Enterprise standard)
+    const canonicalId =
+      (payload['tenant_id'] as string | undefined) || (profile['tenant_id'] as string | undefined);
+    if (canonicalId) return canonicalId;
+
+    // Priority 2: direct org ID claim (org-scoped login fallback)
     const orgId = payload['urn:zitadel:iam:org:id'] as string | undefined;
     if (orgId) return orgId;
 
-    // Priority 2: extract org ID from project roles claim (global login)
+    // Priority 3: extract org ID from project roles claim (global login fallback)
     const orgIdFromRoles = extractOrgIdFromRoles(payload);
     if (orgIdFromRoles) return orgIdFromRoles;
   }
 
-  // Priority 3: custom claim mapper / legacy fields in ID token
-  return (
-    (profile['idpTenantId'] as string | undefined) ||
-    (profile['tenant_id'] as string | undefined) ||
-    undefined
-  );
+  // Priority 4: legacy fields in ID token
+  return profile['idpTenantId'] as string | undefined;
 }
 
 /**

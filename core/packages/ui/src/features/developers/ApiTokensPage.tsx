@@ -48,16 +48,20 @@ function TokenCredentialsModal({
 }) {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
+  const [copiedCombined, setCopiedCombined] = useState(false);
 
-  const copyToClipboard = async (text: string, isSecret: boolean) => {
+  const copyToClipboard = async (text: string, type: 'id' | 'secret' | 'combined') => {
     try {
       await navigator.clipboard.writeText(text);
-      if (isSecret) {
+      if (type === 'secret') {
         setCopiedSecret(true);
         setTimeout(() => setCopiedSecret(false), 2000);
-      } else {
+      } else if (type === 'id') {
         setCopiedId(true);
         setTimeout(() => setCopiedId(false), 2000);
+      } else {
+        setCopiedCombined(true);
+        setTimeout(() => setCopiedCombined(false), 2000);
       }
     } catch {
       // ignore clipboard error
@@ -92,7 +96,7 @@ function TokenCredentialsModal({
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => copyToClipboard(token.client_id, false)}
+                onClick={() => copyToClipboard(token.client_id, 'id')}
               >
                 {copiedId ? (
                   <Check className="h-4 w-4 text-green-600" />
@@ -106,17 +110,41 @@ function TokenCredentialsModal({
             <span className="text-sm font-medium text-slate-700">Client Secret</span>
             <div className="flex gap-2">
               <Input
-                value={token.token}
+                value={token.token.split('.')[1] || ''}
                 readOnly
-                type="password"
+                type="text"
                 className="font-mono text-sm bg-slate-50"
               />
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => copyToClipboard(token.token, true)}
+                onClick={() => copyToClipboard(token.token.split('.')[1] || '', 'secret')}
               >
                 {copiedSecret ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <span className="text-sm font-medium text-slate-700">
+              Combined Token (Bearer Token)
+            </span>
+            <div className="flex gap-2">
+              <Input
+                value={token.token}
+                readOnly
+                type="text"
+                className="font-mono text-sm bg-slate-50"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyToClipboard(token.token, 'combined')}
+              >
+                {copiedCombined ? (
                   <Check className="h-4 w-4 text-green-600" />
                 ) : (
                   <Copy className="h-4 w-4" />
@@ -129,12 +157,17 @@ function TokenCredentialsModal({
         <div className="p-4 mt-2 rounded-lg bg-indigo-50 border border-indigo-100 text-sm text-indigo-900">
           <p className="font-semibold text-indigo-950 mb-1">Developer Note: How to authenticate</p>
           <p className="text-indigo-800">
-            Include the complete Bearer Token in your HTTP requests using the standard Authorization
-            header:
+            Include the Combined Token in your HTTP requests using the standard Authorization
+            header. If using Postman, select <strong>"Bearer Token"</strong> and paste the Combined
+            Token exactly as is.
           </p>
           <code className="block mt-2 p-2.5 bg-white rounded border border-indigo-100 font-mono text-xs text-indigo-950">
-            Authorization: Bearer {'<CLIENT_ID>_<CLIENT_SECRET>'}
+            Authorization: Bearer {'<COMBINED_TOKEN>'}
           </code>
+          <p className="text-xs text-indigo-700 mt-2 font-medium">
+            Note: Do not manually type the word "Bearer" when using Postman's Auth tab, as Postman
+            adds it automatically.
+          </p>
         </div>
 
         <DialogFooter>
@@ -491,8 +524,8 @@ function TokenDetails({ token, config }: { token: ApiToken; config: ApiTokenHook
       </div>
       <div className="grid gap-4 grid-cols-2 content-start pt-1">
         <div>
-          <div className="font-semibold text-slate-900 mb-1">Token ID</div>
-          <div className="font-mono text-xs text-slate-500 break-all">{token.id}</div>
+          <div className="font-semibold text-slate-900 mb-1">Client ID</div>
+          <div className="font-mono text-xs text-slate-500 break-all">{token.client_id}</div>
         </div>
         <div>
           <div className="font-semibold text-slate-900 mb-1">Status</div>

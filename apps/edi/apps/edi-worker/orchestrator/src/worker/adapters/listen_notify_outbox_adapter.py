@@ -84,7 +84,9 @@ class ListenNotifyOutboxAdapter(OutboxPort):
     def _on_notify(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
     ) -> None:
-        logger.debug(f"Received NOTIFY on {channel}: {payload}")
+        logger.info(
+            f"[DEV-LOG] Received Postgres NOTIFY on {channel} with payload (event_id): {payload}"
+        )
         self.queue.put_nowait(payload)
 
     @asynccontextmanager
@@ -111,14 +113,18 @@ class ListenNotifyOutboxAdapter(OutboxPort):
             )
 
             if not row:
-                logger.debug(f"Event {event_id} not found.")
+                logger.warning(
+                    f"[DEV-LOG] Event {event_id} not found in edi.outbox. It might have been processed or missing."
+                )
                 yield None
                 return
 
             # Accept both PENDING (from NOTIFY) and PROCESSING (from sweeper)
             # This allows the sweeper to recover stuck/crashed claims
             if row["status"] not in ("PENDING", "PROCESSING"):
-                logger.debug(f"Event {event_id} already processed (status: {row['status']}).")
+                logger.info(
+                    f"[DEV-LOG] Event {event_id} already processed or failed (status: {row['status']}). Skipping."
+                )
                 yield None
                 return
 
@@ -163,7 +169,7 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                 )
 
                 logger.info(
-                    f"Picked up outbox event {event_id} (type: {row['event_type']}, tenant_id: {row['tenant_id']})"
+                    f"[DEV-LOG] Translating and yielding outbox event {event_id} (type: {row['event_type']}, tenant: {row['tenant_id']})"
                 )
                 yield event
 
@@ -185,9 +191,11 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                     error_message,
                     event_id,
                 )
-                logger.info(f"Marked outbox event {event_id} as FAILED")
+                logger.info(f"[DEV-LOG] Marked outbox event {event_id} as FAILED")
             else:
-                logger.info(f"Successfully processed outbox event {event_id}, marking as PROCESSED")
+                logger.info(
+                    f"[DEV-LOG] Successfully finished outbox event {event_id}, marking as PROCESSED in edi.outbox"
+                )
                 await connection.execute(
                     "UPDATE edi.outbox SET status = 'PROCESSED', error_reason = NULL WHERE id = $1",
                     event_id,
