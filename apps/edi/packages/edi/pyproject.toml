@@ -31,7 +31,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "anyio>=3.7.1",
     "as2-core",
-    "transformer"
+    "transformer",
+    "ucp"
 ]
 
 [tool.uv.sources]
@@ -45,6 +46,8 @@ pipeline = { workspace = true }
 domain = { workspace = true }
 as2-core = { workspace = true }
 transformer = { workspace = true }
+bots_core = { workspace = true }
+ucp = { workspace = true }
 
 
 [build-system]

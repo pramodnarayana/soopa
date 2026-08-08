@@ -74,6 +74,9 @@ jobs:
         run: pnpm turbo lint --filter="./core/platform/**"
 
       - name: Start Database
+        env:
+          ZITADEL_PLATFORM_ADMIN_ID: test_admin_id
+          ZITADEL_PLATFORM_ORG_ID: test_org_id
         run: |
           docker compose up -d postgres_global --wait
           pnpm db:migrate:platform
