@@ -1,6 +1,6 @@
-const UCP_API_URL =
-  (import.meta.env as unknown as Record<string, string>).VITE_UCP_API_URL ||
-  'http://localhost:3000';
+import { config } from './config';
+
+const UCP_API_URL = `${config.ucpApiUrl}/api/v1`;
 
 let globalToken: string | null = null;
 

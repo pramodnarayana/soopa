@@ -19,7 +19,7 @@ export class HttpWebhookRepository {
   }
 
   private get apiRoot(): string {
-    return `${this.baseUrl}/tenants/${this.tenantId}/webhooks`;
+    return `${this.baseUrl}/tenants/${this.tenantId}/edi/webhooks`;
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {

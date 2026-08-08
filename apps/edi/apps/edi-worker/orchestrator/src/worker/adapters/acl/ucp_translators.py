@@ -1,8 +1,13 @@
+from enum import StrEnum
 from typing import Any
 
-from domain.events import LegacyUcpEventType
-
 from worker.adapters.acl.base import EventTranslator
+
+
+# Legacy UCP events used by the worker for full sync
+class LegacyUcpEventType(StrEnum):
+    PROVISION_ALL_TENANTS = "tenant.provision_all"
+    PROVISION_TENANT = "tenant.provision"
 
 
 class TenantProvisionedTranslator(EventTranslator):
@@ -13,7 +18,7 @@ class TenantProvisionedTranslator(EventTranslator):
     def translate(self, external_payload: dict[str, Any]) -> dict[str, Any]:
         # Normalize to dict if needed
         if not isinstance(external_payload, dict):
-            raise ValueError("Malformed provisioning event: payload must be a mapping")
+            raise TypeError("Malformed provisioning event: payload must be a mapping")
 
         # Handle both flat payload and nested 'payload' structure from UCP
         nested_payload = external_payload.get("payload")
@@ -49,7 +54,7 @@ class WebhookEventTranslator(EventTranslator):
 
     def translate(self, external_payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(external_payload, dict):
-            raise ValueError("Malformed webhook event: payload must be a mapping")
+            raise TypeError("Malformed webhook event: payload must be a mapping")
 
         nested_payload = external_payload.get("payload")
         if nested_payload is not None and not isinstance(nested_payload, dict):

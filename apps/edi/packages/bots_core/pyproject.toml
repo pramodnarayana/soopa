@@ -11,7 +11,11 @@ dependencies = [
     "lxml",
     "defusedxml>=0.7.1",
     "pdfminer.six",
+    "edi-grammar",
 ]
+
+[tool.uv.sources]
+edi-grammar = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -33,6 +37,7 @@ module = [
     "bots_core.utils.*",
     "bots_core.infrastructure.config.*",
     "bots_core.usersys.*",
+    "tests.*",
 ]
 ignore_errors = true
 

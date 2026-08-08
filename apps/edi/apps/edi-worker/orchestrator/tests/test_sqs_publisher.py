@@ -3,15 +3,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from worker.adapters.sqs_publisher import SqsPublisherAdapter
+from worker.ports.message_publisher import PublishMessageEnvelope
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_sqs_publisher_publish_batch():
+async def test_sqs_publisher_publish_batch() -> None:
     mock_session = MagicMock()
     mock_client = AsyncMock()
     mock_client_ctx = MagicMock()
-    mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client_ctx.__aenter__.return_value = mock_client
     mock_client_ctx.__aexit__ = AsyncMock()
     mock_session.client.return_value = mock_client_ctx
 
@@ -29,10 +30,12 @@ async def test_sqs_publisher_publish_batch():
         async with adapter.connect():
             # Publish messages
             messages = [
-                {"Id": "1", "MessageBody": {"event": "A"}},
-                {"Id": "2", "MessageBody": {"event": "B"}},
-                {"Id": "3", "MessageBody": {"event": "C"}},
-                {"MessageBody": {"event": "MissingId"}},  # Should be skipped
+                PublishMessageEnvelope(message_id="1", event_type="test", event={"event": "A"}),
+                PublishMessageEnvelope(message_id="2", event_type="test", event={"event": "B"}),
+                PublishMessageEnvelope(message_id="3", event_type="test", event={"event": "C"}),
+                PublishMessageEnvelope(
+                    message_id="", event_type="test", event={"event": "MissingId"}
+                ),
             ]
 
             success_ids = await adapter.publish_batch("test-queue", messages)
@@ -42,17 +45,19 @@ async def test_sqs_publisher_publish_batch():
             mock_client.send_message_batch.assert_called_once()
 
 
-async def test_sqs_publisher_not_connected():
+async def test_sqs_publisher_not_connected() -> None:
     adapter = SqsPublisherAdapter(region="us-east-1", endpoint_url=None)
     with pytest.raises(RuntimeError, match="must be called within the connect"):
-        await adapter.publish_batch("test-queue", [{"Id": "1"}])
+        await adapter.publish_batch(
+            "test-queue", [PublishMessageEnvelope(message_id="1", event_type="test", event={})]
+        )
 
 
-async def test_sqs_publisher_get_queue_url_error():
+async def test_sqs_publisher_get_queue_url_error() -> None:
     mock_session = MagicMock()
     mock_client = AsyncMock()
     mock_client_ctx = MagicMock()
-    mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client_ctx.__aenter__.return_value = mock_client
     mock_client_ctx.__aexit__ = AsyncMock()
     mock_session.client.return_value = mock_client_ctx
 
@@ -63,16 +68,16 @@ async def test_sqs_publisher_get_queue_url_error():
 
         async with adapter.connect():
             success_ids = await adapter.publish_batch(
-                "test-queue", [{"Id": "1", "MessageBody": {}}]
+                "test-queue", [PublishMessageEnvelope(message_id="1", event_type="test", event={})]
             )
             assert success_ids == []
 
 
-async def test_sqs_publisher_publish():
+async def test_sqs_publisher_publish() -> None:
     mock_session = MagicMock()
     mock_client = AsyncMock()
     mock_client_ctx = MagicMock()
-    mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client_ctx.__aenter__.return_value = mock_client
     mock_client_ctx.__aexit__ = AsyncMock()
     mock_session.client.return_value = mock_client_ctx
 

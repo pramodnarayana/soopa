@@ -40,7 +40,7 @@ extraPaths = [
     "../../identity/python/src",
     "src",
     "../../schemas/python/src",
-    "../../../../../apps/edi/packages/database/src",
+    "../../../../../core/platform/packages/orm/src",
     "../../../../../apps/edi/packages/pipeline/src",
     "../../../../../apps/edi/packages/grammar/src",
     "../../../../../apps/edi/packages/config/src",
@@ -54,7 +54,7 @@ extraPaths = [
     "../../../../../apps/edi/apps/edi-worker/ucp-sync/src",
     "../../../../../apps/edi/apps/edi-worker/orchestrator/src",
     "../../../../../apps/edi/apps/edi-as2-server/src",
-    "../../../../../apps/edi/apps/edi-api/src",
+    "../../../../../apps/edi/packages/edi/src",
 ]
 
 [tool.ruff]

@@ -1,5 +1,5 @@
 [project]
-name = "edi"
+name = "soopa-monorepo"
 version = "0.1.0"
 description = "EDI AS2 Integration Platform"
 authors = [
@@ -15,11 +15,17 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "core/platform/packages/*/python",
+    "core/platform/packages/orm",
+    "core/ucp/packages/models",
+    "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",
-    "apps/edi/apps/edi-api",
+    "apps/edi/packages/edi",
     "apps/edi/apps/edi-as2-server",
     "apps/edi/apps/edi-worker/*",
-    "apps/edi/packages/*"
+    "apps/edi/packages/*",
+    "core/platform/apps/scheduler_engine",
+    "core/platform/apps/notification_engine",
+    "core/platform/apps/unified-api",
 ]
 exclude = ["apps/edi/packages/ui"]
 
@@ -41,10 +47,11 @@ pythonpath = [
     "apps/edi/packages/pipeline/src",
     "apps/edi/packages/security/src",
     "apps/edi/packages/transformer/src",
-    "apps/edi/apps/edi-api/src",
+    "apps/edi/packages/edi/src",
     "apps/edi/apps/edi-as2-server/src",
     "apps/edi/apps/edi-worker/orchestrator/src",
     "apps/edi/apps/edi-worker/compute/src",
+    "core/platform/apps/unified-api/src",
 ]
 addopts = "-v --tb=short --ignore=services/worker --ignore=apps/edi/packages/transformer/tests/test_worker.py --ignore=apps/edi/packages/transformer/scripts"
 markers = [
@@ -78,22 +85,24 @@ target-version = "py311"
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP", "B", "SIM"]
-ignore = ["E501"] # Handled by formatter
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF"]
+ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301", "RUF012"] # Handled by formatter / existing legacy code
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments
-"apps/edi/apps/edi-api/src/api/main.py" = ["B008", "E402"]
-"apps/edi/apps/edi-api/src/api/cdc_relay.py" = ["B008"]
-"apps/edi/apps/edi-api/src/api/routers/**/*.py" = ["B008"]
-"apps/edi/apps/edi-api/src/api/dependencies.py" = ["B008"]
+"apps/edi/packages/edi/src/api/main.py" = ["B008", "E402"]
+"apps/edi/packages/edi/src/api/cdc_relay.py" = ["B008"]
+"apps/edi/packages/edi/src/api/routers/**/*.py" = ["B008"]
+"apps/edi/packages/edi/src/api/dependencies/**/*.py" = ["B008"]
 "apps/edi/apps/edi-as2-server/src/as2_server/main.py" = ["B008"]
 "apps/edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
 "core/platform/packages/identity/python/identity/**/*.py" = ["B008"]
-"apps/edi/apps/edi-api/tests/**/*.py" = ["E402"]
+"core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
+"apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores
-"apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405"]
-"apps/edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405"]
+"apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405", "BLE", "TRY"]
+"apps/edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405", "BLE", "TRY"]
+"apps/edi/packages/bots_core/src/bots_core/facade.py" = ["BLE", "TRY"]
 "apps/edi/packages/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]
@@ -107,18 +116,18 @@ omit = [
     "*/migrations/*",
     # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
-    "apps/edi/apps/edi-api/src/api/adapters/edi_header_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/outbound_route_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/as2_partnership_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/transaction_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/api_token_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/webhook_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/outbox_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/as2_partner_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/tenant_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/sftp_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/data_plane_as2_repository.py",
-    "apps/edi/apps/edi-api/src/api/adapters/inbound_route_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/edi_header_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/outbound_route_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/as2_partnership_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/transaction_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/api_token_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/webhook_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/outbox_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/as2_partner_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/tenant_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/sftp_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/data_plane_as2_repository.py",
+    "apps/edi/packages/edi/src/api/adapters/inbound_route_repository.py",
     "*/adapters/sftp.py",
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
@@ -157,5 +166,5 @@ extraPaths = [
     "apps/edi/apps/edi-worker/ucp-sync/src",
     "apps/edi/apps/edi-worker/orchestrator/src",
     "apps/edi/apps/edi-as2-server/src",
-    "apps/edi/apps/edi-api/src",
+    "apps/edi/packages/edi/src",
 ]

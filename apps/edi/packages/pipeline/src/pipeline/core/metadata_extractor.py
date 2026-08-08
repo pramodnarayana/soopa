@@ -60,9 +60,12 @@ class MetadataExtractorService:
             for field_name, json_path in paths.items():
                 try:
                     self.compiled_config[tx_type][field_name] = parse(json_path)
-                except Exception as e:
-                    logger.error(
-                        f"Failed to compile JSONPath '{json_path}' for {tx_type}.{field_name}: {e}"
+                except Exception:
+                    logger.exception(
+                        "Failed to compile JSONPath '%s' for %s.%s",
+                        json_path,
+                        tx_type,
+                        field_name,
                     )
 
     def extract(self, transaction_type: str, payload: dict[str, Any]) -> dict[str, str]:
@@ -87,9 +90,11 @@ class MetadataExtractorService:
                     val = matches[0].value
                     if val is not None:
                         extracted_metadata[field_name] = str(val)
-            except Exception as e:
+            except Exception:  # noqa: BLE001
                 logger.warning(
-                    f"Error extracting field '{field_name}' for type '{transaction_type}': {e}"
+                    "Error extracting field '%s' for type '%s'",
+                    field_name,
+                    transaction_type,
                 )
 
         return extracted_metadata

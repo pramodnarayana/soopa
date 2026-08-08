@@ -16,4 +16,3 @@ class BaseEnvelopeBuilder(ABC):
         """
         Dynamically constructs the Abstract Syntax Tree (AST) for the given payload and route.
         """
-        pass

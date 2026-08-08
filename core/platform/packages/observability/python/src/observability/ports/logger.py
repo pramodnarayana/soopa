@@ -27,6 +27,9 @@ class ILogger(ABC):
     def error(self, event: str, **kwargs: Any) -> None: ...
 
     @abstractmethod
+    def exception(self, event: str, **kwargs: Any) -> None: ...
+
+    @abstractmethod
     def bind(self, **kwargs: Any) -> "ILogger":
         """
         Returns a new logger with the given fields permanently bound.

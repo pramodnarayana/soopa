@@ -1,3 +1,4 @@
+export * from './components/AppNotSubscribed';
 export * from './components/ui/button';
 export * from './components/ui/card';
 export * from './components/ui/data-table';

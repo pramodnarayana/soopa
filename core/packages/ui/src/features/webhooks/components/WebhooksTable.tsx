@@ -56,9 +56,7 @@ function DeleteWebhookDialog({ config, webhook, open, onOpenChange }: DeleteWebh
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete Webhook</DialogTitle>
-          <DialogDescription>
-            This action is permanent and irreversible.
-          </DialogDescription>
+          <DialogDescription>This action is permanent and irreversible.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm text-slate-600">
           <p>To confirm, type the exact webhook URL:</p>

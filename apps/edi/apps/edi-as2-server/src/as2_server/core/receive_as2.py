@@ -81,7 +81,7 @@ class ReceiveAS2UseCase:
                 "isa_extraction_failed", error="Non-ASCII characters in ISA segment"
             )
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.warning("isa_extraction_failed", error=str(e))
             return None
 
@@ -151,7 +151,7 @@ class ReceiveAS2UseCase:
                     self.metrics.increment(
                         "as2_decrypt_errors_total", labels={"tenant_id": str(tenant_id)}
                     )
-                    logger.error("as2_decrypt_failed", error=str(e))
+                    logger.exception("as2_decrypt_failed", error=str(e))
                     disposition = Disposition.DECRYPTION_FAILED
 
         # The MIC MUST be calculated over the signed payload BEFORE signature verification (RFC 4130).
@@ -208,8 +208,9 @@ class ReceiveAS2UseCase:
                                 )
 
                             # 2. Resolve shard row
-                            from database.models import DatabaseShard, Tenant
+                            from platform_orm.models.identity import Tenant
                             from sqlalchemy import select
+                            from ucp_models.infrastructure import DatabaseShard
 
                             stmt = (
                                 select(Tenant, DatabaseShard)
@@ -244,7 +245,7 @@ class ReceiveAS2UseCase:
                             try:
                                 tenant_session = await tenant_session_gen.__anext__()
                             except StopAsyncIteration:
-                                logger.error("as2_isa_routing_failed_session_empty")
+                                logger.exception("as2_isa_routing_failed_session_empty")
                                 return generate_mdn(
                                     as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY
                                 )
@@ -287,7 +288,7 @@ class ReceiveAS2UseCase:
                                 isa_receiver=isa_receiver,
                             )
                     except ValueError as e:
-                        logger.error(
+                        logger.exception(
                             "as2_isa_routing_ambiguous",
                             error=str(e),
                             isa_sender=isa_sender,
@@ -318,10 +319,10 @@ class ReceiveAS2UseCase:
                 )
                 if routed_tenant_session:
                     await routed_tenant_session.commit()
-            except Exception as e:
+            except Exception:
                 if routed_tenant_session:
                     await routed_tenant_session.rollback()
-                raise e
+                raise
 
         # generate_mdn calculates the MIC using as2_msg.payload
         as2_msg.payload = mic_payload

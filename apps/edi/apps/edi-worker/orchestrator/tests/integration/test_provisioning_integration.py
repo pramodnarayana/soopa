@@ -2,15 +2,21 @@ import asyncio
 import logging
 import os
 import uuid
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import pytest
 from config.settings import get_settings
 from database.connection import DatabaseRouter
-from database.models.control_plane import AS2Partner, ControlPlaneOutbox
+from database.models.control_plane import AS2Partner
 from database.models.data_plane import AS2Partner as TenantAS2Partner
+from domain.events import EdiEventType
 from dotenv import load_dotenv
-from soopa_schemas.edi_events import EdiEventType
+from platform_orm.models.identity import Tenant
 from sqlalchemy import delete, select
+from ucp_models.events import ControlPlaneOutbox
+from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
@@ -23,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 @pytest.fixture
-async def e2e_context():
+async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     """
     Sets up the DatabaseRouter and SQS adapters for the E2E test.
     Cleans up inserted data at the end of the test.
@@ -55,7 +61,7 @@ async def e2e_context():
             resp = await sqs.get_queue_url(QueueName=queue_name)
             await sqs.purge_queue(QueueUrl=resp["QueueUrl"])
             await asyncio.sleep(1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logging.warning(f"Could not setup queue: {e}")
             pytest.skip("LocalStack is not available. Skipping integration test.")
 
@@ -66,11 +72,14 @@ async def e2e_context():
     test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
 
-    from database.models.control_plane import App, DatabaseShard, ShardRegistry, Tenant
-
     async for session in db_router.get_global_session():
-        tenant = Tenant(id=test_tenant_id, name="Test Tenant")
+        tenant = Tenant(
+            id=test_tenant_id,
+            name=f"Test Tenant {test_tenant_id}",
+            idp_tenant_id=f"idp_{test_tenant_id}",
+        )
         session.add(tenant)
+        await session.flush()
 
         shard_res = await session.execute(
             select(DatabaseShard).where(DatabaseShard.name == "shard_1")
@@ -79,6 +88,7 @@ async def e2e_context():
 
         if not shard:
             shard = DatabaseShard(
+                id=f"shard_{test_tenant_id}",
                 name="shard_1",
                 dsn=os.getenv(
                     "SHARD_1_URL",
@@ -92,9 +102,9 @@ async def e2e_context():
         edi_app = app_res.scalars().first()
         if not edi_app:
             edi_app = App(
+                id=f"app_{test_tenant_id}",
                 slug="edi",
                 name="EDI Application",
-                description="EDI Processing Engine",
             )
             session.add(edi_app)
             await session.commit()
@@ -157,7 +167,7 @@ async def e2e_context():
         try:
             resp = await sqs.get_queue_url(QueueName=queue_name)
             await sqs.delete_queue(QueueUrl=resp["QueueUrl"])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logging.warning(f"Could not delete queue {queue_name}: {e}")
 
     await db_router.close_all()
@@ -165,7 +175,7 @@ async def e2e_context():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_provisioning_replication_e2e_flow(e2e_context):
+async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
     """
     Tests the full replication flow:
     1. API inserts an event into the Control Plane Outbox.

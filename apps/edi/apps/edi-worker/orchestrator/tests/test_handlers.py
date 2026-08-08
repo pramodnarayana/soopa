@@ -1,3 +1,5 @@
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,14 +11,16 @@ from worker.data.handlers import process_pipeline_event
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.BotsTransformerAdapter")
 @patch("worker.data.handlers.S3StorageAdapter")
-async def test_process_pipeline_event_idempotency_duplicate(mock_s3, mock_transformer, mock_repo):
+async def test_process_pipeline_event_idempotency_duplicate(
+    mock_s3: MagicMock, mock_transformer: MagicMock, mock_repo: MagicMock
+) -> None:
     resolver = AsyncMock()
     resolver.resolve.return_value = ("shard_1", "fake_dsn")
     db_router = MagicMock()
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
@@ -30,7 +34,7 @@ async def test_process_pipeline_event_idempotency_duplicate(mock_s3, mock_transf
         trace_id="trace-123",
         event_type="INBOUND",
         payload={"direction": "INBOUND"},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -46,14 +50,16 @@ async def test_process_pipeline_event_idempotency_duplicate(mock_s3, mock_transf
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.S3StorageAdapter")
 @patch("pipeline.core.saga.TraceLifecycleService")
-async def test_process_pipeline_event_transform_completed(mock_trace, mock_s3, mock_repo):
+async def test_process_pipeline_event_transform_completed(
+    mock_trace: MagicMock, mock_s3: MagicMock, mock_repo: MagicMock
+) -> None:
     resolver = AsyncMock()
     resolver.resolve.return_value = ("shard_1", "fake_dsn")
     db_router = MagicMock()
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
@@ -70,7 +76,7 @@ async def test_process_pipeline_event_transform_completed(mock_trace, mock_s3, m
         trace_id="trace-123",
         event_type="TRANSFORM_COMPLETED",
         payload={"direction": "INBOUND"},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -84,14 +90,16 @@ async def test_process_pipeline_event_transform_completed(mock_trace, mock_s3, m
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.S3StorageAdapter")
 @patch("pipeline.core.saga.TraceLifecycleService")
-async def test_process_pipeline_event_delivery_completed(mock_trace, mock_s3, mock_repo):
+async def test_process_pipeline_event_delivery_completed(
+    mock_trace: MagicMock, mock_s3: MagicMock, mock_repo: MagicMock
+) -> None:
     resolver = AsyncMock()
     resolver.resolve.return_value = ("shard_1", "fake_dsn")
     db_router = MagicMock()
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
@@ -108,7 +116,7 @@ async def test_process_pipeline_event_delivery_completed(mock_trace, mock_s3, mo
         trace_id="trace-123",
         event_type="DELIVERY_COMPLETED",
         payload={"direction": "INBOUND"},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -122,14 +130,16 @@ async def test_process_pipeline_event_delivery_completed(mock_trace, mock_s3, mo
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.S3StorageAdapter")
 @patch("worker.data.handlers.InboundTransformService")
-async def test_process_pipeline_event_inbound(mock_inbound, mock_s3, mock_repo):
+async def test_process_pipeline_event_inbound(
+    mock_inbound: MagicMock, mock_s3: MagicMock, mock_repo: MagicMock
+) -> None:
     resolver = AsyncMock()
     resolver.resolve.return_value = ("shard_1", "fake_dsn")
     db_router = MagicMock()
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
@@ -146,7 +156,7 @@ async def test_process_pipeline_event_inbound(mock_inbound, mock_s3, mock_repo):
         trace_id="trace-123",
         event_type="DOCUMENT_RECEIVED",
         payload={"direction": "INBOUND"},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -161,14 +171,16 @@ async def test_process_pipeline_event_inbound(mock_inbound, mock_s3, mock_repo):
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.S3StorageAdapter")
 @patch("worker.data.handlers.OutboundTransformService")
-async def test_process_pipeline_event_outbound(mock_outbound, mock_s3, mock_repo):
+async def test_process_pipeline_event_outbound(
+    mock_outbound: MagicMock, mock_s3: MagicMock, mock_repo: MagicMock
+) -> None:
     resolver = AsyncMock()
     resolver.resolve.return_value = ("shard_1", "fake_dsn")
     db_router = MagicMock()
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.return_value = fake_get_tenant_session()
@@ -185,7 +197,7 @@ async def test_process_pipeline_event_outbound(mock_outbound, mock_s3, mock_repo
         trace_id="trace-123",
         event_type="OUTBOUND_REQUEST",
         payload={"direction": "OUTBOUND"},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -200,7 +212,9 @@ async def test_process_pipeline_event_outbound(mock_outbound, mock_s3, mock_repo
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
 @patch("worker.data.handlers.WorkerVaultAdapter")
-async def test_process_delivery_success(mock_vault, mock_webhook, mock_repo):
+async def test_process_delivery_success(
+    mock_vault: MagicMock, mock_webhook: MagicMock, mock_repo: MagicMock
+) -> None:
     from worker.data.handlers import process_delivery
 
     resolver = AsyncMock()
@@ -209,7 +223,7 @@ async def test_process_delivery_success(mock_vault, mock_webhook, mock_repo):
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.side_effect = fake_get_tenant_session
@@ -235,7 +249,7 @@ async def test_process_delivery_success(mock_vault, mock_webhook, mock_repo):
         trace_id="trace-123",
         event_type="DELIVER_WEBHOOK",
         payload={"webhook_url": "http://test", "payload": {}},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -251,7 +265,9 @@ async def test_process_delivery_success(mock_vault, mock_webhook, mock_repo):
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
 @patch("worker.data.handlers.WorkerVaultAdapter")
-async def test_process_delivery_skip(mock_vault, mock_webhook, mock_repo):
+async def test_process_delivery_skip(
+    mock_vault: MagicMock, mock_webhook: MagicMock, mock_repo: MagicMock
+) -> None:
     from worker.data.handlers import process_delivery
 
     resolver = AsyncMock()
@@ -260,7 +276,7 @@ async def test_process_delivery_skip(mock_vault, mock_webhook, mock_repo):
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.side_effect = fake_get_tenant_session
@@ -274,7 +290,7 @@ async def test_process_delivery_skip(mock_vault, mock_webhook, mock_repo):
         trace_id="trace-123",
         event_type="DELIVER_WEBHOOK",
         payload={"webhook_url": "http://test", "payload": {}},
-        tenant_id=1,
+        tenant_id="1",
         resolver=resolver,
         db_router=db_router,
         s3_bucket="test",
@@ -290,7 +306,9 @@ async def test_process_delivery_skip(mock_vault, mock_webhook, mock_repo):
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
 @patch("worker.data.handlers.WorkerVaultAdapter")
-async def test_process_delivery_stale_update(mock_vault, mock_webhook, mock_repo, caplog):
+async def test_process_delivery_stale_update(
+    mock_vault: MagicMock, mock_webhook: MagicMock, mock_repo: MagicMock, caplog: MagicMock
+) -> None:
     import logging
 
     from worker.data.handlers import process_delivery
@@ -301,7 +319,7 @@ async def test_process_delivery_stale_update(mock_vault, mock_webhook, mock_repo
 
     mock_session = AsyncMock()
 
-    async def fake_get_tenant_session(*args, **kwargs):
+    async def fake_get_tenant_session(*args: Any, **kwargs: Any) -> "AsyncGenerator[Any, Any]":
         yield mock_session
 
     db_router.get_tenant_session.side_effect = fake_get_tenant_session
@@ -335,7 +353,7 @@ async def test_process_delivery_stale_update(mock_vault, mock_webhook, mock_repo
             trace_id="trace-123",
             event_type="DELIVER_WEBHOOK",
             payload={"webhook_url": "http://test", "payload": {}},
-            tenant_id=1,
+            tenant_id="1",
             resolver=resolver,
             db_router=db_router,
             s3_bucket="test",

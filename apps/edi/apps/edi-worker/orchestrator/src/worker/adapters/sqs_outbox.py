@@ -58,8 +58,9 @@ class SqsOutboxAdapter(OutboxPort):
             try:
                 queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
                 queue_url = queue_url_response["QueueUrl"]
-            except Exception as e:
-                logger.error(f"Failed to get queue URL for {self.queue_name}: {e}")
+            except Exception:
+                logger.exception(f"Failed to get queue URL for {self.queue_name}")
+
                 yield None
                 return
 
@@ -109,17 +110,20 @@ class SqsOutboxAdapter(OutboxPort):
                             yield None
                             return
                         body = translated_body
-                    except ValueError as e:
+                    except ValueError:
                         # Permanent validation error - malformed message
-                        logger.error(
-                            f"Permanent validation error for event type '{external_event_type}' in message {message_id}: {e}. "
-                            f"Message body: {body}. Deleting malformed message."
+                        logger.exception(
+                            "Permanent validation error for event type '%s' in message %s. "
+                            "Message body: %s. Deleting malformed message.",
+                            external_event_type,
+                            message_id,
+                            body,
                         )
                         await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                         yield None
                         return
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse JSON body from SQS message {message_id}")
+                logger.exception(f"Failed to parse JSON body from SQS message {message_id}")
                 await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                 yield None
                 return
@@ -134,13 +138,13 @@ class SqsOutboxAdapter(OutboxPort):
                 logger.info(f"Successfully processed and deleted SQS message {message_id}")
             except Exception as e:
                 if isinstance(e, PermanentProvisioningError):
-                    logger.error(
-                        f"Permanent error processing event {event.id}: {e}. Removing from queue."
+                    logger.exception(
+                        "Permanent error processing event %s. Removing from queue.", event.id
                     )
                     await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                 else:
                     logger.exception(
-                        f"Transient error processing event {event.id}: {e}. Leaving on queue."
+                        "Transient error processing event %s. Leaving on queue.", event.id
                     )
                 raise
 
@@ -158,8 +162,9 @@ class SqsOutboxAdapter(OutboxPort):
             try:
                 queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
                 queue_url = queue_url_response["QueueUrl"]
-            except Exception as e:
-                logger.error(f"Failed to get queue URL for {self.queue_name}: {e}")
+            except Exception:
+                logger.exception(f"Failed to get queue URL for {self.queue_name}")
+
                 raise
 
             message_body = json.dumps(

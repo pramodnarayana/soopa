@@ -15,7 +15,7 @@ class InMemoryStorageAdapter(StoragePort):
 
     async def download(self, uri: str) -> bytes:
         if uri not in self.store:
-            raise FileNotFoundError(f"URI not found in fake storage: {uri}")
+            raise RuntimeError(f"URI not found in fake storage: {uri}")
         return self.store[uri]
 
     async def upload(self, payload: bytes, key_prefix: str, file_name: str) -> str:
@@ -335,7 +335,7 @@ class FakeAS2DeliveryAdapter:
     ) -> tuple[int, dict[str, str], bytes]:
         self.delivered.append({"url": url, "body": body, "headers": headers})
         if getattr(self, "raise_on_deliver", False):
-            raise Exception("Mock delivery failure")
+            raise RuntimeError("Mock delivery failure")
 
         import base64
         import hashlib

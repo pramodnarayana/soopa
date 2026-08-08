@@ -5,14 +5,14 @@ Bots EDI Translator __about__.py
 from importlib import metadata
 
 __all__ = [
-    "__version__",
-    "__version_info__",
-    "__title__",
-    "__summary__",
-    "__url__",
     "__author__",
     "__email__",
     "__license__",
+    "__summary__",
+    "__title__",
+    "__url__",
+    "__version__",
+    "__version_info__",
 ]
 
 __title__ = "bots-core"

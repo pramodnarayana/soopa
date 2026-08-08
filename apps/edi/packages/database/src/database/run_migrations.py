@@ -32,7 +32,7 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
         if pgcode in ("42P01", "3F000"):
             logger.info("ucp.database_shards does not exist yet. Falling back to default shards.")
         else:
-            logger.error(f"Failed to query database_shards from global DB: {e}")
+            logger.exception("Failed to query database_shards from global DB")
             raise
     finally:
         await engine.dispose()
@@ -81,7 +81,7 @@ def run_migrations():
                 credentials, host_info = rest.split("@", 1)
                 user = credentials.split(":", 1)[0]
                 masked_url = f"{protocol}://{user}:***@{host_info}"
-            except Exception:
+            except Exception:  # noqa: BLE001
                 masked_url = "***redacted***"
 
         logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")

@@ -75,8 +75,8 @@ async def clear_database(db_url: str) -> None:
                         f"SKIPPED: Table public.{table} does not exist or cannot be truncated. {e}"
                     )
         logger.info(f"Finished database cleanup for {db_url}.")
-    except Exception as e:
-        logger.error(f"CRITICAL ERROR clearing tables for {db_url}: {e}")
+    except Exception:
+        logger.exception("CRITICAL ERROR clearing tables for %s", db_url)
 
 
 def purge_sqs(endpoint_url: str) -> None:
@@ -94,8 +94,8 @@ def purge_sqs(endpoint_url: str) -> None:
             try:
                 sqs.purge_queue(QueueUrl=q)
                 logger.info(f"SUCCESS: Purged SQS Queue -> {q}")
-            except Exception as e:
-                logger.error(f"FAILED to purge {q}: {e}")
+            except Exception:
+                logger.exception("FAILED to purge %s", q)
     else:
         logger.warning("No SQS Queues found.")
 

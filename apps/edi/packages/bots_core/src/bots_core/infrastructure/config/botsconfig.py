@@ -4,7 +4,6 @@ to be used as:
 from botsconfig import *
 """
 # pylint: disable=line-too-long
-# flake8: noqa:E221
 
 # ***for statust in ta:
 OPEN = 0  # Bots always closes transaction. OPEN is severe error

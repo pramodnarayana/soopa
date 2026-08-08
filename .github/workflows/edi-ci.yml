@@ -75,8 +75,11 @@ jobs:
         run: pnpm turbo lint --filter="./apps/edi/**"
 
       - name: Start Database
+        env:
+          ZITADEL_PLATFORM_ADMIN_ID: test_admin_id
+          ZITADEL_PLATFORM_ORG_ID: test_org_id
         run: |
-          docker compose up -d postgres_global edi_postgres_shard_1 localstack --wait
+          docker compose up -d postgres_global edi_postgres_shard localstack --wait
           pnpm db:migrate
           pnpm db:seed
           uv run --directory apps/edi/packages/database python -m database.run_migrations

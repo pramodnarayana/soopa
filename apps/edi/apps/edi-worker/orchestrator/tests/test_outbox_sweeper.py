@@ -1,5 +1,7 @@
 import datetime
 import uuid
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,7 +12,7 @@ from worker.jobs.outbox_sweeper import DataPlaneOutboxSweeperJobHandler
 
 
 @pytest.mark.asyncio
-async def test_outbox_sweeper_execute():
+async def test_outbox_sweeper_execute() -> None:
     db_router = MagicMock()
     message_publisher = MagicMock()
     message_publisher.connect.return_value.__aenter__ = AsyncMock()
@@ -27,27 +29,26 @@ async def test_outbox_sweeper_execute():
     mock_result.scalars.return_value.all.return_value = [mock_shard]
     mock_global_session.execute.return_value = mock_result
 
-    async def get_global_session():
+    async def get_global_session() -> "AsyncGenerator[Any, Any]":
         yield mock_global_session
 
     db_router.get_global_session = get_global_session
 
     handler = DataPlaneOutboxSweeperJobHandler(db_router, message_publisher)
-    handler._sweep_shard = AsyncMock(return_value=5)
 
-    job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
+    with patch.object(handler, "_sweep_shard", AsyncMock(return_value=5)) as mock_sweep:
+        job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
+        next_run = await handler.execute(job)
 
-    next_run = await handler.execute(job)
-
-    assert handler._sweep_shard.await_count == 1
-    handler._sweep_shard.assert_awaited_with("test_shard", "test_dsn")
+        assert mock_sweep.await_count == 1
+        mock_sweep.assert_awaited_with("test_shard", "test_dsn")
 
     assert next_run is not None
     assert isinstance(next_run, datetime.datetime)
 
 
 @pytest.mark.asyncio
-async def test_outbox_sweeper_execute_exception_caught():
+async def test_outbox_sweeper_execute_exception_caught() -> None:
     db_router = MagicMock()
     message_publisher = MagicMock()
     message_publisher.connect.return_value.__aenter__ = AsyncMock()
@@ -64,25 +65,25 @@ async def test_outbox_sweeper_execute_exception_caught():
     mock_result.scalars.return_value.all.return_value = [mock_shard]
     mock_global_session.execute.return_value = mock_result
 
-    async def get_global_session():
+    async def get_global_session() -> "AsyncGenerator[Any, Any]":
         yield mock_global_session
 
     db_router.get_global_session = get_global_session
 
     handler = DataPlaneOutboxSweeperJobHandler(db_router, message_publisher)
-    handler._sweep_shard = AsyncMock(side_effect=Exception("Database down"))
 
-    job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
-
-    next_run = await handler.execute(job)
-
-    assert handler._sweep_shard.await_count == 1
+    with patch.object(
+        handler, "_sweep_shard", AsyncMock(side_effect=Exception("Database down"))
+    ) as mock_sweep:
+        job = Job(id=uuid.uuid4(), name="outbox_sweeper", payload={}, interval_seconds=120)
+        next_run = await handler.execute(job)
+        assert mock_sweep.await_count == 1
     assert next_run is not None
 
 
 @pytest.mark.asyncio
 @patch("worker.jobs.outbox_sweeper.AsyncSession")
-async def test_outbox_sweep_shard_no_events(mock_async_session):
+async def test_outbox_sweep_shard_no_events(mock_async_session: MagicMock) -> None:
     db_router = MagicMock()
     db_router.get_engine = AsyncMock(return_value=MagicMock())
     message_publisher = MagicMock()
@@ -94,7 +95,7 @@ async def test_outbox_sweep_shard_no_events(mock_async_session):
     mock_session.execute.return_value = mock_result
 
     mock_session_ctx = MagicMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session_ctx.__aenter__.return_value = mock_session
     mock_session_ctx.__aexit__ = AsyncMock()
 
     mock_async_session.return_value = mock_session_ctx
@@ -107,7 +108,7 @@ async def test_outbox_sweep_shard_no_events(mock_async_session):
 
 @pytest.mark.asyncio
 @patch("worker.jobs.outbox_sweeper.AsyncSession")
-async def test_outbox_sweep_shard_with_events(mock_async_session):
+async def test_outbox_sweep_shard_with_events(mock_async_session: MagicMock) -> None:
     db_router = MagicMock()
     db_router.get_engine = AsyncMock(return_value=MagicMock())
     message_publisher = MagicMock()
@@ -131,7 +132,7 @@ async def test_outbox_sweep_shard_with_events(mock_async_session):
     mock_session.execute.return_value = mock_result
 
     mock_session_ctx = MagicMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session_ctx.__aenter__.return_value = mock_session
     mock_session_ctx.__aexit__ = AsyncMock()
 
     mock_async_session.return_value = mock_session_ctx

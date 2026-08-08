@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
+import type { LucideIcon } from 'lucide-react';
 import {
   ArrowLeftRight,
   ChevronRight,
@@ -22,7 +23,7 @@ const NavItem = ({
   to,
   exact,
 }: {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   to: string;
   exact?: boolean;
@@ -45,7 +46,9 @@ const NavItem = ({
   );
 };
 
-function TenantSidebar() {
+function TenantSidebar({ subscriptions }: { subscriptions: string[] }) {
+  const isEdiSubscribed = subscriptions.includes('edi');
+
   return (
     <>
       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4 mt-2">
@@ -53,12 +56,17 @@ function TenantSidebar() {
       </div>
       <NavItem icon={LayoutDashboard} label="Dashboard" to="/tenant" exact />
 
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
-        EDI
-      </div>
-      <NavItem icon={ArrowLeftRight} label="Transactions" to="/tenant/edi/transactions" />
-      <NavItem icon={Network} label="EDI Headers" to="/tenant/edi/headers" />
-      <NavItem icon={Network} label="Routes" to="/tenant/edi/routes" />
+      {isEdiSubscribed && (
+        <>
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
+            EDI
+          </div>
+          <NavItem icon={LayoutDashboard} label="EDI Dashboard" to="/tenant/edi" exact />
+          <NavItem icon={ArrowLeftRight} label="Transactions" to="/tenant/edi/transactions" />
+          <NavItem icon={Network} label="EDI Headers" to="/tenant/edi/headers" />
+          <NavItem icon={Network} label="Routes" to="/tenant/edi/routes" />
+        </>
+      )}
 
       <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-8">
         Developer Settings
@@ -121,7 +129,7 @@ function TenantLayout() {
         </div>
 
         <nav className="flex-1 px-4 py-8 flex flex-col gap-1.5 overflow-y-auto">
-          <TenantSidebar />
+          <TenantSidebar subscriptions={tenant?.subscriptions ?? []} />
         </nav>
 
         <div className="p-4 border-t border-slate-200/60">

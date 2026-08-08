@@ -7,6 +7,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "ucp_models",
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.22.0",
     "gunicorn>=22.0.0",
@@ -18,14 +19,17 @@ dependencies = [
     "config",
     "observability",
     "sqlalchemy>=2.0.0",
+    "orchestrator-worker",
 ]
 
 [tool.uv.sources]
+ucp_models = { workspace = true }
 as2-core = { workspace = true }
 security = { workspace = true }
 database = { workspace = true }
 config = { workspace = true }
 observability = { workspace = true }
+orchestrator-worker = { workspace = true }
 
 
 [build-system]
@@ -53,6 +57,7 @@ DEP002 = [
 venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
+    "../../../../core/ucp/packages/models/src",
     "../../../../core/platform/packages/identity/python/src",
     "../../../../core/platform/packages/observability/python/src",
     "../../../../core/platform/packages/schemas/python/src",

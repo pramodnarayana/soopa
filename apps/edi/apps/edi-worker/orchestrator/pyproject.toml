@@ -5,6 +5,7 @@ description = "Worker service for handling provisioning and data orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "ucp_models",
     "aioboto3>=13.1.1",
     "sqlalchemy>=2.0.29",
     "asyncpg>=0.29.0",
@@ -13,15 +14,14 @@ dependencies = [
     "pipeline",
     "config",
     "domain",
-    "soopa_schemas",
 ]
 
 [tool.uv.sources]
+ucp_models = { workspace = true }
 database = { workspace = true }
 pipeline = { workspace = true }
 config = { workspace = true }
 domain = { workspace = true }
-soopa_schemas = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -46,6 +46,9 @@ module = [
     "botocore.*",
     "hvac",
     "hvac.*",
+    "asyncpg",
+    "pytest_mock",
+    "pytest_mock.*",
 ]
 ignore_missing_imports = true
 
@@ -53,9 +56,9 @@ ignore_missing_imports = true
 venvPath = "../../../../.."
 venv = ".venv"
 extraPaths = [
+    "../../../../core/ucp/packages/models/src",
     "../../../../../core/platform/packages/identity/python/src",
     "../../../../../core/platform/packages/observability/python/src",
-    "../../../../../core/platform/packages/schemas/python/src",
     "../../../packages/database/src",
     "../../../packages/pipeline/src",
     "../../../packages/grammar/src",

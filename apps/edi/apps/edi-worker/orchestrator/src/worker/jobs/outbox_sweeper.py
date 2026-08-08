@@ -3,15 +3,15 @@ import datetime
 import logging
 
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard
 from database.models.data_plane import DataPlaneOutbox
 from domain.events import PIPELINE_EVENT_ROUTING_MAP, PipelineEventType
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.infrastructure import DatabaseShard
 
 from worker.core.scheduler.handler import JobHandlerPort
 from worker.core.scheduler.models import Job
-from worker.ports.message_publisher import MessagePublisherPort
+from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,9 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
                 async with sem:
                     try:
                         return await self._sweep_shard(shard_name, shard_dsn)
-                    except Exception as e:
-                        logger.error(
-                            f"[DataPlaneOutboxSweeper] Failed sweeping shard {shard_name}: {e}"
+                    except Exception:
+                        logger.exception(
+                            "[DataPlaneOutboxSweeper] Failed sweeping shard %s", shard_name
                         )
                         return 0
 
@@ -105,15 +105,17 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
                 messages = []
                 for event in queue_events:
                     messages.append(
-                        {
-                            "Id": str(event.id),
-                            "MessageBody": {
-                                "idempotency_key": str(event.idempotency_key),
-                                "event_type": event.event_type,
+                        PublishMessageEnvelope(
+                            message_id=str(event.id),
+                            event_type=event.event_type,
+                            event={
                                 "payload": event.payload,
                                 "tenant_id": event.tenant_id,
                             },
-                        }
+                            idempotency_key=str(event.idempotency_key)
+                            if event.idempotency_key
+                            else None,
+                        )
                     )
 
                 successful_ids = await self.message_publisher.publish_batch(queue_name, messages)

@@ -1,13 +1,18 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Protocol
+from typing import Any, Protocol
 
-from soopa_schemas.event_message import EventMessage
-from soopa_schemas.event_type import EventType
+from pydantic import BaseModel, Field
 
 # Aliasing to maintain existing contract names for the adapter
-UcpEventMessage = EventMessage
-UcpEventType = EventType
+UcpEventType = str
+
+
+class UcpEventMessage(BaseModel):
+    idempotencyKey: str = Field(...)
+    tenantId: str | None = Field(None)
+    eventType: str = Field(...)
+    payload: dict[str, Any] = Field(...)
 
 
 class UcpEventListenerPort(Protocol):

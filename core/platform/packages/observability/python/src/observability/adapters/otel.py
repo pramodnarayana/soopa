@@ -39,11 +39,14 @@ class OtelTracer(ITracer):
     Exports traces to the OTel Collector via OTLP gRPC.
     """
 
-    def __init__(self, service_name: str, otlp_endpoint: str):
+    def __init__(self, service_name: str, otlp_endpoint: str | None = None):
         resource = Resource(attributes={SERVICE_NAME: service_name})
-        exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+
+        if otlp_endpoint:
+            exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+
         trace.set_tracer_provider(provider)
         self._tracer = trace.get_tracer(service_name)
 

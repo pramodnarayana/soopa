@@ -64,17 +64,16 @@ async def poll_sqs_queue(
 
                         except json.JSONDecodeError:
                             # Permanently delete malformed (non-JSON) messages
-                            logger.error(
+                            logger.exception(
                                 f"[{queue_name}] Non-JSON message body, deleting permanently"
                             )
                             await sqs.delete_message(
                                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
                             )
 
-                        except Exception as e:
-                            logger.exception(
-                                f"[{queue_name}] Transient error processing message: {e}"
-                            )
-        except Exception as e:
-            logger.exception(f"[{queue_name}] SQS client error, retrying in 2s: {e}")
+                        except Exception:
+                            logger.exception("[%s] Transient error processing message", queue_name)
+        except Exception:
+            logger.exception(f"[{queue_name}] SQS client error, retrying in 2s")
+
             await asyncio.sleep(2)

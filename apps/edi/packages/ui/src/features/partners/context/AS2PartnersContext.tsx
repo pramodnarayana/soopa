@@ -41,7 +41,15 @@ export function AS2PartnersProvider({ children }: { children: React.ReactNode })
   const error = errorPartners || errorPartnerships;
 
   const refresh = useCallback(async () => {
-    await Promise.all([refetchPartners(), refetchPartnerships()]);
+    try {
+      await Promise.all([refetchPartners(), refetchPartnerships()]);
+    } catch (err) {
+      // React Query cancels in-flight refetches via AbortController when a
+      // component unmounts (e.g. a dialog closes after a successful mutation).
+      // This is expected behaviour — swallow the cancellation silently.
+      if (err instanceof Error && err.name === 'CancelledError') return;
+      throw err;
+    }
   }, [refetchPartners, refetchPartnerships]);
 
   return (

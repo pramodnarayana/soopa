@@ -1,0 +1,11 @@
+{
+  "name": "@soopa/database",
+  "private": true,
+  "scripts": {
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases .",
+    "test": "uv run pytest",
+    "deadcode": "uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry ."
+  }
+}

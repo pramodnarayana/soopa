@@ -26,8 +26,9 @@ async def run_worker(service: ProvisioningWorkerService, name: str) -> None:
             # If no event was processed, yield/sleep briefly
             if not processed_event:
                 await asyncio.sleep(0.1)
-        except Exception as e:
-            logger.exception(f"[{name}] Error in provisioning loop: {e}")
+        except Exception:
+            logger.exception(f"[{name}] Error in provisioning loop")
+
             await asyncio.sleep(5)
 
 

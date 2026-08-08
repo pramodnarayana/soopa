@@ -7,10 +7,13 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "ucp_models",
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "aioboto3>=13.0.0",
+    "structlog>=26.1.0",
+    "cryptography>=49.0.0",
 ]
 
 [tool.alembic]
@@ -27,25 +30,29 @@ packages = ["src/database"]
 venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
-    "../../../../core/platform/packages/identity/python/src",
-    "../../../../core/platform/packages/observability/python/src",
-    "../../../../core/platform/packages/schemas/python/src",
+    "../../../../core/ucp/packages/models/src",
+    "../identity/python/src",
+    "../observability/python/src",
+    "../schemas/python/src",
     "src",
-    "../pipeline/src",
-    "../grammar/src",
-    "../config/src",
-    "../security/src",
-    "../patches/src",
-    "../transformer/src",
-    "../as2_core/src",
-    "../bots_core/src",
-    "../domain/src",
-    "../../apps/edi-worker/compute/src",
-    "../../apps/edi-worker/ucp-sync/src",
-    "../../apps/edi-worker/orchestrator/src",
-    "../../apps/edi-as2-server/src",
-    "../../apps/edi-api/src",
+    "../../../../apps/edi/packages/pipeline/src",
+    "../../../../apps/edi/packages/grammar/src",
+    "../../../../apps/edi/packages/config/src",
+    "../../../../apps/edi/packages/security/src",
+    "../../../../apps/edi/packages/patches/src",
+    "../../../../apps/edi/packages/transformer/src",
+    "../../../../apps/edi/packages/as2_core/src",
+    "../../../../apps/edi/packages/bots_core/src",
+    "../../../../apps/edi/packages/domain/src",
+    "../../../../apps/edi/apps/edi-worker/compute/src",
+    "../../../../apps/edi/apps/edi-worker/ucp-sync/src",
+    "../../../../apps/edi/apps/edi-worker/orchestrator/src",
+    "../../../../apps/edi/apps/edi-as2-server/src",
+    "../../../../apps/edi/packages/edi/src",
 ]
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"
+
+[tool.uv.sources]
+ucp_models = { workspace = true }

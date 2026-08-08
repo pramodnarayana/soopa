@@ -1,5 +1,6 @@
 import uuid
 
+from database.models.control_plane import AS2Partner, InboundRoute
 from database.models.control_plane import AS2Partner as GlobalTradingPartner
 from database.repository import EdiMessageRepository as DbEdiMessageRepository
 from database.repository import TradingPartnerRepository as DbTradingPartnerRepository
@@ -34,7 +35,6 @@ class AS2TenantRepositoryAdapter:
         isa_receiver: str,
         transaction_type: str | None = None,
     ) -> str | None:
-        from database.models.control_plane import AS2Partner, InboundRoute
 
         conditions = [
             InboundRoute.isa_sender_id == isa_sender,

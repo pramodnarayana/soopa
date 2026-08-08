@@ -33,7 +33,6 @@ class var(Inmessage):
         fields and subfields (build self.lex_records).
         """
         # pylint: disable=too-many-locals, line-too-long
-        # flake8: noqa:E501
         record_sep = self.ta_info["record_sep"]
         mode_inrecord = 0  # 1 indicates: lexing in record, 0 is lexing 'between records'.
         field_sep = (

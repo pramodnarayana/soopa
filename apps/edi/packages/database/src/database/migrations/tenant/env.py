@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from database.models import TenantBase
+from database.models.data_plane import TenantBase
 
 config = context.config
 
@@ -45,7 +45,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = TENANT_DB_URL
+    # Ensure we are using the asyncpg driver
+    configuration["sqlalchemy.url"] = TENANT_DB_URL.replace(
+        "postgresql://", "postgresql+asyncpg://"
+    )
 
     connectable = async_engine_from_config(
         configuration,

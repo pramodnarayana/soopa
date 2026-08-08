@@ -129,7 +129,7 @@ def botsimport(*args):
             else:
                 modulepath = f"edi_grammar.x12.{grammarname}"
         else:
-            modulepath = ".".join(("edi_grammar",) + args[1:])
+            modulepath = ".".join(("edi_grammar", *args[1:]))
     else:
         modulepath = ".".join(args)
 

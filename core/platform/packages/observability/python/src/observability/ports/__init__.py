@@ -4,4 +4,4 @@ from .logger import ILogger
 from .metrics import IMetrics
 from .tracer import ISpan, ITracer
 
-__all__ = ["ITracer", "ISpan", "IMetrics", "ILogger"]
+__all__ = ["ILogger", "IMetrics", "ISpan", "ITracer"]

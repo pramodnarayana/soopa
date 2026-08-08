@@ -4,4 +4,4 @@ set -e
 echo "Running typechecks before push..."
 pnpm typecheck
 echo "Running test-file typechecks before push..."
-pnpm typecheck:node:tests
+pnpm typecheck:tests

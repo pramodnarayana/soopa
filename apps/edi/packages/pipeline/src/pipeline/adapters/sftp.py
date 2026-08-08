@@ -69,11 +69,11 @@ def get_ssh_client(
         key_io = io.StringIO(client_key_string)
         try:
             pkey: paramiko.PKey = paramiko.RSAKey.from_private_key(key_io)
-        except Exception:
+        except Exception:  # noqa: BLE001
             key_io.seek(0)
             try:
                 pkey = paramiko.ECDSAKey.from_private_key(key_io)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 key_io.seek(0)
                 pkey = paramiko.Ed25519Key.from_private_key(key_io)
         connect_kwargs["pkey"] = pkey
@@ -85,8 +85,8 @@ def get_ssh_client(
     try:
         client.connect(**connect_kwargs)  # type: ignore[arg-type]
         return client
-    except Exception as e:
-        logger.error(f"SSH Connection failed for {host}:{port} - {e}")
+    except Exception:
+        logger.exception("SSH Connection failed for %s:%s", host, port)
         client.close()
         raise
 
@@ -162,7 +162,8 @@ class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
             logger.info(f"Successfully uploaded {filename} to {host}:{port}{'/' + target_file}")
 
         except Exception as e:
-            logger.error(f"SFTP upload failed for {host}:{port}: {e}")
+            logger.exception(f"SFTP upload failed for {host}:{port}")
+
             raise RuntimeError(f"SFTP Delivery failed: {e}") from e
         finally:
             if sftp:

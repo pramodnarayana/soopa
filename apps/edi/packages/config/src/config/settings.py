@@ -104,11 +104,11 @@ class IdentitySettings(BaseSettings):
         return data
 
 
-class ServerSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SERVER_", env_file=".env", extra="ignore")
+class PublicSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="PUBLIC_", env_file=".env", extra="ignore")
 
-    external_url: str = Field(
-        default="http://localhost:8000",
+    base_url: str = Field(
+        default="http://localhost:3000",
         description="The external base URL of the EDI platform",
     )
 
@@ -132,7 +132,7 @@ class AppSettings(BaseSettings):
     aws: AwsSettings = Field(default_factory=AwsSettings)
     otel: OtelSettings = Field(default_factory=OtelSettings)
     identity: IdentitySettings = Field(default_factory=IdentitySettings)
-    server: ServerSettings = Field(default_factory=ServerSettings)
+    public: PublicSettings = Field(default_factory=PublicSettings)
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
@@ -140,22 +140,22 @@ class AppSettings(BaseSettings):
         from urllib.parse import urlparse
 
         if self.env != "development":
-            if "://" not in self.server.external_url:
-                raise ValueError("external_url must include a scheme (e.g. https://)")
+            if "://" not in self.public.base_url:
+                raise ValueError("base_url must include a scheme (e.g. https://)")
 
-            parsed = urlparse(self.server.external_url)
+            parsed = urlparse(self.public.base_url)
             host = parsed.hostname or ""
 
             if host == "localhost":
                 raise ValueError(
-                    "external_url must not be a loopback address in non-development environments"
+                    "base_url must not be a loopback address in non-development environments"
                 )
 
             try:
                 ip = ipaddress.ip_address(host)
                 if ip.is_loopback or ip.is_unspecified:
                     raise ValueError(
-                        "external_url must not be a loopback address in non-development environments"
+                        "base_url must not be a loopback address in non-development environments"
                     )
             except ValueError:
                 pass

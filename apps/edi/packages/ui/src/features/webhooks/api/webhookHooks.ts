@@ -34,7 +34,7 @@ export function useTenantWebhooksQuery() {
   return useQuery({
     queryKey: webhooksKeys.tenant(tenantId),
     queryFn: async () => {
-      const res = await api.get(`/tenants/${tenantId}/webhooks`);
+      const res = await api.get(`/tenants/${tenantId}/edi/webhooks`);
       const rawWebhooks = RawWebhooksArrayResponseSchema.parse(res.data);
       return rawWebhooks.map((w) => mapRawWebhook(w, tenantId));
     },
@@ -47,7 +47,7 @@ export function useCreateWebhookMutation() {
   const tenantId = useTenantId();
   return useToastMutation(
     async (payload: CreateWebhookEndpointPayload) => {
-      const res = await api.post(`/tenants/${tenantId}/webhooks`, payload);
+      const res = await api.post(`/tenants/${tenantId}/edi/webhooks`, payload);
       const rawWebhook = RawWebhookResponseSchema.parse(res.data);
       return mapRawWebhook(rawWebhook, tenantId);
     },
@@ -61,7 +61,7 @@ export function useUpdateWebhookStatusMutation() {
   const tenantId = useTenantId();
   return useToastMutation(
     async ({ id, active }: { id: string; active: boolean }) => {
-      const res = await api.patch(`/tenants/${tenantId}/webhooks/${id}`, { active });
+      const res = await api.patch(`/tenants/${tenantId}/edi/webhooks/${id}`, { active });
       const rawWebhook = RawWebhookResponseSchema.parse(res.data);
       return mapRawWebhook(rawWebhook, tenantId);
     },
@@ -75,7 +75,7 @@ export function useUpdateWebhookMutation() {
   const tenantId = useTenantId();
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: { name?: string; url?: string } }) => {
-      const res = await api.patch(`/tenants/${tenantId}/webhooks/${id}`, payload);
+      const res = await api.patch(`/tenants/${tenantId}/edi/webhooks/${id}`, payload);
       const rawWebhook = RawWebhookResponseSchema.parse(res.data);
       return mapRawWebhook(rawWebhook, tenantId);
     },
@@ -89,7 +89,7 @@ export function useDeleteWebhookMutation() {
   const tenantId = useTenantId();
   return useToastMutation(
     async (id: string) => {
-      await api.delete(`/tenants/${tenantId}/webhooks/${id}`);
+      await api.delete(`/tenants/${tenantId}/edi/webhooks/${id}`);
     },
     'Webhook deleted.',
     [webhooksKeys.tenant(tenantId)],

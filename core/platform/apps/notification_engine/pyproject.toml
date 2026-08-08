@@ -1,0 +1,24 @@
+[project]
+name = "notification-engine"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "fastapi>=0.115.14",
+    "jinja2>=3.1.6",
+    "platform-orm",
+    "punq>=0.8.0",
+    "pydantic>=2.13.4",
+    "sqlalchemy>=2.0.51",
+    "ucp-models",
+    "uvicorn>=0.51.0",
+]
+
+[tool.uv.sources]
+platform-orm = { workspace = true }
+ucp-models = { workspace = true }
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"

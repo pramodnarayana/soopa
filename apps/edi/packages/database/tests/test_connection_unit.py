@@ -56,7 +56,7 @@ async def test_get_engine_returns_cached_engine(
 
 @pytest.mark.asyncio
 async def test_get_engine_raises_error_without_url(router: DatabaseRouter) -> None:
-    with pytest.raises(ValueError, match="Engine for shard_2 not found and no URL provided."):
+    with pytest.raises(ValueError, match=r"Engine for shard_2 not found and no URL provided\."):
         await router.get_engine("shard_2")
 
 

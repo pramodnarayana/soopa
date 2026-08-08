@@ -19,4 +19,3 @@ class EventTranslator(ABC):
         Returns:
             A dictionary representing the internal SQS message structure expected by the Orchestrator.
         """
-        pass

@@ -9,14 +9,14 @@ from .message import AS2MDN, AS2Message
 from .parser import parse_as2_request, parse_mdn
 
 __all__ = [
-    "AS2Message",
     "AS2MDN",
+    "AS2Message",
+    "Disposition",
     "OutboundAS2Message",
+    "build_mdn",
     "build_outbound_message",
+    "calculate_mic",
+    "generate_mdn",
     "parse_as2_request",
     "parse_mdn",
-    "generate_mdn",
-    "build_mdn",
-    "calculate_mic",
-    "Disposition",
 ]

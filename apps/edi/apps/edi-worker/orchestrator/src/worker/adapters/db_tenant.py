@@ -1,8 +1,10 @@
 import contextlib
 
 from database.connection import DatabaseRouter
-from database.models import App, DatabaseShard, ShardRegistry, Tenant
+from platform_orm.models.identity import Tenant
 from sqlalchemy import select
+from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 from worker.core.constants import EDI_APP_SLUG
 from worker.ports.tenant import TenantPort

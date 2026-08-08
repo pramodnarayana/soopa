@@ -10,7 +10,7 @@ class TokenClaims(BaseModel):
     exp: int
     iat: int | None = None
     tenant_id: str | None = Field(
-        default=None, validation_alias=AliasChoices("urn:zitadel:iam:org:id", "tenant_id")
+        default=None, validation_alias=AliasChoices("tenant_id", "urn:zitadel:iam:org:id")
     )
     organization_id: str | None = None
     authorized_tenants: set[str] = Field(default_factory=set)
@@ -23,12 +23,21 @@ class TokenClaims(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def extract_authorized_tenants(cls, data: Any) -> Any:
+        import logging
+
+        logging.getLogger(__name__).warning("RAW JWT DATA IN BACKEND: %s", data)
         authorized_tenants = set()
         if isinstance(data, dict):
             # 1. Primary injected org (if Action is enabled)
-            tenant_id = data.get("urn:zitadel:iam:org:id") or data.get("tenant_id")
+            # Prioritize the internal Canonical ID ('tenant_id') over the IdP Org ID
+            tenant_id = data.get("tenant_id") or data.get("urn:zitadel:iam:org:id")
             if tenant_id:
                 authorized_tenants.add(str(tenant_id))
+
+            # Add the IdP Org ID as well so legacy mapping still works
+            idp_org_id = data.get("urn:zitadel:iam:org:id")
+            if idp_org_id:
+                authorized_tenants.add(str(idp_org_id))
 
             # 2. Derive cryptographically from Role allocations (Zero Trust stateless ACL)
             roles_dict = data.get("urn:zitadel:iam:org:project:roles") or data.get("roles")
@@ -64,6 +73,8 @@ class TokenClaims(BaseModel):
 # The canonical tenant ID used to represent the global platform administrator scope.
 PLATFORM_TENANT_ID = "ten_000000000000000000000000"
 
+M2M_API_KEY_PREFIX = "sp_api_"
+
 
 class IdentityContext(BaseModel):
     subject: str
@@ -73,6 +84,11 @@ class IdentityContext(BaseModel):
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
     claims: dict[str, Any]
+
+    @property
+    def is_platform_admin(self) -> bool:
+        """True when the identity holds the reserved platform-admin sentinel tenant ID."""
+        return PLATFORM_TENANT_ID in self.authorized_tenants
 
 
 def identity_context_from_claims(claims: TokenClaims) -> IdentityContext:

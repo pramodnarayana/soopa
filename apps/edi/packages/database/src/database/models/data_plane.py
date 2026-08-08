@@ -1,6 +1,8 @@
+import os
 from datetime import UTC, datetime
 from typing import Any
 
+from platform_orm.models.common import OutboxMixin, TimestampMixin
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -17,7 +19,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
-from .common import OutboxMixin, TimestampMixin
 from .replicated_mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,
@@ -301,9 +302,12 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
 
 class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
     __tablename__ = "outbox"
+    ID_PREFIX = "dp_edi_ob"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128),
+        primary_key=True,
+        default=lambda: f"{DataPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
     )
 
     __table_args__ = (

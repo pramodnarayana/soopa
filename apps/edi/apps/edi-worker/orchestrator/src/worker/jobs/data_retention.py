@@ -3,11 +3,11 @@ import datetime
 import logging
 
 from database.connection import DatabaseRouter
-from database.models.control_plane import DatabaseShard
 from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.infrastructure import DatabaseShard
 
 from worker.core.scheduler.handler import JobHandlerPort
 from worker.core.scheduler.models import Job
@@ -39,8 +39,9 @@ class DataRetentionCleanupJobHandler(JobHandlerPort):
             async with sem:
                 try:
                     return await self._cleanup_shard(shard_name, shard_dsn)
-                except Exception as e:
-                    logger.error(f"[DataRetentionCleanup] Failed cleaning shard {shard_name}: {e}")
+                except Exception:
+                    logger.exception(f"[DataRetentionCleanup] Failed cleaning shard {shard_name}")
+
                     raise
 
         results = await asyncio.gather(

@@ -20,7 +20,6 @@ class MessagePublisherPort(abc.ABC):
         Context manager to establish and share the underlying connection pool.
         Must be entered before calling publish_batch.
         """
-        pass
 
     @abc.abstractmethod
     async def publish_batch(
@@ -30,4 +29,3 @@ class MessagePublisherPort(abc.ABC):
         Publishes a batch of messages to the specified queue.
         Returns a list of the message_ids that were successfully published.
         """
-        pass

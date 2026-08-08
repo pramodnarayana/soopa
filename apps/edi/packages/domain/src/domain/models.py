@@ -56,7 +56,7 @@ class EdiRecordBase(BaseModel):
 
     @field_validator("*", mode="before")
     @classmethod
-    def coerce_to_str(cls, v):
+    def coerce_to_str(cls, v: Any) -> Any:
         if isinstance(v, UUID):
             return str(v)
         return v

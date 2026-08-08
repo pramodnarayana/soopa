@@ -32,7 +32,7 @@ def outmessage_init(**ta_info):
     """
     # Deferred import to avoid circular dependency:
     # outmessage <- parsers.edifact/x12 <- outmessage
-    from bots_core.domain.parsers import WRITER_REGISTRY  # noqa: PLC0415
+    from bots_core.domain.parsers import WRITER_REGISTRY
 
     try:
         classtocall = WRITER_REGISTRY[ta_info["editype"]]
@@ -283,7 +283,7 @@ class Outmessage(message.Message):
                 if field_definition.max_repeat == 1:
                     # non-repeating
                     field_has_data = False
-                    if field_definition.id in noderecord and noderecord[field_definition.id]:
+                    if noderecord.get(field_definition.id):
                         # field exists in outgoing message and has data
                         field_has_data = True
                         recordbuffer.append(
@@ -362,7 +362,7 @@ class Outmessage(message.Message):
                     fieldbuffer = []
                     for grammarsubfield in field_definition.subfields:
                         # loop subfields
-                        if grammarsubfield.id in noderecord and noderecord[grammarsubfield.id]:
+                        if noderecord.get(grammarsubfield.id):
                             # field exists in outgoing message and has data
                             field_has_data = True
                             # append field
@@ -413,10 +413,7 @@ class Outmessage(message.Message):
                             if comp_dict:
                                 for grammarsubfield in field_definition.subfields:
                                     # loop subfields
-                                    if (
-                                        grammarsubfield.id in comp_dict
-                                        and comp_dict[grammarsubfield.id]
-                                    ):
+                                    if comp_dict.get(grammarsubfield.id):
                                         # field exists in outgoing message and has data
                                         composite_has_data = True
                                         compositebuffer.append(

@@ -20,7 +20,7 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
     A simple background job to sweep the Control Plane Outbox for abandoned PENDING events
     that might have been missed by the real-time Postgres NOTIFY listener.
     """
-    logger.info("[Sweeper] Started background sweeper task")
+    logger.info("[DEV-LOG] [Sweeper] Started background sweeper task for edi.outbox")
     pool = None
     failure_backoff = INITIAL_BACKOFF
 
@@ -51,7 +51,7 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
 
                     if claimed_ids:
                         logger.info(
-                            f"[Sweeper] Claimed {len(claimed_ids)} abandoned PENDING events. Pushing to adapter queue."
+                            f"[DEV-LOG] [Sweeper] Claimed {len(claimed_ids)} abandoned PENDING events from edi.outbox. Pushing to adapter queue."
                         )
                         for row in claimed_ids:
                             adapter.queue.put_nowait(str(row["id"]))
@@ -61,8 +61,9 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
                 await asyncio.sleep(NORMAL_SWEEP_INTERVAL)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.exception(f"[Sweeper] Error in sweep: {e}")
+            except Exception:
+                logger.exception("[Sweeper] Error in sweep")
+
                 # Apply exponential backoff with jitter
                 jitter = random.uniform(0, 0.1 * failure_backoff)
                 delay = min(failure_backoff + jitter, MAX_BACKOFF)

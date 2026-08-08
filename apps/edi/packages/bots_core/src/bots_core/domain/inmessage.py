@@ -2,7 +2,6 @@
 # pylint: disable=invalid-name, missing-class-docstring, missing-function-docstring, duplicate-code, too-many-lines
 # pylint: disable=too-many-branches, too-many-statements, attribute-defined-outside-init, consider-using-f-string
 # pylint: disable=broad-exception-caught
-# flake8: noqa:E501
 
 # bots-modules
 import logging
@@ -37,7 +36,7 @@ def parse_edi_file(**ta_info):
     """
     # Deferred import to avoid circular dependency:
     # inmessage <- parsers.base <- inmessage
-    from bots_core.domain.parsers import READER_REGISTRY  # noqa: PLC0415
+    from bots_core.domain.parsers import READER_REGISTRY
 
     try:
         # get inmessage class to call (subclass of Inmessage)

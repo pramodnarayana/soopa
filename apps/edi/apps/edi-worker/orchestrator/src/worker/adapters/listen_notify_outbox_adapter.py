@@ -61,30 +61,32 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                     await self.listener_connection.remove_listener(
                         "edi_outbox_channel", self._on_notify
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Error removing listener: {e}")
                 try:
                     await self.listener_connection.close()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Error closing listener connection: {e}")
                 self.listener_connection = None
 
             if self.pool:
                 try:
                     await self.pool.close()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Error closing pool: {e}")
                 self.pool = None
 
             self._initialized = False
             logger.info("Closed ListenNotifyOutboxAdapter resources")
-        except Exception as e:
-            logger.exception(f"Error during adapter close: {e}")
+        except Exception:
+            logger.exception("Error during adapter close")
 
     def _on_notify(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
     ) -> None:
-        logger.debug(f"Received NOTIFY on {channel}: {payload}")
+        logger.info(
+            f"[DEV-LOG] Received Postgres NOTIFY on {channel} with payload (event_id): {payload}"
+        )
         self.queue.put_nowait(payload)
 
     @asynccontextmanager
@@ -111,14 +113,18 @@ class ListenNotifyOutboxAdapter(OutboxPort):
             )
 
             if not row:
-                logger.debug(f"Event {event_id} not found.")
+                logger.warning(
+                    f"[DEV-LOG] Event {event_id} not found in edi.outbox. It might have been processed or missing."
+                )
                 yield None
                 return
 
             # Accept both PENDING (from NOTIFY) and PROCESSING (from sweeper)
             # This allows the sweeper to recover stuck/crashed claims
             if row["status"] not in ("PENDING", "PROCESSING"):
-                logger.debug(f"Event {event_id} already processed (status: {row['status']}).")
+                logger.info(
+                    f"[DEV-LOG] Event {event_id} already processed or failed (status: {row['status']}). Skipping."
+                )
                 yield None
                 return
 
@@ -163,12 +169,13 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                 )
 
                 logger.info(
-                    f"Picked up outbox event {event_id} (type: {row['event_type']}, tenant_id: {row['tenant_id']})"
+                    f"[DEV-LOG] Translating and yielding outbox event {event_id} (type: {row['event_type']}, tenant: {row['tenant_id']})"
                 )
                 yield event
 
             except Exception as e:
-                logger.exception(f"Error processing Postgres outbox event {event_id}: {e}")
+                logger.exception(f"Error processing Postgres outbox event {event_id}")
+
                 error_message = str(e)
                 processing_error = e
                 processing_failed = True
@@ -184,9 +191,11 @@ class ListenNotifyOutboxAdapter(OutboxPort):
                     error_message,
                     event_id,
                 )
-                logger.info(f"Marked outbox event {event_id} as FAILED")
+                logger.info(f"[DEV-LOG] Marked outbox event {event_id} as FAILED")
             else:
-                logger.info(f"Successfully processed outbox event {event_id}, marking as PROCESSED")
+                logger.info(
+                    f"[DEV-LOG] Successfully finished outbox event {event_id}, marking as PROCESSED in edi.outbox"
+                )
                 await connection.execute(
                     "UPDATE edi.outbox SET status = 'PROCESSED', error_reason = NULL WHERE id = $1",
                     event_id,
@@ -195,3 +204,23 @@ class ListenNotifyOutboxAdapter(OutboxPort):
         # Re-raise the exception after persisting the failure
         if processing_error is not None:
             raise processing_error
+
+    async def publish_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: str,
+        tenant_id: str,
+    ) -> None:
+        """Publishes an event to the outbox queue."""
+        if not self.pool:
+            raise RuntimeError("Adapter is not initialized")
+
+        async with self.pool.acquire() as connection:
+            await connection.execute(
+                "INSERT INTO edi.outbox (idempotency_key, event_type, payload, tenant_id, status) VALUES ($1, $2, $3, $4, 'PENDING') ON CONFLICT (idempotency_key) DO NOTHING",
+                idempotency_key,
+                event_type,
+                json.dumps(payload),
+                tenant_id,
+            )

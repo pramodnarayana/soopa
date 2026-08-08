@@ -37,7 +37,7 @@ def test_httpx_delivery_adapter_validator() -> None:
 
     adapter = HttpxDeliveryAdapter(timeout_secs=5, validator=fail_validator)
 
-    with pytest.raises(ValueError, match="URL validation failed for provided destination."):
+    with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
         import asyncio
 
         asyncio.run(adapter.deliver("https://bad.com", b"{}"))

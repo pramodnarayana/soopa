@@ -7,25 +7,25 @@ from worker.data.scheduled_jobs_handler import process_scheduled_job
 
 
 @pytest.mark.asyncio
-async def test_process_scheduled_job_missing_id():
+async def test_process_scheduled_job_missing_id() -> None:
     # Should log warning and return
     await process_scheduled_job({"job_name": "test"})
 
 
 @pytest.mark.asyncio
-async def test_process_scheduled_job_missing_name():
+async def test_process_scheduled_job_missing_name() -> None:
     # Should log warning and return
     await process_scheduled_job({"job_id": str(uuid.uuid4())})
 
 
 @pytest.mark.asyncio
-async def test_process_scheduled_job_missing_registry():
+async def test_process_scheduled_job_missing_registry() -> None:
     # Should log error and return
     await process_scheduled_job({"job_id": str(uuid.uuid4()), "job_name": "test_job"})
 
 
 @pytest.mark.asyncio
-async def test_process_scheduled_job_unknown_job():
+async def test_process_scheduled_job_unknown_job() -> None:
     registry = MagicMock()
     registry.get.return_value = None
     with pytest.raises(ValueError, match="Unknown scheduled job name: unknown_job"):
@@ -35,7 +35,7 @@ async def test_process_scheduled_job_unknown_job():
 
 
 @pytest.mark.asyncio
-async def test_process_scheduled_job_success():
+async def test_process_scheduled_job_success() -> None:
     registry = MagicMock()
     mock_handler = AsyncMock()
     registry.get.return_value = mock_handler

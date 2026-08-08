@@ -65,6 +65,9 @@ class StructlogLogger(ILogger):
     def error(self, event: str, **kwargs: Any) -> None:
         self._logger.error(event, **kwargs)
 
+    def exception(self, event: str, **kwargs: Any) -> None:
+        self._logger.exception(event, **kwargs)
+
     def bind(self, **kwargs: Any) -> "StructlogLogger":
         bound = self._logger.bind(**kwargs)
         return StructlogLogger(name="", _bound_logger=bound)

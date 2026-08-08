@@ -44,7 +44,7 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | No
             pl = msg.get_payload(decode=True)
             if pl:
                 content_info = cms.ContentInfo.load(pl)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # 3. Try PEM unarmoring
@@ -52,7 +52,7 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | No
         try:
             _, _, der_bytes = pem.unarmor(encrypted_data)
             content_info = cms.ContentInfo.load(der_bytes)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     try:
@@ -100,7 +100,7 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | No
         if padded_plaintext[-pad_len:] != bytes([pad_len]) * pad_len:
             raise ValueError("Invalid PKCS7 padding bytes")
         return padded_plaintext[:-pad_len]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug(f"Manual ASN.1 decryption failed: {e}")
         return None
 
@@ -122,7 +122,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
     for strat_name, strat_func in strategies:
         try:
             return strat_func(encrypted_data, cert, private_key, options=[])  # type: ignore[arg-type]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.debug(f"{strat_name} decryption failed: {e}")
 
     # Enterprise Fallback: Manually parse the ASN.1 tree and decrypt using primitives
@@ -132,7 +132,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
         if manual_decrypted:
             logger.info("Successfully decrypted payload using pure Python ASN.1 manual primitives.")
             return manual_decrypted
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug(f"Manual fallback decryption failed: {e}")
 
     raise ValueError("All native decryption strategies failed.")
@@ -287,7 +287,7 @@ def _inject_certificate_into_cms(binary_sig: bytes, cert_bytes: bytes) -> bytes:
                 signed_data_cms["certificates"].append(choice)
 
         return content_info.dump()  # type: ignore
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug(f"Failed to inject certificate into CMS: {e}")
         return binary_sig
 
@@ -309,7 +309,7 @@ def _execute_endesive_verification(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=CryptographyDeprecationWarning)
         with contextlib.redirect_stdout(io.StringIO()):
-            hashok, sigok, certok = endesive.verifier.verify(
+            hashok, sigok, _certok = endesive.verifier.verify(
                 binary_sig, raw_signed_content, [cert_bytes]
             )
 
