@@ -97,7 +97,7 @@ ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301"
 "apps/edi/packages/edi/src/api/dependencies/**/*.py" = ["B008"]
 "apps/edi/apps/edi-as2-server/src/as2_server/main.py" = ["B008"]
 "apps/edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
-"core/platform/packages/identity/identity/**/*.py" = ["B008"]
+"core/platform/packages/identity/src/identity/**/*.py" = ["B008"]
 "core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores

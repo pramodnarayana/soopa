@@ -10,7 +10,7 @@ import jwt
 from jwt import PyJWKClient
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
-from identity.ports.token_verifier import TokenVerifier
+from identity.ports.token_verifier import TokenValidationError, TokenVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,9 @@ class ZitadelTokenVerifier(TokenVerifier):
                 audience=self._options.audience,
                 issuer=self._options.issuer,
             )
-        except Exception as e:
+        except jwt.PyJWTError as e:
             logger.error("JWT decode failed", exc_info=e)
-            raise
+            raise TokenValidationError(str(e)) from e
 
         # Fallback to /userinfo if roles are missing (with enterprise caching)
         if "urn:zitadel:iam:org:project:roles" not in payload:

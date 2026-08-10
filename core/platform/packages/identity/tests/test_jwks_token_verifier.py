@@ -1,3 +1,4 @@
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,6 +7,7 @@ from identity.adapters.outbound.zitadel.jwks_token_verifier import (
     ZitadelTokenVerifier,
     ZitadelTokenVerifierOptions,
 )
+from identity.ports.token_verifier import TokenValidationError
 
 
 @pytest.fixture
@@ -42,8 +44,9 @@ async def test_verify_valid_token(
             "sub": "user-123",
             "iss": "https://auth.example.com",
             "aud": "my-api",
-            "exp": 1700000000,
+            "exp": int(time.time()) + 3600,
             "tenant_id": "tenant-abc",
+            "urn:zitadel:iam:org:project:roles": {"admin": {"tenant-abc": "domain.com"}},
         }
 
         claims = await verifier.verify("fake.jwt.token")
@@ -58,3 +61,28 @@ async def test_verify_valid_token(
             issuer="https://auth.example.com",
         )
         mock_jwk_client.get_signing_key_from_jwt.assert_called_once_with("fake.jwt.token")
+
+
+@pytest.mark.asyncio
+@patch("identity.adapters.outbound.zitadel.jwks_token_verifier.jwt.decode")
+async def test_verify_expired_token(
+    mock_jwt_decode: MagicMock,
+    options: ZitadelTokenVerifierOptions,
+) -> None:
+    with patch(
+        "identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient"
+    ) as mock_jwk_client_cls:
+        import jwt
+
+        mock_jwk_client = mock_jwk_client_cls.return_value
+        mock_signing_key = MagicMock()
+        mock_signing_key.key = "test-key"
+        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+
+        verifier = ZitadelTokenVerifier(options)
+
+        # jwt.decode raises an exception when token is expired (simulated here)
+        mock_jwt_decode.side_effect = jwt.ExpiredSignatureError("Signature has expired")
+
+        with pytest.raises(TokenValidationError, match="Signature has expired"):
+            await verifier.verify("fake.expired.token")

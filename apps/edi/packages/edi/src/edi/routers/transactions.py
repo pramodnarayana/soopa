@@ -168,11 +168,15 @@ async def replay_transaction(
     return {"status": "accepted", "trace_id": trace_id}
 
 
+from fastapi import APIRouter, Depends, Header
+
+
 @router.post("/bulk-replay", status_code=202)
 async def bulk_replay_transactions(
     request: BulkReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     """
     Trigger an asynchronous replay of multiple transactions at the specified tier.
@@ -180,7 +184,9 @@ async def bulk_replay_transactions(
     async with uow:
         svc = TransactionService(uow)
         try:
-            processed_count = await svc.bulk_replay_transactions(tenant_id, request.trace_ids, request.tier)
+            processed_count = await svc.bulk_replay_transactions(
+                tenant_id, request.trace_ids, request.tier, command_key=idempotency_key
+            )
         except TransactionNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
 

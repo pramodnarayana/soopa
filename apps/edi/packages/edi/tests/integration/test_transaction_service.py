@@ -108,7 +108,18 @@ async def test_bulk_replay_transaction_success(uow, db_session):
 
     # Execute Bulk Replay
     await svc.bulk_replay_transactions(
-        tenant_id=tenant_id, trace_ids=[trace_id_1, trace_id_2], tier="translation"
+        tenant_id=tenant_id,
+        trace_ids=[trace_id_1, trace_id_2],
+        tier="translation",
+        command_key="test_bulk_key",
+    )
+
+    # Submit the same command twice to ensure idempotency
+    await svc.bulk_replay_transactions(
+        tenant_id=tenant_id,
+        trace_ids=[trace_id_1, trace_id_2],
+        tier="translation",
+        command_key="test_bulk_key",
     )
 
     # Assert Outbox Events were created

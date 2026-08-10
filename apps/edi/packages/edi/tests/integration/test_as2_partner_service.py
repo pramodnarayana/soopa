@@ -21,6 +21,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 @pytest.fixture
 def uow(db_session):
+    db_session.info["session_type"] = "global"
     return SqlAlchemyControlPlaneUnitOfWork(global_session=db_session)
 
 

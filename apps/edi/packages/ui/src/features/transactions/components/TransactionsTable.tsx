@@ -95,11 +95,16 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
   rowSelection: controlledRowSelection,
 }: TransactionsTableProps<T>) {
   const [internalRowSelection, setInternalRowSelection] = React.useState({});
-  const rowSelection = controlledRowSelection !== undefined ? controlledRowSelection : internalRowSelection;
-  const setRowSelection = controlledRowSelection !== undefined ? (updater: any) => {
-    const newValue = typeof updater === 'function' ? updater(controlledRowSelection) : updater;
-    // Parent will handle the update; we just notify via onSelectionChange
-  } : setInternalRowSelection;
+  const rowSelection =
+    controlledRowSelection !== undefined ? controlledRowSelection : internalRowSelection;
+  const setRowSelection =
+    controlledRowSelection !== undefined
+      ? (updater: any) => {
+          const newValue =
+            typeof updater === 'function' ? updater(controlledRowSelection) : updater;
+          // Parent will handle the update; we just notify via onSelectionChange
+        }
+      : setInternalRowSelection;
 
   const tanstackColumns = React.useMemo(() => {
     const columnHelper = createColumnHelper<T>();
@@ -113,6 +118,7 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
             <input
               type="checkbox"
               className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+              aria-label="Select all transactions"
               checked={table.getIsAllRowsSelected()}
               ref={(input) => {
                 if (input) input.indeterminate = table.getIsSomeRowsSelected();
@@ -124,6 +130,7 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
             <input
               type="checkbox"
               className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+              aria-label={`Select transaction ${row.original.trace_id ?? row.original.id}`}
               checked={row.getIsSelected()}
               disabled={!row.getCanSelect()}
               onChange={row.getToggleSelectedHandler()}

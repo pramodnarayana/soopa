@@ -42,7 +42,7 @@ class TransactionService:
         )
 
     async def bulk_replay_transactions(
-        self, tenant_id: str, trace_ids: list[str], tier: str
+        self, tenant_id: str, trace_ids: list[str], tier: str, command_key: str | None = None
     ) -> int:
         """
         Trigger asynchronous replay of multiple transactions at the specified tier.
@@ -69,6 +69,11 @@ class TransactionService:
         # 2. Construct Bulk Events
         events = []
         for trace_id in unique_trace_ids:
+            if command_key:
+                idem_key = f"replay_{command_key}_{trace_id}"
+            else:
+                idem_key = f"replay_{trace_id}_{uuid.uuid4().hex}"
+
             events.append(
                 {
                     "event_type": "edi.transaction.replay_requested",
@@ -76,7 +81,7 @@ class TransactionService:
                         "trace_id": trace_id,
                         "tier": tier,
                     },
-                    "idempotency_key": f"replay_{trace_id}_{uuid.uuid4().hex}",
+                    "idempotency_key": idem_key,
                 }
             )
 

@@ -28,14 +28,39 @@ const messageColumns = sharedColumns;
 const jsonColumns = sharedColumns;
 
 const availableFields: FieldDef[] = [
-  { label: 'Trading Partner ID', id: 'trading_partner_id', type: 'text' },
-  { label: 'Status', id: 'status', type: 'text' },
-  { label: 'Direction', id: 'direction', type: 'text' },
-  { label: 'Transaction Type', id: 'transaction_type', type: 'text' },
-  { label: 'Sender ID', id: 'sender_id', type: 'text' },
-  { label: 'Receiver ID', id: 'receiver_id', type: 'text' },
-  { label: 'Shipment Number', id: 'business_metadata.shipment_id', type: 'text' },
-  { label: 'Load Number', id: 'business_metadata.load_number', type: 'text' },
+  {
+    label: 'Trading Partner ID',
+    id: 'trading_partner_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains', 'in'],
+  },
+  { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains', 'in'] },
+  { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains', 'in'] },
+  {
+    label: 'Transaction Type',
+    id: 'transaction_type',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains', 'in'],
+  },
+  { label: 'Sender ID', id: 'sender_id', type: 'text', operators: ['eq', 'neq', 'contains', 'in'] },
+  {
+    label: 'Receiver ID',
+    id: 'receiver_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains', 'in'],
+  },
+  {
+    label: 'Shipment Number',
+    id: 'business_metadata.shipment_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains', 'in'],
+  },
+  {
+    label: 'Load Number',
+    id: 'business_metadata.load_number',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains', 'in'],
+  },
 ];
 
 function ExplorerCommonFields({
