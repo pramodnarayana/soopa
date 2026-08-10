@@ -184,6 +184,9 @@ class AS2PartnerService:
             if not cmd.public_cert_pem:
                 raise ValueError("public_cert_pem required for remote partners.")
 
+        if not public_cert_pem:
+            raise ValueError("public_cert_pem must not be None at this point.")
+
         try:
             await self.uow.as2_partners.rotate_as2_certificates(
                 tenant_id, partner_id, public_cert_pem, private_key_vault_ref
