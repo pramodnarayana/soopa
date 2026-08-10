@@ -1,3 +1,4 @@
+import { type FieldDef, QueryBuilder, useClientFilter } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import { Input } from '@soopa/ui/components/ui/input';
@@ -65,6 +66,21 @@ const USER_STATUS_THEME = {
 
 const columnHelper = createColumnHelper<TenantUser>();
 
+const availableFields: FieldDef[] = [
+  { id: 'email', label: 'Email', type: 'text' },
+  { id: 'displayName', label: 'Name', type: 'text' },
+  {
+    id: 'state',
+    label: 'Status',
+    type: 'enum',
+    operators: ['eq', 'neq'],
+    options: [
+      { label: 'Active', value: 'USER_STATE_ACTIVE' },
+      { label: 'Inactive', value: 'USER_STATE_INACTIVE' },
+    ],
+  },
+];
+
 export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/users')({
   component: TenantUsersPage,
 });
@@ -81,7 +97,8 @@ function TenantUsersPage() {
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('');
 
-  const { data: users = [], isLoading } = useGetTenantUsers(tenantId);
+  const { data: rawUsers = [], isLoading } = useGetTenantUsers(tenantId);
+  const { filters, setFilters, filteredData: users } = useClientFilter(rawUsers);
   const { data: roles = [], isLoading: rolesLoading } = useGetRoles();
 
   const createMutationObj = useCreateTenantUser();
@@ -470,6 +487,10 @@ function TenantUsersPage() {
             <UserPlus className="w-5 h-5" />
             Create User
           </Button>
+        </div>
+
+        <div className="mb-4 flex justify-end">
+          <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
         </div>
 
         <div className="bg-card border border-border shadow-[0_2px_8px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden">

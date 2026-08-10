@@ -3,7 +3,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import jwt
@@ -100,4 +100,4 @@ class ZitadelTokenVerifier(TokenVerifier):
             oldest_key = next(iter(self._userinfo_cache))
             del self._userinfo_cache[oldest_key]
 
-        return userinfo
+        return cast(dict[str, Any], userinfo)

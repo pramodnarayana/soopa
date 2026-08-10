@@ -11,6 +11,7 @@ from edi.core.services.transaction_service import TransactionService
 
 @pytest.fixture
 def uow(db_session):
+    db_session.info["session_type"] = "tenant"
     return SqlAlchemyDataPlaneUnitOfWork(tenant_session=db_session)
 
 
@@ -49,6 +50,7 @@ async def test_replay_transaction_success(uow, db_session):
         sender_id="SENDER123",
         receiver_id="RECEIVER123",
         status="PROCESSED",
+        edi_data="test_data",
     )
     db_session.add(msg)
     await db_session.commit()
@@ -60,13 +62,13 @@ async def test_replay_transaction_success(uow, db_session):
 
     # Assert Outbox Event was created
     async with uow:
-        # Since uow methods are mostly exposed, we can directly query the DB for the outbox
-        from sqlalchemy import text
+        from database.models.data_plane import DataPlaneOutbox
+        from sqlalchemy import func, select
 
         res = await db_session.execute(
-            text(
-                "SELECT count(*) FROM edi.data_plane_outbox WHERE event_type = 'edi.transaction.replay_requested'"
-            )
+            select(func.count())
+            .select_from(DataPlaneOutbox)
+            .where(DataPlaneOutbox.event_type == "edi.transaction.replay_requested")
         )
         count = res.scalar()
         assert count == 1
@@ -87,6 +89,7 @@ async def test_bulk_replay_transaction_success(uow, db_session):
         sender_id="S1",
         receiver_id="R1",
         status="PROCESSED",
+        edi_data="test_data",
     )
     msg2 = EdiMessage(
         tenant_id=tenant_id,
@@ -96,6 +99,7 @@ async def test_bulk_replay_transaction_success(uow, db_session):
         sender_id="S1",
         receiver_id="R1",
         status="PROCESSED",
+        edi_data="test_data",
     )
     db_session.add_all([msg1, msg2])
     await db_session.commit()
@@ -109,14 +113,13 @@ async def test_bulk_replay_transaction_success(uow, db_session):
 
     # Assert Outbox Events were created
     async with uow:
-        from sqlalchemy import text
+        from database.models.data_plane import DataPlaneOutbox
+        from sqlalchemy import func, select
 
-        # Since the test DB isn't wiped between assertions in the same file if not configured,
-        # we check the payload tier to differentiate or just count overall.
         res = await db_session.execute(
-            text(
-                "SELECT count(*) FROM edi.data_plane_outbox WHERE payload->>'tier' = 'translation'"
-            )
+            select(func.count())
+            .select_from(DataPlaneOutbox)
+            .where(DataPlaneOutbox.payload["tier"].astext == "translation")
         )
         count = res.scalar()
         assert count == 2
@@ -137,6 +140,7 @@ async def test_get_transaction_success(uow, db_session, mock_routing_resolver):
         sender_id="SENDER123",
         receiver_id="RECEIVER123",
         status="PROCESSED",
+        edi_data="test_data",
     )
     db_session.add(msg)
     await db_session.commit()

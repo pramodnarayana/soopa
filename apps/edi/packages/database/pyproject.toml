@@ -31,7 +31,7 @@ venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
     "../../../../core/ucp/packages/models/src",
-    "../identity/python/src",
+    "../identity/src",
     "../observability/python/src",
     "../schemas/python/src",
     "src",
