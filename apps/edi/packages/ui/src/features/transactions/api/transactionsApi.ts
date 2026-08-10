@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '../../../hooks/use-toast';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import { useTenantId } from '../../../contexts/TenantContext';
+import { explorerKeys } from '../../explorer/api/explorerApi';
 import type {
   TransactionDetailResponse,
   TransactionListResponse,
@@ -84,6 +86,7 @@ export function useReplayTransaction() {
   const api = useEdiNetwork();
   const queryClient = useQueryClient();
   const tenantId = useTenantId();
+  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({ traceId, tier }: { traceId: string; tier: string }) => {
@@ -94,6 +97,10 @@ export function useReplayTransaction() {
       // Invalidate the detail query to show the new state
       queryClient.invalidateQueries({ queryKey: transactionsKeys.detail(tenantId, traceId) });
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
+      queryClient.invalidateQueries({ queryKey: explorerKeys.all(tenantId) });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     },
   });
 }
@@ -102,6 +109,7 @@ export function useBulkReplayTransactions() {
   const api = useEdiNetwork();
   const queryClient = useQueryClient();
   const tenantId = useTenantId();
+  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({ traceIds, tier }: { traceIds: string[]; tier: string }) => {
@@ -111,6 +119,10 @@ export function useBulkReplayTransactions() {
     onSuccess: () => {
       // Invalidate all transaction lists to show the new state
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
+      queryClient.invalidateQueries({ queryKey: explorerKeys.all(tenantId) });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     },
   });
 }

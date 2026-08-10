@@ -344,6 +344,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 state=getattr(edi_msg, "state", None),
                 status_message=getattr(edi_msg, "status_message", None),
                 is_resend=getattr(edi_msg, "is_resend", False),
+                parent_trace_id=getattr(edi_msg, "parent_trace_id", None),
                 created_at=edi_msg.created_at,
                 updated_at=edi_msg.updated_at,
             ),
@@ -367,6 +368,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     gs_sender_id=getattr(j, "gs_sender_id", None),
                     gs_receiver_id=getattr(j, "gs_receiver_id", None),
                     payload=getattr(j, "payload", None),
+                    parent_trace_id=getattr(j, "parent_trace_id", None),
                     created_at=j.created_at,
                     updated_at=j.updated_at,
                 )
@@ -383,6 +385,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     http_status_code=getattr(g, "http_status_code", None),
                     payload=getattr(g, "payload", None),
                     response=getattr(g, "response", None),
+                    parent_trace_id=getattr(g, "parent_trace_id", None),
                     created_at=g.created_at,
                     updated_at=g.updated_at,
                 )

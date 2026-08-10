@@ -1,8 +1,8 @@
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.routing_resolver_repository import SqlAlchemyRoutingResolverRepository
@@ -36,12 +36,12 @@ class TransactionThreadResponse(BaseModel):
 
 
 class ReplayRequest(BaseModel):
-    tier: str  # "raw", "translation", "gateway"
+    tier: Literal["raw", "translation", "gateway"]
 
 
 class BulkReplayRequest(BaseModel):
-    trace_ids: list[str]
-    tier: str  # "raw", "translation", "gateway"
+    trace_ids: list[str] = Field(min_length=1, max_length=100)
+    tier: Literal["raw", "translation", "gateway"]
 
 
 # --- Endpoints ---
@@ -180,8 +180,8 @@ async def bulk_replay_transactions(
     async with uow:
         svc = TransactionService(uow)
         try:
-            await svc.bulk_replay_transactions(tenant_id, request.trace_ids, request.tier)
+            processed_count = await svc.bulk_replay_transactions(tenant_id, request.trace_ids, request.tier)
         except TransactionNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
 
-    return {"status": "accepted", "processed_count": len(request.trace_ids)}
+    return {"status": "accepted", "processed_count": processed_count}

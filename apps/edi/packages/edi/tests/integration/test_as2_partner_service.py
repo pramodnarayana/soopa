@@ -16,6 +16,8 @@ from edi.domain.models import (
     UpdateAS2TradingPartnerCmd,
 )
 
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+
 
 @pytest.fixture
 def uow(db_session):

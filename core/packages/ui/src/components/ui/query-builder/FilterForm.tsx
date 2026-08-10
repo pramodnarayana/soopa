@@ -139,20 +139,34 @@ export function FilterForm({ fields, onAdd, onCancel }: FilterFormProps) {
       {requiresValue && (
         <div className="w-[200px] shrink-0">
           {selectedField?.type === 'enum' && selectedField.options ? (
-            <Select value={value} onValueChange={(v) => setValue(v || '')}>
-              <SelectTrigger className="w-full bg-white">
-                <SelectValue placeholder="Select value">
-                  {selectedField.options.find((o) => String(o.value) === String(value))?.label}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {selectedField.options.map((opt) => (
-                  <SelectItem key={String(opt.value)} value={String(opt.value)}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            (operator === 'in' || operator === 'not_in') ? (
+              <Input
+                type="text"
+                className="bg-white h-10 w-full"
+                placeholder="Comma-separated values..."
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAdd();
+                  if (e.key === 'Escape') onCancel();
+                }}
+              />
+            ) : (
+              <Select value={value} onValueChange={(v) => setValue(v || '')}>
+                <SelectTrigger className="w-full bg-white">
+                  <SelectValue placeholder="Select value">
+                    {selectedField.options.find((o) => String(o.value) === String(value))?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedField.options.map((opt) => (
+                    <SelectItem key={String(opt.value)} value={String(opt.value)}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )
           ) : (
             <Input
               type={selectedField?.type === 'number' ? 'number' : 'text'}
@@ -176,6 +190,7 @@ export function FilterForm({ fields, onAdd, onCancel }: FilterFormProps) {
           onClick={handleAdd}
           className="h-10 w-10 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg"
           disabled={requiresValue && !value}
+          aria-label="Add filter"
         >
           <Check className="w-4 h-4" />
         </Button>
@@ -184,6 +199,7 @@ export function FilterForm({ fields, onAdd, onCancel }: FilterFormProps) {
           variant="ghost"
           onClick={onCancel}
           className="h-10 w-10 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+          aria-label="Cancel filter"
         >
           <X className="w-4 h-4" />
         </Button>

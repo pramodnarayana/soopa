@@ -86,7 +86,7 @@ function EdiMessageExpandedRow({ item }: { item: ExplorerEdiMessage }) {
           <Button
             variant="default"
             disabled={isPending}
-            onClick={() => replay({ traceId: item.trace_id as string, tier: 'raw' })}
+            onClick={() => replay({ traceId: item.trace_id, tier: 'raw' })}
           >
             <RefreshCcw className={`w-4 h-4 mr-2 ${isPending ? 'animate-spin' : ''}`} />
             Reprocess (Replay Raw)
@@ -123,7 +123,7 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           <Button
             variant="default"
             disabled={isPending}
-            onClick={() => replay({ traceId: item.trace_id as string, tier: 'translation' })}
+            onClick={() => replay({ traceId: item.trace_id, tier: 'translation' })}
           >
             <RefreshCcw className={`w-4 h-4 mr-2 ${isPending ? 'animate-spin' : ''}`} />
             Reprocess (Replay Translation)
@@ -191,37 +191,37 @@ type ActiveTab = 'messages' | 'json';
 
 // ─── Query Builder Fields ───────────────────────────────────────────────────────
 
-const messageFields: FieldDef[] = [
-  {
+const DIRECTION_OPTIONS = [
+  { label: 'Inbound', value: 'INBOUND' },
+  { label: 'Outbound', value: 'OUTBOUND' },
+];
+
+const sharedFieldDefs = {
+  direction: {
     id: 'direction',
     label: 'Direction',
-    type: 'enum',
-    operators: ['eq'],
-    options: [
-      { label: 'Inbound', value: 'INBOUND' },
-      { label: 'Outbound', value: 'OUTBOUND' },
-    ],
+    type: 'enum' as const,
+    operators: ['eq' as const],
+    options: DIRECTION_OPTIONS,
   },
-  { id: 'transaction_type', label: 'Transaction Type', type: 'text', operators: ['eq', 'neq'] },
-  { id: 'sender_id', label: 'ISA Sender', type: 'text', operators: ['eq', 'contains'] },
-  { id: 'receiver_id', label: 'ISA Receiver', type: 'text', operators: ['eq', 'contains'] },
+  transaction_type: { id: 'transaction_type', label: 'Transaction Type', type: 'text' as const, operators: ['eq' as const, 'neq' as const] },
+  sender_id: { id: 'sender_id', label: 'ISA Sender', type: 'text' as const, operators: ['eq' as const, 'contains' as const] },
+  receiver_id: { id: 'receiver_id', label: 'ISA Receiver', type: 'text' as const, operators: ['eq' as const, 'contains' as const] },
+};
+
+const messageFields: FieldDef[] = [
+  sharedFieldDefs.direction,
+  sharedFieldDefs.transaction_type,
+  sharedFieldDefs.sender_id,
+  sharedFieldDefs.receiver_id,
   { id: 'status', label: 'Status', type: 'text', operators: ['eq', 'neq'] },
 ];
 
 const jsonFields: FieldDef[] = [
-  {
-    id: 'direction',
-    label: 'Direction',
-    type: 'enum',
-    operators: ['eq'],
-    options: [
-      { label: 'Inbound', value: 'INBOUND' },
-      { label: 'Outbound', value: 'OUTBOUND' },
-    ],
-  },
-  { id: 'transaction_type', label: 'Transaction Type', type: 'text', operators: ['eq', 'neq'] },
-  { id: 'sender_id', label: 'ISA Sender', type: 'text', operators: ['eq', 'contains'] },
-  { id: 'receiver_id', label: 'ISA Receiver', type: 'text', operators: ['eq', 'contains'] },
+  sharedFieldDefs.direction,
+  sharedFieldDefs.transaction_type,
+  sharedFieldDefs.sender_id,
+  sharedFieldDefs.receiver_id,
   { id: 'gs_sender_id', label: 'GS Sender', type: 'text', operators: ['eq', 'contains'] },
   { id: 'gs_receiver_id', label: 'GS Receiver', type: 'text', operators: ['eq', 'contains'] },
   {
@@ -275,6 +275,8 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
 
   const [selectedMessages, setSelectedMessages] = useState<ExplorerEdiMessage[]>([]);
   const [selectedJson, setSelectedJson] = useState<ExplorerEdiJson[]>([]);
+  const [messagesRowSelection, setMessagesRowSelection] = useState<Record<string, boolean>>({});
+  const [jsonRowSelection, setJsonRowSelection] = useState<Record<string, boolean>>({});
 
   // EDI Messages (from explorer endpoint)
   const [messagesOffset, setMessagesOffset] = useState(0);
@@ -325,6 +327,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     setMessagesOffset(0);
     setAccumulatedMessages([]);
     setSelectedMessages([]);
+    setMessagesRowSelection({});
   };
 
   const handleJsonFiltersChange = (f: FilterRule[]) => {
@@ -332,6 +335,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     setJsonOffset(0);
     setAccumulatedJson([]);
     setSelectedJson([]);
+    setJsonRowSelection({});
   };
 
   return (
@@ -400,7 +404,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
 
                     bulkReplay(
                       { traceIds, tier: 'raw' },
-                      { onSuccess: () => setSelectedMessages([]) },
+                      { onSuccess: () => {
+                        setSelectedMessages([]);
+                        setMessagesRowSelection({});
+                      } },
                     );
                   }}
                 >
@@ -425,6 +432,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               hasMore={(messagesData?.items.length ?? 0) === LIMIT}
               enableRowSelection={true}
               onSelectionChange={setSelectedMessages}
+              rowSelection={messagesRowSelection}
               renderAction={(item) =>
                 item.trace_id ? (
                   <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
@@ -447,7 +455,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
 
                     bulkReplay(
                       { traceIds, tier: 'translation' },
-                      { onSuccess: () => setSelectedJson([]) },
+                      { onSuccess: () => {
+                        setSelectedJson([]);
+                        setJsonRowSelection({});
+                      } },
                     );
                   }}
                 >
@@ -472,6 +483,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               hasMore={(jsonData?.items.length ?? 0) === LIMIT}
               enableRowSelection={true}
               onSelectionChange={setSelectedJson}
+              rowSelection={jsonRowSelection}
               renderAction={(item) =>
                 item.trace_id ? (
                   <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />

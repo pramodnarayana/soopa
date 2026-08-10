@@ -35,21 +35,39 @@ export function applyFilters<T>(data: T[], filters: FilterRule[]): T[] {
           return val.includes(ruleVal);
         case 'not_contains':
           return !val.includes(ruleVal);
-        case 'gt':
-          return Number(rawValue) > Number(rule.value);
-        case 'gte':
-          return Number(rawValue) >= Number(rule.value);
-        case 'lt':
-          return Number(rawValue) < Number(rule.value);
-        case 'lte':
-          return Number(rawValue) <= Number(rule.value);
-        case 'in':
+        case 'gt': {
+          if (rawValue == null || rule.value == null) return false;
+          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          return leftVal > rightVal;
+        }
+        case 'gte': {
+          if (rawValue == null || rule.value == null) return false;
+          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          return leftVal >= rightVal;
+        }
+        case 'lt': {
+          if (rawValue == null || rule.value == null) return false;
+          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          return leftVal < rightVal;
+        }
+        case 'lte': {
+          if (rawValue == null || rule.value == null) return false;
+          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          return leftVal <= rightVal;
+        }
+        case 'in': {
           // Assume rule.value is a comma-separated string if text, or array
           const inArr = Array.isArray(rule.value) ? rule.value : String(rule.value).split(',');
           return inArr.map((i) => String(i).trim().toLowerCase()).includes(val);
-        case 'not_in':
+        }
+        case 'not_in': {
           const notInArr = Array.isArray(rule.value) ? rule.value : String(rule.value).split(',');
           return !notInArr.map((i) => String(i).trim().toLowerCase()).includes(val);
+        }
         default:
           return true;
       }

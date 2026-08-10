@@ -302,7 +302,7 @@ export function WebhooksTable({ config, data, isLoading }: WebhooksTableProps) {
       <DataTable
         table={table}
         isLoading={isLoading}
-        dataLength={data.length}
+        dataLength={tableData.length}
         emptyIcon={<Network className="w-8 h-8" />}
         emptyTitle="No webhooks configured"
         columnsLength={columns.length}

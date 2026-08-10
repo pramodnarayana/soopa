@@ -43,28 +43,32 @@ class TransactionService:
 
     async def bulk_replay_transactions(
         self, tenant_id: str, trace_ids: list[str], tier: str
-    ) -> None:
+    ) -> int:
         """
         Trigger asynchronous replay of multiple transactions at the specified tier.
         Publishes multiple outbox events atomically within the current UOW.
+        Returns the count of unique trace IDs processed.
         """
         if not trace_ids:
-            return
+            return 0
 
         import uuid
 
+        # 0. Deduplicate trace IDs
+        unique_trace_ids = list(dict.fromkeys(trace_ids))
+
         # 1. Bulk Existence Check
         existing_trace_ids = await self.uow.transactions.get_existing_trace_ids(
-            tenant_id, trace_ids
+            tenant_id, unique_trace_ids
         )
-        missing_trace_ids = set(trace_ids) - existing_trace_ids
+        missing_trace_ids = set(unique_trace_ids) - existing_trace_ids
         if missing_trace_ids:
             # For simplicity, we just raise for the first missing one, or could raise a bulk error
             raise TransactionNotFoundError(trace_id=next(iter(missing_trace_ids)))
 
         # 2. Construct Bulk Events
         events = []
-        for trace_id in trace_ids:
+        for trace_id in unique_trace_ids:
             events.append(
                 {
                     "event_type": "edi.transaction.replay_requested",
@@ -80,6 +84,8 @@ class TransactionService:
         await self.uow.data_plane_outbox.publish_outbox_events_bulk(
             tenant_id=tenant_id, events=events
         )
+
+        return len(unique_trace_ids)
 
     async def get_transaction(
         self,
@@ -106,6 +112,7 @@ class TransactionService:
             "gs_receiver_id": msg.gs_receiver_id,
             "status": msg.status,
             "edi_data": msg.edi_data,
+            "parent_trace_id": msg.parent_trace_id,
             "created_at": msg.created_at.isoformat() if msg.created_at else None,
         }
 
@@ -122,6 +129,7 @@ class TransactionService:
                     "business_metadata": j.business_metadata,
                     "payload": j.payload,
                     "status": j.status,
+                    "parent_trace_id": j.parent_trace_id,
                     "created_at": j.created_at.isoformat() if j.created_at else None,
                 }
             )
@@ -136,6 +144,7 @@ class TransactionService:
                     "payload": gw.payload,
                     "response": gw.response,
                     "status": gw.status,
+                    "parent_trace_id": gw.parent_trace_id,
                     "created_at": gw.created_at.isoformat() if gw.created_at else None,
                 }
             )

@@ -30,6 +30,7 @@ interface TransactionsTableProps<T> {
   renderAction?: (item: T) => React.ReactNode;
   enableRowSelection?: boolean;
   onSelectionChange?: (selectedRows: T[]) => void;
+  rowSelection?: Record<string, boolean>;
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -91,8 +92,14 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
   renderAction,
   enableRowSelection,
   onSelectionChange,
+  rowSelection: controlledRowSelection,
 }: TransactionsTableProps<T>) {
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [internalRowSelection, setInternalRowSelection] = React.useState({});
+  const rowSelection = controlledRowSelection !== undefined ? controlledRowSelection : internalRowSelection;
+  const setRowSelection = controlledRowSelection !== undefined ? (updater: any) => {
+    const newValue = typeof updater === 'function' ? updater(controlledRowSelection) : updater;
+    // Parent will handle the update; we just notify via onSelectionChange
+  } : setInternalRowSelection;
 
   const tanstackColumns = React.useMemo(() => {
     const columnHelper = createColumnHelper<T>();

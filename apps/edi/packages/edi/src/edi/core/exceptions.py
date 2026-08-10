@@ -41,9 +41,6 @@ class InvalidCertificateActionError(DomainError):
 class MissingCertificateError(DomainError):
     """Raised when required certificates are missing."""
 
-    def __init__(self, message: str):
-        super().__init__(message)
-
 
 class TransactionNotFoundError(DomainError):
     """Raised when an EDI Transaction trace is not found."""

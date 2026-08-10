@@ -113,7 +113,10 @@ export function ExplorerLayout() {
   );
 
   const handleFiltersChange = (newFilters: FilterRule[]) => {
-    setFilters(newFilters);
+    // Retain only supported operators
+    const supportedOperators = new Set(['eq', 'neq', 'contains', 'in']);
+    const normalizedFilters = newFilters.filter((rule) => supportedOperators.has(rule.operator));
+    setFilters(normalizedFilters);
     setMessagesOffset(0);
     setJsonOffset(0);
     setAccumulatedMessages([]);
