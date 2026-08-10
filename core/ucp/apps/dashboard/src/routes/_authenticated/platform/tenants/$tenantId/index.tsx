@@ -42,27 +42,38 @@ function TenantOverviewPage() {
   if (!tenant) return null;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-8 max-w-2xl">
-      <h2 className="text-lg font-semibold text-slate-900 mb-6">Tenant Overview</h2>
+    <div className="bg-card rounded-2xl border border-border shadow-[0_2px_8px_rgb(0,0,0,0.04)] p-8">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">Tenant Overview</h2>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl h-10 px-5 text-[14px] font-semibold"
+            disabled={name === tenant.name || updateNameMutationObj.isPending}
+            onClick={() => setName(tenant.name)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+            disabled={name === tenant.name || updateNameMutationObj.isPending || !name.trim()}
+            onClick={() => handleUpdateName(name)}
+          >
+            {updateNameMutationObj.isPending ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
+      </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-2xl">
         <div className="space-y-2">
-          <Label className="text-slate-700">Company Name</Label>
-          <div className="flex gap-3">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-lg bg-white"
-            />
-            <Button
-              variant="outline"
-              className="rounded-lg shrink-0"
-              disabled={name === tenant.name || updateNameMutationObj.isPending || !name.trim()}
-              onClick={() => handleUpdateName(name)}
-            >
-              {updateNameMutationObj.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
+          <Label className="text-sm font-medium text-muted-foreground">Company Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-11 rounded-xl bg-background"
+          />
         </div>
       </div>
     </div>

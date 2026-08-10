@@ -13,7 +13,7 @@ export interface CertificateInputProps {
  */
 export function CertificateInput({ value, onChange, extraActions }: CertificateInputProps) {
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden h-[250px] flex flex-col">
+    <div className="border border-slate-200 rounded-xl overflow-hidden h-[440px] flex flex-col">
       <EdiEditorPane
         value={value}
         onChange={onChange}

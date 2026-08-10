@@ -145,6 +145,46 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem; onCancel?:
   return (
     <div className="p-6 bg-slate-50/50 rounded-b-2xl border-t border-slate-100">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="flex justify-between items-center mb-6">
+          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+            Route Details
+          </h4>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
+              onClick={() => {
+                reset();
+                if (onCancel) onCancel();
+                setTargetId(
+                  route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '',
+                );
+              }}
+              disabled={
+                (!isDirty &&
+                  targetId ===
+                    (route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '')) ||
+                isSubmitting
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                (!isDirty &&
+                  targetId ===
+                    (route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '')) ||
+                isSubmitting
+              }
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+            >
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            </Button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top Info */}
           <div className="space-y-2">
@@ -251,38 +291,6 @@ export function RouteDetails({ route, onCancel }: { route: RouteItem; onCancel?:
                 }))}
             />
           </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              reset();
-              if (onCancel) onCancel();
-              setTargetId(route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '');
-            }}
-            disabled={
-              (!isDirty &&
-                targetId ===
-                  (route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '')) ||
-              isSubmitting
-            }
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={
-              (!isDirty &&
-                targetId ===
-                  (route.webhook_id || route.as2_partner_id || route.sftp_partner_id || '')) ||
-              isSubmitting
-            }
-          >
-            {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Save Changes
-          </Button>
         </div>
       </form>
     </div>

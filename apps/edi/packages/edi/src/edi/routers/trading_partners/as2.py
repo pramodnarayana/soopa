@@ -11,16 +11,19 @@ from edi.adapters.http.dtos import (
 )
 from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from edi.core.exceptions import OrchestrationError
-from edi.core.services import AS2PartnerService
 from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
 from edi.dependencies.database import get_control_plane_uow
+from edi.dependencies.headers import get_idempotency_key
 from edi.dependencies.services import get_vault
-from edi.domain.certificate import generate_self_signed_cert
 from edi.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Partners — AS2"])
+
+
+# Import shared rotation helper
+from edi.routers.trading_partners.platform.as2_partners import _rotate_as2_certificates
 
 
 @router.get(
@@ -79,7 +82,7 @@ async def export_as2_certificates(
 
 
 @router.put(
-    "/as2/{partner_id}/certificates/rotate",
+    "/as2/certificates/{partner_id}/rotate",
     response_model=AS2TradingPartnerResponse,
 )
 async def rotate_as2_certificates(
@@ -87,11 +90,13 @@ async def rotate_as2_certificates(
     request: RotateCertificateRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    idempotency_key: str | None = Depends(get_idempotency_key),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     vault: VaultPort = Depends(get_vault),
 ) -> Any:
     """Rotates certificates for an AS2 partner."""
     async with uow:
+        # Resolve actual tenant ID from partner
         partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
             raise HTTPException(status_code=404, detail="Partner not found")
@@ -100,63 +105,12 @@ async def rotate_as2_certificates(
             str(partner.tenant_id) if partner.tenant_id is not None else PLATFORM_TENANT_ID
         )
 
-        if partner.is_local and "certificates:rotate" not in profile["permissions"]:
-            raise HTTPException(
-                status_code=403, detail="Insufficient permissions to rotate certificates."
-            )
-
-        public_cert_pem = request.public_cert_pem
-        private_key_vault_ref = None
-
-        if partner.is_local:
-            if request.action == "generate":
-                private_key_bytes, public_cert_bytes = generate_self_signed_cert(
-                    common_name=partner.as2_id
-                )
-                private_key_vault_ref = vault.store_private_key(
-                    private_key_pem=private_key_bytes,
-                    alias_prefix=f"{partner.name.replace(' ', '_').lower()}_rotated",
-                )
-                public_cert_pem = public_cert_bytes.decode("utf-8")
-            elif request.action == "upload":
-                if not request.private_key_pem or not request.public_cert_pem:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Both public_cert_pem and private_key_pem required for upload.",
-                    )
-                private_key_vault_ref = vault.store_private_key(
-                    private_key_pem=request.private_key_pem.encode("utf-8"),
-                    alias_prefix=f"{partner.name.replace(' ', '_').lower()}_uploaded",
-                )
-        else:
-            if not request.public_cert_pem:
-                raise HTTPException(
-                    status_code=400, detail="public_cert_pem required for remote partners."
-                )
-
-        try:
-            svc = AS2PartnerService(uow=uow)
-            updated_partner = await svc.rotate_certificates(
-                tenant_id=actual_tenant_id,
-                partner_id=partner_id,
-                new_public_cert=str(public_cert_pem),
-                new_private_key_vault_ref=private_key_vault_ref,
-            )
-            await uow.commit()
-        except ValueError as e:
-            if private_key_vault_ref:
-                vault.delete_secret(private_key_vault_ref)
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        except OrchestrationError as e:
-            if private_key_vault_ref:
-                vault.delete_secret(private_key_vault_ref)
-            raise HTTPException(status_code=500, detail="Internal server error") from e
-
-        return AS2TradingPartnerResponse(
-            id=str(updated_partner.partner_id),
-            name=updated_partner.name,
-            as2_id=partner.as2_id,
-            is_local=partner.is_local,
-            url=partner.url,
-            active=updated_partner.status == "ACTIVE",
+        return await _rotate_as2_certificates(
+            partner_id=partner_id,
+            request=request,
+            tenant_id=actual_tenant_id,
+            uow=uow,
+            idempotency_key=idempotency_key,
+            profile=profile,
+            vault=vault,
         )

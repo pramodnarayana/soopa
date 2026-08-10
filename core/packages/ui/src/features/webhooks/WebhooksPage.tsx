@@ -30,7 +30,7 @@ export function WebhooksPage({ baseUrl, tenantId, token }: WebhooksPageProps) {
               Webhooks
             </h2>
           </div>
-          <Button id="add-webhook-btn" onClick={() => setShowCreate(true)}>
+          <Button id="add-webhook-btn" size="cta" onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4 mr-1" />
             Add Webhook
           </Button>

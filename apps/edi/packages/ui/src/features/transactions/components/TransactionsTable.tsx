@@ -95,6 +95,7 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
       // @ts-expect-error key is used as accessor
       return columnHelper.accessor(col.key, {
         header: col.label,
+        meta: { className: col.className },
         cell: (info) => {
           const item = info.row.original;
           const value = info.getValue();
@@ -109,9 +110,9 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
             return <DirectionBadge direction={value as string} />;
           }
           return (
-            <span className="text-slate-700 font-medium font-mono text-xs">
+            <span className="text-foreground font-medium text-sm">
               {(value as string | React.ReactNode) || (
-                <span className="text-slate-400 font-sans font-normal">—</span>
+                <span className="text-muted-foreground font-normal italic">—</span>
               )}
             </span>
           );
@@ -123,7 +124,7 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
       cols.push(
         columnHelper.display({
           id: 'actions',
-          header: 'Action',
+          header: '',
           cell: (info) => (
             <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
               {renderAction(info.row.original)}

@@ -98,58 +98,7 @@ export function SftpPartnerDetails({
             <Button
               type="button"
               variant="outline"
-              disabled={testConnection.isPending}
-              onClick={() => {
-                const vals = getValues();
-                const currentId = ++testRequestId.current;
-                testConnection.mutate(
-                  {
-                    id: partner.id,
-                    payload: {
-                      host: vals.host || partner.host || '',
-                      port: vals.port || partner.port || 22,
-                      username: vals.username || partner.username || '',
-                      password: vals.password || undefined,
-                    },
-                  },
-                  {
-                    onSuccess: (data: { success: boolean; reason?: string }) => {
-                      if (currentId === testRequestId.current)
-                        setTestResult({
-                          success: data.success,
-                          message: data.reason || 'Connection successful!',
-                        });
-                    },
-                    onError: (
-                      error:
-                        | Error
-                        | { response?: { data?: { detail?: string } }; message?: string },
-                    ) => {
-                      const e = error as {
-                        response?: { data?: { detail?: string } };
-                        message?: string;
-                      };
-                      if (currentId === testRequestId.current)
-                        setTestResult({
-                          success: false,
-                          message: e.response?.data?.detail || e.message || 'Connection failed',
-                        });
-                    },
-                  },
-                );
-              }}
-              className="flex items-center gap-2"
-            >
-              {testConnection.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4" />
-              )}
-              {testConnection.isPending ? 'Testing...' : 'Test Connection'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
+              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
               onClick={() => {
                 reset();
                 setTestResult(null);
@@ -159,7 +108,11 @@ export function SftpPartnerDetails({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!isDirty || isSubmitting} className="min-w-[100px]">
+            <Button
+              type="submit"
+              disabled={!isDirty || isSubmitting}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+            >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
             </Button>
           </div>
@@ -239,6 +192,60 @@ export function SftpPartnerDetails({
           <div>
             <Label className="text-xs text-slate-500 block mb-1">To Trading Partner Path</Label>
             <Input {...register('outbound_remote_path')} placeholder="/outbound" />
+          </div>
+          <div className="flex justify-between items-center mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={testConnection.isPending}
+              onClick={() => {
+                const vals = getValues();
+                const currentId = ++testRequestId.current;
+                testConnection.mutate(
+                  {
+                    id: partner.id,
+                    payload: {
+                      host: vals.host || partner.host || '',
+                      port: vals.port || partner.port || 22,
+                      username: vals.username || partner.username || '',
+                      password: vals.password || undefined,
+                    },
+                  },
+                  {
+                    onSuccess: (data: { success: boolean; reason?: string }) => {
+                      if (currentId === testRequestId.current)
+                        setTestResult({
+                          success: data.success,
+                          message: data.reason || 'Connection successful!',
+                        });
+                    },
+                    onError: (
+                      error:
+                        | Error
+                        | { response?: { data?: { detail?: string } }; message?: string },
+                    ) => {
+                      const e = error as {
+                        response?: { data?: { detail?: string } };
+                        message?: string;
+                      };
+                      if (currentId === testRequestId.current)
+                        setTestResult({
+                          success: false,
+                          message: e.response?.data?.detail || e.message || 'Connection failed',
+                        });
+                    },
+                  },
+                );
+              }}
+              className="flex items-center gap-2"
+            >
+              {testConnection.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              {testConnection.isPending ? 'Testing...' : 'Test Connection'}
+            </Button>
           </div>
         </div>
       </form>

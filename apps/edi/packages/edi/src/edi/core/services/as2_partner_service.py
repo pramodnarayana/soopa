@@ -7,12 +7,15 @@ from domain.events import (
 )
 from domain.models import ConnectionType, PartnerStatus
 
+from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.models import (
     CreateAS2TradingPartnerCmd,
     PartnerEntity,
+    RotateAS2CertificateCmd,
     UpdateAS2TradingPartnerCmd,
 )
 from edi.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+from edi.ports.vault import VaultPort
 
 logger = logging.getLogger(__name__)
 
@@ -139,27 +142,73 @@ class AS2PartnerService:
         self,
         tenant_id: str,
         partner_id: str,
-        new_public_cert: str,
-        new_private_key_vault_ref: str | None,
+        cmd: RotateAS2CertificateCmd,
+        vault: VaultPort,
         idempotency_key: str | None = None,
     ) -> PartnerEntity:
         logger.info(f"Rotating certificates for AS2 partner {partner_id} for tenant {tenant_id}")
-        await self.uow.as2_partners.rotate_as2_certificates(
-            tenant_id, partner_id, new_public_cert, new_private_key_vault_ref
-        )
 
-        updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
-        if not updated_partner:
-            raise ValueError("Partner not found after certificate rotation")
+        partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
+        if not partner:
+            raise ValueError("Partner not found")
 
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partner_updated,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
-        )
+        # Validate action
+        if cmd.action not in ("generate", "upload"):
+            raise ValueError(f"Invalid action '{cmd.action}'. Must be 'generate' or 'upload'.")
+
+        public_cert_pem = cmd.public_cert_pem
+        private_key_vault_ref = None
+
+        if partner.is_local:
+            if cmd.action == "generate":
+                private_key_bytes, public_cert_bytes = generate_self_signed_cert(
+                    common_name=partner.as2_id
+                )
+                # Use stable partner_id instead of tenant-controlled name
+                private_key_vault_ref = vault.store_private_key(
+                    private_key_pem=private_key_bytes,
+                    alias_prefix=f"{partner_id}_rotated",
+                )
+                public_cert_pem = public_cert_bytes.decode("utf-8")
+            elif cmd.action == "upload":
+                if not cmd.private_key_pem or not cmd.public_cert_pem:
+                    raise ValueError(
+                        "Both public_cert_pem and private_key_pem required for upload."
+                    )
+                # Use stable partner_id instead of tenant-controlled name
+                private_key_vault_ref = vault.store_private_key(
+                    private_key_pem=cmd.private_key_pem.encode("utf-8"),
+                    alias_prefix=f"{partner_id}_uploaded",
+                )
+        else:
+            if not cmd.public_cert_pem:
+                raise ValueError("public_cert_pem required for remote partners.")
+
+        if not public_cert_pem:
+            raise ValueError("public_cert_pem must not be None at this point.")
+
+        try:
+            await self.uow.as2_partners.rotate_as2_certificates(
+                tenant_id, partner_id, public_cert_pem, private_key_vault_ref
+            )
+
+            updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
+            if not updated_partner:
+                raise ValueError("Partner not found after certificate rotation")
+
+            await self.uow.control_plane_outbox.publish_outbox_event(
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_as2_partner_updated,
+                    resource_id=str(partner_id),
+                ),
+                idempotency_key=idempotency_key,
+            )
+
+        except Exception:
+            if private_key_vault_ref:
+                vault.delete_secret(private_key_vault_ref)
+            raise
 
         return PartnerEntity(
             partner_id=partner_id,

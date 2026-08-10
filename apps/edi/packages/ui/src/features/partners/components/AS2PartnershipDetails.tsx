@@ -144,7 +144,7 @@ export function AS2PartnershipDetails({
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
               onClick={() => {
                 reset();
                 if (onCancel) onCancel();
@@ -155,9 +155,8 @@ export function AS2PartnershipDetails({
             </Button>
             <Button
               type="submit"
-              size="sm"
               disabled={!isDirty || isSubmitting}
-              className="min-w-[80px]"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
             >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
             </Button>

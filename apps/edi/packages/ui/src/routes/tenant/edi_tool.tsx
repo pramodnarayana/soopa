@@ -234,30 +234,33 @@ export function EdiToolPage() {
 
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-8rem)]">
-      <style>{`
-        /* Force span tokens inside the lines to adopt our custom colors */
-      `}</style>
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          <FileCode className="w-6 h-6 text-indigo-600" />
-          EDI Tool
-        </h2>
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
+            <FileCode className="w-7 h-7 text-primary" />
+            EDI Tool
+          </h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Paste EDI or JSON to instantly validate and transform between formats.
+          </p>
+        </div>
       </div>
 
       <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
         {/* Left Pane (Input) */}
-        <div className="flex flex-col border rounded-xl bg-white shadow-sm overflow-hidden relative">
-          <div className="bg-slate-50 px-4 py-2 border-b flex items-center justify-between">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border">
+        <div className="flex flex-col border border-border rounded-xl bg-card shadow-sm overflow-hidden">
+          <div className="bg-muted/50 px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border/40">
               <button
                 onClick={() => {
                   setInputFormat('EDI');
                   setOutputFormat('JSON');
                 }}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
                   inputFormat === 'EDI'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
+                    ? 'bg-background shadow-sm text-foreground border border-border/60'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 EDI Input
@@ -267,10 +270,10 @@ export function EdiToolPage() {
                   setInputFormat('JSON');
                   setOutputFormat('EDI');
                 }}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
                   inputFormat === 'JSON'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                    ? 'bg-background shadow-sm text-foreground border border-border/60'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 JSON Input
@@ -279,20 +282,20 @@ export function EdiToolPage() {
 
             <div className="flex items-center gap-1">
               {transformMutation.isPending && (
-                <span className="text-xs text-slate-400 font-medium mr-2 animate-pulse">
+                <span className="text-xs text-muted-foreground font-medium mr-2 animate-pulse">
                   Processing...
                 </span>
               )}
               <button
                 onClick={() => setInputPayload('')}
-                className="p-1.5 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors flex items-center justify-center"
+                className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
                 title="Clear Input"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => handleCopy(inputPayload, 'Input')}
-                className="p-1.5 hover:bg-slate-200 rounded text-slate-500 transition-colors flex items-center justify-center"
+                className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
                 title="Copy Input"
               >
                 <Copy className="w-4 h-4" />
@@ -319,15 +322,15 @@ export function EdiToolPage() {
         </div>
 
         {/* Right Pane (Output) */}
-        <div className="flex flex-col border rounded-xl bg-white shadow-sm overflow-hidden relative">
-          <div className="bg-slate-50 px-4 py-2 border-b flex items-center justify-between">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border">
+        <div className="flex flex-col border border-border rounded-xl bg-card shadow-sm overflow-hidden">
+          <div className="bg-muted/50 px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border/40">
               <button
                 onClick={() => setOutputFormat('Human Readable')}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
                   outputFormat === 'Human Readable'
-                    ? 'bg-slate-700 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'bg-background shadow-sm text-foreground border border-border/60'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Human Readable
@@ -336,10 +339,10 @@ export function EdiToolPage() {
               {inputFormat === 'EDI' ? (
                 <button
                   onClick={() => setOutputFormat('JSON')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
                     outputFormat === 'JSON'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                      ? 'bg-background shadow-sm text-foreground border border-border/60'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   JSON Output
@@ -347,10 +350,10 @@ export function EdiToolPage() {
               ) : (
                 <button
                   onClick={() => setOutputFormat('EDI')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
                     outputFormat === 'EDI'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
+                      ? 'bg-background shadow-sm text-foreground border border-border/60'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   EDI Output
@@ -360,28 +363,28 @@ export function EdiToolPage() {
 
             <div className="flex items-center gap-3">
               {isValid === true && (
-                <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 shadow-sm">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-xs font-bold uppercase tracking-wider">Success</span>
+                <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Valid</span>
                 </div>
               )}
               {isValid === false && (
-                <div className="flex items-center gap-1.5 text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200 shadow-sm">
-                  <AlertTriangle className="w-4 h-4" />
+                <div className="flex items-center gap-1.5 text-destructive bg-destructive/10 px-2.5 py-1 rounded-full border border-destructive/20">
+                  <AlertTriangle className="w-3.5 h-3.5" />
                   <span className="text-xs font-bold uppercase tracking-wider">Error</span>
                 </div>
               )}
-              <div className="flex items-center gap-1 border-l border-slate-200 pl-3">
+              <div className="flex items-center gap-1 border-l border-border pl-3">
                 <button
                   onClick={() => setInputPayload('')}
-                  className="p-1.5 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600 transition-colors flex items-center justify-center"
+                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
                   title="Clear All"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleCopy(outputResult, 'Output')}
-                  className="p-1.5 hover:bg-slate-200 rounded text-slate-500 transition-colors flex items-center justify-center"
+                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
                   title="Copy Output"
                 >
                   <Copy className="w-4 h-4" />
@@ -389,7 +392,7 @@ export function EdiToolPage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 p-0 bg-white min-h-0 flex flex-col">{renderOutputPane()}</div>
+          <div className="flex-1 p-0 bg-card min-h-0 flex flex-col">{renderOutputPane()}</div>
         </div>
       </div>
     </div>

@@ -454,36 +454,38 @@ function TenantUsersPage() {
       )}
 
       {/* Page content */}
-      <div className="space-y-5">
+      <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Users</h3>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <h3 className="text-2xl font-bold tracking-tight text-foreground">Users</h3>
+            <p className="text-[15px] text-muted-foreground mt-1">
               {users.length} user{users.length !== 1 ? 's' : ''} in this tenant
             </p>
           </div>
           <Button
             id="create-user-btn"
             onClick={() => setShowModal(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 px-4 h-9"
+            className="flex items-center gap-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm rounded-xl h-11 px-6 text-[15px] font-semibold"
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-5 h-5" />
             Create User
           </Button>
         </div>
 
-        <DataTable
-          table={table}
-          columnsLength={columns.length}
-          isLoading={isLoading}
-          dataLength={users.length}
-          emptyIcon={<Users className="w-8 h-8" />}
-          emptyTitle="No Users Yet"
-          emptyDescription="Create the first user for this tenant to get started."
-          renderExpandedRow={(row) => (
-            <UserDetailPanel user={row.original} tenantId={tenantId} tenantRoles={tenantRoles} />
-          )}
-        />
+        <div className="bg-card border border-border shadow-[0_2px_8px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden">
+          <DataTable
+            table={table}
+            columnsLength={columns.length}
+            isLoading={isLoading}
+            dataLength={users.length}
+            emptyIcon={<Users className="w-8 h-8" />}
+            emptyTitle="No Users Yet"
+            emptyDescription="Create the first user for this tenant to get started."
+            renderExpandedRow={(row) => (
+              <UserDetailPanel user={row.original} tenantId={tenantId} tenantRoles={tenantRoles} />
+            )}
+          />
+        </div>
       </div>
     </>
   );

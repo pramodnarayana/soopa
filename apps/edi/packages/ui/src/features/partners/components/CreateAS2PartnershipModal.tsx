@@ -1,5 +1,4 @@
 import { Input } from '@soopa/ui/components/ui/input';
-import { Label } from '@soopa/ui/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -7,12 +6,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@soopa/ui/components/ui/select';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import type { ControllerRenderProps } from 'react-hook-form';
 import { Combobox } from '../../../components/ui/combobox';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '../../../components/ui/form';
 import { FormModal } from '../../../components/ui/form-modal';
 import { SearchableSelect } from '../../../components/ui/searchable-select';
-import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
-import { useCreateAS2PartnershipMutation } from '../api/partnerHooks';
+import {
+  type AS2PartnershipFormValues,
+  useCreateAS2PartnershipForm,
+} from './useCreateAS2PartnershipForm';
 
 export interface CreateAS2PartnershipModalProps {
   availablePartners: { id: string; name: string; type: string; is_local?: boolean }[];
@@ -20,193 +30,241 @@ export interface CreateAS2PartnershipModalProps {
 
 export function CreateAS2PartnershipModal({ availablePartners }: CreateAS2PartnershipModalProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [localPartnerId, setLocalPartnerId] = useState('');
-  const [remotePartnerId, setRemotePartnerId] = useState('');
-  const [mdnType, setMdnType] = useState('SYNC');
-  const [mdnUrl, setMdnUrl] = useState('');
-  const [encryptionAlgorithm, setEncryptionAlgorithm] = useState('AES256');
-  const [signatureAlgorithm, setSignatureAlgorithm] = useState('SHA256');
 
-  const { data: platformSettings } = usePlatformSettings();
-  const createPartnership = useCreateAS2PartnershipMutation();
-
-  useEffect(() => {
-    if (mdnType === 'ASYNC' && !mdnUrl && platformSettings?.available_as2_receive_urls?.length) {
-      setMdnUrl(platformSettings.available_as2_receive_urls[0]);
-    }
-  }, [platformSettings, mdnUrl, mdnType]);
-
-  const reset = () => {
-    setName('');
-    setLocalPartnerId('');
-    setRemotePartnerId('');
-    setMdnType('SYNC');
-    setMdnUrl(platformSettings?.available_as2_receive_urls?.[0] || '');
-    setEncryptionAlgorithm('AES256');
-    setSignatureAlgorithm('SHA256');
-  };
+  const { form, onSubmit, isPending, platformSettings } = useCreateAS2PartnershipForm({
+    onSuccess: () => {
+      form.reset();
+      setIsOpen(false);
+    },
+  });
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    if (!open) reset();
+    if (!open) form.reset();
   };
 
-  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const trimmedName = name?.trim();
-
-    createPartnership.mutate(
-      {
-        name: trimmedName || undefined,
-        local_partner_id: localPartnerId,
-        remote_partner_id: remotePartnerId,
-        mdn_type: mdnType,
-        mdn_url: mdnType === 'ASYNC' ? mdnUrl || undefined : undefined,
-        encryption_algorithm: encryptionAlgorithm,
-        signature_algorithm: signatureAlgorithm,
-      },
-      {
-        onSuccess: () => {
-          setIsOpen(false);
-          reset();
-        },
-      },
-    );
-  };
+  const mdnType = form.watch('mdn_type');
 
   const localIdentities = availablePartners.filter((p) => p.type === 'AS2' && p.is_local === true);
   const remoteIdentities = availablePartners.filter((p) => p.type === 'AS2' && !p.is_local);
 
   return (
-    <FormModal
-      title="Create Partnership"
-      triggerText="Create Partnership"
-      isOpen={isOpen}
-      onOpenChange={handleOpenChange}
-      onSubmit={handleSave}
-      isPending={createPartnership.isPending}
-      submitText="Create Partnership"
-      maxWidth="sm:max-w-[800px]"
-    >
-      <div className="grid gap-2">
-        <Label htmlFor="name" className="text-slate-600 font-medium">
-          Partnership Name
-        </Label>
-        <Input
-          id="name"
-          name="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          placeholder="e.g. Acme Corp X12 Exchange"
-          className="h-10 rounded-xl"
-        />
-      </div>
-
-      {/* Identities Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+    <Form {...form}>
+      <FormModal
+        title="Create Partnership"
+        triggerText="Create Partnership"
+        isOpen={isOpen}
+        onOpenChange={handleOpenChange}
+        onSubmit={onSubmit}
+        isPending={isPending}
+        submitText="Create Partnership"
+        maxWidth="sm:max-w-[800px]"
+      >
         <div className="grid gap-2">
-          <Label className="text-slate-600 font-medium">Local Station (Your AS2)</Label>
-          <SearchableSelect
-            value={localPartnerId}
-            onChange={setLocalPartnerId}
-            placeholder="Select local Trading Partner"
-            options={localIdentities.map((p) => ({
-              label: p.name,
-              value: p.id,
-              searchString: p.name,
-            }))}
-            emptyText="No local stations found"
+          <FormField<AS2PartnershipFormValues, 'name'>
+            control={form.control}
+            name="name"
+            render={({
+              field,
+            }: {
+              field: ControllerRenderProps<AS2PartnershipFormValues, 'name'>;
+            }) => (
+              <FormItem>
+                <FormLabel>Partnership Name</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    placeholder="e.g. Acme Corp X12 Exchange"
+                    className="h-10 rounded-xl"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
 
-        <div className="grid gap-2">
-          <Label className="text-slate-600 font-medium">Remote Station (Partner AS2)</Label>
-          <SearchableSelect
-            value={remotePartnerId}
-            onChange={setRemotePartnerId}
-            placeholder="Select remote Trading Partner"
-            options={remoteIdentities.map((p) => ({
-              label: p.name,
-              value: p.id,
-              searchString: p.name,
-            }))}
-            emptyText="No remote stations found"
+        {/* Identities Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-muted/30 rounded-xl border border-border">
+          <FormField<AS2PartnershipFormValues, 'local_partner_id'>
+            control={form.control}
+            name="local_partner_id"
+            render={({
+              field,
+            }: {
+              field: ControllerRenderProps<AS2PartnershipFormValues, 'local_partner_id'>;
+            }) => (
+              <FormItem className="grid gap-2">
+                <FormLabel>Local Station (Your AS2)</FormLabel>
+                <FormControl>
+                  <SearchableSelect
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Select local Trading Partner"
+                    options={localIdentities.map((p) => ({
+                      label: p.name,
+                      value: p.id,
+                      searchString: p.name,
+                    }))}
+                    emptyText="No local stations found"
+                    allowCustomValue={false}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField<AS2PartnershipFormValues, 'remote_partner_id'>
+            control={form.control}
+            name="remote_partner_id"
+            render={({
+              field,
+            }: {
+              field: ControllerRenderProps<AS2PartnershipFormValues, 'remote_partner_id'>;
+            }) => (
+              <FormItem className="grid gap-2">
+                <FormLabel>Remote Station (Partner AS2)</FormLabel>
+                <FormControl>
+                  <SearchableSelect
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Select remote Trading Partner"
+                    options={remoteIdentities.map((p) => ({
+                      label: p.name,
+                      value: p.id,
+                      searchString: p.name,
+                    }))}
+                    emptyText="No remote stations found"
+                    allowCustomValue={false}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
-      </div>
 
-      {/* Advanced Settings */}
-      <div className="flex flex-col gap-6 pt-2 border-t border-slate-100">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div className="grid gap-2">
-            <Label className="text-slate-600 font-medium">MDN Delivery Type</Label>
-            <Select value={mdnType} onValueChange={setMdnType}>
-              <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue placeholder="Select MDN type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SYNC">Synchronous (Recommended)</SelectItem>
-                <SelectItem value="ASYNC">Asynchronous</SelectItem>
-                <SelectItem value="NONE">None (Fire and Forget)</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Advanced Settings */}
+        <div className="flex flex-col gap-6 pt-4 border-t border-border">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <FormField<AS2PartnershipFormValues, 'encryption_algorithm'>
+              control={form.control}
+              name="encryption_algorithm"
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<AS2PartnershipFormValues, 'encryption_algorithm'>;
+              }) => (
+                <FormItem className="grid gap-2">
+                  <FormLabel>Encryption</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Algorithm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(platformSettings?.supported_as2_encryption_algorithms || []).map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField<AS2PartnershipFormValues, 'signature_algorithm'>
+              control={form.control}
+              name="signature_algorithm"
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<AS2PartnershipFormValues, 'signature_algorithm'>;
+              }) => (
+                <FormItem className="grid gap-2">
+                  <FormLabel>Signature</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Algorithm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(platformSettings?.supported_as2_signature_algorithms || []).map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField<AS2PartnershipFormValues, 'mdn_type'>
+              control={form.control}
+              name="mdn_type"
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<AS2PartnershipFormValues, 'mdn_type'>;
+              }) => (
+                <FormItem className="grid gap-2">
+                  <FormLabel>MDN Delivery Type</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select MDN type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SYNC">Synchronous (Recommended)</SelectItem>
+                        <SelectItem value="ASYNC">Asynchronous</SelectItem>
+                        <SelectItem value="NONE">None (Fire and Forget)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           {mdnType === 'ASYNC' && (
-            <div className="grid gap-2">
-              <Label className="text-slate-600 font-medium">Async MDN Receipt URL</Label>
-              <Combobox
-                options={platformSettings?.available_as2_receive_urls || []}
-                value={mdnUrl}
-                onChange={setMdnUrl}
-                placeholder="https://..."
-                emptyText="Type custom URL..."
-              />
-              <p className="text-xs text-slate-500">
-                This is where the remote partner will send asynchronous MDN receipts back to your
-                server.
-              </p>
-            </div>
+            <FormField<AS2PartnershipFormValues, 'mdn_url'>
+              control={form.control}
+              name="mdn_url"
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<AS2PartnershipFormValues, 'mdn_url'>;
+              }) => (
+                <FormItem className="grid gap-2">
+                  <FormLabel>Async MDN Receipt URL</FormLabel>
+                  <FormControl>
+                    <Combobox
+                      options={platformSettings?.available_as2_receive_urls || []}
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      placeholder="https://..."
+                      emptyText="Type custom URL..."
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    This is where the remote partner will send asynchronous MDN receipts back to
+                    your server.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           )}
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div className="grid gap-2">
-            <Label className="text-slate-600 font-medium">Encryption</Label>
-            <Select value={encryptionAlgorithm} onValueChange={setEncryptionAlgorithm}>
-              <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue placeholder="Algorithm" />
-              </SelectTrigger>
-              <SelectContent>
-                {(platformSettings?.supported_as2_encryption_algorithms || []).map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label className="text-slate-600 font-medium">Signature</Label>
-            <Select value={signatureAlgorithm} onValueChange={setSignatureAlgorithm}>
-              <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue placeholder="Algorithm" />
-              </SelectTrigger>
-              <SelectContent>
-                {(platformSettings?.supported_as2_signature_algorithms || []).map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-    </FormModal>
+      </FormModal>
+    </Form>
   );
 }

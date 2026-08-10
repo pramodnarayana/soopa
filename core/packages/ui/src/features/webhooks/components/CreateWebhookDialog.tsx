@@ -92,7 +92,12 @@ export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhoo
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
-          <Button form="create-webhook-form" type="submit" disabled={createMutation.isPending}>
+          <Button
+            size="cta"
+            form="create-webhook-form"
+            type="submit"
+            disabled={createMutation.isPending}
+          >
             {createMutation.isPending ? 'Saving…' : 'Save Webhook'}
           </Button>
         </DialogFooter>

@@ -153,6 +153,7 @@ export function As2PartnerDetails({
             <Button
               type="button"
               variant="outline"
+              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
               onClick={() => {
                 reset();
                 if (onCancel) onCancel();
@@ -161,7 +162,11 @@ export function As2PartnerDetails({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!isDirty || isSubmitting} className="min-w-[100px]">
+            <Button
+              type="submit"
+              disabled={!isDirty || isSubmitting}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+            >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
             </Button>
           </div>
@@ -224,8 +229,7 @@ export function As2PartnerDetails({
           </h4>
           <div className="flex items-center gap-3">
             <Button
-              variant="outline"
-              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold"
               onClick={() => setPasteDialogOpen(true)}
               disabled={rotateCertificates.isPending}
             >
@@ -303,9 +307,9 @@ export function As2PartnerDetails({
               onChange={setPasteValue}
               extraActions={
                 partner.is_local && !pasteValue ? (
-                  <button
+                  <Button
                     type="button"
-                    className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold"
                     onClick={handleGenerateCertificate}
                     disabled={rotateCertificates.isPending}
                   >
@@ -313,7 +317,7 @@ export function As2PartnerDetails({
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     ) : null}
                     Generate Certificate
-                  </button>
+                  </Button>
                 ) : undefined
               }
             />
@@ -321,6 +325,7 @@ export function As2PartnerDetails({
           <DialogFooter>
             <Button
               variant="outline"
+              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
               onClick={() => {
                 setPasteDialogOpen(false);
                 setPasteValue('');
@@ -329,6 +334,7 @@ export function As2PartnerDetails({
               Cancel
             </Button>
             <Button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold"
               onClick={handlePasteSubmit}
               disabled={!pasteValue.trim() || rotateCertificates.isPending}
             >
@@ -398,19 +404,7 @@ function CertificateRow({
 
   return (
     <>
-      <tr
-        className="hover:bg-slate-50 transition-colors cursor-pointer group"
-        onClick={() => setExpanded(!expanded)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setExpanded(!expanded);
-          }
-        }}
-        tabIndex={0}
-        role="button"
-        aria-expanded={expanded}
-      >
+      <tr className="hover:bg-slate-50 transition-colors group">
         <td className="px-6 py-4 whitespace-nowrap">
           {role === 'Active' ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -446,16 +440,22 @@ function CertificateRow({
           )}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-right">
-          <div className="flex items-center justify-end gap-3">
-            <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors">
-              {expanded ? 'Hide Details' : 'View Details'}
-            </span>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl h-10 px-5 text-[14px] font-semibold"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+          >
+            {expanded ? 'Hide Details' : 'View Details'}
             {expanded ? (
-              <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+              <ChevronDown className="w-4 h-4 ml-2 text-slate-400" />
             ) : (
-              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+              <ChevronRight className="w-4 h-4 ml-2 text-slate-400" />
             )}
-          </div>
+          </Button>
         </td>
       </tr>
       {expanded && (
@@ -470,30 +470,26 @@ function CertificateRow({
                   <div className="flex gap-2">
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold gap-2"
                       onClick={() => publicPem && handleCopy(publicPem, 'Public Certificate')}
                       disabled={!publicPem}
                     >
-                      <Copy className="w-3 h-3" /> Copy
+                      <Copy className="w-4 h-4" /> Copy
                     </Button>
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold gap-2"
                       onClick={() =>
                         publicPem &&
                         handleDownload(publicPem, `${partnerName}_${role.toLowerCase()}_public.pem`)
                       }
                       disabled={!publicPem}
                     >
-                      <Download className="w-3 h-3" /> Download
+                      <Download className="w-4 h-4" /> Download
                     </Button>
                   </div>
                 </div>
-                <pre className="text-[10px] leading-tight text-slate-700 bg-white p-3 rounded border border-slate-200 overflow-x-auto font-mono max-h-48 overflow-y-auto">
+                <pre className="text-sm leading-relaxed text-slate-700 bg-white p-4 rounded-xl border border-slate-200 overflow-x-auto font-mono">
                   {publicPem}
                 </pre>
               </div>
@@ -507,18 +503,14 @@ function CertificateRow({
                     <div className="flex gap-2">
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold gap-2"
                         onClick={() => handleCopy(completePem, 'Complete Identity')}
                       >
-                        <Copy className="w-3 h-3" /> Copy Complete
+                        <Copy className="w-4 h-4" /> Copy Key Pair
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold gap-2"
                         onClick={() =>
                           handleDownload(
                             completePem,
@@ -526,7 +518,7 @@ function CertificateRow({
                           )
                         }
                       >
-                        <Download className="w-3 h-3" /> Download Complete
+                        <Download className="w-4 h-4" /> Download Key Pair
                       </Button>
                     </div>
                   </div>

@@ -1,9 +1,8 @@
 import { buttonVariants } from '@soopa/ui/components/ui/button';
 import { createRoute, Link } from '@tanstack/react-router';
-import { ArrowLeftRight, ArrowRight, Database, FileJson } from 'lucide-react';
+import { ArrowRight, Database, FileJson } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { useExplorerEdiJson } from '../../../features/explorer/api/explorerApi';
 import type { ExplorerEdiJson } from '../../../features/explorer/types';
 import { useTransactions } from '../../../features/transactions/api/transactionsApi';
@@ -156,7 +155,11 @@ const SHARED_COLUMNS = [
   },
 ];
 
-// ─── Direction filter bar ─────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type ActiveTab = 'messages' | 'json';
+
+// ─── Direction filter ─────────────────────────────────────────────────────────
 
 function DirectionFilter({
   value,
@@ -167,16 +170,17 @@ function DirectionFilter({
 }) {
   const options: Direction[] = ['ALL', 'INBOUND', 'OUTBOUND'];
   return (
-    <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+    <div className="flex gap-1 bg-muted p-1 rounded-lg border border-border/40" role="group" aria-label="Filter by direction">
       {options.map((opt) => (
         <button
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
+          aria-pressed={value === opt}
           className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 ${
             value === opt
-              ? 'bg-white shadow-sm text-indigo-700 border border-slate-200/80'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'bg-background shadow-sm text-foreground border border-border/60'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           {opt}
@@ -191,7 +195,7 @@ function DirectionFilter({
 const LIMIT = 50;
 
 export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: string) => void }) {
-  const [activeTab, setActiveTab] = useState<'messages' | 'json'>('messages');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('messages');
   const [direction, setDirection] = useState<Direction>('ALL');
 
   // EDI Messages (from transactions endpoint)
@@ -255,66 +259,55 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-        <div>
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <ArrowLeftRight className="w-4 h-4 text-indigo-600" />
+    <div className="flex flex-col min-h-full animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
+      {/* Page Header */}
+      <div className="bg-card border-b border-border shadow-[0_2px_8px_rgb(0,0,0,0.02)]">
+        <div className="w-full pb-0">
+          {/* Title row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
+                Transactions
+              </h2>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Transactions</h2>
+            <DirectionFilter value={direction} onChange={handleDirectionChange} />
           </div>
-          <p className="text-slate-500 text-sm">
-            Operational view of all EDI messages and their parsed JSON records.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <DirectionFilter value={direction} onChange={handleDirectionChange} />
+          {/* Underline tab nav */}
+          <nav className="flex items-center gap-8" role="tablist" aria-label="Transaction types">
+            <button
+              type="button"
+              role="tab"
+              onClick={() => setActiveTab('messages')}
+              aria-selected={activeTab === 'messages'}
+              aria-controls="messages-panel"
+              data-status={activeTab === 'messages' ? 'active' : undefined}
+              className="inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
+            >
+              <Database className="w-4 h-4" />
+              EDI Messages
+            </button>
+            <button
+              type="button"
+              role="tab"
+              onClick={() => setActiveTab('json')}
+              aria-selected={activeTab === 'json'}
+              aria-controls="json-panel"
+              data-status={activeTab === 'json' ? 'active' : undefined}
+              className="inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
+            >
+              <FileJson className="w-4 h-4" />
+              EDI Json
+            </button>
+          </nav>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => setActiveTab(v as 'messages' | 'json')}
-        className="space-y-6"
-      >
-        <TabsList className="bg-slate-100/50 p-1 rounded-lg border border-slate-200">
-          <TabsTrigger
-            value="messages"
-            className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4"
-          >
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4" />
-              <span>EDI Messages</span>
-              {accumulatedMessages.length > 0 && (
-                <span className="ml-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
-                  {accumulatedMessages.length}
-                </span>
-              )}
-            </div>
-          </TabsTrigger>
-          <TabsTrigger
-            value="json"
-            className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm px-4"
-          >
-            <div className="flex items-center gap-2">
-              <FileJson className="w-4 h-4" />
-              <span>EDI JSON</span>
-              {accumulatedJson.length > 0 && (
-                <span className="ml-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
-                  {accumulatedJson.length}
-                </span>
-              )}
-            </div>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* EDI Messages Tab */}
-        <TabsContent value="messages" className="focus:outline-none">
-          <TransactionsTable<TransactionListItem>
+      {/* Tab content */}
+      <div className="flex-1 w-full pt-8">
+        {activeTab === 'messages' ? (
+          <div id="messages-panel" role="tabpanel" aria-labelledby="messages-tab">
+            <TransactionsTable<TransactionListItem>
             columns={SHARED_COLUMNS}
             data={accumulatedMessages}
             isLoading={messagesLoading && messagesOffset === 0}
@@ -327,11 +320,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               ) : null
             }
           />
-        </TabsContent>
-
-        {/* EDI JSON Tab */}
-        <TabsContent value="json" className="focus:outline-none">
-          <TransactionsTable<ExplorerEdiJson>
+          </div>
+        ) : (
+          <div id="json-panel" role="tabpanel" aria-labelledby="json-tab">
+            <TransactionsTable<ExplorerEdiJson>
             columns={SHARED_COLUMNS}
             data={accumulatedJson}
             isLoading={jsonLoading && jsonOffset === 0}
@@ -344,8 +336,9 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               ) : null
             }
           />
-        </TabsContent>
-      </Tabs>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

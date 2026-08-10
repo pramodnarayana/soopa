@@ -5,7 +5,7 @@ from datetime import datetime
 # Sentinels
 # ---------------------------------------------------------------------------
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from domain.models import ConnectionType, Direction, PartnerStatus
 
@@ -77,6 +77,13 @@ class UpdateAS2TradingPartnerCmd:
     public_cert_pem: str | None = None
     public_cert_vault_ref: str | None = None
     private_key_vault_ref: str | None = None
+
+
+@dataclass(frozen=True)
+class RotateAS2CertificateCmd:
+    action: Literal["generate", "upload"]
+    public_cert_pem: str | None = None
+    private_key_pem: str | None = None
 
 
 @dataclass(frozen=True)

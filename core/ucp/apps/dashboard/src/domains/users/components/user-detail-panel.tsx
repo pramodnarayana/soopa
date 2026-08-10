@@ -7,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@soopa/ui/components/ui/select';
-import { Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useUpdateTenantUser } from '@/domains/users/api/mutations';
@@ -62,11 +61,34 @@ export function UserDetailPanel({
   };
 
   return (
-    <div className="bg-slate-50/70 border-t border-slate-100 px-6 py-5">
+    <div className="p-6 bg-slate-50/50 border-t border-slate-100">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider mb-1">
+            User Details
+          </h4>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl h-10 px-5 text-[14px] font-semibold"
+            disabled={!isDirty || updateMutationObj.isPending}
+            onClick={handleCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+            disabled={!isDirty || updateMutationObj.isPending}
+            onClick={handleSave}
+          >
+            {updateMutationObj.isPending ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
+      </div>
       <div className="max-w-2xl space-y-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          User Details
-        </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">First Name</label>
@@ -123,32 +145,6 @@ export function UserDetailPanel({
               />
             </div>
           )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 pt-1">
-          <Button
-            size="sm"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg h-8 px-4 text-xs flex items-center gap-1.5"
-            disabled={!isDirty || updateMutationObj.isPending}
-            onClick={handleSave}
-          >
-            {updateMutationObj.isPending ? (
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            Save Changes
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-lg h-8 px-4 text-xs"
-            disabled={!isDirty || updateMutationObj.isPending}
-            onClick={handleCancel}
-          >
-            Cancel
-          </Button>
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ function TenantLayout() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-7xl mx-auto space-y-6">
+      <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both">
         <Skeleton className="h-10 w-48 rounded-lg" />
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
@@ -30,27 +30,29 @@ function TenantLayout() {
   }
 
   return (
-    <div className="flex flex-col min-h-full">
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-8 py-6">
-          <div className="mb-4">
+    <div className="flex flex-col min-h-full animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both">
+      <div className="bg-card border-b border-border shadow-[0_2px_8px_rgb(0,0,0,0.02)]">
+        <div className="w-full pb-6">
+          <div className="mb-6">
             <Link
               to="/platform/tenants"
-              className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
+              className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
             >
               <ArrowLeft className="w-4 h-4 mr-1" />
               Back to Tenants
             </Link>
           </div>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
-              <Building2 className="w-6 h-6" />
+            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+              <Building2 className="w-7 h-7" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{tenant.name}</h1>
-              <div className="flex items-center gap-2 mt-1">
+              <h1 className="text-[28px] font-bold text-foreground tracking-tight">
+                {tenant.name}
+              </h1>
+              <div className="flex items-center gap-2 mt-2">
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${tenant.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-widest border ${tenant.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}
@@ -61,13 +63,13 @@ function TenantLayout() {
             </div>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-8">
-          <nav className="flex items-center gap-6" aria-label="Tabs">
+        <div className="w-full">
+          <nav className="flex items-center gap-8" aria-label="Tabs">
             <Link
               to="/platform/tenants/$tenantId"
               params={{ tenantId }}
               activeOptions={{ exact: true }}
-              className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
+              className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
               <Building2 className="w-4 h-4" />
               Overview
@@ -75,7 +77,7 @@ function TenantLayout() {
             <Link
               to="/platform/tenants/$tenantId/users"
               params={{ tenantId }}
-              className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
+              className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
               <Users className="w-4 h-4" />
               Users
@@ -83,7 +85,7 @@ function TenantLayout() {
             <Link
               to="/platform/tenants/$tenantId/apps"
               params={{ tenantId }}
-              className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-2 font-medium text-sm transition-colors border-transparent text-slate-500 hover:text-slate-700 data-[status=active]:border-indigo-600 data-[status=active]:text-indigo-600"
+              className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
               <Box className="w-4 h-4" />
               Apps
@@ -92,7 +94,7 @@ function TenantLayout() {
         </div>
       </div>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full p-8">
+      <div className="flex-1 w-full pt-8">
         <Outlet />
       </div>
     </div>

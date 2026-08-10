@@ -204,7 +204,7 @@ function CreateApiTokenDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button id="generate-api-token-btn" onClick={() => setOpen(true)}>
+      <Button id="generate-api-token-btn" size="cta" onClick={() => setOpen(true)}>
         <Plus className="w-4 h-4 mr-1" />
         Generate Token
       </Button>
@@ -232,7 +232,11 @@ function CreateApiTokenDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={!name.trim() || createMutation.isPending}>
+          <Button
+            size="cta"
+            onClick={handleCreate}
+            disabled={!name.trim() || createMutation.isPending}
+          >
             {createMutation.isPending ? 'Generating…' : 'Generate Token'}
           </Button>
         </DialogFooter>

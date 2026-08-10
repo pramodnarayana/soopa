@@ -47,7 +47,7 @@ const NavItem = ({
   return (
     <Link
       to={to}
-      className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group ${indent ? 'pl-11 pr-4' : 'px-4'} ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+      className={`flex items-center gap-3 py-3 rounded-xl transition-all duration-200 group ${indent ? 'pl-11 pr-4' : 'px-4'} ${active ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' : 'text-slate-500 font-medium hover:bg-slate-50 hover:text-slate-900'}`}
     >
       <Icon
         className={`w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'}`}

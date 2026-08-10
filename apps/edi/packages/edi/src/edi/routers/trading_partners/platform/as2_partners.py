@@ -10,6 +10,7 @@ from edi.adapters.http.dtos import (
     CreateAS2TradingPartnerRequest,
     GenerateCertRequest,
     GenerateCertResponse,
+    RotateCertificateRequest,
     UpdateAS2TradingPartnerRequest,
 )
 from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
@@ -22,6 +23,7 @@ from edi.dependencies.services import get_vault
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.models import (
     CreateAS2TradingPartnerCmd,
+    RotateAS2CertificateCmd,
     UpdateAS2TradingPartnerCmd,
 )
 from edi.ports.vault import VaultPort
@@ -44,9 +46,11 @@ async def generate_certificate(
     """
     private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=request.as2_id)
 
+    # Sanitize alias by allowing only alphanumeric and underscore
+    safe_alias = "".join(c if c.isalnum() or c == "_" else "_" for c in request.as2_id).lower()
     private_key_vault_ref = vault.store_private_key(
         private_key_pem=private_key_bytes,
-        alias_prefix=request.as2_id.replace(" ", "_").lower(),
+        alias_prefix=safe_alias,
     )
 
     return GenerateCertResponse(
@@ -60,6 +64,83 @@ import logging
 from edi.adapters.http.dtos import CertificateExportResponse
 
 logger = logging.getLogger(__name__)
+
+
+async def _rotate_as2_certificates(
+    partner_id: str,
+    request: RotateCertificateRequest,
+    tenant_id: str,
+    uow: ControlPlaneUnitOfWork,
+    idempotency_key: str | None,
+    profile: dict[str, Any],
+    vault: VaultPort,
+) -> AS2TradingPartnerResponse:
+    """Shared coroutine for certificate rotation workflow."""
+    partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    # Require certificates:rotate for all partners
+    if "certificates:rotate" not in profile["permissions"]:
+        raise HTTPException(
+            status_code=403, detail="Insufficient permissions to rotate certificates."
+        )
+
+    cmd = RotateAS2CertificateCmd(
+        action=request.action,
+        public_cert_pem=request.public_cert_pem,
+        private_key_pem=request.private_key_pem,
+    )
+
+    try:
+        svc = AS2PartnerService(uow=uow)
+        updated_partner = await svc.rotate_certificates(
+            tenant_id=tenant_id,
+            partner_id=partner_id,
+            cmd=cmd,
+            vault=vault,
+            idempotency_key=idempotency_key,
+        )
+        await uow.commit()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Unexpected error during certificate rotation")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+    return AS2TradingPartnerResponse(
+        id=str(updated_partner.partner_id),
+        name=updated_partner.name,
+        as2_id=partner.as2_id,
+        is_local=partner.is_local,
+        url=partner.url,
+        active=updated_partner.status == "ACTIVE",
+    )
+
+
+@router.put(
+    "/as2/certificates/{partner_id}/rotate",
+    response_model=AS2TradingPartnerResponse,
+)
+async def rotate_platform_as2_certificates(
+    partner_id: str,
+    request: RotateCertificateRequest,
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    idempotency_key: str | None = Depends(get_idempotency_key),
+    profile: dict[str, Any] = Depends(get_platform_user_profile),
+    vault: VaultPort = Depends(get_vault),
+) -> Any:
+    """Rotates certificates for a Platform AS2 partner."""
+    async with uow:
+        return await _rotate_as2_certificates(
+            partner_id=partner_id,
+            request=request,
+            tenant_id=PLATFORM_TENANT_ID,
+            uow=uow,
+            idempotency_key=idempotency_key,
+            profile=profile,
+            vault=vault,
+        )
 
 
 @router.get(
@@ -203,18 +284,22 @@ async def create_platform_as2_partner(
                     pass  # Pre-stored vault ref
                 elif request.private_key_pem:
                     auto_generated = True
+                    # Sanitize alias by allowing only alphanumeric and underscore
+                    safe_alias = "".join(c if c.isalnum() or c == "_" else "_" for c in request.name).lower()
                     private_key_vault_ref = vault.store_private_key(
                         private_key_pem=request.private_key_pem.encode(),
-                        alias_prefix=request.name.replace(" ", "_").lower(),
+                        alias_prefix=safe_alias,
                     )
                 else:
                     auto_generated = True
                     private_key_bytes, public_cert_bytes = generate_self_signed_cert(
                         common_name=request.as2_id
                     )
+                    # Sanitize alias by allowing only alphanumeric and underscore
+                    safe_alias = "".join(c if c.isalnum() or c == "_" else "_" for c in request.name).lower()
                     private_key_vault_ref = vault.store_private_key(
                         private_key_pem=private_key_bytes,
-                        alias_prefix=request.name.replace(" ", "_").lower(),
+                        alias_prefix=safe_alias,
                     )
                     public_cert_pem = public_cert_bytes.decode("utf-8")
 

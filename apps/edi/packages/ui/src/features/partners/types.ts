@@ -132,3 +132,12 @@ export type RotateCertPayload =
       public_cert_pem: string;
       private_key_pem?: string;
     };
+
+export interface GenerateCertRequest {
+  as2_id: string;
+}
+
+export interface GenerateCertResponse {
+  public_cert_pem: string;
+  private_key_vault_ref: string;
+}
