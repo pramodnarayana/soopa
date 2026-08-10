@@ -1,5 +1,10 @@
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
+import {
   createColumnHelper,
   getCoreRowModel,
   getExpandedRowModel,
@@ -88,13 +93,21 @@ const columns = [
   }),
 ];
 
+const availableFields: FieldDef[] = [
+  { id: 'name', label: 'Partner Name', type: 'text' },
+  { id: 'host', label: 'Host', type: 'text' },
+  { id: 'username', label: 'Username', type: 'text' },
+];
+
 export function SftpPartnersTable({
-  data,
+  data: rawData,
   isLoading,
 }: {
   data: SFTPPartner[];
   isLoading: boolean;
 }) {
+  const { filters, setFilters, filteredData: data } = useClientFilter(rawData);
+
   const table = useReactTable({
     data,
     columns,
@@ -104,16 +117,21 @@ export function SftpPartnersTable({
   });
 
   return (
-    <DataTable
-      table={table}
-      isLoading={isLoading}
-      dataLength={data.length}
-      emptyIcon={<HardDrive className="w-8 h-8" />}
-      emptyTitle="No Active SFTP Partners"
-      columnsLength={columns.length}
-      renderExpandedRow={(row) => (
-        <SftpPartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
-      )}
-    />
+    <div>
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        dataLength={data.length}
+        emptyIcon={<HardDrive className="w-8 h-8" />}
+        emptyTitle="No Active SFTP Partners"
+        columnsLength={columns.length}
+        renderExpandedRow={(row) => (
+          <SftpPartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
+        )}
+      />
+    </div>
   );
 }

@@ -402,3 +402,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         result = await self.session.execute(json_stmt)
         return result.scalars().all()
+
+    async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
+        from database.models.data_plane import EdiMessage
+        from sqlalchemy import select
+
+        tid_str = tenant_id if tenant_id is not None else None
+
+        stmt = select(EdiMessage.trace_id).where(
+            EdiMessage.tenant_id == tid_str, EdiMessage.trace_id.in_(trace_ids)
+        )
+
+        result = await self.session.execute(stmt)
+        return set(result.scalars().all())

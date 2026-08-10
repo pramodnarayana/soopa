@@ -7,6 +7,11 @@ from domain.events import (
 )
 from domain.models import ConnectionType, PartnerStatus
 
+from edi.core.exceptions import (
+    InvalidCertificateActionError,
+    MissingCertificateError,
+    PartnerNotFoundError,
+)
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.models import (
     CreateAS2TradingPartnerCmd,
@@ -105,7 +110,7 @@ class AS2PartnerService:
 
         updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not updated_partner:
-            raise ValueError("Partner not found after update")
+            raise PartnerNotFoundError(partner_id, tenant_id)
 
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
@@ -150,11 +155,11 @@ class AS2PartnerService:
 
         partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:
-            raise ValueError("Partner not found")
+            raise PartnerNotFoundError(partner_id, tenant_id)
 
         # Validate action
         if cmd.action not in ("generate", "upload"):
-            raise ValueError(f"Invalid action '{cmd.action}'. Must be 'generate' or 'upload'.")
+            raise InvalidCertificateActionError(cmd.action)
 
         public_cert_pem = cmd.public_cert_pem
         private_key_vault_ref = None
@@ -172,7 +177,7 @@ class AS2PartnerService:
                 public_cert_pem = public_cert_bytes.decode("utf-8")
             elif cmd.action == "upload":
                 if not cmd.private_key_pem or not cmd.public_cert_pem:
-                    raise ValueError(
+                    raise MissingCertificateError(
                         "Both public_cert_pem and private_key_pem required for upload."
                     )
                 # Use stable partner_id instead of tenant-controlled name
@@ -182,10 +187,10 @@ class AS2PartnerService:
                 )
         else:
             if not cmd.public_cert_pem:
-                raise ValueError("public_cert_pem required for remote partners.")
+                raise MissingCertificateError("public_cert_pem required for remote partners.")
 
         if not public_cert_pem:
-            raise ValueError("public_cert_pem must not be None at this point.")
+            raise MissingCertificateError("public_cert_pem must not be None at this point.")
 
         try:
             await self.uow.as2_partners.rotate_as2_certificates(
@@ -194,7 +199,7 @@ class AS2PartnerService:
 
             updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
             if not updated_partner:
-                raise ValueError("Partner not found after certificate rotation")
+                raise PartnerNotFoundError(partner_id, tenant_id)
 
             await self.uow.control_plane_outbox.publish_outbox_event(
                 ProvisioningEvent(

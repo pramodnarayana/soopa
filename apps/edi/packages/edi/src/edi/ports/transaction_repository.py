@@ -74,3 +74,9 @@ class TransactionRepositoryPort(Protocol):
         Retrieves a chronological thread of documents sharing a specific business metadata key/value.
         """
         ...
+
+    async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
+        """
+        Takes a list of trace_ids and returns the subset that actually exist in the DB.
+        """
+        ...

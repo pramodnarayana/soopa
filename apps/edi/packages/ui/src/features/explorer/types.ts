@@ -1,8 +1,20 @@
 export interface FilterRule {
   id?: string;
   field: string;
-  operator: 'eq' | 'neq' | 'contains' | 'in';
-  value: string | number | boolean | unknown[];
+  operator:
+    | 'eq'
+    | 'neq'
+    | 'contains'
+    | 'not_contains'
+    | 'in'
+    | 'not_in'
+    | 'gt'
+    | 'lt'
+    | 'gte'
+    | 'lte'
+    | 'is_null'
+    | 'is_not_null';
+  value: string | number | boolean | unknown[] | null;
 }
 
 export interface ExplorerRequest {

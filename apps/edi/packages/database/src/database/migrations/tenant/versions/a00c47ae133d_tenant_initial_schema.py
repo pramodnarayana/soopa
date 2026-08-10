@@ -56,6 +56,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("webhook_url", sa.String(length=1024), nullable=True),
@@ -81,6 +82,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_api_gateway_tenant_id"), "api_gateway", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_api_gateway_trace_id"), "api_gateway", ["trace_id"], unique=False)
+    op.create_index(
+        op.f("ix_api_gateway_parent_trace_id"), "api_gateway", ["parent_trace_id"], unique=False
+    )
     op.create_table(
         "as2_partners",
         sa.Column(
@@ -141,6 +145,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("trading_partner_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
@@ -182,6 +187,9 @@ def upgrade() -> None:
     op.create_index(op.f("ix_edi_json_tenant_id"), "edi_json", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_edi_json_trace_id"), "edi_json", ["trace_id"], unique=False)
     op.create_index(
+        op.f("ix_edi_json_parent_trace_id"), "edi_json", ["parent_trace_id"], unique=False
+    )
+    op.create_index(
         op.f("ix_edi_json_trading_partner_id"), "edi_json", ["trading_partner_id"], unique=False
     )
     op.create_index(
@@ -196,6 +204,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("connection_type", sa.String(length=50), nullable=True),
         sa.Column("sender_id", sa.String(length=255), nullable=True),
@@ -239,6 +248,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_edi_messages_tenant_id"), "edi_messages", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_edi_messages_trace_id"), "edi_messages", ["trace_id"], unique=False)
+    op.create_index(
+        op.f("ix_edi_messages_parent_trace_id"), "edi_messages", ["parent_trace_id"], unique=False
+    )
     op.create_index(
         op.f("ix_edi_messages_trading_partner_id"),
         "edi_messages",
@@ -570,11 +582,13 @@ def downgrade() -> None:
     op.drop_index("ix_edi_msgs_sender_recv", table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_trading_partner_id"), table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_trace_id"), table_name="edi_messages")
+    op.drop_index(op.f("ix_edi_messages_parent_trace_id"), table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_tenant_id"), table_name="edi_messages")
     op.drop_table("edi_messages")
     op.drop_index(op.f("ix_edi_json_transaction_type"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_trading_partner_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_trace_id"), table_name="edi_json")
+    op.drop_index(op.f("ix_edi_json_parent_trace_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_tenant_id"), table_name="edi_json")
     op.drop_index("ix_edi_json_sender_recv", table_name="edi_json")
     op.drop_index("ix_edi_json_business_metadata", table_name="edi_json", postgresql_using="gin")
@@ -585,6 +599,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_as2_partners_tenant_id"), table_name="as2_partners")
     op.drop_table("as2_partners")
     op.drop_index(op.f("ix_api_gateway_trace_id"), table_name="api_gateway")
+    op.drop_index(op.f("ix_api_gateway_parent_trace_id"), table_name="api_gateway")
     op.drop_index(op.f("ix_api_gateway_tenant_id"), table_name="api_gateway")
     op.drop_table("api_gateway")
     op.drop_index(op.f("ix_ack_receipts_trace_id"), table_name="ack_receipts")

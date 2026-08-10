@@ -10,6 +10,11 @@ import {
 } from '@soopa/ui/components/ui/dialog';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
+import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
 import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Key, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
@@ -348,7 +353,20 @@ interface ApiTokensTableProps {
   isLoading: boolean;
 }
 
-export function ApiTokensTable({ data, isLoading }: ApiTokensTableProps) {
+const availableFields: FieldDef[] = [
+  { id: 'name', label: 'Name', type: 'text' },
+  { id: 'client_id', label: 'Client ID', type: 'text' },
+  {
+    id: 'active',
+    label: 'Status',
+    type: 'boolean',
+    operators: ['eq'],
+  },
+];
+
+export function ApiTokensTable({ data: rawData, isLoading }: ApiTokensTableProps) {
+  const { filters, setFilters, filteredData: data } = useClientFilter(rawData);
+
   const table = useReactTable({
     data,
     columns,
@@ -356,13 +374,18 @@ export function ApiTokensTable({ data, isLoading }: ApiTokensTableProps) {
   });
 
   return (
-    <DataTable
-      table={table}
-      columnsLength={columns.length}
-      dataLength={data.length}
-      isLoading={isLoading}
-      emptyIcon={<Key className="w-8 h-8" />}
-      emptyTitle="No API Tokens"
-    />
+    <div>
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
+      <DataTable
+        table={table}
+        columnsLength={columns.length}
+        dataLength={data.length}
+        isLoading={isLoading}
+        emptyIcon={<Key className="w-8 h-8" />}
+        emptyTitle="No API Tokens"
+      />
+    </div>
   );
 }

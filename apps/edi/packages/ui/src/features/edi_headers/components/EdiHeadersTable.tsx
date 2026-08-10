@@ -1,6 +1,11 @@
 import { Button } from '@soopa/ui/components/ui/button';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
+import {
   createColumnHelper,
   getCoreRowModel,
   getExpandedRowModel,
@@ -8,7 +13,7 @@ import {
 } from '@tanstack/react-table';
 import { Network, Trash2 } from 'lucide-react';
 import { useToast } from '../../../hooks/use-toast';
-import { useDeleteEdiHeaderMutation, useEdiHeaders } from '../api/ediHeadersApi';
+import { useDeleteEdiHeaderMutation } from '../api/ediHeadersApi';
 import type { EdiHeaderItem } from '../types';
 import { EdiHeaderDetails } from './EdiHeaderDetails';
 
@@ -119,8 +124,22 @@ function EdiHeaderRowActions({ header }: { header: EdiHeaderItem }) {
   );
 }
 
-export function EdiHeadersTable() {
-  const { data: headers, isLoading } = useEdiHeaders();
+const availableFields: FieldDef[] = [
+  { id: 'name', label: 'Name', type: 'text' },
+  { id: 'trading_partner_id', label: 'Trading Partner', type: 'text' },
+  { id: 'transaction_type', label: 'Transaction Type', type: 'text' },
+  { id: 'isa_sender_id', label: 'ISA Sender', type: 'text' },
+  { id: 'isa_receiver_id', label: 'ISA Receiver', type: 'text' },
+];
+
+export function EdiHeadersTable({
+  data: rawHeaders,
+  isLoading,
+}: {
+  data: EdiHeaderItem[];
+  isLoading: boolean;
+}) {
+  const { filters, setFilters, filteredData: headers } = useClientFilter(rawHeaders || []);
 
   const table = useReactTable({
     data: headers || [],
@@ -132,6 +151,9 @@ export function EdiHeadersTable() {
 
   return (
     <div className="space-y-4">
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
       <DataTable
         table={table}
         isLoading={isLoading}

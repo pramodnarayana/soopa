@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from edi.adapters.routing_resolver_repository import SqlAlchemyRoutingResolverRepository
 from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
+from edi.core.exceptions import TransactionNotFoundError
+from edi.core.services.routing_resolver import RoutingResolutionService
+from edi.core.services.transaction_service import TransactionService
 from edi.dependencies.auth import get_current_tenant_id
 from edi.dependencies.database import get_data_plane_uow, get_global_session
 
@@ -29,6 +33,15 @@ class TransactionDetailResponse(BaseModel):
 
 class TransactionThreadResponse(BaseModel):
     items: list[dict[str, Any]]
+
+
+class ReplayRequest(BaseModel):
+    tier: str  # "raw", "translation", "gateway"
+
+
+class BulkReplayRequest(BaseModel):
+    trace_ids: list[str]
+    tier: str  # "raw", "translation", "gateway"
 
 
 # --- Endpoints ---
@@ -118,71 +131,57 @@ async def get_transaction(
     """
     Get the full deep-dive payload for a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
     """
+    resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, uow.tenant_session)
+    resolver = RoutingResolutionService(resolver_repo)
+
     async with uow:
-        result = await uow.transactions.get_transaction(tenant_id, trace_id)
-        if not result or not result.edi_message:
-            raise HTTPException(status_code=404, detail="Transaction not found")
-
-        msg = result.edi_message
-        edi_msg_dict = {
-            "id": str(msg.id),
-            "trace_id": str(msg.trace_id),
-            "direction": msg.direction,
-            "connection_type": msg.connection_type,
-            "sender_id": msg.sender_id,
-            "receiver_id": msg.receiver_id,
-            "gs_sender_id": msg.gs_sender_id,
-            "gs_receiver_id": msg.gs_receiver_id,
-            "status": msg.status,
-            "edi_data": msg.edi_data,
-            "created_at": msg.created_at.isoformat() if msg.created_at else None,
-        }
-
-        edi_jsons = []
-        for j in result.edi_jsons or []:
-            edi_jsons.append(
-                {
-                    "id": str(j.id),
-                    "transaction_type": j.transaction_type,
-                    "sender_id": j.sender_id,
-                    "receiver_id": j.receiver_id,
-                    "gs_sender_id": j.gs_sender_id,
-                    "gs_receiver_id": j.gs_receiver_id,
-                    "business_metadata": j.business_metadata,
-                    "payload": j.payload,
-                    "status": j.status,
-                    "created_at": j.created_at.isoformat() if j.created_at else None,
-                }
+        svc = TransactionService(uow)
+        try:
+            result = await svc.get_transaction(tenant_id, trace_id, resolver)
+            return TransactionDetailResponse(
+                edi_message=result.edi_message,
+                edi_json=result.edi_json,
+                api_gateway=result.api_gateway,
+                trading_partner_name=result.trading_partner_name,
             )
+        except TransactionNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
 
-        apigws = []
-        for gw in result.api_gateways or []:
-            apigws.append(
-                {
-                    "id": str(gw.id),
-                    "webhook_url": gw.webhook_url,
-                    "http_status_code": gw.http_status_code,
-                    "payload": gw.payload,
-                    "response": gw.response,
-                    "status": gw.status,
-                    "created_at": gw.created_at.isoformat() if gw.created_at else None,
-                }
-            )
 
-        from edi.adapters.routing_resolver_repository import SqlAlchemyRoutingResolverRepository
-        from edi.core.services.routing_resolver import RoutingResolutionService
+@router.post("/{trace_id}/replay", status_code=202)
+async def replay_transaction(
+    trace_id: str,
+    request: ReplayRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+) -> dict[str, Any]:
+    """
+    Trigger an asynchronous replay of a transaction at the specified tier.
+    """
+    async with uow:
+        svc = TransactionService(uow)
+        try:
+            await svc.replay_transaction(tenant_id, trace_id, request.tier)
+        except TransactionNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
 
-        resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, uow.tenant_session)
-        resolver = RoutingResolutionService(resolver_repo)
-        trading_partner_name, new_conn_type = await resolver.resolve_routing_context(
-            msg, result.edi_jsons or []
-        )
-        if new_conn_type and edi_msg_dict.get("connection_type") in ("UNKNOWN", None):
-            edi_msg_dict["connection_type"] = new_conn_type
+    return {"status": "accepted", "trace_id": trace_id}
 
-        return TransactionDetailResponse(
-            edi_message=edi_msg_dict,
-            edi_json=edi_jsons,
-            api_gateway=apigws,
-            trading_partner_name=trading_partner_name,
-        )
+
+@router.post("/bulk-replay", status_code=202)
+async def bulk_replay_transactions(
+    request: BulkReplayRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+) -> dict[str, Any]:
+    """
+    Trigger an asynchronous replay of multiple transactions at the specified tier.
+    """
+    async with uow:
+        svc = TransactionService(uow)
+        try:
+            await svc.bulk_replay_transactions(tenant_id, request.trace_ids, request.tier)
+        except TransactionNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    return {"status": "accepted", "processed_count": len(request.trace_ids)}
