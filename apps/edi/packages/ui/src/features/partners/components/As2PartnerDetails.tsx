@@ -404,19 +404,7 @@ function CertificateRow({
 
   return (
     <>
-      <tr
-        className="hover:bg-slate-50 transition-colors cursor-pointer group"
-        onClick={() => setExpanded(!expanded)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setExpanded(!expanded);
-          }
-        }}
-        tabIndex={0}
-        role="button"
-        aria-expanded={expanded}
-      >
+      <tr className="hover:bg-slate-50 transition-colors group">
         <td className="px-6 py-4 whitespace-nowrap">
           {role === 'Active' ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">

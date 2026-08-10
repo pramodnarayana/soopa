@@ -85,7 +85,7 @@ function PlatformLayoutGuard() {
           <button
             onClick={() => void auth.signoutRedirect()}
             aria-label="Sign out"
-            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
           >
             <LogOut className="w-5 h-5" />
           </button>

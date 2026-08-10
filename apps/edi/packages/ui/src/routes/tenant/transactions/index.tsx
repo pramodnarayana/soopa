@@ -170,12 +170,13 @@ function DirectionFilter({
 }) {
   const options: Direction[] = ['ALL', 'INBOUND', 'OUTBOUND'];
   return (
-    <div className="flex gap-1 bg-muted p-1 rounded-lg border border-border/40">
+    <div className="flex gap-1 bg-muted p-1 rounded-lg border border-border/40" role="group" aria-label="Filter by direction">
       {options.map((opt) => (
         <button
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
+          aria-pressed={value === opt}
           className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 ${
             value === opt
               ? 'bg-background shadow-sm text-foreground border border-border/60'
@@ -273,10 +274,13 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
           </div>
 
           {/* Underline tab nav */}
-          <nav className="flex items-center gap-8" aria-label="Tabs">
+          <nav className="flex items-center gap-8" role="tablist" aria-label="Transaction types">
             <button
               type="button"
+              role="tab"
               onClick={() => setActiveTab('messages')}
+              aria-selected={activeTab === 'messages'}
+              aria-controls="messages-panel"
               data-status={activeTab === 'messages' ? 'active' : undefined}
               className="inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
@@ -285,7 +289,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
             </button>
             <button
               type="button"
+              role="tab"
               onClick={() => setActiveTab('json')}
+              aria-selected={activeTab === 'json'}
+              aria-controls="json-panel"
               data-status={activeTab === 'json' ? 'active' : undefined}
               className="inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
@@ -299,7 +306,8 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
       {/* Tab content */}
       <div className="flex-1 w-full pt-8">
         {activeTab === 'messages' ? (
-          <TransactionsTable<TransactionListItem>
+          <div id="messages-panel" role="tabpanel" aria-labelledby="messages-tab">
+            <TransactionsTable<TransactionListItem>
             columns={SHARED_COLUMNS}
             data={accumulatedMessages}
             isLoading={messagesLoading && messagesOffset === 0}
@@ -312,8 +320,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               ) : null
             }
           />
+          </div>
         ) : (
-          <TransactionsTable<ExplorerEdiJson>
+          <div id="json-panel" role="tabpanel" aria-labelledby="json-tab">
+            <TransactionsTable<ExplorerEdiJson>
             columns={SHARED_COLUMNS}
             data={accumulatedJson}
             isLoading={jsonLoading && jsonOffset === 0}
@@ -326,6 +336,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               ) : null
             }
           />
+          </div>
         )}
       </div>
     </div>

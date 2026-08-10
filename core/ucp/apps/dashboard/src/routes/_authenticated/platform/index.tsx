@@ -26,9 +26,6 @@ function PlatformDashboard() {
             </div>
           </div>
           <p className="text-[40px] leading-none font-semibold tracking-tight text-foreground">—</p>
-          <p className="text-base text-emerald-500 mt-4 font-medium flex items-center gap-1.5">
-            <Activity className="w-4 h-4" /> 100% SLA uptime
-          </p>
         </div>
 
         <div className="bg-card p-8 rounded-2xl border border-border shadow-[0_2px_8px_rgb(0,0,0,0.04)] hover:-translate-y-[2px] hover:shadow-[0_8px_24px_rgb(0,0,0,0.06)] transition-all duration-300 ease-out group cursor-default">

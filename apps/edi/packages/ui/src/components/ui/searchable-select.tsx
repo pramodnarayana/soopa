@@ -78,15 +78,16 @@ export function SearchableSelect({
           <CommandList>
             <CommandEmpty>
               {allowCustomValue && inputValue ? (
-                <div
-                  className="px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground text-foreground transition-colors m-1 rounded-md"
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground text-foreground transition-colors m-1 rounded-md text-left"
                   onClick={() => {
                     onChange(inputValue);
                     setOpen(false);
                   }}
                 >
                   Create "{inputValue}"
-                </div>
+                </button>
               ) : (
                 emptyText
               )}

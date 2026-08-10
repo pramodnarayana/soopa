@@ -32,7 +32,10 @@ export function CreateAS2PartnershipModal({ availablePartners }: CreateAS2Partne
   const [isOpen, setIsOpen] = useState(false);
 
   const { form, onSubmit, isPending, platformSettings } = useCreateAS2PartnershipForm({
-    onSuccess: () => setIsOpen(false),
+    onSuccess: () => {
+      form.reset();
+      setIsOpen(false);
+    },
   });
 
   const handleOpenChange = (open: boolean) => {
@@ -104,6 +107,7 @@ export function CreateAS2PartnershipModal({ availablePartners }: CreateAS2Partne
                       searchString: p.name,
                     }))}
                     emptyText="No local stations found"
+                    allowCustomValue={false}
                   />
                 </FormControl>
                 <FormMessage />
@@ -132,6 +136,7 @@ export function CreateAS2PartnershipModal({ availablePartners }: CreateAS2Partne
                       searchString: p.name,
                     }))}
                     emptyText="No remote stations found"
+                    allowCustomValue={false}
                   />
                 </FormControl>
                 <FormMessage />

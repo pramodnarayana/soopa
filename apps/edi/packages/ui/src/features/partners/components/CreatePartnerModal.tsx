@@ -340,10 +340,6 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                         setCertPem(res.public_cert_pem);
                         setPrivateKeyVaultRef(res.private_key_vault_ref);
                         setGeneratedForAs2Id(as2Id);
-                        toast({
-                          title: 'Certificate Generated',
-                          description: 'The certificate has been generated and populated.',
-                        });
                       },
                       onError: () => {
                         toast({

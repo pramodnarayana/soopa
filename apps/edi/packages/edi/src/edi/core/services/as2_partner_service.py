@@ -152,6 +152,10 @@ class AS2PartnerService:
         if not partner:
             raise ValueError("Partner not found")
 
+        # Validate action
+        if cmd.action not in ("generate", "upload"):
+            raise ValueError(f"Invalid action '{cmd.action}'. Must be 'generate' or 'upload'.")
+
         public_cert_pem = cmd.public_cert_pem
         private_key_vault_ref = None
 
@@ -160,9 +164,10 @@ class AS2PartnerService:
                 private_key_bytes, public_cert_bytes = generate_self_signed_cert(
                     common_name=partner.as2_id
                 )
+                # Use stable partner_id instead of tenant-controlled name
                 private_key_vault_ref = vault.store_private_key(
                     private_key_pem=private_key_bytes,
-                    alias_prefix=f"{partner.name.replace(' ', '_').lower()}_rotated",
+                    alias_prefix=f"{partner_id}_rotated",
                 )
                 public_cert_pem = public_cert_bytes.decode("utf-8")
             elif cmd.action == "upload":
@@ -170,9 +175,10 @@ class AS2PartnerService:
                     raise ValueError(
                         "Both public_cert_pem and private_key_pem required for upload."
                     )
+                # Use stable partner_id instead of tenant-controlled name
                 private_key_vault_ref = vault.store_private_key(
                     private_key_pem=cmd.private_key_pem.encode("utf-8"),
-                    alias_prefix=f"{partner.name.replace(' ', '_').lower()}_uploaded",
+                    alias_prefix=f"{partner_id}_uploaded",
                 )
         else:
             if not cmd.public_cert_pem:
@@ -180,7 +186,7 @@ class AS2PartnerService:
 
         try:
             await self.uow.as2_partners.rotate_as2_certificates(
-                tenant_id, partner_id, str(public_cert_pem), private_key_vault_ref
+                tenant_id, partner_id, public_cert_pem, private_key_vault_ref
             )
 
             updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)

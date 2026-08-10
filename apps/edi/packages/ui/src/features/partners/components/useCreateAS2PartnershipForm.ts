@@ -18,7 +18,19 @@ export const as2PartnershipSchema = z
   .refine((data) => data.local_partner_id !== data.remote_partner_id, {
     message: 'Local and Remote stations cannot be the same',
     path: ['remote_partner_id'],
-  });
+  })
+  .refine(
+    (data) => {
+      if (data.mdn_type === 'ASYNC') {
+        return !!data.mdn_url && data.mdn_url.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: 'MDN URL is required when MDN type is Asynchronous',
+      path: ['mdn_url'],
+    },
+  );
 
 export type AS2PartnershipFormValues = z.infer<typeof as2PartnershipSchema>;
 

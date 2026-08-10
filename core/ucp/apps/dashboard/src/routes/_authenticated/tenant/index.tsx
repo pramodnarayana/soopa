@@ -1,5 +1,4 @@
-import { Badge } from '@soopa/ui/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
+import { Badge, Card, CardContent, CardHeader, CardTitle } from '@soopa/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { LayoutDashboard } from 'lucide-react';
 import { useTenantContext } from '../../../contexts/TenantContext';
