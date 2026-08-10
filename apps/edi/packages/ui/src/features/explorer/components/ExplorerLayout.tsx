@@ -1,5 +1,6 @@
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
+import { type FieldDef, QueryBuilder } from '@soopa/ui/components/ui/query-builder';
 import { Database, FileJson } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
@@ -7,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui
 import { useExplorerEdiJson, useExplorerEdiMessages } from '../api/explorerApi';
 import type { ExplorerEdiJson, ExplorerEdiMessage, FilterRule } from '../types';
 import { ExplorerTable } from './ExplorerTable';
-import { FilterBuilder } from './FilterBuilder';
 
 const sharedColumns = [
   { key: 'transaction_type', label: 'Type', className: 'w-[10%]' },
@@ -27,15 +27,64 @@ const sharedColumns = [
 const messageColumns = sharedColumns;
 const jsonColumns = sharedColumns;
 
-const availableFields = [
-  { label: 'Trading Partner ID', value: 'trading_partner_id' },
-  { label: 'Status', value: 'status' },
-  { label: 'Direction', value: 'direction' },
-  { label: 'Transaction Type', value: 'transaction_type' },
-  { label: 'Sender ID', value: 'sender_id' },
-  { label: 'Receiver ID', value: 'receiver_id' },
-  { label: 'Shipment Number', value: 'business_metadata.shipment_id' },
-  { label: 'Load Number', value: 'business_metadata.load_number' },
+const messageFields: FieldDef[] = [
+  {
+    label: 'Trading Partner ID',
+    id: 'trading_partner_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Transaction Type',
+    id: 'transaction_type',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  { label: 'Sender ID', id: 'sender_id', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Receiver ID',
+    id: 'receiver_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+];
+
+const jsonFields: FieldDef[] = [
+  {
+    label: 'Trading Partner ID',
+    id: 'trading_partner_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Transaction Type',
+    id: 'transaction_type',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  { label: 'Sender ID', id: 'sender_id', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Receiver ID',
+    id: 'receiver_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  {
+    label: 'Shipment Number',
+    id: 'business_metadata.shipment_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  {
+    label: 'Load Number',
+    id: 'business_metadata.load_number',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
 ];
 
 function ExplorerCommonFields({
@@ -90,7 +139,8 @@ function ExplorerCommonFields({
 }
 
 export function ExplorerLayout() {
-  const [filters, setFilters] = useState<FilterRule[]>([]);
+  const [messagesFilters, setMessagesFilters] = useState<FilterRule[]>([]);
+  const [jsonFilters, setJsonFilters] = useState<FilterRule[]>([]);
   const [activeTab, setActiveTab] = useState('messages');
   const [messagesOffset, setMessagesOffset] = useState(0);
   const [jsonOffset, setJsonOffset] = useState(0);
@@ -100,23 +150,33 @@ export function ExplorerLayout() {
   const [accumulatedJson, setAccumulatedJson] = useState<ExplorerEdiJson[]>([]);
 
   const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(
-    filters,
+    messagesFilters,
     limit,
     messagesOffset,
     activeTab === 'messages',
   );
   const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(
-    filters,
+    jsonFilters,
     limit,
     jsonOffset,
     activeTab === 'json',
   );
 
-  const handleFiltersChange = (newFilters: FilterRule[]) => {
-    setFilters(newFilters);
+  const handleMessagesFiltersChange = (newFilters: FilterRule[]) => {
+    // Retain only supported operators
+    const supportedOperators = new Set(['eq', 'neq', 'contains']);
+    const normalizedFilters = newFilters.filter((rule) => supportedOperators.has(rule.operator));
+    setMessagesFilters(normalizedFilters);
     setMessagesOffset(0);
-    setJsonOffset(0);
     setAccumulatedMessages([]);
+  };
+
+  const handleJsonFiltersChange = (newFilters: FilterRule[]) => {
+    // Retain only supported operators
+    const supportedOperators = new Set(['eq', 'neq', 'contains']);
+    const normalizedFilters = newFilters.filter((rule) => supportedOperators.has(rule.operator));
+    setJsonFilters(normalizedFilters);
+    setJsonOffset(0);
     setAccumulatedJson([]);
   };
 
@@ -177,17 +237,17 @@ export function ExplorerLayout() {
         </TabsList>
 
         <TabsContent value="messages" className="focus:outline-none">
+          <div className="mb-4 flex justify-end">
+            <QueryBuilder
+              fields={messageFields}
+              rules={messagesFilters as any}
+              onChange={(f) => handleMessagesFiltersChange(f as FilterRule[])}
+            />
+          </div>
           <ExplorerTable
             columns={messageColumns}
             data={accumulatedMessages}
             isLoading={messagesLoading && messagesOffset === 0}
-            headerToolbar={
-              <FilterBuilder
-                availableFields={availableFields}
-                filters={filters}
-                onChange={handleFiltersChange}
-              />
-            }
             renderExpanded={(item) => (
               <div className="space-y-4">
                 <ExplorerCommonFields item={item} />
@@ -207,17 +267,17 @@ export function ExplorerLayout() {
         </TabsContent>
 
         <TabsContent value="json" className="focus:outline-none">
+          <div className="mb-4 flex justify-end">
+            <QueryBuilder
+              fields={jsonFields}
+              rules={jsonFilters as any}
+              onChange={(f) => handleJsonFiltersChange(f as FilterRule[])}
+            />
+          </div>
           <ExplorerTable
             columns={jsonColumns}
             data={accumulatedJson}
             isLoading={jsonLoading && jsonOffset === 0}
-            headerToolbar={
-              <FilterBuilder
-                availableFields={availableFields}
-                filters={filters}
-                onChange={handleFiltersChange}
-              />
-            }
             renderExpanded={(item) => (
               <div className="space-y-4">
                 <ExplorerCommonFields item={item} />

@@ -1,3 +1,4 @@
+import { type FieldDef, QueryBuilder, useClientFilter } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
@@ -66,6 +67,20 @@ const STATUS_THEME = {
 
 const columnHelper = createColumnHelper<Tenant>();
 
+const availableFields: FieldDef[] = [
+  { id: 'name', label: 'Tenant Name', type: 'text' },
+  {
+    id: 'status',
+    label: 'Status',
+    type: 'enum',
+    operators: ['eq', 'neq'],
+    options: [
+      { label: 'Active', value: TENANT_STATUS.ACTIVE },
+      { label: 'Inactive', value: TENANT_STATUS.INACTIVE },
+    ],
+  },
+];
+
 export const Route = createFileRoute('/_authenticated/platform/tenants/')({
   component: TenantsPage,
 });
@@ -75,8 +90,9 @@ function TenantsPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ name: '' });
+  const { data: rawTenants = [], isLoading } = useGetTenants();
+  const { filters, setFilters, filteredData: tenants } = useClientFilter(rawTenants);
 
-  const { data: tenants = [], isLoading } = useGetTenants();
   const provisionMutation = useProvisionTenant();
   const statusMutation = useUpdateTenantStatus();
   const deleteMutation = useDeleteTenant();
@@ -306,6 +322,10 @@ function TenantsPage() {
             </form>
           </DialogContent>
         </Dialog>
+      </div>
+
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
       </div>
 
       <div className="bg-card border border-border shadow-[0_2px_8px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden">

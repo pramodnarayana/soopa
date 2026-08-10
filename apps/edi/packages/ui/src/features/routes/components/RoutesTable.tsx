@@ -1,5 +1,10 @@
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
+import {
   createColumnHelper,
   getCoreRowModel,
   getExpandedRowModel,
@@ -166,7 +171,32 @@ function RouteRowActions({ route }: { route: RouteItem }) {
   );
 }
 
-export function RoutesTable({ data, isLoading }: { data: RouteItem[]; isLoading: boolean }) {
+const availableFields: FieldDef[] = [
+  { id: 'trading_partner_id', label: 'Trading Partner', type: 'text' },
+  { id: 'name', label: 'Route Name', type: 'text' },
+  {
+    id: 'direction',
+    label: 'Direction',
+    type: 'enum',
+    operators: ['eq'],
+    options: [
+      { label: 'Outbound', value: 'OUTBOUND' },
+      { label: 'Inbound', value: 'INBOUND' },
+    ],
+  },
+  { id: 'transaction_type', label: 'Transaction Type', type: 'text' },
+  { id: 'destination_name', label: 'Destination', type: 'text' },
+];
+
+export function RoutesTable({
+  data: rawData,
+  isLoading,
+}: {
+  data: RouteItem[];
+  isLoading: boolean;
+}) {
+  const { filters, setFilters, filteredData: data } = useClientFilter(rawData);
+
   const table = useReactTable({
     data,
     columns,
@@ -180,20 +210,25 @@ export function RoutesTable({ data, isLoading }: { data: RouteItem[]; isLoading:
   });
 
   return (
-    <DataTable
-      table={table}
-      columnsLength={columns.length}
-      isLoading={isLoading}
-      dataLength={data.length}
-      emptyIcon={<ArrowLeftRight className="w-8 h-8" />}
-      emptyTitle="No Routes Configured"
-      emptyDescription="Get started by creating your first inbound or outbound route."
-      renderExpandedRow={(row) => (
-        <RouteDetails route={row.original} onCancel={() => row.toggleExpanded()} />
-      )}
-      getGroupBoundary={(row, prevRow) =>
-        row.original.trading_partner_id !== prevRow.original.trading_partner_id
-      }
-    />
+    <div>
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
+      <DataTable
+        table={table}
+        columnsLength={columns.length}
+        isLoading={isLoading}
+        dataLength={data.length}
+        emptyIcon={<ArrowLeftRight className="w-8 h-8" />}
+        emptyTitle="No Routes Configured"
+        emptyDescription="Get started by creating your first inbound or outbound route."
+        renderExpandedRow={(row) => (
+          <RouteDetails route={row.original} onCancel={() => row.toggleExpanded()} />
+        )}
+        getGroupBoundary={(row, prevRow) =>
+          row.original.trading_partner_id !== prevRow.original.trading_partner_id
+        }
+      />
+    </div>
   );
 }

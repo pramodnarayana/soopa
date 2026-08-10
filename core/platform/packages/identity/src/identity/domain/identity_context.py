@@ -23,9 +23,6 @@ class TokenClaims(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def extract_authorized_tenants(cls, data: Any) -> Any:
-        import logging
-
-        logging.getLogger(__name__).warning("RAW JWT DATA IN BACKEND: %s", data)
         authorized_tenants = set()
         if isinstance(data, dict):
             # 1. Primary injected org (if Action is enabled)
@@ -87,8 +84,27 @@ class IdentityContext(BaseModel):
 
     @property
     def is_platform_admin(self) -> bool:
-        """True when the identity holds the reserved platform-admin sentinel tenant ID."""
-        return PLATFORM_TENANT_ID in self.authorized_tenants
+        """True when the identity has an admin role explicitly assigned to the platform-admin sentinel tenant ID."""
+        if PLATFORM_TENANT_ID not in self.authorized_tenants:
+            return False
+
+        roles_dict = self.claims.get("urn:zitadel:iam:org:project:roles") or self.claims.get(
+            "roles"
+        )
+        if isinstance(roles_dict, dict):
+            for role, orgs in roles_dict.items():
+                if (
+                    role in ("admin", "platform-admin")
+                    and isinstance(orgs, dict)
+                    and PLATFORM_TENANT_ID in orgs
+                ):
+                    return True
+
+        # If roles is a flat list, just check if they have admin and the platform tenant ID is authorized (fallback)
+        return bool(
+            isinstance(roles_dict, list)
+            and any(r in roles_dict for r in ("admin", "platform-admin"))
+        )
 
 
 def identity_context_from_claims(claims: TokenClaims) -> IdentityContext:

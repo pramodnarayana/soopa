@@ -1,10 +1,14 @@
+import { applyFilters, type FieldDef, type FilterRule, QueryBuilder } from '@soopa/ui';
 import { createRoute } from '@tanstack/react-router';
+import { useMemo, useState } from 'react';
+import { useEdiHeaders } from '../../features/edi_headers/api/ediHeadersApi';
 import { CreateEdiHeaderModal } from '../../features/edi_headers/components/CreateEdiHeaderModal';
 import { EdiHeadersTable } from '../../features/edi_headers/components/EdiHeadersTable';
 import { CreateInboundRouteModal } from '../../features/routes/components/CreateInboundRouteModal';
 import { CreateOutboundRouteModal } from '../../features/routes/components/CreateOutboundRouteModal';
 import { RoutesTable } from '../../features/routes/components/RoutesTable';
 import { RoutesProvider, useRoutes } from '../../features/routes/context/RoutesContext';
+import type { RouteItem } from '../../features/routes/types';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({
@@ -21,11 +25,24 @@ export function EdiSetupPageWrapper() {
   );
 }
 
-export function EdiSetupPage() {
-  const { routes, isLoading } = useRoutes();
+export const globalFields: FieldDef[] = [
+  { id: 'trading_partner_id', label: 'Trading Partner', type: 'text' },
+];
 
-  const inboundRoutes = routes.filter((r) => r.direction === 'INBOUND');
-  const outboundRoutes = routes.filter((r) => r.direction === 'OUTBOUND');
+export function EdiSetupPage() {
+  const { routes, isLoading: isRoutesLoading } = useRoutes();
+  const { data: ediHeaders, isLoading: isHeadersLoading } = useEdiHeaders();
+
+  const [filters, setFilters] = useState<FilterRule[]>([]);
+
+  const filteredRoutes = useMemo(() => applyFilters(routes, filters), [routes, filters]);
+  const filteredHeaders = useMemo(
+    () => applyFilters(ediHeaders || [], filters),
+    [ediHeaders, filters],
+  );
+
+  const inboundRoutes = filteredRoutes.filter((r: RouteItem) => r.direction === 'INBOUND');
+  const outboundRoutes = filteredRoutes.filter((r: RouteItem) => r.direction === 'OUTBOUND');
 
   return (
     <div className="flex flex-col gap-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
@@ -38,6 +55,9 @@ export function EdiSetupPage() {
           <p className="text-muted-foreground text-sm mt-2">
             Configure inbound and outbound routing and EDI headers.
           </p>
+        </div>
+        <div>
+          <QueryBuilder fields={globalFields} rules={filters} onChange={setFilters} />
         </div>
       </section>
 
@@ -59,7 +79,7 @@ export function EdiSetupPage() {
               <span className="w-2 h-2 rounded-full bg-sky-500"></span>
               Inbound Routes
             </h3>
-            <RoutesTable data={inboundRoutes} isLoading={isLoading} />
+            <RoutesTable data={inboundRoutes} isLoading={isRoutesLoading} />
           </div>
         </section>
 
@@ -83,7 +103,7 @@ export function EdiSetupPage() {
                 <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                 EDI Headers
               </h3>
-              <EdiHeadersTable />
+              <EdiHeadersTable data={filteredHeaders} isLoading={isHeadersLoading} />
             </div>
 
             <div className="space-y-4">
@@ -91,7 +111,7 @@ export function EdiSetupPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 Outbound Routes
               </h3>
-              <RoutesTable data={outboundRoutes} isLoading={isLoading} />
+              <RoutesTable data={outboundRoutes} isLoading={isRoutesLoading} />
             </div>
           </div>
         </section>

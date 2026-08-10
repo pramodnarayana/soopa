@@ -1,5 +1,10 @@
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
+import {
   createColumnHelper,
   getCoreRowModel,
   getExpandedRowModel,
@@ -51,10 +56,17 @@ function AS2PartnershipRowActions({ as2Partnership }: { as2Partnership: AS2Partn
 
 const columnHelper = createColumnHelper<AS2Partnership>();
 
+const availableFields: FieldDef[] = [
+  { id: 'name', label: 'Partnership Name', type: 'text' },
+  { id: 'mdn_type', label: 'MDN Type', type: 'text' },
+  { id: 'encryption_algorithm', label: 'Encryption', type: 'text' },
+  { id: 'signature_algorithm', label: 'Signature', type: 'text' },
+];
+
 import type { Partner } from '../context/AS2PartnersContext';
 
 export function AS2PartnershipsTable({
-  data,
+  data: rawData,
   availablePartners,
   isLoading,
 }: {
@@ -62,6 +74,7 @@ export function AS2PartnershipsTable({
   availablePartners: Partner[];
   isLoading: boolean;
 }) {
+  const { filters, setFilters, filteredData: data } = useClientFilter(rawData);
   const columns = React.useMemo(() => {
     const getPartnerName = (id: string) => {
       const p = availablePartners.find((ap) => ap.id === id);
@@ -168,20 +181,25 @@ export function AS2PartnershipsTable({
   });
 
   return (
-    <DataTable
-      table={table}
-      isLoading={isLoading}
-      dataLength={data.length}
-      emptyIcon={<Network className="w-8 h-8" />}
-      emptyTitle="No Active AS2Partnerships"
-      columnsLength={columns.length}
-      renderExpandedRow={(row) => (
-        <AS2PartnershipDetails
-          as2Partnership={row.original}
-          availablePartners={availablePartners}
-          onCancel={() => row.toggleExpanded()}
-        />
-      )}
-    />
+    <div>
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        dataLength={data.length}
+        emptyIcon={<Network className="w-8 h-8" />}
+        emptyTitle="No Active AS2Partnerships"
+        columnsLength={columns.length}
+        renderExpandedRow={(row) => (
+          <AS2PartnershipDetails
+            as2Partnership={row.original}
+            availablePartners={availablePartners}
+            onCancel={() => row.toggleExpanded()}
+          />
+        )}
+      />
+    </div>
   );
 }

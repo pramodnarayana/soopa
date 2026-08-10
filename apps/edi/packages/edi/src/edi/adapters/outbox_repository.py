@@ -41,6 +41,40 @@ class SqlAlchemyOutboxRepositoryMixin:
         await self.session.flush()
         return event_id
 
+    async def publish_outbox_events_bulk(
+        self,
+        tenant_id: str,
+        events: list[dict[str, Any]],
+    ) -> list[str]:
+        tid_str = tenant_id if tenant_id is not None else None
+        event_ids = []
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        insert_stmts = []
+        for event in events:
+            event_type = event["event_type"]
+            event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
+            event_id = f"{self.id_prefix}{uuid.uuid4().hex}"
+
+            insert_stmts.append(
+                {
+                    "id": event_id,
+                    "tenant_id": tid_str,
+                    "idempotency_key": event.get("idempotency_key") or str(uuid.uuid4()),
+                    "event_type": event_type_str,
+                    "payload": event.get("payload", {}),
+                    "status": "PENDING",
+                }
+            )
+            event_ids.append(event_id)
+
+        if insert_stmts:
+            stmt = pg_insert(self.model_class).values(insert_stmts)
+            stmt = stmt.on_conflict_do_nothing(index_elements=["idempotency_key"])
+            await self.session.execute(stmt)
+
+        return event_ids
+
 
 class SqlAlchemyControlPlaneOutboxRepository(
     SqlAlchemyOutboxRepositoryMixin, GlobalSqlAlchemyRepository, ControlPlaneOutboxRepositoryPort

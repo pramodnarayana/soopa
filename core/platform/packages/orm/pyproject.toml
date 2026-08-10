@@ -26,7 +26,7 @@ packages = ["src/platform_orm"]
 venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
-    "../identity/python/src",
+    "../identity/src",
     "../observability/python/src",
     "src",
 ]

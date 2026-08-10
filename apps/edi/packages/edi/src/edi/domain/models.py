@@ -346,6 +346,7 @@ class EdiMessageDTO:
     state: str | None = None
     status_message: str | None = None
     is_resend: bool = False
+    parent_trace_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -368,6 +369,7 @@ class EdiJsonDTO:
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     payload: dict[str, Any] | None = None
+    parent_trace_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -383,6 +385,7 @@ class ApiGatewayDTO:
     http_status_code: int | None = None
     payload: dict[str, Any] | None = None
     response: dict[str, Any] | None = None
+    parent_trace_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

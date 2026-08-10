@@ -28,6 +28,10 @@ interface TransactionsTableProps<T> {
   onLoadMore?: () => void;
   hasMore?: boolean;
   renderAction?: (item: T) => React.ReactNode;
+  enableRowSelection?: boolean;
+  onSelectionChange?: (selectedRows: T[]) => void;
+  rowSelection?: Record<string, boolean>;
+  onRowSelectionChange?: (rowSelection: Record<string, boolean>) => void;
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -87,38 +91,91 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
   onLoadMore,
   hasMore,
   renderAction,
+  enableRowSelection,
+  onSelectionChange,
+  rowSelection: controlledRowSelection,
+  onRowSelectionChange,
 }: TransactionsTableProps<T>) {
+  const [internalRowSelection, setInternalRowSelection] = React.useState({});
+  const rowSelection =
+    controlledRowSelection !== undefined ? controlledRowSelection : internalRowSelection;
+  const setRowSelection =
+    controlledRowSelection !== undefined
+      ? (updater: any) => {
+          const newValue =
+            typeof updater === 'function' ? updater(controlledRowSelection) : updater;
+          if (onRowSelectionChange) {
+            onRowSelectionChange(newValue);
+          }
+        }
+      : setInternalRowSelection;
+
   const tanstackColumns = React.useMemo(() => {
     const columnHelper = createColumnHelper<T>();
+    const cols = [];
 
-    const cols = columns.map((col) => {
-      // @ts-expect-error key is used as accessor
-      return columnHelper.accessor(col.key, {
-        header: col.label,
-        meta: { className: col.className },
-        cell: (info) => {
-          const item = info.row.original;
-          const value = info.getValue();
+    if (enableRowSelection) {
+      cols.push(
+        columnHelper.display({
+          id: 'select',
+          header: ({ table }) => (
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+              aria-label="Select all transactions"
+              checked={table.getIsAllRowsSelected()}
+              ref={(input) => {
+                if (input) input.indeterminate = table.getIsSomeRowsSelected();
+              }}
+              onChange={table.getToggleAllRowsSelectedHandler()}
+            />
+          ),
+          cell: ({ row }) => (
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+              aria-label={`Select transaction ${row.original.trace_id ?? row.original.id}`}
+              checked={row.getIsSelected()}
+              disabled={!row.getCanSelect()}
+              onChange={row.getToggleSelectedHandler()}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ),
+          meta: { className: 'w-[40px]' },
+        }),
+      );
+    }
 
-          if (col.render) {
-            return col.render(item);
-          }
-          if (col.key === 'status') {
-            return <StatusBadge status={item.status} />;
-          }
-          if (col.key === 'direction') {
-            return <DirectionBadge direction={value as string} />;
-          }
-          return (
-            <span className="text-foreground font-medium text-sm">
-              {(value as string | React.ReactNode) || (
-                <span className="text-muted-foreground font-normal italic">—</span>
-              )}
-            </span>
-          );
-        },
-      });
-    });
+    cols.push(
+      ...columns.map((col) => {
+        // @ts-expect-error key is used as accessor
+        return columnHelper.accessor(col.key, {
+          header: col.label,
+          meta: { className: col.className },
+          cell: (info) => {
+            const item = info.row.original;
+            const value = info.getValue();
+
+            if (col.render) {
+              return col.render(item);
+            }
+            if (col.key === 'status') {
+              return <StatusBadge status={item.status} />;
+            }
+            if (col.key === 'direction') {
+              return <DirectionBadge direction={value as string} />;
+            }
+            return (
+              <span className="text-foreground font-medium text-sm">
+                {(value as string | React.ReactNode) || (
+                  <span className="text-muted-foreground font-normal italic">—</span>
+                )}
+              </span>
+            );
+          },
+        });
+      }),
+    );
 
     if (renderAction) {
       cols.push(
@@ -135,7 +192,7 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
     }
 
     return cols;
-  }, [columns, renderAction]);
+  }, [columns, renderAction, enableRowSelection]);
 
   const table = useReactTable({
     data,
@@ -143,7 +200,20 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
     getCoreRowModel: getCoreRowModel(),
     getRowCanExpand: () => true,
     getExpandedRowModel: getExpandedRowModel(),
+    state: {
+      rowSelection,
+    },
+    enableRowSelection: enableRowSelection,
+    onRowSelectionChange: setRowSelection,
+    getRowId: (row) => row.id,
   });
+
+  React.useEffect(() => {
+    if (onSelectionChange) {
+      const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
+      onSelectionChange(selectedRows);
+    }
+  }, [rowSelection, onSelectionChange, table]);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">

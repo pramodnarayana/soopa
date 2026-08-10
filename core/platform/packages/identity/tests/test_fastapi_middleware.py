@@ -80,3 +80,21 @@ async def test_attach_identity_to_request(
     assert mock_request.state.identity == mock_context
     mock_request.headers.get.assert_called_once_with("authorization")
     mock_authenticate.assert_called_once_with("Bearer valid", mock_verifier)
+
+
+@pytest.mark.asyncio
+@patch("identity.middleware.fastapi.authenticate_bearer_token")
+async def test_attach_identity_to_request_raises_auth_error(
+    mock_authenticate: AsyncMock, mock_verifier: AsyncMock
+) -> None:
+    mock_authenticate.side_effect = AuthenticationError("Invalid token")
+    mock_request = MagicMock()
+    from types import SimpleNamespace
+
+    mock_request.state = SimpleNamespace()
+    mock_request.headers.get.return_value = "Bearer invalid"
+
+    with pytest.raises(AuthenticationError, match="Invalid token"):
+        await attach_identity_to_request(mock_request, mock_verifier)
+
+    assert not hasattr(mock_request.state, "identity") or mock_request.state.identity is None

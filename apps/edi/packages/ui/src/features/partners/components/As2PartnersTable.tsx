@@ -1,5 +1,10 @@
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
+import {
   createColumnHelper,
   getCoreRowModel,
   getExpandedRowModel,
@@ -97,7 +102,31 @@ const columns = [
   }),
 ];
 
-export function As2PartnersTable({ data, isLoading }: { data: AS2Partner[]; isLoading: boolean }) {
+const availableFields: FieldDef[] = [
+  { id: 'name', label: 'Partner Name', type: 'text' },
+  { id: 'as2_id', label: 'AS2 ID', type: 'text' },
+  { id: 'type', label: 'Type', type: 'text' },
+  {
+    id: 'is_local',
+    label: 'Role',
+    type: 'enum',
+    operators: ['eq'],
+    options: [
+      { label: 'Local Station', value: 'true' },
+      { label: 'Remote Station', value: 'false' },
+    ],
+  },
+];
+
+export function As2PartnersTable({
+  data: rawData,
+  isLoading,
+}: {
+  data: AS2Partner[];
+  isLoading: boolean;
+}) {
+  const { filters, setFilters, filteredData: data } = useClientFilter(rawData);
+
   const table = useReactTable({
     data,
     columns,
@@ -107,16 +136,21 @@ export function As2PartnersTable({ data, isLoading }: { data: AS2Partner[]; isLo
   });
 
   return (
-    <DataTable
-      table={table}
-      isLoading={isLoading}
-      dataLength={data.length}
-      emptyIcon={<Server className="w-8 h-8" />}
-      emptyTitle="No Active AS2 Trading Partners"
-      columnsLength={columns.length}
-      renderExpandedRow={(row) => (
-        <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
-      )}
-    />
+    <div>
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        dataLength={data.length}
+        emptyIcon={<Server className="w-8 h-8" />}
+        emptyTitle="No Active AS2 Trading Partners"
+        columnsLength={columns.length}
+        renderExpandedRow={(row) => (
+          <As2PartnerDetails partner={row.original} onCancel={() => row.toggleExpanded()} />
+        )}
+      />
+    </div>
   );
 }

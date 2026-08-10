@@ -1,4 +1,9 @@
 import {
+  type FieldDef,
+  QueryBuilder,
+  useClientFilter,
+} from '@soopa/ui/components/ui/query-builder';
+import {
   createColumnHelper,
   getCoreRowModel,
   getExpandedRowModel,
@@ -255,6 +260,17 @@ const columns = [
   }),
 ];
 
+const availableFields: FieldDef[] = [
+  { id: 'webhook.name', label: 'Name', type: 'text' },
+  { id: 'webhook.url', label: 'URL', type: 'text' },
+  {
+    id: 'webhook.active',
+    label: 'Status',
+    type: 'boolean',
+    operators: ['eq'],
+  },
+];
+
 interface WebhooksTableProps {
   config: WebhookHookConfig;
   data: Webhook[];
@@ -263,10 +279,12 @@ interface WebhooksTableProps {
 
 export function WebhooksTable({ config, data, isLoading }: WebhooksTableProps) {
   // We map the data so each row has access to the config (needed for actions/mutations)
-  const tableData = React.useMemo(
+  const rawTableData = React.useMemo(
     () => data.map((webhook) => ({ webhook, config })),
     [data, config],
   );
+
+  const { filters, setFilters, filteredData: tableData } = useClientFilter(rawTableData);
 
   const table = useReactTable({
     data: tableData,
@@ -277,20 +295,25 @@ export function WebhooksTable({ config, data, isLoading }: WebhooksTableProps) {
   });
 
   return (
-    <DataTable
-      table={table}
-      isLoading={isLoading}
-      dataLength={data.length}
-      emptyIcon={<Network className="w-8 h-8" />}
-      emptyTitle="No webhooks configured"
-      columnsLength={columns.length}
-      renderExpandedRow={(row) => (
-        <WebhookDetails
-          config={config}
-          webhook={row.original.webhook}
-          onCancel={() => row.toggleExpanded()}
-        />
-      )}
-    />
+    <div>
+      <div className="mb-4 flex justify-end">
+        <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
+      </div>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        dataLength={tableData.length}
+        emptyIcon={<Network className="w-8 h-8" />}
+        emptyTitle="No webhooks configured"
+        columnsLength={columns.length}
+        renderExpandedRow={(row) => (
+          <WebhookDetails
+            config={config}
+            webhook={row.original.webhook}
+            onCancel={() => row.toggleExpanded()}
+          />
+        )}
+      />
+    </div>
   );
 }

@@ -3,14 +3,14 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import jwt
 from jwt import PyJWKClient
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
-from identity.ports.token_verifier import TokenVerifier
+from identity.ports.token_verifier import TokenValidationError, TokenVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,8 @@ class ZitadelTokenVerifier(TokenVerifier):
         self._userinfo_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
     async def verify(self, token: str) -> TokenClaims:
-        signing_key = await self._get_signing_key(token)
         try:
+            signing_key = await self._get_signing_key(token)
             payload = jwt.decode(
                 token,
                 signing_key.key,
@@ -42,9 +42,12 @@ class ZitadelTokenVerifier(TokenVerifier):
                 audience=self._options.audience,
                 issuer=self._options.issuer,
             )
-        except Exception as e:
+        except jwt.PyJWTError as e:
             logger.error("JWT decode failed", exc_info=e)
-            raise
+            raise TokenValidationError(str(e)) from e
+        except Exception as e:
+            logger.error("Failed to get signing key or decode JWT", exc_info=e)
+            raise TokenValidationError(str(e)) from e
 
         # Fallback to /userinfo if roles are missing (with enterprise caching)
         if "urn:zitadel:iam:org:project:roles" not in payload:
@@ -65,7 +68,11 @@ class ZitadelTokenVerifier(TokenVerifier):
                 if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
                     orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
 
-        return TokenClaims.model_validate(payload)
+        try:
+            return TokenClaims.model_validate(payload)
+        except Exception as e:
+            logger.error("Token claims validation failed", exc_info=e)
+            raise TokenValidationError(f"Invalid token claims: {e}") from e
 
     async def _get_signing_key(self, token: str) -> Any:
         return await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)
@@ -100,4 +107,4 @@ class ZitadelTokenVerifier(TokenVerifier):
             oldest_key = next(iter(self._userinfo_cache))
             del self._userinfo_cache[oldest_key]
 
-        return userinfo
+        return cast(dict[str, Any], userinfo)

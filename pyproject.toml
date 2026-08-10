@@ -15,6 +15,7 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "core/platform/packages/*/python",
+    "core/platform/packages/identity",
     "core/platform/packages/orm",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
@@ -34,7 +35,7 @@ asyncio_mode = "auto"
 norecursedirs = ["node_modules", "frontend"]
 
 pythonpath = [
-    "core/platform/packages/identity/python/src",
+    "core/platform/packages/identity/src",
     "core/platform/packages/observability/python/src",
     "apps/edi/packages/as2_core/src",
     "apps/edi/packages/bots_core/src",
@@ -96,7 +97,7 @@ ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301"
 "apps/edi/packages/edi/src/api/dependencies/**/*.py" = ["B008"]
 "apps/edi/apps/edi-as2-server/src/as2_server/main.py" = ["B008"]
 "apps/edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
-"core/platform/packages/identity/python/identity/**/*.py" = ["B008"]
+"core/platform/packages/identity/src/identity/**/*.py" = ["B008"]
 "core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores
@@ -149,7 +150,7 @@ ignore = ["apps/edi/packages/grammar", "**/migrations"]
 venvPath = "."
 venv = ".venv"
 extraPaths = [
-    "core/platform/packages/identity/python/src",
+    "core/platform/packages/identity/src",
     "core/platform/packages/observability/python/src",
     "core/platform/packages/schemas/python/src",
     "apps/edi/packages/database/src",

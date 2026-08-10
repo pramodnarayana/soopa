@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '../../../hooks/use-toast';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
 import { useTenantId } from '../../../contexts/TenantContext';
+import { explorerKeys } from '../../explorer/api/explorerApi';
 import type {
   TransactionDetailResponse,
   TransactionListResponse,
@@ -77,5 +79,50 @@ export function useTransactionThread(key: string, value: string) {
       return response.data;
     },
     enabled: !!key && !!value,
+  });
+}
+
+export function useReplayTransaction() {
+  const api = useEdiNetwork();
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ traceId, tier }: { traceId: string; tier: string }) => {
+      const response = await api.post(`transactions/${traceId}/replay`, { tier });
+      return response.data;
+    },
+    onSuccess: (_, { traceId }) => {
+      // Invalidate the detail query to show the new state
+      queryClient.invalidateQueries({ queryKey: transactionsKeys.detail(tenantId, traceId) });
+      queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
+      queryClient.invalidateQueries({ queryKey: explorerKeys.all(tenantId) });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useBulkReplayTransactions() {
+  const api = useEdiNetwork();
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ traceIds, tier }: { traceIds: string[]; tier: string }) => {
+      const response = await api.post(`transactions/bulk-replay`, { trace_ids: traceIds, tier });
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate all transaction lists to show the new state
+      queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
+      queryClient.invalidateQueries({ queryKey: explorerKeys.all(tenantId) });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
   });
 }

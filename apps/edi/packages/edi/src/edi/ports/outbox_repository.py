@@ -25,3 +25,18 @@ class DataPlaneOutboxRepositoryPort(Protocol):
         payload: dict[str, Any],
         idempotency_key: str | None = None,
     ) -> str: ...
+
+    async def publish_outbox_events_bulk(
+        self,
+        tenant_id: str,
+        events: list[dict[str, Any]],
+    ) -> list[str]:
+        """
+        events is a list of dictionaries, each containing:
+        {
+            "event_type": EdiEventType | str,
+            "payload": dict[str, Any],
+            "idempotency_key": str | None
+        }
+        """
+        ...

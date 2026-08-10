@@ -23,7 +23,7 @@ packages = ["src/security"]
 venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
-    "../../../../core/platform/packages/identity/python/src",
+    "../../../../core/platform/packages/identity/src",
     "../../../../core/platform/packages/observability/python/src",
     "../../../../core/platform/packages/schemas/python/src",
     "../database/src",

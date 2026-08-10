@@ -183,6 +183,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
         String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
 
@@ -232,6 +233,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
         String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -265,6 +267,7 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
         String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 

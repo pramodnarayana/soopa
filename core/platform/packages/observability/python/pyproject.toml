@@ -37,7 +37,7 @@ DEP002 = [
 venvPath = "../../../../.."
 venv = ".venv"
 extraPaths = [
-    "../../identity/python/src",
+    "../../identity/src",
     "src",
     "../../schemas/python/src",
     "../../../../../core/platform/packages/orm/src",
