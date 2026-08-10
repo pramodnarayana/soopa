@@ -31,6 +31,7 @@ interface TransactionsTableProps<T> {
   enableRowSelection?: boolean;
   onSelectionChange?: (selectedRows: T[]) => void;
   rowSelection?: Record<string, boolean>;
+  onRowSelectionChange?: (rowSelection: Record<string, boolean>) => void;
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
   enableRowSelection,
   onSelectionChange,
   rowSelection: controlledRowSelection,
+  onRowSelectionChange,
 }: TransactionsTableProps<T>) {
   const [internalRowSelection, setInternalRowSelection] = React.useState({});
   const rowSelection =
@@ -102,7 +104,9 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
       ? (updater: any) => {
           const newValue =
             typeof updater === 'function' ? updater(controlledRowSelection) : updater;
-          // Parent will handle the update; we just notify via onSelectionChange
+          if (onRowSelectionChange) {
+            onRowSelectionChange(newValue);
+          }
         }
       : setInternalRowSelection;
 

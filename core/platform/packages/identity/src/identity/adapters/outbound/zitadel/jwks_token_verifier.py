@@ -33,8 +33,8 @@ class ZitadelTokenVerifier(TokenVerifier):
         self._userinfo_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
     async def verify(self, token: str) -> TokenClaims:
-        signing_key = await self._get_signing_key(token)
         try:
+            signing_key = await self._get_signing_key(token)
             payload = jwt.decode(
                 token,
                 signing_key.key,
@@ -44,6 +44,9 @@ class ZitadelTokenVerifier(TokenVerifier):
             )
         except jwt.PyJWTError as e:
             logger.error("JWT decode failed", exc_info=e)
+            raise TokenValidationError(str(e)) from e
+        except Exception as e:
+            logger.error("Failed to get signing key or decode JWT", exc_info=e)
             raise TokenValidationError(str(e)) from e
 
         # Fallback to /userinfo if roles are missing (with enterprise caching)
@@ -65,7 +68,11 @@ class ZitadelTokenVerifier(TokenVerifier):
                 if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
                     orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
 
-        return TokenClaims.model_validate(payload)
+        try:
+            return TokenClaims.model_validate(payload)
+        except Exception as e:
+            logger.error("Token claims validation failed", exc_info=e)
+            raise TokenValidationError(f"Invalid token claims: {e}") from e
 
     async def _get_signing_key(self, token: str) -> Any:
         return await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)

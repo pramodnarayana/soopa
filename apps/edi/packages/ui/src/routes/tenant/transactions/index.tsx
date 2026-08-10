@@ -433,6 +433,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               enableRowSelection={true}
               onSelectionChange={setSelectedMessages}
               rowSelection={messagesRowSelection}
+              onRowSelectionChange={setMessagesRowSelection}
               renderAction={(item) =>
                 item.trace_id ? (
                   <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
@@ -484,6 +485,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               enableRowSelection={true}
               onSelectionChange={setSelectedJson}
               rowSelection={jsonRowSelection}
+              onRowSelectionChange={setJsonRowSelection}
               renderAction={(item) =>
                 item.trace_id ? (
                   <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />

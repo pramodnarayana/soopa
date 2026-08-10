@@ -27,39 +27,63 @@ const sharedColumns = [
 const messageColumns = sharedColumns;
 const jsonColumns = sharedColumns;
 
-const availableFields: FieldDef[] = [
+const messageFields: FieldDef[] = [
   {
     label: 'Trading Partner ID',
     id: 'trading_partner_id',
     type: 'text',
-    operators: ['eq', 'neq', 'contains', 'in'],
+    operators: ['eq', 'neq', 'contains'],
   },
-  { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains', 'in'] },
-  { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains', 'in'] },
+  { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains'] },
   {
     label: 'Transaction Type',
     id: 'transaction_type',
     type: 'text',
-    operators: ['eq', 'neq', 'contains', 'in'],
+    operators: ['eq', 'neq', 'contains'],
   },
-  { label: 'Sender ID', id: 'sender_id', type: 'text', operators: ['eq', 'neq', 'contains', 'in'] },
+  { label: 'Sender ID', id: 'sender_id', type: 'text', operators: ['eq', 'neq', 'contains'] },
   {
     label: 'Receiver ID',
     id: 'receiver_id',
     type: 'text',
-    operators: ['eq', 'neq', 'contains', 'in'],
+    operators: ['eq', 'neq', 'contains'],
+  },
+];
+
+const jsonFields: FieldDef[] = [
+  {
+    label: 'Trading Partner ID',
+    id: 'trading_partner_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Transaction Type',
+    id: 'transaction_type',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
+  { label: 'Sender ID', id: 'sender_id', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Receiver ID',
+    id: 'receiver_id',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
   },
   {
     label: 'Shipment Number',
     id: 'business_metadata.shipment_id',
     type: 'text',
-    operators: ['eq', 'neq', 'contains', 'in'],
+    operators: ['eq', 'neq', 'contains'],
   },
   {
     label: 'Load Number',
     id: 'business_metadata.load_number',
     type: 'text',
-    operators: ['eq', 'neq', 'contains', 'in'],
+    operators: ['eq', 'neq', 'contains'],
   },
 ];
 
@@ -115,7 +139,8 @@ function ExplorerCommonFields({
 }
 
 export function ExplorerLayout() {
-  const [filters, setFilters] = useState<FilterRule[]>([]);
+  const [messagesFilters, setMessagesFilters] = useState<FilterRule[]>([]);
+  const [jsonFilters, setJsonFilters] = useState<FilterRule[]>([]);
   const [activeTab, setActiveTab] = useState('messages');
   const [messagesOffset, setMessagesOffset] = useState(0);
   const [jsonOffset, setJsonOffset] = useState(0);
@@ -125,26 +150,33 @@ export function ExplorerLayout() {
   const [accumulatedJson, setAccumulatedJson] = useState<ExplorerEdiJson[]>([]);
 
   const { data: messagesData, isLoading: messagesLoading } = useExplorerEdiMessages(
-    filters,
+    messagesFilters,
     limit,
     messagesOffset,
     activeTab === 'messages',
   );
   const { data: jsonData, isLoading: jsonLoading } = useExplorerEdiJson(
-    filters,
+    jsonFilters,
     limit,
     jsonOffset,
     activeTab === 'json',
   );
 
-  const handleFiltersChange = (newFilters: FilterRule[]) => {
+  const handleMessagesFiltersChange = (newFilters: FilterRule[]) => {
     // Retain only supported operators
-    const supportedOperators = new Set(['eq', 'neq', 'contains', 'in']);
+    const supportedOperators = new Set(['eq', 'neq', 'contains']);
     const normalizedFilters = newFilters.filter((rule) => supportedOperators.has(rule.operator));
-    setFilters(normalizedFilters);
+    setMessagesFilters(normalizedFilters);
     setMessagesOffset(0);
-    setJsonOffset(0);
     setAccumulatedMessages([]);
+  };
+
+  const handleJsonFiltersChange = (newFilters: FilterRule[]) => {
+    // Retain only supported operators
+    const supportedOperators = new Set(['eq', 'neq', 'contains']);
+    const normalizedFilters = newFilters.filter((rule) => supportedOperators.has(rule.operator));
+    setJsonFilters(normalizedFilters);
+    setJsonOffset(0);
     setAccumulatedJson([]);
   };
 
@@ -182,14 +214,6 @@ export function ExplorerLayout() {
         </div>
       </div>
 
-      <div className="mb-4 flex justify-end">
-        <QueryBuilder
-          fields={availableFields}
-          rules={filters as any}
-          onChange={(f) => handleFiltersChange(f as FilterRule[])}
-        />
-      </div>
-
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-slate-100/50 p-1 rounded-lg border border-slate-200">
           <TabsTrigger
@@ -213,6 +237,13 @@ export function ExplorerLayout() {
         </TabsList>
 
         <TabsContent value="messages" className="focus:outline-none">
+          <div className="mb-4 flex justify-end">
+            <QueryBuilder
+              fields={messageFields}
+              rules={messagesFilters as any}
+              onChange={(f) => handleMessagesFiltersChange(f as FilterRule[])}
+            />
+          </div>
           <ExplorerTable
             columns={messageColumns}
             data={accumulatedMessages}
@@ -236,6 +267,13 @@ export function ExplorerLayout() {
         </TabsContent>
 
         <TabsContent value="json" className="focus:outline-none">
+          <div className="mb-4 flex justify-end">
+            <QueryBuilder
+              fields={jsonFields}
+              rules={jsonFilters as any}
+              onChange={(f) => handleJsonFiltersChange(f as FilterRule[])}
+            />
+          </div>
           <ExplorerTable
             columns={jsonColumns}
             data={accumulatedJson}
