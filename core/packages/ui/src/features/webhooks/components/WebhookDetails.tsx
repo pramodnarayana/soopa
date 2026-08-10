@@ -54,8 +54,31 @@ export function WebhookDetails({
 
   return (
     <div className="p-6 bg-slate-50/50 rounded-lg border border-slate-200">
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_2.5fr] gap-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="flex justify-between items-center mb-6">
+          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+            Webhook Details
+          </h4>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!isDirty || updateMutation.isPending}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+            >
+              {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_2.5fr] gap-6 max-w-4xl">
           <div className="space-y-2">
             <Label htmlFor={`name-${webhook.id}`}>Webhook Name</Label>
             <Input
@@ -83,20 +106,10 @@ export function WebhookDetails({
         </div>
 
         {updateMutation.error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 mt-4">
             {updateMutation.error.message}
           </div>
         )}
-
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!isDirty || updateMutation.isPending}>
-            {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Save Changes
-          </Button>
-        </div>
       </form>
     </div>
   );

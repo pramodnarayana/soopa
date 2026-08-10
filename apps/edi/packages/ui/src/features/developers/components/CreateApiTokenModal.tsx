@@ -1,4 +1,4 @@
-import { Button } from '@soopa/ui/components/ui/button';
+import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -40,9 +40,7 @@ export function CreateApiTokenModal() {
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger
-          render={<Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" />}
-        >
+        <DialogTrigger className={buttonVariants({ size: 'cta' })}>
           <Key className="w-4 h-4" />
           Generate Token
         </DialogTrigger>
@@ -72,7 +70,7 @@ export function CreateApiTokenModal() {
             <Button
               onClick={handleCreate}
               disabled={!name.trim() || createMutation.isPending}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              size="cta"
             >
               {createMutation.isPending ? 'Generating...' : 'Generate Token'}
             </Button>

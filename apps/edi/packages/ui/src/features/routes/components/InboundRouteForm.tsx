@@ -237,11 +237,7 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
 
       <div className="flex justify-end mt-2">
-        <Button
-          type="submit"
-          disabled={createInbound.isPending}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 h-10 shadow-sm"
-        >
+        <Button type="submit" size="cta" disabled={createInbound.isPending}>
           {createInbound.isPending ? 'Creating...' : 'Create Inbound Route'}
         </Button>
       </div>

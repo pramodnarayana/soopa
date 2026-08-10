@@ -1,4 +1,4 @@
-import { Button } from '@soopa/ui/components/ui/button';
+import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -15,11 +15,7 @@ export function CreateEdiHeaderModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger
-        render={
-          <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm" />
-        }
-      >
+      <DialogTrigger className={buttonVariants({ size: 'cta' })}>
         <Plus className="h-4 w-4" />
         Create EDI Header
       </DialogTrigger>

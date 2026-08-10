@@ -80,6 +80,13 @@ class UpdateAS2TradingPartnerCmd:
 
 
 @dataclass(frozen=True)
+class RotateAS2CertificateCmd:
+    action: str  # 'generate' or 'upload'
+    public_cert_pem: str | None = None
+    private_key_pem: str | None = None
+
+
+@dataclass(frozen=True)
 class CreateAS2PartnershipCmd:
     local_partner_id: str
     remote_partner_id: str

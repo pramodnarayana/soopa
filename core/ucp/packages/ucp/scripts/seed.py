@@ -127,8 +127,8 @@ async def main() -> None:
             """,
             edi_app_id,
             "edi",
-            "EDI Integration",
-            "B2B Electronic Data Interchange platform.",
+            "EDI",
+            "B2B Electronic Data Interchange.",
         )
         logger.info("Successfully seeded platform apps.")
 

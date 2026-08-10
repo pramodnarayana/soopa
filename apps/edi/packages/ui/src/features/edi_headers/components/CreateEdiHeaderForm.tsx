@@ -227,11 +227,7 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
 
       <div className="flex justify-end mt-2">
-        <Button
-          type="submit"
-          disabled={createEdiHeader.isPending}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-6 h-10 shadow-sm"
-        >
+        <Button type="submit" size="cta" disabled={createEdiHeader.isPending}>
           {createEdiHeader.isPending ? 'Creating...' : 'Create EDI Header'}
         </Button>
       </div>

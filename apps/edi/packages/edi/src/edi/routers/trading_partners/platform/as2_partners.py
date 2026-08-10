@@ -10,6 +10,7 @@ from edi.adapters.http.dtos import (
     CreateAS2TradingPartnerRequest,
     GenerateCertRequest,
     GenerateCertResponse,
+    RotateCertificateRequest,
     UpdateAS2TradingPartnerRequest,
 )
 from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
@@ -22,6 +23,7 @@ from edi.dependencies.services import get_vault
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.models import (
     CreateAS2TradingPartnerCmd,
+    RotateAS2CertificateCmd,
     UpdateAS2TradingPartnerCmd,
 )
 from edi.ports.vault import VaultPort
@@ -60,6 +62,58 @@ import logging
 from edi.adapters.http.dtos import CertificateExportResponse
 
 logger = logging.getLogger(__name__)
+
+
+@router.put(
+    "/as2/certificates/{partner_id}/rotate",
+    response_model=AS2TradingPartnerResponse,
+)
+async def rotate_platform_as2_certificates(
+    partner_id: str,
+    request: RotateCertificateRequest,
+    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    profile: dict[str, Any] = Depends(get_platform_user_profile),
+    vault: VaultPort = Depends(get_vault),
+) -> Any:
+    """Rotates certificates for a Platform AS2 partner."""
+    async with uow:
+        partner = await uow.as2_partners.get_as2_partner(PLATFORM_TENANT_ID, partner_id)
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner not found")
+
+        if partner.is_local and "certificates:rotate" not in profile["permissions"]:
+            raise HTTPException(
+                status_code=403, detail="Insufficient permissions to rotate certificates."
+            )
+
+        cmd = RotateAS2CertificateCmd(
+            action=request.action,
+            public_cert_pem=request.public_cert_pem,
+            private_key_pem=request.private_key_pem,
+        )
+
+        try:
+            svc = AS2PartnerService(uow=uow)
+            updated_partner = await svc.rotate_certificates(
+                tenant_id=PLATFORM_TENANT_ID,
+                partner_id=partner_id,
+                cmd=cmd,
+                vault=vault,
+            )
+            await uow.commit()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Internal server error") from e
+
+        return AS2TradingPartnerResponse(
+            id=str(updated_partner.partner_id),
+            name=updated_partner.name,
+            as2_id=partner.as2_id,
+            is_local=partner.is_local,
+            url=partner.url,
+            active=updated_partner.status == "ACTIVE",
+        )
 
 
 @router.get(

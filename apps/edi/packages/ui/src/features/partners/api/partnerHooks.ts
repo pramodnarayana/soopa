@@ -8,6 +8,8 @@ import type {
   CreateAS2PartnershipPayload,
   CreatePartnerPayload,
   CreateSftpPartnerPayload,
+  GenerateCertRequest,
+  GenerateCertResponse,
   Partner,
   RotateCertPayload,
   UpdateAS2PartnershipPayload,
@@ -243,7 +245,7 @@ export function useRotateCertificatesMutation() {
   const api = useEdiPlatformNetwork();
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: RotateCertPayload }) => {
-      const res = await api.post(
+      const res = await api.put(
         `/platform/trading-partners/as2/certificates/${id}/rotate`,
         payload,
       );
@@ -256,14 +258,13 @@ export function useRotateCertificatesMutation() {
 
 export function useGenerateCertificateMutation() {
   const api = useEdiPlatformNetwork();
-  return useMutation({
-    mutationFn: async (as2Id: string) => {
-      const res = await api.post<{ public_cert_pem: string; private_key_vault_ref: string }>(
-        `/platform/trading-partners/as2/certificates/generate?as2_id=${encodeURIComponent(as2Id)}`,
-      );
-      return res.data;
-    },
-  });
+  return useToastMutation(async (payload: GenerateCertRequest) => {
+    const res = await api.post<GenerateCertResponse>(
+      '/platform/trading-partners/as2/certificates/generate',
+      payload,
+    );
+    return res.data;
+  }, 'Certificate generated successfully.');
 }
 
 export function useTestSftpConnectionMutation() {

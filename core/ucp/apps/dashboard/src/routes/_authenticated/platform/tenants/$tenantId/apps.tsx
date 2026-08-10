@@ -1,4 +1,12 @@
+import { Badge } from '@soopa/ui/components/ui/badge';
 import { Button } from '@soopa/ui/components/ui/button';
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@soopa/ui/components/ui/card';
 import { createFileRoute } from '@tanstack/react-router';
 import { Box, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -59,48 +67,48 @@ function TenantAppsPage() {
         );
 
         return (
-          <div
+          <Card
             key={app.id}
-            className={`relative group flex flex-col overflow-hidden rounded-2xl border p-6 transition-all duration-200 ${
+            className={`relative group flex flex-col overflow-hidden transition-all duration-300 ease-out ${
               isSubscribed
-                ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                : 'border-slate-200 bg-white hover:shadow-md'
+                ? 'border-primary/50 bg-primary/5 shadow-sm'
+                : 'hover:shadow-md hover:-translate-y-0.5'
             }`}
           >
             {isSubscribed && (
               <div className="absolute top-4 right-4 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <Badge variant="default" className="gap-1.5 shadow-sm">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                   Active
-                </span>
-                <CheckCircle2 className="w-6 h-6 text-emerald-600 animate-in zoom-in" />
+                </Badge>
+                <CheckCircle2 className="w-6 h-6 text-primary animate-in zoom-in" />
               </div>
             )}
 
-            <div className="flex flex-col gap-4 flex-grow mt-2">
+            <CardHeader className="flex-grow flex flex-col gap-4 mt-2">
               <div
-                className={`w-12 h-12 rounded-xl flex items-center justify-center ${isSubscribed ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'} transition-colors`}
+                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
+                  isSubscribed
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                }`}
               >
                 <Box className="w-6 h-6" />
               </div>
 
               <div className="space-y-1">
-                <h3
-                  className={`text-lg font-semibold ${isSubscribed ? 'text-emerald-950' : 'text-slate-900'}`}
-                >
-                  {app.name}
-                </h3>
-                <p className={`text-sm ${isSubscribed ? 'text-emerald-900/70' : 'text-slate-500'}`}>
+                <CardTitle className="text-lg">{app.name}</CardTitle>
+                <CardDescription>
                   {app.description || 'Enterprise integration application'}
-                </p>
+                </CardDescription>
               </div>
-            </div>
+            </CardHeader>
 
-            <div className="mt-6 pt-4 border-t border-slate-200/60 flex justify-center">
+            <CardFooter className="pt-4 border-t border-border flex justify-center">
               {isSubscribed ? (
                 <Button
                   variant="outline"
-                  className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
                   disabled={unsubscribeMutationObj.isPending}
                   onClick={() => handleUnsubscribe(app.id)}
                 >
@@ -108,15 +116,15 @@ function TenantAppsPage() {
                 </Button>
               ) : (
                 <Button
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="w-full shadow-sm rounded-xl h-11 text-[15px] font-semibold"
                   disabled={subscribeMutationObj.isPending}
                   onClick={() => handleSubscribe(app.id)}
                 >
                   {subscribeMutationObj.isPending ? 'Subscribing...' : 'Subscribe'}
                 </Button>
               )}
-            </div>
-          </div>
+            </CardFooter>
+          </Card>
         );
       })}
     </div>

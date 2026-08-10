@@ -101,12 +101,12 @@ export function AS2PartnershipsTable({
         cell: (info) => {
           const resolvedName = getPartnerName(info.getValue());
           return (
-            <span
-              className="text-sm font-medium text-slate-700 truncate max-w-[120px]"
+            <div
+              className="text-sm font-medium text-slate-700 truncate max-w-[150px] text-left"
               title={resolvedName}
             >
               {resolvedName}
-            </span>
+            </div>
           );
         },
       }),
@@ -115,12 +115,12 @@ export function AS2PartnershipsTable({
         cell: (info) => {
           const resolvedName = getPartnerName(info.getValue());
           return (
-            <span
-              className="text-sm font-medium text-slate-700 truncate max-w-[120px]"
+            <div
+              className="text-sm font-medium text-slate-700 truncate max-w-[150px] text-left"
               title={resolvedName}
             >
               {resolvedName}
-            </span>
+            </div>
           );
         },
       }),

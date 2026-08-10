@@ -250,20 +250,18 @@ function TenantsPage() {
   });
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out fill-mode-both">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Tenants</h1>
-          <p className="text-slate-500 mt-1">Manage and provision organizations on the platform.</p>
+          <h1 className="text-[28px] font-bold tracking-tight text-foreground">Tenants</h1>
+          <p className="text-muted-foreground mt-1 text-[15px]">
+            Manage and provision organizations on the platform.
+          </p>
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger
-            render={
-              <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm gap-2 rounded-xl h-10 px-5" />
-            }
-          >
-            <Plus className="w-4 h-4" />
+          <DialogTrigger render={<Button size="cta" />}>
+            <Plus className="w-5 h-5" />
             Provision Tenant
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
@@ -291,17 +289,10 @@ function TenantsPage() {
               </div>
               <DialogFooter>
                 <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  className="rounded-lg"
-                >
-                  Cancel
-                </Button>
-                <Button
                   type="submit"
+                  size="xl"
                   disabled={provisionMutation.isPending || !formData.name.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg min-w-[120px]"
+                  className="text-base font-semibold min-w-[120px]"
                 >
                   {provisionMutation.isPending ? (
                     <>
@@ -317,7 +308,7 @@ function TenantsPage() {
         </Dialog>
       </div>
 
-      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+      <div className="bg-card border border-border shadow-[0_2px_8px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden">
         <DataTable
           table={table}
           columnsLength={columns.length}

@@ -170,6 +170,7 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
       isPending={createPartner.isPending}
       submitDisabled={isDuplicate}
       submitText="Create AS2 Trading Partner"
+      maxWidth="sm:max-w-[780px]"
     >
       {/* Local / Remote toggle */}
       <div className="flex items-center gap-3">
@@ -301,9 +302,6 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
             isLocal ? (
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
                 disabled={generateCert.isPending}
                 onClick={async () => {
                   if (!as2Id.trim()) {
@@ -329,30 +327,33 @@ export function CreatePartnerModal({ existingAs2Ids = [] }: { existingAs2Ids?: s
                       return;
                     }
                   }
-                  generateCert.mutate(as2Id, {
-                    onSuccess: (res) => {
-                      if (!isOpenRef.current || !isLocalRef.current) {
-                        // The modal was closed or switched to remote while the mutation was inflight.
-                        // Cleanup the newly created orphaned secret immediately.
-                        deleteCertSecret.mutate(res.private_key_vault_ref);
-                        return;
-                      }
-                      setCertPem(res.public_cert_pem);
-                      setPrivateKeyVaultRef(res.private_key_vault_ref);
-                      setGeneratedForAs2Id(as2Id);
-                      toast({
-                        title: 'Certificate Generated',
-                        description: 'The certificate has been generated and populated.',
-                      });
+                  generateCert.mutate(
+                    { as2_id: as2Id },
+                    {
+                      onSuccess: (res) => {
+                        if (!isOpenRef.current || !isLocalRef.current) {
+                          // The modal was closed or switched to remote while the mutation was inflight.
+                          // Cleanup the newly created orphaned secret immediately.
+                          deleteCertSecret.mutate(res.private_key_vault_ref);
+                          return;
+                        }
+                        setCertPem(res.public_cert_pem);
+                        setPrivateKeyVaultRef(res.private_key_vault_ref);
+                        setGeneratedForAs2Id(as2Id);
+                        toast({
+                          title: 'Certificate Generated',
+                          description: 'The certificate has been generated and populated.',
+                        });
+                      },
+                      onError: () => {
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to generate certificate.',
+                          variant: 'destructive',
+                        });
+                      },
                     },
-                    onError: () => {
-                      toast({
-                        title: 'Error',
-                        description: 'Failed to generate certificate.',
-                        variant: 'destructive',
-                      });
-                    },
-                  });
+                  );
                 }}
               >
                 {generateCert.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
