@@ -107,24 +107,34 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
           </div>
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <legend className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               Delivery Channels
             </legend>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 border border-slate-200 rounded-lg bg-slate-50 p-2">
               {ALL_CHANNELS.map((ch) => (
-                <button
+                <label
                   key={ch}
-                  type="button"
-                  onClick={() => toggle(ch)}
-                  aria-pressed={selected.has(ch)}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors border ${
                     selected.has(ch)
-                      ? `${CHANNEL_STYLES[ch]} border-transparent`
-                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      ? 'bg-white border-indigo-200 shadow-sm'
+                      : 'border-transparent hover:bg-slate-100/50'
                   }`}
                 >
-                  {ch}
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(ch)}
+                    onChange={() => toggle(ch)}
+                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 transition-all cursor-pointer"
+                  />
+                  <span className="flex-1 text-sm font-medium text-slate-700">
+                    {ch.replace('_', ' ')}
+                  </span>
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      selected.has(ch) ? 'bg-indigo-500' : 'bg-slate-200'
+                    }`}
+                  />
+                </label>
               ))}
             </div>
           </fieldset>
