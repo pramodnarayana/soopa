@@ -45,6 +45,10 @@ class PipelineEventType(StrEnum):
     DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
 
 
+class NotificationEventType(StrEnum):
+    NOTIFICATION_TRIGGERED = "notification.triggered"
+
+
 ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType
 
 ALL_PROVISIONING_EVENT_TYPES = (
@@ -66,6 +70,7 @@ class MessageQueueName(StrEnum):
     PROVISIONING_QUEUE = "ProvisioningQueue"
     TRANSFORM_COMPUTE_QUEUE = "TransformComputeQueue"
     CDC_DLQ_QUEUE = "CDC-DLQ"
+    PRIORITY_NOTIFICATIONS_QUEUE = "sqs-priority-notifications-queue"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {
@@ -74,4 +79,5 @@ PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {
     PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
     PipelineEventType.DELIVER_EVENT: MessageQueueName.DELIVER_QUEUE,
     PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
+    NotificationEventType.NOTIFICATION_TRIGGERED: MessageQueueName.PRIORITY_NOTIFICATIONS_QUEUE,
 }

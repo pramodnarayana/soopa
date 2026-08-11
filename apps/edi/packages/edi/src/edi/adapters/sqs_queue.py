@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Any
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3
 
 from edi.ports.message_queue import MessageQueuePort
 

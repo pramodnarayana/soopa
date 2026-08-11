@@ -4,7 +4,7 @@ import logging
 
 from database.connection import DatabaseRouter
 from database.models.data_plane import DataPlaneOutbox
-from domain.events import PIPELINE_EVENT_ROUTING_MAP, PipelineEventType
+from domain.events import PIPELINE_EVENT_ROUTING_MAP, NotificationEventType, PipelineEventType
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
@@ -75,7 +75,9 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
                 select(DataPlaneOutbox)
                 .where(
                     DataPlaneOutbox.status == "PENDING",
-                    DataPlaneOutbox.event_type.in_(list(PipelineEventType)),
+                    DataPlaneOutbox.event_type.in_(
+                        list(PipelineEventType) + list(NotificationEventType)
+                    ),
                     DataPlaneOutbox.created_at < five_mins_ago,
                 )
                 .limit(_BATCH_SIZE)

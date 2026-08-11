@@ -1,14 +1,15 @@
 from typing import Any
 
 from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
-from platform_orm.models.common import OutboxMixin
+from platform_orm.models.common import OutboxMixin, TimestampMixin
 from platform_orm.models.core import NotificationBase
 
 
-class NotificationTemplate(NotificationBase):
+class NotificationTemplate(NotificationBase, TimestampMixin):
     __tablename__ = "notification_templates"
     ID_PREFIX = "notif_tmpl"
 
@@ -49,3 +50,42 @@ class NotificationOutbox(NotificationBase, OutboxMixin):
     def body(self) -> dict[str, Any]:
         """Alias for payload to satisfy OutboxEvent protocol."""
         return self.payload
+
+
+class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
+    __tablename__ = "notification_route_configurations"
+    ID_PREFIX = "notif_rte"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    channels: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    destination_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
+
+    __table_args__: Any = (
+        UniqueConstraint("tenant_id", "event_type", name="notification_route_idx"),
+        {"schema": "notifications"},
+    )
+
+
+class InAppNotification(NotificationBase, TimestampMixin):
+    __tablename__ = "in_app_notifications"
+    ID_PREFIX = "notif_inapp"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    __table_args__: Any = (
+        Index("ix_in_app_notif_tenant_user_read", "tenant_id", "user_id", "is_read"),
+        {"schema": "notifications"},
+    )

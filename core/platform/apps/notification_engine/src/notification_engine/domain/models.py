@@ -13,7 +13,6 @@ class Channel(StrEnum):
 class NotificationEvent:
     tenant_id: str
     event_type: str
-    channels: list[Channel]
     data: dict[str, Any] = field(default_factory=dict)
 
 
@@ -25,6 +24,15 @@ class Template:
     channel: Channel
     subject: str | None
     body_content: str
+    is_active: bool = True
+
+
+@dataclass(frozen=True)
+class NotificationPreference:
+    id: str
+    tenant_id: str
+    event_type: str
+    channels: list[str]
 
 
 @dataclass(frozen=True)

@@ -1,3 +1,4 @@
+import { NotificationBell } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { createRoute, Link, Outlet, useLocation } from '@tanstack/react-router';
 import {
@@ -88,8 +89,11 @@ const NavGroup = ({
   );
 };
 
+import { useTenantId } from '../contexts/TenantContext';
+
 export function AppLayout() {
   const auth = useAuth();
+  const tenantId = useTenantId();
   const redirectTriggered = useRef(false);
   // 1. Fetch user data (role, features)
   const { data: userProfile, isLoading: isProfileLoading } = useDashboardData();
@@ -206,8 +210,15 @@ export function AppLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 ml-72">
-        <div className="max-w-[1400px] mx-auto p-8 lg:p-12">
+      <main className="flex-1 ml-72 flex flex-col min-h-screen">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 px-8 flex items-center justify-end shadow-sm">
+          <NotificationBell
+            tenantId={tenantId as string}
+            userId={auth.user?.profile?.sub as string}
+            accessToken={auth.user?.access_token as string}
+          />
+        </header>
+        <div className="flex-1 max-w-[1400px] w-full mx-auto p-8 lg:p-12">
           <Outlet />
         </div>
       </main>

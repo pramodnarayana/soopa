@@ -1,4 +1,3 @@
-
 from edi.ports.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.as2_partnership_repository import AS2PartnershipRepositoryPort
 from edi.ports.edi_header_repository import EdiHeaderRepositoryPort

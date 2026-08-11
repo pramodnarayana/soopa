@@ -9,6 +9,7 @@ dependencies = [
     "ucp",
     "edi",
     "observability",
+    "notification-engine",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ strict = true
 ucp = { workspace = true }
 edi = { workspace = true }
 observability = { workspace = true }
+notification-engine = { workspace = true }
 
 [dependency-groups]
 dev = [

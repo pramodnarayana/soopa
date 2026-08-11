@@ -15,6 +15,12 @@ export * from './components/ui/table';
 export * from './features/developers/ApiTokensPage';
 export * from './features/developers/api/apiTokenHooks';
 export * from './features/developers/types';
+export * from './features/notifications/api/useNotificationConfig';
+export * from './features/notifications/api/useNotifications';
+export * from './features/notifications/components/NotificationBell';
+export * from './features/notifications/components/NotificationPreferencesPage';
+export * from './features/notifications/components/NotificationsPage';
+export * from './features/notifications/components/NotificationTemplatesPage';
 export * from './features/webhooks/api/webhookHooks';
 export * from './features/webhooks/types';
 // Platform features — usable by any app in the monorepo

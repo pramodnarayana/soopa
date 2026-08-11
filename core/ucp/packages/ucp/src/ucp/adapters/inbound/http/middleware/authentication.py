@@ -58,12 +58,16 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         authorization = request.headers.get("Authorization")
+        token = ""
+
         if authorization:
-            # Support case-insensitive "Bearer" and handle accidental double-Bearer prefixes (common in Postman)
             token = authorization.strip()
             while token.lower().startswith("bearer "):
                 token = token[7:].strip()
+        elif "token" in request.query_params:
+            token = request.query_params.get("token", "").strip()
 
+        if token:
             logger.error(
                 f"[AUTH_MIDDLEWARE] Authorization header found. Token starts with: {token[:15]}..."
             )

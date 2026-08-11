@@ -76,4 +76,3 @@ class WebhookService:
                 resource_id=webhook_id,
             )
         )
-

@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useTenantContext } from '../../../../contexts/TenantContext';
 import { getUcpApiUrl } from '../../../../lib/auth';
 
-export const Route = createFileRoute('/_authenticated/tenant/developer/webhooks')({
+export const Route = createFileRoute('/_authenticated/tenant_/settings/developer/webhooks')({
   component: WebhooksRoute,
 });
 

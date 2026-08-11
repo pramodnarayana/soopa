@@ -37,7 +37,16 @@ class TokenClaims(BaseModel):
                 authorized_tenants.add(str(idp_org_id))
 
             # 2. Derive cryptographically from Role allocations (Zero Trust stateless ACL)
-            roles_dict = data.get("urn:zitadel:iam:org:project:roles") or data.get("roles")
+            # Zitadel injects the project ID into the claim key, e.g. urn:zitadel:iam:org:project:123:roles
+            roles_dict = None
+            for key, value in data.items():
+                if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
+                    roles_dict = value
+                    break
+
+            if not roles_dict:
+                roles_dict = data.get("roles")
+
             if isinstance(roles_dict, dict):
                 for orgs in roles_dict.values():
                     if isinstance(orgs, dict):
@@ -78,6 +87,7 @@ class IdentityContext(BaseModel):
     tenant_id: str | None = None
     organization_id: str | None = None
     authorized_tenants: set[str] = Field(default_factory=set)
+    tenant_mapping: dict[str, str] = Field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
     claims: dict[str, Any]
@@ -88,22 +98,33 @@ class IdentityContext(BaseModel):
         if PLATFORM_TENANT_ID not in self.authorized_tenants:
             return False
 
-        roles_dict = self.claims.get("urn:zitadel:iam:org:project:roles") or self.claims.get(
-            "roles"
-        )
+        roles_dict = None
+        for key, value in self.claims.items():
+            if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
+                roles_dict = value
+                break
+
+        if not roles_dict:
+            roles_dict = self.claims.get("roles")
+
         if isinstance(roles_dict, dict):
             for role, orgs in roles_dict.items():
-                if (
-                    role in ("admin", "platform-admin")
-                    and isinstance(orgs, dict)
-                    and PLATFORM_TENANT_ID in orgs
+                if role.lower() in ("admin", "platform-admin", "platformadmin") and isinstance(
+                    orgs, dict
                 ):
-                    return True
+                    for org_id in orgs:
+                        # Only grant platform admin if the specific org they are an admin for
+                        # is explicitly cryptographically mapped to the PLATFORM_TENANT_ID
+                        if (
+                            org_id == PLATFORM_TENANT_ID
+                            or self.tenant_mapping.get(org_id) == PLATFORM_TENANT_ID
+                        ):
+                            return True
 
         # If roles is a flat list, just check if they have admin and the platform tenant ID is authorized (fallback)
         return bool(
             isinstance(roles_dict, list)
-            and any(r in roles_dict for r in ("admin", "platform-admin"))
+            and any(r.lower() in ("admin", "platform-admin", "platformadmin") for r in roles_dict)
         )
 
 

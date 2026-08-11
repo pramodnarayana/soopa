@@ -69,6 +69,7 @@ dev = [
     "mypy>=1.9.0",
     "pre-commit>=3.7.0",
     "testcontainers[postgres]>=4.15.0",
+    "pytest-archon>=0.0.6",
 ]
 
 [tool.mypy]
@@ -77,7 +78,12 @@ exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "apps/edi/pack
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = "hvac.*"
+module = [
+    "hvac.*",
+    "aioboto3.*",
+    "asyncpg.*",
+    "sse_starlette.*",
+]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -86,6 +92,8 @@ target-version = "py311"
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
+# TODO (Next Ticket): Activate "S" (Security/flake8-bandit) and "C90" (Complexity/mccabe)
+# select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S", "C90"]
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF"]
 ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301", "RUF012"] # Handled by formatter / existing legacy code
 
@@ -99,6 +107,8 @@ ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301"
 "apps/edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
 "core/platform/packages/identity/src/identity/**/*.py" = ["B008"]
 "core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
+"core/platform/apps/notification_engine/src/**/*.py" = ["B008"]
+"core/platform/apps/unified-api/src/**/*.py" = ["B008"]
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores
 "apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405", "BLE", "TRY"]
