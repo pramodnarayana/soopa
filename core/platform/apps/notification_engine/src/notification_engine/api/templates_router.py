@@ -12,14 +12,18 @@ Authorization: Every endpoint validates the caller is authorized for the
 requested tenant_id using the resolved IdentityContext from the middleware.
 """
 
+import asyncio
+import json
 import logging
 from typing import Any
 
+import jinja2
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 
 from notification_engine.adapters.outbound.template_renderer import Jinja2TemplateRenderer
+from notification_engine.api.authorization import _assert_tenant_authorized
 from notification_engine.bootstrap.container import Container
 from notification_engine.domain.models import Channel, Template
 from notification_engine.ports.interfaces import NotificationTemplatesRepositoryPort
@@ -96,27 +100,6 @@ class PreviewTemplateResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Authorization helper (shared with preferences_router — candidate for extraction)
-# ---------------------------------------------------------------------------
-
-
-def _assert_tenant_authorized(request: Request, tenant_id: str) -> None:
-    """
-    Raises HTTP 403 if the authenticated identity is not authorized to access
-    the requested tenant. Guards all tenant-scoped endpoints against IDOR.
-    """
-    identity = getattr(request.state, "identity", None)
-    if identity is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    authorized: set[str] = getattr(identity, "authorized_tenants", set())
-    if tenant_id not in authorized:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to access this tenant's notification templates.",
-        )
-
-
-# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -131,7 +114,7 @@ def _assert_tenant_authorized(request: Request, tenant_id: str) -> None:
 async def list_templates(
     tenant_id: str,
     request: Request,
-    repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),
+    repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),  # noqa: B008
 ) -> list[Template]:
     _assert_tenant_authorized(request, tenant_id)
     return await repo.list_templates(tenant_id)
@@ -148,7 +131,7 @@ async def upsert_template(
     tenant_id: str,
     body: UpsertTemplateRequest,
     request: Request,
-    repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),
+    repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),  # noqa: B008
 ) -> Template:
     _assert_tenant_authorized(request, tenant_id)
     return await repo.upsert_template(
@@ -171,7 +154,7 @@ async def delete_template(
     tenant_id: str,
     template_id: str,
     request: Request,
-    repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),
+    repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),  # noqa: B008
 ) -> None:
     _assert_tenant_authorized(request, tenant_id)
     deleted = await repo.delete_template(tenant_id=tenant_id, template_id=template_id)
@@ -193,7 +176,7 @@ async def preview_template(
     tenant_id: str,
     body: PreviewTemplateRequest,
     request: Request,
-    renderer: Jinja2TemplateRenderer = Depends(Provide[Container.template_renderer]),
+    renderer: Jinja2TemplateRenderer = Depends(Provide[Container.template_renderer]),  # noqa: B008
 ) -> PreviewTemplateResponse:
     """
     Renders the draft template body and optional subject through the production-identical
@@ -201,17 +184,53 @@ async def preview_template(
     security feedback before any template is persisted.
     """
     _assert_tenant_authorized(request, tenant_id)
-    try:
-        rendered_body = renderer.render(body.body_template, body.mock_payload)
-        rendered_subject = (
-            renderer.render(body.subject_template, body.mock_payload)
-            if body.subject_template
-            else None
-        )
-    except Exception as exc:
+
+    # Enforce maximum sizes to prevent DoS
+    MAX_TEMPLATE_SIZE = 10000  # characters
+    MAX_PAYLOAD_SIZE = 50000  # characters (serialized JSON)
+
+    if len(body.body_template) > MAX_TEMPLATE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Template render error: {exc}",
+            detail=f"Template body exceeds maximum size of {MAX_TEMPLATE_SIZE} characters",
+        )
+
+    if body.subject_template and len(body.subject_template) > MAX_TEMPLATE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Subject template exceeds maximum size of {MAX_TEMPLATE_SIZE} characters",
+        )
+
+    serialized_payload = json.dumps(body.mock_payload)
+    if len(serialized_payload) > MAX_PAYLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Mock payload exceeds maximum size of {MAX_PAYLOAD_SIZE} characters",
+        )
+
+    try:
+        # Render in thread pool with timeout to prevent blocking and DoS
+        rendered_body = await asyncio.wait_for(
+            asyncio.to_thread(renderer.render, body.body_template, body.mock_payload), timeout=2.0
+        )
+        rendered_subject = None
+        if body.subject_template:
+            rendered_subject = await asyncio.wait_for(
+                asyncio.to_thread(renderer.render, body.subject_template, body.mock_payload),
+                timeout=2.0,
+            )
+    except TimeoutError as exc:
+        logger.warning(f"Template render timeout for tenant {tenant_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Template rendering timed out. Please simplify the template.",
+        ) from exc
+    except jinja2.TemplateError as exc:
+        # Catch specific Jinja2 rendering errors (TemplateSyntaxError, UndefinedError, etc.)
+        logger.exception(f"Template render error for tenant {tenant_id}: {type(exc).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Template rendering failed. Please check your template syntax.",
         ) from exc
 
     return PreviewTemplateResponse(

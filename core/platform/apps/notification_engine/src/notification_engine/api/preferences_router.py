@@ -15,6 +15,7 @@ from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 
+from notification_engine.api.authorization import _assert_tenant_authorized
 from notification_engine.bootstrap.container import Container
 from notification_engine.domain.models import Channel, NotificationPreference
 from notification_engine.ports.interfaces import NotificationPreferencesRepositoryPort
@@ -58,27 +59,6 @@ class UpsertPreferenceRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Authorization helper
-# ---------------------------------------------------------------------------
-
-
-def _assert_tenant_authorized(request: Request, tenant_id: str) -> None:
-    """
-    Raises HTTP 403 if the authenticated identity is not authorized to access
-    the requested tenant. Guards all tenant-scoped endpoints against IDOR.
-    """
-    identity = getattr(request.state, "identity", None)
-    if identity is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    authorized: set[str] = getattr(identity, "authorized_tenants", set())
-    if tenant_id not in authorized:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to access this tenant's notification preferences.",
-        )
-
-
-# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -93,7 +73,7 @@ def _assert_tenant_authorized(request: Request, tenant_id: str) -> None:
 async def list_preferences(
     tenant_id: str,
     request: Request,
-    repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),
+    repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),  # noqa: B008
 ) -> list[NotificationPreference]:
     _assert_tenant_authorized(request, tenant_id)
     return await repo.list_preferences(tenant_id)
@@ -111,7 +91,7 @@ async def upsert_preference(
     event_type: str,
     body: UpsertPreferenceRequest,
     request: Request,
-    repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),
+    repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),  # noqa: B008
 ) -> NotificationPreference:
     _assert_tenant_authorized(request, tenant_id)
     return await repo.upsert_preference(
@@ -131,7 +111,7 @@ async def delete_preference(
     tenant_id: str,
     event_type: str,
     request: Request,
-    repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),
+    repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),  # noqa: B008
 ) -> None:
     _assert_tenant_authorized(request, tenant_id)
     deleted = await repo.delete_preference(tenant_id=tenant_id, event_type=event_type)

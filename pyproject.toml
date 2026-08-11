@@ -92,9 +92,7 @@ target-version = "py311"
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
-# TODO (Next Ticket): Activate "S" (Security/flake8-bandit) and "C90" (Complexity/mccabe)
-# select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S", "C90"]
-select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF"]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S"]
 ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301", "RUF012"] # Handled by formatter / existing legacy code
 
 [tool.ruff.lint.per-file-ignores]
@@ -107,7 +105,6 @@ ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301"
 "apps/edi/legacy_libs/identity/src/identity/dependencies.py" = ["B008"]
 "core/platform/packages/identity/src/identity/**/*.py" = ["B008"]
 "core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
-"core/platform/apps/notification_engine/src/**/*.py" = ["B008"]
 "core/platform/apps/unified-api/src/**/*.py" = ["B008"]
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 # Legacy BOTS engine formatting ignores

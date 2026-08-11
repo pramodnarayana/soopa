@@ -6,6 +6,8 @@ import { TenantContext } from '../../contexts/TenantContext';
 import { useGetTenant } from '../../domains/tenants/api/queries';
 import { resolveTenantId } from '../../lib/auth';
 
+const logger = console;
+
 export interface TenantProviderProps {
   children: (props: {
     sidebarHeader: ReactNode;
@@ -30,11 +32,29 @@ export function TenantProvider({ children }: TenantProviderProps) {
     );
   }
 
-  if (!tenantId) {
-    throw new Error(
-      'FATAL: Tenant ID is missing from both the access token and user profile. ' +
-        'This user may not be assigned to a Zitadel organization. ' +
-        `Access token present: ${!!token}, Profile keys: ${Object.keys(auth.user?.profile ?? {}).join(', ')}`,
+  if (!auth.isLoading && !tenantId) {
+    // Log diagnostic details without exposing PII in the error message
+    logger.error('Tenant ID resolution failed', {
+      hasToken: !!token,
+      hasUser: !!auth.user,
+      profileKeyCount: Object.keys(auth.user?.profile ?? {}).length,
+    });
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50/50">
+        <div className="max-w-md p-8 bg-white rounded-lg shadow-md border border-slate-200">
+          <h1 className="text-xl font-bold text-slate-900 mb-4">Configuration Error</h1>
+          <p className="text-slate-600 mb-4">
+            Your account is not properly configured. Please contact your administrator.
+          </p>
+          <button
+            onClick={() => void auth.signoutRedirect()}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
     );
   }
 

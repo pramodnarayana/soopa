@@ -334,7 +334,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_in_app_notif_tenant_user_read",
         "in_app_notifications",
-        ["tenant_id", "user_id", "is_read"],
+        ["tenant_id", "user_id", "is_read", "created_at"],
         unique=False,
         schema="notifications",
     )
@@ -344,7 +344,10 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("event_type", sa.String(length=255), nullable=False),
         sa.Column(
-            "channels", postgresql.JSONB(astext_type=sa.Text()), server_default="[]", nullable=False
+            "channels",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
         ),
         sa.Column("destination_config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

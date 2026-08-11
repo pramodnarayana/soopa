@@ -64,8 +64,8 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             token = authorization.strip()
             while token.lower().startswith("bearer "):
                 token = token[7:].strip()
-        elif "token" in request.query_params:
-            token = request.query_params.get("token", "").strip()
+        # Note: Query parameter token authentication removed for security.
+        # SSE clients must use Authorization header or cookie-based authentication.
 
         if token:
             logger.error(

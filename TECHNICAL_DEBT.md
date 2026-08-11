@@ -75,8 +75,8 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 ## [Notifications] In-App Notification Delivery UX
 
 - **Date Added**: 2026-08-11
-- **Description**: The newly implemented Notification Engine provides true User-Level scoping for In-App Notifications, however the delivery model relies entirely on HTTP long-polling (React Query `refetchInterval`) rather than real-time push. Furthermore, users cannot opt-in/opt-out of specific event channels.
-- **Action Item**: Implement WebSockets or Server-Sent Events (SSE) on the Notification Engine to stream new notifications to the UI in real-time. Additionally, develop a Pub/Sub Subscription Preference page allowing users to configure which specific `event_type`s generate In-App vs. Email alerts.
+- **Description**: The Notification Engine now delivers real-time In-App notifications via Server-Sent Events (SSE) and supports tenant-scoped event_type routing. However, user-level subscription preferences are not yet implemented - users cannot opt-in/opt-out of specific notification channels on a per-user basis.
+- **Action Item**: Implement user-level notification preferences allowing individual users to configure which event_type notifications they receive via In-App vs. Email channels. This requires extending the preferences system to support user-scoped overrides on top of tenant-wide routing rules, and applying those preferences during recipient/channel resolution in the notification delivery pipeline.
 
 ## [Authorization Architecture] Granular PBAC/RBAC for Platform Superusers
 
@@ -98,4 +98,4 @@ This document tracks known architectural drift, quick fixes, and non-critical re
   1. Omit the `className` prop from all core design system components, forcing the use of strongly-typed variants (via `cva`).
   2. Extend TanStack Table's `ColumnMeta` to strictly type all table configurations (e.g., `isPrimaryText: true`, `truncate: boolean`) instead of accepting raw CSS string overrides.
   3. Implement ESLint rules (`no-restricted-syntax`) to ban raw HTML tags (`<table>`, `<button>`) outside of the UI library.
-  4. Disable arbitrary values in `tailwind.config.js` to prevent custom pixel or font scaling.
+  4. Enforce design token constraints by implementing an ESLint plugin or custom Tailwind class validator that rejects unauthorized arbitrary Tailwind values (e.g., `text-[14.5px]`, `w-[347px]`) while still permitting approved design tokens. Note: Tailwind v3.x does not support globally disabling arbitrary values, so enforcement must be done via linting or build-time validation.

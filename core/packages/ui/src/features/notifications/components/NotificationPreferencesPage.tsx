@@ -57,7 +57,11 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
   const toggle = (ch: Channel) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(ch) ? next.delete(ch) : next.add(ch);
+      if (next.has(ch)) {
+        next.delete(ch);
+      } else {
+        next.add(ch);
+      }
       return next;
     });
 
@@ -84,10 +88,14 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
 
         <div className="flex flex-col gap-5 py-2">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <label
+              htmlFor="event-type-input"
+              className="text-xs font-semibold text-slate-500 uppercase tracking-wider"
+            >
               Event Type
             </label>
             <input
+              id="event-type-input"
               type="text"
               value={eventType}
               onChange={(e) => setEventType(e.target.value)}
@@ -98,10 +106,10 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
             />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Delivery Channels
-            </label>
+            </legend>
             <div className="flex gap-2">
               {ALL_CHANNELS.map((ch) => (
                 <button
@@ -119,7 +127,7 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
         </div>
 
         <DialogFooter showCloseButton>

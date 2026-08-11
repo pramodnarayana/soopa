@@ -44,7 +44,7 @@ class PostgresNotificationListener:
                 await self._connection.remove_listener(self.channel, self._on_notify)
                 await self._connection.close()
             except Exception:  # noqa: BLE001
-                pass
+                logger.warning("Failed to cleanly close postgres connection during shutdown")
         if self._task:
             self._task.cancel()
         logger.info(f"Stopped PostgresNotificationListener on channel '{self.channel}'")
@@ -61,6 +61,10 @@ class PostgresNotificationListener:
                 while self.is_running and not self._connection.is_closed():
                     await asyncio.sleep(1)
 
+                # Connection closed cleanly - apply backoff before reconnect
+                if self.is_running:
+                    await asyncio.sleep(5)
+
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -76,15 +80,20 @@ class PostgresNotificationListener:
             event_data = json.loads(payload)
             tenant_id = event_data.get("tenant_id")
             user_id = event_data.get("user_id")
+            notification_id = event_data.get("id")
+            title = event_data.get("title")
+            body = event_data.get("body")
 
-            if not tenant_id or not user_id:
-                logger.warning(f"Received malformed notification event: {payload}")
+            if not tenant_id or not user_id or not notification_id or not title or not body:
+                logger.warning(
+                    f"Received malformed notification event (missing required fields): {payload}"
+                )
                 return
 
             notification = NotificationDTO(
-                id=event_data["id"],
-                title=event_data["title"],
-                body=event_data["body"],
+                id=notification_id,
+                title=title,
+                body=body,
                 is_read=event_data.get("is_read", False),
                 created_at=event_data.get("created_at"),
             )

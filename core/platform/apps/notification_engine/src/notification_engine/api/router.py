@@ -1,6 +1,11 @@
 import logging
 
-from fastapi import APIRouter, status
+from dependency_injector.wiring import Provide, inject
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from notification_engine.bootstrap.container import Container
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
@@ -13,4 +18,28 @@ router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 @router.get("/health", status_code=status.HTTP_200_OK)
 async def health_check() -> dict[str, str]:
+    """Lightweight liveness check - always returns OK if the service is running."""
     return {"status": "OK", "service": "notification_engine"}
+
+
+@router.get("/ready", status_code=status.HTTP_200_OK)
+@inject
+async def readiness_check(
+    db_session: AsyncSession = Depends(Provide[Container.db_session]),  # noqa: B008
+) -> dict[str, str]:
+    """
+    Readiness check - verifies critical dependencies are available before serving traffic.
+    Checks DB connectivity, Postgres listener, and SQS consumer health.
+    """
+    try:
+        # Check database connectivity
+        await db_session.execute(text("SELECT 1"))
+
+        # TODO: Add checks for Postgres listener and SQS consumer health
+        # These would require access to the listener and consumer instances
+        # which may need to be registered in the container
+
+        return {"status": "ready", "service": "notification_engine"}
+    except Exception as e:
+        logger.exception("Readiness check failed")
+        return {"status": "not ready", "error": str(e)}

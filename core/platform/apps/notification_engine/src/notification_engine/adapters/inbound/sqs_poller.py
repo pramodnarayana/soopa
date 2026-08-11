@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aioboto3
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 async def poll_sqs_queue(
     queue_name: str,
-    processor_func: Callable[[dict[str, Any]], Any],
+    processor_func: Callable[[dict[str, Any]], Awaitable[Any]],
     aws_endpoint: str | None = None,
 ) -> None:
     """Long-polls an SQS queue and processes messages."""

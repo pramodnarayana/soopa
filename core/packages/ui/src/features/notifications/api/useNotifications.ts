@@ -12,7 +12,15 @@ export interface InAppNotification {
 const getBaseUrl = () => {
   // Use the unified API via the standard VITE_UCP_API_URL or fallback
   const url = (import.meta as any).env?.VITE_UCP_API_URL;
-  if (!url) return 'http://localhost:3000/api/v1/notifications';
+  if (!url) {
+    // Only use localhost in development mode
+    if ((import.meta as any).env?.MODE === 'development') {
+      return 'http://localhost:3000/api/v1/notifications';
+    }
+    throw new Error(
+      'VITE_UCP_API_URL is not configured. Please set this environment variable in production.',
+    );
+  }
 
   const base = url.replace(/\/+$/, '');
   return `${base}/api/v1/notifications`;
@@ -30,8 +38,12 @@ export function useNotifications({ tenantId, userId, accessToken }: Notification
   useEffect(() => {
     if (!userId || !tenantId || !accessToken) return;
 
+    // Note: EventSource doesn't support custom headers, so we use tenant_id query param
+    // for tenant middleware compatibility. Authentication should be handled via cookie-based
+    // session or a ticket-based mechanism on the backend (see authentication.py).
+    // TODO: Implement proper SSE authentication mechanism (ticket or cookie-based)
     const eventSource = new EventSource(
-      `${getBaseUrl()}/${tenantId}/users/${userId}/stream?token=${accessToken}&tenant_id=${tenantId}`,
+      `${getBaseUrl()}/${tenantId}/users/${userId}/stream?tenant_id=${tenantId}`,
     );
 
     eventSource.onmessage = (event) => {
@@ -52,10 +64,16 @@ export function useNotifications({ tenantId, userId, accessToken }: Notification
       }
     };
 
+    eventSource.onerror = (error) => {
+      console.error('SSE stream error:', error);
+      // Invalidate the notifications query to trigger a REST fallback
+      void queryClient.invalidateQueries({ queryKey: ['notifications', tenantId, userId] });
+    };
+
     return () => {
       eventSource.close();
     };
-  }, [userId, tenantId, queryClient]);
+  }, [userId, tenantId, accessToken, queryClient]);
 
   return useQuery({
     queryKey: ['notifications', tenantId, userId],

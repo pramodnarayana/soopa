@@ -33,9 +33,11 @@ export function AppLayout({
 
       {/* Main Content Area - no left margin on mobile */}
       <main className="flex-1 lg:ml-[340px] bg-background flex flex-col min-h-screen">
-        <header className="h-20 bg-background/80 backdrop-blur-md border-b border-border/40 sticky top-0 z-40 px-8 flex items-center justify-end shadow-sm">
-          {headerContent}
-        </header>
+        {headerContent && (
+          <header className="h-20 bg-background/80 backdrop-blur-md border-b border-border/40 sticky top-0 z-40 px-8 flex items-center justify-end shadow-sm">
+            {headerContent}
+          </header>
+        )}
         <div className="mx-auto w-full max-w-[1800px] p-8 lg:p-12 xl:p-16 flex-1">{children}</div>
       </main>
     </div>

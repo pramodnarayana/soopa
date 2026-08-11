@@ -8,7 +8,7 @@ import {
 } from '../api/useNotifications';
 
 export const NotificationBell: React.FC<NotificationContext> = (props) => {
-  const { data: notifications = [], isLoading } = useNotifications(props);
+  const { data: notifications = [], isLoading, error } = useNotifications(props);
   const markAsRead = useMarkNotificationAsRead(props);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
@@ -53,6 +53,11 @@ export const NotificationBell: React.FC<NotificationContext> = (props) => {
           {isLoading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-10 text-red-500">
+              <Bell className="w-10 h-10 mb-2 opacity-20" />
+              <p className="text-sm">Failed to load notifications</p>
             </div>
           ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-slate-500">

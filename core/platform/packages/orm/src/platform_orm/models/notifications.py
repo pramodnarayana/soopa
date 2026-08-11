@@ -62,7 +62,7 @@ class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
     )
     event_type: Mapped[str] = mapped_column(String(255), nullable=False)
     channels: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
-    destination_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=True)
+    destination_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     __table_args__: Any = (
         UniqueConstraint("tenant_id", "event_type", name="notification_route_idx"),
@@ -86,6 +86,6 @@ class InAppNotification(NotificationBase, TimestampMixin):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__: Any = (
-        Index("ix_in_app_notif_tenant_user_read", "tenant_id", "user_id", "is_read"),
+        Index("ix_in_app_notif_tenant_user_read", "tenant_id", "user_id", "is_read", "created_at"),
         {"schema": "notifications"},
     )

@@ -212,11 +212,13 @@ export function AppLayout() {
       {/* Main Content Area */}
       <main className="flex-1 ml-72 flex flex-col min-h-screen">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 px-8 flex items-center justify-end shadow-sm">
-          <NotificationBell
-            tenantId={tenantId as string}
-            userId={auth.user?.profile?.sub as string}
-            accessToken={auth.user?.access_token as string}
-          />
+          {tenantId && auth.user?.profile?.sub && auth.user?.access_token && (
+            <NotificationBell
+              tenantId={tenantId}
+              userId={auth.user.profile.sub}
+              accessToken={auth.user.access_token}
+            />
+          )}
         </header>
         <div className="flex-1 max-w-[1400px] w-full mx-auto p-8 lg:p-12">
           <Outlet />

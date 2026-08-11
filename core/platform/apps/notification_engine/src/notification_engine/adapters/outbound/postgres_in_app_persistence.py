@@ -1,14 +1,17 @@
 import json
+import logging
 import uuid
 from collections.abc import Callable, Sequence
 from typing import Any
 
 from platform_orm.models.identity import TenantUser
 from platform_orm.models.notifications import InAppNotification
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .channels.in_app_delivery_strategy import InAppPersistencePort
+
+logger = logging.getLogger(__name__)
 
 
 class PostgresInAppPersistence(InAppPersistencePort):
@@ -26,11 +29,20 @@ class PostgresInAppPersistence(InAppPersistencePort):
             else:
                 stmt = select(TenantUser.user_id).where(
                     TenantUser.tenant_id == tenant_id,
-                    TenantUser.role.in_(["admin", "owner", "Admin", "Owner"]),
+                    func.lower(TenantUser.role).in_(["admin", "owner"]),
                     TenantUser.active.is_(True),
                 )
                 result = await session.execute(stmt)
                 user_ids = result.scalars().all()
+
+            if not user_ids:
+                logger.warning(
+                    "No recipients found for in-app notification: tenant_id=%s, target_user_id=%s, "
+                    "event_type=%s. No active admin/owner users available.",
+                    tenant_id,
+                    data.get("target_user_id"),
+                    data.get("event_type"),
+                )
 
             notifications = []
             for uid in user_ids:
@@ -45,6 +57,9 @@ class PostgresInAppPersistence(InAppPersistencePort):
                 notifications.append(notification)
                 session.add(notification)
 
+            # Flush to populate ORM-assigned created_at timestamps
+            await session.flush()
+
             # Issue NOTIFY for each notification, which will only commit if the transaction commits
             for notif in notifications:
                 payload = json.dumps(
@@ -55,7 +70,9 @@ class PostgresInAppPersistence(InAppPersistencePort):
                         "title": notif.title,
                         "body": notif.body,
                         "is_read": notif.is_read,
-                        "created_at": None,
+                        "created_at": (
+                            notif.created_at.isoformat() if notif.created_at else None
+                        ),
                     }
                 )
                 # Escape single quotes in the payload

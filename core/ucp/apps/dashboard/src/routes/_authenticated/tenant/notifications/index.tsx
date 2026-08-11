@@ -9,17 +9,13 @@ export const Route = createFileRoute('/_authenticated/tenant/notifications/')({
 
 function NotificationsRoute() {
   const auth = useAuth();
-  const { tenantId } = useTenantContext();
+  const { tenantId, token } = useTenantContext();
 
-  if (!auth.user?.access_token || !tenantId || !auth.user?.profile?.sub) {
+  if (!token || !tenantId || !auth.user?.profile?.sub) {
     return null;
   }
 
   return (
-    <NotificationsPage
-      tenantId={tenantId}
-      userId={auth.user.profile.sub}
-      accessToken={auth.user.access_token}
-    />
+    <NotificationsPage tenantId={tenantId} userId={auth.user.profile.sub} accessToken={token} />
   );
 }

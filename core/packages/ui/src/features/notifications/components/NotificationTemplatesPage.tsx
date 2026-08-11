@@ -18,6 +18,14 @@ import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { DataTable } from '../../../components/ui/data-table';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../components/ui/dialog';
+import {
   type NotificationConfigContext,
   type NotificationTemplate,
   useDeleteTemplate,
@@ -73,7 +81,7 @@ function TemplateEditorPanel({
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   const upsert = useUpsertTemplate(ctx);
-  const preview = usePreviewTemplate(ctx);
+  const { mutate: previewMutate } = usePreviewTemplate(ctx);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runPreview = useCallback(
@@ -86,7 +94,7 @@ function TemplateEditorPanel({
         return;
       }
       setPreviewError(null);
-      preview.mutate(
+      previewMutate(
         {
           body_template: currentBody,
           subject_template: currentSubject || undefined,
@@ -98,7 +106,7 @@ function TemplateEditorPanel({
         },
       );
     },
-    [preview],
+    [previewMutate],
   );
 
   const schedulePreview = useCallback(
@@ -312,10 +320,22 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
   const { data: templates = [], isLoading } = useTemplates(props);
   const remove = useDeleteTemplate(props);
   const [editing, setEditing] = useState<NotificationTemplate | 'new' | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<NotificationTemplate | null>(null);
 
-  const handleDelete = (tmpl: NotificationTemplate) => {
-    remove.mutate(tmpl.id, {
-      onSuccess: () => toast.success('Template deleted'),
+  const handleDeleteClick = (tmpl: NotificationTemplate) => {
+    setTemplateToDelete(tmpl);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!templateToDelete) return;
+    remove.mutate(templateToDelete.id, {
+      onSuccess: () => {
+        toast.success('Template deleted');
+        setDeleteDialogOpen(false);
+        setTemplateToDelete(null);
+      },
       onError: () => toast.error('Failed to delete template'),
     });
   };
@@ -365,7 +385,7 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleDelete(row.original)}
+            onClick={() => handleDeleteClick(row.original)}
             className="text-red-600 border-red-200 hover:bg-red-50"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -403,6 +423,7 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
 
       {editing && (
         <TemplateEditorPanel
+          key={editing === 'new' ? 'new-template' : editing.id}
           template={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
           ctx={props}
@@ -420,6 +441,32 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
           emptyDescription="Create a template to begin customising your notification messages."
         />
       </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Template</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the template for{' '}
+              <strong>{templateToDelete?.event_type}</strong> on{' '}
+              <strong>{templateToDelete?.channel}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleDeleteConfirm}
+              disabled={remove.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {remove.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
