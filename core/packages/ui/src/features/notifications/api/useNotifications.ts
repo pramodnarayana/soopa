@@ -5,6 +5,7 @@ export interface InAppNotification {
   id: string;
   title: string;
   body: string;
+  severity: 'info' | 'high' | 'urgent';
   is_read: boolean;
   created_at: string;
 }
@@ -91,7 +92,7 @@ export function useNotifications({ tenantId, userId, accessToken }: Notification
       }
       return res.json();
     },
-    enabled: !!userId && !!tenantId,
+    enabled: !!userId && !!tenantId && !!accessToken,
   });
 }
 

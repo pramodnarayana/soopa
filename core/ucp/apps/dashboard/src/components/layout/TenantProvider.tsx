@@ -104,16 +104,18 @@ export function TenantProvider({ children }: TenantProviderProps) {
     </div>
   );
 
+  const finalTenantId = tenant?.id ?? tenantId ?? '';
+
   const headerContent = (
     <NotificationBell
-      tenantId={tenant?.id ?? tenantId}
+      tenantId={finalTenantId}
       userId={auth.user?.profile?.sub ?? ''}
       accessToken={token}
     />
   );
 
   return (
-    <TenantContext.Provider value={{ tenantId: tenant?.id ?? tenantId, token }}>
+    <TenantContext.Provider value={{ tenantId: finalTenantId, token }}>
       {children({
         sidebarHeader,
         userProfile,

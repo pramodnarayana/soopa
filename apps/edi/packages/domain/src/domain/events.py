@@ -70,7 +70,7 @@ class MessageQueueName(StrEnum):
     PROVISIONING_QUEUE = "ProvisioningQueue"
     TRANSFORM_COMPUTE_QUEUE = "TransformComputeQueue"
     CDC_DLQ_QUEUE = "CDC-DLQ"
-    PRIORITY_NOTIFICATIONS_QUEUE = "sqs-priority-notifications-queue"
+    PRIORITY_NOTIFICATIONS_QUEUE = "PriorityNotificationsQueue"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {

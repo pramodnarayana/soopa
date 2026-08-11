@@ -31,6 +31,9 @@ line-length = 100
 
 [tool.ruff.lint.per-file-ignores]
 "src/**/*.py" = ["B008", "E402"]
+"src/ucp/adapters/outbound/identity/zitadel_client.py" = ["S105"]
+"src/ucp/application/workers/event_listener.py" = ["S110"]
+"src/ucp/core/config.py" = ["S105", "S106"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

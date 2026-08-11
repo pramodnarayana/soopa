@@ -57,7 +57,7 @@ class NotificationConsumerWorker:
         await self.dispatch_use_case.execute(notification_event)
 
     async def _run(self) -> None:
-        queue_name = "sqs-priority-notifications-queue"
+        queue_name = "PriorityNotificationsQueue"
         aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
 
         logger.info(f"Starting NotificationConsumerWorker for {queue_name}...")

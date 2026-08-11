@@ -17,9 +17,7 @@ import {
   useNotifications,
 } from '../api/useNotifications';
 
-type EnrichedNotification = InAppNotification & {
-  severity: 'info' | 'high' | 'urgent';
-};
+// We no longer need EnrichedNotification because InAppNotification has severity
 
 const availableFields: FieldDef[] = [
   { id: 'title', label: 'Title', type: 'text' },
@@ -52,16 +50,9 @@ export const NotificationsPage: React.FC<NotificationContext> = (props) => {
     markAsRead.mutate(id);
   };
 
-  const enrichedNotifications = React.useMemo((): EnrichedNotification[] => {
-    return notifications.map((n) => ({
-      ...n,
-      severity: ((n as any).severity as 'info' | 'high' | 'urgent' | undefined) || 'info',
-    }));
-  }, [notifications]);
+  const { filters, setFilters, filteredData } = useClientFilter(notifications);
 
-  const { filters, setFilters, filteredData } = useClientFilter(enrichedNotifications);
-
-  const columns: ColumnDef<EnrichedNotification>[] = [
+  const columns: ColumnDef<InAppNotification>[] = [
     {
       accessorKey: 'severity',
       header: 'Severity',
@@ -139,7 +130,7 @@ export const NotificationsPage: React.FC<NotificationContext> = (props) => {
     getRowCanExpand: () => true,
   });
 
-  const renderExpandedRow = (row: import('@tanstack/react-table').Row<EnrichedNotification>) => {
+  const renderExpandedRow = (row: import('@tanstack/react-table').Row<InAppNotification>) => {
     const notification = row.original;
     const severity = notification.severity;
     const date = new Date(notification.created_at);

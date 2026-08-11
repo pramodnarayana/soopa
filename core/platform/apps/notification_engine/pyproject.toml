@@ -13,7 +13,6 @@ dependencies = [
     "dependency-injector>=4.44.0",
     "pydantic>=2.13.4",
     "sqlalchemy>=2.0.51",
-    "sse-starlette>=2.0.0",
     "ucp-models",
     "uvicorn>=0.51.0",
 ]

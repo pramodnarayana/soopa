@@ -23,7 +23,12 @@ async def test_stream_manager_broadcast():
 
     # Broadcast
     dto = NotificationDTO(
-        id="n1", title="Test", body="Body", is_read=False, created_at=datetime.now(UTC)
+        id="n1",
+        title="Test",
+        body="Body",
+        is_read=False,
+        created_at=datetime.now(UTC),
+        severity="info",
     )
 
     await manager.broadcast(tenant_id, user_id, dto)

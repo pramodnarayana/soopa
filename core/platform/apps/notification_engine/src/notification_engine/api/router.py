@@ -3,7 +3,7 @@ import logging
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from notification_engine.bootstrap.container import Container
 
@@ -25,15 +25,15 @@ async def health_check() -> dict[str, str]:
 @router.get("/ready", status_code=status.HTTP_200_OK)
 @inject
 async def readiness_check(
-    db_session: AsyncSession = Depends(Provide[Container.db_session]),  # noqa: B008
+    session_factory: async_sessionmaker[AsyncSession] = Depends(Provide[Container.session_factory]),  # noqa: B008
 ) -> dict[str, str]:
     """
     Readiness check - verifies critical dependencies are available before serving traffic.
     Checks DB connectivity, Postgres listener, and SQS consumer health.
     """
     try:
-        # Check database connectivity
-        await db_session.execute(text("SELECT 1"))
+        async with session_factory() as session:
+            await session.execute(text("SELECT 1"))
 
         # TODO: Add checks for Postgres listener and SQS consumer health
         # These would require access to the listener and consumer instances

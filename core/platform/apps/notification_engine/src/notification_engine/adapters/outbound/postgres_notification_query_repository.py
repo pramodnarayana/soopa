@@ -36,6 +36,7 @@ class PostgresNotificationQueryRepository(NotificationQueryPort):
                     id=notif.id,
                     title=notif.title,
                     body=notif.body,
+                    severity=notif.severity,
                     is_read=notif.is_read,
                     created_at=notif.created_at.isoformat() if notif.created_at else None,
                 )

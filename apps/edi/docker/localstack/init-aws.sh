@@ -34,4 +34,8 @@ awslocal sqs create-queue --queue-name edi-orchestrator-jobs-DLQ
 JOBS_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/edi-orchestrator-jobs-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 awslocal sqs create-queue --queue-name edi-orchestrator-jobs --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$JOBS_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
+awslocal sqs create-queue --queue-name PriorityNotificationsQueue-DLQ
+NOTIFICATIONS_DLQ_ARN=$(awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/PriorityNotificationsQueue-DLQ --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+awslocal sqs create-queue --queue-name PriorityNotificationsQueue --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"$NOTIFICATIONS_DLQ_ARN\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
+
 echo "LocalStack Initialization Complete."

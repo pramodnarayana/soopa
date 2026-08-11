@@ -46,6 +46,23 @@ async def test_in_app_notifications_router_integration(db_session_factory):
     from notification_engine.bootstrap.container import Container
 
     app = FastAPI()
+
+    class MockIdentity:
+        def __init__(self, user_id, authorized_tenants):
+            self.user_id = user_id
+            self.authorized_tenants = authorized_tenants
+
+    @app.middleware("http")
+    async def mock_identity_middleware(request, call_next):
+        # We can dynamically set the identity based on headers if needed,
+        # but for now we'll just set it to the test user and tenant.
+        tenant_context = request.headers.get("x-mock-tenant", tenant_id)
+        user_context = request.headers.get("x-mock-user", user_id)
+        request.state.identity = MockIdentity(
+            user_id=user_context, authorized_tenants={tenant_context}
+        )
+        return await call_next(request)
+
     app.include_router(router)
 
     # Initialize container and override query repository
@@ -92,3 +109,17 @@ async def test_in_app_notifications_router_integration(db_session_factory):
             f"/api/v1/notifications/{tenant_id}/users/{user_id}/in-app/wrong_id/read"
         )
         assert bad_response.status_code == 404
+
+        # Cross-tenant authorization scenario: Request tenant B's path while authenticated as tenant A
+        cross_tenant_response = await ac.get(
+            f"/api/v1/notifications/other-tenant-id/users/{user_id}/in-app",
+            headers={"x-mock-tenant": tenant_id},  # Authenticated for test-router-tenant
+        )
+        assert cross_tenant_response.status_code == 403
+
+        # Cross-user authorization scenario: Request user B's path while authenticated as user A
+        cross_user_response = await ac.get(
+            f"/api/v1/notifications/{tenant_id}/users/other-user-id/in-app",
+            headers={"x-mock-user": user_id},  # Authenticated for user-123
+        )
+        assert cross_user_response.status_code == 403

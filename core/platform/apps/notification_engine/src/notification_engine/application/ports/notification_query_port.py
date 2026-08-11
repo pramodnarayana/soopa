@@ -7,6 +7,7 @@ class NotificationDTO:
     id: str
     title: str
     body: str
+    severity: str
     is_read: bool
     created_at: str | None
 

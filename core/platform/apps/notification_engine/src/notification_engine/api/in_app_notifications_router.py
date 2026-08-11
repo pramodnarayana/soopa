@@ -101,6 +101,7 @@ async def stream_notifications(
                             "id": notification.id,
                             "title": notification.title,
                             "body": notification.body,
+                            "severity": notification.severity,
                             "is_read": notification.is_read,
                             "created_at": notification.created_at,
                         }

@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 import json
 import logging
+import re
 from typing import Any
 
 import asyncpg
@@ -23,7 +25,7 @@ class PostgresNotificationListener:
         stream_manager: NotificationStreamPort,
         channel: str = "in_app_notifications",
     ):
-        self.database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+        self.database_url = re.sub(r"^postgresql\+[^:]+://", "postgresql://", database_url)
         self.channel = channel
         self.stream_manager = stream_manager
         self.is_running = False
@@ -39,14 +41,14 @@ class PostgresNotificationListener:
 
     async def stop(self) -> None:
         self.is_running = False
-        if self._connection:
-            try:
-                await self._connection.remove_listener(self.channel, self._on_notify)
-                await self._connection.close()
-            except Exception:  # noqa: BLE001
-                logger.warning("Failed to cleanly close postgres connection during shutdown")
         if self._task:
             self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+        if self._connection:
+            await self._connection.remove_listener(self.channel, self._on_notify)
+            await self._connection.close()
         logger.info(f"Stopped PostgresNotificationListener on channel '{self.channel}'")
 
     async def _run_loop(self) -> None:
@@ -61,14 +63,11 @@ class PostgresNotificationListener:
                 while self.is_running and not self._connection.is_closed():
                     await asyncio.sleep(1)
 
-                # Connection closed cleanly - apply backoff before reconnect
-                if self.is_running:
-                    await asyncio.sleep(5)
-
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("Error in PostgresNotificationListener connection loop")
+            finally:
                 if self.is_running:
                     await asyncio.sleep(5)  # Backoff before reconnecting
 
@@ -94,6 +93,7 @@ class PostgresNotificationListener:
                 id=notification_id,
                 title=title,
                 body=body,
+                severity=event_data.get("severity", "info"),
                 is_read=event_data.get("is_read", False),
                 created_at=event_data.get("created_at"),
             )

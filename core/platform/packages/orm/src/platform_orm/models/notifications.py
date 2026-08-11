@@ -83,6 +83,7 @@ class InAppNotification(NotificationBase, TimestampMixin):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(String(50), nullable=False, server_default="info")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__: Any = (
