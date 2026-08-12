@@ -5,7 +5,7 @@ Business logic (FastAPI) depends only on the IPayloadStorage interface.
 
 from abc import ABC, abstractmethod
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3
 
 
 class IPayloadStorage(ABC):

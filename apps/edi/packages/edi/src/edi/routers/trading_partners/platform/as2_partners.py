@@ -285,7 +285,9 @@ async def create_platform_as2_partner(
                 elif request.private_key_pem:
                     auto_generated = True
                     # Sanitize alias by allowing only alphanumeric and underscore
-                    safe_alias = "".join(c if c.isalnum() or c == "_" else "_" for c in request.name).lower()
+                    safe_alias = "".join(
+                        c if c.isalnum() or c == "_" else "_" for c in request.name
+                    ).lower()
                     private_key_vault_ref = vault.store_private_key(
                         private_key_pem=request.private_key_pem.encode(),
                         alias_prefix=safe_alias,
@@ -296,7 +298,9 @@ async def create_platform_as2_partner(
                         common_name=request.as2_id
                     )
                     # Sanitize alias by allowing only alphanumeric and underscore
-                    safe_alias = "".join(c if c.isalnum() or c == "_" else "_" for c in request.name).lower()
+                    safe_alias = "".join(
+                        c if c.isalnum() or c == "_" else "_" for c in request.name
+                    ).lower()
                     private_key_vault_ref = vault.store_private_key(
                         private_key_pem=private_key_bytes,
                         alias_prefix=safe_alias,

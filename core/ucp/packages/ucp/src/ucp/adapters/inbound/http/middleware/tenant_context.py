@@ -36,8 +36,13 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         # 1. Resolve Active Tenant ID
         # Header (x-tenant-id) is injected by API Gateway for UI requests.
+        # Query parameter (tenant_id) is used as a fallback for EventSource (SSE) which cannot send headers.
         # IdentityContext (identity.tenant_id) is the primary fallback for M2M API requests.
-        active_tenant_id = request.headers.get("x-tenant-id") or identity.tenant_id
+        active_tenant_id = (
+            request.headers.get("x-tenant-id")
+            or request.query_params.get("tenant_id")
+            or identity.tenant_id
+        )
 
         if not active_tenant_id:
             logger.warning("[TENANT_CONTEXT_MIDDLEWARE] Tenant ID missing from request.")

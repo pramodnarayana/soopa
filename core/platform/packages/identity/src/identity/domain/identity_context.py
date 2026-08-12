@@ -37,12 +37,26 @@ class TokenClaims(BaseModel):
                 authorized_tenants.add(str(idp_org_id))
 
             # 2. Derive cryptographically from Role allocations (Zero Trust stateless ACL)
-            roles_dict = data.get("urn:zitadel:iam:org:project:roles") or data.get("roles")
-            if isinstance(roles_dict, dict):
-                for orgs in roles_dict.values():
-                    if isinstance(orgs, dict):
-                        for org_id in orgs:
-                            authorized_tenants.add(str(org_id))
+            # Zitadel injects the project ID into the claim key, e.g. urn:zitadel:iam:org:project:123:roles
+            # Evaluate ALL matching project-specific claims, not just the first one
+            project_roles_found = False
+            for key, value in data.items():
+                if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
+                    project_roles_found = True
+                    if isinstance(value, dict):
+                        for orgs in value.values():
+                            if isinstance(orgs, dict):
+                                for org_id in orgs:
+                                    authorized_tenants.add(str(org_id))
+
+            # Only use generic roles claim if no project-specific claims exist
+            if not project_roles_found:
+                roles_dict = data.get("roles")
+                if isinstance(roles_dict, dict):
+                    for orgs in roles_dict.values():
+                        if isinstance(orgs, dict):
+                            for org_id in orgs:
+                                authorized_tenants.add(str(org_id))
 
             # NOTE: The canonical ID "ten_000000000000000000000000" is used as a reserved sentinel value to represent
             # platform-admin privileges. Downstream code checks for
@@ -78,6 +92,7 @@ class IdentityContext(BaseModel):
     tenant_id: str | None = None
     organization_id: str | None = None
     authorized_tenants: set[str] = Field(default_factory=set)
+    tenant_mapping: dict[str, str] = Field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
     claims: dict[str, Any]
@@ -88,31 +103,65 @@ class IdentityContext(BaseModel):
         if PLATFORM_TENANT_ID not in self.authorized_tenants:
             return False
 
-        roles_dict = self.claims.get("urn:zitadel:iam:org:project:roles") or self.claims.get(
-            "roles"
-        )
-        if isinstance(roles_dict, dict):
-            for role, orgs in roles_dict.items():
-                if (
-                    role in ("admin", "platform-admin")
-                    and isinstance(orgs, dict)
-                    and PLATFORM_TENANT_ID in orgs
-                ):
-                    return True
+        # Evaluate ALL project-specific claims, not just the first one
+        project_roles_found = False
+        roles_dict = None  # Initialize before project-specific branch to avoid UnboundLocalError
+        for key, value in self.claims.items():
+            if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
+                project_roles_found = True
+                if isinstance(value, dict):
+                    for role, orgs in value.items():
+                        if role.lower() in ("admin", "platform-admin", "platformadmin") and isinstance(
+                            orgs, dict
+                        ):
+                            for org_id in orgs:
+                                # Only grant platform admin if the specific org they are an admin for
+                                # is explicitly cryptographically mapped to the PLATFORM_TENANT_ID
+                                if (
+                                    org_id == PLATFORM_TENANT_ID
+                                    or self.tenant_mapping.get(org_id) == PLATFORM_TENANT_ID
+                                ):
+                                    return True
+
+        # Only use generic roles claim if no project-specific claims exist
+        if not project_roles_found:
+            roles_dict = self.claims.get("roles")
+            if isinstance(roles_dict, dict):
+                for role, orgs in roles_dict.items():
+                    if role.lower() in ("admin", "platform-admin", "platformadmin") and isinstance(
+                        orgs, dict
+                    ):
+                        for org_id in orgs:
+                            if (
+                                org_id == PLATFORM_TENANT_ID
+                                or self.tenant_mapping.get(org_id) == PLATFORM_TENANT_ID
+                            ):
+                                return True
 
         # If roles is a flat list, just check if they have admin and the platform tenant ID is authorized (fallback)
         return bool(
             isinstance(roles_dict, list)
-            and any(r in roles_dict for r in ("admin", "platform-admin"))
+            and any(r.lower() in ("admin", "platform-admin", "platformadmin") for r in roles_dict)
         )
 
 
-def identity_context_from_claims(claims: TokenClaims) -> IdentityContext:
+def identity_context_from_claims(
+    claims: TokenClaims, tenant_mapping: dict[str, str] | None = None
+) -> IdentityContext:
+    """
+    Constructs an IdentityContext from validated token claims.
+
+    Args:
+        claims: Validated token claims
+        tenant_mapping: Optional mapping from IdP org IDs to canonical tenant IDs.
+                       Used for platform-admin role validation.
+    """
     return IdentityContext(
         subject=claims.sub,
         tenant_id=claims.tenant_id,
         organization_id=claims.organization_id,
         authorized_tenants=claims.authorized_tenants,
+        tenant_mapping=tenant_mapping or {},
         roles=tuple(claims.roles),
         permissions=tuple(claims.permissions),
         claims=claims.model_dump(mode="json"),

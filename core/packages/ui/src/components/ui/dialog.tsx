@@ -1,4 +1,5 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
+import { cva, type VariantProps } from 'class-variance-authority';
 import { XIcon } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '../../lib/utils';
@@ -33,23 +34,44 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
   );
 }
 
+const dialogContentVariants = cva(
+  'fixed top-1/2 left-1/2 z-50 grid -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+  {
+    variants: {
+      size: {
+        default: 'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
+        sm: 'w-full max-w-[calc(100%-2rem)] sm:max-w-sm',
+        lg: 'w-full max-w-[calc(100%-2rem)] sm:max-w-2xl',
+        xl: 'w-full max-w-[calc(100%-2rem)] sm:max-w-4xl',
+        '6xl': 'w-full max-w-[calc(100%-2rem)] sm:max-w-6xl',
+        full: 'w-[calc(100%-2rem)] h-[calc(100%-2rem)] max-w-none max-h-none',
+      },
+    },
+    defaultVariants: {
+      size: 'default',
+    },
+  },
+);
+
+export interface DialogContentProps
+  extends DialogPrimitive.Popup.Props,
+    VariantProps<typeof dialogContentVariants> {
+  showCloseButton?: boolean;
+}
+
 function DialogContent({
   className,
+  size,
   children,
   showCloseButton = true,
   ...props
-}: DialogPrimitive.Popup.Props & {
-  showCloseButton?: boolean;
-}) {
+}: DialogContentProps) {
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
-        className={cn(
-          'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
-          className,
-        )}
+        className={cn(dialogContentVariants({ size, className }))}
         {...props}
       >
         {children}

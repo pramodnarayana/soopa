@@ -71,3 +71,31 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-08-05
 - **Description**: Several recently migrated or newly created Python packages (such as `patches`, `edi-grammar`, and `transformer`) currently have zero tests. To prevent Turborepo and the CI pipeline from failing when running `pytest` concurrently (which natively returns Exit Code 5 when no tests are collected), the `package.json` proxy scripts currently suppress this specific exit code (`uv run pytest || (ret=$?; [ $ret -eq 5 ] && exit 0 || exit $ret)`).
 - **Action Item**: Write actual unit and integration tests for all untested Python packages. Once all packages have legitimate tests, remove the Exit Code 5 suppression hack from the respective `package.json` files so that accidental test-suite drops correctly fail the CI pipeline.
+
+## [Notifications] In-App Notification Delivery UX
+
+- **Date Added**: 2026-08-11
+- **Description**: The Notification Engine now delivers real-time In-App notifications via Server-Sent Events (SSE) and supports tenant-scoped event_type routing. However, user-level subscription preferences are not yet implemented - users cannot opt-in/opt-out of specific notification channels on a per-user basis.
+- **Action Item**: Implement user-level notification preferences allowing individual users to configure which event_type notifications they receive via In-App vs. Email channels. This requires extending the preferences system to support user-scoped overrides on top of tenant-wide routing rules, and applying those preferences during recipient/channel resolution in the notification delivery pipeline.
+
+## [Authorization Architecture] Granular PBAC/RBAC for Platform Superusers
+
+- **Date Added**: 2026-08-11
+- **Description**: While standard tenant-level users are strictly governed by granular Permission-Based Access Control (PBAC), the global Platform Superuser access is currently granted via an omnipotent "PlatformAdmin" role tied to a sentinel tenant ID (`ten_000000000000000000000000`). This magic string bypasses all granular checks, giving all internal staff omnipotent "Root" privileges across the entire cluster without distinction.
+- **Action Item**: Implement granular PBAC/RBAC/ABAC for platform-level users. We need to decompose the omnipotent "PlatformAdmin" role into specific platform capabilities (e.g., `platform:tenant:read`, `platform:tenant:delete`, `platform:billing:manage`) so that internal staff (Support, Engineering, Billing) only receive the minimal platform privileges required for their roles (Principle of Least Privilege).
+
+## [Architecture] Standardize Dependency Injection via `dependency-injector`
+
+- **Date Added**: 2026-08-11
+- **Description**: The codebase currently utilizes a mix of Dependency Injection strategies. The `notification_engine` module utilizes `dependency-injector` (the true enterprise standard for IoC), while the `edi` and `ucp` domains rely on FastAPI's native `Depends()` system. While `Depends()` is ergonomic for web APIs, it leaks the web framework into the core application logic and cannot be cleanly utilized in background workers or CLI scripts.
+- **Action Item**: Standardize the entire Python monorepo on `dependency-injector`. Refactor the `edi` and `ucp` domains to define declarative containers (`containers.DeclarativeContainer`) for all dependencies, and utilize `@inject` and `Provide` in their FastAPI routers.
+
+## [UI Architecture] Compile-time Enforcement of UI Consistency
+
+- **Date Added**: 2026-08-11
+- **Description**: The UI components currently allow arbitrary Tailwind CSS classes (e.g., `text-sm`, `max-w-6xl`) to be passed into them via the `className` prop, leading to UI inconsistency and layout regressions. Developers are currently allowed to bypass the enterprise design system because the compile-time constraints are too loose.
+- **Action Item**: Implement strict compile-time UI enforcement by:
+  1. Omit the `className` prop from all core design system components, forcing the use of strongly-typed variants (via `cva`).
+  2. Extend TanStack Table's `ColumnMeta` to strictly type all table configurations (e.g., `isPrimaryText: true`, `truncate: boolean`) instead of accepting raw CSS string overrides.
+  3. Implement ESLint rules (`no-restricted-syntax`) to ban raw HTML tags (`<table>`, `<button>`) outside of the UI library.
+  4. Enforce design token constraints by implementing an ESLint plugin or custom Tailwind class validator that rejects unauthorized arbitrary Tailwind values (e.g., `text-[14.5px]`, `w-[347px]`) while still permitting approved design tokens. Note: Tailwind v3.x does not support globally disabling arbitrary values, so enforcement must be done via linting or build-time validation.

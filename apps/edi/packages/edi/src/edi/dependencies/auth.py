@@ -63,7 +63,7 @@ async def get_current_tenant_id(
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Perimeter failed to inject tenant_id into request state."
+            detail="Perimeter failed to inject tenant_id into request state.",
         )
     return str(tenant_id)
 

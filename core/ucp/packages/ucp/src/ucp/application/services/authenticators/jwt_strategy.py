@@ -58,6 +58,7 @@ class JwtStrategy(IAuthenticationStrategy):
                         mapped_tenants.add(
                             tid
                         )  # MUST keep original IdP ID so guard can match it if requested!
+                        identity.tenant_mapping[tid] = resolved_t.id
                         # Default primary tenant if missing
                         if not identity.tenant_id:
                             identity.tenant_id = resolved_t.id

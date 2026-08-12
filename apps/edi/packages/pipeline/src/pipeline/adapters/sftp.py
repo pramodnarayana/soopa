@@ -34,7 +34,7 @@ def get_ssh_client(
         logging.getLogger(__name__).warning(
             f"No host key provided for {host}. Using AutoAddPolicy (vulnerable to MITM)."
         )
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - intentional TOFU for partners without host keys, logged warning
     else:
         parts = host_key_string.split()
         if len(parts) < 2:

@@ -61,7 +61,6 @@ def create_edi_app() -> FastAPI:
         },
     )
 
-
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
@@ -130,7 +129,9 @@ def create_edi_app() -> FastAPI:
         current_rls_tenant = rls_result.scalar()
 
         if str(current_rls_tenant) != tenant_id:
-            raise HTTPException(status_code=403, detail="RLS context mismatch. Unauthorized access.")
+            raise HTTPException(
+                status_code=403, detail="RLS context mismatch. Unauthorized access."
+            )
 
         return profile
 

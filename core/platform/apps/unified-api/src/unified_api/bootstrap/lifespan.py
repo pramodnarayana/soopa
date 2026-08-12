@@ -27,6 +27,10 @@ from ucp.bootstrap.lifespan import startup as ucp_startup
 logger = logging.getLogger(__name__)
 
 
+from notification.bootstrap.lifespan import shutdown as notification_shutdown
+from notification.bootstrap.lifespan import startup as notification_startup
+
+
 @asynccontextmanager
 async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
@@ -34,12 +38,14 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     Startup order:
       1. UCP background workers (outbox sweeper, event listener).
-      2. EDI DatabaseRouter — attached to the EDI sub-app's state so that
+      2. Notification Engine background workers.
+      3. EDI DatabaseRouter — attached to the EDI sub-app's state so that
          ``request.app.state.db_router`` resolves correctly inside EDI routes.
 
     Shutdown order (reverse):
       1. EDI DatabaseRouter.
-      2. UCP background workers.
+      2. Notification Engine background workers.
+      3. UCP background workers.
     """
     # Retrieve the EDI sub-app from the Shell's mounted routes.
     # The Shell created edi_app and passed it to app.mount("/", edi_app).
@@ -57,16 +63,28 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
 
+    # Nested try/finally blocks ensure cleanup runs in reverse order
+    # and only for services that have actually started.
     logger.info("Shell startup: initializing UCP domain workers.")
     await ucp_startup()
-
-    logger.info("Shell startup: initializing EDI domain infrastructure.")
-    await edi_startup(edi_app)
-
-    yield
-
-    logger.info("Shell shutdown: stopping EDI domain infrastructure.")
-    await edi_shutdown()
-
-    logger.info("Shell shutdown: stopping UCP domain workers.")
-    await ucp_shutdown()
+    try:
+        logger.info("Shell startup: initializing Notification Engine workers.")
+        await notification_startup()
+        try:
+            logger.info("Shell startup: initializing EDI domain infrastructure.")
+            await edi_startup(edi_app)
+            try:
+                # Normal operation
+                yield
+            finally:
+                # EDI started successfully, always clean it up
+                logger.info("Shell shutdown: stopping EDI domain infrastructure.")
+                await edi_shutdown()
+        finally:
+            # Notification Engine started successfully, always clean it up
+            logger.info("Shell shutdown: stopping Notification Engine workers.")
+            await notification_shutdown()
+    finally:
+        # UCP started successfully, always clean it up
+        logger.info("Shell shutdown: stopping UCP domain workers.")
+        await ucp_shutdown()

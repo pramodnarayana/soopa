@@ -30,3 +30,10 @@
 # Local Infrastructure
 - NEVER attempt to work around a missing migration with code changes. Missing tables are an infrastructure problem, not a code problem.
 - After any change to a Drizzle schema file, remind the user to run `pnpm db:migrate` to apply the migration locally.
+
+# Platform Architecture Paradigms (Core Tenets)
+
+The following paradigms define the entire system structure. Any new design or module MUST strictly adhere to them:
+1. **Domain-Driven Design (DDD)**: Systems must be broken down into Generic Subdomains/Core Domains with strict Bounded Contexts. Use Ubiquitous Language. Enforce strict isolation where business logic (Domain Layer) has ZERO external dependencies.
+2. **Modular Monolith**: Code must be physically co-located in the monorepo and run against the same database cluster, but logically strictly isolated. Communication between modules must happen asynchronously via Outbox Patterns or Events, NOT via direct cross-module function calls or SQL joins.
+3. **Shopify-Style Deployment Strategy (Single Image, Multiple Containers)**: Avoid versioning hell. We build one single massive Docker image containing the entire Modular Monolith codebase. At runtime, we spin up multiple containers from this identical image, each acting as a different worker (e.g., API Web Server, SQS Poller, Outbox Sweeper, Cron Scheduler) simply by executing a different entrypoint.

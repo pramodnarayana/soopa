@@ -43,7 +43,12 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort, GlobalSqlAlchemyReposit
         return WebhookDomainModel.model_validate(record)
 
     async def update_webhook(
-        self, tenant_id: str, webhook_id: str, name: str | None, url: str | None, active: bool | None
+        self,
+        tenant_id: str,
+        webhook_id: str,
+        name: str | None,
+        url: str | None,
+        active: bool | None,
     ) -> WebhookDomainModel:
         result = await self.session.execute(
             select(Webhook).where(Webhook.id == webhook_id, Webhook.tenant_id == tenant_id)

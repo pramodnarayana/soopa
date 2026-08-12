@@ -35,7 +35,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
         sftp = None
         try:
             client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - test connection accepts any host key
 
             connect_kwargs = {
                 "hostname": host,
