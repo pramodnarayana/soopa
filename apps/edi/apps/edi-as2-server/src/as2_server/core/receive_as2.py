@@ -1,5 +1,6 @@
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from as2_core import (
@@ -19,6 +20,14 @@ from ..ports.repository import (
 )
 from ..ports.storage import IPayloadStorage
 from ..ports.vault import IVaultService
+
+
+@dataclass(frozen=True)
+class _RouteResult:
+    failed: bool
+    tenant_id: str | None = None
+    message_repo: IEdiMessageRepository | None = None
+    session: Any = None
 
 
 class ReceiveAS2UseCase:
@@ -139,21 +148,21 @@ class ReceiveAS2UseCase:
         self._record_metrics(tenant_id, disposition, start_time, logger)
         return mdn
 
-    async def _resolve_initial_tenant(self, as2_msg: AS2Message) -> uuid.UUID | None:
+    async def _resolve_initial_tenant(self, as2_msg: AS2Message) -> str | None:
         try:
             tenant_id = await self.tenant_repo.resolve_tenant_id(as2_msg.as2_to)
             if not tenant_id:
                 self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
                 self.logger.warning("as2_unknown_tenant", as2_to=as2_msg.as2_to)
                 return None
-            return uuid.UUID(tenant_id)
+            return tenant_id
         except ValueError as e:
             self.logger.warning("tenant_resolution_ambiguous", error=str(e), as2_to=as2_msg.as2_to)
             self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
             return None
 
     def _record_message_received(
-        self, tenant_id: uuid.UUID, as2_msg: AS2Message, logger: Any
+        self, tenant_id: str, as2_msg: AS2Message, logger: Any
     ) -> None:
         self.metrics.increment(
             "as2_messages_received_total",
@@ -168,7 +177,7 @@ class ReceiveAS2UseCase:
         )
 
     def _decrypt_payload(
-        self, as2_msg: AS2Message, tenant_id: uuid.UUID, logger: Any
+        self, as2_msg: AS2Message, tenant_id: str, logger: Any
     ) -> tuple[bytes, Disposition]:
         with self.tracer.start_span("as2.decrypt") as span:
             try:
@@ -190,7 +199,7 @@ class ReceiveAS2UseCase:
                 return as2_msg.payload, Disposition.DECRYPTION_FAILED
 
     def _verify_signature(
-        self, as2_msg: AS2Message, partner: Any, payload: bytes, tenant_id: uuid.UUID, logger: Any
+        self, as2_msg: AS2Message, partner: Any, payload: bytes, tenant_id: str, logger: Any
     ) -> tuple[bytes, Disposition]:
         with self.tracer.start_span("as2.verify_signature") as span:
             if not partner.public_cert_pem:
@@ -215,27 +224,18 @@ class ReceiveAS2UseCase:
             logger.info("as2_signature_verified")
             return verified_payload, Disposition.PROCESSED
 
-    class _RouteResult:
-        def __init__(
-            self, failed: bool, tenant_id: Any = None, message_repo: Any = None, session: Any = None
-        ):
-            self.failed = failed
-            self.tenant_id = tenant_id
-            self.message_repo = message_repo
-            self.session = session
-
     async def _route_tenant(
         self,
         as2_msg: AS2Message,
         payload: bytes,
-        tenant_id: uuid.UUID,
+        tenant_id: str,
         async_exit_stack: Any,
         logger: Any,
     ) -> _RouteResult:
         with self.tracer.start_span("as2.isa_routing"):
             isa_headers = self._extract_isa_headers(payload)
             if not isa_headers:
-                return self._RouteResult(failed=False, tenant_id=tenant_id)
+                return _RouteResult(failed=False, tenant_id=tenant_id)
 
             isa_sender, isa_receiver = isa_headers
             try:
@@ -248,7 +248,7 @@ class ReceiveAS2UseCase:
                         isa_sender=isa_sender,
                         isa_receiver=isa_receiver,
                     )
-                    return self._RouteResult(failed=False, tenant_id=tenant_id)
+                    return _RouteResult(failed=False, tenant_id=tenant_id)
 
                 if not self.db_router or not self.global_session:
                     logger.error(
@@ -256,7 +256,7 @@ class ReceiveAS2UseCase:
                         isa_sender=isa_sender,
                         isa_receiver=isa_receiver,
                     )
-                    return self._RouteResult(failed=True)
+                    return _RouteResult(failed=True)
 
                 from platform_orm.models.identity import Tenant
                 from sqlalchemy import select
@@ -273,7 +273,7 @@ class ReceiveAS2UseCase:
                     logger.error(
                         "as2_isa_routing_failed_no_shard_row", true_tenant_id=true_tenant_id
                     )
-                    return self._RouteResult(failed=True)
+                    return _RouteResult(failed=True)
 
                 tenant_obj, shard_obj = row
                 tenant_session_gen = self.db_router.get_tenant_session(
@@ -290,7 +290,7 @@ class ReceiveAS2UseCase:
                     tenant_session = await tenant_session_gen.__anext__()
                 except StopAsyncIteration:
                     logger.exception("as2_isa_routing_failed_session_empty")
-                    return self._RouteResult(failed=True)
+                    return _RouteResult(failed=True)
 
                 from ..adapters.repository import EdiMessageRepositoryAdapter
 
@@ -299,7 +299,7 @@ class ReceiveAS2UseCase:
                 partner = await self.partner_repo.find_by_as2_id(true_tenant_id, as2_msg.as2_from)
                 if not partner or not partner.active:
                     logger.warning("as2_isa_routed_partner_missing", as2_from=as2_msg.as2_from)
-                    return self._RouteResult(failed=True)
+                    return _RouteResult(failed=True)
 
                 logger.info(
                     "as2_isa_routed_tenant",
@@ -307,7 +307,7 @@ class ReceiveAS2UseCase:
                     isa_receiver=isa_receiver,
                     true_tenant_id=true_tenant_id,
                 )
-                return self._RouteResult(
+                return _RouteResult(
                     failed=False,
                     tenant_id=true_tenant_id,
                     message_repo=new_repo,
@@ -321,11 +321,11 @@ class ReceiveAS2UseCase:
                     isa_sender=isa_sender,
                     isa_receiver=isa_receiver,
                 )
-                return self._RouteResult(failed=True)
+                return _RouteResult(failed=True)
 
     async def _persist_message(
         self,
-        tenant_id: uuid.UUID,
+        tenant_id: str,
         as2_msg: AS2Message,
         disposition: Disposition,
         storage_uri: str,
@@ -355,7 +355,7 @@ class ReceiveAS2UseCase:
                 raise
 
     def _record_metrics(
-        self, tenant_id: uuid.UUID, disposition: Disposition, start_time: float, logger: Any
+        self, tenant_id: str, disposition: Disposition, start_time: float, logger: Any
     ) -> None:
         duration = time.perf_counter() - start_time
         self.metrics.observe(

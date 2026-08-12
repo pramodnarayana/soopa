@@ -8,6 +8,12 @@ from scheduler_engine.adapters.outbound.postgres_job_repository import SqlAlchem
 from scheduler_engine.worker import SchedulerWorker
 
 
+def _validate_positive_int(value: int, name: str) -> int:
+    if value <= 0:
+        raise ValueError(f"{name} must be positive, got {value}")
+    return value
+
+
 class Container(containers.DeclarativeContainer):
     """
     Declarative IoC container for the Scheduler Engine.
@@ -29,9 +35,17 @@ class Container(containers.DeclarativeContainer):
         repository=job_repository,
         dispatcher=job_dispatcher,
         poll_interval_seconds=providers.Callable(
-            int, providers.Callable(os.environ.get, "SCHEDULER_POLL_INTERVAL_SECONDS", "5")
+            _validate_positive_int,
+            providers.Callable(
+                int, providers.Callable(os.environ.get, "SCHEDULER_POLL_INTERVAL_SECONDS", "5")
+            ),
+            "poll_interval_seconds",
         ),
         max_concurrent_jobs=providers.Callable(
-            int, providers.Callable(os.environ.get, "SCHEDULER_MAX_CONCURRENT_JOBS", "10")
+            _validate_positive_int,
+            providers.Callable(
+                int, providers.Callable(os.environ.get, "SCHEDULER_MAX_CONCURRENT_JOBS", "10")
+            ),
+            "max_concurrent_jobs",
         ),
     )

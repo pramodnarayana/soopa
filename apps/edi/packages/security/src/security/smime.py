@@ -35,15 +35,15 @@ def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
         pl = msg.get_payload(decode=True)
         if pl:
             return cms.ContentInfo.load(pl)
-    except Exception:  # noqa: BLE001
-        logger.debug("Failed S/MIME payload extraction fallback")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"Failed S/MIME payload extraction fallback: {exc}")
 
     # 3. Try PEM unarmoring
     try:
         _, _, der_bytes = pem.unarmor(encrypted_data)
         return cms.ContentInfo.load(der_bytes)
-    except Exception:  # noqa: BLE001
-        logger.debug("Failed PEM unarmoring fallback")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"Failed PEM unarmoring fallback: {exc}")
 
     return None
 

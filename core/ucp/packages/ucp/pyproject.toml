@@ -14,6 +14,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "platform-orm",
     "identity",
+    "dependency-injector>=4.41.0",
 ]
 
 [project.optional-dependencies]

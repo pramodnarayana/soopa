@@ -25,13 +25,13 @@ class ApiKeyStrategy(IAuthenticationStrategy):
         return token.startswith(M2M_API_KEY_PREFIX)
 
     async def authenticate(self, token: str) -> IdentityContext:
-        logger.error("[ApiKeyStrategy] Token identified as M2M API Key. Processing...")
+        logger.debug("[ApiKeyStrategy] Token identified as M2M API Key. Processing...")
 
         async with self.token_repo_factory() as token_repo:
             try:
-                logger.error("[ApiKeyStrategy] Calling authenticate_api_key...")
+                logger.debug("[ApiKeyStrategy] Calling authenticate_api_key...")
                 identity = await authenticate_api_key(token, token_repo)
-                logger.error(f"[ApiKeyStrategy] SUCCESS. Identity populated: {identity.subject}")
+                logger.debug(f"[ApiKeyStrategy] SUCCESS. Identity populated: {identity.subject}")
                 return identity
             except Exception:
                 logger.exception("[ApiKeyStrategy] CRITICAL ERROR in authenticate_api_key")

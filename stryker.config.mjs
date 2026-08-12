@@ -9,7 +9,6 @@ export default {
   },
   mutate: [
     'apps/edi/packages/ui/src/**/*.ts?(x)',
-    'core/ucp/apps/dashboard/src/**/*.ts?(x)',
     '!**/*.test.ts?(x)',
     '!**/*.spec.ts?(x)',
     '!**/*.d.ts',

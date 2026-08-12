@@ -29,7 +29,7 @@ repos:
         entry: uv run mypy .
         language: system
         types_or: [python, pyi]
-        exclude: ^.*/scripts/.*$
+        exclude: ^(.*/)?scripts/.*$
         pass_filenames: false
       - id: eslint
         name: eslint
@@ -39,7 +39,7 @@ repos:
         pass_filenames: false
       - id: biome
         name: biome
-        entry: pnpm biome check --write
+        entry: pnpm biome check
         language: system
         types_or: [javascript, jsx, ts, tsx, json]
         pass_filenames: false

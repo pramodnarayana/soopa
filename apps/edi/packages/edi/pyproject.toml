@@ -32,7 +32,8 @@ dependencies = [
     "anyio>=3.7.1",
     "as2-core",
     "transformer",
-    "ucp"
+    "ucp",
+    "dependency-injector>=4.41.0"
 ]
 
 [tool.uv.sources]

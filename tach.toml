@@ -1,6 +1,7 @@
 exact = false
-forbid_circular_dependencies = false
+forbid_circular_dependencies = true
 ignore_type_checking_imports = true
+root_module = "forbid"
 source_roots = [
     "core/ucp/packages/ucp/src",
     "apps/edi/packages/edi/src",
@@ -8,7 +9,9 @@ source_roots = [
     "apps/edi/packages/pipeline/src",
     "core/platform/packages/identity/src",
     "core/platform/packages/schemas/python/src",
-    "core/ucp/packages/models/src"
+    "core/ucp/packages/models/src",
+    "core/platform/apps/scheduler_engine/src",
+    "core/platform/apps/unified-api/src"
 ]
 
 [[modules]]
@@ -35,4 +38,18 @@ depends_on = [
     "identity",
     "platform_orm.models",
     "schemas"
+]
+
+[[modules]]
+path = "edi.bootstrap"
+depends_on = [
+    "edi.adapters",
+    "edi.services"
+]
+
+[[modules]]
+path = "ucp.bootstrap"
+depends_on = [
+    "ucp.adapters",
+    "ucp.application"
 ]

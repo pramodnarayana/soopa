@@ -62,8 +62,8 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                         is_success = True
                         if as2_msg.mic and (
                             not received_mic
-                            or as2_msg.mic.replace(" ", "").lower()
-                            != received_mic.replace(" ", "").lower()
+                            or as2_msg.mic.replace(" ", "")
+                            != received_mic.replace(" ", "")
                         ):
                             is_success = False
                             logger.warning(

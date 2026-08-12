@@ -100,9 +100,18 @@ def _strip_outer_mime_headers(payload: bytes, is_encrypted: bool, is_signed: boo
     if not is_encrypted and not is_signed:
         return payload
 
-    if b"\r\n\r\n" in payload:
+    crlf_idx = payload.find(b"\r\n\r\n")
+    lf_idx = payload.find(b"\n\n")
+
+    # Choose the separator that occurs earliest (lowest index)
+    if crlf_idx != -1 and lf_idx != -1:
+        if crlf_idx < lf_idx:
+            return payload.split(b"\r\n\r\n", 1)[1]
+        else:
+            return payload.split(b"\n\n", 1)[1]
+    elif crlf_idx != -1:
         return payload.split(b"\r\n\r\n", 1)[1]
-    if b"\n\n" in payload:
+    elif lf_idx != -1:
         return payload.split(b"\n\n", 1)[1]
     return payload
 
