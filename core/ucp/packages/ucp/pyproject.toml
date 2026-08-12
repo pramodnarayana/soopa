@@ -31,9 +31,9 @@ line-length = 100
 
 [tool.ruff.lint.per-file-ignores]
 "src/**/*.py" = ["B008", "E402"]
-"src/ucp/adapters/outbound/identity/zitadel_client.py" = ["S105"]
-"src/ucp/application/workers/event_listener.py" = ["S110"]
-"src/ucp/core/config.py" = ["S105", "S106"]
+# zitadel_client.py: S105 suppression removed - password now in config with inline noqa
+# event_listener.py: S110 suppression removed - no bare except:pass found
+"src/ucp/core/config.py" = ["S105", "S106"]  # Config default values for local dev (aws credentials, etc.)
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

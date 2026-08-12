@@ -14,7 +14,7 @@ def assert_tenant_authorized(request: Request, tenant_id: str) -> None:
     if tenant_id not in authorized:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not authorized to access this tenant's notification templates.",
+            detail="Not authorized to access this tenant's resources",
         )
 
 

@@ -6,6 +6,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getNotificationApiBase } from './apiBase';
 
 export interface NotificationPreference {
   id: string;
@@ -35,14 +36,17 @@ export interface NotificationConfigContext {
   accessToken: string;
 }
 
-const BASE = (import.meta as any).env?.VITE_UCP_API_URL ?? 'http://localhost:3000';
-
 function notificationBase(tenantId: string) {
-  return `${BASE}/api/v1/notifications/${tenantId}`;
+  return `${getNotificationApiBase()}/${tenantId}`;
 }
 
 function authHeader(token: string) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+async function handleResponseError(res: Response, fallbackMessage: string): Promise<never> {
+  const err = await res.json().catch(() => ({}));
+  throw new Error((err as { detail?: string }).detail ?? fallbackMessage);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +60,7 @@ export function usePreferences({ tenantId, accessToken }: NotificationConfigCont
       const res = await fetch(`${notificationBase(tenantId)}/preferences`, {
         headers: authHeader(accessToken),
       });
-      if (!res.ok) throw new Error('Failed to fetch preferences');
+      if (!res.ok) await handleResponseError(res, 'Failed to fetch preferences');
       return res.json();
     },
   });
@@ -74,7 +78,7 @@ export function useUpsertPreference({ tenantId, accessToken }: NotificationConfi
           body: JSON.stringify({ channels }),
         },
       );
-      if (!res.ok) throw new Error('Failed to save preference');
+      if (!res.ok) await handleResponseError(res, 'Failed to save preference');
       return res.json() as Promise<NotificationPreference>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-preferences', tenantId] }),
@@ -106,7 +110,7 @@ export function useTemplates({ tenantId, accessToken }: NotificationConfigContex
       const res = await fetch(`${notificationBase(tenantId)}/templates`, {
         headers: authHeader(accessToken),
       });
-      if (!res.ok) throw new Error('Failed to fetch templates');
+      if (!res.ok) await handleResponseError(res, 'Failed to fetch templates');
       return res.json();
     },
   });
@@ -121,7 +125,7 @@ export function useUpsertTemplate({ tenantId, accessToken }: NotificationConfigC
         headers: authHeader(accessToken),
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Failed to save template');
+      if (!res.ok) await handleResponseError(res, 'Failed to save template');
       return res.json() as Promise<NotificationTemplate>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-templates', tenantId] }),
@@ -132,11 +136,13 @@ export function useDeleteTemplate({ tenantId, accessToken }: NotificationConfigC
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (templateId: string) => {
-      const res = await fetch(`${notificationBase(tenantId)}/templates/${templateId}`, {
+      const res = await fetch(`${notificationBase(tenantId)}/templates/${encodeURIComponent(templateId)}`, {
         method: 'DELETE',
         headers: authHeader(accessToken),
       });
-      if (!res.ok && res.status !== 204) throw new Error('Failed to delete template');
+      if (!res.ok && res.status !== 204) {
+        await handleResponseError(res, 'Failed to delete template');
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notification-templates', tenantId] }),
   });

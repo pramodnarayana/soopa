@@ -9,11 +9,12 @@
  * same SandboxedEnvironment as production — SSTI errors surface here in real-time.
  */
 
-import Editor from '@monaco-editor/react';
 import { ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import DOMPurify from 'dompurify';
 import { Bell, Eye, FileText, Mail, MessageSquare, Plus, Save, Trash2 } from 'lucide-react';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+
+const Editor = lazy(() => import('@monaco-editor/react'));
 import { toast } from 'sonner';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
@@ -246,10 +247,7 @@ function TemplateEditorPanel({
                 <input
                   type="text"
                   value={subject}
-                  onChange={(e) => {
-                    setSubject(e.target.value);
-                    schedulePreview(body, e.target.value, mockPayload);
-                  }}
+                  onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g. Payment failed for invoice {{ invoice_id }}"
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 shadow-sm"
                 />
@@ -268,24 +266,28 @@ function TemplateEditorPanel({
                 <span className="text-slate-400 font-normal normal-case">(Jinja2)</span>
               </label>
               <div className="flex-1 rounded-xl border border-slate-200 overflow-hidden shadow-sm bg-white">
-                <Editor
-                  defaultLanguage="html"
-                  value={body}
-                  onChange={(v) => {
-                    const b = v ?? '';
-                    setBody(b);
-                    schedulePreview(b, subject, mockPayload);
-                  }}
-                  theme="light"
-                  options={{
-                    fontSize: 13,
-                    lineNumbers: 'on',
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                    padding: { top: 16, bottom: 16 },
-                  }}
-                />
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center h-full">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    </div>
+                  }
+                >
+                  <Editor
+                    defaultLanguage="html"
+                    value={body}
+                    onChange={(v) => setBody(v ?? '')}
+                    theme="light"
+                    options={{
+                      fontSize: 13,
+                      lineNumbers: 'on',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      wordWrap: 'on',
+                      padding: { top: 16, bottom: 16 },
+                    }}
+                  />
+                </Suspense>
               </div>
             </div>
 
@@ -302,10 +304,7 @@ function TemplateEditorPanel({
                   </label>
                   <textarea
                     value={mockPayload}
-                    onChange={(e) => {
-                      setMockPayload(e.target.value);
-                      schedulePreview(body, subject, e.target.value);
-                    }}
+                    onChange={(e) => setMockPayload(e.target.value)}
                     rows={4}
                     className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-700 focus:border-indigo-300 focus:outline-none resize-none"
                   />

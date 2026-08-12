@@ -49,10 +49,19 @@ class NotificationConsumerWorker:
         # inside a "notification.triggered" routing envelope.
         domain_event_type = payload.get("event_type", body.get("event_type"))
 
+        # Validate required fields before constructing domain event
+        tenant_id = payload.get("tenant_id")
+        if not tenant_id:
+            logger.error("SQS message payload missing 'tenant_id'")
+            return
+        if not domain_event_type:
+            logger.error("SQS message payload missing 'event_type' / domain_event_type")
+            return
+
         logger.info(f"Dispatching notification event: {domain_event_type}")
 
         notification_event = NotificationEvent(
-            tenant_id=payload["tenant_id"], event_type=domain_event_type, data=payload
+            tenant_id=tenant_id, event_type=domain_event_type, data=payload
         )
         await self.dispatch_use_case.execute(notification_event)
 
@@ -71,10 +80,25 @@ class NotificationConsumerWorker:
             )
         )
 
-        await self._shutdown_event.wait()
-        poll_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await poll_task
+        # Wait for whichever completes first: polling task or shutdown signal
+        shutdown_task = asyncio.create_task(self._shutdown_event.wait())
+        done, pending = await asyncio.wait(
+            {poll_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+
+        # If polling task completed first (possibly with exception), log/propagate it
+        if poll_task in done:
+            try:
+                await poll_task  # Re-raise exception if any
+            except Exception:
+                logger.exception("SQS polling task exited with exception")
+                raise
+
+        # Cancel whichever task is still pending
+        for task in pending:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     def start(self) -> asyncio.Task[Any]:
         if self._task is None:
@@ -82,7 +106,10 @@ class NotificationConsumerWorker:
             self._task = asyncio.create_task(self._run())
         return self._task
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         if self._task is not None:
             self._shutdown_event.set()
+            # Wait for the task to fully complete before clearing the reference
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._task
             self._task = None

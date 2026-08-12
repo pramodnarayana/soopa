@@ -1,7 +1,7 @@
 import logging
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -40,6 +40,9 @@ async def readiness_check(
         # which may need to be registered in the container
 
         return {"status": "ready", "service": "notification_engine"}
-    except Exception as e:
+    except Exception:
         logger.exception("Readiness check failed")
-        return {"status": "not ready", "error": str(e)}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service not ready",
+        )

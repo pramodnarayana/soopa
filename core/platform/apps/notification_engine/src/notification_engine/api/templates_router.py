@@ -36,6 +36,9 @@ router = APIRouter(
     tags=["notification-templates"],
 )
 
+# Limit concurrent template preview renders to prevent thread-pool exhaustion
+_RENDER_SEMAPHORE = asyncio.Semaphore(10)
+
 # ---------------------------------------------------------------------------
 # DTOs
 # ---------------------------------------------------------------------------
@@ -218,16 +221,18 @@ async def preview_template(
 
     try:
         # Render in thread pool with timeout to prevent blocking and DoS
-        rendered_body = await asyncio.wait_for(
-            asyncio.to_thread(renderer.render, body.body_template, body.mock_payload),
-            timeout=settings.render_timeout_seconds,
-        )
-        rendered_subject = None
-        if body.subject_template:
-            rendered_subject = await asyncio.wait_for(
-                asyncio.to_thread(renderer.render, body.subject_template, body.mock_payload),
+        # Use semaphore to limit concurrent renders and prevent thread-pool exhaustion
+        async with _RENDER_SEMAPHORE:
+            rendered_body = await asyncio.wait_for(
+                asyncio.to_thread(renderer.render, body.body_template, body.mock_payload),
                 timeout=settings.render_timeout_seconds,
             )
+            rendered_subject = None
+            if body.subject_template:
+                rendered_subject = await asyncio.wait_for(
+                    asyncio.to_thread(renderer.render, body.subject_template, body.mock_payload),
+                    timeout=settings.render_timeout_seconds,
+                )
     except TimeoutError as exc:
         logger.warning(f"Template render timeout for tenant {tenant_id}")
         raise HTTPException(

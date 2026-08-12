@@ -32,12 +32,18 @@ class PostgresNotificationListener:
         self._connection: asyncpg.Connection | None = None
         self._task: asyncio.Task[Any] | None = None
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._ready = asyncio.Event()
 
     def start(self) -> None:
         if not self.is_running:
             self.is_running = True
+            self._ready.clear()
             self._task = asyncio.create_task(self._run_loop())
             logger.info(f"Started PostgresNotificationListener on channel '{self.channel}'")
+
+    async def wait_until_ready(self, timeout: float = 5.0) -> None:
+        """Wait until the listener is connected and ready to receive notifications."""
+        await asyncio.wait_for(self._ready.wait(), timeout=timeout)
 
     async def stop(self) -> None:
         self.is_running = False
@@ -59,6 +65,9 @@ class PostgresNotificationListener:
                 await self._connection.add_listener(self.channel, self._on_notify)
                 logger.info(f"Listening on Postgres channel '{self.channel}'")
 
+                # Signal that listener is ready
+                self._ready.set()
+
                 # Keep connection alive while running
                 while self.is_running and not self._connection.is_closed():
                     await asyncio.sleep(1)
@@ -68,6 +77,14 @@ class PostgresNotificationListener:
             except Exception:
                 logger.exception("Error in PostgresNotificationListener connection loop")
             finally:
+                # Clean up existing connection before reconnecting
+                if self._connection:
+                    try:
+                        await self._connection.close()
+                    except Exception:
+                        logger.exception("Error closing connection during cleanup")
+                    finally:
+                        self._connection = None
                 if self.is_running:
                     await asyncio.sleep(5)  # Backoff before reconnecting
 

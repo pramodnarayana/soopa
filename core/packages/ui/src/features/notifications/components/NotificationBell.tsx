@@ -1,3 +1,4 @@
+import { formatDistanceToNow } from 'date-fns';
 import { Bell, Check, Clock } from 'lucide-react';
 import React from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
@@ -19,10 +20,7 @@ export const NotificationBell: React.FC<NotificationContext> = (props) => {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(
-      Math.round((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-      'day',
-    );
+    return formatDistanceToNow(date, { addSuffix: true });
   };
 
   return (

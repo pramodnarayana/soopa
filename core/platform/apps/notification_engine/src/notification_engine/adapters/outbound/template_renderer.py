@@ -1,7 +1,8 @@
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Any
 
-from jinja2 import Undefined
+from jinja2 import Template, Undefined
 from jinja2.sandbox import SandboxedEnvironment
 
 
@@ -36,7 +37,13 @@ class Jinja2TemplateRenderer:
             undefined=_SilentUndefined,
             autoescape=False,  # Templates control escaping per channel
         )
+        # Compile and cache templates by source string to avoid repeated parsing
+        self._compile_template = lru_cache(maxsize=512)(self._compile_template_uncached)
+
+    def _compile_template_uncached(self, template_str: str) -> Template:
+        """Compile a template string into a Jinja2 Template object."""
+        return self._env.from_string(template_str)
 
     def render(self, template_str: str, data: dict[str, Any]) -> str:
-        template = self._env.from_string(template_str)
+        template = self._compile_template(template_str)
         return template.render(**data)

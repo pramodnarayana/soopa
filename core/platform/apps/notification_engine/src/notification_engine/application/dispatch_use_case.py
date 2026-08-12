@@ -1,6 +1,7 @@
 import hashlib
 import logging
 
+from ..adapters.outbound.postgres_template_repository import PLATFORM_TENANT_ID
 from ..domain.models import NotificationEvent, NotificationOutboxEvent
 from ..ports.interfaces import (
     NotificationRouteRepositoryPort,
@@ -32,10 +33,14 @@ class DispatchNotificationUseCase:
 
         channels = await self.route_repo.get_channels(event.tenant_id, event.event_type)
         if not channels:
-            logger.info(
-                f"No route configured for tenant {event.tenant_id}, event {event.event_type}. Dropping."
-            )
-            return
+            # Fallback to platform-level default channels if tenant has no specific config
+            channels = await self.route_repo.get_channels(PLATFORM_TENANT_ID, event.event_type)
+            if not channels:
+                logger.info(
+                    f"No route configured for tenant {event.tenant_id}, event {event.event_type}. Dropping."
+                )
+                # TODO: Emit metric for dropped notifications (e.g., metrics.increment("notifications.dropped"))
+                return
 
         for channel in channels:
             template = await self.template_repo.get_template(

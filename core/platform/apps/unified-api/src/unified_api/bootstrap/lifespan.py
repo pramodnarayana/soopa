@@ -63,22 +63,28 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
 
+    # Nested try/finally blocks ensure cleanup runs in reverse order
+    # and only for services that have actually started.
     logger.info("Shell startup: initializing UCP domain workers.")
     await ucp_startup()
-
-    logger.info("Shell startup: initializing Notification Engine workers.")
-    await notification_startup()
-
-    logger.info("Shell startup: initializing EDI domain infrastructure.")
-    await edi_startup(edi_app)
-
-    yield
-
-    logger.info("Shell shutdown: stopping EDI domain infrastructure.")
-    await edi_shutdown()
-
-    logger.info("Shell shutdown: stopping Notification Engine workers.")
-    await notification_shutdown()
-
-    logger.info("Shell shutdown: stopping UCP domain workers.")
-    await ucp_shutdown()
+    try:
+        logger.info("Shell startup: initializing Notification Engine workers.")
+        await notification_startup()
+        try:
+            logger.info("Shell startup: initializing EDI domain infrastructure.")
+            await edi_startup(edi_app)
+            try:
+                # Normal operation
+                yield
+            finally:
+                # EDI started successfully, always clean it up
+                logger.info("Shell shutdown: stopping EDI domain infrastructure.")
+                await edi_shutdown()
+        finally:
+            # Notification Engine started successfully, always clean it up
+            logger.info("Shell shutdown: stopping Notification Engine workers.")
+            await notification_shutdown()
+    finally:
+        # UCP started successfully, always clean it up
+        logger.info("Shell shutdown: stopping UCP domain workers.")
+        await ucp_shutdown()

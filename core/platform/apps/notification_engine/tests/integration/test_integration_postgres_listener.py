@@ -11,9 +11,11 @@ from notification_engine.application.ports.notification_query_port import Notifi
 class FakeStreamManager:
     def __init__(self):
         self.broadcasts = []
+        self.notification_received = asyncio.Event()
 
     async def broadcast(self, tenant_id: str, user_id: str, notification: NotificationDTO) -> None:
         self.broadcasts.append((tenant_id, user_id, notification))
+        self.notification_received.set()
 
 
 @pytest.mark.asyncio
@@ -32,40 +34,41 @@ async def test_postgres_listener_integration(postgres_container, db_engine):
     listener = PostgresNotificationListener(db_url, stream_manager, channel="in_app_notifications")
     listener.start()
 
-    # Give it a moment to connect and execute ADD_LISTENER
-    await asyncio.sleep(0.5)
+    try:
+        # Wait for listener to be ready instead of sleeping
+        await listener.wait_until_ready(timeout=5.0)
 
-    payload = json.dumps(
-        {
-            "tenant_id": "test-tenant",
-            "user_id": "user-123",
-            "id": "notif-777",
-            "title": "Integration Title",
-            "body": "Integration Body",
-            "is_read": False,
-            "created_at": "2026-08-11T12:00:00",
-        }
-    )
+        payload = json.dumps(
+            {
+                "tenant_id": "test-tenant",
+                "user_id": "user-123",
+                "id": "notif-777",
+                "title": "Integration Title",
+                "body": "Integration Body",
+                "is_read": False,
+                "created_at": "2026-08-11T12:00:00",
+            }
+        )
 
-    # Issue a real NOTIFY command from the other connection
-    async with db_engine.begin() as conn:
-        # We must escape the single quotes in the payload if needed,
-        # but the easiest way is to use bound parameters if possible.
-        # Unfortunately, NOTIFY payload doesn't support parameterized queries natively in all dialects,
-        # so we inject the json directly safely.
-        await conn.execute(text(f"NOTIFY in_app_notifications, '{payload}'"))
+        # Issue a real NOTIFY command from the other connection
+        async with db_engine.begin() as conn:
+            # We must escape the single quotes in the payload if needed,
+            # but the easiest way is to use bound parameters if possible.
+            # Unfortunately, NOTIFY payload doesn't support parameterized queries natively in all dialects,
+            # so we inject the json directly safely.
+            await conn.execute(text(f"NOTIFY in_app_notifications, '{payload}'"))
 
-    # Wait for the listener to pick it up and process it
-    await asyncio.sleep(0.5)
+        # Wait for the notification to be received instead of sleeping
+        await asyncio.wait_for(stream_manager.notification_received.wait(), timeout=5.0)
 
-    # Verify the event was received and parsed correctly
-    assert len(stream_manager.broadcasts) == 1
+        # Verify the event was received and parsed correctly
+        assert len(stream_manager.broadcasts) == 1
 
-    broadcasted = stream_manager.broadcasts[0]
-    assert broadcasted[0] == "test-tenant"
-    assert broadcasted[1] == "user-123"
-    assert broadcasted[2].id == "notif-777"
-    assert broadcasted[2].title == "Integration Title"
-
-    # Clean up
-    await listener.stop()
+        broadcasted = stream_manager.broadcasts[0]
+        assert broadcasted[0] == "test-tenant"
+        assert broadcasted[1] == "user-123"
+        assert broadcasted[2].id == "notif-777"
+        assert broadcasted[2].title == "Integration Title"
+    finally:
+        # Clean up - always stop the listener
+        await listener.stop()

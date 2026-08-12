@@ -76,7 +76,8 @@ class PostgresRouteRepository:
             )
             result = await session.execute(stmt)
             row = result.scalars().one()
-        return self._map_preference(row)
+            preference = self._map_preference(row)
+        return preference
 
     async def delete_preference(self, tenant_id: str, event_type: str) -> bool:
         async with self._session_factory() as session, session.begin():

@@ -42,7 +42,7 @@ const availableFields: FieldDef[] = [
 ];
 
 export const NotificationsPage: React.FC<NotificationContext> = (props) => {
-  const { data: notifications = [], isLoading } = useNotifications(props);
+  const { data: notifications = [], isLoading, isError } = useNotifications(props);
   const markAsRead = useMarkNotificationAsRead(props);
 
   const handleMarkAsRead = (e: React.MouseEvent, id: string) => {
@@ -174,16 +174,26 @@ export const NotificationsPage: React.FC<NotificationContext> = (props) => {
           <QueryBuilder fields={availableFields} rules={filters} onChange={setFilters} />
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden">
-          <DataTable
-            table={table}
-            columnsLength={columns.length}
-            dataLength={filteredData.length}
-            isLoading={isLoading}
-            emptyIcon={<Bell className="w-8 h-8 opacity-50" />}
-            emptyTitle="No Notifications"
-            emptyDescription="You're all caught up!"
-            renderExpandedRow={renderExpandedRow}
-          />
+          {isError ? (
+            <div className="flex flex-col items-center justify-center py-12 text-red-600">
+              <Bell className="w-12 h-12 mb-3 opacity-20" />
+              <p className="text-lg font-semibold">Failed to load notifications</p>
+              <p className="text-sm text-red-500 mt-1">
+                Please try refreshing the page or contact support if the issue persists.
+              </p>
+            </div>
+          ) : (
+            <DataTable
+              table={table}
+              columnsLength={columns.length}
+              dataLength={filteredData.length}
+              isLoading={isLoading}
+              emptyIcon={<Bell className="w-8 h-8 opacity-50" />}
+              emptyTitle="No Notifications"
+              emptyDescription="You're all caught up!"
+              renderExpandedRow={renderExpandedRow}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -15,8 +15,7 @@ class ZitadelClient:
         self.api_url = self.settings.zitadel_api_url
         self.token = self.settings.zitadel_api_token
         self.ucp_project_id = self.settings.zitadel_ucp_project_id
-        # We can add default user password to config if needed, or rely on env
-        self.default_user_password = "Password1!"
+        self.default_user_password = self.settings.zitadel_default_user_password
         self._client: httpx.AsyncClient | None = None
 
     def _assert_config(self) -> None:

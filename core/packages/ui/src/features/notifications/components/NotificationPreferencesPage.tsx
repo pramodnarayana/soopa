@@ -124,7 +124,7 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
                   <ChevronDown className="w-4 h-4 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[380px] p-2" align="start">
+              <PopoverContent className="w-[380px] p-2" align="start" portaled={false}>
                 <div className="flex flex-col gap-1">
                   {ALL_CHANNELS.map((ch) => (
                     <label
@@ -165,7 +165,7 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
 // ---------------------------------------------------------------------------
 
 export const NotificationPreferencesPage: React.FC<NotificationConfigContext> = (props) => {
-  const { data: preferences = [], isLoading } = usePreferences(props);
+  const { data: preferences = [], isLoading, isError } = usePreferences(props);
   const upsert = useUpsertPreference(props);
   const remove = useDeletePreference(props);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -264,15 +264,25 @@ export const NotificationPreferencesPage: React.FC<NotificationConfigContext> = 
       </section>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden">
-        <DataTable
-          table={table}
-          columnsLength={columns.length}
-          dataLength={preferences.length}
-          isLoading={isLoading}
-          emptyIcon={<SlidersHorizontal className="w-8 h-8 opacity-50" />}
-          emptyTitle="No Rules Configured"
-          emptyDescription="Add a rule to start routing notifications to your preferred channels."
-        />
+        {isError ? (
+          <div className="flex flex-col items-center justify-center py-12 text-red-600">
+            <SlidersHorizontal className="w-12 h-12 mb-3 opacity-20" />
+            <p className="text-lg font-semibold">Failed to load preferences</p>
+            <p className="text-sm text-red-500 mt-1">
+              Please try refreshing the page or contact support if the issue persists.
+            </p>
+          </div>
+        ) : (
+          <DataTable
+            table={table}
+            columnsLength={columns.length}
+            dataLength={preferences.length}
+            isLoading={isLoading}
+            emptyIcon={<SlidersHorizontal className="w-8 h-8 opacity-50" />}
+            emptyTitle="No Rules Configured"
+            emptyDescription="Add a rule to start routing notifications to your preferred channels."
+          />
+        )}
       </div>
 
       <AddRuleDialog

@@ -105,6 +105,7 @@ class IdentityContext(BaseModel):
 
         # Evaluate ALL project-specific claims, not just the first one
         project_roles_found = False
+        roles_dict = None  # Initialize before project-specific branch to avoid UnboundLocalError
         for key, value in self.claims.items():
             if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
                 project_roles_found = True

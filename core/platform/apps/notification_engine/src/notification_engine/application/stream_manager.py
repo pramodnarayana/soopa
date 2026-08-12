@@ -20,7 +20,7 @@ class NotificationStreamManager(NotificationStreamPort):
 
     def subscribe(self, tenant_id: str, user_id: str) -> asyncio.Queue[NotificationDTO]:
         """Creates a new queue for a client connection and registers it."""
-        queue: asyncio.Queue[NotificationDTO] = asyncio.Queue()
+        queue: asyncio.Queue[NotificationDTO] = asyncio.Queue(maxsize=100)
         self._queues[(tenant_id, user_id)].add(queue)
         logger.debug(f"Subscribed SSE client for tenant={tenant_id}, user={user_id}")
         return queue
@@ -41,9 +41,15 @@ class NotificationStreamManager(NotificationStreamPort):
         """Pushes a notification to all connected queues for a specific user."""
         key = (tenant_id, user_id)
         if key in self._queues:
-            queues_to_notify = self._queues[key]
+            # Iterate over a snapshot to avoid issues if set is modified during iteration
+            queues_to_notify = list(self._queues[key])
             logger.debug(
                 f"Broadcasting notification to {len(queues_to_notify)} client(s) for user={user_id}"
             )
             for queue in queues_to_notify:
-                await queue.put(notification)
+                try:
+                    queue.put_nowait(notification)
+                except asyncio.QueueFull:
+                    logger.warning(
+                        f"Dropped notification for user={user_id}: queue full (client too slow)"
+                    )

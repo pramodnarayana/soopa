@@ -92,8 +92,8 @@ class Container(containers.DeclarativeContainer):
 
     # -----------------------------------------------------------------------
     # Stateless services — Singleton: constructed once, reused for every request.
-    # Jinja2 SandboxedEnvironment compilation is expensive; Singleton avoids
-    # re-compiling on every render call.
+    # The Singleton prevents re-creating the Jinja2 SandboxedEnvironment on every
+    # request; template compilation itself is cached by the renderer's internal LRU cache.
     # -----------------------------------------------------------------------
 
     template_renderer = providers.Singleton(
@@ -185,14 +185,15 @@ class Container(containers.DeclarativeContainer):
 
     # -----------------------------------------------------------------------
     # Workers — created once at lifespan startup.
+    # Use Singleton so repeated resolutions reuse the same lifespan-owned instances.
     # -----------------------------------------------------------------------
 
-    consumer_worker = providers.Factory(
+    consumer_worker = providers.Singleton(
         NotificationConsumerWorker,
         dispatch_use_case=dispatch_use_case,
     )
 
-    sweeper_worker = providers.Factory(
+    sweeper_worker = providers.Singleton(
         NotificationOutboxSweeper,
         repository=outbox_repository,
         dispatcher=delivery_dispatcher,

@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.models import Channel, Template
 
+PLATFORM_TENANT_ID = "ten_000"
+
 
 class PostgresTemplateRepository:
     """
@@ -31,7 +33,7 @@ class PostgresTemplateRepository:
         template exists, enabling platform-level default template seeding.
         """
         async with self._session_factory() as session:
-            for lookup_tenant in (tenant_id, "ten_000"):
+            for lookup_tenant in (tenant_id, PLATFORM_TENANT_ID):
                 stmt = select(NotificationTemplate).where(
                     NotificationTemplate.tenant_id == lookup_tenant,
                     NotificationTemplate.event_type == event_type,
@@ -41,16 +43,7 @@ class PostgresTemplateRepository:
                 result = await session.execute(stmt)
                 row = result.scalars().first()
                 if row:
-                    return Template(
-                        id=row.id,
-                        tenant_id=row.tenant_id,
-                        name=row.name,
-                        event_type=row.event_type,
-                        channel=Channel(row.channel),
-                        subject=row.subject_template,
-                        body_content=row.body_template,
-                        is_active=row.is_active,
-                    )
+                    return self._map_template(row)
         return None
 
     # -----------------------------------------------------------------------
