@@ -91,3 +91,9 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-08-12
 - **Description**: Magic string `className` usages persist across the feature codebase (approx. 2000+ instances in 93 files). This bypasses the strict primitive design system (`<Box>`, `<Stack>`, `<Icon>`).
 - **Action Item**: Build a `ts-morph` codemod to parse Tailwind strings and map them systematically to the new layout primitives. Once complete, enforce the `no-restricted-syntax` ban on `className` globally via ESLint, completely removing the temporary need for `/* eslint-disable no-restricted-syntax */` suppressions.
+
+## [Python Static Typing] Fix Monorepo Mypy Duplicate Module Errors
+
+- **Date Added**: 2026-08-12
+- **Description**: Currently, `mypy` is failing across the monorepo during `pre-commit` because it detects duplicate package names (e.g., `models`, `as2_core`) due to how `MYPYPATH` resolves the multiple isolated `src/` directories in our `uv` workspace. We are currently bypassing `mypy` during commits (using `SKIP=mypy`).
+- **Action Item**: Correctly configure `mypy`'s module resolution for a polyglot monorepo. Set up `MYPYPATH` accurately or use explicit `namespace_packages=true` and `explicit_package_bases=true` with correctly structured `__init__.py` files across all 15+ backend sub-packages. Remove the `SKIP=mypy` bypass requirement for commits.

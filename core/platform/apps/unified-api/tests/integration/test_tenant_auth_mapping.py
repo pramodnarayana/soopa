@@ -1,14 +1,19 @@
+# 1. Setup minimal dependencies to isolate the authentication middleware mapping logic
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
-# 1. Setup minimal dependencies to isolate the authentication middleware mapping logic
+os.environ["ZITADEL_API_TOKEN"] = "test-token"  # noqa: S105
+os.environ["ZITADEL_UCP_PROJECT_ID"] = "test-project"
+os.environ["ZITADEL_PLATFORM_ORG_ID"] = "test-org"
+
+
+from dependency_injector import providers
 from identity.domain.identity_context import IdentityContext
-from ucp.adapters.inbound.http.guards.tenant_auth_guard import (
-    get_tenant_repo_for_guard,
-    require_tenant_member,
-)
+from ucp.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
+from ucp.bootstrap.container import Container
 
 app = FastAPI(title="Unified API Auth Mapping Test")
 
@@ -18,14 +23,13 @@ class MockTenant:
 
 
 class MockTenantRepo:
+    def __init__(self, session=None):
+        pass
+
     async def find_by_idp_tenant_id(self, idp_tenant_id: str):
         if idp_tenant_id == "385223051081416707":
             return MockTenant()
         return None
-
-
-def mock_get_tenant_repo_for_guard():
-    return MockTenantRepo()
 
 
 router = APIRouter()
@@ -39,7 +43,10 @@ async def get_tenant(
 
 
 app.include_router(router)
-app.dependency_overrides[get_tenant_repo_for_guard] = mock_get_tenant_repo_for_guard
+
+container = Container()
+container.tenant_repo.override(providers.Factory(MockTenantRepo))
+container.wire(modules=["ucp.adapters.inbound.http.guards.tenant_auth_guard"])
 
 client = TestClient(app)
 
