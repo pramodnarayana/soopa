@@ -11,6 +11,7 @@
 
 import Editor from '@monaco-editor/react';
 import { ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import DOMPurify from 'dompurify';
 import { Bell, Eye, FileText, Mail, MessageSquare, Plus, Save, Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -73,6 +74,7 @@ function TemplateEditorPanel({
   onClose: () => void;
   ctx: NotificationConfigContext;
 }) {
+  const [name, setName] = useState(template?.name ?? '');
   const [eventType, setEventType] = useState(template?.event_type ?? '');
   const [channel, setChannel] = useState<Channel>((template?.channel as Channel) ?? 'IN_APP');
   const [subject, setSubject] = useState(template?.subject_template ?? '');
@@ -131,9 +133,11 @@ function TemplateEditorPanel({
   }, [body, subject, mockPayload, schedulePreview]);
 
   const handleSave = () => {
+    if (!name.trim()) return toast.error('Template name is required');
     if (!eventType.trim()) return toast.error('Event type is required');
     upsert.mutate(
       {
+        name: name.trim(),
         event_type: eventType.trim(),
         channel,
         subject_template: subject || null,
@@ -152,12 +156,11 @@ function TemplateEditorPanel({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[90vw] w-[1200px] h-[90vh] flex flex-col p-0 gap-0 overflow-hidden bg-slate-50">
-        {/* Header with Save/Cancel */}
+      <DialogContent size="6xl" className="p-0 gap-0 overflow-hidden bg-slate-50">
         <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
-              <FileText className="w-6 h-6 text-indigo-600" />
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
+              <FileText className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
               <DialogTitle className="text-xl font-bold text-slate-900">
@@ -169,27 +172,21 @@ function TemplateEditorPanel({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
             <Button
               onClick={handleSave}
               disabled={upsert.isPending}
               className="gap-2 bg-indigo-600 hover:bg-indigo-700"
             >
               <Save className="w-4 h-4" />
-              {upsert.isPending ? 'Saving…' : 'Save Template'}
+              {upsert.isPending ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 p-6 overflow-auto flex-1">
-          {/* Top Tabs for Channel Selection */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Delivery Channel
-            </label>
-            <div className="flex gap-2 p-1 bg-white rounded-lg border border-slate-200 shadow-sm w-fit">
+        <div className="flex flex-col gap-6 p-6">
+          {/* Top Tabs for Channel Selection - strictly horizontally aligned at the top */}
+          <div className="flex justify-center border-b border-slate-200 pb-4">
+            <div className="flex gap-2 p-1 bg-slate-100/50 rounded-lg border border-slate-200 shadow-inner w-fit">
               {ALL_CHANNELS.map((ch) => {
                 const Icon = CHANNEL_ICONS[ch];
                 const isActive = channel === ch;
@@ -199,10 +196,10 @@ function TemplateEditorPanel({
                     type="button"
                     disabled={!!template}
                     onClick={() => setChannel(ch)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-6 py-2.5 rounded-md text-sm font-semibold transition-all ${
                       isActive
-                        ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50'
-                        : 'text-slate-600 hover:bg-slate-50 border border-transparent'
+                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/60'
+                        : 'text-slate-600 hover:bg-slate-200/50 border border-transparent'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <Icon className="w-4 h-4" />
@@ -214,7 +211,19 @@ function TemplateEditorPanel({
           </div>
 
           {/* Metadata Row */}
-          <div className="grid grid-cols-2 gap-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div className="grid grid-cols-3 gap-6">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Template Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Invoice Payment Failed - Email"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 shadow-sm"
+              />
+            </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Event Type
@@ -225,10 +234,10 @@ function TemplateEditorPanel({
                 onChange={(e) => setEventType(e.target.value)}
                 disabled={!!template}
                 placeholder="e.g. invoice.payment_failed"
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400 shadow-sm"
               />
             </div>
-            {channel === 'EMAIL' && (
+            {channel === 'EMAIL' ? (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Subject Line{' '}
@@ -242,14 +251,16 @@ function TemplateEditorPanel({
                     schedulePreview(body, e.target.value, mockPayload);
                   }}
                   placeholder="e.g. Payment failed for invoice {{ invoice_id }}"
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 shadow-sm"
                 />
               </div>
+            ) : (
+              <div /> /* Empty div to maintain grid if no subject */
             )}
           </div>
 
           {/* Editor + Preview split */}
-          <div className="grid grid-cols-2 gap-6 flex-1 min-h-[500px]">
+          <div className="grid grid-cols-2 gap-6 min-h-[400px]">
             {/* Monaco Editor */}
             <div className="flex flex-col gap-2 h-full">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -295,7 +306,7 @@ function TemplateEditorPanel({
                       setMockPayload(e.target.value);
                       schedulePreview(body, subject, e.target.value);
                     }}
-                    rows={6}
+                    rows={4}
                     className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-700 focus:border-indigo-300 focus:outline-none resize-none"
                   />
                 </div>
@@ -329,7 +340,9 @@ function TemplateEditorPanel({
                           {channel === 'EMAIL' ? (
                             <div
                               className="text-sm text-slate-700 bg-white p-4 rounded border border-slate-200 shadow-sm prose prose-sm max-w-none"
-                              dangerouslySetInnerHTML={{ __html: previewResult.rendered_body }}
+                              dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(previewResult.rendered_body),
+                              }}
                             />
                           ) : (
                             <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans bg-white p-4 rounded border border-slate-200 shadow-sm">
@@ -384,10 +397,17 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
 
   const columns: ColumnDef<NotificationTemplate>[] = [
     {
+      accessorKey: 'name',
+      header: 'Name',
+      cell: ({ row }) => (
+        <span className="text-sm font-semibold text-slate-900">{row.original.name}</span>
+      ),
+    },
+    {
       accessorKey: 'event_type',
       header: 'Event Type',
       cell: ({ row }) => (
-        <span className="font-mono text-sm font-medium text-slate-800">
+        <span className="font-mono text-sm font-medium text-slate-600">
           {row.original.event_type}
         </span>
       ),

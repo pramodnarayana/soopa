@@ -97,5 +97,5 @@ class PostgresRouteRepository:
             id=row.id,
             tenant_id=row.tenant_id,
             event_type=row.event_type,
-            channels=row.channels,
+            channels=[Channel(c) for c in row.channels],
         )

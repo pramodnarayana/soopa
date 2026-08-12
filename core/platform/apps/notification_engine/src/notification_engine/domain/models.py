@@ -20,6 +20,7 @@ class NotificationEvent:
 class Template:
     id: str
     tenant_id: str
+    name: str
     event_type: str
     channel: Channel
     subject: str | None
@@ -32,7 +33,7 @@ class NotificationPreference:
     id: str
     tenant_id: str
     event_type: str
-    channels: list[str]
+    channels: list[Channel]
 
 
 @dataclass(frozen=True)

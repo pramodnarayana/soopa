@@ -15,7 +15,7 @@ from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 
-from notification_engine.api.authorization import _assert_tenant_authorized
+from notification_engine.api.authorization import assert_tenant_authorized
 from notification_engine.bootstrap.container import Container
 from notification_engine.domain.models import Channel, NotificationPreference
 from notification_engine.ports.interfaces import NotificationPreferencesRepositoryPort
@@ -75,7 +75,7 @@ async def list_preferences(
     request: Request,
     repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),  # noqa: B008
 ) -> list[NotificationPreference]:
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
     return await repo.list_preferences(tenant_id)
 
 
@@ -93,7 +93,7 @@ async def upsert_preference(
     request: Request,
     repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),  # noqa: B008
 ) -> NotificationPreference:
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
     return await repo.upsert_preference(
         tenant_id=tenant_id,
         event_type=event_type,
@@ -113,7 +113,7 @@ async def delete_preference(
     request: Request,
     repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),  # noqa: B008
 ) -> None:
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
     deleted = await repo.delete_preference(tenant_id=tenant_id, event_type=event_type)
     if not deleted:
         raise HTTPException(

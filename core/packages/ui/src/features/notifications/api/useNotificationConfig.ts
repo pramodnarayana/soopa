@@ -17,6 +17,7 @@ export interface NotificationPreference {
 export interface NotificationTemplate {
   id: string;
   tenant_id: string;
+  name: string;
   event_type: string;
   channel: string;
   subject_template: string | null;

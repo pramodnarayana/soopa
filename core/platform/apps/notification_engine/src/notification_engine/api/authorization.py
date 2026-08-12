@@ -1,7 +1,7 @@
 from fastapi import HTTPException, Request, status
 
 
-def _assert_tenant_authorized(request: Request, tenant_id: str) -> None:
+def assert_tenant_authorized(request: Request, tenant_id: str) -> None:
     """
     Raises HTTP 403 if the authenticated identity is not authorized to access
     the requested tenant. Guards all tenant-scoped endpoints against IDOR.
@@ -18,7 +18,7 @@ def _assert_tenant_authorized(request: Request, tenant_id: str) -> None:
         )
 
 
-def _assert_user_matches_identity(request: Request, user_id: str) -> None:
+def assert_user_matches_identity(request: Request, user_id: str) -> None:
     """
     Raises HTTP 403 if the authenticated identity does not match the requested user_id.
     """

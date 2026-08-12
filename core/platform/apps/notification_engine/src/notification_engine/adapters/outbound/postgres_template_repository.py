@@ -44,10 +44,12 @@ class PostgresTemplateRepository:
                     return Template(
                         id=row.id,
                         tenant_id=row.tenant_id,
+                        name=row.name,
                         event_type=row.event_type,
                         channel=Channel(row.channel),
                         subject=row.subject_template,
                         body_content=row.body_template,
+                        is_active=row.is_active,
                     )
         return None
 
@@ -67,6 +69,7 @@ class PostgresTemplateRepository:
     async def upsert_template(
         self,
         tenant_id: str,
+        name: str,
         event_type: str,
         channel: str,
         subject_template: str | None,
@@ -77,8 +80,9 @@ class PostgresTemplateRepository:
             stmt = (
                 insert(NotificationTemplate)
                 .values(
-                    id=f"notif_tmpl_{uuid.uuid4().hex}",
+                    id=f"{NotificationTemplate.ID_PREFIX}_{uuid.uuid4().hex}",
                     tenant_id=tenant_id,
+                    name=name,
                     event_type=event_type,
                     channel=channel,
                     subject_template=subject_template,
@@ -88,6 +92,7 @@ class PostgresTemplateRepository:
                 .on_conflict_do_update(
                     constraint="notification_template_idx",
                     set_={
+                        "name": name,
                         "subject_template": subject_template,
                         "body_template": body_template,
                         "is_active": is_active,
@@ -117,6 +122,7 @@ class PostgresTemplateRepository:
         return Template(
             id=row.id,
             tenant_id=row.tenant_id,
+            name=row.name,
             event_type=row.event_type,
             channel=Channel(row.channel),
             subject=row.subject_template,

@@ -24,6 +24,7 @@ async def test_get_template(db_session_factory):
         template = NotificationTemplate(
             id="tpl_123",
             tenant_id=tenant_id,
+            name="Invoice Created - Email",
             event_type="invoice.created",
             channel="EMAIL",
             is_active=True,
@@ -35,6 +36,7 @@ async def test_get_template(db_session_factory):
         template2 = NotificationTemplate(
             id="tpl_456",
             tenant_id=tenant_id,
+            name="Invoice Created - In App",
             event_type="invoice.created",
             channel="IN_APP",
             is_active=False,  # INACTIVE!

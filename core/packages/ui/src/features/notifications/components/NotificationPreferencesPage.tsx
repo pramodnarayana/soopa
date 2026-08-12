@@ -9,7 +9,7 @@
  */
 
 import { ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { Plus, Save, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Save, SlidersHorizontal, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '../../../components/ui/badge';
@@ -17,11 +17,13 @@ import { Button } from '../../../components/ui/button';
 import { DataTable } from '../../../components/ui/data-table';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../../../components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import {
   type NotificationConfigContext,
   type NotificationPreference,
@@ -106,41 +108,48 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
             />
           </div>
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
               Delivery Channels
-            </legend>
-            <div className="flex flex-col gap-2 border border-slate-200 rounded-lg bg-slate-50 p-2">
-              {ALL_CHANNELS.map((ch) => (
-                <label
-                  key={ch}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors border ${
-                    selected.has(ch)
-                      ? 'bg-white border-indigo-200 shadow-sm'
-                      : 'border-transparent hover:bg-slate-100/50'
-                  }`}
+            </label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="justify-between w-full font-normal border-slate-200"
                 >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(ch)}
-                    onChange={() => toggle(ch)}
-                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 transition-all cursor-pointer"
-                  />
-                  <span className="flex-1 text-sm font-medium text-slate-700">
-                    {ch.replace('_', ' ')}
-                  </span>
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      selected.has(ch) ? 'bg-indigo-500' : 'bg-slate-200'
-                    }`}
-                  />
-                </label>
-              ))}
-            </div>
-          </fieldset>
+                  {selected.size > 0
+                    ? `${selected.size} channel${selected.size > 1 ? 's' : ''} selected`
+                    : 'Select channels...'}
+                  <ChevronDown className="w-4 h-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[380px] p-2" align="start">
+                <div className="flex flex-col gap-1">
+                  {ALL_CHANNELS.map((ch) => (
+                    <label
+                      key={ch}
+                      className="flex items-center gap-3 px-2 py-2 rounded-md cursor-pointer hover:bg-slate-100 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(ch)}
+                        onChange={() => toggle(ch)}
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 transition-all cursor-pointer"
+                      />
+                      <span className="flex-1 text-sm font-medium text-slate-700">
+                        {ch.replace('_', ' ')}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
 
-        <DialogFooter showCloseButton>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline">Close</Button>} />
           <Button onClick={handleSave} disabled={isSaving} className="gap-1.5">
             <Save className="w-3.5 h-3.5" />
             {isSaving ? 'Saving…' : 'Save Rule'}

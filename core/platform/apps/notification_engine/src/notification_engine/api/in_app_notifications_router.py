@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from notification_engine.api.authorization import (
-    _assert_tenant_authorized,
-    _assert_user_matches_identity,
+    assert_tenant_authorized,
+    assert_user_matches_identity,
 )
 from notification_engine.application.ports.notification_query_port import (
     NotificationDTO,
@@ -33,8 +33,8 @@ async def get_user_notifications(
     """
     Fetches the latest In-App notifications for a specific user in a tenant.
     """
-    _assert_tenant_authorized(request, tenant_id)
-    _assert_user_matches_identity(request, user_id)
+    assert_tenant_authorized(request, tenant_id)
+    assert_user_matches_identity(request, user_id)
     return await repo.get_in_app_notifications(tenant_id, user_id, limit)
 
 
@@ -52,8 +52,8 @@ async def mark_notification_read(
     """
     Marks a specific notification as read.
     """
-    _assert_tenant_authorized(request, tenant_id)
-    _assert_user_matches_identity(request, user_id)
+    assert_tenant_authorized(request, tenant_id)
+    assert_user_matches_identity(request, user_id)
     success = await repo.mark_as_read(tenant_id, user_id, notification_id)
     if not success:
         raise HTTPException(
@@ -74,8 +74,8 @@ async def stream_notifications(
     """
     Server-Sent Events (SSE) endpoint to stream new notifications to the UI in real-time.
     """
-    _assert_tenant_authorized(request, tenant_id)
-    _assert_user_matches_identity(request, user_id)
+    assert_tenant_authorized(request, tenant_id)
+    assert_user_matches_identity(request, user_id)
 
     queue = stream_manager.subscribe(tenant_id, user_id)
 

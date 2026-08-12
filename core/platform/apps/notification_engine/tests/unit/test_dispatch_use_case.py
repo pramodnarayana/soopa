@@ -70,6 +70,7 @@ async def test_dispatch_success():
     template_repo.templates[(tenant_id, event_type, Channel.EMAIL)] = Template(
         id="tmpl_1",
         tenant_id=tenant_id,
+        name="Invoice Created - Email",
         event_type=event_type,
         subject="Invoice {{id}}",
         body_content="Hello, invoice {{id}} is ready.",

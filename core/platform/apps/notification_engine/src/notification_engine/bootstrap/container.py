@@ -42,6 +42,7 @@ from notification_engine.application.consumer import NotificationConsumerWorker
 from notification_engine.application.dispatch_use_case import DispatchNotificationUseCase
 from notification_engine.application.outbox_sweeper import NotificationOutboxSweeper
 from notification_engine.application.stream_manager import NotificationStreamManager
+from notification_engine.config import NotificationEngineSettings
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,10 @@ class Container(containers.DeclarativeContainer):
 
     template_renderer = providers.Singleton(
         Jinja2TemplateRenderer,
+    )
+
+    engine_settings = providers.Singleton(
+        NotificationEngineSettings,
     )
 
     stream_manager = providers.Singleton(

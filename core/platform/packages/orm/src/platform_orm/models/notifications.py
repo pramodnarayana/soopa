@@ -17,6 +17,7 @@ class NotificationTemplate(NotificationBase, TimestampMixin):
     tenant_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=False
     )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     event_type: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(50), nullable=False)
     subject_template: Mapped[str | None] = mapped_column(Text, nullable=True)

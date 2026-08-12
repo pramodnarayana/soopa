@@ -23,8 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 
 from notification_engine.adapters.outbound.template_renderer import Jinja2TemplateRenderer
-from notification_engine.api.authorization import _assert_tenant_authorized
+from notification_engine.api.authorization import assert_tenant_authorized
 from notification_engine.bootstrap.container import Container
+from notification_engine.config import NotificationEngineSettings
 from notification_engine.domain.models import Channel, Template
 from notification_engine.ports.interfaces import NotificationTemplatesRepositoryPort
 
@@ -45,6 +46,7 @@ class TemplateResponse(BaseModel):
 
     id: str
     tenant_id: str
+    name: str
     event_type: str
     channel: str
     subject_template: str | None
@@ -55,11 +57,19 @@ class TemplateResponse(BaseModel):
 class UpsertTemplateRequest(BaseModel):
     """Write DTO for creating / replacing a notification template."""
 
+    name: str
     event_type: str
     channel: str
     subject_template: str | None = None
     body_template: str
     is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("name must not be empty.")
+        return v.strip()
 
     @field_validator("channel")
     @classmethod
@@ -116,7 +126,7 @@ async def list_templates(
     request: Request,
     repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),  # noqa: B008
 ) -> list[Template]:
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
     return await repo.list_templates(tenant_id)
 
 
@@ -133,9 +143,10 @@ async def upsert_template(
     request: Request,
     repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),  # noqa: B008
 ) -> Template:
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
     return await repo.upsert_template(
         tenant_id=tenant_id,
+        name=body.name,
         event_type=body.event_type,
         channel=body.channel,
         subject_template=body.subject_template,
@@ -156,7 +167,7 @@ async def delete_template(
     request: Request,
     repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),  # noqa: B008
 ) -> None:
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
     deleted = await repo.delete_template(tenant_id=tenant_id, template_id=template_id)
     if not deleted:
         raise HTTPException(
@@ -177,47 +188,45 @@ async def preview_template(
     body: PreviewTemplateRequest,
     request: Request,
     renderer: Jinja2TemplateRenderer = Depends(Provide[Container.template_renderer]),  # noqa: B008
+    settings: NotificationEngineSettings = Depends(Provide[Container.engine_settings]),  # noqa: B008
 ) -> PreviewTemplateResponse:
     """
     Renders the draft template body and optional subject through the production-identical
     SandboxedEnvironment. SSTI attempts are rejected here, giving the editor real-time
     security feedback before any template is persisted.
     """
-    _assert_tenant_authorized(request, tenant_id)
+    assert_tenant_authorized(request, tenant_id)
 
-    # Enforce maximum sizes to prevent DoS
-    MAX_TEMPLATE_SIZE = 10000  # characters
-    MAX_PAYLOAD_SIZE = 50000  # characters (serialized JSON)
-
-    if len(body.body_template) > MAX_TEMPLATE_SIZE:
+    if len(body.body_template) > settings.max_template_size_chars:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Template body exceeds maximum size of {MAX_TEMPLATE_SIZE} characters",
+            detail=f"Template body exceeds maximum size of {settings.max_template_size_chars} characters",
         )
 
-    if body.subject_template and len(body.subject_template) > MAX_TEMPLATE_SIZE:
+    if body.subject_template and len(body.subject_template) > settings.max_template_size_chars:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Subject template exceeds maximum size of {MAX_TEMPLATE_SIZE} characters",
+            detail=f"Subject template exceeds maximum size of {settings.max_template_size_chars} characters",
         )
 
     serialized_payload = json.dumps(body.mock_payload)
-    if len(serialized_payload) > MAX_PAYLOAD_SIZE:
+    if len(serialized_payload) > settings.max_payload_size_chars:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Mock payload exceeds maximum size of {MAX_PAYLOAD_SIZE} characters",
+            detail=f"Mock payload exceeds maximum size of {settings.max_payload_size_chars} characters",
         )
 
     try:
         # Render in thread pool with timeout to prevent blocking and DoS
         rendered_body = await asyncio.wait_for(
-            asyncio.to_thread(renderer.render, body.body_template, body.mock_payload), timeout=2.0
+            asyncio.to_thread(renderer.render, body.body_template, body.mock_payload),
+            timeout=settings.render_timeout_seconds,
         )
         rendered_subject = None
         if body.subject_template:
             rendered_subject = await asyncio.wait_for(
                 asyncio.to_thread(renderer.render, body.subject_template, body.mock_payload),
-                timeout=2.0,
+                timeout=settings.render_timeout_seconds,
             )
     except TimeoutError as exc:
         logger.warning(f"Template render timeout for tenant {tenant_id}")

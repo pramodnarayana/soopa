@@ -57,6 +57,7 @@ class NotificationTemplatesRepositoryPort(Protocol):
     async def upsert_template(
         self,
         tenant_id: str,
+        name: str,
         event_type: str,
         channel: str,
         subject_template: str | None,
