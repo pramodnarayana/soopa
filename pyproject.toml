@@ -34,26 +34,7 @@ exclude = ["apps/edi/packages/ui"]
 asyncio_mode = "auto"
 norecursedirs = ["node_modules", "frontend"]
 
-pythonpath = [
-    "core/platform/packages/identity/src",
-    "core/platform/packages/observability/python/src",
-    "apps/edi/packages/as2_core/src",
-    "apps/edi/packages/bots_core/src",
-    "apps/edi/packages/config/src",
-    "apps/edi/packages/database/src",
-    "apps/edi/packages/domain/src",
-    "apps/edi/packages/grammar/src",
-    "apps/edi/packages/identity/src",
-    "apps/edi/packages/patches/src",
-    "apps/edi/packages/pipeline/src",
-    "apps/edi/packages/security/src",
-    "apps/edi/packages/transformer/src",
-    "apps/edi/packages/edi/src",
-    "apps/edi/apps/edi-as2-server/src",
-    "apps/edi/apps/edi-worker/orchestrator/src",
-    "apps/edi/apps/edi-worker/compute/src",
-    "core/platform/apps/unified-api/src",
-]
+
 addopts = "-v --tb=short --ignore=services/worker --ignore=apps/edi/packages/transformer/tests/test_worker.py --ignore=apps/edi/packages/transformer/scripts"
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
