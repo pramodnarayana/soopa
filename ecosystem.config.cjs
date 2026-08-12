@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'notification-engine',
-      script: 'server/notification_engine/dist/index.js',
+      script: 'server/notification/dist/index.js',
       instances: 1,
       autorestart: true,
       watch: false,

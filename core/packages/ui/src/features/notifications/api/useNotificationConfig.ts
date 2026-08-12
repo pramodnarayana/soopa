@@ -6,7 +6,6 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getNotificationApiBase } from './apiBase';
 
 export interface NotificationPreference {
   id: string;
@@ -34,10 +33,11 @@ export interface PreviewResult {
 export interface NotificationConfigContext {
   tenantId: string;
   accessToken: string;
+  apiUrl: string;
 }
 
-function notificationBase(tenantId: string) {
-  return `${getNotificationApiBase()}/${tenantId}`;
+function notificationBase(apiUrl: string, tenantId: string) {
+  return `${apiUrl}/${tenantId}`;
 }
 
 function authHeader(token: string) {
@@ -53,11 +53,11 @@ async function handleResponseError(res: Response, fallbackMessage: string): Prom
 // Preferences
 // ---------------------------------------------------------------------------
 
-export function usePreferences({ tenantId, accessToken }: NotificationConfigContext) {
+export function usePreferences({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   return useQuery<NotificationPreference[]>({
     queryKey: ['notification-preferences', tenantId],
     queryFn: async () => {
-      const res = await fetch(`${notificationBase(tenantId)}/preferences`, {
+      const res = await fetch(`${notificationBase(apiUrl, tenantId)}/preferences`, {
         headers: authHeader(accessToken),
       });
       if (!res.ok) await handleResponseError(res, 'Failed to fetch preferences');
@@ -66,12 +66,12 @@ export function usePreferences({ tenantId, accessToken }: NotificationConfigCont
   });
 }
 
-export function useUpsertPreference({ tenantId, accessToken }: NotificationConfigContext) {
+export function useUpsertPreference({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ event_type, channels }: { event_type: string; channels: string[] }) => {
       const res = await fetch(
-        `${notificationBase(tenantId)}/preferences/${encodeURIComponent(event_type)}`,
+        `${notificationBase(apiUrl, tenantId)}/preferences/${encodeURIComponent(event_type)}`,
         {
           method: 'PUT',
           headers: authHeader(accessToken),
@@ -85,12 +85,12 @@ export function useUpsertPreference({ tenantId, accessToken }: NotificationConfi
   });
 }
 
-export function useDeletePreference({ tenantId, accessToken }: NotificationConfigContext) {
+export function useDeletePreference({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (event_type: string) => {
       const res = await fetch(
-        `${notificationBase(tenantId)}/preferences/${encodeURIComponent(event_type)}`,
+        `${notificationBase(apiUrl, tenantId)}/preferences/${encodeURIComponent(event_type)}`,
         { method: 'DELETE', headers: authHeader(accessToken) },
       );
       if (!res.ok && res.status !== 204) throw new Error('Failed to delete preference');
@@ -103,11 +103,11 @@ export function useDeletePreference({ tenantId, accessToken }: NotificationConfi
 // Templates
 // ---------------------------------------------------------------------------
 
-export function useTemplates({ tenantId, accessToken }: NotificationConfigContext) {
+export function useTemplates({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   return useQuery<NotificationTemplate[]>({
     queryKey: ['notification-templates', tenantId],
     queryFn: async () => {
-      const res = await fetch(`${notificationBase(tenantId)}/templates`, {
+      const res = await fetch(`${notificationBase(apiUrl, tenantId)}/templates`, {
         headers: authHeader(accessToken),
       });
       if (!res.ok) await handleResponseError(res, 'Failed to fetch templates');
@@ -116,11 +116,11 @@ export function useTemplates({ tenantId, accessToken }: NotificationConfigContex
   });
 }
 
-export function useUpsertTemplate({ tenantId, accessToken }: NotificationConfigContext) {
+export function useUpsertTemplate({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: Omit<NotificationTemplate, 'id' | 'tenant_id'>) => {
-      const res = await fetch(`${notificationBase(tenantId)}/templates`, {
+      const res = await fetch(`${notificationBase(apiUrl, tenantId)}/templates`, {
         method: 'PUT',
         headers: authHeader(accessToken),
         body: JSON.stringify(payload),
@@ -132,14 +132,17 @@ export function useUpsertTemplate({ tenantId, accessToken }: NotificationConfigC
   });
 }
 
-export function useDeleteTemplate({ tenantId, accessToken }: NotificationConfigContext) {
+export function useDeleteTemplate({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (templateId: string) => {
-      const res = await fetch(`${notificationBase(tenantId)}/templates/${encodeURIComponent(templateId)}`, {
-        method: 'DELETE',
-        headers: authHeader(accessToken),
-      });
+      const res = await fetch(
+        `${notificationBase(apiUrl, tenantId)}/templates/${encodeURIComponent(templateId)}`,
+        {
+          method: 'DELETE',
+          headers: authHeader(accessToken),
+        },
+      );
       if (!res.ok && res.status !== 204) {
         await handleResponseError(res, 'Failed to delete template');
       }
@@ -148,14 +151,14 @@ export function useDeleteTemplate({ tenantId, accessToken }: NotificationConfigC
   });
 }
 
-export function usePreviewTemplate({ tenantId, accessToken }: NotificationConfigContext) {
+export function usePreviewTemplate({ tenantId, accessToken, apiUrl }: NotificationConfigContext) {
   return useMutation({
     mutationFn: async (payload: {
       body_template: string;
       subject_template?: string;
       mock_payload?: Record<string, unknown>;
     }) => {
-      const res = await fetch(`${notificationBase(tenantId)}/templates/preview`, {
+      const res = await fetch(`${notificationBase(apiUrl, tenantId)}/templates/preview`, {
         method: 'POST',
         headers: authHeader(accessToken),
         body: JSON.stringify(payload),

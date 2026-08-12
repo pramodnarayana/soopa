@@ -16,6 +16,14 @@ function NotificationsRoute() {
   }
 
   return (
-    <NotificationsPage tenantId={tenantId} userId={auth.user.profile.sub} accessToken={token} />
+    <NotificationsPage
+      tenantId={tenantId}
+      userId={auth.user.profile.sub}
+      accessToken={token}
+      apiUrl={
+        `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(/\/+$/, '') +
+        '/api/v1/notifications'
+      }
+    />
   );
 }

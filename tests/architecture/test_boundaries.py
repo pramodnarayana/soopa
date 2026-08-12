@@ -9,13 +9,13 @@ def test_domain_layer_isolation():
     """
     (
         archrule("domain_is_pure")
-        .match("notification_engine.domain*")
-        .should_not_import("notification_engine.adapters*")
-        .should_not_import("notification_engine.api*")
+        .match("notification.domain*")
+        .should_not_import("notification.adapters*")
+        .should_not_import("notification.api*")
         .should_not_import("sqlalchemy*")
         .should_not_import("fastapi*")
         .should_not_import("asyncpg*")
-        .check("notification_engine")
+        .check("notification")
     )
 
 
@@ -28,7 +28,7 @@ def test_modular_monolith_strict_isolation():
     """
     (
         archrule("notification_is_isolated")
-        .match("notification_engine.*")
+        .match("notification.*")
         .should_not_import("scheduler_engine.*")
         .should_not_import("edi.*")
         .check("core")

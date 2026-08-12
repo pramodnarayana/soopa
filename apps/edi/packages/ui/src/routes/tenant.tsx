@@ -217,6 +217,12 @@ export function AppLayout() {
               tenantId={tenantId}
               userId={auth.user.profile.sub}
               accessToken={auth.user.access_token}
+              apiUrl={
+                `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(
+                  /\/+$/,
+                  '',
+                ) + '/api/v1/notifications'
+              }
             />
           )}
         </header>

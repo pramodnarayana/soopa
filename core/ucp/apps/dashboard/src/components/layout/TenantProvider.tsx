@@ -108,9 +108,13 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   const headerContent = (
     <NotificationBell
-      tenantId={finalTenantId}
-      userId={auth.user?.profile?.sub ?? ''}
+      tenantId={tenant?.id ?? ''}
+      userId={auth.user?.profile.sub ?? ''}
       accessToken={token}
+      apiUrl={
+        `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(/\/+$/, '') +
+        '/api/v1/notifications'
+      }
     />
   );
 

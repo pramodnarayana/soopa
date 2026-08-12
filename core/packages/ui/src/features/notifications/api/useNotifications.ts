@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { getNotificationApiBase } from './apiBase';
 
 export interface InAppNotification {
   id: string;
@@ -15,20 +14,21 @@ export interface NotificationContext {
   tenantId: string;
   userId: string;
   accessToken: string;
+  apiUrl: string;
 }
 
-export function useNotifications({ tenantId, userId, accessToken }: NotificationContext) {
+export function useNotifications({ tenantId, userId, accessToken, apiUrl }: NotificationContext) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!userId || !tenantId || !accessToken) return;
+    if (!userId || !tenantId || !accessToken || !apiUrl) return;
 
     // Note: EventSource doesn't support custom headers, so we use tenant_id query param
     // for tenant middleware compatibility. Authentication should be handled via cookie-based
     // session or a ticket-based mechanism on the backend (see authentication.py).
     // TODO: Implement proper SSE authentication mechanism (ticket or cookie-based)
     const eventSource = new EventSource(
-      `${getNotificationApiBase()}/${tenantId}/users/${userId}/stream?tenant_id=${tenantId}`,
+      `${apiUrl}/${tenantId}/users/${userId}/stream?tenant_id=${tenantId}`,
     );
 
     let consecutiveErrorCount = 0;
@@ -81,7 +81,7 @@ export function useNotifications({ tenantId, userId, accessToken }: Notification
     queryFn: async (): Promise<InAppNotification[]> => {
       if (!userId || !tenantId) return [];
 
-      const res = await fetch(`${getNotificationApiBase()}/${tenantId}/users/${userId}/in-app`, {
+      const res = await fetch(`${apiUrl}/${tenantId}/users/${userId}/in-app`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -96,7 +96,12 @@ export function useNotifications({ tenantId, userId, accessToken }: Notification
   });
 }
 
-export function useMarkNotificationAsRead({ tenantId, userId, accessToken }: NotificationContext) {
+export function useMarkNotificationAsRead({
+  tenantId,
+  userId,
+  accessToken,
+  apiUrl,
+}: NotificationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -104,7 +109,7 @@ export function useMarkNotificationAsRead({ tenantId, userId, accessToken }: Not
       if (!userId || !tenantId) return;
 
       const res = await fetch(
-        `${getNotificationApiBase()}/${tenantId}/users/${userId}/in-app/${notificationId}/read`,
+        `${apiUrl}/${tenantId}/users/${userId}/in-app/${notificationId}/read`,
         {
           method: 'PUT',
           headers: {

@@ -13,5 +13,8 @@ function NotificationTemplatesRoute() {
     return null;
   }
 
-  return <NotificationTemplatesPage tenantId={tenantId} accessToken={token} />;
+  const apiUrl =
+    `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(/\/+$/, '') +
+    '/api/v1/notifications';
+  return <NotificationTemplatesPage tenantId={tenantId} accessToken={token} apiUrl={apiUrl} />;
 }

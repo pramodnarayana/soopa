@@ -27,8 +27,8 @@ from ucp.bootstrap.lifespan import startup as ucp_startup
 logger = logging.getLogger(__name__)
 
 
-from notification_engine.bootstrap.lifespan import shutdown as notification_shutdown
-from notification_engine.bootstrap.lifespan import startup as notification_startup
+from notification.bootstrap.lifespan import shutdown as notification_shutdown
+from notification.bootstrap.lifespan import startup as notification_startup
 
 
 @asynccontextmanager

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # For Zitadel this is the same as the API URL (e.g. http://ucp.localhost:8080).
     zitadel_issuer: str = "http://ucp.localhost:8080"
     # Default password for newly created users (local dev only - users must change on first login)
-    zitadel_default_user_password: str = "Password1!"  # noqa: S105 - dev-only default, not a real credential
+    zitadel_default_user_password: str = "Password1!"
 
     from pydantic import field_validator  # type: ignore
 

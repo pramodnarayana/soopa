@@ -102,11 +102,11 @@ setup_shell_exception_handlers(app)
 # UCP dependency injection (real adapters → router placeholders) is wired here
 # on the Shell app instance, since that is the app that owns the UCP routes.
 # ---------------------------------------------------------------------------
-from notification_engine.api.in_app_notifications_router import (
+from notification.api.in_app_notifications_router import (
     router as in_app_notifications_router,
 )
-from notification_engine.api.preferences_router import router as notification_preferences_router
-from notification_engine.api.templates_router import router as notification_templates_router
+from notification.api.preferences_router import router as notification_preferences_router
+from notification.api.templates_router import router as notification_templates_router
 
 app.include_router(tenants_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
