@@ -32,9 +32,11 @@ def calculate_mic(payload: bytes, mic_alg: str = "sha256") -> str:
     if alg == "sha256":
         digest = hashlib.sha256(payload).digest()
     elif alg == "sha1":
-        digest = hashlib.sha1(payload).digest()
+        # AS2 RFC explicitly requires support for older MIC algorithms like SHA1 for backwards compatibility.
+        digest = hashlib.sha1(payload).digest()  # noqa: S324
     elif alg == "md5":
-        digest = hashlib.md5(payload).digest()
+        # MD5 is heavily deprecated but still encountered in very old EDI implementations.
+        digest = hashlib.md5(payload).digest()  # noqa: S324
     else:
         raise ValueError(f"Unsupported MIC algorithm: {mic_alg}")
 

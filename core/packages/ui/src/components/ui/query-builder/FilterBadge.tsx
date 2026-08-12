@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { Icon } from '../icon';
 import { FieldDef, FilterRule } from './types';
 import { getOperatorLabel } from './utils';
 
@@ -33,7 +34,7 @@ export function FilterBadge({ rule, field, onRemove }: FilterBadgeProps) {
         className="ml-1 -mr-1 p-0.5 rounded-md text-indigo-400 hover:text-indigo-700 hover:bg-indigo-200/50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         aria-label={`Remove ${fieldLabel} filter`}
       >
-        <X className="w-3.5 h-3.5" />
+        <Icon icon={X} size="xs" />
       </button>
     </div>
   );

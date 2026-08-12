@@ -111,7 +111,8 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             except ValueError:
                 import hashlib
 
-                hashed = hashlib.md5(str(msg.get("trace_id", trace_id)).encode()).hexdigest()
+                # Safe: Test mock only generates dummy hash
+                hashed = hashlib.md5(str(msg.get("trace_id", trace_id)).encode()).hexdigest()  # noqa: S324
                 msg["trace_id"] = str(uuid.UUID(hashed))
 
             return EdiMessageDomainModel(**msg)

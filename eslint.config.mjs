@@ -1,5 +1,6 @@
 import eslint from '@eslint/js';
 import pluginRouter from '@tanstack/eslint-plugin-router';
+import boundaries from 'eslint-plugin-boundaries';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -28,6 +29,7 @@ export default tseslint.config(
       },
     },
     rules: {
+      complexity: ['error', 10],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
@@ -89,6 +91,7 @@ export default tseslint.config(
       ],
     },
   },
+
   {
     files: ['**/*.spec.ts', '**/*.test.ts', 'test/**'],
     rules: {

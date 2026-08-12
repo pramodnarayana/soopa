@@ -87,6 +87,99 @@ export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId
 
 import { UserDetailPanel } from '@/domains/users/components/user-detail-panel';
 
+// --- Components ---
+const UserActionsCell = ({
+  user,
+  isActive,
+  isKnownStatus,
+  isPending,
+  theme,
+  onToggleStatus,
+  onDelete,
+}: {
+  user: TenantUser;
+  isActive: boolean;
+  isKnownStatus: boolean;
+  isPending: boolean;
+  theme: typeof USER_STATUS_THEME.unknown;
+  onToggleStatus: (userId: string, isActive: boolean) => void;
+  onDelete: (userId: string, email: string) => void;
+}) => (
+  <div className="flex items-center gap-2 justify-end pr-2">
+    <div className="flex items-center gap-4 mr-2" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={isActive}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isKnownStatus) {
+            onToggleStatus(user.id, isActive);
+          }
+        }}
+        disabled={isPending || !isKnownStatus}
+        title={
+          !isKnownStatus
+            ? 'Unknown status - toggle disabled'
+            : isActive
+              ? 'Deactivate User'
+              : 'Activate User'
+        }
+        className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${theme.toggleBg} ${isPending || !isKnownStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <span
+          className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isActive ? 'opacity-100 ' + theme.toggleText : 'opacity-0'}`}
+        >
+          Active
+        </span>
+        <span
+          className={`absolute right-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isActive ? 'opacity-0' : 'opacity-100 ' + theme.toggleText}`}
+        >
+          Inactive
+        </span>
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${theme.toggleSwitch}`}
+        >
+          {isPending ? (
+            <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+          ) : (
+            <Power className={`w-3 h-3 ${theme.icon}`} />
+          )}
+        </span>
+      </button>
+    </div>
+
+    {/* Send Invite */}
+    <Button
+      variant="ghost"
+      size="icon"
+      disabled={isPending}
+      title="Send Invite Email"
+      onClick={(e) => {
+        e.stopPropagation();
+        toast.info('Email invitations coming soon!');
+      }}
+    >
+      <Send className="w-4 h-4" />
+    </Button>
+
+    {/* Delete */}
+    <Button
+      variant="destructive"
+      size="icon"
+      disabled={isPending}
+      title="Delete User"
+      onClick={(e) => {
+        e.stopPropagation();
+        onDelete(user.id, user.email);
+      }}
+    >
+      <Trash2 className="w-4 h-4" />
+    </Button>
+  </div>
+);
+
 // --- Main Page ---
 function TenantUsersPage() {
   const { tenantId } = Route.useParams();
@@ -270,81 +363,15 @@ function TenantUsersPage() {
             USER_STATUS_THEME.unknown;
 
           return (
-            <div className="flex items-center gap-2 justify-end pr-2">
-              <div className="flex items-center gap-4 mr-2" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isActive}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isKnownStatus) {
-                      handleToggleStatus(user.id, isActive);
-                    }
-                  }}
-                  disabled={isPending || !isKnownStatus}
-                  title={
-                    !isKnownStatus
-                      ? 'Unknown status - toggle disabled'
-                      : isActive
-                        ? 'Deactivate User'
-                        : 'Activate User'
-                  }
-                  className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 ${theme.toggleBg} ${isPending || !isKnownStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <span
-                    className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isActive ? 'opacity-100 ' + theme.toggleText : 'opacity-0'}`}
-                  >
-                    Active
-                  </span>
-                  <span
-                    className={`absolute right-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity duration-200 ${isActive ? 'opacity-0' : 'opacity-100 ' + theme.toggleText}`}
-                  >
-                    Inactive
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow ring-0 transition-transform duration-200 ease-in-out ${theme.toggleSwitch}`}
-                  >
-                    {isPending ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
-                    ) : (
-                      <Power className={`w-3 h-3 ${theme.icon}`} />
-                    )}
-                  </span>
-                </button>
-              </div>
-
-              {/* Send Invite */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                disabled={isPending}
-                title="Send Invite Email"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toast.info('Email invitations coming soon!');
-                }}
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-
-              {/* Delete */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                disabled={isPending}
-                title="Delete User"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteUser(user.id, user.email);
-                }}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
+            <UserActionsCell
+              user={user}
+              isActive={isActive}
+              isKnownStatus={isKnownStatus}
+              isPending={isPending}
+              theme={theme}
+              onToggleStatus={handleToggleStatus}
+              onDelete={handleDeleteUser}
+            />
           );
         },
       }),
@@ -393,7 +420,6 @@ function TenantUsersPage() {
                     placeholder="John"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="rounded-lg"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -403,7 +429,6 @@ function TenantUsersPage() {
                     placeholder="Doe"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="rounded-lg"
                   />
                 </div>
               </div>
@@ -415,7 +440,6 @@ function TenantUsersPage() {
                   placeholder="john.doe@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="rounded-lg"
                 />
               </div>
               <div className="space-y-1.5">
@@ -445,12 +469,11 @@ function TenantUsersPage() {
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 pb-6">
-              <Button variant="outline" onClick={resetModal} className="rounded-lg">
+              <Button variant="outline" onClick={resetModal}>
                 Cancel
               </Button>
               <Button
                 id="create-user-submit"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-5"
                 disabled={
                   !firstName || !lastName || !email || !selectedRole || createMutationObj.isPending
                 }
@@ -479,11 +502,7 @@ function TenantUsersPage() {
               {users.length} user{users.length !== 1 ? 's' : ''} in this tenant
             </p>
           </div>
-          <Button
-            id="create-user-btn"
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm rounded-xl h-11 px-6 text-[15px] font-semibold"
-          >
+          <Button id="create-user-btn" onClick={() => setShowModal(true)} size="cta">
             <UserPlus className="w-5 h-5" />
             Create User
           </Button>

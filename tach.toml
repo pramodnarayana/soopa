@@ -1,0 +1,38 @@
+exact = false
+forbid_circular_dependencies = false
+ignore_type_checking_imports = true
+source_roots = [
+    "core/ucp/packages/ucp/src",
+    "apps/edi/packages/edi/src",
+    "apps/edi/packages/transformer/src",
+    "apps/edi/packages/pipeline/src",
+    "core/platform/packages/identity/src",
+    "core/platform/packages/schemas/python/src",
+    "core/ucp/packages/models/src"
+]
+
+[[modules]]
+path = "edi.domain"
+depends_on = []
+
+[[modules]]
+path = "edi.adapters"
+depends_on = [
+    "edi.domain",
+    "edi.ports",
+    "schemas"
+]
+
+[[modules]]
+path = "ucp.domain"
+depends_on = []
+
+[[modules]]
+path = "ucp.application"
+depends_on = [
+    "ucp.domain",
+    "ucp.ports",
+    "identity",
+    "platform_orm.models",
+    "schemas"
+]

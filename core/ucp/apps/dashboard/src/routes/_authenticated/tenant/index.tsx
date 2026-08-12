@@ -36,9 +36,7 @@ function TenantDashboard() {
       {/* Active Modules */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Active Modules
-          </CardTitle>
+          <CardTitle>Active Modules</CardTitle>
         </CardHeader>
         <CardContent>
           {activeSubscriptions.length === 0 ? (
@@ -48,7 +46,7 @@ function TenantDashboard() {
           ) : (
             <div className="flex flex-wrap gap-3">
               {activeSubscriptions.map((app) => (
-                <Badge key={app} variant="secondary" className="px-4 py-1.5 text-sm">
+                <Badge key={app} variant="secondary">
                   {app.toUpperCase()}
                 </Badge>
               ))}

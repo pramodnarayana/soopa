@@ -47,8 +47,9 @@ class ControlPlaneEventListener:
             try:
                 await self._connection.remove_listener(self.channel, self._on_notify)
                 await self._connection.close()
-            except Exception:  # noqa: BLE001
-                pass
+            # Exception catch is broad because this is part of the final shutdown teardown
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Error closing listener connection: {e}")
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

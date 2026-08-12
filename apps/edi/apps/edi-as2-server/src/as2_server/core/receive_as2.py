@@ -44,11 +44,6 @@ class ReceiveAS2UseCase:
         self.logger = ObservabilityProvider.logger(__name__)
 
     def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str] | None:
-        """
-        Lightweight ISA parser to extract Sender and Receiver for routing
-        without parsing the entire EDI structure.
-        Requires the complete fixed-length ISA envelope (106 chars) and all 16 elements.
-        """
         try:
             content = pure_edi_bytes[:106].decode("ascii", errors="strict")
             if not content.startswith("ISA") or len(content) < 106:
@@ -58,29 +53,15 @@ class ReceiveAS2UseCase:
                 return None
 
             element_separator = content[3]
-            isa_segment = content[:106]
-            elements = isa_segment.split(element_separator)
+            elements = content[:106].split(element_separator)
 
-            # ISA split should have exactly 17 elements (ISA tag + 15 fields + 1 after terminator/field)
-            # Actually, standard ISA is 106 chars: `ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *...~`
-            # `elements` length will be 17 if we split on `*`.
-            if len(elements) != 17:
-                self.logger.warning("isa_extraction_failed", error="ISA element count invalid")
+            if len(elements) != 17 or len(elements[6]) != 15 or len(elements[8]) != 15:
+                self.logger.warning(
+                    "isa_extraction_failed", error="ISA element count or widths invalid"
+                )
                 return None
 
-            # Enforce fixed field widths based on X12 standard
-            if len(elements[6]) != 15 or len(elements[8]) != 15:
-                self.logger.warning("isa_extraction_failed", error="ISA field widths invalid")
-                return None
-
-            isa_sender = elements[6].strip()
-            isa_receiver = elements[8].strip()
-            return isa_sender, isa_receiver
-        except UnicodeDecodeError:
-            self.logger.warning(
-                "isa_extraction_failed", error="Non-ASCII characters in ISA segment"
-            )
-            return None
+            return elements[6].strip(), elements[8].strip()
         except Exception as e:  # noqa: BLE001
             self.logger.warning("isa_extraction_failed", error=str(e))
             return None
@@ -99,25 +80,81 @@ class ReceiveAS2UseCase:
     ) -> AS2MDN:
         start_time = time.perf_counter()
 
-        tenant_id = None
-        try:
-            tenant_id = await self.tenant_repo.resolve_tenant_id(as2_msg.as2_to)
-        except ValueError as e:
-            self.logger.warning("tenant_resolution_ambiguous", error=str(e), as2_to=as2_msg.as2_to)
-
+        tenant_id = await self._resolve_initial_tenant(as2_msg)
         if not tenant_id:
-            self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
-            self.logger.warning("as2_unknown_tenant", as2_to=as2_msg.as2_to)
             return generate_mdn(as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY)
 
         logger = self.logger.bind(message_id=as2_msg.message_id, tenant_id=tenant_id)
 
-        partner = await self.partner_repo.find_by_as2_id(tenant_id, as2_msg.as2_from)
+        partner = await self.partner_repo.find_by_as2_id(str(tenant_id), as2_msg.as2_from)
         if not partner:
             self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": str(tenant_id)})
             logger.warning("as2_unknown_partner", as2_from=as2_msg.as2_from)
             return generate_mdn(as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY)
 
+        self._record_message_received(tenant_id, as2_msg, logger)
+
+        processed_payload = as2_msg.payload
+        disposition = Disposition.PROCESSED
+
+        if as2_msg.is_encrypted:
+            processed_payload, disp_update = self._decrypt_payload(as2_msg, tenant_id, logger)
+            if "failed" in disp_update.value:
+                disposition = disp_update
+
+        mic_payload = processed_payload
+
+        if as2_msg.is_signed and "failed" not in disposition.value:
+            processed_payload, disp_update = self._verify_signature(
+                as2_msg, partner, processed_payload, tenant_id, logger
+            )
+            if "failed" in disp_update.value:
+                disposition = disp_update
+
+        routed_tenant_session = None
+
+        if tenant_id == str(PLATFORM_TENANT_ID) and "failed" not in disposition.value:
+            route_result = await self._route_tenant(
+                as2_msg, processed_payload, tenant_id, async_exit_stack, logger
+            )
+            if route_result.failed:
+                return generate_mdn(as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY)
+            tenant_id = route_result.tenant_id
+            message_repo = route_result.message_repo
+            routed_tenant_session = route_result.session
+            logger = self.logger.bind(message_id=as2_msg.message_id, tenant_id=tenant_id)
+
+        with self.tracer.start_span("as2.s3_upload"):
+            storage_uri = await self.storage.upload(
+                str(tenant_id), as2_msg.message_id, processed_payload
+            )
+
+        await self._persist_message(
+            tenant_id, as2_msg, disposition, storage_uri, message_repo, routed_tenant_session
+        )
+
+        as2_msg.payload = mic_payload
+        mdn = generate_mdn(as2_msg, disposition=disposition)
+
+        self._record_metrics(tenant_id, disposition, start_time, logger)
+        return mdn
+
+    async def _resolve_initial_tenant(self, as2_msg: AS2Message) -> uuid.UUID | None:
+        try:
+            tenant_id = await self.tenant_repo.resolve_tenant_id(as2_msg.as2_to)
+            if not tenant_id:
+                self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
+                self.logger.warning("as2_unknown_tenant", as2_to=as2_msg.as2_to)
+                return None
+            return uuid.UUID(tenant_id)
+        except ValueError as e:
+            self.logger.warning("tenant_resolution_ambiguous", error=str(e), as2_to=as2_msg.as2_to)
+            self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
+            return None
+
+    def _record_message_received(
+        self, tenant_id: uuid.UUID, as2_msg: AS2Message, logger: Any
+    ) -> None:
         self.metrics.increment(
             "as2_messages_received_total",
             labels={
@@ -130,180 +167,173 @@ class ReceiveAS2UseCase:
             "as2_message_received", is_encrypted=as2_msg.is_encrypted, is_signed=as2_msg.is_signed
         )
 
-        processed_payload = as2_msg.payload
-        disposition = Disposition.PROCESSED
+    def _decrypt_payload(
+        self, as2_msg: AS2Message, tenant_id: uuid.UUID, logger: Any
+    ) -> tuple[bytes, Disposition]:
+        with self.tracer.start_span("as2.decrypt") as span:
+            try:
+                private_key_pem = self.vault.get_host_private_key()
+                host_cert_pem = self.vault.get_host_certificate()
+                if not private_key_pem or not host_cert_pem:
+                    raise ValueError("Host keys missing")
 
-        if as2_msg.is_encrypted:
-            with self.tracer.start_span("as2.decrypt") as span:
-                try:
-                    private_key_pem = self.vault.get_host_private_key()
-                    host_cert_pem = self.vault.get_host_certificate()
-                    if not private_key_pem or not host_cert_pem:
-                        raise ValueError("Host keys missing")
+                payload = decrypt_payload(as2_msg.raw_mime or b"", private_key_pem, host_cert_pem)
+                logger.info("as2_decrypt_success")
+                return payload, Disposition.PROCESSED
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status_error("Decryption failed")
+                self.metrics.increment(
+                    "as2_decrypt_errors_total", labels={"tenant_id": str(tenant_id)}
+                )
+                logger.exception("as2_decrypt_failed", error=str(e))
+                return as2_msg.payload, Disposition.DECRYPTION_FAILED
 
-                    processed_payload = decrypt_payload(
-                        as2_msg.raw_mime or b"", private_key_pem, host_cert_pem
-                    )
-                    logger.info("as2_decrypt_success")
-                except Exception as e:
-                    span.record_exception(e)
-                    span.set_status_error("Decryption failed")
-                    self.metrics.increment(
-                        "as2_decrypt_errors_total", labels={"tenant_id": str(tenant_id)}
-                    )
-                    logger.exception("as2_decrypt_failed", error=str(e))
-                    disposition = Disposition.DECRYPTION_FAILED
+    def _verify_signature(
+        self, as2_msg: AS2Message, partner: Any, payload: bytes, tenant_id: uuid.UUID, logger: Any
+    ) -> tuple[bytes, Disposition]:
+        with self.tracer.start_span("as2.verify_signature") as span:
+            if not partner.public_cert_pem:
+                span.set_status_error("Partner certificate missing")
+                self.metrics.increment(
+                    "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
+                )
+                logger.warning("as2_partner_cert_missing", as2_from=as2_msg.as2_from)
+                return payload, Disposition.INSUFFICIENT_SECURITY
 
-        # The MIC MUST be calculated over the signed payload BEFORE signature verification (RFC 4130).
-        # We capture the payload here (which is either the raw payload, or the decrypted signed payload)
-        mic_payload = processed_payload
-
-        if as2_msg.is_signed and "failed" not in disposition:
-            with self.tracer.start_span("as2.verify_signature") as span:
-                if not partner.public_cert_pem:
-                    span.set_status_error("Partner certificate missing")
-                    self.metrics.increment(
-                        "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
-                    )
-                    logger.warning("as2_partner_cert_missing", as2_from=as2_msg.as2_from)
-                    disposition = Disposition.INSUFFICIENT_SECURITY
-                else:
-                    partner_cert = partner.public_cert_pem.encode("utf-8")
-                    is_valid, verified_payload = verify_signature(processed_payload, partner_cert)
-                    if not is_valid:
-                        span.set_status_error("Signature invalid")
-                        self.metrics.increment(
-                            "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
-                        )
-                        logger.warning("as2_signature_invalid")
-                        disposition = Disposition.AUTHENTICATION_FAILED
-                    else:
-                        processed_payload = verified_payload
-                        logger.info("as2_signature_verified")
-
-        routed_tenant_session = None
-
-        # Dynamic Tenant Resolution via ISA payload routing
-        if tenant_id == str(PLATFORM_TENANT_ID) and "failed" not in disposition:
-            with self.tracer.start_span("as2.isa_routing"):
-                isa_headers = self._extract_isa_headers(processed_payload)
-                if isa_headers:
-                    isa_sender, isa_receiver = isa_headers
-                    try:
-                        true_tenant_id = await self.tenant_repo.resolve_tenant_by_edi_identifiers(
-                            as2_peer_id=as2_msg.as2_from,
-                            isa_sender=isa_sender,
-                            isa_receiver=isa_receiver,
-                        )
-                        if true_tenant_id:
-                            # 1. Check if we have the necessary DB setup tools
-                            if not self.db_router or not self.global_session:
-                                logger.error(
-                                    "as2_isa_routing_failed_no_db_tools",
-                                    isa_sender=isa_sender,
-                                    isa_receiver=isa_receiver,
-                                )
-                                return generate_mdn(
-                                    as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY
-                                )
-
-                            # 2. Resolve shard row
-                            from platform_orm.models.identity import Tenant
-                            from sqlalchemy import select
-                            from ucp_models.infrastructure import DatabaseShard
-
-                            stmt = (
-                                select(Tenant, DatabaseShard)
-                                .join(DatabaseShard)
-                                .where(Tenant.id == true_tenant_id)
-                            )
-                            result = await self.global_session.execute(stmt)
-                            row = result.first()
-
-                            if not row:
-                                logger.error(
-                                    "as2_isa_routing_failed_no_shard_row",
-                                    true_tenant_id=true_tenant_id,
-                                )
-                                return generate_mdn(
-                                    as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY
-                                )
-
-                            tenant_obj, shard_obj = row
-
-                            # 3. Setup tenant session
-                            tenant_session_gen = self.db_router.get_tenant_session(
-                                tenant_id=tenant_obj.id,
-                                shard_key=str(shard_obj.name),
-                                shard_url=str(shard_obj.dsn),
-                            )
-
-                            from contextlib import aclosing
-
-                            await async_exit_stack.enter_async_context(aclosing(tenant_session_gen))
-
-                            try:
-                                tenant_session = await tenant_session_gen.__anext__()
-                            except StopAsyncIteration:
-                                logger.exception("as2_isa_routing_failed_session_empty")
-                                return generate_mdn(
-                                    as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY
-                                )
-
-                            # 4. Resolve the repository
-                            from ..adapters.repository import EdiMessageRepositoryAdapter
-
-                            new_repo = EdiMessageRepositoryAdapter(tenant_session)
-
-                            # 5. Success! Now apply the changes to the flow state
-                            tenant_id = true_tenant_id
-                            logger = self.logger.bind(
-                                message_id=as2_msg.message_id, tenant_id=tenant_id
-                            )
-                            message_repo = new_repo
-                            routed_tenant_session = tenant_session
-
-                            # 6. Re-resolve active partner for routed tenant
-                            partner = await self.partner_repo.find_by_as2_id(
-                                tenant_id, as2_msg.as2_from
-                            )
-                            if not partner or not partner.active:
-                                logger.warning(
-                                    "as2_isa_routed_partner_missing", as2_from=as2_msg.as2_from
-                                )
-                                return generate_mdn(
-                                    as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY
-                                )
-
-                            logger.info(
-                                "as2_isa_routed_tenant",
-                                isa_sender=isa_sender,
-                                isa_receiver=isa_receiver,
-                                true_tenant_id=tenant_id,
-                            )
-                        else:
-                            logger.warning(
-                                "as2_isa_routing_failed_unmatched",
-                                isa_sender=isa_sender,
-                                isa_receiver=isa_receiver,
-                            )
-                    except ValueError as e:
-                        logger.exception(
-                            "as2_isa_routing_ambiguous",
-                            error=str(e),
-                            isa_sender=isa_sender,
-                            isa_receiver=isa_receiver,
-                        )
-                        return generate_mdn(as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY)
-
-        with self.tracer.start_span("as2.s3_upload"):
-            # Upload the inner EDI payload (after decryption and verification extraction)
-            storage_uri = await self.storage.upload(
-                tenant_id, as2_msg.message_id, processed_payload
+            is_valid, verified_payload = verify_signature(
+                payload, partner.public_cert_pem.encode("utf-8")
             )
+            if not is_valid:
+                span.set_status_error("Signature invalid")
+                self.metrics.increment(
+                    "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
+                )
+                logger.warning("as2_signature_invalid")
+                return payload, Disposition.AUTHENTICATION_FAILED
 
+            logger.info("as2_signature_verified")
+            return verified_payload, Disposition.PROCESSED
+
+    class _RouteResult:
+        def __init__(
+            self, failed: bool, tenant_id: Any = None, message_repo: Any = None, session: Any = None
+        ):
+            self.failed = failed
+            self.tenant_id = tenant_id
+            self.message_repo = message_repo
+            self.session = session
+
+    async def _route_tenant(
+        self,
+        as2_msg: AS2Message,
+        payload: bytes,
+        tenant_id: uuid.UUID,
+        async_exit_stack: Any,
+        logger: Any,
+    ) -> _RouteResult:
+        with self.tracer.start_span("as2.isa_routing"):
+            isa_headers = self._extract_isa_headers(payload)
+            if not isa_headers:
+                return self._RouteResult(failed=False, tenant_id=tenant_id)
+
+            isa_sender, isa_receiver = isa_headers
+            try:
+                true_tenant_id = await self.tenant_repo.resolve_tenant_by_edi_identifiers(
+                    as2_peer_id=as2_msg.as2_from, isa_sender=isa_sender, isa_receiver=isa_receiver
+                )
+                if not true_tenant_id:
+                    logger.warning(
+                        "as2_isa_routing_failed_unmatched",
+                        isa_sender=isa_sender,
+                        isa_receiver=isa_receiver,
+                    )
+                    return self._RouteResult(failed=False, tenant_id=tenant_id)
+
+                if not self.db_router or not self.global_session:
+                    logger.error(
+                        "as2_isa_routing_failed_no_db_tools",
+                        isa_sender=isa_sender,
+                        isa_receiver=isa_receiver,
+                    )
+                    return self._RouteResult(failed=True)
+
+                from platform_orm.models.identity import Tenant
+                from sqlalchemy import select
+                from ucp_models.infrastructure import DatabaseShard
+
+                stmt = (
+                    select(Tenant, DatabaseShard)
+                    .join(DatabaseShard)
+                    .where(Tenant.id == true_tenant_id)
+                )
+                row = (await self.global_session.execute(stmt)).first()
+
+                if not row:
+                    logger.error(
+                        "as2_isa_routing_failed_no_shard_row", true_tenant_id=true_tenant_id
+                    )
+                    return self._RouteResult(failed=True)
+
+                tenant_obj, shard_obj = row
+                tenant_session_gen = self.db_router.get_tenant_session(
+                    tenant_id=tenant_obj.id,
+                    shard_key=str(shard_obj.name),
+                    shard_url=str(shard_obj.dsn),
+                )
+
+                from contextlib import aclosing
+
+                await async_exit_stack.enter_async_context(aclosing(tenant_session_gen))
+
+                try:
+                    tenant_session = await tenant_session_gen.__anext__()
+                except StopAsyncIteration:
+                    logger.exception("as2_isa_routing_failed_session_empty")
+                    return self._RouteResult(failed=True)
+
+                from ..adapters.repository import EdiMessageRepositoryAdapter
+
+                new_repo = EdiMessageRepositoryAdapter(tenant_session)
+
+                partner = await self.partner_repo.find_by_as2_id(true_tenant_id, as2_msg.as2_from)
+                if not partner or not partner.active:
+                    logger.warning("as2_isa_routed_partner_missing", as2_from=as2_msg.as2_from)
+                    return self._RouteResult(failed=True)
+
+                logger.info(
+                    "as2_isa_routed_tenant",
+                    isa_sender=isa_sender,
+                    isa_receiver=isa_receiver,
+                    true_tenant_id=true_tenant_id,
+                )
+                return self._RouteResult(
+                    failed=False,
+                    tenant_id=true_tenant_id,
+                    message_repo=new_repo,
+                    session=tenant_session,
+                )
+
+            except ValueError as e:
+                logger.exception(
+                    "as2_isa_routing_ambiguous",
+                    error=str(e),
+                    isa_sender=isa_sender,
+                    isa_receiver=isa_receiver,
+                )
+                return self._RouteResult(failed=True)
+
+    async def _persist_message(
+        self,
+        tenant_id: uuid.UUID,
+        as2_msg: AS2Message,
+        disposition: Disposition,
+        storage_uri: str,
+        message_repo: Any,
+        routed_tenant_session: Any,
+    ) -> None:
         with self.tracer.start_span("as2.db_persist"):
-            status = "ERROR" if "failed" in disposition else "RECEIVED"
+            status = "ERROR" if "failed" in disposition.value else "RECEIVED"
             trace_id = uuid.uuid4()
             try:
                 await message_repo.save_message(
@@ -324,10 +354,9 @@ class ReceiveAS2UseCase:
                     await routed_tenant_session.rollback()
                 raise
 
-        # generate_mdn calculates the MIC using as2_msg.payload
-        as2_msg.payload = mic_payload
-        mdn = generate_mdn(as2_msg, disposition=disposition)
-
+    def _record_metrics(
+        self, tenant_id: uuid.UUID, disposition: Disposition, start_time: float, logger: Any
+    ) -> None:
         duration = time.perf_counter() - start_time
         self.metrics.observe(
             "as2_message_processing_seconds", duration, labels={"tenant_id": str(tenant_id)}
@@ -336,9 +365,7 @@ class ReceiveAS2UseCase:
             "as2_mdn_sent_total",
             labels={
                 "tenant_id": str(tenant_id),
-                "disposition": "processed" if "failed" not in disposition else "failed",
+                "disposition": "processed" if "failed" not in disposition.value else "failed",
             },
         )
         logger.info("as2_mdn_sent", disposition=disposition, duration_ms=round(duration * 1000, 2))
-
-        return mdn

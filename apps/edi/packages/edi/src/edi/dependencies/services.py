@@ -1,16 +1,11 @@
-import os
-from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from database.base_repository import GlobalSession
 from database.session import get_global_session
+from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, Request
 
-from edi.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
-from edi.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
-from edi.adapters.sqs_queue import SQSMessageQueueAdapter
-from edi.adapters.tenant_repository import SqlAlchemyTenantRepository
-from edi.adapters.vault import vault
+from edi.bootstrap.container import Container
 from edi.ports.as2_tester import AS2TesterPort
 from edi.ports.message_queue import MessageQueuePort
 from edi.ports.sftp_tester import SftpTesterPort
@@ -19,48 +14,54 @@ from edi.ports.vault import VaultPort
 from edi.services.as2_receiver_service import As2ReceiverService
 
 
-@lru_cache
-def get_sftp_tester() -> SftpTesterPort:
+@inject
+def get_sftp_tester(sftp_tester: Any = Depends(Provide[Container.sftp_tester])) -> SftpTesterPort:
     """Returns the Paramiko-based SFTP connection tester."""
-    return ParamikoSftpTesterAdapter()
+    return cast(SftpTesterPort, sftp_tester)
 
 
-@lru_cache
-def get_as2_tester() -> AS2TesterPort:
+@inject
+def get_as2_tester(as2_tester: Any = Depends(Provide[Container.as2_tester])) -> AS2TesterPort:
     """Returns the httpx-based AS2 connection tester."""
-    return HttpxAS2TesterAdapter()
+    return cast(AS2TesterPort, as2_tester)
 
 
-def get_vault() -> VaultPort:
-    return vault
+@inject
+def get_vault(vault_port: Any = Depends(Provide[Container.vault_port])) -> VaultPort:
+    return cast(VaultPort, vault_port)
 
 
-@lru_cache
-def get_message_queue() -> MessageQueuePort:
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
-    return SQSMessageQueueAdapter(endpoint_url=endpoint_url)
+@inject
+def get_message_queue(
+    message_queue: Any = Depends(Provide[Container.message_queue]),
+) -> MessageQueuePort:
+    return cast(MessageQueuePort, message_queue)
 
 
+@inject
 def get_tenant_repo(
     session: Annotated[GlobalSession, Depends(get_global_session)],
+    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
 ) -> TenantRepositoryPort:
-    return SqlAlchemyTenantRepository(session)
+    return cast(TenantRepositoryPort, tenant_repo_factory(session=session))
 
 
+@inject
 def get_as2_receiver_service(
     request: Request,
     global_session: Annotated[GlobalSession, Depends(get_global_session)],
-    vault: Annotated[VaultPort, Depends(get_vault)],
+    service_factory: Any = Depends(Provide[Container.as2_receiver_service.provider]),
+    cp_uow_factory: Any = Depends(Provide[Container.cp_uow.provider]),
+    dp_factory_provider: Any = Depends(Provide[Container.dp_factory.provider]),
 ) -> As2ReceiverService:
-    from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork
-    from edi.adapters.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
-
-    control_plane_uow = SqlAlchemyControlPlaneUnitOfWork(global_session)
-    dp_factory = SqlAlchemyDataPlaneUnitOfWorkFactory(
+    control_plane_uow = cp_uow_factory(global_session=global_session)
+    dp_factory = dp_factory_provider(
         global_session=global_session, db_router=request.app.state.db_router
     )
-    return As2ReceiverService(
-        control_plane_uow=control_plane_uow,
-        dp_factory=dp_factory,
-        vault=vault,
+    return cast(
+        As2ReceiverService,
+        service_factory(
+            control_plane_uow=control_plane_uow,
+            dp_factory=dp_factory,
+        ),
     )

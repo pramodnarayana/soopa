@@ -5,10 +5,10 @@ import secrets
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from platform_orm.models.identity import ApiToken
 
-from ucp.adapters.inbound.http.dtos.api_token_dtos import (
-    ApiTokenCreatedResponse,
-    CreateApiTokenRequest,
-    UpdateApiTokenRequest,
+from ucp.application.models.api_token_models import (
+    ApiTokenCreatedResult,
+    CreateApiTokenCommand,
+    UpdateApiTokenCommand,
 )
 from ucp.ports.api_token_repository import ApiTokenRepositoryPort
 
@@ -24,8 +24,8 @@ class ApiTokenService:
         return await self.token_repo.get_by_id(token_id, tenant_id)
 
     async def create_token(
-        self, tenant_id: str, request: CreateApiTokenRequest
-    ) -> ApiTokenCreatedResponse:
+        self, tenant_id: str, command: CreateApiTokenCommand
+    ) -> ApiTokenCreatedResult:
         # Generate raw secrets
         client_id = f"cli_{secrets.token_hex(16)}"
         secret = f"sec_{secrets.token_urlsafe(32)}"
@@ -36,10 +36,10 @@ class ApiTokenService:
         token_model = ApiToken(
             id=f"{ApiToken.ID_PREFIX}_{os.urandom(12).hex()}",
             tenant_id=tenant_id,
-            name=request.name,
+            name=command.name,
             client_id=client_id,
             secret_hash=secret_hash,
-            expires_at=request.expires_at,
+            expires_at=command.expires_at,
             active=True,
         )
 
@@ -48,7 +48,7 @@ class ApiTokenService:
         # Return the created token with the combined string (client_id.secret)
         # The frontend will display this single string to the developer.
         # The backend auth middleware will split it by '.' to perform O(1) lookups.
-        return ApiTokenCreatedResponse(
+        return ApiTokenCreatedResult(
             id=created_token.id,
             name=created_token.name,
             client_id=created_token.client_id,
@@ -60,15 +60,15 @@ class ApiTokenService:
         )
 
     async def update_token(
-        self, token_id: str, tenant_id: str, request: UpdateApiTokenRequest
+        self, token_id: str, tenant_id: str, command: UpdateApiTokenCommand
     ) -> ApiToken | None:
         from typing import Any
 
         update_data: dict[str, Any] = {}
-        if request.name is not None:
-            update_data["name"] = request.name
-        if request.active is not None:
-            update_data["active"] = request.active
+        if command.name is not None:
+            update_data["name"] = command.name
+        if command.active is not None:
+            update_data["active"] = command.active
 
         return await self.token_repo.update(token_id, tenant_id, **update_data)
 

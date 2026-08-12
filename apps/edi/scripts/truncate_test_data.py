@@ -44,7 +44,8 @@ def purge_sqs_queues() -> bool:
         region_name=AWS_REGION,
         endpoint_url=AWS_ENDPOINT,
         aws_access_key_id="test",
-        aws_secret_access_key="test",
+        # Safe: dummy key for localstack
+        aws_secret_access_key="test",  # noqa: S106
     )
 
     from botocore.exceptions import ClientError

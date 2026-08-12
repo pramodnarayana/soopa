@@ -2,10 +2,6 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
-## [TypeScript Version Drift] Monorepo TypeScript Alignment
-- **Date Added**: 2026-07-23
-- **Description**: The `@soopa/dashboard` uses `typescript: ~6.0.2` while `@soopa/edi-ui` uses `typescript: ^5.4.0`. This dependency drift caused `ignoreDeprecations` mismatch issues in `tsconfig.json` during the CI build process.
-- **Action Item**: Standardize the entire monorepo to use a single, unified workspace version of TypeScript (e.g. `6.0.x`). Remove the divergent `ignoreDeprecations` flags across packages once unified.
 
 ## [Python Static Typing] Enforce Strict `mypy` in CI/CD
 - **Date Added**: 2026-07-23
@@ -66,11 +62,6 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Description**: The UI currently relies on manually constructed API clients and disconnected TanStack routing configuration. This allows API contracts or payload structure changes in the backend (FastAPI/NestJS) to silently break the frontend at runtime (such as 404s on trace links) without being caught during the build process.
 - **Action Item**: Implement a strict end-to-end OpenAPI code generation pipeline (using a tool like Orval or tRPC) across the monorepo. This will auto-generate strictly typed React Query hooks and frontend API clients directly from the backend schemas, ensuring that any breaking changes in the API instantly fail the frontend TypeScript build at compile time.
 
-## [Testing] Missing Python Test Suites & Exit Code 5 Suppression
-
-- **Date Added**: 2026-08-05
-- **Description**: Several recently migrated or newly created Python packages (such as `patches`, `edi-grammar`, and `transformer`) currently have zero tests. To prevent Turborepo and the CI pipeline from failing when running `pytest` concurrently (which natively returns Exit Code 5 when no tests are collected), the `package.json` proxy scripts currently suppress this specific exit code (`uv run pytest || (ret=$?; [ $ret -eq 5 ] && exit 0 || exit $ret)`).
-- **Action Item**: Write actual unit and integration tests for all untested Python packages. Once all packages have legitimate tests, remove the Exit Code 5 suppression hack from the respective `package.json` files so that accidental test-suite drops correctly fail the CI pipeline.
 
 ## [Notifications] In-App Notification Delivery UX
 
@@ -84,11 +75,6 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Description**: While standard tenant-level users are strictly governed by granular Permission-Based Access Control (PBAC), the global Platform Superuser access is currently granted via an omnipotent "PlatformAdmin" role tied to a sentinel tenant ID (`ten_000000000000000000000000`). This magic string bypasses all granular checks, giving all internal staff omnipotent "Root" privileges across the entire cluster without distinction.
 - **Action Item**: Implement granular PBAC/RBAC/ABAC for platform-level users. We need to decompose the omnipotent "PlatformAdmin" role into specific platform capabilities (e.g., `platform:tenant:read`, `platform:tenant:delete`, `platform:billing:manage`) so that internal staff (Support, Engineering, Billing) only receive the minimal platform privileges required for their roles (Principle of Least Privilege).
 
-## [Architecture] Standardize Dependency Injection via `dependency-injector`
-
-- **Date Added**: 2026-08-11
-- **Description**: The codebase currently utilizes a mix of Dependency Injection strategies. The `notification_engine` module utilizes `dependency-injector` (the true enterprise standard for IoC), while the `edi` and `ucp` domains rely on FastAPI's native `Depends()` system. While `Depends()` is ergonomic for web APIs, it leaks the web framework into the core application logic and cannot be cleanly utilized in background workers or CLI scripts.
-- **Action Item**: Standardize the entire Python monorepo on `dependency-injector`. Refactor the `edi` and `ucp` domains to define declarative containers (`containers.DeclarativeContainer`) for all dependencies, and utilize `@inject` and `Provide` in their FastAPI routers.
 
 ## [UI Architecture] Compile-time Enforcement of UI Consistency
 
@@ -99,3 +85,9 @@ This document tracks known architectural drift, quick fixes, and non-critical re
   2. Extend TanStack Table's `ColumnMeta` to strictly type all table configurations (e.g., `isPrimaryText: true`, `truncate: boolean`) instead of accepting raw CSS string overrides.
   3. Implement ESLint rules (`no-restricted-syntax`) to ban raw HTML tags (`<table>`, `<button>`) outside of the UI library.
   4. Enforce design token constraints by implementing an ESLint plugin or custom Tailwind class validator that rejects unauthorized arbitrary Tailwind values (e.g., `text-[14.5px]`, `w-[347px]`) while still permitting approved design tokens. Note: Tailwind v3.x does not support globally disabling arbitrary values, so enforcement must be done via linting or build-time validation.
+
+## [UI Architecture] Magic String className Eradication Codemod
+
+- **Date Added**: 2026-08-12
+- **Description**: Magic string `className` usages persist across the feature codebase (approx. 2000+ instances in 93 files). This bypasses the strict primitive design system (`<Box>`, `<Stack>`, `<Icon>`).
+- **Action Item**: Build a `ts-morph` codemod to parse Tailwind strings and map them systematically to the new layout primitives. Once complete, enforce the `no-restricted-syntax` ban on `className` globally via ESLint, completely removing the temporary need for `/* eslint-disable no-restricted-syntax */` suppressions.

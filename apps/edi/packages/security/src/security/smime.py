@@ -11,6 +11,7 @@ import email
 import logging
 import re
 from email import policy
+from typing import Any
 
 import patches.cryptography  # noqa: F401 - applies legacy 3DES patch
 from cryptography import x509
@@ -21,41 +22,43 @@ from cryptography.hazmat.primitives.serialization import pkcs7
 logger = logging.getLogger(__name__)
 
 
-def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | None:  # type: ignore
+def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
+    from asn1crypto import cms, pem  # type: ignore
+
+    # 1. Try raw bytes (BER/DER)
+    with contextlib.suppress(Exception):
+        return cms.ContentInfo.load(encrypted_data)
+
+    # 2. Try S/MIME payload extraction
+    try:
+        msg = email.message_from_bytes(encrypted_data, policy=policy.HTTP)
+        pl = msg.get_payload(decode=True)
+        if pl:
+            return cms.ContentInfo.load(pl)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed S/MIME payload extraction fallback")
+
+    # 3. Try PEM unarmoring
+    try:
+        _, _, der_bytes = pem.unarmor(encrypted_data)
+        return cms.ContentInfo.load(der_bytes)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed PEM unarmoring fallback")
+
+    return None
+
+
+def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes | None:
     """
     Ultimate pure-Python native fallback for BouncyCastle BER envelopes.
     Bypasses cryptography's strict Rust PKCS7 parser entirely by manually
     extracting the symmetric key and decrypting the payload using raw primitives.
     """
-    from asn1crypto import cms, pem  # type: ignore
     from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
-    content_info = None
-
-    # 1. Try raw bytes (BER/DER)
-    with contextlib.suppress(Exception):
-        content_info = cms.ContentInfo.load(encrypted_data)
-
-    # 2. Try S/MIME payload extraction
-    if not content_info:
-        try:
-            msg = email.message_from_bytes(encrypted_data, policy=policy.HTTP)
-            pl = msg.get_payload(decode=True)
-            if pl:
-                content_info = cms.ContentInfo.load(pl)
-        except Exception:  # noqa: BLE001
-            pass
-
-    # 3. Try PEM unarmoring
-    if not content_info:
-        try:
-            _, _, der_bytes = pem.unarmor(encrypted_data)
-            content_info = cms.ContentInfo.load(der_bytes)
-        except Exception:  # noqa: BLE001
-            pass
-
     try:
+        content_info = _parse_asn1_content_info(encrypted_data)
         if not content_info:
             raise ValueError(
                 "asn1crypto could not parse the payload in any format. Is the binary corrupted?"
@@ -149,7 +152,8 @@ def sign_payload(
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
     alg_map = {
-        "sha1": hashes.SHA1(),
+        # AS2 explicitly supports SHA1
+        "sha1": hashes.SHA1(),  # noqa: S303
         "sha256": hashes.SHA256(),
         "sha384": hashes.SHA384(),
         "sha512": hashes.SHA512(),

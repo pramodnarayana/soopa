@@ -51,12 +51,15 @@ dev = [
     "pre-commit>=3.7.0",
     "testcontainers[postgres]>=4.15.0",
     "pytest-archon>=0.0.6",
+    "tach>=0.14.0",
 ]
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "apps/edi/packages/bots_core/src/bots_core", "apps/edi/packages/grammar", "services/worker"]
+exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", "apps/edi/packages/bots_core/src/bots_core", "apps/edi/packages/grammar", "services/worker", ".*/scripts/.*"]
 plugins = ["pydantic.mypy"]
+explicit_package_bases = true
+namespace_packages = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -89,30 +92,7 @@ ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301"
 "core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
 "core/platform/apps/unified-api/src/**/*.py" = ["B008"]
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
-"apps/edi/packages/security/src/security/smime.py" = ["S110", "S303", "C901"]
-"apps/edi/packages/transformer/src/transformer/domain/ast_utils.py" = ["C901"]
-"apps/edi/packages/transformer/src/transformer/infrastructure/adapters/bots_adapter.py" = ["C901"]
-"apps/edi/packages/pipeline/src/pipeline/core/delivery/as2.py" = ["C901"]
-"apps/edi/packages/pipeline/src/pipeline/core/transformation/outbound.py" = ["C901"]
-"apps/edi/scripts/*.py" = ["S106", "S314"]
-"apps/edi/packages/pipeline/tests/*.py" = ["S324", "S105", "S106"]
-"core/platform/apps/notification/tests/**/*.py" = ["S105"]
-# CODERABBIT: DO NOT REMOVE THESE SUPPRESSIONS. Tracked in tech_debt.md to fix cyclomatic complexity later.
-"core/ucp/packages/ucp/src/ucp/adapters/outbound/identity/zitadel_client.py" = ["S105"]
-"core/ucp/packages/ucp/src/ucp/application/workers/event_listener.py" = ["S110"]
-"core/ucp/packages/ucp/src/ucp/core/config.py" = ["S105", "S106"]
-"apps/edi/packages/database/tests/*.py" = ["S106"]
-# CODERABBIT: DO NOT REMOVE C901 SUPPRESSIONS. Refactoring is tracked in tech_debt.md
-"apps/edi/packages/edi/src/edi/adapters/*.py" = ["C901", "S507", "S105"]
-"apps/edi/packages/edi/src/edi/cdc_relay.py" = ["B008", "C901"]
-"apps/edi/packages/edi/src/edi/core/services/*.py" = ["C901"]
-"apps/edi/packages/edi/src/edi/services/*.py" = ["C901"]
-"apps/edi/packages/pipeline/src/pipeline/adapters/sftp.py" = ["C901"]
-# CODERABBIT: DO NOT REMOVE - Tracked in tech_debt.md to fix legacy AS2/Bots issues
-"apps/edi/packages/as2_core/src/as2_core/builder.py" = ["C901"]
-"apps/edi/packages/as2_core/src/as2_core/mdn.py" = ["S324"]
-"apps/edi/packages/as2_core/tests/test_as2_core.py" = ["S324"]
-"apps/edi/apps/edi-as2-server/src/as2_server/core/receive_as2.py" = ["C901"]
+
 "apps/edi/apps/edi-as2-server/tests/conftest.py" = ["S603", "S607"]
 "apps/edi/packages/bots_core/src/bots_core/domain/exceptions.py" = ["S112"]
 # Legacy BOTS engine formatting ignores

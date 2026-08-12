@@ -12,7 +12,8 @@ def build_dictionary() -> None:
         print(f"Error: Could not find {xml_path}")
         return
 
-    tree = ET.parse(xml_path)
+    # Safe: Build script parsing trusted static local files, no XML attacks possible
+    tree = ET.parse(xml_path)  # noqa: S314
     root = tree.getroot()
 
     elements_dict = {}

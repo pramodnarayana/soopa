@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import random
 
 import asyncpg
 
@@ -65,7 +64,9 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
                 logger.exception("[Sweeper] Error in sweep")
 
                 # Apply exponential backoff with jitter
-                jitter = random.uniform(0, 0.1 * failure_backoff)
+                import secrets
+
+                jitter = secrets.SystemRandom().uniform(0, 0.1 * failure_backoff)
                 delay = min(failure_backoff + jitter, MAX_BACKOFF)
                 logger.warning(f"[Sweeper] Retrying after {delay:.2f} seconds")
                 await asyncio.sleep(delay)

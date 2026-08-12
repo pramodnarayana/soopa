@@ -1,9 +1,10 @@
 import contextlib
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from database.base_repository import GlobalSession
 from database.session import get_global_session
+from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, Request
 from platform_orm.models.identity import Tenant
 from sqlalchemy import select
@@ -11,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
-from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
 from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
+from edi.bootstrap.container import Container
 from edi.dependencies.auth import get_current_tenant_id
 from edi.exceptions import TenantNotSubscribedException
 from edi.ports.uow import ControlPlaneUnitOfWorkPort
@@ -68,13 +69,17 @@ async def get_tenant_session(
         yield session
 
 
+@inject
 async def get_control_plane_uow(
     global_session: Annotated[GlobalSession, Depends(get_global_session)],
+    cp_uow_factory: Any = Depends(Provide[Container.cp_uow.provider]),
 ) -> ControlPlaneUnitOfWorkPort:
-    return ControlPlaneUnitOfWork(global_session=global_session)
+    return cast(ControlPlaneUnitOfWorkPort, cp_uow_factory(global_session=global_session))
 
 
+@inject
 async def get_data_plane_uow(
     tenant_session: AsyncSession = Depends(get_tenant_session),
+    dp_uow_factory: Any = Depends(Provide[Container.dp_uow.provider]),
 ) -> DataPlaneUnitOfWork:
-    return DataPlaneUnitOfWork(tenant_session=tenant_session)
+    return cast(DataPlaneUnitOfWork, dp_uow_factory(tenant_session=tenant_session))

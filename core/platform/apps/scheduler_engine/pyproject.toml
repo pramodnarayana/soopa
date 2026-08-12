@@ -9,7 +9,7 @@ dependencies = [
     "croniter>=6.2.4",
     "platform-orm",
     "pydantic>=2.0.0",
-    "punq>=0.8.0",
+    "dependency-injector>=4.44.0",
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.51",
     "types-croniter>=6.2.4.20260711",

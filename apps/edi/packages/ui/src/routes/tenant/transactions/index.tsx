@@ -204,9 +204,24 @@ const sharedFieldDefs = {
     operators: ['eq' as const],
     options: DIRECTION_OPTIONS,
   },
-  transaction_type: { id: 'transaction_type', label: 'Transaction Type', type: 'text' as const, operators: ['eq' as const, 'neq' as const] },
-  sender_id: { id: 'sender_id', label: 'ISA Sender', type: 'text' as const, operators: ['eq' as const, 'contains' as const] },
-  receiver_id: { id: 'receiver_id', label: 'ISA Receiver', type: 'text' as const, operators: ['eq' as const, 'contains' as const] },
+  transaction_type: {
+    id: 'transaction_type',
+    label: 'Transaction Type',
+    type: 'text' as const,
+    operators: ['eq' as const, 'neq' as const],
+  },
+  sender_id: {
+    id: 'sender_id',
+    label: 'ISA Sender',
+    type: 'text' as const,
+    operators: ['eq' as const, 'contains' as const],
+  },
+  receiver_id: {
+    id: 'receiver_id',
+    label: 'ISA Receiver',
+    type: 'text' as const,
+    operators: ['eq' as const, 'contains' as const],
+  },
 };
 
 const messageFields: FieldDef[] = [
@@ -404,10 +419,12 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
 
                     bulkReplay(
                       { traceIds, tier: 'raw' },
-                      { onSuccess: () => {
-                        setSelectedMessages([]);
-                        setMessagesRowSelection({});
-                      } },
+                      {
+                        onSuccess: () => {
+                          setSelectedMessages([]);
+                          setMessagesRowSelection({});
+                        },
+                      },
                     );
                   }}
                 >
@@ -456,10 +473,12 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
 
                     bulkReplay(
                       { traceIds, tier: 'translation' },
-                      { onSuccess: () => {
-                        setSelectedJson([]);
-                        setJsonRowSelection({});
-                      } },
+                      {
+                        onSuccess: () => {
+                          setSelectedJson([]);
+                          setJsonRowSelection({});
+                        },
+                      },
                     );
                   }}
                 >

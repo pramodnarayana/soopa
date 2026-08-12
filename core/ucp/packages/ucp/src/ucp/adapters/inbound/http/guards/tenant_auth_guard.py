@@ -20,24 +20,25 @@ Architecture note:
 """
 
 import logging
-from typing import Annotated
+from typing import Any
 
+from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, HTTPException, Path, Request, status
 from identity.domain.identity_context import IdentityContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ucp.bootstrap.container import Container
+from ucp.core.container import get_db_session
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 
 logger = logging.getLogger(__name__)
 
 
-# Dependency injection placeholder — overridden in main.py
-def get_tenant_repo_for_guard() -> ITenantRepository:
-    raise NotImplementedError()
-
-
+@inject
 async def require_tenant_member(
     request: Request,
-    tenant_repo: Annotated[ITenantRepository, Depends(get_tenant_repo_for_guard)],
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
     # Path param name matches the route definition: /tenants/{tenant_id}/...
     tenant_id: str = Path(...),
 ) -> IdentityContext:
@@ -62,6 +63,8 @@ async def require_tenant_member(
             detail="TENANT_GUARD_AUTH_REQUIRED",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
 
     # Platform Admins bypass all tenant-level ACL checks.
     # But we still need to normalize the tenant_id if it's an IdP Org ID.

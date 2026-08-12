@@ -15,6 +15,8 @@ Architectural invariants:
      contract defined in ucp.ports.outbound.edi_service.IEdiService.
 """
 
+import contextlib
+
 from edi.adapters.inbound.ucp_adapter import UcpAdapter
 from edi.module import create_edi_app
 from fastapi import FastAPI
@@ -26,9 +28,11 @@ from ucp.adapters.inbound.http.routers import (
     tokens_router,
     users_router,
 )
+from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
+from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.application.services.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.services.authenticators.jwt_strategy import JwtStrategy
-from ucp.bootstrap.dependencies import setup_dependency_injection
+from ucp.bootstrap.container import Container as UcpContainer
 from ucp.core.container import _async_session_maker, get_token_verifier
 from ucp.ports.outbound.edi_service import IEdiService
 
@@ -61,15 +65,31 @@ setup_observability(app)
 # for the request and validates authorization against the IdentityContext.
 app.add_middleware(TenantContextMiddleware, public_paths=_PUBLIC_PATHS)
 
+
 # Layer 2 — Perimeter Authentication
 # The authentication middleware runs once per request at the Shell boundary.
 # It uses the Strategy Pattern to dynamically evaluate different token types
 # (M2M API Keys, IdP JWTs) without needing modification when adding new methods.
+@contextlib.asynccontextmanager
+async def api_token_repo_factory():
+    async with _async_session_maker() as session:
+        yield PostgresApiTokenRepository(session)
+
+
+@contextlib.asynccontextmanager
+async def tenant_repo_factory():
+    async with _async_session_maker() as session:
+        yield TenantRepository(session)
+
+
 app.add_middleware(
     AuthenticationMiddleware,
     strategies=[
-        ApiKeyStrategy(session_maker=_async_session_maker),
-        JwtStrategy(session_maker=_async_session_maker, token_verifier=get_token_verifier()),
+        ApiKeyStrategy(token_repo_factory=api_token_repo_factory),
+        JwtStrategy(
+            tenant_repo_factory=tenant_repo_factory,
+            token_verifier=get_token_verifier(),
+        ),
     ],
     public_paths=_PUBLIC_PATHS,
 )
@@ -115,7 +135,9 @@ app.include_router(tokens_router.router, prefix="/api/v1/tenants/{tenant_id}/tok
 app.include_router(in_app_notifications_router)
 app.include_router(notification_preferences_router)
 app.include_router(notification_templates_router)
-setup_dependency_injection(app)
+
+ucp_container = UcpContainer()
+app.state.ucp_container = ucp_container
 
 
 # ---------------------------------------------------------------------------

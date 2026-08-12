@@ -1,8 +1,10 @@
-from typing import Annotated
+from typing import Annotated, Any
 
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Header, HTTPException
 from identity.domain.identity_context import IdentityContext
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.inbound.http.dtos.tenant_dtos import (
     ProvisionTenantRequest,
@@ -17,7 +19,9 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
+from ucp.bootstrap.container import Container
 from ucp.core.config import get_settings
+from ucp.core.container import get_db_session
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.project_provider import IProjectProvider
 from ucp.ports.outbound.tenant_query_service import ITenantQueryService
@@ -26,40 +30,23 @@ from ucp.ports.outbound.tenant_repository import ITenantRepository
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 
-# Dependency placeholders — overridden in main.py via dependency_overrides
-def get_tenant_repo() -> ITenantRepository:
-    raise NotImplementedError()
-
-
-def get_tenant_query_service() -> ITenantQueryService:
-    raise NotImplementedError()
-
-
-def get_project_provider() -> IProjectProvider:
-    raise NotImplementedError()
-
-
-def get_provision_tenant_use_case() -> ProvisionTenantUseCase:
-    raise NotImplementedError()
-
-
-def get_delete_tenant_use_case() -> DeleteTenantUseCase:
-    raise NotImplementedError()
-
-
 @router.get("", response_model=list[TenantResponse])
+@inject
 async def find_all(  # type: ignore
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    query_service: ITenantQueryService = Depends(get_tenant_query_service),
+    session: AsyncSession = Depends(get_db_session),
+    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
+    query_service: ITenantQueryService = query_service_factory(session=session)
     tenants = await query_service.get_all_tenants()
     return [TenantResponse.from_read_model(t) for t in tenants]
 
 
 @router.get("/roles")
+@inject
 async def get_roles(  # type: ignore
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    project_provider: IProjectProvider = Depends(get_project_provider),
+    project_provider: IProjectProvider = Depends(Provide[Container.project_provider]),
 ):
     roles = await project_provider.get_roles()
     tenant_group = get_settings().zitadel_tenant_role_group
@@ -74,11 +61,14 @@ async def resolve_tenant(id: str, tenant_repo: ITenantRepository) -> "Tenant":
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
+@inject
 async def find_one(  # type: ignore
     tenant_id: str,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
-    query_service: ITenantQueryService = Depends(get_tenant_query_service),
+    session: AsyncSession = Depends(get_db_session),
+    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
+    query_service: ITenantQueryService = query_service_factory(session=session)
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     if not tenant_rm:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -86,13 +76,17 @@ async def find_one(  # type: ignore
 
 
 @router.post("", response_model=TenantResponse)
+@inject
 async def provision(  # type: ignore
     dto: ProvisionTenantRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
-    use_case: ProvisionTenantUseCase = Depends(get_provision_tenant_use_case),
-    query_service: ITenantQueryService = Depends(get_tenant_query_service),
+    session: AsyncSession = Depends(get_db_session),
+    use_case_factory=Depends(Provide[Container.provision_tenant_use_case.provider]),
+    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
+    use_case: ProvisionTenantUseCase = use_case_factory(tenant_repo__session=session)
+    query_service: ITenantQueryService = query_service_factory(session=session)
     command = ProvisionTenantCommand(name=dto.name)
     tenant = await use_case.execute(command, idempotency_key)
 
@@ -101,16 +95,20 @@ async def provision(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.patch("/{id}/name", response_model=TenantResponse)
+@router.patch("/{tenant_id}/name", response_model=TenantResponse)
+@inject
 async def update_name(  # type: ignore
-    id: str,
+    tenant_id: str,
     dto: UpdateTenantNameRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
-    tenant_repo: ITenantRepository = Depends(get_tenant_repo),
-    query_service: ITenantQueryService = Depends(get_tenant_query_service),
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
+    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    tenant = await resolve_tenant(id, tenant_repo)
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    query_service: ITenantQueryService = query_service_factory(session=session)
+    tenant = await resolve_tenant(tenant_id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
@@ -122,16 +120,20 @@ async def update_name(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.patch("/{id}/status", response_model=TenantResponse)
+@router.patch("/{tenant_id}/status", response_model=TenantResponse)
+@inject
 async def update_status(  # type: ignore
-    id: str,
+    tenant_id: str,
     dto: UpdateTenantStatusRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
-    tenant_repo: ITenantRepository = Depends(get_tenant_repo),
-    query_service: ITenantQueryService = Depends(get_tenant_query_service),
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
+    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    tenant = await resolve_tenant(id, tenant_repo)
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    query_service: ITenantQueryService = query_service_factory(session=session)
+    tenant = await resolve_tenant(tenant_id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
@@ -143,15 +145,22 @@ async def update_status(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.delete("/{id}")
-async def delete(  # type: ignore
-    id: str,
+@router.delete("/{tenant_id}", status_code=204)
+@inject
+async def remove(  # type: ignore
+    tenant_id: str,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
-    tenant_repo: ITenantRepository = Depends(get_tenant_repo),
-    use_case: DeleteTenantUseCase = Depends(get_delete_tenant_use_case),
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
+    use_case_factory=Depends(Provide[Container.delete_tenant_use_case.provider]),
 ):
-    tenant = await resolve_tenant(id, tenant_repo)
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    use_case: DeleteTenantUseCase = use_case_factory(
+        tenant_repo__session=session,
+        user_repo__session=session,
+    )
+    tenant = await resolve_tenant(tenant_id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
@@ -171,11 +180,14 @@ class SubscriptionResponse(BaseModel):
 
 
 @router.get("/{id}/subscriptions", response_model=list[SubscriptionResponse])
+@inject
 async def get_subscriptions(
     id: str,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
-    tenant_repo: ITenantRepository = Depends(get_tenant_repo),
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
 ) -> list[SubscriptionResponse]:
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
     tenant = await resolve_tenant(id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -189,13 +201,16 @@ async def get_subscriptions(
 
 
 @router.post("/{id}/subscriptions", response_model=SubscriptionResponse)
+@inject
 async def subscribe_app(
     id: str,
     dto: SubscribeAppRequest,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
-    tenant_repo: ITenantRepository = Depends(get_tenant_repo),
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
 ) -> SubscriptionResponse:
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
     tenant = await resolve_tenant(id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -212,13 +227,16 @@ async def subscribe_app(
 
 
 @router.delete("/{id}/subscriptions/{app_id}")
+@inject
 async def unsubscribe_app(
     id: str,
     app_id: str,
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
-    tenant_repo: ITenantRepository = Depends(get_tenant_repo),
+    session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
 ) -> dict[str, bool]:
+    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
     tenant = await resolve_tenant(id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")

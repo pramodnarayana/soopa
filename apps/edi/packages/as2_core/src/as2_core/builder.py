@@ -1,18 +1,12 @@
 """
 Outbound AS2 Message Builder.
 Constructs an RFC 4130-compliant AS2 HTTP payload from raw EDI content.
-
-Workflow (per RFC 4130 Section 3.1):
-  1. Start with raw EDI payload.
-  2. Compute MIC *before* any wrapping (on the innermost MIME entity).
-  3. Optionally sign   → multipart/signed or application/pkcs7-mime (opaque-signed)
-  4. Optionally encrypt → application/pkcs7-mime (enveloped-data)
-  5. Return the final bytes + the HTTP headers the sender must set.
 """
 
 import email
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from .mdn import calculate_mic
 
@@ -27,19 +21,90 @@ def _ensure_crlf(data: bytes) -> bytes:
 
 @dataclass
 class OutboundAS2Message:
-    """
-    Result of building an outbound AS2 message.
-    Contains the final HTTP body bytes and the headers to send.
-    """
-
     body: bytes
-    """Raw bytes to send as the HTTP POST body."""
-
     headers: dict[str, str] = field(default_factory=dict)
-    """HTTP headers required for the AS2 transmission."""
-
     mic: str | None = None
-    """Pre-encryption MIC, to be stored for MDN validation."""
+
+
+@dataclass
+class _AS2State:
+    payload: bytes
+    content_type: str
+    cte: str | None = None
+    cd: str | None = None
+    is_signed: bool = False
+    is_encrypted: bool = False
+
+
+def _apply_signature(state: _AS2State, sign_fn: Any) -> None:
+    if sign_fn is None:
+        return
+
+    state.payload = sign_fn(state.payload)
+    msg = email.message_from_bytes(state.payload)
+    state.content_type = msg.get("Content-Type", "multipart/signed")
+    state.cte = msg.get("Content-Transfer-Encoding") or state.cte
+    state.cd = msg.get("Content-Disposition") or state.cd
+    state.is_signed = True
+
+
+def _apply_encryption(state: _AS2State, encrypt_fn: Any) -> None:
+    if encrypt_fn is None:
+        return
+
+    state.payload = encrypt_fn(state.payload)
+    msg = email.message_from_bytes(state.payload)
+
+    encrypt_ct = msg.get("Content-Type")
+    if encrypt_ct:
+        state.content_type = encrypt_ct
+    else:
+        state.content_type = "application/pkcs7-mime; smime-type=enveloped-data; name=smime.p7m"
+
+    state.cte = msg.get("Content-Transfer-Encoding") or state.cte
+    state.cd = msg.get("Content-Disposition") or state.cd
+    state.is_encrypted = True
+
+
+def _build_headers(
+    state: _AS2State,
+    as2_from: str,
+    as2_to: str,
+    message_id: str | None,
+    mic_alg: str,
+    mdn_url: str | None,
+) -> dict[str, str]:
+    message_id_str = f"<{message_id}@soopaedi>" if message_id else f"<{uuid.uuid4()}@soopaedi>"
+    headers: dict[str, str] = {
+        "AS2-Version": "1.2",
+        "AS2-From": as2_from,
+        "AS2-To": as2_to,
+        "Message-ID": message_id_str,
+        "Content-Type": state.content_type,
+        "MIME-Version": "1.0",
+        "Disposition-Notification-To": as2_from,
+        "Disposition-Notification-Options": f"signed-receipt-protocol=required, pkcs7-signature; signed-receipt-micalg=optional, {mic_alg}",
+    }
+
+    if state.cte:
+        headers["Content-Transfer-Encoding"] = state.cte
+    if state.cd:
+        headers["Content-Disposition"] = state.cd
+    if mdn_url:
+        headers["Receipt-Delivery-Option"] = mdn_url
+
+    return headers
+
+
+def _strip_outer_mime_headers(payload: bytes, is_encrypted: bool, is_signed: bool) -> bytes:
+    if not is_encrypted and not is_signed:
+        return payload
+
+    if b"\r\n\r\n" in payload:
+        return payload.split(b"\r\n\r\n", 1)[1]
+    if b"\n\n" in payload:
+        return payload.split(b"\n\n", 1)[1]
+    return payload
 
 
 def build_outbound_message(
@@ -54,129 +119,25 @@ def build_outbound_message(
     mic_alg: str = "sha256",
     message_id: str | None = None,
 ) -> OutboundAS2Message:
-    """
-    Builds a fully-wrapped, optionally signed, optionally encrypted AS2
-    HTTP payload, following RFC 4130 and OpenAS2 inter-op conventions.
-
-    Args:
-        payload:      Raw EDI content bytes (e.g., ISA...IEA for X12).
-        as2_from:     Local AS2 partner ID (AS2-From header value).
-        as2_to:       Remote AS2 partner ID (AS2-To header value).
-        content_type: MIME type of the payload, defaults to EDI-X12.
-        sign_fn:      Optional callable(payload, ...) → signed_bytes.
-                      If provided, the payload is signed before encrypting.
-        encrypt_fn:   Optional callable(payload) → encrypted_bytes.
-                      If provided, the (possibly-signed) payload is encrypted.
-        mdn_url:      If set, requests an async MDN at this URL.
-                      If None, requests a synchronous (inline) MDN.
-        mic_alg:      Hash algorithm for MIC computation (sha1 or sha256).
-
-    Returns:
-        OutboundAS2Message with body bytes and AS2 HTTP headers.
-    """
-    # ── Step 1: Normalize Payload Line Endings & Construct Inner Entity ───────
-    # AS2 requires CRLF line endings for signature calculation
     payload = _ensure_crlf(payload)
 
     if sign_fn is not None or encrypt_fn is not None:
-        # RFC 4130 specifies that the data to be signed/encrypted MUST be a fully
-        # formed MIME entity with its own Content-Type header.
         mime_headers = f"Content-Type: {content_type}\r\n"
         mime_headers += "Content-Transfer-Encoding: binary\r\n\r\n"
         payload = mime_headers.encode("ascii") + payload
 
-    # ── Step 2: Compute MIC on the inner MIME entity ──────────────────────────
-    # The MIC is calculated over the entire MIME entity (including the headers
-    # prepended in Step 1) before signing or encryption, per RFC 4130.
     mic = calculate_mic(payload, mic_alg)
 
-    # ── Step 3: Optionally sign ───────────────────────────────────────────────
-    current_payload = payload
-    current_content_type = content_type
-    current_cte: str | None = None
-    current_cd: str | None = None
-    is_signed = False
+    state = _AS2State(payload=payload, content_type=content_type)
 
-    if sign_fn is not None:
-        current_payload = sign_fn(current_payload)  # type: ignore[operator]
+    _apply_signature(state, sign_fn)
+    _apply_encryption(state, encrypt_fn)
 
-        # Parse the exact Content-Type (with boundary and micalg) generated by the signer
-        msg = email.message_from_bytes(current_payload)
-        signer_ct = msg.get("Content-Type")
-        current_content_type = signer_ct or "multipart/signed"
-        if msg.get("Content-Transfer-Encoding"):
-            current_cte = msg.get("Content-Transfer-Encoding")
-        if msg.get("Content-Disposition"):
-            current_cd = msg.get("Content-Disposition")
-
-        is_signed = True
-
-    # ── Step 4: Optionally encrypt ────────────────────────────────────────────
-    is_encrypted = False
-    if encrypt_fn is not None:
-        current_payload = encrypt_fn(current_payload)  # type: ignore[operator]
-
-        msg = email.message_from_bytes(current_payload)
-        encrypt_ct = msg.get("Content-Type")
-        if encrypt_ct:
-            current_content_type = encrypt_ct
-        else:
-            current_content_type = (
-                "application/pkcs7-mime; smime-type=enveloped-data; name=smime.p7m"
-            )
-
-        if msg.get("Content-Transfer-Encoding"):
-            current_cte = msg.get("Content-Transfer-Encoding")
-        if msg.get("Content-Disposition"):
-            current_cd = msg.get("Content-Disposition")
-
-        is_encrypted = True
-
-    message_id_str = f"<{message_id}@soopaedi>" if message_id else f"<{uuid.uuid4()}@soopaedi>"
-    headers: dict[str, str] = {
-        "AS2-Version": "1.2",
-        "AS2-From": as2_from,
-        "AS2-To": as2_to,
-        "Message-ID": message_id_str,
-        "Content-Type": current_content_type,
-        "MIME-Version": "1.0",
-        "Disposition-Notification-To": as2_from,
-        "Disposition-Notification-Options": f"signed-receipt-protocol=required, pkcs7-signature; signed-receipt-micalg=optional, {mic_alg}",
-    }
-
-    if current_cte:
-        headers["Content-Transfer-Encoding"] = current_cte
-    if current_cd:
-        headers["Content-Disposition"] = current_cd
-
-    if mdn_url:
-        # Async MDN: send back to this URL
-        headers["Receipt-Delivery-Option"] = mdn_url
-    # else: sync MDN is the default — the response body itself is the MDN
-
-    # Encode security flags for the receiver to know what to expect
-    security_note_parts = []
-    if is_encrypted:
-        security_note_parts.append("encrypted")
-    if is_signed:
-        security_note_parts.append("signed")
-
-    # ── Step 5: Strip Outer MIME Headers from Body ────────────────────────────
-    if is_encrypted or is_signed:
-        # RFC 5322 specifies \r\n\r\n (or \n\n) as the delimiter between headers and body.
-        # While it might be tempting to use Python's `email.message.Message.get_payload()`,
-        # doing so on a multipart/signed S/MIME payload causes the `email` module to
-        # reconstruct boundaries and standardize newlines, which silently invalidates
-        # the cryptographic signature.
-        # Performing a raw binary split is the enterprise-standard approach for AS2
-        # to guarantee 100% byte-for-byte preservation of the cryptographic payload.
-        if b"\r\n\r\n" in current_payload:
-            _, current_payload = current_payload.split(b"\r\n\r\n", 1)
-        elif b"\n\n" in current_payload:
-            _, current_payload = current_payload.split(b"\n\n", 1)
+    headers = _build_headers(state, as2_from, as2_to, message_id, mic_alg, mdn_url)
+    final_payload = _strip_outer_mime_headers(state.payload, state.is_encrypted, state.is_signed)
 
     return OutboundAS2Message(
-        body=current_payload,
+        body=final_payload,
         headers=headers,
         mic=mic,
     )

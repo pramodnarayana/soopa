@@ -49,7 +49,6 @@ function TenantOverviewPage() {
           <Button
             type="button"
             variant="outline"
-            className="rounded-xl h-10 px-5 text-[14px] font-semibold"
             disabled={name === tenant.name || updateNameMutationObj.isPending}
             onClick={() => setName(tenant.name)}
           >
@@ -57,7 +56,6 @@ function TenantOverviewPage() {
           </Button>
           <Button
             type="button"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
             disabled={name === tenant.name || updateNameMutationObj.isPending || !name.trim()}
             onClick={() => handleUpdateName(name)}
           >
@@ -68,12 +66,8 @@ function TenantOverviewPage() {
 
       <div className="space-y-4 max-w-2xl">
         <div className="space-y-2">
-          <Label className="text-sm font-medium text-muted-foreground">Company Name</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-11 rounded-xl bg-background"
-          />
+          <Label>Company Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
       </div>
     </div>

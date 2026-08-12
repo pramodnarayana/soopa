@@ -24,3 +24,28 @@ repos:
         types_or: [python, pyi]
         exclude: ^libs/edi_grammar/
         require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run mypy .
+        language: system
+        types_or: [python, pyi]
+        exclude: ^.*/scripts/.*$
+        pass_filenames: false
+      - id: eslint
+        name: eslint
+        entry: pnpm lint
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+      - id: biome
+        name: biome
+        entry: pnpm biome check --write
+        language: system
+        types_or: [javascript, jsx, ts, tsx, json]
+        pass_filenames: false
+      - id: tach
+        name: tach
+        entry: uv run tach check
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false

@@ -12,7 +12,8 @@ def storage() -> Aioboto3PayloadStorage:
         region="us-east-1",
         endpoint_url="http://localhost:4566",
         access_key_id="test_key",
-        secret_access_key="test_secret",
+        # Safe: This is a dummy key for localstack S3 mocking, not a real AWS secret
+        secret_access_key="test_secret",  # noqa: S106
     )
 
 

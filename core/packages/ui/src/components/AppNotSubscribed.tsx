@@ -1,4 +1,4 @@
-import { Box } from 'lucide-react';
+import { AlertCircle, Box } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 
 interface AppNotSubscribedProps {
@@ -7,25 +7,27 @@ interface AppNotSubscribedProps {
 
 export function AppNotSubscribed({ appName }: AppNotSubscribedProps) {
   return (
-    <div className="flex flex-1 items-center justify-center p-6 bg-muted/20 min-h-full">
-      <Card className="max-w-md shadow-lg text-center border-dashed border-2 bg-background/50 backdrop-blur-sm">
-        <CardHeader className="flex flex-col items-center gap-4 pb-4">
-          <div className="p-4 rounded-full bg-primary/10">
-            <Box className="w-12 h-12 text-primary" />
-          </div>
-          <div className="space-y-1.5">
-            <CardTitle className="text-2xl font-bold tracking-tight">
-              {appName} Not Subscribed
-            </CardTitle>
-            <CardDescription className="text-base">
-              You don't have access to {appName}.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Contact your administrator to enable it.</p>
-        </CardContent>
-      </Card>
+    <div className="flex flex-1 items-center justify-center min-h-[50vh] p-4">
+      <div className="w-full max-w-md">
+        <Card>
+          <CardHeader>
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-red-100 rounded-full">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+            </div>
+            <div className="text-center">
+              <CardTitle>Subscription Required</CardTitle>
+            </div>
+            <div className="text-center">
+              <CardDescription>
+                You do not have access to {appName}. Please contact your administrator or subscribe
+                to this application to continue.
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
     </div>
   );
 }
