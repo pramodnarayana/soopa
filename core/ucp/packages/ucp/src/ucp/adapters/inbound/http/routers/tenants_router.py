@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -139,7 +139,9 @@ async def update_status(  # type: ignore
     use_case: ToggleTenantStatusUseCase = use_case_factory(uow__session=session)
     query_service: ITenantQueryService = query_service_factory(session=session)
 
-    command = ToggleTenantStatusCommand(tenant_id=tenant_id, status=dto.status)
+    command = ToggleTenantStatusCommand(
+        tenant_id=tenant_id, status=cast(Literal["active", "inactive"], dto.status)
+    )
     await use_case.execute(command, idempotency_key)
 
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)

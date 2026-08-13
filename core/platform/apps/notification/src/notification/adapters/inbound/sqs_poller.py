@@ -20,15 +20,15 @@ async def poll_sqs_queue(
     if aws_endpoint:
         client_kwargs["endpoint_url"] = aws_endpoint
 
-    while True:
-        try:
-            async with session.client("sqs", **client_kwargs) as sqs:
-                queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
-                queue_url = queue_url_resp["QueueUrl"]
+    try:
+        async with session.client("sqs", **client_kwargs) as sqs:
+            queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
+            queue_url = queue_url_resp["QueueUrl"]
 
-                logger.info(f"Started polling {queue_name} ({queue_url})")
+            logger.info(f"Started polling {queue_name} ({queue_url})")
 
-                while True:
+            while True:
+                try:
                     response = await sqs.receive_message(
                         QueueUrl=queue_url,
                         MaxNumberOfMessages=10,
@@ -65,6 +65,8 @@ async def poll_sqs_queue(
                             logger.exception(
                                 "[%s] Error processing message, will retry", queue_name
                             )
-        except Exception:
-            logger.exception(f"[{queue_name}] SQS client error, retrying in 2s")
-            await asyncio.sleep(2)
+                except Exception:
+                    logger.exception(f"[{queue_name}] SQS client error, retrying in 2s")
+                    await asyncio.sleep(2)
+    except Exception:
+        logger.exception(f"[{queue_name}] Initializing SQS client failed")

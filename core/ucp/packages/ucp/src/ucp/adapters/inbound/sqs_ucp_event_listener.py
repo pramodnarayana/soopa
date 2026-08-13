@@ -1,6 +1,7 @@
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import aioboto3
 import structlog
@@ -26,10 +27,10 @@ class SqsUcpEventListener(UcpEventListenerPort):
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
-        self._client = None
-        self._client_context = None
+        self._client: Any = None
+        self._client_context: Any = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "SqsUcpEventListener":
         """Allows using the listener as a context manager for continuous polling with connection reuse."""
         if not self._client:
             self._client_context = self.session.client(
@@ -40,7 +41,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
             self._client = await self._client_context.__aenter__()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self._client_context:
             await self._client_context.__aexit__(exc_type, exc_val, exc_tb)
             self._client = None
@@ -70,7 +71,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
 
     @asynccontextmanager
     async def _process_with_client(
-        self, sqs_client
+        self, sqs_client: Any
     ) -> AsyncGenerator[UcpEventMessage | None, None]:
         try:
             response = await sqs_client.receive_message(
@@ -113,7 +114,9 @@ class SqsUcpEventListener(UcpEventListenerPort):
 
             except json.JSONDecodeError:
                 logger.exception(
-                    "sqs_message_json_decode_failed", message_id=message_id, payload_length=len(body_str)
+                    "sqs_message_json_decode_failed",
+                    message_id=message_id,
+                    payload_length=len(body_str),
                 )
                 await sqs_client.delete_message(
                     QueueUrl=self.queue_url, ReceiptHandle=receipt_handle

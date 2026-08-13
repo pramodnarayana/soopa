@@ -45,6 +45,7 @@ pythonpath = [
 ]
 [tool.mypy]
 strict = true
+plugins = ["pydantic.mypy"]
 
 [build-system]
 requires = ["hatchling"]
@@ -70,5 +71,8 @@ dev = [
 ]
 
 [[tool.mypy.overrides]]
-module = "asyncpg.*"
+module = [
+    "asyncpg.*",
+    "aioboto3.*"
+]
 ignore_missing_imports = true

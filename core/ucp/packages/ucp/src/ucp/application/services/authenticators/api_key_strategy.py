@@ -1,7 +1,7 @@
-import structlog
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
+import structlog
 from identity.domain.authentication_strategy import IAuthenticationStrategy
 from identity.domain.identity_context import M2M_API_KEY_PREFIX, IdentityContext
 

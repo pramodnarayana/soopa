@@ -1,4 +1,5 @@
 from datetime import UTC
+from typing import Literal, cast
 
 from platform_orm.models.identity import TenantUser
 from platform_orm.models.identity import User as DbUser
@@ -50,7 +51,7 @@ class UserRepository(IUserRepository):
             idp_user_id=db_user.idp_user_id,
             email=db_user.email,
             name=db_user.name or "",
-            status=db_user.status,
+            status=cast(Literal["active", "inactive"], db_user.status),
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )

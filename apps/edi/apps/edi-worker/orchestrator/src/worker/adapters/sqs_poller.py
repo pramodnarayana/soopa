@@ -44,7 +44,9 @@ async def poll_sqs_queue(
                             # Log trace_id if available, otherwise just log processing
                             trace_id = body.get("payload", {}).get("trace_id")
                             if trace_id:
-                                logger.info("processing_message", queue_name=queue_name, trace_id=trace_id)
+                                logger.info(
+                                    "processing_message", queue_name=queue_name, trace_id=trace_id
+                                )
                             else:
                                 logger.info("processing_message", queue_name=queue_name)
 
@@ -56,19 +58,27 @@ async def poll_sqs_queue(
                             )
 
                             if trace_id:
-                                logger.info("message_processed_successfully", queue_name=queue_name, trace_id=trace_id)
+                                logger.info(
+                                    "message_processed_successfully",
+                                    queue_name=queue_name,
+                                    trace_id=trace_id,
+                                )
                             else:
                                 logger.info("message_processed_successfully", queue_name=queue_name)
 
                         except json.JSONDecodeError:
                             # Permanently delete malformed (non-JSON) messages
-                            logger.exception("non_json_message_body_deleting_permanently", queue_name=queue_name)
+                            logger.exception(
+                                "non_json_message_body_deleting_permanently", queue_name=queue_name
+                            )
                             await sqs.delete_message(
                                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
                             )
 
                         except Exception:
-                            logger.exception("transient_error_processing_message", queue_name=queue_name)
+                            logger.exception(
+                                "transient_error_processing_message", queue_name=queue_name
+                            )
                 except Exception:
                     logger.exception("sqs_client_error_retrying", queue_name=queue_name)
                     await asyncio.sleep(2)

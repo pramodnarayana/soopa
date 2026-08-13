@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from ucp.ports.uow import UcpUnitOfWorkPort
 
@@ -6,7 +7,7 @@ from ucp.ports.uow import UcpUnitOfWorkPort
 @dataclass
 class ToggleTenantStatusCommand:
     tenant_id: str
-    status: str
+    status: Literal["active", "inactive"]
 
 
 class ToggleTenantStatusUseCase:

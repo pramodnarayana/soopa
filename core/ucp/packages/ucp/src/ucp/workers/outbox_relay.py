@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import uuid
+from typing import Any
 
 import structlog
 
@@ -27,7 +28,7 @@ class OutboxRelayWorker:
         self.user_provider = user_provider
         self.worker_id = str(uuid.uuid4())
 
-    async def run(self, max_iterations: int | None = None):
+    async def run(self, max_iterations: int | None = None) -> None:
         logger.info("outbox_relay_worker_starting", worker_id=self.worker_id)
         iterations = 0
         while max_iterations is None or iterations < max_iterations:
@@ -58,7 +59,7 @@ class OutboxRelayWorker:
 
             iterations += 1
 
-    async def process_event(self, event):  # noqa: C901
+    async def process_event(self, event: Any) -> None:  # noqa: C901
         logger.info("processing_outbox_event", event_type=event.event_type, event_id=event.id)
 
         if event.event_type == "TenantProvisioned":
@@ -70,7 +71,7 @@ class OutboxRelayWorker:
                     logger.warning(
                         "organization_already_exists_in_idp",
                         event_id=event.id,
-                        note="search_logic_needed_to_retrieve_org_id"
+                        note="search_logic_needed_to_retrieve_org_id",
                     )
                 raise
 
@@ -110,7 +111,7 @@ class OutboxRelayWorker:
                     logger.warning(
                         "user_already_exists_in_idp",
                         event_id=event.id,
-                        note="search_logic_needed_to_retrieve_user_id"
+                        note="search_logic_needed_to_retrieve_user_id",
                     )
                 raise
 
@@ -157,8 +158,9 @@ class OutboxRelayWorker:
             raise ValueError(f"Unknown event type: {event.event_type}")
 
 
-async def main():
+async def main() -> None:
     import logging
+
     logging.basicConfig(level=logging.INFO)
 
     container = Container()

@@ -23,7 +23,7 @@ class UcpUnitOfWorkPort(ABC):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type: any, exc_val: any, exc_tb: any) -> None:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         pass
 
     @abstractmethod

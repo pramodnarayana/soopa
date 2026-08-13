@@ -26,7 +26,7 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
             await self.session.begin()
         return self
 
-    async def __aexit__(self, exc_type: any, exc_val: any, exc_tb: any) -> None:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if exc_type is not None:
             await self.rollback()
         # Note: We do NOT auto-commit on success here.

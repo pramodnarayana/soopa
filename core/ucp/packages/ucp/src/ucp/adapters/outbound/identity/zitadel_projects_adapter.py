@@ -143,7 +143,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
 
             users_with_roles.append(
                 ZitadelUser(
-                    id=u.id,
+                    userId=u.id,
                     email=email,
                     displayName=display_name,
                     firstName=first_name,

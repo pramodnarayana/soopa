@@ -1,5 +1,4 @@
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Protocol
 
 from pydantic import AliasChoices, BaseModel, Field
@@ -18,5 +17,4 @@ class UcpEventListenerPort(Protocol):
     Yields events one by one, managing acknowledgment implicitly on yield exit.
     """
 
-    @asynccontextmanager
-    async def process_next_event(self) -> AsyncGenerator[UcpEventMessage | None, None]: ...
+    def process_next_event(self) -> AbstractAsyncContextManager[UcpEventMessage | None]: ...

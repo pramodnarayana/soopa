@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import aioboto3
 import structlog
@@ -24,10 +25,10 @@ class SnsOutboxPublisher(OutboxPublisherPort):
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
-        self._client = None
-        self._client_context = None
+        self._client: Any = None
+        self._client_context: Any = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "SnsOutboxPublisher":
         """Allows using the publisher as a context manager for batch publishing."""
         if not self._client:
             self._client_context = self.session.client(
@@ -38,7 +39,7 @@ class SnsOutboxPublisher(OutboxPublisherPort):
             self._client = await self._client_context.__aenter__()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self._client_context:
             await self._client_context.__aexit__(exc_type, exc_val, exc_tb)
             self._client = None
@@ -54,7 +55,9 @@ class SnsOutboxPublisher(OutboxPublisherPort):
             "eventType": event.event_type,
             "tenantId": event.tenant_id,
             "payload": event.payload,
-            "publishedAt": event.published_at.isoformat() if event.published_at else None,
+            "publishedAt": event.created_at.isoformat()
+            if hasattr(event, "created_at") and event.created_at
+            else None,
         }
 
         try:
@@ -74,15 +77,17 @@ class SnsOutboxPublisher(OutboxPublisherPort):
             logger.exception("sns_publish_failed", event_id=event.id)
             raise
 
-    async def _publish_internal(self, sns_client, event: OutboxEvent, message: dict) -> None:
-        publish_params = {
+    async def _publish_internal(
+        self, sns_client: Any, event: OutboxEvent, message: dict[str, Any]
+    ) -> None:
+        publish_params: dict[str, Any] = {
             "TopicArn": self.topic_arn,
             "Message": json.dumps(message),
         }
         # Only include FIFO-specific parameters if the topic is FIFO
         if self.topic_arn.endswith(".fifo"):
-            publish_params["MessageGroupId"] = event.tenant_id
-            publish_params["MessageDeduplicationId"] = event.idempotency_key
+            publish_params["MessageGroupId"] = event.tenant_id or "default"
+            publish_params["MessageDeduplicationId"] = event.idempotency_key or event.id
 
         await sns_client.publish(**publish_params)
         logger.debug("sns_event_published", event_type=event.event_type, topic_arn=self.topic_arn)
