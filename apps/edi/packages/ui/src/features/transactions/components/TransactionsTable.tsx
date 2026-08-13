@@ -1,3 +1,4 @@
+import { Badge } from '@soopa/ui';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
   createColumnHelper,
@@ -7,7 +8,6 @@ import {
 } from '@tanstack/react-table';
 import { Database } from 'lucide-react';
 import React from 'react';
-import { Badge } from '../../../components/ui/badge';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────

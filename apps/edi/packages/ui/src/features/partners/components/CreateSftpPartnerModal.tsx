@@ -1,10 +1,10 @@
+import { RadioGroup, RadioGroupItem } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
 import { CheckCircle2, Copy, Network, Play, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FormModal } from '../../../components/ui/form-modal';
-import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
 import { useToast } from '../../../hooks/use-toast';
 import { useCreateSftpPartnerMutation, useTestSftpConnectionMutation } from '../api/partnerHooks';
 

@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
@@ -10,7 +11,6 @@ import {
 import { Input } from '@soopa/ui/components/ui/input';
 import { AlertTriangle, Check, Copy } from 'lucide-react';
 import { useState } from 'react';
-import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert';
 import { useToast } from '../../../hooks/use-toast';
 import type { ApiTokenCreated } from '../types';
 

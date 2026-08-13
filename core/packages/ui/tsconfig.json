@@ -11,6 +11,7 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
+    "rootDir": ".",
     "ignoreDeprecations": "6.0",
     "paths": {
       "@soopa/ui/*": ["./src/*"],

@@ -1,3 +1,13 @@
+import {
+  Combobox,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  SearchableSelect,
+} from '@soopa/ui';
 import { Input } from '@soopa/ui/components/ui/input';
 import {
   Select,
@@ -8,17 +18,7 @@ import {
 } from '@soopa/ui/components/ui/select';
 import { useState } from 'react';
 import type { ControllerRenderProps } from 'react-hook-form';
-import { Combobox } from '../../../components/ui/combobox';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '../../../components/ui/form';
 import { FormModal } from '../../../components/ui/form-modal';
-import { SearchableSelect } from '../../../components/ui/searchable-select';
 import {
   type AS2PartnershipFormValues,
   useCreateAS2PartnershipForm,

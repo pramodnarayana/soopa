@@ -1,7 +1,7 @@
 import hashlib
 import os
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 
@@ -34,8 +34,8 @@ class CreateApiTokenUseCase:
                 last_used_at=None,
                 expires_at=command.expires_at,
                 active=True,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
 
             created_token = await self.uow.api_token_repo.create(token_model)

@@ -1,3 +1,4 @@
+import { Combobox, SearchableSelect } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
@@ -11,9 +12,7 @@ import {
 import { CheckCircle2, Loader2, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Combobox } from '../../../components/ui/combobox';
 import { EdiEditorPane } from '../../../components/ui/edi-editor-pane';
-import { SearchableSelect } from '../../../components/ui/searchable-select';
 import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
 import { useToast } from '../../../hooks/use-toast';
 import {

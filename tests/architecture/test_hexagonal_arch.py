@@ -21,10 +21,35 @@ def test_edi_domain_is_isolated():
     """
     (
         archrule("EDI Domain Isolation")
-        .match("apps.edi.packages.domain*")
-        .should_not_import("apps.edi.packages.database*")
-        .should_not_import("apps.edi.packages.pipeline*")
-        .check("apps.edi.packages")
+        .match("domain*")
+        .should_not_import("database*")
+        .should_not_import("pipeline*")
+        .check("domain")
+    )
+
+
+def test_ucp_application_is_isolated():
+    """
+    Enforce that UCP Application Layer (UseCases) cannot import from Adapters.
+    They must rely strictly on Ports (Dependency Inversion).
+    """
+    (
+        archrule("UCP Application Isolation")
+        .match("ucp.application*")
+        .should_not_import("ucp.adapters*")
+        .check("ucp")
+    )
+
+
+def test_edi_application_is_isolated():
+    """
+    Enforce that EDI Application Layer cannot import from Adapters.
+    """
+    (
+        archrule("EDI Application Isolation")
+        .match("edi.core*")
+        .should_not_import("edi.adapters*")
+        .check("edi")
     )
 
 

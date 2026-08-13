@@ -1,3 +1,4 @@
+import { Combobox } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
@@ -21,7 +22,6 @@ import {
 import { pki } from 'node-forge';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Combobox } from '../../../components/ui/combobox';
 import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
 import { useToast } from '../../../hooks/use-toast';
 import {

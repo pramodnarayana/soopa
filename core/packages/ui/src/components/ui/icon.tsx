@@ -29,11 +29,22 @@ const iconVariants = cva('', {
 });
 
 export interface IconProps
-  extends Omit<LucideProps, 'className' | 'color' | 'size'>,
+  extends Omit<LucideProps, 'color' | 'size'>,
     VariantProps<typeof iconVariants> {
   icon: LucideIcon;
 }
 
-export function Icon({ icon: LucideIconComponent, size, color, ...props }: IconProps) {
-  return <LucideIconComponent className={cn(iconVariants({ size, color }))} {...props} />;
-}
+const Icon = React.forwardRef<SVGSVGElement, IconProps>(
+  ({ className, icon: LucideIconComponent, size, color, ...props }, ref) => {
+    return (
+      <LucideIconComponent
+        ref={ref}
+        className={cn(iconVariants({ size, color }), className)}
+        {...props}
+      />
+    );
+  },
+);
+Icon.displayName = 'Icon';
+
+export { Icon };

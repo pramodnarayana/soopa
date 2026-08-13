@@ -1,8 +1,8 @@
+import { SearchableSelect } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
 import { useState } from 'react';
-import { SearchableSelect } from '../../../components/ui/searchable-select';
 import { useToast } from '../../../hooks/use-toast';
 import { useCreateOutboundRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';

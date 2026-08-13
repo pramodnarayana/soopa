@@ -2,7 +2,33 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from types import TracebackType
+from typing import Any, Protocol
+
+
+class SQSClientProtocol(Protocol):
+    async def get_queue_url(self, QueueName: str) -> dict[str, Any]: ...
+
+    async def receive_message(
+        self, QueueUrl: str, MaxNumberOfMessages: int, WaitTimeSeconds: int
+    ) -> dict[str, Any]: ...
+
+    async def delete_message(self, QueueUrl: str, ReceiptHandle: str) -> dict[str, Any]: ...
+
+    async def send_message(
+        self, QueueUrl: str, MessageBody: str, MessageGroupId: str, MessageDeduplicationId: str
+    ) -> dict[str, Any]: ...
+
+
+class SQSClientContextProtocol(Protocol):
+    async def __aenter__(self) -> SQSClientProtocol: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None: ...
+
 
 import aioboto3
 import structlog
@@ -42,11 +68,11 @@ class SqsOutboxAdapter(OutboxPort):
             self.endpoint_url = "http://localhost:4566"
         self.region = "us-east-1"
         self.session = aioboto3.Session()
-        self._client = None
-        self._client_context = None
+        self._client: SQSClientProtocol | None = None
+        self._client_context: SQSClientContextProtocol | None = None
         self._queue_url: str | None = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "SqsOutboxAdapter":
         if not self._client:
             self._client_context = self.session.client(
                 "sqs", endpoint_url=self.endpoint_url, region_name=self.region
@@ -54,7 +80,12 @@ class SqsOutboxAdapter(OutboxPort):
             self._client = await self._client_context.__aenter__()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self._client_context:
             await self._client_context.__aexit__(exc_type, exc_val, exc_tb)
             self._client = None
@@ -67,7 +98,7 @@ class SqsOutboxAdapter(OutboxPort):
             self._client = None
             self._client_context = None
 
-    async def _get_queue_url(self, sqs) -> str:
+    async def _get_queue_url(self, sqs: SQSClientProtocol) -> str:
         if self._queue_url:
             return self._queue_url
         try:
@@ -94,7 +125,9 @@ class SqsOutboxAdapter(OutboxPort):
                 yield event
 
     @asynccontextmanager
-    async def _process_with_client(self, sqs) -> AsyncIterator[OutboxEvent | None]:
+    async def _process_with_client(
+        self, sqs: SQSClientProtocol
+    ) -> AsyncIterator[OutboxEvent | None]:
         try:
             queue_url = await self._get_queue_url(sqs)
         except Exception:  # noqa: BLE001

@@ -158,7 +158,7 @@ function TemplateEditorPanel({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent size="6xl" className="p-0 gap-0 overflow-hidden bg-slate-50">
+      <DialogContent className="max-w-6xl p-0 gap-0 overflow-hidden bg-slate-50">
         <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100">

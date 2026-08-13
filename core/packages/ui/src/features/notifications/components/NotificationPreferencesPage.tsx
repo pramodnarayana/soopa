@@ -146,7 +146,9 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
         </div>
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline">Close</Button>} />
+          <DialogClose asChild>
+            <Button variant="outline">Close</Button>
+          </DialogClose>
           <Button onClick={handleSave} disabled={isSaving}>
             <Save className="w-3.5 h-3.5" />
             {isSaving ? 'Saving…' : 'Save Rule'}

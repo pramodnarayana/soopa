@@ -7,6 +7,7 @@ from typing import Any
 import aioboto3
 import structlog
 
+from worker.adapters.aws_types import SQSClientProtocol
 from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
 
 logger = structlog.get_logger(__name__)
@@ -18,7 +19,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
         self.region = region
         self.session = aioboto3.Session()
         self._queue_url_cache: dict[str, str] = {}
-        self._sqs_client = None
+        self._sqs_client: SQSClientProtocol | None = None
 
     @asynccontextmanager
     async def connect(self) -> AsyncIterator["MessagePublisherPort"]:
@@ -32,7 +33,11 @@ class SqsPublisherAdapter(MessagePublisherPort):
                 self._sqs_client = None
 
     async def _send_batch_chunk(
-        self, queue_name: str, queue_url: str, sqs: Any, batch: list[PublishMessageEnvelope]
+        self,
+        queue_name: str,
+        queue_url: str,
+        sqs: SQSClientProtocol,
+        batch: list[PublishMessageEnvelope],
     ) -> list[str]:
         entries = []
         for msg in batch:
