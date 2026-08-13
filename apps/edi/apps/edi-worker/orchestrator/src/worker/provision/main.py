@@ -1,6 +1,6 @@
 import asyncio
-import logging
 
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from dotenv import load_dotenv
@@ -13,23 +13,36 @@ from worker.core.service import ProvisioningWorkerService
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 PROVISIONING_QUEUE_NAME = "edi-tenant-sync.fifo"
 
 
 async def run_worker(service: ProvisioningWorkerService, name: str) -> None:
-    logger.info(f"[{name}] Started polling for PROVISION events")
-    while True:
-        try:
-            processed_event = await service.process_next_event()
-            # If no event was processed, yield/sleep briefly
-            if not processed_event:
-                await asyncio.sleep(0.1)
-        except Exception:
-            logger.exception(f"[{name}] Error in provisioning loop")
+    bound_logger = logger.bind(worker_name=name)
+    bound_logger.info("worker_started")
 
-            await asyncio.sleep(5)
+    async def _poll_loop() -> None:
+        while True:
+            try:
+                processed_event = await service.process_next_event()
+                # If no event was processed, yield/sleep briefly
+                if not processed_event:
+                    await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                bound_logger.exception("provisioning_loop_error")
+                await asyncio.sleep(5)
+
+    try:
+        if hasattr(service.outbox_port, "__aenter__"):
+            async with service.outbox_port:  # type: ignore
+                await _poll_loop()
+        else:
+            await _poll_loop()
+    except asyncio.CancelledError:
+        pass
 
 
 async def main() -> None:
@@ -39,18 +52,18 @@ async def main() -> None:
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
     # 1. Internal DB Listener (Postgres LISTEN/NOTIFY)
-    logger.info("Initializing Internal (Postgres) message listener")
+    logger.info("initializing_internal_postgres_listener")
     internal_outbox = ListenNotifyOutboxAdapter(db_url=settings.database.global_url)
     internal_service = ProvisioningWorkerService(
         tenant_adapter, internal_outbox, replication_adapter
     )
 
     # 2. AWS SQS Consumer
-    logger.info("Initializing AWS (SQS) message consumer")
+    logger.info("initializing_aws_sqs_consumer")
     aws_outbox = SqsOutboxAdapter(queue_name=PROVISIONING_QUEUE_NAME)
     aws_service = ProvisioningWorkerService(tenant_adapter, aws_outbox, replication_adapter)
 
-    logger.info("Starting unified Enterprise Provisioning Worker (Internal + AWS + Sweeper)...")
+    logger.info("starting_unified_provisioning_worker")
 
     internal_task = asyncio.create_task(run_worker(internal_service, "InternalListener"))
     aws_task = asyncio.create_task(run_worker(aws_service, "AwsListener"))
@@ -62,7 +75,7 @@ async def main() -> None:
     try:
         await asyncio.gather(internal_task, aws_task, sweeper_task)
     finally:
-        logger.info("Shutting down worker tasks gracefully...")
+        logger.info("shutting_down_gracefully")
         internal_task.cancel()
         aws_task.cancel()
         sweeper_task.cancel()
@@ -77,5 +90,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

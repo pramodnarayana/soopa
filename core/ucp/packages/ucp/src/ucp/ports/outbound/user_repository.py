@@ -8,6 +8,10 @@ class IUserRepository(Protocol):
         """Finds all users associated with a specific tenant"""
         ...
 
+    async def find_by_email(self, email: str) -> User | None:
+        """Finds a user by their email address"""
+        ...
+
     async def delete_orphaned_users(self, user_ids: list[str]) -> None:
         """Deletes users if they are not associated with any active tenants"""
         ...

@@ -1,8 +1,8 @@
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import structlog
 from domain.events import (
     EdiEventType,
     ProvisioningEvent,
@@ -18,15 +18,13 @@ from worker.ports.outbox import OutboxPort
 from worker.ports.replication import ReplicationPort
 from worker.ports.tenant import TenantPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def handle_provision_all_tenants(
     service: "ProvisioningWorkerService", event: ProvisioningEvent, event_id: str
 ) -> None:
-    logger.info(
-        f"[DEV-LOG] Processing global provision event {event_id} for all tenants. Broadcasting..."
-    )
+    logger.info("processing_global_provision_event", event_id=event_id, action="broadcasting")
     try:
         all_tenant_ids = await service.tenant_port.get_all_tenant_ids()
         _semaphore = asyncio.Semaphore(10)
@@ -43,7 +41,10 @@ async def handle_provision_all_tenants(
         for t_id, result in zip(all_tenant_ids, results, strict=False):
             if isinstance(result, Exception):
                 logger.exception(
-                    f"Failed to broadcast global event {event_id} to tenant {t_id}: {result}",
+                    "global_event_broadcast_failed",
+                    event_id=event_id,
+                    tenant_id=t_id,
+                    error=str(result),
                     exc_info=result,
                 )
                 if not isinstance(result, PermanentProvisioningError):
@@ -105,7 +106,8 @@ class ProvisioningWorkerService:
     async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
         if tenant_id == PLATFORM_TENANT_ID:
             logger.info(
-                f"[DEV-LOG] Master Tenant detected. Broadcasting global platform event {replicate_fn.__name__} to all tenant databases"
+                "master_tenant_detected_broadcasting",
+                replicate_fn=replicate_fn.__name__,
             )
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []
@@ -114,7 +116,7 @@ class ProvisioningWorkerService:
                     await replicate_fn(t_id, *args)
                 except PermanentProvisioningError:
                     # Log permanent errors but don't retry them
-                    logger.exception("Permanent error for tenant %s", t_id)
+                    logger.exception("permanent_provisioning_error_ignored", tenant_id=t_id)
 
                 except Exception as e:  # noqa: BLE001
                     transient_errors.append(e)
@@ -138,18 +140,18 @@ class ProvisioningWorkerService:
                 parsed_event = self._event_adapter.validate_python(body)
             except ValidationError as e:
                 # If we don't know how to handle it, we permanently fail it so it goes to DLQ
-                logger.exception(f"Validation error for event type '{event.event_type}'")
+                logger.exception("provisioning_event_validation_error", event_type=event.event_type)
 
                 raise PermanentProvisioningError(
                     f"Invalid provision event payload for {event.event_type}: {e}"
                 ) from e
 
             try:
-                if parsed_event.event_type == LegacyUcpEventType.PROVISION_ALL_TENANTS:
+                if parsed_event.event_type.value == LegacyUcpEventType.PROVISION_ALL_TENANTS.value:
                     await handle_provision_all_tenants(self, parsed_event, str(event.id))
-                elif parsed_event.event_type == LegacyUcpEventType.PROVISION_TENANT:
+                elif parsed_event.event_type.value == LegacyUcpEventType.PROVISION_TENANT.value:
                     logger.info(
-                        f"[DEV-LOG] Provisioning tenant configuration for {parsed_event.tenant_id}"
+                        "provisioning_tenant_configuration", tenant_id=parsed_event.tenant_id
                     )
                     await self.replication_port.replicate_tenant_configuration(
                         parsed_event.tenant_id
@@ -167,7 +169,10 @@ class ProvisioningWorkerService:
                         )
 
                     logger.info(
-                        f"[DEV-LOG] Dispatching {parsed_event.event_type} for resource {parsed_event.resource_id} in tenant {parsed_event.tenant_id}"
+                        "dispatching_provision_event",
+                        event_type=parsed_event.event_type,
+                        resource_id=parsed_event.resource_id,
+                        tenant_id=parsed_event.tenant_id,
                     )
                     await self._broadcast_or_replicate(
                         parsed_event.tenant_id, handler, parsed_event.resource_id
@@ -177,7 +182,7 @@ class ProvisioningWorkerService:
             except TransientProvisioningError:
                 raise
             except Exception as e:
-                logger.exception(f"Failed to process event {event.id}")
+                logger.exception("provisioning_event_processing_failed", event_id=event.id)
 
                 raise TransientProvisioningError(f"Failed to process event {event.id}: {e}") from e
 

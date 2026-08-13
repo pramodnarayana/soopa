@@ -2,20 +2,30 @@ from dependency_injector import containers, providers
 
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
+from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.tenant_query_service import DatabaseTenantQueryService
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.adapters.outbound.database.user_repository import UserRepository
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
 from ucp.adapters.outbound.identity.zitadel_organizations_adapter import ZitadelOrganizationsAdapter
 from ucp.adapters.outbound.identity.zitadel_projects_adapter import ZitadelProjectsAdapter
 from ucp.adapters.outbound.identity.zitadel_users_adapter import ZitadelUsersAdapter
-from ucp.application.services.api_token_service import ApiTokenService
+from ucp.application.use_cases.api_tokens import (
+    CreateApiTokenUseCase,
+    DeleteApiTokenUseCase,
+    ListApiTokensUseCase,
+    UpdateApiTokenUseCase,
+)
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.delete_user_use_case import DeleteUserUseCase
 from ucp.application.use_cases.invite_user_use_case import InviteUserUseCase
 from ucp.application.use_cases.provision_tenant_use_case import ProvisionTenantUseCase
+from ucp.application.use_cases.toggle_tenant_status_use_case import ToggleTenantStatusUseCase
 from ucp.application.use_cases.toggle_user_status_use_case import ToggleUserStatusUseCase
+from ucp.application.use_cases.update_tenant_name_use_case import UpdateTenantNameUseCase
 from ucp.application.use_cases.update_user_use_case import UpdateUserUseCase
+from ucp.core.container import _async_session_maker
 
 
 class Container(containers.DeclarativeContainer):
@@ -46,53 +56,79 @@ class Container(containers.DeclarativeContainer):
     app_repo = providers.Factory(PostgresAppRepository)
     user_repo = providers.Factory(UserRepository)
     api_token_repo = providers.Factory(PostgresApiTokenRepository)
+    session_factory_provider = providers.Object(_async_session_maker)
+    outbox_repo = providers.Factory(
+        PostgresOutboxRepository, session_factory=session_factory_provider
+    )
+
+    # -----------------------------------------------------------------------
+    # Unit Of Work (Session provided at runtime via kwargs)
+    # -----------------------------------------------------------------------
+    uow = providers.Factory(SqlAlchemyUcpUnitOfWork)
 
     # -----------------------------------------------------------------------
     # Services & Use Cases
     # -----------------------------------------------------------------------
-    api_token_service = providers.Factory(
-        ApiTokenService,
-        token_repo=api_token_repo,
+    create_api_token_use_case = providers.Factory(
+        CreateApiTokenUseCase,
+        uow=uow,
+    )
+
+    update_api_token_use_case = providers.Factory(
+        UpdateApiTokenUseCase,
+        uow=uow,
+    )
+
+    list_api_tokens_use_case = providers.Factory(
+        ListApiTokensUseCase,
+        uow=uow,
+    )
+
+    delete_api_token_use_case = providers.Factory(
+        DeleteApiTokenUseCase,
+        uow=uow,
     )
 
     provision_tenant_use_case = providers.Factory(
         ProvisionTenantUseCase,
-        tenant_repo=tenant_repo,
-        org_provider=org_provider,
-        user_provider=user_provider,
+        uow=uow,
     )
 
     delete_tenant_use_case = providers.Factory(
         DeleteTenantUseCase,
-        tenant_repo=tenant_repo,
-        user_repo=user_repo,
-        org_provider=org_provider,
+        uow=uow,
+    )
+
+    update_tenant_name_use_case = providers.Factory(
+        UpdateTenantNameUseCase,
+        uow=uow,
+    )
+
+    toggle_tenant_status_use_case = providers.Factory(
+        ToggleTenantStatusUseCase,
+        uow=uow,
     )
 
     invite_user_use_case = providers.Factory(
         InviteUserUseCase,
-        tenant_repo=tenant_repo,
-        user_repo=user_repo,
+        uow=uow,
         idp=user_provider,
     )
 
     update_user_use_case = providers.Factory(
         UpdateUserUseCase,
-        tenant_repo=tenant_repo,
-        user_repo=user_repo,
+        uow=uow,
         idp=user_provider,
     )
 
     toggle_user_status_use_case = providers.Factory(
         ToggleUserStatusUseCase,
-        tenant_repo=tenant_repo,
-        user_repo=user_repo,
+        uow=uow,
         idp=user_provider,
     )
 
     delete_user_use_case = providers.Factory(
         DeleteUserUseCase,
-        tenant_repo=tenant_repo,
-        user_repo=user_repo,
+        uow=uow,
         idp=user_provider,
     )

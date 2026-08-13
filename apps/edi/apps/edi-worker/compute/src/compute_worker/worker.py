@@ -3,7 +3,7 @@ import json
 import logging
 import typing
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3
 from transformer.application.use_cases import ProcessInboundEdiUseCase
 
 logger = logging.getLogger(__name__)

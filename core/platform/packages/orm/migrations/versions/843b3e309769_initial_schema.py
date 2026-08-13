@@ -356,9 +356,37 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "event_type", name="notification_route_idx"),
         schema="notifications",
     )
+
+    # --- Custom Postgres Triggers for Transactional Outbox ---
+    op.execute("""
+        CREATE OR REPLACE FUNCTION ucp_outbox_notify() RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_notify('ucp_outbox_wakeup', 'new_event');
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+    op.execute("""
+        CREATE TRIGGER trg_ucp_outbox_notify
+        AFTER INSERT ON ucp.outbox
+        FOR EACH ROW EXECUTE FUNCTION ucp_outbox_notify();
+    """)
+
+    op.execute("""
+        CREATE OR REPLACE FUNCTION notification_outbox_notify() RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_notify('notification_outbox_wakeup', 'new_event');
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+    op.execute("""
+        CREATE TRIGGER trg_notification_outbox_notify
+        AFTER INSERT ON notifications.notification_outbox
+        FOR EACH ROW EXECUTE FUNCTION notification_outbox_notify();
+    """)
     # ### end Alembic commands ###
 
 
@@ -374,6 +402,16 @@ def downgrade() -> None:
     development. Downgrading this migration drops the entire schema, which
     implicitly removes all columns introduced by the squash.
     """
+
+    # --- Drop Custom Postgres Triggers ---
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_notification_outbox_notify ON notifications.notification_outbox;"
+    )
+    op.execute("DROP FUNCTION IF EXISTS notification_outbox_notify();")
+
+    op.execute("DROP TRIGGER IF EXISTS trg_ucp_outbox_notify ON ucp.outbox;")
+    op.execute("DROP FUNCTION IF EXISTS ucp_outbox_notify();")
+
     op.drop_table("notification_route_configurations", schema="notifications")
     op.drop_index(
         "ix_in_app_notif_tenant_user_read",

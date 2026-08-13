@@ -17,6 +17,7 @@ Design invariants:
 import logging
 from collections.abc import AsyncIterator
 from contextlib import aclosing, asynccontextmanager
+from typing import Any, cast
 
 from database.connection import DatabaseRouter
 from identity.domain.identity_context import PLATFORM_TENANT_ID
@@ -116,7 +117,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 stmt = _build_fetch_all_stmt(spec, tenant_id)
                 result = await global_session.execute(stmt)
                 for entity in result.scalars().all():
-                    source_tenant_id = entity.tenant_id or tenant_id
+                    source_tenant_id = getattr(entity, "tenant_id", None) or tenant_id
                     await self._upsert_entity(
                         tenant_session, source_tenant_id, entity, spec.tenant_model
                     )
@@ -180,7 +181,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                             f"Sending to DLQ."
                         )
 
-                    dep_tenant_id = dep_entity.tenant_id or tenant_id
+                    dep_tenant_id = getattr(dep_entity, "tenant_id", None) or tenant_id
                     await self._upsert_entity(
                         tenant_session, dep_tenant_id, dep_entity, dep.tenant_model
                     )
@@ -191,7 +192,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     )
 
                 # 3. Upsert the entity — all FK dependencies are now guaranteed to exist
-                source_tenant_id = entity.tenant_id or tenant_id
+                source_tenant_id = getattr(entity, "tenant_id", None) or tenant_id
                 await self._upsert_entity(
                     tenant_session, source_tenant_id, entity, spec.tenant_model
                 )
@@ -235,7 +236,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 f"{spec.global_model.__name__} id={entity_id} not found "
                 f"in global DB for tenant={tenant_id}."
             )
-        return entity
+        return cast(DeclarativeBase, entity)
 
     # -----------------------------------------------------------------------
     # Public Granular Replication Methods
@@ -407,7 +408,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 # ---------------------------------------------------------------------------
 
 
-def _build_fetch_all_stmt(spec: EntitySpec, tenant_id: str):  # type: ignore[return]
+def _build_fetch_all_stmt(spec: EntitySpec, tenant_id: str) -> Any:
     """Constructs the SELECT statement for fetching all global entities of a given spec."""
     if spec.include_shared:
         return select(spec.global_model).where(

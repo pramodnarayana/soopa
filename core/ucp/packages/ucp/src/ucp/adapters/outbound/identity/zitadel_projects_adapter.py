@@ -142,7 +142,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             last_name = u.human.profile.last_name if u.human and u.human.profile else None
 
             users_with_roles.append(
-                ZitadelUser(  # type: ignore
+                ZitadelUser(
                     id=u.id,
                     email=email,
                     displayName=display_name,

@@ -47,18 +47,18 @@ const stackVariants = cva('flex', {
 });
 
 export interface StackProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, 'className'>,
     VariantProps<typeof stackVariants> {
   asChild?: boolean;
 }
 
 const Stack = React.forwardRef<HTMLDivElement, StackProps>(
-  ({ direction, align, justify, wrap, gap, asChild = false, className, ...props }, ref) => {
+  ({ direction, align, justify, wrap, gap, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : 'div';
     return (
       <Comp
         ref={ref}
-        className={cn(stackVariants({ direction, align, justify, wrap, gap }), className)}
+        className={cn(stackVariants({ direction, align, justify, wrap, gap }))}
         {...props}
       />
     );

@@ -126,7 +126,7 @@ class ReceiveAS2UseCase:
             route_result = await self._route_tenant(
                 as2_msg, processed_payload, tenant_id, async_exit_stack, logger
             )
-            if route_result.failed:
+            if route_result.failed or not route_result.tenant_id or not route_result.message_repo:
                 return generate_mdn(as2_msg, disposition=Disposition.INSUFFICIENT_SECURITY)
             tenant_id = route_result.tenant_id
             message_repo = route_result.message_repo
@@ -161,9 +161,7 @@ class ReceiveAS2UseCase:
             self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
             return None
 
-    def _record_message_received(
-        self, tenant_id: str, as2_msg: AS2Message, logger: Any
-    ) -> None:
+    def _record_message_received(self, tenant_id: str, as2_msg: AS2Message, logger: Any) -> None:
         self.metrics.increment(
             "as2_messages_received_total",
             labels={

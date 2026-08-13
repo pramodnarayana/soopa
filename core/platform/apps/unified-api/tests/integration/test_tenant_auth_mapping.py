@@ -57,6 +57,30 @@ def app(container):
     """Create test app with configured container."""
     test_app = FastAPI(title="Unified API Auth Mapping Test")
     test_app.include_router(router)
+
+    @test_app.middleware("http")
+    async def authentication_middleware(request: Request, call_next):
+        identity = raw_identity.model_copy()
+        repo = MockTenantRepo()
+
+        mapped_tenants = set()
+        for tid in identity.authorized_tenants:
+            if not tid.startswith("ten_") and tid != "ten_000000000000000000000000":
+                resolved_t = await repo.find_by_idp_tenant_id(tid)
+                if resolved_t:
+                    mapped_tenants.add(resolved_t.id)
+                    mapped_tenants.add(tid)  # retain IdP ID
+                    if not identity.tenant_id:
+                        identity.tenant_id = resolved_t.id
+                else:
+                    raise HTTPException(status_code=403, detail="Not found")
+            else:
+                mapped_tenants.add(tid)
+
+        identity.authorized_tenants = mapped_tenants
+        request.state.identity = identity
+        return await call_next(request)
+
     return test_app
 
 
@@ -64,6 +88,7 @@ def app(container):
 def client(app):
     """Create test client."""
     return TestClient(app)
+
 
 # 2. Simulate the Middleware mapping logic (which sits at the Unified API perimeter)
 # In standard testing, we would use the real DB. Here we test the pure mapping logic.
@@ -73,30 +98,6 @@ raw_identity = IdentityContext(
     authorized_tenants={"385223051081416707"},
     claims={},
 )
-
-
-@app.middleware("http")
-async def authentication_middleware(request: Request, call_next):
-    identity = raw_identity.model_copy()
-    repo = MockTenantRepo()
-
-    mapped_tenants = set()
-    for tid in identity.authorized_tenants:
-        if not tid.startswith("ten_") and tid != "ten_000000000000000000000000":
-            resolved_t = await repo.find_by_idp_tenant_id(tid)
-            if resolved_t:
-                mapped_tenants.add(resolved_t.id)
-                mapped_tenants.add(tid)  # retain IdP ID
-                if not identity.tenant_id:
-                    identity.tenant_id = resolved_t.id
-            else:
-                raise HTTPException(status_code=403, detail="Not found")
-        else:
-            mapped_tenants.add(tid)
-
-    identity.authorized_tenants = mapped_tenants
-    request.state.identity = identity
-    return await call_next(request)
 
 
 def test_tenant_auth_accepts_idp_id(client):

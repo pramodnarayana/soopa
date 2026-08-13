@@ -1,11 +1,11 @@
 import asyncio
-import logging
 
 import asyncpg
+import structlog
 
 from worker.adapters.listen_notify_outbox_adapter import ListenNotifyOutboxAdapter
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Backoff configuration
 INITIAL_BACKOFF = 1.0  # 1 second
@@ -19,7 +19,7 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
     A simple background job to sweep the Control Plane Outbox for abandoned PENDING events
     that might have been missed by the real-time Postgres NOTIFY listener.
     """
-    logger.info("[DEV-LOG] [Sweeper] Started background sweeper task for edi.outbox")
+    logger.info("sweeper_started", target="edi.outbox")
     pool = None
     failure_backoff = INITIAL_BACKOFF
 
@@ -50,7 +50,9 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
 
                     if claimed_ids:
                         logger.info(
-                            f"[DEV-LOG] [Sweeper] Claimed {len(claimed_ids)} abandoned PENDING events from edi.outbox. Pushing to adapter queue."
+                            "swept_abandoned_pending_events",
+                            count=len(claimed_ids),
+                            target="edi.outbox",
                         )
                         for row in claimed_ids:
                             adapter.queue.put_nowait(str(row["id"]))
@@ -61,14 +63,14 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
             except asyncio.CancelledError:
                 break
             except Exception:
-                logger.exception("[Sweeper] Error in sweep")
+                logger.exception("sweeper_run_loop_error")
 
                 # Apply exponential backoff with jitter
                 import secrets
 
                 jitter = secrets.SystemRandom().uniform(0, 0.1 * failure_backoff)
                 delay = min(failure_backoff + jitter, MAX_BACKOFF)
-                logger.warning(f"[Sweeper] Retrying after {delay:.2f} seconds")
+                logger.warning("sweeper_retrying", delay=delay)
                 await asyncio.sleep(delay)
                 # Increase backoff for next failure
                 failure_backoff = min(failure_backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)

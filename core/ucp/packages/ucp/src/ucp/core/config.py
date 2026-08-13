@@ -1,11 +1,13 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # AWS / SNS
     sns_tenant_events_topic_arn: str = ""
+    sqs_ucp_events_queue_url: str = ""
     aws_endpoint_url: str | None = None
     aws_region: str = "us-east-1"
     aws_access_key_id: str = "test"
@@ -28,12 +30,10 @@ class Settings(BaseSettings):
     # Default password for newly created users (local dev only - users must change on first login)
     zitadel_default_user_password: str = "Password1!"
 
-    from pydantic import field_validator  # type: ignore
-
     # Database
     database_url: str = ""
 
-    @field_validator("database_url")  # type: ignore
+    @field_validator("database_url")
     @classmethod
     def inject_asyncpg_driver(cls, v: str) -> str:
         if v and v.startswith("postgresql://"):
@@ -49,4 +49,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

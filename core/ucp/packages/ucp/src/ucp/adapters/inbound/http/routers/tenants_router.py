@@ -19,6 +19,14 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
+from ucp.application.use_cases.toggle_tenant_status_use_case import (
+    ToggleTenantStatusCommand,
+    ToggleTenantStatusUseCase,
+)
+from ucp.application.use_cases.update_tenant_name_use_case import (
+    UpdateTenantNameCommand,
+    UpdateTenantNameUseCase,
+)
 from ucp.bootstrap.container import Container
 from ucp.core.config import get_settings
 from ucp.core.container import get_db_session
@@ -85,7 +93,7 @@ async def provision(  # type: ignore
     use_case_factory=Depends(Provide[Container.provision_tenant_use_case.provider]),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    use_case: ProvisionTenantUseCase = use_case_factory(tenant_repo__session=session)
+    use_case: ProvisionTenantUseCase = use_case_factory(uow__session=session)
     query_service: ITenantQueryService = query_service_factory(session=session)
     command = ProvisionTenantCommand(name=dto.name)
     tenant = await use_case.execute(command, idempotency_key)
@@ -103,19 +111,16 @@ async def update_name(  # type: ignore
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
+    use_case_factory=Depends(Provide[Container.update_tenant_name_use_case.provider]),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    use_case: UpdateTenantNameUseCase = use_case_factory(uow__session=session)
     query_service: ITenantQueryService = query_service_factory(session=session)
-    tenant = await resolve_tenant(tenant_id, tenant_repo)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
-    tenant.rename(dto.name)
-    await tenant_repo.save(tenant, idempotency_key)
+    command = UpdateTenantNameCommand(tenant_id=tenant_id, name=dto.name)
+    await use_case.execute(command, idempotency_key)
 
-    tenant_rm = await query_service.get_tenant_by_id(tenant.id)
+    tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     assert tenant_rm is not None
     return TenantResponse.from_read_model(tenant_rm)
 
@@ -128,19 +133,16 @@ async def update_status(  # type: ignore
     _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
+    use_case_factory=Depends(Provide[Container.toggle_tenant_status_use_case.provider]),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    use_case: ToggleTenantStatusUseCase = use_case_factory(uow__session=session)
     query_service: ITenantQueryService = query_service_factory(session=session)
-    tenant = await resolve_tenant(tenant_id, tenant_repo)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
-    tenant.change_status(dto.status)  # type: ignore
-    await tenant_repo.save(tenant, idempotency_key)
+    command = ToggleTenantStatusCommand(tenant_id=tenant_id, status=dto.status)
+    await use_case.execute(command, idempotency_key)
 
-    tenant_rm = await query_service.get_tenant_by_id(tenant.id)
+    tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     assert tenant_rm is not None
     return TenantResponse.from_read_model(tenant_rm)
 
@@ -157,8 +159,7 @@ async def remove(  # type: ignore
 ):
     tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
     use_case: DeleteTenantUseCase = use_case_factory(
-        tenant_repo__session=session,
-        user_repo__session=session,
+        uow__session=session,
     )
     tenant = await resolve_tenant(tenant_id, tenant_repo)
     if not tenant:

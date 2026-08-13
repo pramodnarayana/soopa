@@ -1,17 +1,17 @@
 import json
-import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import aioboto3
+import structlog
 
 from worker.adapters.acl.registry import translate_external_event
 from worker.core.errors import PermanentProvisioningError
 from worker.ports.outbox import OutboxEvent, OutboxPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SqsEvent(OutboxEvent):
@@ -42,111 +42,142 @@ class SqsOutboxAdapter(OutboxPort):
             self.endpoint_url = "http://localhost:4566"
         self.region = "us-east-1"
         self.session = aioboto3.Session()
+        self._client = None
+        self._client_context = None
+        self._queue_url: str | None = None
+
+    async def __aenter__(self):
+        if not self._client:
+            self._client_context = self.session.client(
+                "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+            )
+            self._client = await self._client_context.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._client_context:
+            await self._client_context.__aexit__(exc_type, exc_val, exc_tb)
+            self._client = None
+            self._client_context = None
 
     async def close(self) -> None:
         """Close the adapter and release all resources."""
-        # aioboto3 sessions are lightweight and don't hold persistent connections
-        # The session itself doesn't need explicit cleanup, but we provide this
-        # method for interface consistency with other adapters
-        logger.info("Closed SqsOutboxAdapter resources")
+
+    async def _get_queue_url(self, sqs) -> str:
+        if self._queue_url:
+            return self._queue_url
+        try:
+            queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
+            self._queue_url = queue_url_response["QueueUrl"]
+            return self._queue_url
+        except Exception:
+            logger.exception("sqs_queue_url_resolution_failed", queue_name=self.queue_name)
+            raise
 
     @asynccontextmanager
     async def process_next_event(self) -> AsyncIterator[OutboxEvent | None]:
-        async with self.session.client(
-            "sqs", endpoint_url=self.endpoint_url, region_name=self.region
-        ) as sqs:
-            try:
-                queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
-                queue_url = queue_url_response["QueueUrl"]
-            except Exception:
-                logger.exception(f"Failed to get queue URL for {self.queue_name}")
+        if self._client:
+            sqs = self._client
+            async with self._process_with_client(sqs) as event:
+                yield event
+        else:
+            async with (
+                self.session.client(
+                    "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+                ) as sqs,
+                self._process_with_client(sqs) as event,
+            ):
+                yield event
 
-                yield None
-                return
+    @asynccontextmanager
+    async def _process_with_client(self, sqs) -> AsyncIterator[OutboxEvent | None]:
+        try:
+            queue_url = await self._get_queue_url(sqs)
+        except Exception:  # noqa: BLE001
+            yield None
+            return
 
-            response = await sqs.receive_message(
-                QueueUrl=queue_url,
-                MaxNumberOfMessages=1,
-                WaitTimeSeconds=5,
-            )
+        response = await sqs.receive_message(
+            QueueUrl=queue_url,
+            MaxNumberOfMessages=1,
+            WaitTimeSeconds=5,
+        )
 
-            logger.debug(
-                f"SQS receive_message: {len(response.get('Messages', []))} message(s) received"
-            )
+        messages = response.get("Messages", [])
+        if not messages:
+            yield None
+            return
 
-            messages = response.get("Messages", [])
-            if not messages:
-                yield None
-                return
+        msg = messages[0]
+        receipt_handle = msg["ReceiptHandle"]
+        message_id = msg["MessageId"]
+        body_str = msg.get("Body", "{}")
 
-            msg = messages[0]
-            receipt_handle = msg["ReceiptHandle"]
-            message_id = msg["MessageId"]
-            body_str = msg.get("Body", "{}")
+        try:
+            raw_body = json.loads(body_str)
+            # Handle SNS Envelope
+            if "Type" in raw_body and raw_body["Type"] == "Notification" and "Message" in raw_body:
+                body = json.loads(raw_body["Message"])
+            else:
+                body = raw_body
 
-            try:
-                raw_body = json.loads(body_str)
-                # Handle SNS Envelope
-                if (
-                    "Type" in raw_body
-                    and raw_body["Type"] == "Notification"
-                    and "Message" in raw_body
-                ):
-                    body = json.loads(raw_body["Message"])
-                else:
-                    body = raw_body
-
-                # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
-                external_event_type = body.get("eventType")
-                if external_event_type:
-                    try:
-                        translated_body = translate_external_event(external_event_type, body)
-                        if translated_body is None:
-                            # Unregistered event type - leave message for retry/DLQ
-                            logger.warning(
-                                f"Unregistered event type '{external_event_type}' in message {message_id}. "
-                                f"Leaving message for retry or DLQ routing."
-                            )
-                            yield None
-                            return
-                        body = translated_body
-                    except ValueError:
-                        # Permanent validation error - malformed message
-                        logger.exception(
-                            "Permanent validation error for event type '%s' in message %s. "
-                            "Message body: %s. Deleting malformed message.",
-                            external_event_type,
-                            message_id,
-                            body,
+            # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
+            external_event_type = body.get("eventType")
+            if external_event_type:
+                try:
+                    translated_body = translate_external_event(external_event_type, body)
+                    if translated_body is None:
+                        # Unregistered event type - leave message for retry/DLQ
+                        logger.warning(
+                            "unregistered_external_event_type",
+                            external_event_type=external_event_type,
+                            message_id=message_id,
+                            action="leave_for_dlq",
                         )
-                        await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                         yield None
                         return
-            except json.JSONDecodeError:
-                logger.exception(f"Failed to parse JSON body from SQS message {message_id}")
-                await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
-                yield None
-                return
-
-            event = SqsEvent(message_id=message_id, receipt_handle=receipt_handle, body=body)
-            logger.info(f"Picked up SQS event {message_id}")
-
-            try:
-                yield event
-                # Delete the message on success
-                await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
-                logger.info(f"Successfully processed and deleted SQS message {message_id}")
-            except Exception as e:
-                if isinstance(e, PermanentProvisioningError):
+                    body = translated_body
+                except ValueError:
+                    # Permanent validation error - malformed message
                     logger.exception(
-                        "Permanent error processing event %s. Removing from queue.", event.id
+                        "permanent_validation_error",
+                        external_event_type=external_event_type,
+                        message_id=message_id,
+                        body=body,
+                        action="delete_message",
                     )
                     await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
-                else:
-                    logger.exception(
-                        "Transient error processing event %s. Leaving on queue.", event.id
-                    )
-                raise
+                    yield None
+                    return
+        except json.JSONDecodeError:
+            logger.exception(
+                "sqs_message_json_decode_failed",
+                message_id=message_id,
+                payload=body_str,
+            )
+            await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+            yield None
+            return
+
+        event = SqsEvent(message_id=message_id, receipt_handle=receipt_handle, body=body)
+        logger.info("sqs_event_picked_up", message_id=message_id)
+
+        try:
+            yield event
+            # Delete the message on success
+            await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+            logger.info("sqs_message_processed_and_deleted", message_id=message_id)
+        except Exception as e:
+            if isinstance(e, PermanentProvisioningError):
+                logger.exception(
+                    "permanent_provisioning_error", event_id=event.id, action="delete_message"
+                )
+                await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+            else:
+                logger.exception(
+                    "transient_provisioning_error", event_id=event.id, action="leave_on_queue"
+                )
+            raise
 
     async def publish_event(
         self,
@@ -159,13 +190,7 @@ class SqsOutboxAdapter(OutboxPort):
         async with self.session.client(
             "sqs", endpoint_url=self.endpoint_url, region_name=self.region
         ) as sqs:
-            try:
-                queue_url_response = await sqs.get_queue_url(QueueName=self.queue_name)
-                queue_url = queue_url_response["QueueUrl"]
-            except Exception:
-                logger.exception(f"Failed to get queue URL for {self.queue_name}")
-
-                raise
+            queue_url = await self._get_queue_url(sqs)
 
             message_body = json.dumps(
                 {
@@ -182,4 +207,9 @@ class SqsOutboxAdapter(OutboxPort):
                 MessageGroupId=tenant_id,
                 MessageDeduplicationId=idempotency_key,
             )
-            logger.info(f"Published event {event_type} for tenant {tenant_id} to {self.queue_name}")
+            logger.info(
+                "sqs_event_published",
+                event_type=event_type,
+                tenant_id=tenant_id,
+                queue_name=self.queue_name,
+            )

@@ -37,6 +37,24 @@ class UserRepository(IUserRepository):
             users.append(u)
         return users
 
+    async def find_by_email(self, email: str) -> User | None:
+        stmt = select(DbUser).where(DbUser.email == email)
+        result = await self.session.execute(stmt)
+        db_user = result.scalar_one_or_none()
+
+        if not db_user:
+            return None
+
+        return User(
+            id=db_user.id,
+            idp_user_id=db_user.idp_user_id,
+            email=db_user.email,
+            name=db_user.name or "",
+            status=db_user.status,
+            created_at=db_user.created_at.replace(tzinfo=UTC),
+            updated_at=db_user.updated_at.replace(tzinfo=UTC),
+        )
+
     async def delete_orphaned_users(self, user_ids: list[str]) -> None:
         if not user_ids:
             return

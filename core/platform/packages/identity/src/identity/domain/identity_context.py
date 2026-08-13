@@ -111,9 +111,11 @@ class IdentityContext(BaseModel):
                 project_roles_found = True
                 if isinstance(value, dict):
                     for role, orgs in value.items():
-                        if role.lower() in ("admin", "platform-admin", "platformadmin") and isinstance(
-                            orgs, dict
-                        ):
+                        if role.lower() in (
+                            "admin",
+                            "platform-admin",
+                            "platformadmin",
+                        ) and isinstance(orgs, dict):
                             for org_id in orgs:
                                 # Only grant platform admin if the specific org they are an admin for
                                 # is explicitly cryptographically mapped to the PLATFORM_TENANT_ID

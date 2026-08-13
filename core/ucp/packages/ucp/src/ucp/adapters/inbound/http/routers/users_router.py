@@ -87,10 +87,7 @@ async def create_user(  # type: ignore
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.invite_user_use_case.provider]),
 ):
-    use_case: InviteUserUseCase = use_case_factory(
-        tenant_repo__session=session,
-        user_repo__session=session,
-    )
+    use_case: InviteUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = InviteUserCommand(
         tenant_id=canonical_tenant_id,
@@ -120,10 +117,7 @@ async def update_user(  # type: ignore
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.update_user_use_case.provider]),
 ):
-    use_case: UpdateUserUseCase = use_case_factory(
-        tenant_repo__session=session,
-        user_repo__session=session,
-    )
+    use_case: UpdateUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = UpdateUserCommand(
         tenant_id=canonical_tenant_id,
@@ -153,10 +147,7 @@ async def toggle_status(  # type: ignore
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.toggle_user_status_use_case.provider]),
 ):
-    use_case: ToggleUserStatusUseCase = use_case_factory(
-        tenant_repo__session=session,
-        user_repo__session=session,
-    )
+    use_case: ToggleUserStatusUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = ToggleUserStatusCommand(
         tenant_id=canonical_tenant_id,
@@ -183,10 +174,7 @@ async def delete_user(  # type: ignore
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.delete_user_use_case.provider]),
 ):
-    use_case: DeleteUserUseCase = use_case_factory(
-        tenant_repo__session=session,
-        user_repo__session=session,
-    )
+    use_case: DeleteUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = DeleteUserCommand(
         tenant_id=canonical_tenant_id,

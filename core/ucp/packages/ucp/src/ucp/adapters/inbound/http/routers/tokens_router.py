@@ -16,7 +16,12 @@ from ucp.application.models.api_token_models import (
     CreateApiTokenCommand,
     UpdateApiTokenCommand,
 )
-from ucp.application.services.api_token_service import ApiTokenService
+from ucp.application.use_cases.api_tokens import (
+    CreateApiTokenUseCase,
+    DeleteApiTokenUseCase,
+    ListApiTokensUseCase,
+    UpdateApiTokenUseCase,
+)
 from ucp.bootstrap.container import Container
 from ucp.core.container import get_db_session
 
@@ -30,11 +35,11 @@ async def list_tokens(
     tenant_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
-    service_factory: Any = Depends(Provide[Container.api_token_service.provider]),
+    use_case_factory: Any = Depends(Provide[Container.list_api_tokens_use_case.provider]),
 ) -> list[ApiTokenResponse]:
     """Lists all active and inactive API tokens for the tenant."""
-    service: ApiTokenService = service_factory(token_repo__session=session)
-    tokens = await service.list_tokens(tenant_id)
+    use_case: ListApiTokensUseCase = use_case_factory(uow__session=session)
+    tokens = await use_case.execute(tenant_id)
     return [ApiTokenResponse.model_validate(t) for t in tokens]
 
 
@@ -45,15 +50,15 @@ async def create_token(
     request: CreateApiTokenRequest,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
-    service_factory: Any = Depends(Provide[Container.api_token_service.provider]),
+    use_case_factory: Any = Depends(Provide[Container.create_api_token_use_case.provider]),
 ) -> ApiTokenCreatedResponse:
     """
     Creates a new API Token.
     The raw secret is only returned ONCE in this response.
     """
-    service: ApiTokenService = service_factory(token_repo__session=session)
+    use_case: CreateApiTokenUseCase = use_case_factory(uow__session=session)
     command = CreateApiTokenCommand(name=request.name, expires_at=request.expires_at)
-    result = await service.create_token(tenant_id, command)
+    result = await use_case.execute(tenant_id, command)
     return ApiTokenCreatedResponse(
         id=result.id,
         name=result.name,
@@ -74,12 +79,12 @@ async def update_token(
     request: UpdateApiTokenRequest,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
-    service_factory: Any = Depends(Provide[Container.api_token_service.provider]),
+    use_case_factory: Any = Depends(Provide[Container.update_api_token_use_case.provider]),
 ) -> ApiTokenResponse:
     """Updates token metadata (e.g. name or active status)."""
-    service: ApiTokenService = service_factory(token_repo__session=session)
+    use_case: UpdateApiTokenUseCase = use_case_factory(uow__session=session)
     command = UpdateApiTokenCommand(name=request.name, active=request.active)
-    token = await service.update_token(token_id, tenant_id, command)
+    token = await use_case.execute(token_id, tenant_id, command)
     if not token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
     return ApiTokenResponse.model_validate(token)
@@ -92,10 +97,10 @@ async def delete_token(
     token_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
-    service_factory: Any = Depends(Provide[Container.api_token_service.provider]),
+    use_case_factory: Any = Depends(Provide[Container.delete_api_token_use_case.provider]),
 ) -> None:
     """Permanently deletes an API token."""
-    service: ApiTokenService = service_factory(token_repo__session=session)
-    deleted = await service.delete_token(token_id, tenant_id)
+    use_case: DeleteApiTokenUseCase = use_case_factory(uow__session=session)
+    deleted = await use_case.execute(token_id, tenant_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")

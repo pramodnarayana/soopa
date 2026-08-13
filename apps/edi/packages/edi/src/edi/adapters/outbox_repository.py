@@ -95,8 +95,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
         event: ProvisioningEvent,
         idempotency_key: str | None = None,
     ) -> str:
-        from sqlalchemy import text
-
         event_id = await super().publish_outbox_event(
             tenant_id=event.tenant_id,
             event_type=str(
@@ -104,10 +102,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
             ),
             payload=event.model_dump(mode="json"),
             idempotency_key=idempotency_key,
-        )
-        await self.session.execute(
-            text("SELECT pg_notify('edi_outbox_channel', :event_id)"),
-            {"event_id": event_id},
         )
         return event_id
 

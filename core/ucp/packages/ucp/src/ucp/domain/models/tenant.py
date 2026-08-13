@@ -72,6 +72,14 @@ class Tenant(AggregateRoot):
         self.name = new_name.strip()
         self.updated_at = datetime.now(UTC)
 
+    def set_idp_tenant_id(self, idp_tenant_id: str) -> None:
+        if self.idp_tenant_id:
+            raise ValueError(
+                f"Tenant already has IDP organization associated: {self.idp_tenant_id}"
+            )
+        self.idp_tenant_id = idp_tenant_id
+        self.updated_at = datetime.now(UTC)
+
     def subscribe(self, app_id: str) -> None:
         if self.status != "active":
             raise AppSubscriptionError("Cannot subscribe an inactive tenant to an app.")

@@ -164,7 +164,7 @@ async def _mark_delivery_success(session: Any, key_str: str, owner_token: str) -
         )
         .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
     )
-    if result.rowcount > 0:  # type: ignore[attr-defined]
+    if result.rowcount > 0:
         await session.execute(
             insert(ProcessedEvent).values(idempotency_key=key_str).on_conflict_do_nothing()
         )
@@ -181,7 +181,7 @@ async def _mark_delivery_failure(session: Any, key_str: str, owner_token: str) -
         )
         .values(status="FAILED", owner_token=None, lease_expires_at=None)
     )
-    if result.rowcount == 0:  # type: ignore[attr-defined]
+    if result.rowcount == 0:
         logger.warning(f"[WORKER] Stale fail update for {key_str}. Lease lost.")
 
 

@@ -15,6 +15,7 @@ Architectural invariants:
      contract defined in ucp.ports.outbound.edi_service.IEdiService.
 """
 
+import collections.abc
 import contextlib
 
 from edi.adapters.inbound.ucp_adapter import UcpAdapter
@@ -71,13 +72,13 @@ app.add_middleware(TenantContextMiddleware, public_paths=_PUBLIC_PATHS)
 # It uses the Strategy Pattern to dynamically evaluate different token types
 # (M2M API Keys, IdP JWTs) without needing modification when adding new methods.
 @contextlib.asynccontextmanager
-async def api_token_repo_factory():
+async def api_token_repo_factory() -> collections.abc.AsyncIterator[PostgresApiTokenRepository]:
     async with _async_session_maker() as session:
         yield PostgresApiTokenRepository(session)
 
 
 @contextlib.asynccontextmanager
-async def tenant_repo_factory():
+async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepository]:
     async with _async_session_maker() as session:
         yield TenantRepository(session)
 
