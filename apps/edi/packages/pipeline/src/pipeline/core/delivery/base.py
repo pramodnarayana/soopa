@@ -1,13 +1,13 @@
-import logging
 import uuid
 
+import structlog
 from domain.events import PipelineEventType
 from domain.models import EdiMessageDomainModel
 
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class BaseDeliveryStrategy:

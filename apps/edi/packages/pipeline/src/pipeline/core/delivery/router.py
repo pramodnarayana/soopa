@@ -1,9 +1,9 @@
-import logging
+import structlog
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
 from pipeline.ports.repository import RepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DeliveryRouter:
@@ -24,7 +24,7 @@ class DeliveryRouter:
         Looks up the route for the given trace_id and dispatches to the
         correct delivery handler via the strategy registry.
         """
-        logger.info(f"Starting delivery pipeline for trace_id={trace_id}")
+        logger.info("Starting delivery pipeline for trace_id={trace_id}", trace_id=trace_id)
 
         edi_msg = await self.repository.get_edi_message(trace_id)
         if not edi_msg:
@@ -44,7 +44,8 @@ class DeliveryRouter:
             )
             if not route:
                 logger.error(
-                    f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
+                    "Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found",
+                    edi_msg_trading_partner_id=edi_msg.trading_partner_id,
                 )
                 raise ValueError(
                     f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
@@ -63,7 +64,12 @@ class DeliveryRouter:
                 direction, sender_id, receiver_id, transaction_type
             )
             if not route:
-                logger.error(f"No {direction} route found for {sender_id}->{receiver_id}")
+                logger.error(
+                    "No {direction} route found for {sender_id}->{receiver_id}",
+                    direction=direction,
+                    sender_id=sender_id,
+                    receiver_id=receiver_id,
+                )
                 raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
 
         for route_key, strategy in self.strategies.items():

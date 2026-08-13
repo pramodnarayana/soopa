@@ -1,5 +1,4 @@
-import logging
-
+import structlog
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import ConnectionType, Direction, OutboundRouteDomainModel
 
@@ -11,7 +10,7 @@ from edi.domain.models import (
 )
 from edi.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class OutboundRouteService:
@@ -27,7 +26,9 @@ class OutboundRouteService:
         self, tenant_id: str, cmd: CreateOutboundRouteCmd, idempotency_key: str | None = None
     ) -> RouteEntity:
         logger.info(
-            f"Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}"
+            "Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}",
+            cmd_trading_partner_id=cmd.trading_partner_id,
+            tenant_id=tenant_id,
         )
         route_id = await self.uow.outbound_routes.create_outbound_route(
             tenant_id=tenant_id, cmd=cmd

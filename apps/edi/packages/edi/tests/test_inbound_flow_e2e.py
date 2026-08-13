@@ -1,11 +1,11 @@
 import base64
 import datetime
-import logging
 import uuid
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+import structlog
 from as2_core import build_outbound_message
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -21,7 +21,7 @@ from database.models.data_plane import (
 )
 from sqlalchemy import select
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # --- Test Data Generation ---
 

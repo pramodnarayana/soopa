@@ -1,11 +1,11 @@
 import asyncio
-import logging
 import os
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models.control_plane import AS2Partner
@@ -25,7 +25,6 @@ from worker.adapters.sqs_publisher import SqsPublisherAdapter
 from worker.core.service import ProvisioningWorkerService
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
 
 
 @pytest.fixture
@@ -43,7 +42,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     # We use localstack URL directly as per the local dev environment
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
-    queue_name = f"test-edi-tenant-sync-{uuid.uuid4()}.fifo"
+    queue_name = "test-edi-tenant-sync-{uuid.uuid4()}.fifo"
     outbox_adapter = SqsOutboxAdapter(queue_name=queue_name)
     outbox_adapter.endpoint_url = sqs_endpoint
 
@@ -61,8 +60,8 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
             resp = await sqs.get_queue_url(QueueName=queue_name)
             await sqs.purge_queue(QueueUrl=resp["QueueUrl"])
             await asyncio.sleep(1)
-        except Exception as e:  # noqa: BLE001
-            logging.warning(f"Could not setup queue: {e}")
+        except Exception:  # noqa: BLE001
+            structlog.get_logger(__name__).warning("Could not setup queue: {e}")
             pytest.skip("LocalStack is not available. Skipping integration test.")
 
     # Use a dedicated test queue so the integration test is isolated from production traffic.
@@ -75,8 +74,8 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     async for session in db_router.get_global_session():
         tenant = Tenant(
             id=test_tenant_id,
-            name=f"Test Tenant {test_tenant_id}",
-            idp_tenant_id=f"idp_{test_tenant_id}",
+            name="Test Tenant {test_tenant_id}",
+            idp_tenant_id="idp_{test_tenant_id}",
         )
         session.add(tenant)
         await session.flush()
@@ -88,7 +87,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
 
         if not shard:
             shard = DatabaseShard(
-                id=f"shard_{test_tenant_id}",
+                id="shard_{test_tenant_id}",
                 name="shard_1",
                 dsn=os.getenv(
                     "SHARD_1_URL",
@@ -102,7 +101,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
         edi_app = app_res.scalars().first()
         if not edi_app:
             edi_app = App(
-                id=f"app_{test_tenant_id}",
+                id="app_{test_tenant_id}",
                 slug="edi",
                 name="EDI Application",
             )
@@ -167,8 +166,8 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
         try:
             resp = await sqs.get_queue_url(QueueName=queue_name)
             await sqs.delete_queue(QueueUrl=resp["QueueUrl"])
-        except Exception as e:  # noqa: BLE001
-            logging.warning(f"Could not delete queue {queue_name}: {e}")
+        except Exception:  # noqa: BLE001
+            structlog.get_logger(__name__).warning("Could not delete queue {queue_name}: {e}")
 
     await db_router.close_all()
 

@@ -20,12 +20,11 @@ modern algorithms, this file can be deleted.
 Upstream issue: https://github.com/paramiko/paramiko/issues/2277
 """
 
-import logging
-
 import paramiko
+import structlog
 from cryptography.hazmat.primitives import hashes
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _PATCH_APPLIED = False
 

@@ -1,14 +1,14 @@
 import json
-import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import aioboto3
+import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 from worker.ports.ucp_event_listener import UcpEventListenerPort, UcpEventMessage
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SqsUcpListenerAdapter(UcpEventListenerPort):

@@ -1,13 +1,13 @@
 import asyncio
 import io
-import logging
 
 import paramiko
 import patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
+import structlog
 
 from edi.ports.sftp_tester import SftpTesterPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ParamikoSftpTesterAdapter(SftpTesterPort):

@@ -1,10 +1,10 @@
 import email
-import logging
 import re
 import uuid
 from email import policy
 from typing import Any
 
+import structlog
 from as2_core.mdn import build_mdn, calculate_mic
 from as2_core.message import AS2Message
 from as2_core.parser import parse_as2_request
@@ -15,7 +15,7 @@ from edi.ports.uow import ControlPlaneUnitOfWorkPort
 from edi.ports.uow_factory import DataPlaneUnitOfWorkFactoryPort
 from edi.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class As2ReceiverService:
@@ -50,7 +50,11 @@ class As2ReceiverService:
         """
         # 1. Parse Request
         as2_msg = self._parse_request(headers, body_bytes)
-        logger.info(f"Looking up partnership: from '{as2_msg.as2_from}' to '{as2_msg.as2_to}'")
+        logger.info(
+            "Looking up partnership: from '{as2_msg.as2_from}' to '{as2_msg.as2_to}'",
+            as2_msg_as2_from=as2_msg.as2_from,
+            as2_msg_as2_to=as2_msg.as2_to,
+        )
 
         # 2. Lookup Partnership
         partnership, local_partner, remote_partner = await self._lookup_partnership(
@@ -111,7 +115,7 @@ class As2ReceiverService:
         try:
             return parse_as2_request(headers, body_bytes)
         except ValueError as e:
-            logger.warning(f"Failed to parse AS2 request: {e}")
+            logger.warning("Failed to parse AS2 request: {e}", e=e)
             raise ValueError(f"Bad Request: {e}") from e
 
     async def _lookup_partnership(self, as2_from: str, as2_to: str):  # type: ignore
@@ -120,7 +124,11 @@ class As2ReceiverService:
                 as2_from=as2_from, as2_to=as2_to
             )
             if not match:
-                logger.error(f"Partnership not found in Control Plane for {as2_from} -> {as2_to}")
+                logger.error(
+                    "Partnership not found in Control Plane for {as2_from} -> {as2_to}",
+                    as2_from=as2_from,
+                    as2_to=as2_to,
+                )
                 raise ValueError("Partnership not configured")
             return match
 
@@ -194,7 +202,11 @@ class As2ReceiverService:
             current_entity = raw_signed_content
         else:
             mic = calculate_mic(current_entity, "sha256")
-            logger.info(f"Calculated MIC (sha256) for unsigned message {as2_msg.message_id}: {mic}")
+            logger.info(
+                "Calculated MIC (sha256) for unsigned message {as2_msg.message_id}: {mic}",
+                as2_msg_message_id=as2_msg.message_id,
+                mic=mic,
+            )
 
         return current_entity, mic
 
@@ -214,10 +226,8 @@ class As2ReceiverService:
             if decrypted:
                 return decrypted
         except Exception as e:  # noqa: BLE001
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.debug(f"Initial decryption attempt failed (will try fallback): {e}")
+            logger = structlog.get_logger(__name__)
+            logger.debug("Initial decryption attempt failed (will try fallback): {e}", e=e)
 
         # Fallback to prepending headers for openssl parsing
         smime_headers = self._reconstruct_smime_headers(original_headers)
@@ -267,7 +277,11 @@ class As2ReceiverService:
         else:
             mic = calculate_mic(verify_entity, "sha256")
 
-        logger.info(f"Calculated MIC (sha256) for signed message {message_id}: {mic}")
+        logger.info(
+            "Calculated MIC (sha256) for signed message {message_id}: {mic}",
+            message_id=message_id,
+            mic=mic,
+        )
 
         try:
             is_valid, verified_payload = verify_signature(
@@ -345,11 +359,18 @@ class As2ReceiverService:
 
         if not true_tenant_id or true_tenant_id == PLATFORM_TENANT_ID:
             logger.error(
-                f"Cannot save payload. No tenant could be identified for ISA {isa_sender} -> {isa_receiver}"
+                "Cannot save payload. No tenant could be identified for ISA {isa_sender} -> {isa_receiver}",
+                isa_sender=isa_sender,
+                isa_receiver=isa_receiver,
             )
             raise ValueError("No tenant could be identified for this ISA pair")
 
-        logger.info(f"Saved AS2 payload ({isa_sender}->{isa_receiver}) to Tenant {true_tenant_id}")
+        logger.info(
+            "Saved AS2 payload ({isa_sender}->{isa_receiver}) to Tenant {true_tenant_id}",
+            isa_sender=isa_sender,
+            isa_receiver=isa_receiver,
+            true_tenant_id=true_tenant_id,
+        )
 
         edi_record = {
             "trace_id": str(uuid.uuid4()),

@@ -1,7 +1,8 @@
-import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class JobHandlerRegistry:
@@ -10,7 +11,7 @@ class JobHandlerRegistry:
 
     def register(self, job_name: str, handler: Any) -> None:
         self._handlers[job_name] = handler
-        logger.info(f"Registered job handler for {job_name}")
+        logger.info("Registered job handler for {job_name}", job_name=job_name)
 
     def get(self, job_name: str) -> Any | None:
         return self._handlers.get(job_name)

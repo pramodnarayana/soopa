@@ -159,10 +159,6 @@ class OutboxRelayWorker:
 
 
 async def main() -> None:
-    import logging
-
-    logging.basicConfig(level=logging.INFO)
-
     container = Container()
     container.wire(modules=[sys.modules[__name__]])
 

@@ -1,7 +1,7 @@
-import logging
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
+import structlog
 from identity.application.authenticate import TenantNotProvisionedError, authenticate_bearer_token
 from identity.domain.authentication_strategy import IAuthenticationStrategy
 from identity.domain.identity_context import IdentityContext
@@ -9,7 +9,7 @@ from identity.ports.token_verifier import TokenVerifier
 
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class JwtStrategy(IAuthenticationStrategy):

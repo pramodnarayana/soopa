@@ -1,5 +1,6 @@
 import hashlib
-import logging
+
+import structlog
 
 from ..adapters.outbound.postgres_template_repository import PLATFORM_TENANT_ID
 from ..domain.models import NotificationEvent, NotificationOutboxEvent
@@ -10,7 +11,7 @@ from ..ports.interfaces import (
 )
 from ..ports.outbox_repository import NotificationOutboxRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DispatchNotificationUseCase:
@@ -28,7 +29,9 @@ class DispatchNotificationUseCase:
 
     async def execute(self, event: NotificationEvent) -> None:
         logger.info(
-            f"Dispatching notification for tenant {event.tenant_id}, event {event.event_type}"
+            "Dispatching notification for tenant {event.tenant_id}, event {event.event_type}",
+            event_tenant_id=event.tenant_id,
+            event_event_type=event.event_type,
         )
 
         channels = await self.route_repo.get_channels(event.tenant_id, event.event_type)
@@ -37,7 +40,9 @@ class DispatchNotificationUseCase:
             channels = await self.route_repo.get_channels(PLATFORM_TENANT_ID, event.event_type)
             if not channels:
                 logger.info(
-                    f"No route configured for tenant {event.tenant_id}, event {event.event_type}. Dropping."
+                    "No route configured for tenant {event.tenant_id}, event {event.event_type}. Dropping.",
+                    event_tenant_id=event.tenant_id,
+                    event_event_type=event.event_type,
                 )
                 # TODO: Emit metric for dropped notifications (e.g., metrics.increment("notifications.dropped"))
                 return
@@ -48,7 +53,10 @@ class DispatchNotificationUseCase:
             )
             if not template:
                 logger.warning(
-                    f"No template found for tenant {event.tenant_id}, event {event.event_type}, channel {channel.value}"
+                    "No template found for tenant {event.tenant_id}, event {event.event_type}, channel {channel.value}",
+                    event_tenant_id=event.tenant_id,
+                    event_event_type=event.event_type,
+                    channel_value=channel.value,
                 )
                 continue
 

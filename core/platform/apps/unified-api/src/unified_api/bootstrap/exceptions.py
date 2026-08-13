@@ -17,15 +17,14 @@ Architecture note:
     UCP routers are inlined on the Shell, not a sub-app.
 """
 
-import logging
-
+import structlog
 from edi.core.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from ucp.core.exceptions import IdentityProviderError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def setup_shell_exception_handlers(app: FastAPI) -> None:

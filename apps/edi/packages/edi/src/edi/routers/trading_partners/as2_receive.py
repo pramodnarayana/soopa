@@ -1,12 +1,11 @@
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from edi.core.exceptions import OrchestrationError
 from edi.dependencies.services import get_as2_receiver_service
 from edi.services.as2_receiver_service import As2ReceiverService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["Platform - AS2 Receive"])
 
@@ -34,7 +33,7 @@ async def receive_as2_message(
             headers=headers, body_bytes=body_bytes
         )
     except ValueError as e:
-        logger.warning(f"Business logic rejection: {e}")
+        logger.warning("Business logic rejection: {e}", e=e)
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
             from as2_core import build_mdn
 

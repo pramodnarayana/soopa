@@ -1,9 +1,9 @@
 import json
-import logging
 import uuid
 from collections.abc import Callable, Sequence
 from typing import Any
 
+import structlog
 from platform_orm.models.identity import TenantUser
 from platform_orm.models.notifications import InAppNotification
 from sqlalchemy import func, select, text
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .channels.in_app_delivery_strategy import InAppPersistencePort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PostgresInAppPersistence(InAppPersistencePort):

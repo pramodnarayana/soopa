@@ -19,9 +19,9 @@ Architecture note:
   NOT be imported or used from the Application or Domain layers.
 """
 
-import logging
 from typing import Any
 
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, HTTPException, Path, Request, status
 from identity.domain.identity_context import IdentityContext
@@ -31,7 +31,7 @@ from ucp.bootstrap.container import Container
 from ucp.core.container import get_db_session
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @inject

@@ -19,22 +19,19 @@ script or by pnpm infra:phase2-teardown.
 
 import asyncio
 import contextlib
-import logging
 import os
 import sys
 from typing import Any
 
 import asyncpg
 import httpx
+import structlog
 from dotenv import load_dotenv
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
+
+logger = structlog.get_logger(__name__)
 
 # The built-in Zitadel system org — never delete this.
 ZITADEL_SYSTEM_ORG_NAME = "ZITADEL"

@@ -1,13 +1,14 @@
 import asyncio
-import logging
 import uuid
 from typing import Any
+
+import structlog
 
 from ..domain.models import Channel
 from ..ports.interfaces import DeliveryDispatcherPort
 from ..ports.outbox_repository import NotificationOutboxRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class NotificationOutboxSweeper:
@@ -36,7 +37,10 @@ class NotificationOutboxSweeper:
         self.is_running = False
 
     async def _run_loop(self) -> None:
-        logger.info(f"Starting Notification Outbox Sweeper (id={self.worker_id})")
+        logger.info(
+            "Starting Notification Outbox Sweeper (id={self.worker_id})",
+            self_worker_id=self.worker_id,
+        )
         while self.is_running:
             try:
                 await self.poll()
@@ -49,7 +53,7 @@ class NotificationOutboxSweeper:
         # Sweep stuck messages
         swept = await self.repository.sweep_stuck_messages(self.lock_lease_ms)
         if swept > 0:
-            logger.info(f"Swept {swept} stuck notification outbox messages.")
+            logger.info("Swept {swept} stuck notification outbox messages.", swept=swept)
 
         # Claim new messages
         messages = await self.repository.claim_next_messages(
@@ -58,7 +62,7 @@ class NotificationOutboxSweeper:
         if not messages:
             return
 
-        logger.debug(f"Claimed {len(messages)} notification outbox messages.")
+        logger.debug("Claimed {len(messages)} notification outbox messages.", val_0=len(messages))
 
         # Process messages concurrently
         tasks = [self._process_message(msg) for msg in messages]

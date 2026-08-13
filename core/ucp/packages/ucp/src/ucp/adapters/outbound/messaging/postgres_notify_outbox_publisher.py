@@ -1,12 +1,12 @@
 import json
-import logging
 
+import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp.domain.models.outbox_event import OutboxEvent
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PostgresNotifyOutboxPublisher:
@@ -42,5 +42,7 @@ class PostgresNotifyOutboxPublisher:
             await session.commit()
 
             logger.info(
-                f"Published event {event.event_type} (id: {event.id}) to control_plane_events channel via pg_notify."
+                "Published event {event.event_type} (id: {event.id}) to control_plane_events channel via pg_notify.",
+                event_event_type=event.event_type,
+                event_id=event.id,
             )

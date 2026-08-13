@@ -1,14 +1,14 @@
 import ipaddress
-import logging
 import socket
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from urllib.parse import urlparse
 
+import structlog
 from config.settings import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 settings = get_settings()
 IS_DEV = settings.env == "development"
@@ -24,7 +24,9 @@ def validate_target_url(url: str) -> bool:
 
         # Only allow http and https schemes
         if parsed.scheme not in ("http", "https"):
-            logger.warning(f"SSRF check failed: invalid scheme {parsed.scheme}")
+            logger.warning(
+                "SSRF check failed: invalid scheme {parsed.scheme}", parsed_scheme=parsed.scheme
+            )
             return False
 
         # Reject URLs without a hostname
@@ -39,7 +41,10 @@ def validate_target_url(url: str) -> bool:
             # getaddrinfo returns a list of 5-tuples: (family, type, proto, canonname, sockaddr)
             addr_info = socket.getaddrinfo(parsed.hostname, None)
         except socket.gaierror:
-            logger.warning(f"SSRF check failed: could not resolve hostname {parsed.hostname}")
+            logger.warning(
+                "SSRF check failed: could not resolve hostname {parsed.hostname}",
+                parsed_hostname=parsed.hostname,
+            )
             return False
 
         for addr in addr_info:
@@ -55,7 +60,7 @@ def validate_target_url(url: str) -> bool:
                 if IS_DEV and ip.is_loopback:
                     pass
                 else:
-                    logger.warning(f"SSRF check failed: resolved to private/internal IP {ip}")
+                    logger.warning("SSRF check failed: resolved to private/internal IP {ip}", ip=ip)
                     return False
 
         return True

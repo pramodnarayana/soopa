@@ -1,7 +1,8 @@
-import logging
 from typing import Any, Protocol
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class EmailProviderPort(Protocol):
@@ -27,6 +28,9 @@ class EmailDeliveryStrategy:
             raise DeliveryError("Email provider not configured")
 
         logger.info(
-            f"[EMAIL] Delivering to tenant {tenant_id}. Subject: {subject}. Body: {content}"
+            "[EMAIL] Delivering to tenant {tenant_id}. Subject: {subject}. Body: {content}",
+            tenant_id=tenant_id,
+            subject=subject,
+            content=content,
         )
         await self.email_provider.send_email(tenant_id, content, subject, data)

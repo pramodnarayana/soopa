@@ -1,9 +1,9 @@
-import logging
 from typing import Any
 
+import structlog
 from jsonpath_ng import parse  # type: ignore[import-untyped]
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Enterprise configuration mapping transaction types to JSONPath expressions
 # Using recursive descendant paths ($..) to extract fields accurately regardless
@@ -75,7 +75,8 @@ class MetadataExtractorService:
         """
         if not transaction_type or transaction_type not in self.compiled_config:
             logger.debug(
-                f"No extractor configuration found for transaction type: {transaction_type}"
+                "No extractor configuration found for transaction type: {transaction_type}",
+                transaction_type=transaction_type,
             )
             return {}
 

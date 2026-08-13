@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
-import logging
 
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from dotenv import load_dotenv
@@ -11,8 +11,7 @@ from sqlalchemy.future import select
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def seed_database() -> None:
@@ -86,7 +85,10 @@ async def seed_database() -> None:
                 default_timezone=str(job_def.default_timezone),
                 max_retries=job_def.max_retries,
             )
-            logger.info(f"Registered system job via SchedulerClient: {job_def.name.value}.")
+            logger.info(
+                "Registered system job via SchedulerClient: {job_def.name.value}.",
+                job_def_name_value=job_def.name.value,
+            )
             await session.flush()
 
         await session.commit()

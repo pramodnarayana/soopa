@@ -99,6 +99,7 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 ## [Observability Architecture] Massive Refactoring of Legacy Logging
 
 - **Date Added**: 2026-08-13
+- **Status**: ✅ RESOLVED
 - **Description**: We attempted to enforce strict Enterprise Observability standards globally by configuring Ruff to ban `import logging` (TID251) and block f-strings in logging (G004). However, the linter detected over 600 violations across legacy systems, causing the CI pipeline to fail completely. To unblock the team, these strict checks have been temporarily deactivated in `pyproject.toml`.
 - **Action Item**: Reactivate `TID251` and `G004` in Ruff, and systematically refactor all 600+ violations across the codebase to use `structlog` and context injection, eradicating all legacy standard logging usages and f-string anti-patterns.
 

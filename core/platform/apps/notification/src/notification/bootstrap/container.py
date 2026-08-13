@@ -6,9 +6,9 @@ inside class bodies. The Container is the single source of truth for all
 dependency wiring in this bounded context.
 """
 
-import logging
 from collections.abc import AsyncGenerator
 
+import structlog
 from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -44,7 +44,7 @@ from notification.application.outbox_sweeper import NotificationOutboxSweeper
 from notification.application.stream_manager import NotificationStreamManager
 from notification.config import NotificationEngineSettings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def _init_async_engine(database_url: str) -> AsyncGenerator[AsyncEngine]:

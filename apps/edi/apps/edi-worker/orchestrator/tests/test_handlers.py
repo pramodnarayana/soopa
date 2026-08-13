@@ -307,10 +307,11 @@ async def test_process_delivery_skip(
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
 @patch("worker.data.handlers.WorkerVaultAdapter")
 async def test_process_delivery_stale_update(
-    mock_vault: MagicMock, mock_webhook: MagicMock, mock_repo: MagicMock, caplog: MagicMock
+    mock_vault: MagicMock,
+    mock_webhook: MagicMock,
+    mock_repo: MagicMock,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    import logging
-
     from worker.data.handlers import process_delivery
 
     resolver = AsyncMock()
@@ -347,24 +348,26 @@ async def test_process_delivery_stale_update(
     strategy_instance = AsyncMock()
     strategy_instance.deliver.return_value = True
     mock_webhook.return_value = strategy_instance
+    mock_webhook.return_value = strategy_instance
 
-    with caplog.at_level(logging.WARNING):
-        await process_delivery(
-            trace_id="trace-123",
-            event_type="DELIVER_WEBHOOK",
-            payload={"webhook_url": "http://test", "payload": {}},
-            tenant_id="1",
-            resolver=resolver,
-            db_router=db_router,
-            s3_bucket="test",
-            aws_endpoint=None,
-            idempotency_key="00000000-0000-0000-0000-000000000000",
-        )
+    await process_delivery(
+        trace_id="trace-123",
+        event_type="DELIVER_WEBHOOK",
+        payload={"webhook_url": "http://test", "payload": {}},
+        tenant_id="1",
+        resolver=resolver,
+        db_router=db_router,
+        s3_bucket="test",
+        aws_endpoint=None,
+        idempotency_key="00000000-0000-0000-0000-000000000000",
+    )
+
+    captured = capsys.readouterr()
 
     # We expect a warning log about stale success update
     assert (
-        "Stale success update for idempotency_key=00000000-0000-0000-0000-000000000000. Lease lost."
-        in caplog.text
+        "[WORKER] Stale success update for idempotency_key={key_str}. Lease lost." in captured.out
     )
+    assert "00000000-0000-0000-0000-000000000000" in captured.out
     # Should not have called execute for ProcessedEvent since rowcount == 0
     assert mock_session.execute.call_count == 2

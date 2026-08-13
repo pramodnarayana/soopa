@@ -7,20 +7,17 @@ the canonical platform tenant record so the platform admin can log in.
 """
 
 import asyncio
-import logging
 import os
 import sys
 
 import asyncpg
+import structlog
 from dotenv import load_dotenv
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
+
+logger = structlog.get_logger(__name__)
 
 PLATFORM_SENTINEL_ID = "ten_000000000000000000000000"
 
@@ -43,7 +40,9 @@ async def main() -> None:
     conn = await asyncpg.connect(database_url)
     try:
         logger.info(
-            f"Seeding platform sentinel tenant (id={PLATFORM_SENTINEL_ID}, org={platform_org_id})..."
+            "Seeding platform sentinel tenant (id={PLATFORM_SENTINEL_ID}, org={platform_org_id})...",
+            PLATFORM_SENTINEL_ID=PLATFORM_SENTINEL_ID,
+            platform_org_id=platform_org_id,
         )
 
         # Upsert the platform tenant
@@ -71,11 +70,16 @@ async def main() -> None:
 
         if existing_user_id:
             platform_user_id = existing_user_id
-            logger.info(f"Platform admin user already exists (id={platform_user_id}). Updating...")
+            logger.info(
+                "Platform admin user already exists (id={platform_user_id}). Updating...",
+                platform_user_id=platform_user_id,
+            )
         else:
             platform_user_id = f"usr_{os.urandom(12).hex()}"
             logger.info(
-                f"Seeding new platform admin user (id={platform_user_id}, idp_user_id={platform_admin_id})..."
+                "Seeding new platform admin user (id={platform_user_id}, idp_user_id={platform_admin_id})...",
+                platform_user_id=platform_user_id,
+                platform_admin_id=platform_admin_id,
             )
 
         # Upsert the platform admin user

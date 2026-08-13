@@ -5,10 +5,11 @@ Try to have a 'completely filled' xml file.
 # pylint: disable=invalid-name, line-too-long, consider-using-f-string, missing-function-docstring
 
 import copy
-import logging
 import os
 import sys
 from collections import OrderedDict
+
+import structlog
 
 try:
     from xml.etree import ElementTree as ET
@@ -26,7 +27,7 @@ from bots_core.infrastructure.config.botsconfig import (
 )
 from bots_core.utils import botslib
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # **************************************************************************************

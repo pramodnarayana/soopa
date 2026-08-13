@@ -1,18 +1,18 @@
 import asyncio
 import hashlib
-import logging
 import time
 from dataclasses import dataclass
 from typing import Any, cast
 
 import httpx
 import jwt
+import structlog
 from jwt import PyJWKClient
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
 from identity.ports.token_verifier import TokenValidationError, TokenVerifier
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)

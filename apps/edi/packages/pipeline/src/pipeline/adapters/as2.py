@@ -3,14 +3,14 @@ HTTPX-based adapter for outbound AS2 delivery.
 Implements AS2DeliveryPort using an async HTTP client.
 """
 
-import logging
 import typing
 
 import httpx
+import structlog
 
 from pipeline.ports.as2 import AS2DeliveryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
@@ -41,7 +41,7 @@ class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
             httpx.ConnectError: If the remote endpoint is unreachable.
             httpx.TimeoutException: If the connection or read times out.
         """
-        logger.debug(f"AS2 HTTP POST → {url}, Content-Length={len(body)}")
+        logger.debug("AS2 HTTP POST → {url}, Content-Length={len(body)}", url=url, val_1=len(body))
 
         import contextlib
 
@@ -64,7 +64,7 @@ class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
         resp_headers = {k.lower(): v for k, v in response.headers.items()}
 
         logger.info(
-            f"AS2 response from {url}: HTTP {response.status_code}, "
-            f"Content-Length={len(response.content)}"
+            "AS2 response from {url}: HTTP {response.status_code}, "
+            "Content-Length={len(response.content)}"
         )
         return response.status_code, resp_headers, response.content

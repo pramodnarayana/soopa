@@ -9,8 +9,7 @@ AuthenticationMiddleware and stored in request.state.identity. Every endpoint
 validates that the requested tenant_id is within the caller's authorized scope.
 """
 
-import logging
-
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -20,7 +19,7 @@ from notification.bootstrap.container import Container
 from notification.domain.models import Channel, NotificationPreference
 from notification.ports.interfaces import NotificationPreferencesRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/notifications",

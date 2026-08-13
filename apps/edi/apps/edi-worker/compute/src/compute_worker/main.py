@@ -1,11 +1,10 @@
 import asyncio
-import logging
-import sys
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
+import structlog
 from transformer.application.use_cases import ProcessInboundEdiUseCase
 from transformer.domain.models import ParsedEdiPayload
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
@@ -13,24 +12,22 @@ from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 from compute_worker.worker import SQSComputeWorker
 
 # Configure logging so it prints beautifully to the terminal
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger("worker_runner")
+logger = structlog.get_logger("worker_runner")
 
 
 # Create local mock implementations of the outbound ports
 class MockStoragePort:
     async def get_raw_payload(self, s3_uri: str) -> bytes:
-        logger.info(f"[Storage] Fetching raw EDI bytes from S3: {s3_uri}")
+        logger.info("[Storage] Fetching raw EDI bytes from S3: {s3_uri}", s3_uri=s3_uri)
         return b"ISA*00*..."
 
 
 class MockRepositoryPort:
     async def save_parsed_payload(self, trace_id: str, payload: ParsedEdiPayload) -> None:
-        logger.info(f"[Database] Successfully saved transformed payload for trace {trace_id}")
+        logger.info(
+            "[Database] Successfully saved transformed payload for trace {trace_id}",
+            trace_id=trace_id,
+        )
 
 
 async def main() -> None:

@@ -1,5 +1,5 @@
 import asyncio
-from logging.config import fileConfig
+from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
 
 from alembic import context
 from sqlalchemy import pool

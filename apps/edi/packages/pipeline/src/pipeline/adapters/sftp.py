@@ -1,23 +1,21 @@
 import asyncio
 import base64
 import io
-import logging
 
 import paramiko
 import patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
+import structlog
 
 from pipeline.ports.sftp import SftpDeliveryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _setup_host_key(
     client: paramiko.SSHClient, host: str, port: int, host_key_string: str | None
 ) -> None:
     if not host_key_string:
-        import logging
-
-        logging.getLogger(__name__).warning(
+        structlog.get_logger(__name__).warning(
             f"No host key provided for {host}. Using AutoAddPolicy (vulnerable to MITM)."
         )
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -166,10 +164,16 @@ class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
             with io.BytesIO(payload) as fl:
                 sftp.putfo(fl, target_file)
 
-            logger.info(f"Successfully uploaded {filename} to {host}:{port}{'/' + target_file}")
+            logger.info(
+                "Successfully uploaded {filename} to {host}:{port}{'/' + target_file}",
+                filename=filename,
+                host=host,
+                port=port,
+                val_3="/" + target_file,
+            )
 
         except Exception as e:
-            logger.exception(f"SFTP upload failed for {host}:{port}")
+            logger.exception("SFTP upload failed for {host}:{port}", host=host, port=port)
 
             raise RuntimeError(f"SFTP Delivery failed: {e}") from e
         finally:

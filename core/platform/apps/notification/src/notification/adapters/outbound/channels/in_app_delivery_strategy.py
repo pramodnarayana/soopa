@@ -1,7 +1,8 @@
-import logging
 from typing import Any, Protocol
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class InAppPersistencePort(Protocol):
@@ -26,5 +27,9 @@ class InAppDeliveryStrategy:
         if self.persistence is None:
             raise DeliveryError("In-app persistence not configured")
 
-        logger.info(f"[IN_APP] Delivering to tenant {tenant_id}. Body: {content}")
+        logger.info(
+            "[IN_APP] Delivering to tenant {tenant_id}. Body: {content}",
+            tenant_id=tenant_id,
+            content=content,
+        )
         await self.persistence.save_notification(tenant_id, content, subject, data)

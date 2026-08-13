@@ -1,11 +1,12 @@
-import logging
 from typing import Any
+
+import structlog
 
 from ...domain.models import Channel
 from ...ports.interfaces import DeliveryStrategyPort
 from .channels import EmailDeliveryStrategy, InAppDeliveryStrategy, SlackDeliveryStrategy
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class StrategyDeliveryDispatcher:
@@ -31,7 +32,7 @@ class StrategyDeliveryDispatcher:
     ) -> None:
         strategy = self.strategies.get(channel)
         if not strategy:
-            logger.warning(f"No delivery strategy found for channel {channel}")
+            logger.warning("No delivery strategy found for channel {channel}", channel=channel)
             return
 
         await strategy.deliver(tenant_id, content, subject, data)

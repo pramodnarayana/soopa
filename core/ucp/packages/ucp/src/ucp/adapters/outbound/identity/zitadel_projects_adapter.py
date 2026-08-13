@@ -1,4 +1,4 @@
-import logging
+import structlog
 
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
 from ucp.domain.dtos.zitadel_dtos import (
@@ -10,14 +10,18 @@ from ucp.domain.dtos.zitadel_dtos import (
 )
 from ucp.ports.outbound.project_provider import IProjectProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
     async def create_project_grant(
         self, org_id: str, project_id: str, role_keys: list[str]
     ) -> None:
-        logger.info(f"Creating project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}")
+        logger.info(
+            "Creating project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}",
+            org_id=org_id,
+            project_id=project_id,
+        )
 
         try:
             response = await self.fetch_with_auth(
@@ -32,14 +36,22 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             if response.status_code >= 400:
                 await self.handle_response_error(response, "create project grant")
 
-            logger.info(f"Successfully granted Project {project_id} to Organization {org_id}")
+            logger.info(
+                "Successfully granted Project {project_id} to Organization {org_id}",
+                project_id=project_id,
+                org_id=org_id,
+            )
         except Exception:
-            logger.exception(f"Error creating project grant for org {org_id}")
+            logger.exception("Error creating project grant for org {org_id}", org_id=org_id)
 
             raise
 
     async def delete_project_grant(self, org_id: str, project_id: str) -> None:
-        logger.info(f"Deleting project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}")
+        logger.info(
+            "Deleting project grant in Zitadel. OrgId: {org_id}, ProjectId: {project_id}",
+            org_id=org_id,
+            project_id=project_id,
+        )
 
         try:
             # First, search for the grant to get its ID
@@ -59,7 +71,9 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
 
             if not grant:
                 logger.warning(
-                    f"No project grant found for org {org_id} and project {project_id}. Skipping deletion."
+                    "No project grant found for org {org_id} and project {project_id}. Skipping deletion.",
+                    org_id=org_id,
+                    project_id=project_id,
                 )
                 return
 
@@ -73,9 +87,13 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
             if delete_response.status_code >= 400:
                 await self.handle_response_error(delete_response, "delete project grant")
 
-            logger.info(f"Successfully revoked Project {project_id} from Organization {org_id}")
+            logger.info(
+                "Successfully revoked Project {project_id} from Organization {org_id}",
+                project_id=project_id,
+                org_id=org_id,
+            )
         except Exception:
-            logger.exception(f"Error deleting project grant for org {org_id}")
+            logger.exception("Error deleting project grant for org {org_id}", org_id=org_id)
 
             raise
 
@@ -96,7 +114,7 @@ class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
         return parsed_data.result
 
     async def get_users(self, org_id: str) -> list[ZitadelUser]:
-        logger.info(f"Fetching users for org {org_id}")
+        logger.info("Fetching users for org {org_id}", org_id=org_id)
 
         # 1. Fetch all users in the org
         response = await self.fetch_with_auth(

@@ -1,9 +1,9 @@
 import contextlib
-import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
@@ -26,7 +26,7 @@ from worker.adapters.vault import WorkerVaultAdapter
 from worker.core.security import ssrf_safe_context
 from worker.core.tenant_resolver import TenantResolver
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def process_pipeline_event(
@@ -70,7 +70,8 @@ async def process_pipeline_event(
                     result = await session.execute(stmt)
                     if not result.scalar_one_or_none():
                         logger.info(
-                            f"Skipping duplicate event with idempotency_key={idempotency_key}"
+                            "Skipping duplicate event with idempotency_key={idempotency_key}",
+                            idempotency_key=idempotency_key,
                         )
                         await session.commit()
                         return
@@ -110,10 +111,12 @@ async def process_pipeline_event(
                         if direction == MessageDirection.INBOUND
                         else OutboundTransformService(transformer_adapter, repo_adapter)
                     )
-                    logger.info(f"[WORKER] Transforming trace_id={trace_id}")
+                    logger.info("[WORKER] Transforming trace_id={trace_id}", trace_id=trace_id)
 
                     await service.transform(trace_id)
-                    logger.info(f"[WORKER] SUCCESS transforming trace_id={trace_id}")
+                    logger.info(
+                        "[WORKER] SUCCESS transforming trace_id={trace_id}", trace_id=trace_id
+                    )
 
                 # Commit transaction
                 await session.commit()
@@ -169,7 +172,10 @@ async def _mark_delivery_success(session: Any, key_str: str, owner_token: str) -
             insert(ProcessedEvent).values(idempotency_key=key_str).on_conflict_do_nothing()
         )
     else:
-        logger.warning(f"[WORKER] Stale success update for idempotency_key={key_str}. Lease lost.")
+        logger.warning(
+            "[WORKER] Stale success update for idempotency_key={key_str}. Lease lost.",
+            key_str=key_str,
+        )
 
 
 async def _mark_delivery_failure(session: Any, key_str: str, owner_token: str) -> None:
@@ -182,7 +188,7 @@ async def _mark_delivery_failure(session: Any, key_str: str, owner_token: str) -
         .values(status="FAILED", owner_token=None, lease_expires_at=None)
     )
     if result.rowcount == 0:
-        logger.warning(f"[WORKER] Stale fail update for {key_str}. Lease lost.")
+        logger.warning("[WORKER] Stale fail update for {key_str}. Lease lost.", key_str=key_str)
 
 
 async def process_delivery(
@@ -209,7 +215,8 @@ async def process_delivery(
                 owner_token = await _claim_delivery_outbox_event(session, key_str)
                 if not owner_token:
                     logger.info(
-                        f"Skipping delivery for idempotency_key={idempotency_key} (already processed or currently leased)"
+                        "Skipping delivery for idempotency_key={idempotency_key} (already processed or currently leased)",
+                        idempotency_key=idempotency_key,
                     )
                     await session.commit()
                     return

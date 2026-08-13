@@ -1,5 +1,4 @@
-import logging
-
+import structlog
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import ConnectionType, Direction, InboundRouteDomainModel
 
@@ -11,7 +10,7 @@ from edi.domain.models import (
 )
 from edi.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class InboundRouteService:
@@ -26,7 +25,11 @@ class InboundRouteService:
     async def create_inbound_route(
         self, tenant_id: str, cmd: CreateInboundRouteCmd, idempotency_key: str | None = None
     ) -> RouteEntity:
-        logger.info(f"Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}")
+        logger.info(
+            "Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}",
+            cmd_isa_sender_id=cmd.isa_sender_id,
+            tenant_id=tenant_id,
+        )
         route_id = await self.uow.inbound_routes.create_inbound_route(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(

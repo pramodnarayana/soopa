@@ -59,11 +59,11 @@ async def generate_certificate(
     )
 
 
-import logging
+import structlog
 
 from edi.adapters.http.dtos import CertificateExportResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def _rotate_as2_certificates(

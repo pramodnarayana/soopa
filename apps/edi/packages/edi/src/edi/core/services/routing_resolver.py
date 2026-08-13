@@ -1,12 +1,12 @@
 import contextlib
-import logging
 from typing import Any
 
+import structlog
 from domain.models import ConnectionType, Direction
 
 from edi.ports.routing_resolver_repository import RoutingResolverRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class RoutingResolutionService:
@@ -46,7 +46,7 @@ class RoutingResolutionService:
             except Exception:
                 logger.exception(
                     "Failed to resolve trading_partner_name from outbound route "
-                    f"for trace_id={msg.trace_id}",
+                    "for trace_id={msg.trace_id}",
                 )
 
         # 2. Fallback to business_metadata from EDI JSON
@@ -82,7 +82,7 @@ class RoutingResolutionService:
 
         except Exception:
             logger.exception(
-                f"Failed to resolve trading_partner_name for inbound trace_id={msg.trace_id}",
+                "Failed to resolve trading_partner_name for inbound trace_id={msg.trace_id}",
             )
 
         return None, msg.connection_type
@@ -113,7 +113,7 @@ class RoutingResolutionService:
             except Exception:
                 logger.exception(
                     "Failed to resolve trading_partner_name from business_metadata "
-                    f"for trace_id={msg.trace_id}",
+                    "for trace_id={msg.trace_id}",
                 )
 
         return None, msg.connection_type

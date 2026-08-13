@@ -1,10 +1,11 @@
-import logging
 import uuid
 from typing import Any
 
+import structlog
+
 from worker.core.scheduler.models import Job
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
@@ -17,10 +18,10 @@ async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
     job_payload = message.get("payload", {})
 
     if not job_id or not job_name:
-        logger.error(f"Missing job_id or job_name in message: {message}")
+        logger.error("Missing job_id or job_name in message: {message}", message=message)
         return
 
-    logger.info(f"Processing scheduled job: {job_name} ({job_id})")
+    logger.info("Processing scheduled job: {job_name} ({job_id})", job_name=job_name, job_id=job_id)
 
     registry = kwargs.get("registry")
     if not registry:
@@ -29,7 +30,7 @@ async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
 
     handler = registry.get(job_name)
     if not handler:
-        logger.error(f"Unknown scheduled job name: {job_name}")
+        logger.error("Unknown scheduled job name: {job_name}", job_name=job_name)
         raise ValueError(f"Unknown scheduled job name: {job_name}")
 
     # Reconstruct a dummy Job object just enough for the handler to execute it

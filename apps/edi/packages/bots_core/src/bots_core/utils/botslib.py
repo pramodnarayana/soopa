@@ -7,11 +7,12 @@ Botslib should not import code from other Bots-modules.
 import datetime as python_datetime
 import gettext as std_gettext
 import importlib
-import logging
 import os
 import platform
 import socket
 import sys
+
+import structlog
 
 from bots_core.domain.exceptions import (
     ScriptImportError,
@@ -35,7 +36,7 @@ class _BotsGlobalStub:
             return False
 
     version = ""
-    logger = logging.getLogger(__name__)
+    logger = structlog.get_logger(__name__)
 
 
 botsglobal = _BotsGlobalStub()
@@ -52,7 +53,7 @@ _ = gettext
 
 MAXINT = (2**31) - 1
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # **********************************************************/**

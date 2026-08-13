@@ -1,7 +1,8 @@
-import logging
 from typing import Any, Protocol
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class SlackIntegrationPort(Protocol):
@@ -26,5 +27,9 @@ class SlackDeliveryStrategy:
         if self.slack_integration is None:
             raise DeliveryError("Slack integration not configured")
 
-        logger.info(f"[SLACK] Delivering to tenant {tenant_id}. Body: {content}")
+        logger.info(
+            "[SLACK] Delivering to tenant {tenant_id}. Body: {content}",
+            tenant_id=tenant_id,
+            content=content,
+        )
         await self.slack_integration.send_message(tenant_id, content, subject, data)

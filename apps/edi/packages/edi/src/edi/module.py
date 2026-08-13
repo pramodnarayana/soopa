@@ -1,6 +1,6 @@
-import logging
 from typing import Any
 
+import structlog
 from dotenv import load_dotenv
 
 from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile
@@ -42,7 +42,7 @@ from edi.routers.tenant import dashboard
 from edi.routers.trading_partners import as2_receive, platform
 from edi.routers.webhooks import webhook
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def create_edi_app() -> FastAPI:
@@ -78,7 +78,11 @@ def create_edi_app() -> FastAPI:
                 error_dict["ctx"] = {k: str(v) for k, v in ctx.items()}
             sanitized_errors.append(error_dict)
 
-        logger.error(f"422 Error at {request.url.path}: {sanitized_errors}")
+        logger.error(
+            "422 Error at {request.url.path}: {sanitized_errors}",
+            request_url_path=request.url.path,
+            sanitized_errors=sanitized_errors,
+        )
         return JSONResponse(
             status_code=422,
             content={"detail": sanitized_errors},
@@ -88,7 +92,11 @@ def create_edi_app() -> FastAPI:
     async def orchestration_exception_handler(
         request: Request, exc: OrchestrationError
     ) -> JSONResponse:
-        logger.error(f"OrchestrationError at {request.url.path}: {exc}")
+        logger.error(
+            "OrchestrationError at {request.url.path}: {exc}",
+            request_url_path=request.url.path,
+            exc=exc,
+        )
         return JSONResponse(
             status_code=500,
             content={"detail": str(exc)},
@@ -96,7 +104,9 @@ def create_edi_app() -> FastAPI:
 
     @app.exception_handler(VaultError)
     async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
-        logger.error(f"VaultError at {request.url.path}: {exc}")
+        logger.error(
+            "VaultError at {request.url.path}: {exc}", request_url_path=request.url.path, exc=exc
+        )
         return JSONResponse(
             status_code=500,
             content={"detail": str(exc)},

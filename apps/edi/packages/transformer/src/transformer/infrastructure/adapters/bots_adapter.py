@@ -1,11 +1,12 @@
 import json
-import logging
+
+import structlog
 
 from transformer.application.ports import EDITransformerPort
 from transformer.domain.exceptions import TransformationError
 from transformer.domain.models import JsonDict, ParsedEdiPayload, TransactionSet
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class BotsEDIAdapter(EDITransformerPort):
@@ -166,7 +167,10 @@ class BotsEDIAdapter(EDITransformerPort):
 
         This transforms raw X12/EDIFACT bytes into our pristine domain model.
         """
-        logger.info(f"Invoking stateless Bots adapter with {len(raw_edi)} bytes of payload")
+        logger.info(
+            "Invoking stateless Bots adapter with {len(raw_edi)} bytes of payload",
+            val_0=len(raw_edi),
+        )
 
         # Validate payload before attempting to load backend
         if not raw_edi:

@@ -7,9 +7,9 @@ Row-Level Security (RLS).
 """
 
 import asyncio
-import logging
 from collections.abc import AsyncGenerator
 
+import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import (
 
 from database.base_repository import GlobalSession, TenantSession
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DatabaseRouter:
@@ -66,7 +66,9 @@ class DatabaseRouter:
                     if not url:
                         raise ValueError(f"Engine for {db_key} not found and no URL provided.")
                     self._engines[db_key] = self._create_engine(url)
-                    logger.info(f"Created new connection pool for database shard: {db_key}")
+                    logger.info(
+                        "Created new connection pool for database shard: {db_key}", db_key=db_key
+                    )
         return self._engines[db_key]
 
     async def get_global_session(self) -> AsyncGenerator[GlobalSession, None]:
@@ -113,5 +115,5 @@ class DatabaseRouter:
         """
         for key, engine in self._engines.items():
             await engine.dispose()
-            logger.info(f"Closed connection pool for {key}")
+            logger.info("Closed connection pool for {key}", key=key)
         self._engines.clear()

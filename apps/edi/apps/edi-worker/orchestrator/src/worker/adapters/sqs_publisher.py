@@ -1,15 +1,15 @@
 import json
-import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import aioboto3
+import structlog
 
 from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SqsPublisherAdapter(MessagePublisherPort):
@@ -55,9 +55,13 @@ class SqsPublisherAdapter(MessagePublisherPort):
             for success in resp.get("Successful", []):
                 successful_ids.append(success["Id"])
             for failed in resp.get("Failed", []):
-                logger.error(f"Failed to forward message id={failed['Id']}: {failed['Message']}")
+                logger.error(
+                    "Failed to forward message id={failed['Id']}: {failed['Message']}",
+                    failedId=failed["Id"],
+                    failedMessage=failed["Message"],
+                )
         except Exception:
-            logger.exception(f"Failed to send batch to {queue_name}")
+            logger.exception("Failed to send batch to {queue_name}", queue_name=queue_name)
 
         return successful_ids
 
@@ -78,7 +82,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
                 resp = await sqs.get_queue_url(QueueName=queue_name)
                 self._queue_url_cache[queue_name] = resp["QueueUrl"]
             except Exception:
-                logger.exception(f"Failed to get queue url for {queue_name}")
+                logger.exception("Failed to get queue url for {queue_name}", queue_name=queue_name)
                 return []
 
         queue_url = self._queue_url_cache[queue_name]
@@ -100,7 +104,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
                     resp = await sqs.get_queue_url(QueueName=queue_name)
                     self._queue_url_cache[queue_name] = resp["QueueUrl"]
             except Exception:
-                logger.exception(f"Failed to get queue url for {queue_name}")
+                logger.exception("Failed to get queue url for {queue_name}", queue_name=queue_name)
                 raise
 
         queue_url = self._queue_url_cache[queue_name]
@@ -123,5 +127,5 @@ class SqsPublisherAdapter(MessagePublisherPort):
 
                 await sqs.send_message(**kwargs)
         except Exception:
-            logger.exception(f"Failed to send single message to {queue_name}")
+            logger.exception("Failed to send single message to {queue_name}", queue_name=queue_name)
             raise

@@ -5,15 +5,15 @@ Bots outmessage lib
 # pylint: disable=too-many-branches, too-many-statements, attribute-defined-outside-init, consider-using-f-string
 
 import decimal
+import time
 
 # bots-modules
-import logging
-import time
+import structlog
 
 from bots_core.domain import grammar, message, node
 from bots_core.domain.exceptions import BotsImportError, OutMessageError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 from bots_core.infrastructure.config.botsconfig import (
     FORMATFROMGRAMMAR,
     SFIELD,

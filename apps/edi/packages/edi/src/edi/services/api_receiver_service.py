@@ -1,12 +1,12 @@
-import logging
 import uuid
 from typing import Any
 
+import structlog
 from pipeline.core.metadata_extractor import MetadataExtractorService
 
 from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ApiReceiverService:
@@ -37,7 +37,10 @@ class ApiReceiverService:
             str: The generated trace_id for tracking.
         """
         async with self.uow:
-            logger.info(f"Received outbound JSON for partner: {trading_partner_id}")
+            logger.info(
+                "Received outbound JSON for partner: {trading_partner_id}",
+                trading_partner_id=trading_partner_id,
+            )
 
             # 1. Resolve transaction_type from payload if not provided explicitly
             if not transaction_type:
@@ -83,7 +86,7 @@ class ApiReceiverService:
 
             # 2. Create Trace ID
             trace_id = str(uuid.uuid4())
-            logger.info(f"Generated Trace ID: {trace_id}")
+            logger.info("Generated Trace ID: {trace_id}", trace_id=trace_id)
 
             # 3. Save EdiJson (Status: RECEIVED)
             # We defer ALL routing and translation config logic to the Worker.

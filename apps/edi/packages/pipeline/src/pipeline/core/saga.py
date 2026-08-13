@@ -1,13 +1,13 @@
-import logging
 from typing import Any
 
+import structlog
 from domain.direction import MessageDirection
 from domain.events import PipelineEventType
 from domain.status import MessageStatus
 
 from pipeline.ports.repository import RepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class TraceLifecycleService:
@@ -26,7 +26,10 @@ class TraceLifecycleService:
         """
         trace_id = payload["trace_id"]
         direction = payload.get("direction", MessageDirection.INBOUND)
-        logger.info(f"TraceLifecycle: handling TRANSFORM_COMPLETED for trace_id={trace_id}")
+        logger.info(
+            "TraceLifecycle: handling TRANSFORM_COMPLETED for trace_id={trace_id}",
+            trace_id=trace_id,
+        )
 
         if direction == MessageDirection.INBOUND:
             # Update the parent EdiMessage with the extracted metadata
@@ -79,7 +82,9 @@ class TraceLifecycleService:
             event_type=PipelineEventType.DELIVER_EVENT,
             payload={"trace_id": trace_id},
         )
-        logger.info(f"TraceLifecycle: Triggered DELIVER_EVENT for trace_id={trace_id}")
+        logger.info(
+            "TraceLifecycle: Triggered DELIVER_EVENT for trace_id={trace_id}", trace_id=trace_id
+        )
 
     async def handle_delivery_completed(self, payload: dict[str, Any]) -> None:
         """
@@ -89,7 +94,9 @@ class TraceLifecycleService:
         direction = payload.get("direction", MessageDirection.INBOUND)
         status = payload.get("status")
         logger.info(
-            f"TraceLifecycle: handling DELIVERY_COMPLETED ({status}) for trace_id={trace_id}"
+            "TraceLifecycle: handling DELIVERY_COMPLETED ({status}) for trace_id={trace_id}",
+            status=status,
+            trace_id=trace_id,
         )
 
         if direction == MessageDirection.INBOUND:

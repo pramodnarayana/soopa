@@ -1,6 +1,6 @@
-import logging
 import typing
 
+import structlog
 from domain.events import (
     EdiEventType,
     ProvisioningEvent,
@@ -22,7 +22,7 @@ from edi.domain.models import (
 from edi.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 from edi.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AS2PartnerService:
@@ -78,7 +78,11 @@ class AS2PartnerService:
     async def create_as2_partner(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str | None = None
     ) -> PartnerEntity:
-        logger.info(f"Provisioning AS2 partner {cmd.name} for tenant {tenant_id}")
+        logger.info(
+            "Provisioning AS2 partner {cmd.name} for tenant {tenant_id}",
+            cmd_name=cmd.name,
+            tenant_id=tenant_id,
+        )
 
         partner_id = await self.uow.as2_partners.create_as2_identity(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
@@ -105,7 +109,11 @@ class AS2PartnerService:
         cmd: UpdateAS2TradingPartnerCmd,
         idempotency_key: str | None = None,
     ) -> PartnerEntity:
-        logger.info(f"Updating AS2 partner {partner_id} for tenant {tenant_id}")
+        logger.info(
+            "Updating AS2 partner {partner_id} for tenant {tenant_id}",
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+        )
         await self.uow.as2_partners.update_as2_identity(tenant_id, partner_id, cmd)
 
         updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
@@ -132,7 +140,11 @@ class AS2PartnerService:
     async def delete_as2_partner(
         self, tenant_id: str, partner_id: str, idempotency_key: str | None = None
     ) -> None:
-        logger.info(f"Deleting AS2 partner {partner_id} for tenant {tenant_id}")
+        logger.info(
+            "Deleting AS2 partner {partner_id} for tenant {tenant_id}",
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+        )
         await self.uow.as2_partners.delete_as2_identity(tenant_id, partner_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
@@ -151,7 +163,11 @@ class AS2PartnerService:
         vault: VaultPort,
         idempotency_key: str | None = None,
     ) -> PartnerEntity:
-        logger.info(f"Rotating certificates for AS2 partner {partner_id} for tenant {tenant_id}")
+        logger.info(
+            "Rotating certificates for AS2 partner {partner_id} for tenant {tenant_id}",
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+        )
 
         partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not partner:

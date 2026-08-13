@@ -101,8 +101,11 @@ target-version = "py311"
 exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S", "C90"]
-ignore = ["E501", "B904", "E402", "TRY003", "G004", "RUF013", "TRY300", "TRY301", "RUF012", "S101"] # Handled by formatter / existing legacy code
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S", "C90", "TID251"]
+ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF012", "S101"] # Handled by formatter / existing legacy code
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"logging".msg = "Use structlog via ILogger port instead of standard logging."
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments

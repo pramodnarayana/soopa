@@ -1,6 +1,6 @@
-import logging
 from typing import Any, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,7 @@ from edi.core.services.transaction_service import TransactionService
 from edi.dependencies.auth import get_current_tenant_id
 from edi.dependencies.database import get_data_plane_uow, get_global_session
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/edi/transactions", tags=["Transactions"])
 

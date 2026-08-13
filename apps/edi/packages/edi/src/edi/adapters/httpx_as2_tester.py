@@ -7,13 +7,13 @@ then parses the synchronous MDN response. Used exclusively for the
 """
 
 import functools
-import logging
 
 import httpx
+import structlog
 from as2_core import build_outbound_message, parse_mdn
 from security import encrypt_payload, sign_payload
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def build_synthetic_ping(as2_from: str, as2_to: str) -> bytes:
@@ -93,7 +93,7 @@ class HttpxAS2TesterAdapter:
                 encrypt_fn=encrypt_fn,
             )
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"as2_test_build_failed: {e}")
+            logger.warning("as2_test_build_failed: {e}", e=e)
             return False, f"Failed to build AS2 message: {e}", payload_str, None
 
         try:
@@ -123,5 +123,5 @@ class HttpxAS2TesterAdapter:
             # e.g. "automatic-action/MDN-sent-automatically; processed"
             return True, mdn.disposition or "", payload_str, full_mdn
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"as2_test_mdn_parse_failed error={e}")
+            logger.warning("as2_test_mdn_parse_failed error={e}", e=e)
             return False, f"MDN parse error: {e}", payload_str, full_mdn

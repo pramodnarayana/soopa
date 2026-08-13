@@ -1,21 +1,17 @@
 import argparse
 import asyncio
-import logging
 import os
 import re
 
 import boto3
+import structlog
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # Configure enterprise-grade logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger("ClearData")
+
+logger = structlog.get_logger("ClearData")
 
 DB_URLS = [
     os.environ.get("DB_URL", "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"),
@@ -58,7 +54,7 @@ def _assert_local_aws_endpoint() -> str:
 
 
 async def clear_database(db_url: str) -> None:
-    logger.info(f"Connecting to database {db_url}...")
+    logger.info("Connecting to database {db_url}...", db_url=db_url)
     try:
         engine = create_async_engine(db_url)
         async with engine.begin() as conn:
@@ -67,20 +63,22 @@ async def clear_database(db_url: str) -> None:
                     # Use a savepoint so a ProgrammingError rolls back only this
                     # table and allows the loop to continue for subsequent tables.
                     async with conn.begin_nested():
-                        logger.info(f"Attempting to TRUNCATE public.{table} CASCADE...")
+                        logger.info("Attempting to TRUNCATE public.{table} CASCADE...", table=table)
                         await conn.execute(text(f"TRUNCATE public.{table} CASCADE"))
-                        logger.info(f"SUCCESS: Truncated public.{table}")
+                        logger.info("SUCCESS: Truncated public.{table}", table=table)
                 except ProgrammingError as e:
                     logger.warning(
-                        f"SKIPPED: Table public.{table} does not exist or cannot be truncated. {e}"
+                        "SKIPPED: Table public.{table} does not exist or cannot be truncated. {e}",
+                        table=table,
+                        e=e,
                     )
-        logger.info(f"Finished database cleanup for {db_url}.")
+        logger.info("Finished database cleanup for {db_url}.", db_url=db_url)
     except Exception:
         logger.exception("CRITICAL ERROR clearing tables for %s", db_url)
 
 
 def purge_sqs(endpoint_url: str) -> None:
-    logger.info(f"Connecting to SQS at {endpoint_url}...")
+    logger.info("Connecting to SQS at {endpoint_url}...", endpoint_url=endpoint_url)
     sqs = boto3.client(
         "sqs",
         endpoint_url=endpoint_url,
@@ -94,7 +92,7 @@ def purge_sqs(endpoint_url: str) -> None:
         for q in queues["QueueUrls"]:
             try:
                 sqs.purge_queue(QueueUrl=q)
-                logger.info(f"SUCCESS: Purged SQS Queue -> {q}")
+                logger.info("SUCCESS: Purged SQS Queue -> {q}", q=q)
             except Exception:
                 logger.exception("FAILED to purge %s", q)
     else:

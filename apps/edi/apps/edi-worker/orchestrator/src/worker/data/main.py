@@ -1,8 +1,8 @@
 import asyncio
-import logging
 import os
 from typing import Any
 
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from domain.events import MessageQueueName
@@ -15,7 +15,7 @@ from worker.core.tenant_resolver import TenantResolver
 from worker.data.handlers import process_delivery, process_pipeline_event
 
 load_dotenv()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
@@ -31,7 +31,7 @@ async def main() -> None:
         trace_id = payload.get("trace_id")
         tenant_id = body.get("tenant_id")
         if not trace_id or not tenant_id:
-            logger.error(f"Missing trace_id or tenant_id in message: {body}")
+            logger.error("Missing trace_id or tenant_id in message: {body}", body=body)
             return
         await process_pipeline_event(
             trace_id=trace_id,
@@ -58,7 +58,7 @@ async def main() -> None:
         trace_id = payload.get("trace_id")
         tenant_id = body.get("tenant_id")
         if not trace_id or not tenant_id:
-            logger.error(f"Missing trace_id or tenant_id in message: {body}")
+            logger.error("Missing trace_id or tenant_id in message: {body}", body=body)
             return
         await process_delivery(
             trace_id=trace_id,
@@ -131,5 +131,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

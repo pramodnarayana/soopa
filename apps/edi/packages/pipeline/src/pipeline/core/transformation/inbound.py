@@ -1,6 +1,6 @@
-import logging
 import uuid
 
+import structlog
 from config.settings import get_settings
 from domain.direction import MessageDirection
 from domain.events import PipelineEventType
@@ -9,7 +9,7 @@ from domain.status import MessageStatus
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.transformer import TransformerPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class InboundTransformService:
@@ -27,7 +27,9 @@ class InboundTransformService:
 
     async def transform(self, trace_id: str) -> None:
         """Transforms an inbound X12 EDI payload to JSON."""
-        logger.info(f"Starting inbound transformation pipeline for trace_id={trace_id}")
+        logger.info(
+            "Starting inbound transformation pipeline for trace_id={trace_id}", trace_id=trace_id
+        )
 
         edi_msg = await self.repository.get_edi_message(trace_id)
         if not edi_msg:
@@ -43,7 +45,10 @@ class InboundTransformService:
         settings = get_settings()
 
         if settings.enable_heavy_compute_queue:
-            logger.info(f"Offloading heavy EDI parsing to compute queue for trace_id={trace_id}")
+            logger.info(
+                "Offloading heavy EDI parsing to compute queue for trace_id={trace_id}",
+                trace_id=trace_id,
+            )
             compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
             await self.repository.publish_outbox_event(
                 idempotency_key=compute_key,
@@ -175,4 +180,6 @@ class InboundTransformService:
                 "transaction_type": txn_type_for_parent,
             },
         )
-        logger.info(f"Successfully transformed EDI to JSON for trace_id={trace_id}")
+        logger.info(
+            "Successfully transformed EDI to JSON for trace_id={trace_id}", trace_id=trace_id
+        )

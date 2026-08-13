@@ -1,14 +1,13 @@
 import asyncio
-import logging
 import os
 import signal
 import sys
 
+import structlog
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Hold strong references to background tasks to prevent GC (see RUF006)
 _background_tasks: set[asyncio.Task[None]] = set()

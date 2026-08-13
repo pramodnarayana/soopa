@@ -3,12 +3,13 @@ Bots node lib
 """
 
 import decimal
-import logging
+
+import structlog
 
 from bots_core.domain.exceptions import MappingFormatError, MappingRootError
 
 # bots-modules
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 from bots_core.utils import botslib
 from bots_core.utils.botslib import gettext as _
 

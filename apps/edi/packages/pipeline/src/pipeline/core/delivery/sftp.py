@@ -1,5 +1,4 @@
-import logging
-
+import structlog
 from domain.models import EdiMessageDomainModel
 from domain.status import MessageStatus
 
@@ -8,7 +7,7 @@ from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.sftp import SftpDeliveryPort
 from pipeline.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SftpDeliveryStrategy(BaseDeliveryStrategy):
@@ -29,7 +28,10 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         idempotency_key: str | None = None,
     ) -> None:
         if not await self.repository.claim_edi_message(trace_id):
-            logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
+            logger.warning(
+                "Could not claim trace_id={trace_id} (already claimed or terminal).",
+                trace_id=trace_id,
+            )
             return
 
         try:
@@ -64,8 +66,12 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             await self._emit_delivery_completed(
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
-            logger.info(f"Delivered trace_id={trace_id} → SFTP {partner['host']}")
+            logger.info(
+                "Delivered trace_id={trace_id} → SFTP {partner['host']}",
+                trace_id=trace_id,
+                partnerhost=partner["host"],
+            )
         except Exception:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.exception(f"SFTP delivery failed for trace_id={trace_id}")
+            logger.exception("SFTP delivery failed for trace_id={trace_id}", trace_id=trace_id)

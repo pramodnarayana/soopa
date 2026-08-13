@@ -1,13 +1,13 @@
 import hashlib
 import hmac
-import logging
 
+import structlog
 from fastapi import HTTPException, status
 from identity.domain.identity_context import M2M_API_KEY_PREFIX, IdentityContext
 
 from ucp.ports.api_token_repository import ApiTokenRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # In-process cache: { client_id → (tenant_id, secret_hash) }
 # Short-circuits the DB lookup for repeated calls within the same process.
@@ -50,7 +50,9 @@ async def authenticate_api_key(
     # DB Lookup (constant-time verification)
     token_record = await token_repo.get_by_client_id(client_id)
     if not token_record or not hmac.compare_digest(token_record.secret_hash, secret_hash):
-        logger.warning(f"API key authentication failed for client_id={client_id!r}")
+        logger.warning(
+            "API key authentication failed for client_id={client_id}", client_id=client_id
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="APIKEY_INVALID_OR_REVOKED",

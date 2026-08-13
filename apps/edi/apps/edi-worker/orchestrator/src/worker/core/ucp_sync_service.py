@@ -1,13 +1,14 @@
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
+
+import structlog
 
 from worker.adapters.acl.registry import UcpEventNames, translate_external_event
 from worker.ports.outbox import OutboxPort
 from worker.ports.tenant import TenantPort
 from worker.ports.ucp_event_listener import UcpEventListenerPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class UcpSyncWorkerService:
@@ -37,7 +38,10 @@ class UcpSyncWorkerService:
                 tenant_id=event.tenantId,
             )
         else:
-            logger.debug(f"No translation available for external event: {event.eventType}")
+            logger.debug(
+                "No translation available for external event: {event.eventType}",
+                event_eventType=event.eventType,
+            )
 
     async def process_messages(self) -> None:
         """
@@ -52,7 +56,10 @@ class UcpSyncWorkerService:
                 if handler:
                     await handler(event)
                 else:
-                    logger.debug(f"Ignored unhandled UCP event type: {event.eventType}")
+                    logger.debug(
+                        "Ignored unhandled UCP event type: {event.eventType}",
+                        event_eventType=event.eventType,
+                    )
             except Exception:
                 logger.exception(
                     "Failed to process UCP event %s (idempotency_key=%s)",

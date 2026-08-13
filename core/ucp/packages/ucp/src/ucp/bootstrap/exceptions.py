@@ -11,15 +11,14 @@ Architecture note:
     allowed to import from multiple domains simultaneously.
 """
 
-import logging
-
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ucp.core.exceptions import IdentityProviderError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def setup_exception_handlers(app: FastAPI) -> None:

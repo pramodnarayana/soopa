@@ -1,7 +1,7 @@
-import logging
 import uuid
 from typing import Any
 
+import structlog
 from config.settings import get_settings
 from domain.direction import MessageDirection
 from domain.events import PipelineEventType
@@ -10,7 +10,7 @@ from domain.status import MessageStatus
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.transformer import TransformerPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class OutboundTransformService:
@@ -61,7 +61,8 @@ class OutboundTransformService:
         self, trace_id: str, standard: str, transaction_type: str, route_config: dict[str, Any]
     ) -> None:
         logger.info(
-            f"Offloading heavy JSON-to-EDI formatting to compute queue for trace_id={trace_id}"
+            "Offloading heavy JSON-to-EDI formatting to compute queue for trace_id={trace_id}",
+            trace_id=trace_id,
         )
         compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
         await self.repository.publish_outbox_event(
@@ -89,7 +90,9 @@ class OutboundTransformService:
 
     async def transform(self, trace_id: str) -> None:
         """Transforms an outbound JSON payload to X12 EDI."""
-        logger.info(f"Starting outbound transformation pipeline for trace_id={trace_id}")
+        logger.info(
+            "Starting outbound transformation pipeline for trace_id={trace_id}", trace_id=trace_id
+        )
 
         edi_json = await self.repository.get_edi_json(trace_id)
         if not edi_json:
@@ -162,4 +165,6 @@ class OutboundTransformService:
                 "gs_receiver_id": route_config.get("gs_receiver_id"),
             },
         )
-        logger.info(f"Successfully transformed JSON to EDI for trace_id={trace_id}")
+        logger.info(
+            "Successfully transformed JSON to EDI for trace_id={trace_id}", trace_id=trace_id
+        )

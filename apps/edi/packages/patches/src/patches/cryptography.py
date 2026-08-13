@@ -15,11 +15,10 @@ Python type restriction is all that's required to restore functionality.
 Upstream logic: https://github.com/pyca/cryptography/blob/main/src/cryptography/hazmat/primitives/serialization/pkcs7.py
 """
 
-import logging
-
+import structlog
 from cryptography.hazmat.primitives.serialization import pkcs7
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _PATCH_APPLIED = False
 

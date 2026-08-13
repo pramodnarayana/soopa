@@ -1,12 +1,12 @@
 import json
-import logging
 from typing import Any
 
 import aioboto3
+import structlog
 
 from edi.ports.message_queue import MessageQueuePort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SQSMessageQueueAdapter(MessageQueuePort):
@@ -21,7 +21,7 @@ class SQSMessageQueueAdapter(MessageQueuePort):
         self.session = aioboto3.Session()
 
     async def send(self, queue_name: str, payload: dict[str, Any]) -> None:
-        logger.info(f"Relaying event to SQS queue '{queue_name}'")
+        logger.info("Relaying event to SQS queue '{queue_name}'", queue_name=queue_name)
 
         client_kwargs = {"region_name": self.region}
         if self.endpoint_url:
@@ -35,4 +35,6 @@ class SQSMessageQueueAdapter(MessageQueuePort):
             # Send message to SQS
             await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(payload))
 
-            logger.info(f"Successfully sent message to SQS queue {queue_name}")
+            logger.info(
+                "Successfully sent message to SQS queue {queue_name}", queue_name=queue_name
+            )

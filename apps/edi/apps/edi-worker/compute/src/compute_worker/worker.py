@@ -1,12 +1,12 @@
 import asyncio
 import json
-import logging
 import typing
 
 import aioboto3
+import structlog
 from transformer.application.use_cases import ProcessInboundEdiUseCase
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SQSComputeWorker:
@@ -29,7 +29,9 @@ class SQSComputeWorker:
 
     async def start(self) -> None:
         self._running = True
-        logger.info(f"Starting SQS worker polling against {self.queue_url}")
+        logger.info(
+            "Starting SQS worker polling against {self.queue_url}", self_queue_url=self.queue_url
+        )
 
         client_kwargs = {"region_name": "us-east-1"}
         if self.endpoint_url:
@@ -86,11 +88,12 @@ class SQSComputeWorker:
             trace_id = str(trace_id).strip()
             s3_uri = str(s3_uri).strip()
 
-            logger.info(f"Worker received SQS message for trace {trace_id}")
+            logger.info("Worker received SQS message for trace {trace_id}", trace_id=trace_id)
             # Execute Hexagonal Use Case
             result = await self.use_case.execute(trace_id=trace_id, s3_uri=s3_uri)
             logger.info(
-                f"Successfully transformed EDI into {len(result.transactions)} transactions."
+                "Successfully transformed EDI into {len(result.transactions)} transactions.",
+                val_0=len(result.transactions),
             )
 
             # Delete message from queue on success
@@ -99,7 +102,7 @@ class SQSComputeWorker:
                 await sqs_client.delete_message(
                     QueueUrl=self.queue_url, ReceiptHandle=str(receipt_handle)
                 )
-                logger.debug(f"Deleted message for trace {trace_id} from queue")
+                logger.debug("Deleted message for trace {trace_id} from queue", trace_id=trace_id)
 
         except Exception:
             logger.exception("Failed to process EDI message")

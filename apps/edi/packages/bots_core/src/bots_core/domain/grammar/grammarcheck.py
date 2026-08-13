@@ -5,16 +5,16 @@ Bots grammar check
 
 import atexit
 import glob
-
-# Bots-modules
-import logging
 import os
 import sys
+
+# Bots-modules
+import structlog
 
 from bots_core.domain import grammar
 from bots_core.domain.exceptions import txtexc
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def startmulti(grammardir, editype):

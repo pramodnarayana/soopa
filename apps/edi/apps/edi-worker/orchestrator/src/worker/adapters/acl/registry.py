@@ -1,5 +1,6 @@
-import logging
 from typing import Any
+
+import structlog
 
 from worker.adapters.acl.base import EventTranslator
 from worker.adapters.acl.ucp_translators import (
@@ -7,7 +8,7 @@ from worker.adapters.acl.ucp_translators import (
     WebhookEventTranslator,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class UcpEventNames:
@@ -44,7 +45,9 @@ def translate_external_event(event_type: str, payload: dict[str, Any]) -> dict[s
         try:
             return translator.translate(payload)
         except Exception:
-            logger.exception(f"Error translating external event '{event_type}'")
+            logger.exception(
+                "Error translating external event '{event_type}'", event_type=event_type
+            )
 
             raise
 

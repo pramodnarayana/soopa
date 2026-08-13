@@ -1,12 +1,12 @@
 import asyncio
 import json
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aioboto3
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def poll_sqs_queue(
@@ -25,7 +25,7 @@ async def poll_sqs_queue(
             queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
             queue_url = queue_url_resp["QueueUrl"]
 
-            logger.info(f"Started polling {queue_name} ({queue_url})")
+            logger.info("started_polling_queue", queue_name=queue_name, queue_url=queue_url)
 
             while True:
                 try:
@@ -41,7 +41,9 @@ async def poll_sqs_queue(
                         try:
                             body = json.loads(msg["Body"])
 
-                            logger.info(f"[{queue_name}] Processing priority notification message")
+                            logger.info(
+                                "processing_priority_notification_message", queue_name=queue_name
+                            )
                             await processor_func(body)
 
                             # Delete message on success
@@ -49,13 +51,13 @@ async def poll_sqs_queue(
                                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
                             )
                             logger.info(
-                                f"[{queue_name}] Successfully processed and deleted message"
+                                "successfully_processed_and_deleted_message", queue_name=queue_name
                             )
 
                         except json.JSONDecodeError:
                             # Permanently delete malformed (non-JSON) messages
                             logger.exception(
-                                f"[{queue_name}] Non-JSON message body, deleting permanently"
+                                "non_json_message_body_deleting_permanently", queue_name=queue_name
                             )
                             await sqs.delete_message(
                                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
@@ -63,10 +65,10 @@ async def poll_sqs_queue(
 
                         except Exception:
                             logger.exception(
-                                "[%s] Error processing message, will retry", queue_name
+                                "error_processing_message_will_retry", queue_name=queue_name
                             )
                 except Exception:
-                    logger.exception(f"[{queue_name}] SQS client error, retrying in 2s")
+                    logger.exception("sqs_client_error_retrying_in_2s", queue_name=queue_name)
                     await asyncio.sleep(2)
     except Exception:
-        logger.exception(f"[{queue_name}] Initializing SQS client failed")
+        logger.exception("initializing_sqs_client_failed", queue_name=queue_name)

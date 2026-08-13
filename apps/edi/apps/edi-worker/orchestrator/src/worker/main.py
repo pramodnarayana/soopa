@@ -1,10 +1,11 @@
 import asyncio
-import logging
+
+import structlog
 
 from worker.data.main import main as data_main
 from worker.provision.main import main as provision_main
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
@@ -27,5 +28,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

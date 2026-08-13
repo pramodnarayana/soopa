@@ -1,7 +1,7 @@
 import asyncio
 import json
-import logging
 
+import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from transformer.domain.exceptions import TransformationError
@@ -9,7 +9,7 @@ from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 from edi.core.exceptions import OrchestrationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/edi-tools", tags=["EDI Tools"])
 
@@ -29,7 +29,7 @@ async def _handle_edi_to_json(
     request: TransformRequest, adapter: BotsEDIAdapter
 ) -> TransformResponse:
     raw_bytes = request.payload.encode("utf-8")
-    logger.info(f"EDI TOOL RECEIVED PAYLOAD LENGTH: {len(raw_bytes)}")
+    logger.info("EDI TOOL RECEIVED PAYLOAD LENGTH: {len(raw_bytes)}", val_0=len(raw_bytes))
 
     # Delegate parsing and validation to the common BotsEDIAdapter
     ast_dict, errors = await asyncio.to_thread(adapter.get_raw_ast, raw_bytes)

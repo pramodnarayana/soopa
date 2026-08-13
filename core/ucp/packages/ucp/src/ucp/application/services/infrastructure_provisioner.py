@@ -1,13 +1,13 @@
-import logging
 from typing import Any
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class InfrastructureProvisioner:
@@ -27,7 +27,8 @@ class InfrastructureProvisioner:
         event_id = event_data.get("eventId")
         if not tenant_id or not event_id:
             logger.error(
-                f"Cannot provision infrastructure: missing tenantId/eventId in event: {event_data}"
+                "Cannot provision infrastructure: missing tenantId/eventId in event: {event_data}",
+                event_data=event_data,
             )
             return
 
@@ -37,12 +38,12 @@ class InfrastructureProvisioner:
                 stmt = select(ControlPlaneOutbox.payload).where(ControlPlaneOutbox.id == event_id)
                 payload = await session.scalar(stmt)
                 if not payload:
-                    logger.error(f"Could not find outbox event {event_id}")
+                    logger.error("Could not find outbox event {event_id}", event_id=event_id)
                     return
 
                 app_id_from_event = payload.get("app_id")
                 if not app_id_from_event:
-                    logger.error(f"No app_id in payload for event {event_id}")
+                    logger.error("No app_id in payload for event {event_id}", event_id=event_id)
                     return
 
                 # 2. Look up the App ID strictly
@@ -50,7 +51,9 @@ class InfrastructureProvisioner:
                 app_id = await session.scalar(app_stmt)
                 if not app_id:
                     logger.error(
-                        f"Cannot subscribe tenant {tenant_id} to unknown app id '{app_id_from_event}'"
+                        "Cannot subscribe tenant {tenant_id} to unknown app id '{app_id_from_event}'",
+                        tenant_id=tenant_id,
+                        app_id_from_event=app_id_from_event,
                     )
                     return
 
@@ -82,11 +85,16 @@ class InfrastructureProvisioner:
 
                 await session.commit()
                 logger.info(
-                    f"Successfully provisioned infrastructure for tenant {tenant_id} (App: {app_id_from_event}, Shard: {shard_id})"
+                    "Successfully provisioned infrastructure for tenant {tenant_id} (App: {app_id_from_event}, Shard: {shard_id})",
+                    tenant_id=tenant_id,
+                    app_id_from_event=app_id_from_event,
+                    shard_id=shard_id,
                 )
 
         except Exception:
-            logger.exception(f"Failed to process app.subscribed for event {event_id}")
+            logger.exception(
+                "Failed to process app.subscribed for event {event_id}", event_id=event_id
+            )
 
     async def handle_app_unsubscribed(self, event_data: dict[str, Any]) -> None:
         """
@@ -96,7 +104,8 @@ class InfrastructureProvisioner:
         event_id = event_data.get("eventId")
         if not tenant_id or not event_id:
             logger.error(
-                f"Cannot process unsubscription: missing tenantId/eventId in event: {event_data}"
+                "Cannot process unsubscription: missing tenantId/eventId in event: {event_data}",
+                event_data=event_data,
             )
             return
 
@@ -106,12 +115,12 @@ class InfrastructureProvisioner:
                 stmt = select(ControlPlaneOutbox.payload).where(ControlPlaneOutbox.id == event_id)
                 payload = await session.scalar(stmt)
                 if not payload:
-                    logger.error(f"Could not find outbox event {event_id}")
+                    logger.error("Could not find outbox event {event_id}", event_id=event_id)
                     return
 
                 app_id_from_event = payload.get("app_id")
                 if not app_id_from_event:
-                    logger.error(f"No app_id in payload for event {event_id}")
+                    logger.error("No app_id in payload for event {event_id}", event_id=event_id)
                     return
 
                 # 2. Look up the App ID strictly
@@ -119,7 +128,9 @@ class InfrastructureProvisioner:
                 app_id = await session.scalar(app_stmt)
                 if not app_id:
                     logger.error(
-                        f"Cannot unsubscribe tenant {tenant_id} from unknown app id '{app_id_from_event}'"
+                        "Cannot unsubscribe tenant {tenant_id} from unknown app id '{app_id_from_event}'",
+                        tenant_id=tenant_id,
+                        app_id_from_event=app_id_from_event,
                     )
                     return
 
@@ -132,12 +143,18 @@ class InfrastructureProvisioner:
                     existing_sub.status = "inactive"
                     await session.commit()
                     logger.info(
-                        f"Successfully deactivated subscription for tenant {tenant_id} (App: {app_id_from_event})"
+                        "Successfully deactivated subscription for tenant {tenant_id} (App: {app_id_from_event})",
+                        tenant_id=tenant_id,
+                        app_id_from_event=app_id_from_event,
                     )
                 else:
                     logger.warning(
-                        f"Attempted to deactivate non-existent subscription for tenant {tenant_id} (App: {app_id_from_event})"
+                        "Attempted to deactivate non-existent subscription for tenant {tenant_id} (App: {app_id_from_event})",
+                        tenant_id=tenant_id,
+                        app_id_from_event=app_id_from_event,
                     )
 
         except Exception:
-            logger.exception(f"Failed to process app.unsubscribed for event {event_id}")
+            logger.exception(
+                "Failed to process app.unsubscribed for event {event_id}", event_id=event_id
+            )

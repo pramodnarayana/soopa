@@ -1,12 +1,11 @@
-import logging
-
+import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
@@ -58,7 +57,9 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         if not is_platform_admin and active_tenant_id not in identity.authorized_tenants:
             logger.warning(
-                f"[TENANT_CONTEXT_MIDDLEWARE] Identity {identity.subject} attempted to access unauthorized tenant {active_tenant_id}."
+                "[TENANT_CONTEXT_MIDDLEWARE] Identity {identity.subject} attempted to access unauthorized tenant {active_tenant_id}.",
+                identity_subject=identity.subject,
+                active_tenant_id=active_tenant_id,
             )
             return JSONResponse(
                 status_code=403,
@@ -66,7 +67,10 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             )
 
         # 3. Inject Context
-        logger.debug(f"[TENANT_CONTEXT_MIDDLEWARE] Active Tenant resolved: {active_tenant_id}")
+        logger.debug(
+            "[TENANT_CONTEXT_MIDDLEWARE] Active Tenant resolved: {active_tenant_id}",
+            active_tenant_id=active_tenant_id,
+        )
         request.state.tenant_id = active_tenant_id
 
         return await call_next(request)

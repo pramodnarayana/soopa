@@ -1,5 +1,4 @@
-import logging
-
+import structlog
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import ConnectionType, PartnerStatus
 
@@ -10,7 +9,7 @@ from edi.domain.models import (
 )
 from edi.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AS2PartnershipService:
@@ -36,7 +35,9 @@ class AS2PartnershipService:
             raise ValueError(f"Remote AS2 partner {cmd.remote_partner_id} not found")
 
         logger.info(
-            f"Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}"
+            "Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}",
+            cmd_local_partner_id=cmd.local_partner_id,
+            cmd_remote_partner_id=cmd.remote_partner_id,
         )
         partner_id = await self.uow.as2_partnerships.create_as2_partnership(
             tenant_id=tenant_id, cmd=cmd
@@ -75,7 +76,7 @@ class AS2PartnershipService:
                     "Invalid local_partner_id or remote_partner_id referenced in update"
                 )
 
-        logger.info(f"Updating AS2 partnership {partnership_id}")
+        logger.info("Updating AS2 partnership {partnership_id}", partnership_id=partnership_id)
         await self.uow.as2_partnerships.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
@@ -99,7 +100,11 @@ class AS2PartnershipService:
         )
 
     async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
-        logger.info(f"Deleting AS2 partnership {partnership_id} for tenant {tenant_id}")
+        logger.info(
+            "Deleting AS2 partnership {partnership_id} for tenant {tenant_id}",
+            partnership_id=partnership_id,
+            tenant_id=tenant_id,
+        )
         await self.uow.as2_partnerships.delete_as2_partnership(tenant_id, partnership_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(

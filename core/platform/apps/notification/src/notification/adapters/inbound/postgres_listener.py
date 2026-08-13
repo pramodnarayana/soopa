@@ -1,16 +1,16 @@
 import asyncio
 import contextlib
 import json
-import logging
 from typing import Any
 
 import asyncpg
+import structlog
 from sqlalchemy.engine import make_url
 
 from notification.application.ports.notification_query_port import NotificationDTO
 from notification.application.ports.notification_stream_port import NotificationStreamPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PostgresNotificationListener:
@@ -39,7 +39,10 @@ class PostgresNotificationListener:
             self.is_running = True
             self._ready.clear()
             self._task = asyncio.create_task(self._run_loop())
-            logger.info(f"Started PostgresNotificationListener on channel '{self.channel}'")
+            logger.info(
+                "Started PostgresNotificationListener on channel '{self.channel}'",
+                self_channel=self.channel,
+            )
 
     async def wait_until_ready(self, timeout: float = 5.0) -> None:
         """Wait until the listener is connected and ready to receive notifications."""
@@ -52,7 +55,10 @@ class PostgresNotificationListener:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-        logger.info(f"Stopped PostgresNotificationListener on channel '{self.channel}'")
+        logger.info(
+            "Stopped PostgresNotificationListener on channel '{self.channel}'",
+            self_channel=self.channel,
+        )
 
     async def _run_loop(self) -> None:
         while self.is_running:
@@ -61,7 +67,9 @@ class PostgresNotificationListener:
                 asyncpg_url = url.render_as_string(hide_password=False)
                 self._connection = await asyncpg.connect(asyncpg_url)
                 await self._connection.add_listener(self.channel, self._on_notify)
-                logger.info(f"Listening on Postgres channel '{self.channel}'")
+                logger.info(
+                    "Listening on Postgres channel '{self.channel}'", self_channel=self.channel
+                )
 
                 # Signal that listener is ready
                 self._ready.set()
@@ -101,7 +109,8 @@ class PostgresNotificationListener:
 
             if not tenant_id or not user_id or not notification_id or not title or not body:
                 logger.warning(
-                    f"Received malformed notification event (missing required fields): {payload}"
+                    "Received malformed notification event (missing required fields): {payload}",
+                    payload=payload,
                 )
                 return
 

@@ -1,7 +1,7 @@
 import asyncio
-import logging
 import os
 
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 
@@ -10,7 +10,7 @@ from worker.adapters.sqs_outbox import SqsOutboxAdapter
 from worker.adapters.sqs_ucp_listener import SqsUcpListenerAdapter
 from worker.core.ucp_sync_service import UcpSyncWorkerService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def run_worker(service: UcpSyncWorkerService) -> None:
@@ -53,5 +53,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

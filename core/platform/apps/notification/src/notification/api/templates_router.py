@@ -14,10 +14,10 @@ requested tenant_id using the resolved IdentityContext from the middleware.
 
 import asyncio
 import json
-import logging
 from typing import Any
 
 import jinja2
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -29,7 +29,7 @@ from notification.config import NotificationEngineSettings
 from notification.domain.models import Channel, Template
 from notification.ports.interfaces import NotificationTemplatesRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/notifications",
@@ -234,14 +234,18 @@ async def preview_template(
                     timeout=settings.render_timeout_seconds,
                 )
     except TimeoutError as exc:
-        logger.warning(f"Template render timeout for tenant {tenant_id}")
+        logger.warning("Template render timeout for tenant {tenant_id}", tenant_id=tenant_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Template rendering timed out. Please simplify the template.",
         ) from exc
     except jinja2.TemplateError as exc:
         # Catch specific Jinja2 rendering errors (TemplateSyntaxError, UndefinedError, etc.)
-        logger.exception(f"Template render error for tenant {tenant_id}: {type(exc).__name__}")
+        logger.exception(
+            "Template render error for tenant {tenant_id}: {type(exc).__name__}",
+            tenant_id=tenant_id,
+            val_1=type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Template rendering failed. Please check your template syntax.",

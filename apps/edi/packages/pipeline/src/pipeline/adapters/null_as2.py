@@ -7,11 +7,11 @@ Allows DeliveryService to always require a concrete AS2DeliveryPort
 without any conditional logic at the injection site.
 """
 
-import logging
+import structlog
 
 from pipeline.ports.as2 import AS2DeliveryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class NullAS2DeliveryAdapter(AS2DeliveryPort):

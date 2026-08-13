@@ -1,11 +1,12 @@
 import asyncio
-import logging
 from collections import defaultdict
+
+import structlog
 
 from notification.application.ports.notification_query_port import NotificationDTO
 from notification.application.ports.notification_stream_port import NotificationStreamPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class NotificationStreamManager(NotificationStreamPort):
@@ -22,7 +23,11 @@ class NotificationStreamManager(NotificationStreamPort):
         """Creates a new queue for a client connection and registers it."""
         queue: asyncio.Queue[NotificationDTO] = asyncio.Queue(maxsize=100)
         self._queues[(tenant_id, user_id)].add(queue)
-        logger.debug(f"Subscribed SSE client for tenant={tenant_id}, user={user_id}")
+        logger.debug(
+            "Subscribed SSE client for tenant={tenant_id}, user={user_id}",
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
         return queue
 
     def unsubscribe(
@@ -35,7 +40,11 @@ class NotificationStreamManager(NotificationStreamPort):
                 self._queues[key].remove(queue)
             if not self._queues[key]:
                 del self._queues[key]
-        logger.debug(f"Unsubscribed SSE client for tenant={tenant_id}, user={user_id}")
+        logger.debug(
+            "Unsubscribed SSE client for tenant={tenant_id}, user={user_id}",
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
 
     async def broadcast(self, tenant_id: str, user_id: str, notification: NotificationDTO) -> None:
         """Pushes a notification to all connected queues for a specific user."""
@@ -44,12 +53,15 @@ class NotificationStreamManager(NotificationStreamPort):
             # Iterate over a snapshot to avoid issues if set is modified during iteration
             queues_to_notify = list(self._queues[key])
             logger.debug(
-                f"Broadcasting notification to {len(queues_to_notify)} client(s) for user={user_id}"
+                "Broadcasting notification to {len(queues_to_notify)} client(s) for user={user_id}",
+                val_0=len(queues_to_notify),
+                user_id=user_id,
             )
             for queue in queues_to_notify:
                 try:
                     queue.put_nowait(notification)
                 except asyncio.QueueFull:
                     logger.warning(
-                        f"Dropped notification for user={user_id}: queue full (client too slow)"
+                        "Dropped notification for user={user_id}: queue full (client too slow)",
+                        user_id=user_id,
                     )

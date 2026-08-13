@@ -13,15 +13,15 @@ single reason to change (SRP):
 """
 
 import functools
-import logging
 from typing import Any
 
+import structlog
 from as2_core import OutboundAS2Message, build_outbound_message
 from security import encrypt_payload, sign_payload
 
 from pipeline.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def _resolve_pem(

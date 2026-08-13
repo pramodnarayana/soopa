@@ -1,9 +1,9 @@
-import logging
+import structlog
 
 from ...domain.models import ScheduledJob
 from ...ports.job_dispatcher import JobDispatcherPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DummyJobDispatcher(JobDispatcherPort):
@@ -14,5 +14,8 @@ class DummyJobDispatcher(JobDispatcherPort):
 
     async def dispatch(self, job: ScheduledJob) -> None:
         logger.info(
-            f"Dummy dispatch: successfully published job {job.name} ({job.id}) to target_queue {job.target_queue}"
+            "Dummy dispatch: successfully published job {job.name} ({job.id}) to target_queue {job.target_queue}",
+            job_name=job.name,
+            job_id=job.id,
+            job_target_queue=job.target_queue,
         )

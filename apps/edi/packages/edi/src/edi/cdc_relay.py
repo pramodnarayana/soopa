@@ -1,6 +1,6 @@
-import logging
 from typing import Any
 
+import structlog
 from domain.events import PIPELINE_EVENT_ROUTING_MAP, MessageQueueName
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from edi.dependencies.services import get_message_queue
 from edi.ports.message_queue import MessageQueuePort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/internal/cdc", tags=["CDC Relay"])
 
@@ -112,7 +112,7 @@ async def relay_cdc_event(
             # Outbox table routing logic
             if not event.event_type:
                 error_msg = f"Outbox event missing event_type: {event.idempotency_key}"
-                logger.error(f"[CDC Relay] {error_msg}")
+                logger.error("[CDC Relay] {error_msg}", error_msg=error_msg)
                 await _quarantine(queue, error_msg, event.model_dump())
                 continue
 
@@ -124,7 +124,7 @@ async def relay_cdc_event(
                     error_msg = (
                         f"Invalid JSON in outbox payload for key {event.idempotency_key}: {e}"
                     )
-                    logger.exception(f"[CDC Relay] {error_msg}")
+                    logger.exception("[CDC Relay] {error_msg}", error_msg=error_msg)
                     await _quarantine(queue, error_msg, event.model_dump())
                     continue
             else:
@@ -139,7 +139,7 @@ async def relay_cdc_event(
                 trace_id = payload_dict.get("trace_id") if isinstance(payload_dict, dict) else None
                 if not trace_id:
                     error_msg = f"Outbox event missing trace_id in payload: {event.idempotency_key}"
-                    logger.error(f"[CDC Relay] {error_msg}")
+                    logger.error("[CDC Relay] {error_msg}", error_msg=error_msg)
                     await _quarantine(queue, error_msg, event.model_dump())
                     continue
 
@@ -151,7 +151,14 @@ async def relay_cdc_event(
             }
 
             await queue.send(queue_name=queue_name, payload=message_body)
-            logger.info(f"[CDC Relay] Relayed event_type={event.event_type} to {queue_name}")
+            logger.info(
+                "[CDC Relay] Relayed event_type={event.event_type} to {queue_name}",
+                event_event_type=event.event_type,
+                queue_name=queue_name,
+            )
         else:
-            logger.debug(f"[CDC Relay] Ignoring event for unhandled table: {event.table}")
+            logger.debug(
+                "[CDC Relay] Ignoring event for unhandled table: {event.table}",
+                event_table=event.table,
+            )
     return {"status": "ok"}

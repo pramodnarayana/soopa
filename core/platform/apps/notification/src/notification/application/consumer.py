@@ -1,14 +1,15 @@
 import asyncio
 import contextlib
-import logging
 import os
 from typing import Any
+
+import structlog
 
 from ..adapters.inbound.sqs_poller import poll_sqs_queue
 from ..domain.models import NotificationEvent
 from .dispatch_use_case import DispatchNotificationUseCase
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class NotificationConsumerWorker:
@@ -58,7 +59,10 @@ class NotificationConsumerWorker:
             logger.error("SQS message payload missing 'event_type' / domain_event_type")
             return
 
-        logger.info(f"Dispatching notification event: {domain_event_type}")
+        logger.info(
+            "Dispatching notification event: {domain_event_type}",
+            domain_event_type=domain_event_type,
+        )
 
         notification_event = NotificationEvent(
             tenant_id=tenant_id, event_type=domain_event_type, data=payload
@@ -69,7 +73,9 @@ class NotificationConsumerWorker:
         queue_name = "PriorityNotificationsQueue"
         aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
 
-        logger.info(f"Starting NotificationConsumerWorker for {queue_name}...")
+        logger.info(
+            "Starting NotificationConsumerWorker for {queue_name}...", queue_name=queue_name
+        )
 
         # We run the SQS poller in a task so we can cancel it via the shutdown event
         poll_task = asyncio.create_task(

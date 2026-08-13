@@ -1,15 +1,14 @@
 import asyncio
-import logging
 from pathlib import Path
 
+import structlog
 from alembic import command
 from alembic.config import Config
 from config.settings import get_settings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
@@ -69,7 +68,7 @@ def run_migrations():
     # 2. Fetch Shards dynamically
     logger.info("--- Fetching Tenant Shards ---")
     shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.database.global_url))
-    logger.info(f"Found {len(shard_urls)} shard(s) to migrate")
+    logger.info("Found {len(shard_urls)} shard(s) to migrate", val_0=len(shard_urls))
 
     # 3. Run Tenant Migrations per shard
     for url in shard_urls:
@@ -84,12 +83,14 @@ def run_migrations():
             except Exception:  # noqa: BLE001
                 masked_url = "***redacted***"
 
-        logger.info(f"--- Applying TENANT Migrations to Shard: {masked_url} ---")
+        logger.info(
+            "--- Applying TENANT Migrations to Shard: {masked_url} ---", masked_url=masked_url
+        )
         tenant_cfg = Config(str(package_root / "alembic.tenant.ini"))
         tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
         tenant_cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(tenant_cfg, "head")
-        logger.info(f"FINISHED TENANT UPGRADE FOR {masked_url}")
+        logger.info("FINISHED TENANT UPGRADE FOR {masked_url}", masked_url=masked_url)
 
     logger.info("--- All Database Migrations Complete ---")
 

@@ -1,11 +1,12 @@
-import logging
 import os
 from collections.abc import Awaitable
 from typing import cast
 
+import structlog
+
 from notification.bootstrap.container import Container
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Instantiate and wire globally at module load time so @inject patches
 # the endpoints BEFORE FastAPI inspects their signatures for Depends()

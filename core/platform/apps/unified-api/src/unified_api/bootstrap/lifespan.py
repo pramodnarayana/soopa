@@ -14,17 +14,17 @@ Architecture note:
   - Shutdown order (reverse): EDI infrastructure → UCP workers.
 """
 
-import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import structlog
 from edi.bootstrap.lifespan import shutdown as edi_shutdown
 from edi.bootstrap.lifespan import startup as edi_startup
 from fastapi import FastAPI
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 from notification.bootstrap.lifespan import shutdown as notification_shutdown

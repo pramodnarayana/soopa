@@ -1,12 +1,12 @@
-import logging
 from typing import Any
 
 import httpx
+import structlog
 
 from ucp.core.config import get_settings
 from ucp.core.exceptions import IdentityProviderError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ZitadelClient:
@@ -56,7 +56,11 @@ class ZitadelClient:
 
     async def handle_response_error(self, response: httpx.Response, action_context: str) -> None:
         error_text = response.text
-        logger.error(f"Failed to {action_context}: {error_text}")
+        logger.error(
+            "Failed to {action_context}: {error_text}",
+            action_context=action_context,
+            error_text=error_text,
+        )
         raise IdentityProviderError(
             message=f"Failed to {action_context}",
             original_error=error_text,

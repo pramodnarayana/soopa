@@ -1,17 +1,16 @@
 import asyncio
-import logging
 import os
 import signal
 import sys
 from collections.abc import Awaitable
 from typing import cast
 
+import structlog
 from dotenv import load_dotenv
 
 from notification.bootstrap.container import Container
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def run_consumer() -> None:

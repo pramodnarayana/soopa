@@ -1,6 +1,6 @@
 import json
-import logging
 
+import structlog
 from domain.models import EdiMessageDomainModel
 from domain.status import MessageStatus
 
@@ -9,7 +9,7 @@ from pipeline.ports.http import HttpDeliveryPort
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class WebhookDeliveryStrategy(BaseDeliveryStrategy):
@@ -30,7 +30,10 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         idempotency_key: str | None = None,
     ) -> None:
         if not await self.repository.claim_api_payload(trace_id):
-            logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
+            logger.warning(
+                "Could not claim trace_id={trace_id} (already claimed or terminal).",
+                trace_id=trace_id,
+            )
             return
 
         api_payload = await self.repository.get_api_payload(trace_id)
@@ -68,7 +71,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id, MessageStatus.FAILED, webhook_url=partner.get("url"), response=str(e)
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.exception(f"Webhook delivery failed for trace_id={trace_id}")
+            logger.exception("Webhook delivery failed for trace_id={trace_id}", trace_id=trace_id)
             return
 
         if 200 <= status_code < 300:
@@ -82,7 +85,11 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             await self._emit_delivery_completed(
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
-            logger.info(f"Delivered trace_id={trace_id} → webhook {partner['url']}")
+            logger.info(
+                "Delivered trace_id={trace_id} → webhook {partner['url']}",
+                trace_id=trace_id,
+                partnerurl=partner["url"],
+            )
         else:
             await self.repository.update_api_payload_status(
                 trace_id,
@@ -92,4 +99,8 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 response=response_text,
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.error(f"Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}")
+            logger.error(
+                "Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}",
+                trace_id=trace_id,
+                status_code=status_code,
+            )

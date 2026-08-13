@@ -1,5 +1,4 @@
-import logging
-
+import structlog
 from domain.events import EdiEventType, ProvisioningEvent
 from domain.models import ConnectionType, PartnerStatus
 
@@ -11,7 +10,7 @@ from edi.domain.models import (
 )
 from edi.ports.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SFTPPartnerService:
@@ -25,7 +24,11 @@ class SFTPPartnerService:
     async def create_sftp_partner(
         self, tenant_id: str, cmd: CreateSFTPPartnerCmd, idempotency_key: str | None = None
     ) -> PartnerEntity:
-        logger.info(f"Creating SFTP partner {cmd.name} for tenant {tenant_id}")
+        logger.info(
+            "Creating SFTP partner {cmd.name} for tenant {tenant_id}",
+            cmd_name=cmd.name,
+            tenant_id=tenant_id,
+        )
         partner_id = await self.uow.sftp_partners.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
         await self.uow.control_plane_outbox.publish_outbox_event(
             event=ProvisioningEvent(
@@ -51,7 +54,11 @@ class SFTPPartnerService:
         cmd: UpdateSFTPPartnerCmd,
         idempotency_key: str | None = None,
     ) -> PartnerEntity:
-        logger.info(f"Updating SFTP partner {partner_id} for tenant {tenant_id}")
+        logger.info(
+            "Updating SFTP partner {partner_id} for tenant {tenant_id}",
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+        )
         existing = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
         if not existing:
             raise ValueError(f"SFTP partner {partner_id} not found")
@@ -100,7 +107,11 @@ class SFTPPartnerService:
     async def delete_sftp_partner(
         self, tenant_id: str, partner_id: str, idempotency_key: str | None = None
     ) -> None:
-        logger.info(f"Deleting SFTP partner {partner_id} for tenant {tenant_id}")
+        logger.info(
+            "Deleting SFTP partner {partner_id} for tenant {tenant_id}",
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+        )
         await self.uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(

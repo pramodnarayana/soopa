@@ -4,8 +4,9 @@
 # pylint: disable=broad-exception-caught
 
 # bots-modules
-import logging
 import time
+
+import structlog
 
 from bots_core.domain import grammar, message, node
 from bots_core.domain.exceptions import (
@@ -15,7 +16,7 @@ from bots_core.domain.exceptions import (
     txtexc,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 from bots_core.infrastructure.config.botsconfig import (
     ID,
     LIN,

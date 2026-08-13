@@ -4,7 +4,7 @@ Bots message lib
 # pylint: disable=missing-function-docstring
 
 # bots-modules
-import logging
+import structlog
 
 from bots_core.domain import grammar, node
 from bots_core.domain.exceptions import (
@@ -20,7 +20,7 @@ from bots_core.infrastructure.config.botsconfig import (
 )
 from bots_core.utils.botslib import gettext as _
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class Message:

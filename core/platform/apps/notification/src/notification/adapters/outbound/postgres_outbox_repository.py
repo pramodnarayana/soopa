@@ -1,8 +1,8 @@
-import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import structlog
 from platform_orm.models.notifications import NotificationOutbox
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...domain.models import NotificationOutboxEvent
 from ...ports.outbox_repository import NotificationOutboxRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PostgresOutboxRepository(NotificationOutboxRepositoryPort):
@@ -103,7 +103,9 @@ class PostgresOutboxRepository(NotificationOutboxRepositoryPort):
             result = await session.execute(stmt)
             if cast(CursorResult[Any], result).rowcount == 0:
                 logger.warning(
-                    f"Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_completed"
+                    "Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_completed",
+                    message_id=message_id,
+                    worker_id=worker_id,
                 )
 
     async def mark_failed(self, message_id: str, worker_id: str, error_reason: str) -> None:
@@ -123,5 +125,7 @@ class PostgresOutboxRepository(NotificationOutboxRepositoryPort):
             result = await session.execute(stmt)
             if cast(CursorResult[Any], result).rowcount == 0:
                 logger.warning(
-                    f"Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_failed"
+                    "Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_failed",
+                    message_id=message_id,
+                    worker_id=worker_id,
                 )

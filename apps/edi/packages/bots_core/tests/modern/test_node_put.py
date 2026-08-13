@@ -1,5 +1,3 @@
-import logging
-
 import pytest
 
 from bots_core.domain.exceptions import MappingFormatError, MappingRootError
@@ -71,14 +69,14 @@ def test_node_putloop_wrong_root():
         node.putloop({"BOTSID": "WRONG_ROOT"})
 
 
-def test_node_display(caplog):
-    caplog.set_level(logging.INFO)
+def test_node_display(capsys) -> None:
     node = Node(record={"BOTSID": "ROOT", "BOTSIDnr": "1"})
     child = Node(record={"BOTSID": "CHILD", "BOTSIDnr": "1"})
     node.append(child)
 
     node.display()
 
-    assert "Displaying all nodes in node tree:" in caplog.text
-    assert "'BOTSID': 'ROOT'" in caplog.text
-    assert "'BOTSID': 'CHILD'" in caplog.text
+    captured = capsys.readouterr()
+    assert "Displaying all nodes in node tree:" in captured.out
+    assert "ROOT" in captured.out
+    assert "CHILD" in captured.out

@@ -1,6 +1,6 @@
-import logging
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
@@ -17,7 +17,7 @@ from edi.dependencies.headers import get_idempotency_key
 from edi.dependencies.services import get_vault
 from edi.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["Partners — AS2"])
 

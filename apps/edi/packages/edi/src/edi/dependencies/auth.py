@@ -1,6 +1,6 @@
-import logging
 from typing import Any
 
+import structlog
 from fastapi import Depends, HTTPException, Request, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 
@@ -16,19 +16,28 @@ async def get_identity_context(
     Extracts the authenticated identity from the request.
     Throws a 401 if the user is unauthenticated.
     """
-    logger = logging.getLogger(__name__)
+    logger = structlog.get_logger(__name__)
 
-    logger.info(f"[EDI_GUARD] get_identity_context executing for {request.url.path}")
+    logger.info(
+        "[EDI_GUARD] get_identity_context executing for {request.url.path}",
+        request_url_path=request.url.path,
+    )
 
     identity: IdentityContext | None = getattr(request.state, "identity", None)
     if identity is not None:
-        logger.info(f"[EDI_GUARD] Found identity in request.state: {identity.subject}")
+        logger.info(
+            "[EDI_GUARD] Found identity in request.state: {identity.subject}",
+            identity_subject=identity.subject,
+        )
 
     if identity is None:
         logger.warning("[EDI_GUARD] Identity NOT found in request.state. Checking scope...")
         identity = request.scope.get("identity")
         if identity is not None:
-            logger.info(f"[EDI_GUARD] Found identity in request.scope: {identity.subject}")
+            logger.info(
+                "[EDI_GUARD] Found identity in request.scope: {identity.subject}",
+                identity_subject=identity.subject,
+            )
         else:
             logger.warning("[EDI_GUARD] Identity NOT found in request.scope either!")
 
@@ -49,7 +58,7 @@ async def get_raw_jwt(
     return identity.claims
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def get_current_tenant_id(

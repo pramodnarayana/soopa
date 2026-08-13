@@ -14,12 +14,11 @@ Architecture note:
   into the Application or Domain layers.
 """
 
-import logging
-
+import structlog
 from fastapi import HTTPException, Request, status
 from identity.domain.identity_context import IdentityContext
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def require_platform_admin(

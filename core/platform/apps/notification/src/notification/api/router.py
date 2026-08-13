@@ -1,5 +1,4 @@
-import logging
-
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
@@ -7,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from notification.bootstrap.container import Container
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 # Strict Event-Driven Architecture:

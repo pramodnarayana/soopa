@@ -12,7 +12,8 @@ in inmessage.py / outmessage.py via READER_REGISTRY / WRITER_REGISTRY.
 # pylint: disable=too-many-statements, attribute-defined-outside-init
 
 import codecs
-import logging
+
+import structlog
 
 from bots_core.domain.exceptions import InMessageError
 from bots_core.domain.outmessage import Outmessage
@@ -25,7 +26,7 @@ from bots_core.utils.botslib import gettext as _
 
 from .base import var
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------

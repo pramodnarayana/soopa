@@ -1,7 +1,7 @@
 import asyncio
 import datetime
-import logging
 
+import structlog
 from database.connection import DatabaseRouter
 from database.models.data_plane import DataPlaneOutbox
 from domain.events import PIPELINE_EVENT_ROUTING_MAP
@@ -13,7 +13,7 @@ from worker.core.scheduler.handler import JobHandlerPort
 from worker.core.scheduler.models import Job
 from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _BATCH_SIZE = 100
 _CONCURRENCY_LIMIT = 5
@@ -29,7 +29,7 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
         Sweeps the data-plane (tenant shard) outbox for PENDING pipeline events
         and forwards each one to the appropriate SQS queue using concurrent batching.
         """
-        logger.info(f"[DataPlaneOutboxSweeper] Running sweep for job {job.id}")
+        logger.info("[DataPlaneOutboxSweeper] Running sweep for job {job.id}", job_id=job.id)
 
         total_processed = 0
         sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
@@ -55,7 +55,8 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
             total_processed += sum(results)
 
         logger.info(
-            f"[DataPlaneOutboxSweeper] Sweep complete. Total events forwarded: {total_processed}"
+            "[DataPlaneOutboxSweeper] Sweep complete. Total events forwarded: {total_processed}",
+            total_processed=total_processed,
         )
 
         interval_seconds = (
@@ -85,7 +86,10 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
             events = result.scalars().all()
 
             if not events:
-                logger.debug(f"[DataPlaneOutboxSweeper] No pending events on shard={shard_name}")
+                logger.debug(
+                    "[DataPlaneOutboxSweeper] No pending events on shard={shard_name}",
+                    shard_name=shard_name,
+                )
                 return 0
 
             # Group events by target queue to utilize SQS send_message_batch
@@ -94,8 +98,8 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
                 queue_name = PIPELINE_EVENT_ROUTING_MAP.get(event.event_type)
                 if not queue_name:
                     logger.warning(
-                        f"[DataPlaneOutboxSweeper] Unknown event_type={event.event_type!r} "
-                        f"for event id={event.id}. Marking FAILED."
+                        "[DataPlaneOutboxSweeper] Unknown event_type={event.event_type!r} "
+                        "for event id={event.id}. Marking FAILED."
                     )
                     event.status = "FAILED"
                     continue
@@ -126,7 +130,9 @@ class DataPlaneOutboxSweeperJobHandler(JobHandlerPort):
                         processed += 1
                     else:
                         logger.error(
-                            f"[DataPlaneOutboxSweeper] Failed to forward event id={event.id} to {queue_name}"
+                            "[DataPlaneOutboxSweeper] Failed to forward event id={event.id} to {queue_name}",
+                            event_id=event.id,
+                            queue_name=queue_name,
                         )
 
             # Commit the session. Only events marked PROCESSED/FAILED above will be updated.

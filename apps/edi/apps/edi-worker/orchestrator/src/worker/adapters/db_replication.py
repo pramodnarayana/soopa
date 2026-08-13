@@ -14,11 +14,11 @@ Design invariants:
         _do_replicate                 (bulk: full tenant state sync)
 """
 
-import logging
 from collections.abc import AsyncIterator
 from contextlib import aclosing, asynccontextmanager
 from typing import Any, cast
 
+import structlog
 from database.connection import DatabaseRouter
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
@@ -32,7 +32,7 @@ from worker.core.replication_graph import EntitySpec, topological_layers
 from worker.ports.replication import ReplicationPort
 from worker.ports.tenant import TenantPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 SHARED_TENANT_ID = PLATFORM_TENANT_ID
 
@@ -58,7 +58,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
         except Exception as e:
-            raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
+            raise PermanentProvisioningError("Tenant {tenant_id} unresolvable: {e}") from e
 
         global_gen = self.db_router.get_global_session()
         tenant_gen = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
@@ -73,7 +73,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
         except Exception as e:
-            raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
+            raise PermanentProvisioningError("Tenant {tenant_id} unresolvable: {e}") from e
 
         tenant_gen = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         async with aclosing(tenant_gen) as tenant_ctx:
@@ -91,12 +91,13 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 await self._do_replicate(tenant_id, global_session, tenant_session)
                 await tenant_session.commit()
                 logger.info(
-                    f"[REPLICATION] Full configuration sync complete for tenant={tenant_id}."
+                    "[REPLICATION] Full configuration sync complete for tenant={tenant_id}.",
+                    tenant_id=tenant_id,
                 )
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
-                    f"Full configuration sync failed for tenant={tenant_id}: {e}"
+                    "Full configuration sync failed for tenant={tenant_id}: {e}"
                 ) from e
 
     async def _do_replicate(
@@ -164,9 +165,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         continue  # Optional FK not set on this instance — skip
 
                     logger.info(
-                        f"[REPLICATION] {spec.global_model.__name__} {entity_id}: "
-                        f"FK {dep.fk_attr}={dep_id} → pre-replicating "
-                        f"{dep.global_model.__name__} to shard for tenant={tenant_id}."
+                        "[REPLICATION] {spec.global_model.__name__} {entity_id}: "
+                        "FK {dep.fk_attr}={dep_id} → pre-replicating "
+                        "{dep.global_model.__name__} to shard for tenant={tenant_id}."
                     )
 
                     dep_stmt = select(dep.global_model).where(dep.global_model.id == dep_id)
@@ -175,10 +176,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                     if not dep_entity:
                         raise PermanentProvisioningError(
-                            f"FK dependency {dep.global_model.__name__} id={dep_id} "
-                            f"(required by {spec.global_model.__name__} id={entity_id}) "
-                            f"not found in global DB. The row may have been deleted. "
-                            f"Sending to DLQ."
+                            "FK dependency {dep.global_model.__name__} id={dep_id} "
+                            "(required by {spec.global_model.__name__} id={entity_id}) "
+                            "not found in global DB. The row may have been deleted. "
+                            "Sending to DLQ."
                         )
 
                     dep_tenant_id = getattr(dep_entity, "tenant_id", None) or tenant_id
@@ -186,9 +187,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         tenant_session, dep_tenant_id, dep_entity, dep.tenant_model
                     )
                     logger.info(
-                        f"[REPLICATION] Pre-replicated dependency "
-                        f"{dep.global_model.__name__} id={dep_id} "
-                        f"to shard for tenant={dep_tenant_id}."
+                        "[REPLICATION] Pre-replicated dependency "
+                        "{dep.global_model.__name__} id={dep_id} "
+                        "to shard for tenant={dep_tenant_id}."
                     )
 
                 # 3. Upsert the entity — all FK dependencies are now guaranteed to exist
@@ -198,8 +199,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 )
                 await tenant_session.commit()
                 logger.info(
-                    f"[REPLICATION] Replicated {spec.global_model.__name__} "
-                    f"id={entity_id} to shard for tenant={tenant_id}."
+                    "[REPLICATION] Replicated {spec.global_model.__name__} "
+                    "id={entity_id} to shard for tenant={tenant_id}."
                 )
 
             except (TransientProvisioningError, PermanentProvisioningError):
@@ -208,7 +209,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
-                    f"Failed to replicate {spec.global_model.__name__} id={entity_id}: {e}"
+                    "Failed to replicate {spec.global_model.__name__} id={entity_id}: {e}"
                 ) from e
 
     async def _fetch_global_entity(
@@ -233,8 +234,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
         if not entity:
             raise PermanentProvisioningError(
-                f"{spec.global_model.__name__} id={entity_id} not found "
-                f"in global DB for tenant={tenant_id}."
+                "{spec.global_model.__name__} id={entity_id} not found "
+                "in global DB for tenant={tenant_id}."
             )
         return cast(DeclarativeBase, entity)
 
@@ -331,8 +332,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
 
         logger.debug(
-            f"[REPLICATION] Upserting {tenant_model.__name__} id={data.get('id')} "
-            f"into shard for tenant={tenant_id}."
+            "[REPLICATION] Upserting {tenant_model.__name__} id={data.get('id')} "
+            "into shard for tenant={tenant_id}."
         )
         await tenant_session.execute(stmt)
 
@@ -353,13 +354,13 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 )
                 await tenant_session.commit()
                 logger.info(
-                    f"[REPLICATION] Deleted {tenant_model.__name__} id={entity_id} "
-                    f"from shard for tenant={tenant_id}."
+                    "[REPLICATION] Deleted {tenant_model.__name__} id={entity_id} "
+                    "from shard for tenant={tenant_id}."
                 )
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
-                    f"Failed to delete {tenant_model.__name__} id={entity_id}: {e}"
+                    "Failed to delete {tenant_model.__name__} id={entity_id}: {e}"
                 ) from e
 
     async def _sync_deletes(
@@ -395,8 +396,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stale_ids = tenant_ids - global_ids
         if stale_ids:
             logger.info(
-                f"[REPLICATION] Removing {len(stale_ids)} stale "
-                f"{tenant_model.__tablename__} record(s) from shard for tenant={tenant_id}."
+                "[REPLICATION] Removing {len(stale_ids)} stale "
+                "{tenant_model.__tablename__} record(s) from shard for tenant={tenant_id}."
             )
             await tenant_session.execute(
                 delete(tenant_model).where(tenant_model.id.in_(list(stale_ids)))

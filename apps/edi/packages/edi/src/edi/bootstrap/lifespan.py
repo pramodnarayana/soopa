@@ -15,15 +15,15 @@ Architecture note:
   - No business logic belongs here — only infrastructure wiring.
 """
 
-import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
 from fastapi import FastAPI
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _db_router: DatabaseRouter | None = None
 

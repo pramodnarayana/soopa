@@ -1,7 +1,7 @@
 import asyncio
 import datetime
-import logging
 
+import structlog
 from database.connection import DatabaseRouter
 from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from sqlalchemy import delete, select
@@ -12,7 +12,7 @@ from ucp_models.infrastructure import DatabaseShard
 from worker.core.scheduler.handler import JobHandlerPort
 from worker.core.scheduler.models import Job
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _CONCURRENCY_LIMIT = 5
 _RETENTION_DAYS = 7
@@ -27,7 +27,7 @@ class DataRetentionCleanupJobHandler(JobHandlerPort):
         Cleans up old PROCESSED outbox events and processed idempotency keys
         across all tenant shards to prevent unbounded database growth.
         """
-        logger.info(f"[DataRetentionCleanup] Running sweep for job {job.id}")
+        logger.info("[DataRetentionCleanup] Running sweep for job {job.id}", job_id=job.id)
 
         sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
 
@@ -40,20 +40,18 @@ class DataRetentionCleanupJobHandler(JobHandlerPort):
                 try:
                     return await self._cleanup_shard(shard_name, shard_dsn)
                 except Exception:
-                    logger.exception(f"[DataRetentionCleanup] Failed cleaning shard {shard_name}")
+                    logger.exception(
+                        "[DataRetentionCleanup] Failed cleaning shard {shard_name}",
+                        shard_name=shard_name,
+                    )
 
                     raise
 
-        results = await asyncio.gather(
-            *[_bounded_cleanup(shard.name, shard.dsn) for shard in shards]
-        )
-
-        total_outbox = sum(r[0] for r in results)
-        total_processed = sum(r[1] for r in results)
+        await asyncio.gather(*[_bounded_cleanup(shard.name, shard.dsn) for shard in shards])
 
         logger.info(
-            f"[DataRetentionCleanup] Cleanup complete. "
-            f"Deleted {total_outbox} outbox rows and {total_processed} processed_events rows."
+            "[DataRetentionCleanup] Cleanup complete. "
+            "Deleted {total_outbox} outbox rows and {total_processed} processed_events rows."
         )
 
         # Return None to let the scheduler calculate the next run based on interval

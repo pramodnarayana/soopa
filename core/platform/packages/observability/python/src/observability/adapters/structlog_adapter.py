@@ -4,7 +4,7 @@ Automatically injects the active OTel trace_id into every log line.
 Swap this out by registering a different ILogger implementation in provider.py.
 """
 
-import logging
+import logging  # noqa: TID251 - We need to translate log levels to the stdlib constants internally
 import sys
 from typing import Any
 

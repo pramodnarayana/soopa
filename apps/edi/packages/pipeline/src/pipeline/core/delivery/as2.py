@@ -1,6 +1,6 @@
-import logging
 from typing import Any
 
+import structlog
 from domain.models import EdiMessageDomainModel
 from domain.status import MessageStatus
 
@@ -10,7 +10,7 @@ from pipeline.ports.as2 import AS2DeliveryPort
 from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class As2DeliveryStrategy(BaseDeliveryStrategy):
@@ -37,8 +37,8 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
             logger.error(
-                f"AS2 Delivery failed for trace_id={trace_id}. "
-                f"HTTP status: {status_code}, body: {response_body!r}"
+                "AS2 Delivery failed for trace_id={trace_id}. "
+                "HTTP status: {status_code}, body: {response_body!r}"
             )
             return
 
@@ -66,27 +66,32 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                         ):
                             is_success = False
                             logger.warning(
-                                f"MDN MIC mismatch for trace_id={trace_id}. "
-                                f"Expected {as2_msg.mic}, got {received_mic}"
+                                "MDN MIC mismatch for trace_id={trace_id}. "
+                                "Expected {as2_msg.mic}, got {received_mic}"
                             )
 
             if is_success:
                 await self.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
                 await self._emit_delivery_completed(trace_id, direction, MessageStatus.DELIVERED)
                 logger.info(
-                    f"Delivered trace_id={trace_id} (HTTP {status_code}). MIC={as2_msg.mic}"
+                    "Delivered trace_id={trace_id} (HTTP {status_code}). MIC={as2_msg.mic}",
+                    trace_id=trace_id,
+                    status_code=status_code,
+                    as2_msg_mic=as2_msg.mic,
                 )
             else:
                 await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
                 await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
                 logger.error(
-                    f"Sync MDN indicates failure for trace_id={trace_id}. "
-                    f"Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
+                    "Sync MDN indicates failure for trace_id={trace_id}. "
+                    "Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
                 )
         except Exception:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
-            logger.exception(f"AS2 MDN parsing or processing failed for trace_id={trace_id}")
+            logger.exception(
+                "AS2 MDN parsing or processing failed for trace_id={trace_id}", trace_id=trace_id
+            )
 
     async def deliver(
         self,
@@ -96,17 +101,20 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         idempotency_key: str | None = None,
     ) -> None:
         if not await self.repository.claim_edi_message(trace_id):
-            logger.warning(f"Could not claim trace_id={trace_id} (already claimed or terminal).")
+            logger.warning(
+                "Could not claim trace_id={trace_id} (already claimed or terminal).",
+                trace_id=trace_id,
+            )
             return
 
         try:
             remote_partner = await self.repository.get_as2_partner(partner_id)
             if not remote_partner:
-                raise ValueError(f"AS2 partner {partner_id} not found.")
+                raise ValueError("AS2 partner {partner_id} not found.")
 
             remote_url: str | None = remote_partner.get("remote_url")
             if not remote_url:
-                raise ValueError(f"AS2 partner {partner_id} has no remote_url configured.")
+                raise ValueError("AS2 partner {partner_id} has no remote_url configured.")
 
             local_partner_id: str | None = remote_partner.get("local_partner_id")
             local_partner = (
@@ -129,10 +137,11 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
-                f"AS2 Delivery Adapter is misconfigured or failed to build for trace_id={trace_id}"
+                "AS2 Delivery Adapter is misconfigured or failed to build for trace_id={trace_id}",
+                trace_id=trace_id,
             )
             raise RuntimeError(
-                f"AS2 Delivery Adapter failed to build for trace_id={trace_id}"
+                "AS2 Delivery Adapter failed to build for trace_id={trace_id}"
             ) from e
 
         try:
@@ -144,15 +153,19 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         except RuntimeError as e:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.exception(f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}")
+            logger.exception(
+                "AS2 Delivery Adapter is misconfigured for trace_id={trace_id}", trace_id=trace_id
+            )
             raise RuntimeError(
-                f"AS2 Delivery Adapter is misconfigured for trace_id={trace_id}"
+                "AS2 Delivery Adapter is misconfigured for trace_id={trace_id}"
             ) from e
         except Exception as e:
             await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.exception(f"AS2 HTTP transmission failed for trace_id={trace_id}")
-            raise RuntimeError(f"AS2 HTTP transmission failed for trace_id={trace_id}") from e
+            logger.exception(
+                "AS2 HTTP transmission failed for trace_id={trace_id}", trace_id=trace_id
+            )
+            raise RuntimeError("AS2 HTTP transmission failed for trace_id={trace_id}") from e
 
         await self._process_mdn_response(
             trace_id, edi_msg.direction, as2_msg, status_code, response_headers, response_body

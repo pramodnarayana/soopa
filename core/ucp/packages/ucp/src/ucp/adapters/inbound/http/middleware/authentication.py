@@ -11,9 +11,9 @@ Architecture note:
   It uses the Strategy Pattern to evaluate different token types dynamically.
 """
 
-import logging
 from collections.abc import Sequence
 
+import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from identity.application.authenticate import AuthenticationError, TenantNotProvisionedError
@@ -21,7 +21,7 @@ from identity.domain.authentication_strategy import IAuthenticationStrategy
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Paths that are fully public — no token required.
 _PUBLIC_PATHS: frozenset[str] = frozenset(
@@ -52,7 +52,10 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self.public_paths = public_paths
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        logger.error(f"[AUTH_MIDDLEWARE] Intercepted request for path: {request.url.path}")
+        logger.error(
+            "[AUTH_MIDDLEWARE] Intercepted request for path: {request.url.path}",
+            request_url_path=request.url.path,
+        )
 
         if request.url.path in self.public_paths:
             return await call_next(request)
@@ -69,16 +72,21 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         if token:
             logger.error(
-                f"[AUTH_MIDDLEWARE] Authorization header found. Token starts with: {token[:15]}..."
+                "[AUTH_MIDDLEWARE] Authorization header found. Token starts with: {token[:15]}...",
+                token15=token[:15],
             )
 
             # Chain of Responsibility / Strategy Execution
             strategy_found = False
             for strategy in self.strategies:
-                logger.error(f"[AUTH_MIDDLEWARE] Evaluating strategy: {type(strategy).__name__}")
+                logger.error(
+                    "[AUTH_MIDDLEWARE] Evaluating strategy: {type(strategy).__name__}",
+                    val_0=type(strategy).__name__,
+                )
                 if strategy.can_handle(token):
                     logger.error(
-                        f"[AUTH_MIDDLEWARE] Strategy {type(strategy).__name__} claimed the token!"
+                        "[AUTH_MIDDLEWARE] Strategy {type(strategy).__name__} claimed the token!",
+                        val_0=type(strategy).__name__,
                     )
                     strategy_found = True
                     try:
@@ -97,7 +105,10 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                         request.scope["identity"] = None
                         break
                     except TenantNotProvisionedError as e:
-                        logger.warning(f"[AUTH_MIDDLEWARE] Tenant not provisioned: {e.tenant_id}")
+                        logger.warning(
+                            "[AUTH_MIDDLEWARE] Tenant not provisioned: {e.tenant_id}",
+                            e_tenant_id=e.tenant_id,
+                        )
                         return JSONResponse(status_code=403, content={"detail": str(e)})
 
             if not strategy_found:
@@ -112,6 +123,8 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             request.scope["identity"] = None
 
         logger.error(
-            f"[AUTH_MIDDLEWARE] Proceeding to call_next for {request.url.path} with identity={getattr(request.state, 'identity', None)}"
+            "[AUTH_MIDDLEWARE] Proceeding to call_next for {request.url.path} with identity={getattr(request.state, 'identity', None)}",
+            request_url_path=request.url.path,
+            val_1=getattr(request.state, "identity", None),
         )
         return await call_next(request)

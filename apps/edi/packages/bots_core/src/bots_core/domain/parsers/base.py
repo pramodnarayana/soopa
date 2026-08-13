@@ -9,7 +9,7 @@ Extracted from the monolithic inmessage.py.
 # pylint: disable=too-many-statements, attribute-defined-outside-init
 # pylint: disable=broad-exception-caught
 
-import logging
+import structlog
 
 from bots_core.domain.exceptions import InMessageError
 from bots_core.domain.inmessage import Inmessage
@@ -21,7 +21,7 @@ from bots_core.infrastructure.config.botsconfig import (
 )
 from bots_core.utils.botslib import gettext as _
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class var(Inmessage):

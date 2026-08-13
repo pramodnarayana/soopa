@@ -1,6 +1,6 @@
-import logging
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.exc import IntegrityError
@@ -27,7 +27,7 @@ from edi.domain.models import (
 from edi.ports.as2_tester import AS2TesterPort
 from edi.ports.vault import VaultPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["Platform Partners - AS2 Partnerships"])
 
