@@ -16,7 +16,7 @@ Design invariants:
 
 from collections.abc import AsyncIterator
 from contextlib import aclosing, asynccontextmanager
-from typing import Any, cast
+from typing import Any, ClassVar, Protocol, cast
 
 import structlog
 from database.connection import DatabaseRouter
@@ -24,7 +24,7 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Mapped
 
 from worker.adapters.replication_registry import REPLICATION_GRAPH
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
@@ -35,6 +35,13 @@ from worker.ports.tenant import TenantPort
 logger = structlog.get_logger(__name__)
 
 SHARED_TENANT_ID = PLATFORM_TENANT_ID
+
+
+class ReplicatedModel(Protocol):
+    __tablename__: ClassVar[str]
+    id: Mapped[str]
+    tenant_id: Mapped[str | None]
+
 
 # Compute once at module load — the graph is static for the lifetime of the process.
 # Any cycle in the graph raises ValueError immediately at startup, not silently at runtime.
@@ -341,7 +348,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         self,
         tenant_id: str,
         entity_id: str,
-        tenant_model: type[DeclarativeBase],
+        tenant_model: type[ReplicatedModel],
     ) -> None:
         """Deletes a single entity from the tenant shard by ID."""
         async with self._get_tenant_session(tenant_id) as tenant_session:
@@ -368,8 +375,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         tenant_id: str,
         global_session: AsyncSession,
         tenant_session: AsyncSession,
-        global_model: type[DeclarativeBase],
-        tenant_model: type[DeclarativeBase],
+        global_model: type[ReplicatedModel],
+        tenant_model: type[ReplicatedModel],
         include_shared: bool,
     ) -> None:
         """

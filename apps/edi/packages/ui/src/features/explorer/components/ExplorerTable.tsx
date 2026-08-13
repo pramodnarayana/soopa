@@ -1,3 +1,4 @@
+import { Badge } from '@soopa/ui';
 import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
 import {
   Table,
@@ -10,7 +11,6 @@ import {
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import React, { useState } from 'react';
-import { Badge } from '../../../components/ui/badge';
 
 interface ColumnDef<T> {
   key: string;

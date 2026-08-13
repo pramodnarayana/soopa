@@ -1,3 +1,4 @@
+import { SearchableSelect } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
@@ -11,7 +12,6 @@ import {
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { SearchableSelect } from '../../../components/ui/searchable-select';
 import { useToast } from '../../../hooks/use-toast';
 import { useUpdateRouteMutation } from '../api/routeHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';

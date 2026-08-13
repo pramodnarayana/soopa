@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import Any
 
-from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
 from edi.core.exceptions import TransactionNotFoundError
 from edi.core.services.routing_resolver import RoutingResolutionService
+from edi.ports.uow import DataPlaneUnitOfWorkPort
 
 
 @dataclass
@@ -15,7 +15,7 @@ class TransactionDetailResult:
 
 
 class TransactionService:
-    def __init__(self, uow: DataPlaneUnitOfWork) -> None:
+    def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
 
     async def replay_transaction(self, tenant_id: str, trace_id: str, tier: str) -> None:

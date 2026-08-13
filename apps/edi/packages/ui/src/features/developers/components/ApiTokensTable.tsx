@@ -1,3 +1,4 @@
+import { Badge } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
@@ -19,7 +20,6 @@ import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/re
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Key, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { Badge } from '../../../components/ui/badge';
 import { useDeleteApiTokenMutation, useUpdateApiTokenMutation } from '../api/apiTokenHooks';
 import type { ApiToken } from '../types';
 
@@ -58,24 +58,26 @@ function DeleteTokenDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-red-600">Delete API Token</DialogTitle>
-          <DialogDescription render={<div className="space-y-3 text-sm text-slate-600" />}>
-            <p>
-              This action is{' '}
-              <span className="font-semibold text-slate-900">permanent and irreversible</span>. Any
-              integrations authenticating with this token will immediately fail.
-            </p>
-            <p>To confirm, type the token name below:</p>
-            <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
-              {token.name}
-            </code>
-            <Input
-              id={`delete-token-confirm-${token.id}`}
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="Type the token name to confirm"
-              className="font-mono text-sm"
-              autoComplete="off"
-            />
+          <DialogDescription asChild>
+            <div className="space-y-3 text-sm text-slate-600">
+              <p>
+                This action is{' '}
+                <span className="font-semibold text-slate-900">permanent and irreversible</span>.
+                Any integrations authenticating with this token will immediately fail.
+              </p>
+              <p>To confirm, type the token name below:</p>
+              <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
+                {token.name}
+              </code>
+              <Input
+                id={`delete-token-confirm-${token.id}`}
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="Type the token name to confirm"
+                className="font-mono text-sm"
+                autoComplete="off"
+              />
+            </div>
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

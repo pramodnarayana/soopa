@@ -1,9 +1,9 @@
+import { Combobox } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Combobox } from '../../../components/ui/combobox';
 import { FormModal } from '../../../components/ui/form-modal';
 import { usePlatformSettings } from '../../../features/platform/api/settingsHooks';
 import { useToast } from '../../../hooks/use-toast';

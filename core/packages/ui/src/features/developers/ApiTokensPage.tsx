@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import {
   Dialog,
@@ -64,8 +65,8 @@ function TokenCredentialsModal({
         setCopiedCombined(true);
         setTimeout(() => setCopiedCombined(false), 2000);
       }
-    } catch {
-      // ignore clipboard error
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
     }
   };
 
@@ -188,8 +189,9 @@ function CreateApiTokenDialog({
       setOpen(false);
       setName('');
       onCreated(data);
-    } catch {
-      // surfaced by mutation
+    } catch (error) {
+      console.error('Failed to generate API token:', error);
+      toast.error('Failed to generate API token. Please try again.');
     }
   };
 
@@ -214,7 +216,9 @@ function CreateApiTokenDialog({
           <Input id="create-token-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline">Cancel</Button>} />
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
           <Button
             size="sm"
             onClick={handleCreate}
@@ -248,8 +252,9 @@ function DeleteTokenDialog({
       await deleteMutation.mutateAsync(token.id);
       setConfirmText('');
       onOpenChange(false);
-    } catch {
-      // surfaced by mutation
+    } catch (error) {
+      console.error('Failed to delete API token:', error);
+      toast.error('Failed to delete API token. Please try again.');
     }
   };
 
@@ -289,7 +294,9 @@ function DeleteTokenDialog({
           </p>
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline">Cancel</Button>} />
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
           <Button
             id={`delete-token-confirm-btn-${token.id}`}
             variant="destructive"
@@ -333,8 +340,9 @@ function RenameTokenDialog({
     try {
       await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
       onOpenChange(false);
-    } catch {
-      // surfaced by mutation
+    } catch (error) {
+      console.error('Failed to rename API token:', error);
+      toast.error('Failed to rename API token. Please try again.');
     }
   };
 
@@ -378,7 +386,15 @@ function TokenRowActions({ config, token }: { config: ApiTokenHookConfig; token:
 
   const handleToggleActive = (e: React.MouseEvent) => {
     e.stopPropagation();
-    updateMutation.mutate({ id: token.id, data: { active: !isActive } });
+    updateMutation.mutate(
+      { id: token.id, data: { active: !isActive } },
+      {
+        onError: (error) => {
+          console.error('Failed to toggle token status:', error);
+          toast.error('Failed to toggle token status. Please try again.');
+        },
+      }
+    );
   };
 
   return (
@@ -472,8 +488,9 @@ function TokenDetails({ token, config }: { token: ApiToken; config: ApiTokenHook
     if (trimmed && trimmed !== token.name) {
       try {
         await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
-      } catch {
-        // surfaced by mutation
+      } catch (error) {
+        console.error('Failed to update API token:', error);
+        toast.error('Failed to update API token. Please try again.');
       }
     }
   };

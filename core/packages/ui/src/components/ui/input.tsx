@@ -1,4 +1,5 @@
-import { Input as InputPrimitive } from '@base-ui/react/input';
+'use client';
+
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 import { cn } from '../../lib/utils';
@@ -19,18 +20,22 @@ const inputVariants = cva(
 );
 
 export interface InputProps
-  extends Omit<React.ComponentProps<'input'>, 'className'>,
+  extends React.InputHTMLAttributes<HTMLInputElement>,
     VariantProps<typeof inputVariants> {}
 
-function Input({ type, variant, ...props }: InputProps) {
-  return (
-    <InputPrimitive
-      type={type}
-      data-slot="input"
-      className={cn(inputVariants({ variant }))}
-      {...props}
-    />
-  );
-}
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, variant, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        data-slot="input"
+        className={cn(inputVariants({ variant, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  },
+);
+Input.displayName = 'Input';
 
 export { Input };

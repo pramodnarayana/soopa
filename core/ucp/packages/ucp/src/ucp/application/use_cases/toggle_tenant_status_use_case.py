@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from ucp.core.exceptions import ResourceNotFoundError
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 
@@ -23,7 +24,7 @@ class ToggleTenantStatusUseCase:
                 tenant = await self._uow.tenant_repo.find_by_idp_tenant_id(command.tenant_id)
 
             if not tenant:
-                raise ValueError("Tenant not found")
+                raise ResourceNotFoundError("Tenant not found")
 
             tenant.change_status(command.status)
             await self._uow.tenant_repo.save(tenant, idempotency_key)

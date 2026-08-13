@@ -1,3 +1,4 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
 import {
@@ -20,7 +21,6 @@ import {
 } from '@soopa/ui/components/ui/table';
 import { Clock, Pause, Play } from 'lucide-react';
 import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import type { JobResponse } from '../api/schedulerApi';
 import { useJobsQuery, useUpdateJobMutation } from '../api/schedulerHooks';
 import { CronBuilder } from './CronBuilder';

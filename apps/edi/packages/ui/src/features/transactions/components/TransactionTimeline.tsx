@@ -1,6 +1,6 @@
+import { Badge } from '@soopa/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
 import { Activity, AlertCircle, CheckCircle2, Database, FileJson, Server } from 'lucide-react';
-import { Badge } from '../../../components/ui/badge';
 import { CodeViewer } from '../../../components/ui/code-viewer';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 import type { TransactionDetailResponse } from '../types';

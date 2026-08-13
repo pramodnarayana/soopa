@@ -47,15 +47,21 @@ const boxVariants = cva('', {
 });
 
 export interface BoxProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, 'className'>,
+  extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof boxVariants> {
   asChild?: boolean;
 }
 
 const Box = React.forwardRef<HTMLDivElement, BoxProps>(
-  ({ p, m, bg, border, rounded, asChild = false, ...props }, ref) => {
+  ({ className, p, m, bg, border, rounded, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : 'div';
-    return <Comp ref={ref} className={cn(boxVariants({ p, m, bg, border, rounded }))} {...props} />;
+    return (
+      <Comp
+        ref={ref}
+        className={cn(boxVariants({ p, m, bg, border, rounded }), className)}
+        {...props}
+      />
+    );
   },
 );
 Box.displayName = 'Box';

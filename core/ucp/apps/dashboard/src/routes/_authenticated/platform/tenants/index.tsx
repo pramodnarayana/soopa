@@ -274,9 +274,11 @@ function TenantsPage() {
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger render={<Button size="cta" />}>
-            <Plus className="w-5 h-5" />
-            Provision Tenant
+          <DialogTrigger asChild>
+            <Button size="cta">
+              <Plus className="w-5 h-5" />
+              Provision Tenant
+            </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <form onSubmit={handleSubmit}>

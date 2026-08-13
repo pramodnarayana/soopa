@@ -1,6 +1,7 @@
 # 1. Setup minimal dependencies to isolate the authentication middleware mapping logic
 import os
-from typing import Annotated
+from collections.abc import Iterator
+from typing import Annotated, Any
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
@@ -22,10 +23,10 @@ class MockTenant:
 
 
 class MockTenantRepo:
-    def __init__(self, session=None):
+    def __init__(self, session: Any = None) -> None:
         pass
 
-    async def find_by_idp_tenant_id(self, idp_tenant_id: str):
+    async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> MockTenant | None:
         if idp_tenant_id == "385223051081416707":
             return MockTenant()
         return None
@@ -37,12 +38,12 @@ router = APIRouter()
 @router.get("/api/v1/tenants/{tenant_id}")
 async def get_tenant(
     tenant_id: str, identity: Annotated[IdentityContext, Depends(require_tenant_member)]
-):
+) -> dict[str, str]:
     return {"status": "success", "tenant_id": tenant_id}
 
 
 @pytest.fixture
-def container():
+def container() -> Iterator[Container]:
     """Configure and provide a test container with proper cleanup."""
     test_container = Container()
     test_container.tenant_repo.override(providers.Factory(MockTenantRepo))
@@ -53,13 +54,13 @@ def container():
 
 
 @pytest.fixture
-def app(container):
+def app(container: Container) -> FastAPI:
     """Create test app with configured container."""
     test_app = FastAPI(title="Unified API Auth Mapping Test")
     test_app.include_router(router)
 
     @test_app.middleware("http")
-    async def authentication_middleware(request: Request, call_next):
+    async def authentication_middleware(request: Request, call_next: Any) -> Any:
         identity = raw_identity.model_copy()
         repo = MockTenantRepo()
 
@@ -85,7 +86,7 @@ def app(container):
 
 
 @pytest.fixture
-def client(app):
+def client(app: FastAPI) -> TestClient:
     """Create test client."""
     return TestClient(app)
 
@@ -100,7 +101,7 @@ raw_identity = IdentityContext(
 )
 
 
-def test_tenant_auth_accepts_idp_id(client):
+def test_tenant_auth_accepts_idp_id(client: TestClient) -> None:
     """
     Ensures that when a user requests the IdP Tenant ID in the URL,
     the perimeter mapping logic correctly authorizes it without a 403.
@@ -111,7 +112,7 @@ def test_tenant_auth_accepts_idp_id(client):
     assert response.json() == {"status": "success", "tenant_id": idp_id}
 
 
-def test_tenant_auth_accepts_canonical_id(client):
+def test_tenant_auth_accepts_canonical_id(client: TestClient) -> None:
     """
     Ensures that when a user requests the Canonical UCP Tenant ID in the URL,
     the perimeter mapping logic correctly authorizes it without a 403.

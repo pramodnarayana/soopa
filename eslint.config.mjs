@@ -1,6 +1,7 @@
 import eslint from '@eslint/js';
 import pluginRouter from '@tanstack/eslint-plugin-router';
 import boundaries from 'eslint-plugin-boundaries';
+import tailwind from 'eslint-plugin-tailwindcss';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -10,6 +11,7 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
+  ...tailwind.configs['flat/recommended'],
   {
     languageOptions: {
       parserOptions: {
@@ -30,6 +32,8 @@ export default tseslint.config(
     },
     rules: {
       complexity: ['error', 10],
+      'tailwindcss/no-arbitrary-value': 'error',
+      'tailwindcss/no-custom-classname': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
@@ -101,6 +105,35 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
+  {
+    files: ['apps/**/*.tsx', 'core/**/*.tsx'],
+    ignores: ['**/packages/ui/src/components/ui/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXElement[openingElement.name.name="table"]',
+          message: 'Raw <table> tags are forbidden. Use <DataTable> from the design system.',
+        },
+        {
+          selector: 'JSXElement[openingElement.name.name="button"]',
+          message: 'Raw <button> tags are forbidden. Use <Button> from the design system.',
+        },
+        {
+          selector: 'JSXElement[openingElement.name.name="td"]',
+          message: 'Raw <td> tags are forbidden. Use <DataTable> from the design system.',
+        },
+        {
+          selector: 'JSXElement[openingElement.name.name="th"]',
+          message: 'Raw <th> tags are forbidden. Use <DataTable> from the design system.',
+        },
+        {
+          selector: 'JSXElement[openingElement.name.name="tr"]',
+          message: 'Raw <tr> tags are forbidden. Use <DataTable> from the design system.',
+        },
+      ],
     },
   },
 );
