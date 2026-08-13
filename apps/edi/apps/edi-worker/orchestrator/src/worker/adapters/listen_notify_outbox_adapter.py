@@ -6,6 +6,7 @@ from typing import Any
 
 import asyncpg
 import structlog
+from sqlalchemy.engine import make_url
 
 from worker.adapters.acl.registry import translate_external_event
 from worker.ports.outbox import OutboxEvent, OutboxPort
@@ -43,7 +44,8 @@ class ListenNotifyOutboxAdapter(OutboxPort):
         if self._initialized:
             return
 
-        asyncpg_url = self.db_url.replace("postgresql+asyncpg://", "postgresql://")
+        url = make_url(self.db_url).set(drivername="postgresql")
+        asyncpg_url = url.render_as_string(hide_password=False)
         self.pool = await asyncpg.create_pool(asyncpg_url)
         self.listener_connection = await asyncpg.connect(asyncpg_url)
         await self.listener_connection.add_listener("edi_outbox_channel", self._on_notify)

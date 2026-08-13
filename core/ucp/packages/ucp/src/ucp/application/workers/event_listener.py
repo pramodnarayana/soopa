@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import asyncpg
+from sqlalchemy.engine import make_url
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class ControlPlaneEventListener:
         database_url: str,
         channel: str = "control_plane_events",
     ):
-        self.database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+        self.database_url = database_url
         self.channel = channel
         self._handlers: dict[str, list[Callable[[dict[str, Any]], Any]]] = {}
         self.is_running = False
@@ -59,8 +60,10 @@ class ControlPlaneEventListener:
     async def _run_loop(self) -> None:
         while self.is_running:
             try:
-                logger.debug(f"Connecting to database to listen on '{self.channel}'...")
-                self._connection = await asyncpg.connect(self.database_url)
+                url = make_url(self.database_url).set(drivername="postgresql")
+                asyncpg_url = url.render_as_string(hide_password=False)
+                self._connection = await asyncpg.connect(asyncpg_url)
+                logger.info("event_listener_connected", url="[REDACTED]")
                 await self._connection.add_listener(self.channel, self._on_notify)
                 logger.info(f"Listening on Postgres channel '{self.channel}'")
 

@@ -5,6 +5,7 @@ from typing import Any
 
 import asyncpg
 import structlog
+from sqlalchemy.engine import make_url
 
 from ...domain.models.outbox_event import OutboxEvent
 from ...ports.outbox_publisher import OutboxPublisherPort
@@ -70,7 +71,10 @@ class ControlPlaneOutboxSweeper:
         if not self.database_url:
             return
         try:
-            self._connection = await asyncpg.connect(self.database_url)
+            # properly parse URL and extract dialect
+            url = make_url(self.database_url).set(drivername="postgresql")
+            asyncpg_url = url.render_as_string(hide_password=False)
+            self._connection = await asyncpg.connect(asyncpg_url)
             await self._connection.add_listener("ucp_outbox_wakeup", self._on_notify)
             logger.info("outbox_relay_listening", channel="ucp_outbox_wakeup")
         except Exception:

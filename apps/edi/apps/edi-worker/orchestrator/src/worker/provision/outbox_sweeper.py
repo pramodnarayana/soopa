@@ -2,6 +2,7 @@ import asyncio
 
 import asyncpg
 import structlog
+from sqlalchemy.engine import make_url
 
 from worker.adapters.listen_notify_outbox_adapter import ListenNotifyOutboxAdapter
 
@@ -24,7 +25,8 @@ async def run_sweeper(db_url: str, adapter: ListenNotifyOutboxAdapter) -> None:
     failure_backoff = INITIAL_BACKOFF
 
     try:
-        asyncpg_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+        url = make_url(db_url).set(drivername="postgresql")
+        asyncpg_url = url.render_as_string(hide_password=False)
         pool = await asyncpg.create_pool(asyncpg_url)
 
         while True:
