@@ -35,7 +35,7 @@ def test_validate_target_url(monkeypatch: MagicMock) -> None:
 
     monkeypatch.setattr(worker.core.security, "IS_DEV", False)
 
-    def mock_getaddrinfo(host, *args, **kwargs):
+    def mock_getaddrinfo(host: str, *args: Any, **kwargs: Any) -> list[tuple[None, None, None, None, tuple[str, int]]]:
         if host == "example.com":
             return [(None, None, None, None, ("93.184.216.34", 80))]
         return [(None, None, None, None, (host, 80))]

@@ -22,7 +22,7 @@ from edi.core.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from ucp.core.exceptions import IdentityProviderError
+from ucp.core.exceptions import IdentityProviderError, ResourceNotFoundError
 
 logger = structlog.get_logger(__name__)
 
@@ -36,6 +36,16 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
       - EDI domain exceptions (OrchestrationError, VaultError) — backstop only
       - Framework validation exceptions (RequestValidationError)
     """
+
+    @app.exception_handler(ResourceNotFoundError)
+    async def resource_not_found_exception_handler(
+        request: Request, exc: ResourceNotFoundError
+    ) -> JSONResponse:
+        logger.warning("ResourceNotFoundError at %s: %s", request.url.path, exc)
+        return JSONResponse(
+            status_code=404,
+            content={"detail": str(exc)},
+        )
 
     @app.exception_handler(IdentityProviderError)
     async def identity_provider_exception_handler(

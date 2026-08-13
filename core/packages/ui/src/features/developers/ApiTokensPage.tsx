@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import {
   Dialog,
@@ -190,6 +191,7 @@ function CreateApiTokenDialog({
       onCreated(data);
     } catch (error) {
       console.error('Failed to generate API token:', error);
+      toast.error('Failed to generate API token. Please try again.');
     }
   };
 
@@ -252,6 +254,7 @@ function DeleteTokenDialog({
       onOpenChange(false);
     } catch (error) {
       console.error('Failed to delete API token:', error);
+      toast.error('Failed to delete API token. Please try again.');
     }
   };
 
@@ -339,6 +342,7 @@ function RenameTokenDialog({
       onOpenChange(false);
     } catch (error) {
       console.error('Failed to rename API token:', error);
+      toast.error('Failed to rename API token. Please try again.');
     }
   };
 
@@ -382,7 +386,15 @@ function TokenRowActions({ config, token }: { config: ApiTokenHookConfig; token:
 
   const handleToggleActive = (e: React.MouseEvent) => {
     e.stopPropagation();
-    updateMutation.mutate({ id: token.id, data: { active: !isActive } });
+    updateMutation.mutate(
+      { id: token.id, data: { active: !isActive } },
+      {
+        onError: (error) => {
+          console.error('Failed to toggle token status:', error);
+          toast.error('Failed to toggle token status. Please try again.');
+        },
+      }
+    );
   };
 
   return (
@@ -478,6 +490,7 @@ function TokenDetails({ token, config }: { token: ApiToken; config: ApiTokenHook
         await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
       } catch (error) {
         console.error('Failed to update API token:', error);
+        toast.error('Failed to update API token. Please try again.');
       }
     }
   };

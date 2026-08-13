@@ -16,7 +16,7 @@ Design invariants:
 
 from collections.abc import AsyncIterator
 from contextlib import aclosing, asynccontextmanager
-from typing import Any, Protocol, cast
+from typing import Any, ClassVar, Protocol, cast
 
 import structlog
 from database.connection import DatabaseRouter
@@ -38,8 +38,9 @@ SHARED_TENANT_ID = PLATFORM_TENANT_ID
 
 
 class ReplicatedModel(Protocol):
+    __tablename__: ClassVar[str]
     id: Mapped[str]
-    tenant_id: Mapped[str]
+    tenant_id: Mapped[str | None]
 
 
 # Compute once at module load — the graph is static for the lifetime of the process.

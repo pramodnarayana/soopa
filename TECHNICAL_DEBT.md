@@ -94,19 +94,19 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Description**: Developers currently create files manually, which leads to boilerplate errors and architectural drift.
 - **Action Item**: Build an internal CLI (e.g., `pnpm run generate:use-case`) that scaffolds new features with strict Hexagonal boundaries, ensuring developers fall into the "pit of success" by default.
 
-## [Observability Architecture] Massive Refactoring of Legacy Logging
+## [Observability Architecture] Legacy Logging Refactoring
 
 - **Date Added**: 2026-08-13
-- **Status**: ✅ RESOLVED
-- **Description**: We attempted to enforce strict Enterprise Observability standards globally by configuring Ruff to ban `import logging` (TID251) and block f-strings in logging (G004). However, the linter detected over 600 violations across legacy systems, causing the CI pipeline to fail completely. To unblock the team, these strict checks have been temporarily deactivated in `pyproject.toml`.
-- **Action Item**: Reactivate `TID251` and `G004` in Ruff, and systematically refactor all 600+ violations across the codebase to use `structlog` and context injection, eradicating all legacy standard logging usages and f-string anti-patterns.
+- **Status**: IN PROGRESS
+- **Description**: Strict Enterprise Observability standards have been enforced by configuring Ruff to ban `import logging` (TID251). The check is now active in `pyproject.toml` and enforced in CI. Legacy violations are being addressed incrementally through per-file ignores and systematic refactoring to `structlog`.
+- **Action Item**: Complete the systematic refactoring of remaining legacy `logging` usages to use `structlog` and context injection, gradually removing per-file ignores as violations are resolved.
 
-## [Strict Typing] Legacy Mypy Violations
+## [Strict Typing] Mypy Type Enforcement
 
 - **Date Added**: 2026-08-13
-- **Status**: ✅ RESOLVED
-- **Description**: The Mypy strict type checker currently detects 40 legacy violations across 14 files (primarily missing return types, untyped function calls, and incorrect generic types). To unblock the current enterprise refactor commit, the `mypy` pre-commit hook has been temporarily commented out.
-- **Action Item**: Resolve the 40 legacy Mypy errors and reactivate the `mypy` hook in `.pre-commit-config.yaml` to ensure strict CI type enforcement.
+- **Status**: IN PROGRESS
+- **Description**: The Mypy strict type checker is active in the pre-commit configuration and enforced in CI. Legacy type violations are being addressed incrementally through per-file configuration and systematic type annotation improvements.
+- **Action Item**: Continue resolving legacy Mypy violations across the codebase to achieve full strict type coverage without per-file exceptions.
 
 ## [Security/UX] Hide Internal Tenant IDs from Client-Facing URLs
 

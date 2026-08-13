@@ -46,6 +46,7 @@ def test_use_case_class_structure():
     use_case_files = get_use_case_files()
     class_name_violations = []
     public_method_violations = []
+    syntax_errors = []
 
     for filepath in use_case_files:
         if not filepath.name.endswith("_use_case.py"):
@@ -56,7 +57,8 @@ def test_use_case_class_structure():
 
         try:
             tree = ast.parse(source)
-        except SyntaxError:
+        except SyntaxError as e:
+            syntax_errors.append(f"{filepath.name}: SyntaxError at line {e.lineno}: {e.msg}")
             continue
 
         use_case_classes = [
@@ -84,6 +86,7 @@ def test_use_case_class_structure():
                 f"{filepath.name} ({use_case_class.name}): expected exactly 1 public method, found {len(public_methods)} -> {public_methods}"
             )
 
+    assert not syntax_errors, "Use Case Syntax Errors:\n" + "\n".join(syntax_errors)
     assert not class_name_violations, "Use Case Class Naming Violations:\n" + "\n".join(
         class_name_violations
     )
