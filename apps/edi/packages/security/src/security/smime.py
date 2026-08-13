@@ -8,54 +8,57 @@ No private keys or payloads are ever written to disk.
 
 import contextlib
 import email
-import logging
 import re
 from email import policy
+from typing import Any
 
 import patches.cryptography  # noqa: F401 - applies legacy 3DES patch
+import structlog
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers import algorithms
 from cryptography.hazmat.primitives.serialization import pkcs7
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
-def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | None:  # type: ignore
+def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
+    from asn1crypto import cms, pem  # type: ignore
+
+    # 1. Try raw bytes (BER/DER)
+    with contextlib.suppress(Exception):
+        return cms.ContentInfo.load(encrypted_data)
+
+    # 2. Try S/MIME payload extraction
+    try:
+        msg = email.message_from_bytes(encrypted_data, policy=policy.HTTP)
+        pl = msg.get_payload(decode=True)
+        if pl:
+            return cms.ContentInfo.load(pl)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("smime_payload_extraction_fallback_failed", error=str(exc))
+
+    # 3. Try PEM unarmoring
+    try:
+        _, _, der_bytes = pem.unarmor(encrypted_data)
+        return cms.ContentInfo.load(der_bytes)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("pem_unarmoring_fallback_failed", error=str(exc))
+
+    return None
+
+
+def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes | None:
     """
     Ultimate pure-Python native fallback for BouncyCastle BER envelopes.
     Bypasses cryptography's strict Rust PKCS7 parser entirely by manually
     extracting the symmetric key and decrypting the payload using raw primitives.
     """
-    from asn1crypto import cms, pem  # type: ignore
     from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
-    content_info = None
-
-    # 1. Try raw bytes (BER/DER)
-    with contextlib.suppress(Exception):
-        content_info = cms.ContentInfo.load(encrypted_data)
-
-    # 2. Try S/MIME payload extraction
-    if not content_info:
-        try:
-            msg = email.message_from_bytes(encrypted_data, policy=policy.HTTP)
-            pl = msg.get_payload(decode=True)
-            if pl:
-                content_info = cms.ContentInfo.load(pl)
-        except Exception:  # noqa: BLE001
-            pass
-
-    # 3. Try PEM unarmoring
-    if not content_info:
-        try:
-            _, _, der_bytes = pem.unarmor(encrypted_data)
-            content_info = cms.ContentInfo.load(der_bytes)
-        except Exception:  # noqa: BLE001
-            pass
-
     try:
+        content_info = _parse_asn1_content_info(encrypted_data)
         if not content_info:
             raise ValueError(
                 "asn1crypto could not parse the payload in any format. Is the binary corrupted?"
@@ -101,7 +104,7 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key) -> bytes | No
             raise ValueError("Invalid PKCS7 padding bytes")
         return padded_plaintext[:-pad_len]
     except Exception as e:  # noqa: BLE001
-        logger.debug(f"Manual ASN.1 decryption failed: {e}")
+        logger.debug("manual_asn1_decryption_failed", error=str(e))
         return None
 
 
@@ -123,7 +126,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
         try:
             return strat_func(encrypted_data, cert, private_key, options=[])  # type: ignore[arg-type]
         except Exception as e:  # noqa: BLE001
-            logger.debug(f"{strat_name} decryption failed: {e}")
+            logger.debug("decryption_strategy_failed", strategy=strat_name, error=str(e))
 
     # Enterprise Fallback: Manually parse the ASN.1 tree and decrypt using primitives
     # This completely eliminates the need for OpenSSL shell commands, bypassing Rust strictness.
@@ -133,7 +136,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
             logger.info("Successfully decrypted payload using pure Python ASN.1 manual primitives.")
             return manual_decrypted
     except Exception as e:  # noqa: BLE001
-        logger.debug(f"Manual fallback decryption failed: {e}")
+        logger.debug("manual_fallback_decryption_failed", error=str(e))
 
     raise ValueError("All native decryption strategies failed.")
 
@@ -149,7 +152,8 @@ def sign_payload(
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
     alg_map = {
-        "sha1": hashes.SHA1(),
+        # AS2 explicitly supports SHA1
+        "sha1": hashes.SHA1(),  # noqa: S303
         "sha256": hashes.SHA256(),
         "sha384": hashes.SHA384(),
         "sha512": hashes.SHA512(),
@@ -288,7 +292,7 @@ def _inject_certificate_into_cms(binary_sig: bytes, cert_bytes: bytes) -> bytes:
 
         return content_info.dump()  # type: ignore
     except Exception as e:  # noqa: BLE001
-        logger.debug(f"Failed to inject certificate into CMS: {e}")
+        logger.debug("certificate_injection_into_cms_failed", error=str(e))
         return binary_sig
 
 

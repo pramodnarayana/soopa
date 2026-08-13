@@ -15,7 +15,8 @@ class WorkerVaultAdapter:
         env = os.getenv("ENVIRONMENT", "development")
         if not token:
             if env in ("development", "dev", "test", "local") or "pytest" in sys.modules:
-                token = "root"
+                # Safe: This is only a dummy token for local dev/pytest, not a real production secret
+                token = "root"  # noqa: S105
             else:
                 raise ValueError("VAULT_TOKEN required in non-dev")
 

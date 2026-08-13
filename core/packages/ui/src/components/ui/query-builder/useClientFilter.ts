@@ -37,26 +37,42 @@ export function applyFilters<T>(data: T[], filters: FilterRule[]): T[] {
           return !val.includes(ruleVal);
         case 'gt': {
           if (rawValue == null || rule.value == null) return false;
-          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
-          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          const leftVal = isNaN(Number(rawValue))
+            ? new Date(String(rawValue)).getTime()
+            : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value))
+            ? new Date(String(rule.value)).getTime()
+            : Number(rule.value);
           return leftVal > rightVal;
         }
         case 'gte': {
           if (rawValue == null || rule.value == null) return false;
-          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
-          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          const leftVal = isNaN(Number(rawValue))
+            ? new Date(String(rawValue)).getTime()
+            : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value))
+            ? new Date(String(rule.value)).getTime()
+            : Number(rule.value);
           return leftVal >= rightVal;
         }
         case 'lt': {
           if (rawValue == null || rule.value == null) return false;
-          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
-          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          const leftVal = isNaN(Number(rawValue))
+            ? new Date(String(rawValue)).getTime()
+            : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value))
+            ? new Date(String(rule.value)).getTime()
+            : Number(rule.value);
           return leftVal < rightVal;
         }
         case 'lte': {
           if (rawValue == null || rule.value == null) return false;
-          const leftVal = isNaN(Number(rawValue)) ? new Date(String(rawValue)).getTime() : Number(rawValue);
-          const rightVal = isNaN(Number(rule.value)) ? new Date(String(rule.value)).getTime() : Number(rule.value);
+          const leftVal = isNaN(Number(rawValue))
+            ? new Date(String(rawValue)).getTime()
+            : Number(rawValue);
+          const rightVal = isNaN(Number(rule.value))
+            ? new Date(String(rule.value)).getTime()
+            : Number(rule.value);
           return leftVal <= rightVal;
         }
         case 'in': {

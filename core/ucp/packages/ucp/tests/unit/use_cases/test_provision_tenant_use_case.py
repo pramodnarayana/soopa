@@ -9,6 +9,7 @@ from ucp.application.use_cases.provision_tenant_use_case import (
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture
@@ -32,15 +33,19 @@ def mock_user_identity_provider() -> IUserIdentityProvider:
 
 
 @pytest.fixture
+def mock_uow(mock_tenant_repo: ITenantRepository) -> UcpUnitOfWorkPort:
+    uow = create_autospec(UcpUnitOfWorkPort, instance=True)  # type: ignore
+    uow.tenant_repo = mock_tenant_repo
+    uow.__aenter__.return_value = uow
+    return uow
+
+
+@pytest.fixture
 def provision_use_case(
-    mock_tenant_repo: ITenantRepository,
-    mock_org_provider: IOrganizationProvider,
-    mock_user_identity_provider: IUserIdentityProvider,
+    mock_uow: UcpUnitOfWorkPort,
 ) -> ProvisionTenantUseCase:
     return ProvisionTenantUseCase(
-        tenant_repo=mock_tenant_repo,
-        organization_provider=mock_org_provider,
-        user_identity_provider=mock_user_identity_provider,
+        uow=mock_uow,
     )
 
 
@@ -48,7 +53,7 @@ def provision_use_case(
 async def test_provision_tenant_success(
     provision_use_case: ProvisionTenantUseCase,
     mock_tenant_repo: ITenantRepository,
-    mock_org_provider: IOrganizationProvider,
+    mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     # Arrange
     command = ProvisionTenantCommand(name="Test Tenant")
@@ -56,14 +61,19 @@ async def test_provision_tenant_success(
     # Act
     tenant = await provision_use_case.execute(command, idempotency_key="idemp-1")
 
-    # Assert \u2014 correct calls to the ports
-    mock_org_provider.create_organization.assert_called_once_with("Test Tenant")  # type: ignore
+    # Assert - correct calls to the ports
+    mock_uow.register_event.assert_called_once_with(
+        event_type="TenantProvisioned",
+        payload={"name": "Test Tenant"},
+        idempotency_key="idemp-1",
+        tenant_id=tenant.id,
+    )
     mock_tenant_repo.save.assert_called_once()  # type: ignore
 
-    # Assert \u2014 the tenant passed to save is correct
+    # Assert — the tenant passed to save is correct
     saved_tenant = mock_tenant_repo.save.call_args[0][0]  # type: ignore
     assert saved_tenant.name == "Test Tenant"
-    assert saved_tenant.idp_tenant_id == "zitadel-org-123"
+    assert saved_tenant.idp_tenant_id is None
     assert saved_tenant.id.startswith("ten_")
 
     # Assert \u2014 the returned tenant is the same object persisted

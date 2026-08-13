@@ -9,6 +9,7 @@ from ucp.domain.models.user import User
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture
@@ -30,15 +31,22 @@ def mock_org_provider() -> IOrganizationProvider:
 
 
 @pytest.fixture
+def mock_uow(
+    mock_tenant_repo: ITenantRepository, mock_user_repo: IUserRepository
+) -> UcpUnitOfWorkPort:
+    uow = create_autospec(UcpUnitOfWorkPort, instance=True)  # type: ignore
+    uow.tenant_repo = mock_tenant_repo
+    uow.user_repo = mock_user_repo
+    uow.__aenter__.return_value = uow
+    return uow
+
+
+@pytest.fixture
 def delete_use_case(
-    mock_tenant_repo: ITenantRepository,
-    mock_user_repo: IUserRepository,
-    mock_org_provider: IOrganizationProvider,
+    mock_uow: UcpUnitOfWorkPort,
 ) -> DeleteTenantUseCase:
     return DeleteTenantUseCase(
-        tenant_repo=mock_tenant_repo,
-        user_repo=mock_user_repo,
-        organization_provider=mock_org_provider,
+        uow=mock_uow,
     )
 
 
@@ -58,7 +66,7 @@ async def test_delete_tenant_success(
     delete_use_case: DeleteTenantUseCase,
     mock_tenant_repo: ITenantRepository,
     mock_user_repo: IUserRepository,
-    mock_org_provider: IOrganizationProvider,
+    mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     tenant = Tenant.create(
         id="ten_123",
@@ -75,6 +83,7 @@ async def test_delete_tenant_success(
     mock_tenant_repo.delete = AsyncMock()  # type: ignore
     mock_user_repo.delete_orphaned_users = AsyncMock()  # type: ignore
     mock_org_provider.delete_organization = AsyncMock()  # type: ignore
+    mock_uow.register_event.return_value = None  # type: ignore
 
     await delete_use_case.execute("ten_123", "idemp-key")
 
@@ -82,4 +91,10 @@ async def test_delete_tenant_success(
     mock_user_repo.find_users_by_tenant.assert_called_once_with("ten_123")
     mock_tenant_repo.delete.assert_awaited_once_with("ten_123", "idemp-key")
     mock_user_repo.delete_orphaned_users.assert_awaited_once_with(["usr_1"])
-    mock_org_provider.delete_organization.assert_awaited_once_with("zitadel-org-123")
+    mock_uow.register_event.assert_called_once_with(
+        event_type="TenantDeleted",
+        payload={"org_id": "zitadel-org-123"},
+        idempotency_key="idemp-key",
+        tenant_id="ten_123",
+    )
+    mock_uow.commit.assert_awaited_once()

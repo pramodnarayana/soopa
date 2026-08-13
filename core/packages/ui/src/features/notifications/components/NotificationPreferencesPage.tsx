@@ -114,10 +114,7 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
             </label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="justify-between w-full font-normal border-slate-200"
-                >
+                <Button variant="outline">
                   {selected.size > 0
                     ? `${selected.size} channel${selected.size > 1 ? 's' : ''} selected`
                     : 'Select channels...'}
@@ -150,7 +147,7 @@ function AddRuleDialog({ open, onOpenChange, onSave, isSaving }: AddRuleDialogPr
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline">Close</Button>} />
-          <Button onClick={handleSave} disabled={isSaving} className="gap-1.5">
+          <Button onClick={handleSave} disabled={isSaving}>
             <Save className="w-3.5 h-3.5" />
             {isSaving ? 'Saving…' : 'Save Rule'}
           </Button>
@@ -206,14 +203,7 @@ export const NotificationPreferencesPage: React.FC<NotificationConfigContext> = 
       cell: ({ row }) => (
         <div className="flex gap-1.5 flex-wrap">
           {row.original.channels.map((ch) => (
-            <Badge
-              key={ch}
-              className={`text-xs font-semibold uppercase ${
-                CHANNEL_STYLES[ch as Channel] ?? 'bg-slate-100 text-slate-700'
-              }`}
-            >
-              {ch}
-            </Badge>
+            <Badge key={ch}>{ch}</Badge>
           ))}
         </div>
       ),
@@ -224,10 +214,9 @@ export const NotificationPreferencesPage: React.FC<NotificationConfigContext> = 
       cell: ({ row }) => (
         <div className="flex justify-end">
           <Button
-            variant="outline"
+            variant="destructive"
             size="sm"
             onClick={() => handleDelete(row.original)}
-            className="text-red-600 border-red-200 hover:bg-red-50"
             aria-label={`Delete rule for ${row.original.event_type}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -256,7 +245,7 @@ export const NotificationPreferencesPage: React.FC<NotificationConfigContext> = 
               Configure which channels receive alerts for each event type.
             </p>
           </div>
-          <Button onClick={() => setDialogOpen(true)} className="gap-2">
+          <Button onClick={() => setDialogOpen(true)}>
             <Plus className="w-4 h-4" />
             Add Rule
           </Button>

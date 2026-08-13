@@ -1,0 +1,33 @@
+rules:
+  - id: zero-mocks-for-pure-logic
+    patterns:
+      - pattern: unittest.mock.$ANY(...)
+      - pattern-not: unittest.mock.ANY
+    message: "Enterprise Rule: Zero Mocks for Pure Logic. Do not use unittest.mock inside domain unit tests."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/test_*.py"
+        - "**/tests/**/domain/**"
+  - id: aws-client-in-loop
+    patterns:
+      - pattern-inside: |
+          while $COND:
+            ...
+      - pattern-either:
+          - pattern: boto3.client(...)
+          - pattern: aioboto3.Session().client(...)
+          - pattern: $S.client("sqs", ...)
+    message: "Enterprise Rule: Performance bottleneck. Do not instantiate AWS clients inside a polling loop. Create the client outside the loop and reuse it via connection pooling."
+    languages: [python]
+    severity: ERROR
+  - id: get-queue-url-in-loop
+    patterns:
+      - pattern-inside: |
+          while $COND:
+            ...
+      - pattern: $SQS.get_queue_url(...)
+    message: "Enterprise Rule: Performance bottleneck. Do not call get_queue_url dynamically inside a polling loop. Cache it."
+    languages: [python]
+    severity: ERROR

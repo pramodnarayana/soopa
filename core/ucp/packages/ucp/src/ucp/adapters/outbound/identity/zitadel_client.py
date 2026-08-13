@@ -58,5 +58,7 @@ class ZitadelClient:
         error_text = response.text
         logger.error(f"Failed to {action_context}: {error_text}")
         raise IdentityProviderError(
-            message=f"Failed to {action_context}", original_error=error_text
+            message=f"Failed to {action_context}",
+            original_error=error_text,
+            status_code=response.status_code,
         )

@@ -31,6 +31,36 @@ class SqsPublisherAdapter(MessagePublisherPort):
             finally:
                 self._sqs_client = None
 
+    async def _send_batch_chunk(
+        self, queue_name: str, queue_url: str, sqs: Any, batch: list[PublishMessageEnvelope]
+    ) -> list[str]:
+        entries = []
+        for msg in batch:
+            entry = {
+                "Id": msg.message_id,
+                "MessageBody": json.dumps(msg.event),
+            }
+            if queue_name.endswith(".fifo"):
+                entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
+                dedup_id = msg.idempotency_key or msg.message_id or str(uuid.uuid4())
+                entry["MessageDeduplicationId"] = dedup_id
+            entries.append(entry)
+
+        if not entries:
+            return []
+
+        successful_ids = []
+        try:
+            resp = await sqs.send_message_batch(QueueUrl=queue_url, Entries=entries)
+            for success in resp.get("Successful", []):
+                successful_ids.append(success["Id"])
+            for failed in resp.get("Failed", []):
+                logger.error(f"Failed to forward message id={failed['Id']}: {failed['Message']}")
+        except Exception:
+            logger.exception(f"Failed to send batch to {queue_name}")
+
+        return successful_ids
+
     async def publish_batch(
         self, queue_name: str, messages: list[PublishMessageEnvelope]
     ) -> list[str]:
@@ -56,35 +86,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
         # SQS allows max 10 messages per batch
         for i in range(0, len(messages), 10):
             batch = messages[i : i + 10]
-            entries = []
-            for msg in batch:
-                entry = {
-                    "Id": msg.message_id,
-                    "MessageBody": json.dumps(msg.event),
-                }
-                # FIFO queues require MessageGroupId; standard queues do not support it
-                if queue_name.endswith(".fifo"):
-                    entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
-                    dedup_id = msg.idempotency_key or msg.message_id or str(uuid.uuid4())
-                    entry["MessageDeduplicationId"] = dedup_id
-
-                entries.append(entry)
-
-            if not entries:
-                continue
-
-            try:
-                resp = await sqs.send_message_batch(QueueUrl=queue_url, Entries=entries)
-
-                for success in resp.get("Successful", []):
-                    successful_ids.append(success["Id"])
-
-                for failed in resp.get("Failed", []):
-                    logger.error(
-                        f"Failed to forward message id={failed['Id']}: {failed['Message']}"
-                    )
-            except Exception:
-                logger.exception(f"Failed to send batch to {queue_name}")
+            successful_ids.extend(await self._send_batch_chunk(queue_name, queue_url, sqs, batch))
 
         return successful_ids
 

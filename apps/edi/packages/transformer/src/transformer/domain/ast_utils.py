@@ -7,6 +7,35 @@ class ASTUtils:
     """
 
     @staticmethod
+    def _is_segment_key(k: str) -> bool:
+        return k.isupper() and 2 <= len(k) <= 3 and k.isalnum()
+
+    @staticmethod
+    def _is_loop_list(v: list[Any]) -> bool:
+        if not v:
+            return False
+        first_item = v[0]
+        if isinstance(first_item, dict):
+            for sub_k in first_item:
+                if ASTUtils._is_segment_key(sub_k):
+                    return True
+        return False
+
+    @staticmethod
+    def _count_segment_node(k: str, v: Any, traverse_fn: Any) -> int:
+        if ASTUtils._is_segment_key(k):
+            if isinstance(v, list) and len(v) > 0:
+                if ASTUtils._is_loop_list(v):
+                    traverse_fn(v)
+                else:
+                    return len(v)
+            elif isinstance(v, dict):
+                return 1
+        elif isinstance(v, (dict, list)):
+            traverse_fn(v)
+        return 0
+
+    @staticmethod
     def count_segments(txn: dict[str, Any]) -> int:
         """
         Recursively counts the number of valid EDI segments in a transaction AST dictionary.
@@ -17,25 +46,7 @@ class ASTUtils:
             nonlocal count
             if isinstance(node, dict):
                 for k, v in node.items():
-                    # Segments are uppercase, 2-3 alphanumeric characters
-                    if k.isupper() and 2 <= len(k) <= 3 and k.isalnum():
-                        if isinstance(v, list) and len(v) > 0:
-                            # Check if the list contains standard segments or if it's a loop
-                            first_item = v[0]
-                            is_loop = False
-                            if isinstance(first_item, dict):
-                                for sub_k in first_item:
-                                    if sub_k.isupper() and 2 <= len(sub_k) <= 3 and sub_k.isalnum():
-                                        is_loop = True
-                                        break
-                            if is_loop:
-                                traverse(v)
-                            else:
-                                count += len(v)
-                        elif isinstance(v, dict):
-                            count += 1
-                    elif isinstance(v, (dict, list)):
-                        traverse(v)
+                    count += ASTUtils._count_segment_node(k, v, traverse)
             elif isinstance(node, list):
                 for item in node:
                     traverse(item)

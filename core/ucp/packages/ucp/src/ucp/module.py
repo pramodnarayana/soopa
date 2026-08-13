@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from ucp.adapters.inbound.http.routers import apps_router, tenants_router, users_router
-from ucp.bootstrap.dependencies import setup_dependency_injection
+from ucp.bootstrap.container import Container
 from ucp.bootstrap.exceptions import setup_exception_handlers
 from ucp.bootstrap.lifespan import lifespan
 from ucp.bootstrap.middleware import setup_middleware
@@ -26,6 +26,7 @@ def create_ucp_app() -> FastAPI:
     app.include_router(apps_router.router, prefix="/api/v1")
 
     # 4. Wire Up Dependency Injection (IoC Container)
-    setup_dependency_injection(app)
+    container = Container()
+    app.container = container  # type: ignore[attr-defined]
 
     return app

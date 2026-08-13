@@ -107,7 +107,8 @@ class TestMICCalculation:
 
         payload = b"test-payload"
         mic = calculate_mic(payload, mic_alg="sha1")
-        expected_b64 = base64.b64encode(hashlib.sha1(payload).digest()).decode()
+        # Test case specifically validates the legacy SHA1 compatibility path.
+        expected_b64 = base64.b64encode(hashlib.sha1(payload).digest()).decode()  # noqa: S324
         assert mic.startswith(expected_b64)
         assert "sha1" in mic
 

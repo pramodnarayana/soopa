@@ -67,17 +67,10 @@ function TenantAppsPage() {
         );
 
         return (
-          <Card
-            key={app.id}
-            className={`relative group flex flex-col overflow-hidden transition-all duration-300 ease-out ${
-              isSubscribed
-                ? 'border-primary/50 bg-primary/5 shadow-sm'
-                : 'hover:shadow-md hover:-translate-y-0.5'
-            }`}
-          >
+          <Card key={app.id}>
             {isSubscribed && (
               <div className="absolute top-4 right-4 flex items-center gap-2">
-                <Badge variant="default" className="gap-1.5 shadow-sm">
+                <Badge variant="default">
                   <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                   Active
                 </Badge>
@@ -85,7 +78,7 @@ function TenantAppsPage() {
               </div>
             )}
 
-            <CardHeader className="flex-grow flex flex-col gap-4 mt-2">
+            <CardHeader>
               <div
                 className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
                   isSubscribed
@@ -97,18 +90,18 @@ function TenantAppsPage() {
               </div>
 
               <div className="space-y-1">
-                <CardTitle className="text-lg">{app.name}</CardTitle>
+                <CardTitle>{app.name}</CardTitle>
                 <CardDescription>
                   {app.description || 'Enterprise integration application'}
                 </CardDescription>
               </div>
             </CardHeader>
 
-            <CardFooter className="pt-4 border-t border-border flex justify-center">
+            <CardFooter>
               {isSubscribed ? (
                 <Button
-                  variant="outline"
-                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
+                  variant="destructive"
+                  fullWidth={true}
                   disabled={unsubscribeMutationObj.isPending}
                   onClick={() => handleUnsubscribe(app.id)}
                 >
@@ -116,7 +109,8 @@ function TenantAppsPage() {
                 </Button>
               ) : (
                 <Button
-                  className="w-full shadow-sm rounded-xl h-11 text-[15px] font-semibold"
+                  fullWidth={true}
+                  size="cta"
                   disabled={subscribeMutationObj.isPending}
                   onClick={() => handleSubscribe(app.id)}
                 >

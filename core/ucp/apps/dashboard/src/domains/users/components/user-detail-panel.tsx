@@ -72,7 +72,6 @@ export function UserDetailPanel({
           <Button
             type="button"
             variant="outline"
-            className="rounded-xl h-10 px-5 text-[14px] font-semibold"
             disabled={!isDirty || updateMutationObj.isPending}
             onClick={handleCancel}
           >
@@ -80,7 +79,6 @@ export function UserDetailPanel({
           </Button>
           <Button
             type="button"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
             disabled={!isDirty || updateMutationObj.isPending}
             onClick={handleSave}
           >
@@ -95,7 +93,6 @@ export function UserDetailPanel({
             <Input
               value={editFirst}
               onChange={(e) => setEditFirst(e.target.value)}
-              className="h-9 rounded-lg text-sm bg-white"
               placeholder="First name"
             />
           </div>
@@ -104,17 +101,12 @@ export function UserDetailPanel({
             <Input
               value={editLast}
               onChange={(e) => setEditLast(e.target.value)}
-              className="h-9 rounded-lg text-sm bg-white"
               placeholder="Last name"
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">Email Address</label>
-            <Input
-              value={user.email}
-              disabled
-              className="h-9 rounded-lg text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
-            />
+            <Input value={user.email} disabled />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">Role</label>
@@ -141,7 +133,6 @@ export function UserDetailPanel({
                   day: 'numeric',
                 })}
                 disabled
-                className="h-9 rounded-lg text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
               />
             </div>
           )}

@@ -11,6 +11,7 @@ from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
 from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture
@@ -31,15 +32,22 @@ def mock_idp() -> IUserIdentityProvider:
 
 
 @pytest.fixture
+def mock_uow(
+    mock_tenant_repo: ITenantRepository, mock_user_repo: IUserRepository
+) -> UcpUnitOfWorkPort:
+    uow = create_autospec(UcpUnitOfWorkPort, instance=True)  # type: ignore
+    uow.tenant_repo = mock_tenant_repo
+    uow.user_repo = mock_user_repo
+    uow.__aenter__.return_value = uow
+    return uow
+
+
+@pytest.fixture
 def use_case(
-    mock_tenant_repo: ITenantRepository,
-    mock_user_repo: IUserRepository,
-    mock_idp: IUserIdentityProvider,
+    mock_uow: UcpUnitOfWorkPort,
 ) -> InviteUserUseCase:
     return InviteUserUseCase(
-        tenant_repo=mock_tenant_repo,
-        user_repo=mock_user_repo,
-        user_identity_provider=mock_idp,
+        uow=mock_uow,
     )
 
 
@@ -48,7 +56,7 @@ async def test_invite_user_success(
     use_case: InviteUserUseCase,
     mock_tenant_repo: ITenantRepository,
     mock_user_repo: IUserRepository,
-    mock_idp: IUserIdentityProvider,
+    mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     # Arrange
     tenant = Tenant.create(id="ten_123", name="Test", idp_tenant_id="org-123", subscriptions=[])
@@ -65,17 +73,22 @@ async def test_invite_user_success(
     local_user_id = await use_case.execute(command)
 
     # Assert
-    mock_idp.create_user.assert_called_once_with(  # type: ignore
-        org_id="org-123", email="test@example.com", first_name="John", last_name="Doe"
-    )
-    mock_idp.assign_tenant_role.assert_called_once_with(  # type: ignore
-        user_id="idp-user-123", org_id="org-123", role="admin"
+    mock_uow.register_event.assert_called_once_with(
+        event_type="UserInvited",
+        payload={
+            "org_id": "org-123",
+            "email": "test@example.com",
+            "first_name": "John",
+            "last_name": "Doe",
+            "role": "admin",
+        },
+        tenant_id="ten_123",
     )
 
     saved_user = mock_user_repo.save.call_args[0][0]  # type: ignore
     assert saved_user.email == "test@example.com"
     assert saved_user.id == local_user_id
-    assert saved_user.idp_user_id == "idp-user-123"
+    assert saved_user.idp_user_id is None
 
     mock_user_repo.save_tenant_membership.assert_called_once_with(  # type: ignore
         tenant_id="ten_123", user_id=local_user_id, role="admin"

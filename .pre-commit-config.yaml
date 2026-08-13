@@ -8,6 +8,13 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=2000']
 
+  - repo: https://github.com/returntocorp/semgrep
+    rev: v1.51.0
+    hooks:
+      - id: semgrep
+        name: semgrep-enterprise
+        args: ['--config=.semgrep/enterprise-rules.yml', '--error']
+
   - repo: local
     hooks:
       - id: ruff
@@ -24,3 +31,28 @@ repos:
         types_or: [python, pyi]
         exclude: ^libs/edi_grammar/
         require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run mypy core/ucp/packages/ucp core/platform/apps/unified-api
+        language: system
+        types_or: [python, pyi]
+        exclude: ^(.*/)?scripts/.*$
+        pass_filenames: false
+      - id: eslint
+        name: eslint
+        entry: pnpm lint
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+      - id: biome
+        name: biome
+        entry: pnpm biome check
+        language: system
+        types_or: [javascript, jsx, ts, tsx, json]
+        pass_filenames: false
+      - id: tach
+        name: tach
+        entry: uv run tach check
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false

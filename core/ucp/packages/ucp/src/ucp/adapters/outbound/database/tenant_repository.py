@@ -5,7 +5,7 @@ from datetime import UTC
 
 from platform_orm.models.identity import ApiKey, ApiToken, TenantUser
 from platform_orm.models.identity import Tenant as DbTenant
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
@@ -127,11 +127,6 @@ class TenantRepository(ITenantRepository):
                 payload=json.loads(event.model_dump_json()),
             )
             self.session.add(outbox_event)
-            # Fire Postgres NOTIFY so the OutboxListener instantly wakes up
-            await self.session.execute(
-                text("SELECT pg_notify('control_plane_outbox_channel', :outbox_id)"),
-                {"outbox_id": outbox_id},
-            )
 
     async def delete(self, tenant_id: str, idempotency_key: str | None = None) -> None:
         await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))

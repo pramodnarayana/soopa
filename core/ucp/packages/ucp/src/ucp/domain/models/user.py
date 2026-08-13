@@ -45,6 +45,12 @@ class User(AggregateRoot):
             updated_at=now,
         )
 
+    def set_idp_user_id(self, idp_user_id: str) -> None:
+        if self.idp_user_id:
+            raise ValueError(f"User already has an IDP mapping: {self.idp_user_id}")
+        self.idp_user_id = idp_user_id
+        self.updated_at = datetime.now(UTC)
+
     def activate(self) -> None:
         if self.status != "active":
             self.status = "active"

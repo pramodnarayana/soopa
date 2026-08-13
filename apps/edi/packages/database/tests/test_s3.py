@@ -21,7 +21,8 @@ async def test_aioboto3_payload_storage_upload() -> None:
             region="us-east-1",
             endpoint_url="http://localhost:4566",
             access_key_id="test",
-            secret_access_key="test",
+            # Safe: This is a dummy key for localstack S3 mocking, not a real AWS secret
+            secret_access_key="test",  # noqa: S106
         )
 
         uri = await storage.upload(tenant_id=1, message_id="msg123", payload=b"hello")

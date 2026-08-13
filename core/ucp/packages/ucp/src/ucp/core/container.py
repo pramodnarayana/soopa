@@ -39,7 +39,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     On any unhandled exception the transaction rolls back, preventing partial
     writes (e.g. Zitadel org created but DB tenant row missing).
     """
-    async with _async_session_maker() as session, session.begin():
+    async with _async_session_maker() as session:
         yield session
 
 

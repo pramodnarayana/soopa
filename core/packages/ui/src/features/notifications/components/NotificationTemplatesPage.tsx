@@ -12,9 +12,10 @@
 import { ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import DOMPurify from 'dompurify';
 import { Bell, Eye, FileText, Mail, MessageSquare, Plus, Save, Trash2 } from 'lucide-react';
-import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 
 const Editor = lazy(() => import('@monaco-editor/react'));
+
 import { toast } from 'sonner';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
@@ -173,11 +174,7 @@ function TemplateEditorPanel({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button
-              onClick={handleSave}
-              disabled={upsert.isPending}
-              className="gap-2 bg-indigo-600 hover:bg-indigo-700"
-            >
+            <Button onClick={handleSave} disabled={upsert.isPending}>
               <Save className="w-4 h-4" />
               {upsert.isPending ? 'Saving…' : 'Save'}
             </Button>
@@ -418,9 +415,7 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
         const ch = row.original.channel as Channel;
         const Icon = CHANNEL_ICONS[ch];
         return (
-          <Badge
-            className={`text-xs font-semibold uppercase flex items-center gap-1.5 w-fit ${CHANNEL_STYLES[ch] ?? 'bg-slate-100 text-slate-700'}`}
-          >
+          <Badge>
             {Icon && <Icon className="w-3.5 h-3.5" />}
             {ch.replace('_', ' ')}
           </Badge>
@@ -432,9 +427,9 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
       header: 'Status',
       cell: ({ row }) =>
         row.original.is_active ? (
-          <Badge className="bg-emerald-100 text-emerald-800 text-xs font-semibold">Active</Badge>
+          <Badge variant="default">Active</Badge>
         ) : (
-          <Badge className="bg-slate-100 text-slate-500 text-xs font-semibold">Inactive</Badge>
+          <Badge variant="secondary">Inactive</Badge>
         ),
     },
     {
@@ -445,12 +440,7 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
           <Button variant="outline" size="sm" onClick={() => setEditing(row.original)}>
             Edit
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDeleteClick(row.original)}
-            className="text-red-600 border-red-200 hover:bg-red-50"
-          >
+          <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(row.original)}>
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -477,10 +467,7 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
               Design Jinja2 templates for each event type and delivery channel.
             </p>
           </div>
-          <Button
-            onClick={() => setEditing('new')}
-            className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-          >
+          <Button onClick={() => setEditing('new')}>
             <Plus className="w-4 h-4" />
             New Template
           </Button>
@@ -522,12 +509,7 @@ export const NotificationTemplatesPage: React.FC<NotificationConfigContext> = (p
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
-            <Button
-              variant="default"
-              onClick={handleDeleteConfirm}
-              disabled={remove.isPending}
-              className="bg-red-600 hover:bg-red-700"
-            >
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={remove.isPending}>
               {remove.isPending ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>

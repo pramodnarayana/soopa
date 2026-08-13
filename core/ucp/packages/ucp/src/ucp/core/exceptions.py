@@ -25,6 +25,7 @@ class InfrastructureError(Exception):
 class IdentityProviderError(InfrastructureError):
     """Raised when the external Identity Provider fails."""
 
-    def __init__(self, message: str, original_error: str = None):  # type: ignore
+    def __init__(self, message: str, original_error: str = None, status_code: int = None):  # type: ignore
         super().__init__(message)
         self.original_error = original_error
+        self.status_code = status_code

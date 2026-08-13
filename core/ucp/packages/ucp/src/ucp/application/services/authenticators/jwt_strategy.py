@@ -6,9 +6,8 @@ from identity.application.authenticate import TenantNotProvisionedError, authent
 from identity.domain.authentication_strategy import IAuthenticationStrategy
 from identity.domain.identity_context import IdentityContext
 from identity.ports.token_verifier import TokenVerifier
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.ports.outbound.tenant_repository import ITenantRepository
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +19,10 @@ class JwtStrategy(IAuthenticationStrategy):
 
     def __init__(
         self,
-        session_maker: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+        tenant_repo_factory: Callable[[], AbstractAsyncContextManager[ITenantRepository]],
         token_verifier: TokenVerifier,
     ):
-        self.session_maker = session_maker
+        self.tenant_repo_factory = tenant_repo_factory
         self.token_verifier = token_verifier
 
     def can_handle(self, token: str) -> bool:
@@ -38,9 +37,7 @@ class JwtStrategy(IAuthenticationStrategy):
         )
 
         # Map IdP tenant ID to Canonical UCP tenant ID exactly once at the perimeter.
-        async with self.session_maker() as session:
-            repo = TenantRepository(session)
-
+        async with self.tenant_repo_factory() as repo:
             # 1. Map the primary tenant_id if present
             if identity.tenant_id and not identity.tenant_id.startswith("ten_"):
                 resolved = await repo.find_by_idp_tenant_id(identity.tenant_id)

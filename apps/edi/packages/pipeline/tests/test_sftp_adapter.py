@@ -25,7 +25,8 @@ async def test_paramiko_sftp_delivery_adapter(mock_rsa_key, mock_ssh_client_clas
         host="sftp.example.com",
         port=22,
         username="user",
-        password="password",
+        # Safe: dummy password for unit test mocking
+        password="password",  # noqa: S106
         remote_path="/upload/",
         filename="test.txt",
         payload=b"test payload",
@@ -40,7 +41,8 @@ async def test_paramiko_sftp_delivery_adapter(mock_rsa_key, mock_ssh_client_clas
     assert call_kwargs["hostname"] == "sftp.example.com"
     assert call_kwargs["port"] == 22
     assert call_kwargs["username"] == "user"
-    assert call_kwargs["password"] == "password"
+    # Safe: dummy password for unit test mocking
+    assert call_kwargs["password"] == "password"  # noqa: S105
 
     # SFTP session was opened and the file was uploaded
     mock_client.open_sftp.assert_called_once()

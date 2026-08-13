@@ -16,12 +16,17 @@ by the outermost (Shell) application before being dispatched to sub-apps.
 CORS must live exclusively on the Shell host (unified_api/main.py).
 """
 
+import contextlib
+from collections.abc import AsyncGenerator
+
 from fastapi import FastAPI
 
 from ucp.adapters.inbound.http.middleware.authentication import (
     _PUBLIC_PATHS,
     AuthenticationMiddleware,
 )
+from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
+from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.application.services.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.services.authenticators.jwt_strategy import JwtStrategy
 from ucp.core.container import _async_session_maker, get_token_verifier
@@ -31,9 +36,23 @@ def setup_middleware(app: FastAPI) -> None:
     """
     Registers all cross-cutting HTTP middleware on the UCP domain sub-application.
     """
+
+    @contextlib.asynccontextmanager
+    async def api_token_repo_factory() -> AsyncGenerator[PostgresApiTokenRepository, None]:
+        async with _async_session_maker() as session:
+            yield PostgresApiTokenRepository(session)
+
+    @contextlib.asynccontextmanager
+    async def tenant_repo_factory() -> AsyncGenerator[TenantRepository, None]:
+        async with _async_session_maker() as session:
+            yield TenantRepository(session)
+
     strategies = [
-        ApiKeyStrategy(session_maker=_async_session_maker),
-        JwtStrategy(session_maker=_async_session_maker, token_verifier=get_token_verifier()),
+        ApiKeyStrategy(token_repo_factory=api_token_repo_factory),
+        JwtStrategy(
+            tenant_repo_factory=tenant_repo_factory,
+            token_verifier=get_token_verifier(),
+        ),
     ]
     app.add_middleware(
         AuthenticationMiddleware,

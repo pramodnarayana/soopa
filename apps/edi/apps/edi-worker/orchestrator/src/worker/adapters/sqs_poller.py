@@ -1,12 +1,12 @@
 import asyncio
 import json
-import logging
 from collections.abc import Callable
 from typing import Any
 
 import aioboto3
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def poll_sqs_queue(
@@ -20,15 +20,15 @@ async def poll_sqs_queue(
     if aws_endpoint:
         client_kwargs["endpoint_url"] = aws_endpoint
 
-    while True:
-        try:
-            async with session.client("sqs", **client_kwargs) as sqs:
-                queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
-                queue_url = queue_url_resp["QueueUrl"]
+    try:
+        async with session.client("sqs", **client_kwargs) as sqs:
+            queue_url_resp = await sqs.get_queue_url(QueueName=queue_name)
+            queue_url = queue_url_resp["QueueUrl"]
 
-                logger.info(f"Started polling {queue_name} ({queue_url})")
+            logger.info("started_polling_queue", queue_name=queue_name, queue_url=queue_url)
 
-                while True:
+            while True:
+                try:
                     response = await sqs.receive_message(
                         QueueUrl=queue_url,
                         MaxNumberOfMessages=10,
@@ -44,9 +44,11 @@ async def poll_sqs_queue(
                             # Log trace_id if available, otherwise just log processing
                             trace_id = body.get("payload", {}).get("trace_id")
                             if trace_id:
-                                logger.info(f"[{queue_name}] Processing trace_id={trace_id}")
+                                logger.info(
+                                    "processing_message", queue_name=queue_name, trace_id=trace_id
+                                )
                             else:
-                                logger.info(f"[{queue_name}] Processing message")
+                                logger.info("processing_message", queue_name=queue_name)
 
                             await processor_func(body)
 
@@ -57,23 +59,28 @@ async def poll_sqs_queue(
 
                             if trace_id:
                                 logger.info(
-                                    f"[{queue_name}] Successfully processed trace_id={trace_id}"
+                                    "message_processed_successfully",
+                                    queue_name=queue_name,
+                                    trace_id=trace_id,
                                 )
                             else:
-                                logger.info(f"[{queue_name}] Successfully processed message")
+                                logger.info("message_processed_successfully", queue_name=queue_name)
 
                         except json.JSONDecodeError:
                             # Permanently delete malformed (non-JSON) messages
                             logger.exception(
-                                f"[{queue_name}] Non-JSON message body, deleting permanently"
+                                "non_json_message_body_deleting_permanently", queue_name=queue_name
                             )
                             await sqs.delete_message(
                                 QueueUrl=queue_url, ReceiptHandle=receipt_handle
                             )
 
                         except Exception:
-                            logger.exception("[%s] Transient error processing message", queue_name)
-        except Exception:
-            logger.exception(f"[{queue_name}] SQS client error, retrying in 2s")
-
-            await asyncio.sleep(2)
+                            logger.exception(
+                                "transient_error_processing_message", queue_name=queue_name
+                            )
+                except Exception:
+                    logger.exception("sqs_client_error_retrying", queue_name=queue_name)
+                    await asyncio.sleep(2)
+    except Exception:
+        logger.exception("sqs_client_or_queue_initialization_failed")

@@ -14,6 +14,8 @@ dependencies = [
     "asyncpg>=0.29.0",
     "platform-orm",
     "identity",
+    "dependency-injector>=4.41.0",
+    "structlog>=24.0.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +46,7 @@ pythonpath = [
 ]
 [tool.mypy]
 strict = true
+plugins = ["pydantic.mypy"]
 
 [build-system]
 requires = ["hatchling"]
@@ -69,5 +72,8 @@ dev = [
 ]
 
 [[tool.mypy.overrides]]
-module = "asyncpg.*"
+module = [
+    "asyncpg.*",
+    "aioboto3.*"
+]
 ignore_missing_imports = true

@@ -11,30 +11,16 @@ from pipeline.ports.sftp import SftpDeliveryPort
 logger = logging.getLogger(__name__)
 
 
-def get_ssh_client(
-    host: str,
-    port: int,
-    username: str,
-    password: str | None = None,
-    client_key_string: str | None = None,
-    host_key_string: str | None = None,
-    timeout: int = 10,
-    use_legacy_rsa: bool = False,
-) -> paramiko.SSHClient:
-    """
-    Creates an enterprise-grade, configured SSHClient.
-    Supports both legacy servers (ssh-rsa) and modern cryptographic algorithms.
-    """
-    client = paramiko.SSHClient()
-
+def _setup_host_key(
+    client: paramiko.SSHClient, host: str, port: int, host_key_string: str | None
+) -> None:
     if not host_key_string:
-        # Trust on First Use (TOFU) / Auto-add for partners who don't provide host keys
         import logging
 
         logging.getLogger(__name__).warning(
             f"No host key provided for {host}. Using AutoAddPolicy (vulnerable to MITM)."
         )
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - intentional TOFU for partners without host keys, logged warning
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     else:
         parts = host_key_string.split()
         if len(parts) < 2:
@@ -53,6 +39,37 @@ def get_ssh_client(
         client.get_host_keys().add(hostname=host_identifier, keytype=key_type, key=parsed_key)
         client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
+
+def _parse_client_key(client_key_string: str) -> paramiko.PKey:
+    key_io = io.StringIO(client_key_string)
+    try:
+        return paramiko.RSAKey.from_private_key(key_io)
+    except Exception:  # noqa: BLE001
+        key_io.seek(0)
+        try:
+            return paramiko.ECDSAKey.from_private_key(key_io)
+        except Exception:  # noqa: BLE001
+            key_io.seek(0)
+            return paramiko.Ed25519Key.from_private_key(key_io)
+
+
+def get_ssh_client(
+    host: str,
+    port: int,
+    username: str,
+    password: str | None = None,
+    client_key_string: str | None = None,
+    host_key_string: str | None = None,
+    timeout: int = 10,
+    use_legacy_rsa: bool = False,
+) -> paramiko.SSHClient:
+    """
+    Creates an enterprise-grade, configured SSHClient.
+    Supports both legacy servers (ssh-rsa) and modern cryptographic algorithms.
+    """
+    client = paramiko.SSHClient()
+    _setup_host_key(client, host, port, host_key_string)
+
     connect_kwargs = {
         "hostname": host,
         "port": port,
@@ -66,17 +83,7 @@ def get_ssh_client(
         connect_kwargs["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}
 
     if client_key_string:
-        key_io = io.StringIO(client_key_string)
-        try:
-            pkey: paramiko.PKey = paramiko.RSAKey.from_private_key(key_io)
-        except Exception:  # noqa: BLE001
-            key_io.seek(0)
-            try:
-                pkey = paramiko.ECDSAKey.from_private_key(key_io)
-            except Exception:  # noqa: BLE001
-                key_io.seek(0)
-                pkey = paramiko.Ed25519Key.from_private_key(key_io)
-        connect_kwargs["pkey"] = pkey
+        connect_kwargs["pkey"] = _parse_client_key(client_key_string)
     elif password:
         connect_kwargs["password"] = password
     else:

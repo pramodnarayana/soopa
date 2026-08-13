@@ -5,7 +5,8 @@ sqs = boto3.client(
     endpoint_url="http://localhost:4566",
     region_name="us-east-1",
     aws_access_key_id="test",
-    aws_secret_access_key="test",
+    # Safe: dummy key for localstack
+    aws_secret_access_key="test",  # noqa: S106
 )
 queues = sqs.list_queues()
 if "QueueUrls" in queues:

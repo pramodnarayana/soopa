@@ -57,9 +57,9 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         (route.app for route in app.routes if isinstance(route, Mount) and route.path == ""),
         None,
     )
-    if edi_app is None:
+    if edi_app is None or not isinstance(edi_app, FastAPI):
         raise RuntimeError(
-            "EDI sub-app not found in Shell routes. "
+            "EDI sub-app not found or is not a FastAPI instance. "
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
 

@@ -125,6 +125,66 @@ async def process_pipeline_event(
                 raise
 
 
+async def _claim_delivery_outbox_event(session: Any, key_str: str) -> str | None:
+    owner_token = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    lease_expires = now + timedelta(minutes=5)
+
+    stmt = (
+        update(DataPlaneOutbox)
+        .where(
+            DataPlaneOutbox.idempotency_key == key_str,
+            DataPlaneOutbox.status != "PROCESSED",
+            or_(
+                DataPlaneOutbox.lease_expires_at.is_(None),
+                DataPlaneOutbox.lease_expires_at < now,
+            ),
+        )
+        .values(
+            status="DELIVERING",
+            owner_token=owner_token,
+            lease_expires_at=lease_expires,
+        )
+        .returning(DataPlaneOutbox.idempotency_key)
+    )
+    result = await session.execute(stmt)
+    if not result.scalar_one_or_none():
+        return None
+    return owner_token
+
+
+async def _mark_delivery_success(session: Any, key_str: str, owner_token: str) -> None:
+    from sqlalchemy.dialects.postgresql import insert
+
+    result = await session.execute(
+        update(DataPlaneOutbox)
+        .where(
+            DataPlaneOutbox.idempotency_key == key_str,
+            DataPlaneOutbox.owner_token == owner_token,
+        )
+        .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
+    )
+    if result.rowcount > 0:
+        await session.execute(
+            insert(ProcessedEvent).values(idempotency_key=key_str).on_conflict_do_nothing()
+        )
+    else:
+        logger.warning(f"[WORKER] Stale success update for idempotency_key={key_str}. Lease lost.")
+
+
+async def _mark_delivery_failure(session: Any, key_str: str, owner_token: str) -> None:
+    result = await session.execute(
+        update(DataPlaneOutbox)
+        .where(
+            DataPlaneOutbox.idempotency_key == key_str,
+            DataPlaneOutbox.owner_token == owner_token,
+        )
+        .values(status="FAILED", owner_token=None, lease_expires_at=None)
+    )
+    if result.rowcount == 0:
+        logger.warning(f"[WORKER] Stale fail update for {key_str}. Lease lost.")
+
+
 async def process_delivery(
     trace_id: str,
     event_type: str,
@@ -139,46 +199,22 @@ async def process_delivery(
     """Sets up the Hexagonal dependencies and executes DeliveryService."""
     shard_name, shard_dsn = await resolver.resolve(tenant_id)
     key_str = str(idempotency_key) if idempotency_key else None
+    owner_token: str | None = None
 
-    # Unit of Work 1: Persist DELIVERING state before network I/O
     if key_str:
         async with contextlib.aclosing(
             db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         ) as session_gen:
             async for session in session_gen:
-                owner_token = str(uuid.uuid4())
-                now = datetime.now(UTC)
-                lease_expires = now + timedelta(minutes=5)
-
-                # Atomically claim the delivery row
-                stmt = (
-                    update(DataPlaneOutbox)
-                    .where(
-                        DataPlaneOutbox.idempotency_key == key_str,
-                        DataPlaneOutbox.status != "PROCESSED",
-                        or_(
-                            DataPlaneOutbox.lease_expires_at.is_(None),
-                            DataPlaneOutbox.lease_expires_at < now,
-                        ),
-                    )
-                    .values(
-                        status="DELIVERING",
-                        owner_token=owner_token,
-                        lease_expires_at=lease_expires,
-                    )
-                    .returning(DataPlaneOutbox.idempotency_key)
-                )
-                result = await session.execute(stmt)
-                if not result.scalar_one_or_none():
+                owner_token = await _claim_delivery_outbox_event(session, key_str)
+                if not owner_token:
                     logger.info(
                         f"Skipping delivery for idempotency_key={idempotency_key} (already processed or currently leased)"
                     )
                     await session.commit()
                     return
-
                 await session.commit()
 
-    # Unit of Work 2: Execute network delivery and persist outcome
     async with contextlib.aclosing(
         db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
     ) as session_gen:
@@ -212,48 +248,18 @@ async def process_delivery(
                 # Execute pure domain logic
                 await service.deliver(trace_id, idempotency_key=key_str)
 
-                if key_str:
-                    from sqlalchemy.dialects.postgresql import insert
+                if key_str and owner_token:
+                    await _mark_delivery_success(session, key_str, owner_token)
 
-                    result = await session.execute(
-                        update(DataPlaneOutbox)
-                        .where(
-                            DataPlaneOutbox.idempotency_key == key_str,
-                            DataPlaneOutbox.owner_token == owner_token,
-                        )
-                        .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
-                    )
-                    if result.rowcount > 0:  # type: ignore[attr-defined]
-                        await session.execute(
-                            insert(ProcessedEvent)
-                            .values(idempotency_key=key_str)
-                            .on_conflict_do_nothing()
-                        )
-                    else:
-                        logger.warning(
-                            f"[WORKER] Stale success update for idempotency_key={key_str}. Lease lost."
-                        )
                 # Commit transaction
                 await session.commit()
             except Exception:
-                if key_str:
+                if key_str and owner_token:
                     try:
                         await session.rollback()
-                        result = await session.execute(
-                            update(DataPlaneOutbox)
-                            .where(
-                                DataPlaneOutbox.idempotency_key == key_str,
-                                DataPlaneOutbox.owner_token == owner_token,
-                            )
-                            .values(status="FAILED", owner_token=None, lease_expires_at=None)
-                        )
-                        if result.rowcount == 0:  # type: ignore[attr-defined]
-                            logger.warning(
-                                f"[WORKER] Stale failure update for idempotency_key={key_str}. Lease lost."
-                            )
+                        await _mark_delivery_failure(session, key_str, owner_token)
                         await session.commit()
                     except Exception:
-                        logger.exception(
-                            "[WORKER] Failed to update outbox status after delivery error"
-                        )
+                        logger.exception("Failed to mark outbox as FAILED")
+                logger.exception("[WORKER] FAILURE in process_delivery for trace_id=%s", trace_id)
                 raise

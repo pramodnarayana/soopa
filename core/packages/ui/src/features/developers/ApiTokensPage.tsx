@@ -21,6 +21,7 @@ import React, { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -92,7 +93,7 @@ function TokenCredentialsModal({
           <div className="grid gap-1.5">
             <span className="text-sm font-medium text-slate-700">Client ID</span>
             <div className="flex gap-2">
-              <Input value={token.client_id} readOnly className="font-mono text-sm bg-slate-50" />
+              <Input value={token.client_id} readOnly variant="code" />
               <Button
                 variant="outline"
                 size="icon"
@@ -109,12 +110,7 @@ function TokenCredentialsModal({
           <div className="grid gap-1.5">
             <span className="text-sm font-medium text-slate-700">Client Secret</span>
             <div className="flex gap-2">
-              <Input
-                value={token.token.split('.')[1] || ''}
-                readOnly
-                type="text"
-                className="font-mono text-sm bg-slate-50"
-              />
+              <Input value={token.token.split('.')[1] || ''} readOnly type="text" variant="code" />
               <Button
                 variant="outline"
                 size="icon"
@@ -133,12 +129,7 @@ function TokenCredentialsModal({
               Combined Token (Bearer Token)
             </span>
             <div className="flex gap-2">
-              <Input
-                value={token.token}
-                readOnly
-                type="text"
-                className="font-mono text-sm bg-slate-50"
-              />
+              <Input value={token.token} readOnly type="text" variant="code" />
               <Button
                 variant="outline"
                 size="icon"
@@ -219,21 +210,13 @@ function CreateApiTokenDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2">
-          <Label htmlFor="new-token-name">Token Name</Label>
-          <Input
-            id="new-token-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. ERP Prod Integration"
-            autoFocus
-          />
+          <Label htmlFor="create-token-name">Token Name</Label>
+          <Input id="create-token-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
+          <DialogClose render={<Button variant="outline">Cancel</Button>} />
           <Button
-            size="cta"
+            size="sm"
             onClick={handleCreate}
             disabled={!name.trim() || createMutation.isPending}
           >
@@ -296,8 +279,7 @@ function DeleteTokenDialog({
             id={`delete-token-confirm-${token.id}`}
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
-            placeholder="Type token name to confirm"
-            className="font-mono text-sm"
+            variant="code"
             autoComplete="off"
             aria-describedby={`delete-token-warning-${token.id}`}
           />
@@ -307,9 +289,7 @@ function DeleteTokenDialog({
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <DialogClose render={<Button variant="outline">Cancel</Button>} />
           <Button
             id={`delete-token-confirm-btn-${token.id}`}
             variant="destructive"
@@ -508,11 +488,9 @@ function TokenDetails({ token, config }: { token: ApiToken; config: ApiTokenHook
               id={`token-name-${token.id}`}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-8 text-sm bg-white"
             />
             <Button
               size="sm"
-              className="h-8 shrink-0"
               onClick={handleSave}
               disabled={updateMutation.isPending || name.trim() === token.name || !name.trim()}
             >

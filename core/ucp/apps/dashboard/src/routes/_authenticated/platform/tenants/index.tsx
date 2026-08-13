@@ -171,7 +171,6 @@ function TenantsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 mr-4"
                 onClick={(e) => {
                   e.stopPropagation();
                   void navigate({ to: `/platform/tenants/${tenant.id}` });
@@ -233,9 +232,8 @@ function TenantsPage() {
                 </button>
               </div>
               <Button
-                variant="ghost"
+                variant="destructive"
                 size="icon"
-                className="text-slate-400 hover:text-red-600 hover:bg-red-50"
                 disabled={deleteMutation.isPending}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -290,15 +288,12 @@ function TenantsPage() {
               </DialogHeader>
               <div className="grid gap-4 py-6">
                 <div className="flex flex-col gap-3">
-                  <Label htmlFor="name" className="text-slate-700">
-                    Company Name
-                  </Label>
+                  <Label htmlFor="name">Company Name</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Acme Corp"
-                    className="col-span-3 rounded-lg"
                     required
                   />
                 </div>
@@ -306,9 +301,8 @@ function TenantsPage() {
               <DialogFooter>
                 <Button
                   type="submit"
-                  size="xl"
+                  size="cta"
                   disabled={provisionMutation.isPending || !formData.name.trim()}
-                  className="text-base font-semibold min-w-[120px]"
                 >
                   {provisionMutation.isPending ? (
                     <>

@@ -58,17 +58,7 @@ export const NotificationsPage: React.FC<NotificationContext> = (props) => {
       header: 'Severity',
       cell: ({ row }) => {
         const severity = row.original.severity;
-        const colorClass =
-          severity === 'urgent'
-            ? 'bg-red-100 text-red-800'
-            : severity === 'high'
-              ? 'bg-orange-100 text-orange-800'
-              : 'bg-blue-100 text-blue-800';
-        return (
-          <Badge className={`uppercase text-xs font-semibold tracking-wider ${colorClass}`}>
-            {severity}
-          </Badge>
-        );
+        return <Badge>{severity}</Badge>;
       },
     },
     {
@@ -104,16 +94,9 @@ export const NotificationsPage: React.FC<NotificationContext> = (props) => {
       cell: ({ row }) => {
         const isRead = row.original.is_read;
         return isRead ? (
-          <Badge variant="outline" className="text-slate-500 border-slate-200">
-            Read
-          </Badge>
+          <Badge variant="outline">Read</Badge>
         ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={(e) => handleMarkAsRead(e, row.original.id)}
-            className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-          >
+          <Button variant="outline" size="sm" onClick={(e) => handleMarkAsRead(e, row.original.id)}>
             <Check className="w-4 h-4 mr-1.5" />
             Mark as Read
           </Button>

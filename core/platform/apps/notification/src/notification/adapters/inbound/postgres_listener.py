@@ -2,10 +2,10 @@ import asyncio
 import contextlib
 import json
 import logging
-import re
 from typing import Any
 
 import asyncpg
+from sqlalchemy.engine import make_url
 
 from notification.application.ports.notification_query_port import NotificationDTO
 from notification.application.ports.notification_stream_port import NotificationStreamPort
@@ -25,7 +25,7 @@ class PostgresNotificationListener:
         stream_manager: NotificationStreamPort,
         channel: str = "in_app_notifications",
     ):
-        self.database_url = re.sub(r"^postgresql\+[^:]+://", "postgresql://", database_url)
+        self.database_url = database_url
         self.channel = channel
         self.stream_manager = stream_manager
         self.is_running = False
@@ -57,8 +57,9 @@ class PostgresNotificationListener:
     async def _run_loop(self) -> None:
         while self.is_running:
             try:
-                logger.debug(f"Connecting to database to listen on '{self.channel}'...")
-                self._connection = await asyncpg.connect(self.database_url)
+                url = make_url(self.database_url).set(drivername="postgresql")
+                asyncpg_url = url.render_as_string(hide_password=False)
+                self._connection = await asyncpg.connect(asyncpg_url)
                 await self._connection.add_listener(self.channel, self._on_notify)
                 logger.info(f"Listening on Postgres channel '{self.channel}'")
 

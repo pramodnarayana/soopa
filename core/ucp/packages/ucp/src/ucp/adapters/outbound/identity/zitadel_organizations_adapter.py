@@ -1,12 +1,11 @@
-import logging
-
+import structlog
 from pydantic import BaseModel, Field
 
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.project_provider import IProjectProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class CreateOrgResponse(BaseModel):
@@ -21,7 +20,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
         self.project_provider = project_provider
 
     async def create_organization(self, name: str) -> tuple[str, bool]:
-        logger.info(f"Provisioning Organization in Zitadel: {name}")
+        logger.info("provisioning_organization_in_zitadel", org_name=name)
 
         try:
             response = await self.fetch_with_auth(
@@ -38,7 +37,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
             if not org_id:
                 raise ValueError("Org ID not returned from Zitadel")
 
-            logger.info(f"Created Organization in Zitadel with ID: {org_id}")
+            logger.info("created_organization_in_zitadel", org_id=org_id)
 
             grant_succeeded = False
             if self.ucp_project_id:
@@ -53,20 +52,19 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
                     grant_succeeded = True
                 except Exception:
                     logger.exception(
-                        "Failed to grant UCP project to org %s. "
-                        "The organization was created successfully but project grant failed. "
-                        "Manual intervention or retry may be required.",
-                        org_id,
+                        "failed_to_grant_ucp_project_to_org",
+                        org_id=org_id,
+                        note="org_created_but_project_grant_failed_manual_intervention_required",
                     )
 
             return org_id, grant_succeeded
         except Exception:
-            logger.exception("Error creating organization in Zitadel")
+            logger.exception("error_creating_organization_in_zitadel", org_name=name)
 
             raise
 
     async def delete_organization(self, org_id: str) -> None:
-        logger.info(f"Deleting Organization in Zitadel: {org_id}")
+        logger.info("deleting_organization_in_zitadel", org_id=org_id)
 
         try:
             # First try admin v1 delete (which works cross-org)
@@ -83,8 +81,41 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
             if response.status_code >= 400:
                 await self.handle_response_error(response, "delete org")
 
-            logger.info(f"Successfully deleted Organization {org_id} from Zitadel")
+            logger.info("successfully_deleted_organization_from_zitadel", org_id=org_id)
         except Exception:
-            logger.exception(f"Error deleting organization {org_id} in Zitadel")
+            logger.exception("error_deleting_organization_in_zitadel", org_id=org_id)
 
+            raise
+
+    async def update_organization_name(self, org_id: str, name: str) -> None:
+        logger.info("updating_organization_name_in_zitadel", org_id=org_id, org_name=name)
+
+        try:
+            response = await self.fetch_with_auth(
+                endpoint=f"/v2/organizations/{org_id}", method="POST", json={"name": name}
+            )
+
+            if response.status_code >= 400:
+                await self.handle_response_error(response, "update org name")
+
+            logger.info("successfully_updated_organization_name_in_zitadel", org_id=org_id)
+        except Exception:
+            logger.exception("error_updating_organization_name_in_zitadel", org_id=org_id)
+            raise
+
+    async def toggle_organization_status(self, org_id: str, active: bool) -> None:
+        logger.info("toggling_organization_status_in_zitadel", org_id=org_id, active=active)
+
+        try:
+            endpoint = f"/v2/organizations/{org_id}/{'activate' if active else 'deactivate'}"
+            response = await self.fetch_with_auth(endpoint=endpoint, method="POST", json={})
+
+            if response.status_code >= 400:
+                await self.handle_response_error(response, "toggle org status")
+
+            logger.info(
+                "successfully_toggled_organization_status_in_zitadel", org_id=org_id, active=active
+            )
+        except Exception:
+            logger.exception("error_toggling_organization_status_in_zitadel", org_id=org_id)
             raise

@@ -79,4 +79,5 @@ async def test_outbox_sweeper_integration(db_session_factory):
 
         assert outbox_row is not None
         assert outbox_row.status == "COMPLETED"
-        assert outbox_row.owner_token == "test_worker_1"
+        # Safe: dummy token for test
+        assert outbox_row.owner_token == "test_worker_1"  # noqa: S105

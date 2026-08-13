@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi import cdc_relay
+from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import edi_lifespan
 from edi.core.exceptions import OrchestrationError, VaultError
 from edi.routers import (
@@ -134,5 +135,8 @@ def create_edi_app() -> FastAPI:
             )
 
         return profile
+
+    container = Container()
+    app.container = container  # type: ignore[attr-defined]
 
     return app

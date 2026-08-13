@@ -31,6 +31,218 @@ export const Route = createRoute({
   component: EdiToolPage,
 });
 
+interface TransformResponse {
+  valid: boolean;
+  result?: string;
+  error?: string;
+}
+
+interface ProcessResultPayload {
+  data: TransformResponse;
+  variables: { payload: string; action: string };
+  debouncedPayload: string;
+  currentAction: string;
+}
+
+function _parseTransformSuccessResult(data: TransformResponse): {
+  outputResult: string;
+  validationErrors: string[];
+} {
+  if (!data.result) {
+    return {
+      outputResult: data.valid ? 'Valid format.' : data.error || 'Unknown error occurred.',
+      validationErrors: [],
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(data.result) as {
+      data?: unknown;
+      meta?: { validation_errors?: string[] };
+    };
+    if (parsed.data !== undefined && parsed.meta) {
+      return {
+        outputResult:
+          typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data, null, 2),
+        validationErrors: parsed.meta.validation_errors || [],
+      };
+    }
+  } catch {
+    // Ignore JSON parse errors and return raw result
+  }
+
+  return { outputResult: data.result, validationErrors: [] };
+}
+
+function processTransformSuccess({
+  data,
+  variables,
+  debouncedPayload,
+  currentAction,
+}: ProcessResultPayload): {
+  ignored: boolean;
+  isValid: boolean | null;
+  validationErrors: string[];
+  outputResult: string;
+} {
+  if (variables.payload !== debouncedPayload || variables.action !== currentAction) {
+    return { ignored: true, isValid: null, validationErrors: [], outputResult: '' };
+  }
+
+  const { outputResult, validationErrors } = _parseTransformSuccessResult(data);
+  return { ignored: false, isValid: data.valid, validationErrors, outputResult };
+}
+
+const FormatToggleButton = ({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
+      active
+        ? 'bg-background shadow-sm text-foreground border border-border/60'
+        : 'text-muted-foreground hover:text-foreground'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+const EdiHumanReadableContainer = ({
+  inputFormat,
+  inputPayload,
+  outputResult,
+  validationErrors,
+}: {
+  inputFormat: 'EDI' | 'JSON';
+  inputPayload: string;
+  outputResult: string;
+  validationErrors: string[];
+}) => {
+  try {
+    const sourceData = inputFormat === 'JSON' ? inputPayload : outputResult;
+    if (!sourceData) return <div className="p-4 text-slate-500">No data to display.</div>;
+
+    const parsedData = JSON.parse(sourceData) as {
+      data?: unknown;
+      meta?: { validation_errors?: string[] };
+    };
+
+    let astToRender = parsedData;
+    let errorsToRender = validationErrors;
+
+    if (inputFormat === 'JSON' && parsedData.data) {
+      astToRender = parsedData.data;
+      if (parsedData.meta && parsedData.meta.validation_errors) {
+        errorsToRender = parsedData.meta.validation_errors;
+      }
+    }
+
+    return <EdiHumanReadableViewer data={astToRender} validationErrors={errorsToRender} />;
+  } catch {
+    return (
+      <div className="p-4 text-red-500 font-medium">
+        Could not parse JSON for human-readable viewing.
+      </div>
+    );
+  }
+};
+
+const EdiCodeViewer = ({
+  outputFormat,
+  outputResult,
+  validationErrors,
+  onEditorWillMount,
+}: {
+  outputFormat: 'JSON' | 'EDI';
+  outputResult: string;
+  validationErrors: string[];
+  onEditorWillMount: (monaco: typeof import('monaco-editor')) => void;
+}) => (
+  <div className="flex flex-col h-full relative">
+    {validationErrors.length > 0 && (
+      <div className="bg-red-50 border-b border-red-200 p-3 shrink-0">
+        <div className="flex items-center gap-2 text-red-800 font-bold text-sm mb-2">
+          <AlertTriangle className="w-4 h-4" />
+          Validation Errors
+        </div>
+        <ul className="list-disc list-inside text-red-600 text-xs font-medium space-y-1 overflow-y-auto max-h-32">
+          {validationErrors.map((err, i) => (
+            <li key={i}>{err}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+    <div className="flex-1 min-h-0">
+      <Editor
+        height="100%"
+        language={outputFormat === 'EDI' ? 'edi' : 'json'}
+        value={outputResult}
+        theme="soopa-theme"
+        beforeMount={onEditorWillMount}
+        options={{
+          readOnly: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          lineNumbersMinChars: 3,
+          wordWrap: 'on',
+          folding: true,
+          padding: { top: 16, bottom: 16 },
+          renderLineHighlight: 'none',
+          hideCursorInOverviewRuler: true,
+          overviewRulerBorder: false,
+          scrollbar: {
+            verticalScrollbarSize: 8,
+            horizontalScrollbarSize: 8,
+          },
+        }}
+      />
+    </div>
+  </div>
+);
+
+const EdiOutputViewer = ({
+  outputFormat,
+  inputFormat,
+  inputPayload,
+  outputResult,
+  validationErrors,
+  onEditorWillMount,
+}: {
+  outputFormat: 'JSON' | 'Human Readable' | 'EDI';
+  inputFormat: 'EDI' | 'JSON';
+  inputPayload: string;
+  outputResult: string;
+  validationErrors: string[];
+  onEditorWillMount: (monaco: typeof import('monaco-editor')) => void;
+}) => {
+  if (outputFormat === 'Human Readable') {
+    return (
+      <EdiHumanReadableContainer
+        inputFormat={inputFormat}
+        inputPayload={inputPayload}
+        outputResult={outputResult}
+        validationErrors={validationErrors}
+      />
+    );
+  }
+
+  return (
+    <EdiCodeViewer
+      outputFormat={outputFormat}
+      outputResult={outputResult}
+      validationErrors={validationErrors}
+      onEditorWillMount={onEditorWillMount}
+    />
+  );
+};
+
 export function EdiToolPage() {
   const [inputFormat, setInputFormat] = useState<'EDI' | 'JSON'>('EDI');
   const [outputFormat, setOutputFormat] = useState<'JSON' | 'Human Readable' | 'EDI'>('JSON');
@@ -66,37 +278,13 @@ export function EdiToolPage() {
     },
     onSuccess: ({ data, variables }) => {
       const currentAction = inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI';
-      if (variables.payload !== debouncedPayload || variables.action !== currentAction) {
-        return; // Ignore stale responses
-      }
+      const res = processTransformSuccess({ data, variables, debouncedPayload, currentAction });
 
-      setIsValid(data.valid);
-      if (data.result) {
-        try {
-          const parsed = JSON.parse(data.result) as {
-            data?: unknown;
-            meta?: { validation_errors?: string[] };
-          };
-          if (parsed.data !== undefined && parsed.meta) {
-            setValidationErrors(parsed.meta.validation_errors || []);
-            setOutputResult(
-              typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data, null, 2),
-            );
-          } else {
-            setValidationErrors([]);
-            setOutputResult(data.result);
-          }
-        } catch {
-          setValidationErrors([]);
-          setOutputResult(data.result);
-        }
-      } else if (!data.valid) {
-        setValidationErrors([]);
-        setOutputResult(data.error || 'Unknown error occurred.');
-      } else {
-        setValidationErrors([]);
-        setOutputResult('Valid format.');
-      }
+      if (res.ignored) return;
+
+      setIsValid(res.isValid);
+      setValidationErrors(res.validationErrors);
+      setOutputResult(res.outputResult);
     },
     onError: (
       error: Error | import('axios').AxiosError,
@@ -156,81 +344,7 @@ export function EdiToolPage() {
     }
   };
 
-  const renderOutputPane = () => {
-    if (outputFormat === 'Human Readable') {
-      try {
-        const sourceData = inputFormat === 'JSON' ? inputPayload : outputResult;
-        if (!sourceData) return <div className="p-4 text-slate-500">No data to display.</div>;
-
-        const parsedData = JSON.parse(sourceData) as {
-          data?: unknown;
-          meta?: { validation_errors?: string[] };
-        };
-
-        let astToRender = parsedData;
-        let errorsToRender = validationErrors;
-
-        // Smart Extractor: If the user pasted an API Envelope, extract the pristine data and errors
-        if (inputFormat === 'JSON' && parsedData.data) {
-          astToRender = parsedData.data;
-          if (parsedData.meta && parsedData.meta.validation_errors) {
-            errorsToRender = parsedData.meta.validation_errors;
-          }
-        }
-
-        return <EdiHumanReadableViewer data={astToRender} validationErrors={errorsToRender} />;
-      } catch {
-        return (
-          <div className="p-4 text-red-500 font-medium">
-            Could not parse JSON for human-readable viewing.
-          </div>
-        );
-      }
-    }
-
-    return (
-      <div className="flex flex-col h-full relative">
-        {validationErrors.length > 0 && (
-          <div className="bg-red-50 border-b border-red-200 p-3 shrink-0">
-            <div className="flex items-center gap-2 text-red-800 font-bold text-sm mb-2">
-              <AlertTriangle className="w-4 h-4" />
-              Validation Errors
-            </div>
-            <ul className="list-disc list-inside text-red-600 text-xs font-medium space-y-1 overflow-y-auto max-h-32">
-              {validationErrors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className="flex-1 min-h-0">
-          <Editor
-            height="100%"
-            language={outputFormat === 'EDI' ? 'edi' : 'json'}
-            value={outputResult}
-            theme="soopa-theme"
-            beforeMount={handleEditorWillMount}
-            options={{
-              readOnly: true,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              lineNumbersMinChars: 3,
-              wordWrap: 'on',
-              folding: true,
-              padding: { top: 16, bottom: 16 },
-              renderLineHighlight: 'none',
-              hideCursorInOverviewRuler: true,
-              overviewRulerBorder: false,
-              scrollbar: {
-                verticalScrollbarSize: 8,
-                horizontalScrollbarSize: 8,
-              },
-            }}
-          />
-        </div>
-      </div>
-    );
-  };
+  // EdiOutputViewer component extracted
 
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-8rem)]">
@@ -252,32 +366,24 @@ export function EdiToolPage() {
         <div className="flex flex-col border border-border rounded-xl bg-card shadow-sm overflow-hidden">
           <div className="bg-muted/50 px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border/40">
-              <button
+              <FormatToggleButton
+                active={inputFormat === 'EDI'}
                 onClick={() => {
                   setInputFormat('EDI');
                   setOutputFormat('JSON');
                 }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
-                  inputFormat === 'EDI'
-                    ? 'bg-background shadow-sm text-foreground border border-border/60'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
               >
                 EDI Input
-              </button>
-              <button
+              </FormatToggleButton>
+              <FormatToggleButton
+                active={inputFormat === 'JSON'}
                 onClick={() => {
                   setInputFormat('JSON');
                   setOutputFormat('EDI');
                 }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
-                  inputFormat === 'JSON'
-                    ? 'bg-background shadow-sm text-foreground border border-border/60'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
               >
                 JSON Input
-              </button>
+              </FormatToggleButton>
             </div>
 
             <div className="flex items-center gap-1">
@@ -325,39 +431,27 @@ export function EdiToolPage() {
         <div className="flex flex-col border border-border rounded-xl bg-card shadow-sm overflow-hidden">
           <div className="bg-muted/50 px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border/40">
-              <button
+              <FormatToggleButton
+                active={outputFormat === 'Human Readable'}
                 onClick={() => setOutputFormat('Human Readable')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
-                  outputFormat === 'Human Readable'
-                    ? 'bg-background shadow-sm text-foreground border border-border/60'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
               >
                 Human Readable
-              </button>
+              </FormatToggleButton>
 
               {inputFormat === 'EDI' ? (
-                <button
+                <FormatToggleButton
+                  active={outputFormat === 'JSON'}
                   onClick={() => setOutputFormat('JSON')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
-                    outputFormat === 'JSON'
-                      ? 'bg-background shadow-sm text-foreground border border-border/60'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
                 >
                   JSON Output
-                </button>
+                </FormatToggleButton>
               ) : (
-                <button
+                <FormatToggleButton
+                  active={outputFormat === 'EDI'}
                   onClick={() => setOutputFormat('EDI')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 ${
-                    outputFormat === 'EDI'
-                      ? 'bg-background shadow-sm text-foreground border border-border/60'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
                 >
                   EDI Output
-                </button>
+                </FormatToggleButton>
               )}
             </div>
 
@@ -392,7 +486,16 @@ export function EdiToolPage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 p-0 bg-card min-h-0 flex flex-col">{renderOutputPane()}</div>
+          <div className="flex-1 p-0 bg-card min-h-0 flex">
+            <EdiOutputViewer
+              outputFormat={outputFormat}
+              inputFormat={inputFormat}
+              inputPayload={inputPayload}
+              outputResult={outputResult}
+              validationErrors={validationErrors}
+              onEditorWillMount={handleEditorWillMount}
+            />
+          </div>
         </div>
       </div>
     </div>

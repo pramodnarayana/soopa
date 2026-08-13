@@ -1,13 +1,15 @@
+from typing import Any
+
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.ports.outbound.app_repository import IAppRepository
+from ucp.bootstrap.container import Container
+from ucp.core.container import get_db_session
+from ucp.ports.uow import UcpUnitOfWorkPort
 
 router = APIRouter(prefix="/apps", tags=["Apps"])
-
-
-def get_app_repo() -> IAppRepository:
-    raise NotImplementedError()
 
 
 class AppResponse(BaseModel):
@@ -18,8 +20,14 @@ class AppResponse(BaseModel):
 
 
 @router.get("", response_model=list[AppResponse])
-async def get_apps(app_repo: IAppRepository = Depends(get_app_repo)) -> list[AppResponse]:
-    apps = await app_repo.find_all()
+@inject
+async def get_apps(
+    session: AsyncSession = Depends(get_db_session),
+    uow_factory: Any = Depends(Provide[Container.uow.provider]),
+) -> list[AppResponse]:
+    uow: UcpUnitOfWorkPort = uow_factory(session=session)
+    async with uow:
+        apps = await uow.app_repo.find_all()
     return [
         AppResponse(
             id=app.id,
