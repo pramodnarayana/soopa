@@ -53,6 +53,8 @@ class IdentitySyncService:
             pass
         except Exception:
             logger.exception("identity_sync_service_run_loop_fatal_error")
+        finally:
+            self.is_running = False
 
     async def _poll_continuous(self) -> None:
         while self.is_running:
@@ -67,7 +69,7 @@ class IdentitySyncService:
                         tenant_id=event.tenant_id, event_type=event.event_type
                     )
 
-                    if event.event_type == "tenant.provisioned":
+                    if event.event_type == "TenantProvisioned":
                         bound_logger.info("syncing_tenant_to_identity_provider")
                         await self.identity_provider.sync_tenant(event.tenant_id)
                         bound_logger.debug("identity_sync_successful")

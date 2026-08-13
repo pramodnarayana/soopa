@@ -20,12 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProvider
+from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProvider
 from ucp.adapters.outbound.messaging.sns_outbox_publisher import SnsOutboxPublisher
 from ucp.application.services.identity_sync_service import IdentitySyncService
 from ucp.application.services.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.workers.event_listener import ControlPlaneEventListener
 from ucp.application.workers.outbox_sweeper import ControlPlaneOutboxSweeper
+from ucp.bootstrap.container import Container
 from ucp.core.config import get_settings
+from ucp.ports.identity_provider import IdentityProviderPort
 
 settings = get_settings()
 logger = structlog.get_logger(__name__)
@@ -68,12 +71,19 @@ async def startup() -> None:
     _sweeper.start()
     logger.info("ucp_outbox_sweeper_started")
 
+    idp: IdentityProviderPort
+    if os.environ.get("APP_ENV", "production") in ("local", "test"):
+        idp = DummyIdentityProvider()
+    else:
+        container = Container()
+        idp = ZitadelIdentityProvider(org_provider=container.org_provider())
+
     _identity_service = IdentitySyncService(
         event_listener=SqsUcpEventListener(
             queue_url=settings.sqs_ucp_events_queue_url,
             endpoint_url=settings.aws_endpoint_url,
         ),
-        identity_provider=DummyIdentityProvider(),
+        identity_provider=idp,
     )
     _identity_service.start()
 

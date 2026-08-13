@@ -55,6 +55,14 @@ class ControlPlaneEventListener:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+
+        if self._background_tasks:
+            for task in list(self._background_tasks):
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            self._background_tasks.clear()
+
         logger.info("control_plane_event_listener_stopped", channel=self.channel)
 
     async def _run_loop(self) -> None:

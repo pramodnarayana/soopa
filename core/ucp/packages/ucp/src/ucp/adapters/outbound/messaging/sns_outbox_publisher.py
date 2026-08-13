@@ -47,8 +47,7 @@ class SnsOutboxPublisher(OutboxPublisherPort):
 
     async def publish(self, event: OutboxEvent) -> None:
         if not self.topic_arn:
-            logger.warning("sns_topic_arn_not_configured_dropping_event")
-            return
+            raise ValueError("sns_topic_arn_not_configured")
 
         message = {
             "eventId": event.id,
