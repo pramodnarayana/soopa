@@ -17,7 +17,7 @@ reviews:
     1. **Enterprise Observability**:
        - Reject ANY PR that introduces `import logging` or uses `logging.getLogger()`.
        - Reject ANY PR that uses f-strings in log statements.
-       - Demand the use of `structlog` and context injection (e.g., `logger.bind(tenant_id=...)`).
+       - Demand the use of either an injected `ILogger` port OR `structlog` with structured context injection (e.g., `logger.bind(tenant_id=...)` or `logger.info("event_name", field=value)`).
 
     2. **Hexagonal Architecture**:
        - Reject ANY PR where the `domain` logic imports external dependencies, HTTP frameworks, or ORM models.

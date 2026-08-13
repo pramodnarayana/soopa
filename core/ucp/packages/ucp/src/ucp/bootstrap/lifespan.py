@@ -12,9 +12,9 @@ Architecture note:
     hooks, but UCP does not depend on (or know about) the Shell.
 """
 
-import logging
 import os
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
@@ -28,7 +28,7 @@ from ucp.application.workers.outbox_sweeper import ControlPlaneOutboxSweeper
 from ucp.core.config import get_settings
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Module-level references held during the process lifetime.
 # These are initialized by ``startup()`` and released by ``shutdown()``.
@@ -50,7 +50,7 @@ async def startup() -> None:
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     if not database_url:
-        logger.warning("DATABASE_URL not set — UCP background workers will not start.")
+        logger.warning("database_url_not_set_workers_not_starting")
         return
 
     _engine = create_async_engine(database_url, pool_pre_ping=True)
@@ -66,7 +66,7 @@ async def startup() -> None:
         poll_interval_seconds=int(os.environ.get("OUTBOX_POLL_INTERVAL_SECONDS", "5")),
     )
     _sweeper.start()
-    logger.info("UCP ControlPlaneOutboxSweeper (Relay) started.")
+    logger.info("ucp_outbox_sweeper_started")
 
     _identity_service = IdentitySyncService(
         event_listener=SqsUcpEventListener(
@@ -82,7 +82,7 @@ async def startup() -> None:
     _listener.subscribe("app.subscribed", provisioner.handle_app_subscribed)
     _listener.subscribe("app.unsubscribed", provisioner.handle_app_unsubscribed)
     _listener.start()
-    logger.info("UCP ControlPlaneEventListener started.")
+    logger.info("ucp_event_listener_started")
 
 
 async def shutdown() -> None:
@@ -94,17 +94,17 @@ async def shutdown() -> None:
 
     if _sweeper:
         await _sweeper.stop()
-        logger.info("UCP ControlPlaneOutboxSweeper stopped.")
+        logger.info("ucp_outbox_sweeper_stopped")
         _sweeper = None
 
     if _identity_service:
         await _identity_service.stop()
-        logger.info("UCP IdentitySyncService stopped.")
+        logger.info("ucp_identity_sync_service_stopped")
         _identity_service = None
 
     if _listener:
         await _listener.stop()
-        logger.info("UCP ControlPlaneEventListener stopped.")
+        logger.info("ucp_event_listener_stopped")
         _listener = None
 
     if _engine:

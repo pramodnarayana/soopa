@@ -1,8 +1,8 @@
-import logging
+import structlog
 
 from ucp.ports.identity_provider import IdentityProviderPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class DummyIdentityProvider(IdentityProviderPort):
@@ -12,6 +12,4 @@ class DummyIdentityProvider(IdentityProviderPort):
     """
 
     async def sync_tenant(self, tenant_id: str) -> None:
-        logger.info(
-            f"[DummyIdentityProvider] Pretending to sync tenant {tenant_id} to external IDP"
-        )
+        logger.info("dummy_idp_sync_tenant", tenant_id=tenant_id)

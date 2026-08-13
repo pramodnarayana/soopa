@@ -113,7 +113,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
 
             except json.JSONDecodeError:
                 logger.exception(
-                    "sqs_message_json_decode_failed", message_id=message_id, payload=body_str
+                    "sqs_message_json_decode_failed", message_id=message_id, payload_length=len(body_str)
                 )
                 await sqs_client.delete_message(
                     QueueUrl=self.queue_url, ReceiptHandle=receipt_handle

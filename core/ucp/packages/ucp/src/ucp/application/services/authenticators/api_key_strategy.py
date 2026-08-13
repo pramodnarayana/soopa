@@ -1,4 +1,4 @@
-import logging
+import structlog
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
@@ -8,7 +8,7 @@ from identity.domain.identity_context import M2M_API_KEY_PREFIX, IdentityContext
 from ucp.application.services.api_key_authenticator import authenticate_api_key
 from ucp.ports.api_token_repository import ApiTokenRepositoryPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ApiKeyStrategy(IAuthenticationStrategy):
@@ -25,14 +25,14 @@ class ApiKeyStrategy(IAuthenticationStrategy):
         return token.startswith(M2M_API_KEY_PREFIX)
 
     async def authenticate(self, token: str) -> IdentityContext:
-        logger.debug("[ApiKeyStrategy] Token identified as M2M API Key. Processing...")
+        logger.debug("api_key_authentication_started")
 
         async with self.token_repo_factory() as token_repo:
             try:
-                logger.debug("[ApiKeyStrategy] Calling authenticate_api_key...")
+                logger.debug("calling_authenticate_api_key")
                 identity = await authenticate_api_key(token, token_repo)
-                logger.debug(f"[ApiKeyStrategy] SUCCESS. Identity populated: {identity.subject}")
+                logger.debug("api_key_authentication_success", subject=identity.subject)
                 return identity
             except Exception:
-                logger.exception("[ApiKeyStrategy] CRITICAL ERROR in authenticate_api_key")
+                logger.exception("api_key_authentication_error")
                 raise

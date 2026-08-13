@@ -1,14 +1,14 @@
 import asyncio
 import contextlib
 import json
-import logging
 from collections.abc import Callable
 from typing import Any
 
 import asyncpg
+import structlog
 from sqlalchemy.engine import make_url
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ControlPlaneEventListener:
@@ -40,7 +40,7 @@ class ControlPlaneEventListener:
         if not self.is_running:
             self.is_running = True
             self._task = asyncio.create_task(self._run_loop())
-            logger.info(f"Started ControlPlaneEventListener on channel '{self.channel}'")
+            logger.info("control_plane_event_listener_started", channel=self.channel)
 
     async def stop(self) -> None:
         self.is_running = False
@@ -50,12 +50,12 @@ class ControlPlaneEventListener:
                 await self._connection.close()
             # Exception catch is broad because this is part of the final shutdown teardown
             except Exception as e:  # noqa: BLE001
-                logger.warning(f"Error closing listener connection: {e}")
+                logger.warning("error_closing_listener_connection", error=str(e))
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-        logger.info(f"Stopped ControlPlaneEventListener on channel '{self.channel}'")
+        logger.info("control_plane_event_listener_stopped", channel=self.channel)
 
     async def _run_loop(self) -> None:
         while self.is_running:
@@ -63,9 +63,9 @@ class ControlPlaneEventListener:
                 url = make_url(self.database_url).set(drivername="postgresql")
                 asyncpg_url = url.render_as_string(hide_password=False)
                 self._connection = await asyncpg.connect(asyncpg_url)
-                logger.info("event_listener_connected", url="[REDACTED]")
+                logger.info("event_listener_connected")
                 await self._connection.add_listener(self.channel, self._on_notify)
-                logger.info(f"Listening on Postgres channel '{self.channel}'")
+                logger.info("listening_on_postgres_channel", channel=self.channel)
 
                 # Keep connection alive while running
                 while self.is_running and not self._connection.is_closed():
@@ -86,12 +86,12 @@ class ControlPlaneEventListener:
             event_data = json.loads(payload)
             event_type = event_data.get("eventType")
             if not event_type:
-                logger.warning(f"Received malformed event (no eventType): {payload}")
+                logger.warning("received_malformed_event_no_event_type")
                 return
 
             handlers = self._handlers.get(event_type, [])
             if not handlers:
-                logger.debug(f"No handlers registered for event type: {event_type}")
+                logger.debug("no_handlers_registered_for_event_type", event_type=event_type)
                 return
 
             # Execute handlers asynchronously
@@ -112,4 +112,4 @@ class ControlPlaneEventListener:
             else:
                 handler(event_data)
         except Exception:
-            logger.exception(f"Handler {handler.__name__} failed processing event")
+            logger.exception("handler_failed_processing_event", handler_name=handler.__name__)

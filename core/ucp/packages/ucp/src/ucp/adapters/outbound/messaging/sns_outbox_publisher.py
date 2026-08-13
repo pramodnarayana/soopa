@@ -1,12 +1,12 @@
 import json
-import logging
 
 import aioboto3
+import structlog
 
 from ucp.domain.models.outbox_event import OutboxEvent
 from ucp.ports.outbox_publisher import OutboxPublisherPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SnsOutboxPublisher(OutboxPublisherPort):
@@ -46,7 +46,7 @@ class SnsOutboxPublisher(OutboxPublisherPort):
 
     async def publish(self, event: OutboxEvent) -> None:
         if not self.topic_arn:
-            logger.warning("SNS Topic ARN not configured. Dropping event.")
+            logger.warning("sns_topic_arn_not_configured_dropping_event")
             return
 
         message = {
@@ -71,14 +71,18 @@ class SnsOutboxPublisher(OutboxPublisherPort):
                 ) as sns_client:
                     await self._publish_internal(sns_client, event, message)
         except Exception:
-            logger.exception(f"Failed to publish event {event.id} to SNS")
+            logger.exception("sns_publish_failed", event_id=event.id)
             raise
 
     async def _publish_internal(self, sns_client, event: OutboxEvent, message: dict) -> None:
-        await sns_client.publish(
-            TopicArn=self.topic_arn,
-            Message=json.dumps(message),
-            MessageGroupId=event.tenant_id,  # Useful if SNS topic is FIFO
-            MessageDeduplicationId=event.idempotency_key,
-        )
-        logger.debug(f"Successfully published {event.event_type} to SNS Topic {self.topic_arn}")
+        publish_params = {
+            "TopicArn": self.topic_arn,
+            "Message": json.dumps(message),
+        }
+        # Only include FIFO-specific parameters if the topic is FIFO
+        if self.topic_arn.endswith(".fifo"):
+            publish_params["MessageGroupId"] = event.tenant_id
+            publish_params["MessageDeduplicationId"] = event.idempotency_key
+
+        await sns_client.publish(**publish_params)
+        logger.debug("sns_event_published", event_type=event.event_type, topic_arn=self.topic_arn)

@@ -39,6 +39,7 @@ The following paradigms define the entire system structure. Any new design or mo
 3. **Shopify-Style Deployment Strategy (Single Image, Multiple Containers)**: Avoid versioning hell. We build one single massive Docker image containing the entire Modular Monolith codebase. At runtime, we spin up multiple containers from this identical image, each acting as a different worker (e.g., API Web Server, SQS Poller, Outbox Sweeper, Cron Scheduler) simply by executing a different entrypoint.
 
 # Enterprise Observability (Strictly Enforced)
+
 - **Cornerstone Observability**: Observability is a first-class architectural concern, not an afterthought. You must NEVER use Python's standard `import logging` or `logging.getLogger(__name__)`.
 - **Structured JSON Logging**: ALWAYS use the injected `ILogger` port or `structlog.get_logger()` from the platform observability package.
 - **Context Injection (No String Interpolation)**: NEVER use f-strings to inject variables into log messages. ALWAYS use structured context binding (e.g., `logger.info("event_processed", tenant_id=tenant_id, event_id=event.id)` or `bound_logger = logger.bind(tenant_id=tenant_id)`).

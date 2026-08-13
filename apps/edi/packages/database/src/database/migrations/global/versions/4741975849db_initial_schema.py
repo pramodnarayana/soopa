@@ -271,7 +271,7 @@ def upgrade() -> None:
     op.execute("""
         CREATE OR REPLACE FUNCTION edi_outbox_notify() RETURNS trigger AS $$
         BEGIN
-            PERFORM pg_notify('edi_outbox_channel', 'new_event');
+            PERFORM pg_notify('edi_outbox_channel', NEW.id);
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;

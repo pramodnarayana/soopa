@@ -38,6 +38,7 @@ class IdentitySyncService:
 
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+            self._task = None
             logger.info("identity_sync_service_stopped")
 
     async def _run_loop(self) -> None:

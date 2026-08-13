@@ -31,13 +31,13 @@ repos:
         types_or: [python, pyi]
         exclude: ^libs/edi_grammar/
         require_serial: true
-#      - id: mypy
-#        name: mypy
-#        entry: uv run mypy .
-#        language: system
-#        types_or: [python, pyi]
-#        exclude: ^(.*/)?scripts/.*$
-#        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: uv run mypy core/ucp/packages/ucp core/platform/apps/unified-api
+        language: system
+        types_or: [python, pyi]
+        exclude: ^(.*/)?scripts/.*$
+        pass_filenames: false
       - id: eslint
         name: eslint
         entry: pnpm lint

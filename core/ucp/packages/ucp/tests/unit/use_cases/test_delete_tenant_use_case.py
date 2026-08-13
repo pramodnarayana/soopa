@@ -83,7 +83,7 @@ async def test_delete_tenant_success(
     mock_tenant_repo.delete = AsyncMock()  # type: ignore
     mock_user_repo.delete_orphaned_users = AsyncMock()  # type: ignore
     mock_org_provider.delete_organization = AsyncMock()  # type: ignore
-    mock_uow.register_event = AsyncMock()  # type: ignore
+    mock_uow.register_event.return_value = None  # type: ignore
 
     await delete_use_case.execute("ten_123", "idemp-key")
 
@@ -97,3 +97,4 @@ async def test_delete_tenant_success(
         idempotency_key="idemp-key",
         tenant_id="ten_123",
     )
+    mock_uow.commit.assert_awaited_once()

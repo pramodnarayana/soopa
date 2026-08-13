@@ -62,6 +62,10 @@ class SqsOutboxAdapter(OutboxPort):
 
     async def close(self) -> None:
         """Close the adapter and release all resources."""
+        if self._client_context:
+            await self._client_context.__aexit__(None, None, None)
+            self._client = None
+            self._client_context = None
 
     async def _get_queue_url(self, sqs) -> str:
         if self._queue_url:

@@ -78,6 +78,9 @@ class ControlPlaneOutboxSweeper:
             await self._connection.add_listener("ucp_outbox_wakeup", self._on_notify)
             logger.info("outbox_relay_listening", channel="ucp_outbox_wakeup")
         except Exception:
+            if self._connection:
+                await self._connection.close()
+                self._connection = None
             logger.exception("outbox_relay_connection_failed", fallback="pure_polling")
 
     async def _run_loop(self) -> None:
@@ -101,8 +104,6 @@ class ControlPlaneOutboxSweeper:
                 if self.is_running:
                     # Wait for EITHER the timer OR an instant wakeup from Postgres
                     self._poll_event.clear()
-                    import contextlib
-
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
                             self._poll_event.wait(), timeout=self.poll_interval_seconds

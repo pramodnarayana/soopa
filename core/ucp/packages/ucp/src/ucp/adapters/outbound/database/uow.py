@@ -22,7 +22,8 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         self._events: list[dict[str, Any]] = []
 
     async def __aenter__(self) -> Self:
-        await self.session.begin()
+        if not self.session.in_transaction():
+            await self.session.begin()
         return self
 
     async def __aexit__(self, exc_type: any, exc_val: any, exc_tb: any) -> None:

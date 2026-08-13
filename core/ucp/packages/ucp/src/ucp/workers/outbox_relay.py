@@ -1,7 +1,8 @@
 import asyncio
-import logging
 import sys
 import uuid
+
+import structlog
 
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
@@ -11,7 +12,7 @@ from ucp.core.exceptions import IdentityProviderError
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class OutboxRelayWorker:
@@ -27,7 +28,7 @@ class OutboxRelayWorker:
         self.worker_id = str(uuid.uuid4())
 
     async def run(self, max_iterations: int | None = None):
-        logger.info(f"Starting Outbox Relay Worker (ID: {self.worker_id})")
+        logger.info("outbox_relay_worker_starting", worker_id=self.worker_id)
         iterations = 0
         while max_iterations is None or iterations < max_iterations:
             try:
@@ -49,16 +50,16 @@ class OutboxRelayWorker:
                         await self.process_event(event)
                         await self.outbox_repo.mark_completed(event.id, self.worker_id)
                     except Exception as e:
-                        logger.exception(f"Failed to process event {event.id}")
+                        logger.exception("outbox_event_processing_failed", event_id=event.id)
                         await self.outbox_repo.mark_failed(event.id, self.worker_id, str(e))
             except Exception:
-                logger.exception("Error in Outbox Relay Worker loop")
+                logger.exception("outbox_relay_worker_loop_error")
                 await asyncio.sleep(5)
 
             iterations += 1
 
     async def process_event(self, event):  # noqa: C901
-        logger.info(f"Processing event: {event.event_type} ({event.id})")
+        logger.info("processing_outbox_event", event_type=event.event_type, event_id=event.id)
 
         if event.event_type == "TenantProvisioned":
             try:
@@ -67,8 +68,9 @@ class OutboxRelayWorker:
                 if e.status_code == 409:
                     # Basic idempotency / conflict handling for existing orgs
                     logger.warning(
-                        f"Organization {event.payload['name']} already exists in IDP. "
-                        f"Search logic needed to retrieve org_id."
+                        "organization_already_exists_in_idp",
+                        event_id=event.id,
+                        note="search_logic_needed_to_retrieve_org_id"
                     )
                 raise
 
@@ -106,8 +108,9 @@ class OutboxRelayWorker:
             except IdentityProviderError as e:
                 if e.status_code == 409:
                     logger.warning(
-                        f"User {event.payload['email']} already exists in IDP. "
-                        f"Search logic needed to retrieve user_id."
+                        "user_already_exists_in_idp",
+                        event_id=event.id,
+                        note="search_logic_needed_to_retrieve_user_id"
                     )
                 raise
 
@@ -150,10 +153,12 @@ class OutboxRelayWorker:
             await self.user_provider.delete_user(event.payload["idp_user_id"])
 
         else:
-            logger.warning(f"Unknown event type: {event.event_type}")
+            logger.warning("unknown_event_type", event_type=event.event_type, event_id=event.id)
+            raise ValueError(f"Unknown event type: {event.event_type}")
 
 
 async def main():
+    import logging
     logging.basicConfig(level=logging.INFO)
 
     container = Container()

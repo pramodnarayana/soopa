@@ -1,9 +1,5 @@
-import logging
-
 from ucp.core.exceptions import ResourceNotFoundError
 from ucp.ports.uow import UcpUnitOfWorkPort
-
-logger = logging.getLogger(__name__)
 
 
 class DeleteTenantUseCase:

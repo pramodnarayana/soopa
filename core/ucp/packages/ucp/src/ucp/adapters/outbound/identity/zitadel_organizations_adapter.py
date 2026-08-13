@@ -88,3 +88,40 @@ class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
             logger.exception(f"Error deleting organization {org_id} in Zitadel")
 
             raise
+
+    async def update_organization_name(self, org_id: str, name: str) -> None:
+        logger.info(f"Updating Organization name in Zitadel: {org_id} to {name}")
+
+        try:
+            response = await self.fetch_with_auth(
+                endpoint=f"/management/v1/orgs/{org_id}",
+                method="PUT",
+                json={"name": name}
+            )
+
+            if response.status_code >= 400:
+                await self.handle_response_error(response, "update org name")
+
+            logger.info(f"Successfully updated Organization {org_id} name in Zitadel")
+        except Exception:
+            logger.exception(f"Error updating organization {org_id} name in Zitadel")
+            raise
+
+    async def toggle_organization_status(self, org_id: str, active: bool) -> None:
+        logger.info(f"Toggling Organization status in Zitadel: {org_id} to active={active}")
+
+        try:
+            endpoint = f"/management/v1/orgs/{org_id}/{'activate' if active else 'deactivate'}"
+            response = await self.fetch_with_auth(
+                endpoint=endpoint,
+                method="POST",
+                json={}
+            )
+
+            if response.status_code >= 400:
+                await self.handle_response_error(response, "toggle org status")
+
+            logger.info(f"Successfully toggled Organization {org_id} status in Zitadel")
+        except Exception:
+            logger.exception(f"Error toggling organization {org_id} status in Zitadel")
+            raise

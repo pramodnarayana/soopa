@@ -8,10 +8,10 @@ def test_ucp_domain_is_isolated():
     """
     (
         archrule("UCP Domain Isolation")
-        .match("core.ucp.packages.ucp.src.ucp.domain*")
-        .should_not_import("core.ucp.packages.ucp.src.ucp.adapters*")
-        .should_not_import("core.ucp.packages.ucp.src.ucp.application*")
-        .check("core.ucp.packages.ucp.src.ucp")
+        .match("ucp.domain*")
+        .should_not_import("ucp.adapters*")
+        .should_not_import("ucp.application*")
+        .check("ucp")
     )
 
 
@@ -34,8 +34,8 @@ def test_no_cross_module_pollution():
     """
     (
         archrule("Modular Monolith Isolation")
-        .match("core.ucp.packages.ucp.src.ucp.adapters*")
-        .should_not_import("apps.edi.packages.database*")
-        .should_not_import("apps.edi.apps.edi-worker.orchestrator.src.worker.adapters*")
-        .check("core.ucp.packages.ucp.src.ucp")
+        .match("ucp.adapters*")
+        .should_not_import("database*")
+        .should_not_import("worker.adapters*")
+        .check("ucp")
     )
