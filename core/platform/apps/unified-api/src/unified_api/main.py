@@ -25,11 +25,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from ucp.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
 from ucp.adapters.inbound.http.routers import (
     apps_router,
+    auth_router,
     tenants_router,
     tokens_router,
     users_router,
 )
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
+from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.application.services.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.services.authenticators.jwt_strategy import JwtStrategy
@@ -83,12 +85,19 @@ async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepositor
         yield TenantRepository(session)
 
 
+@contextlib.asynccontextmanager
+async def role_repo_factory() -> collections.abc.AsyncIterator[PostgresRoleRepository]:
+    async with _async_session_maker() as session:
+        yield PostgresRoleRepository(session)
+
+
 app.add_middleware(
     AuthenticationMiddleware,
     strategies=[
         ApiKeyStrategy(token_repo_factory=api_token_repo_factory),
         JwtStrategy(
             tenant_repo_factory=tenant_repo_factory,
+            role_repo_factory=role_repo_factory,
             token_verifier=get_token_verifier(),
         ),
     ],
@@ -123,12 +132,17 @@ setup_shell_exception_handlers(app)
 # UCP dependency injection (real adapters → router placeholders) is wired here
 # on the Shell app instance, since that is the app that owns the UCP routes.
 # ---------------------------------------------------------------------------
-from notification.api.in_app_notifications_router import (  # type: ignore[import-untyped]
+from notification.api.in_app_notifications_router import (
     router as in_app_notifications_router,
 )
-from notification.api.preferences_router import router as notification_preferences_router  # type: ignore[import-untyped]
-from notification.api.templates_router import router as notification_templates_router  # type: ignore[import-untyped]
+from notification.api.preferences_router import (
+    router as notification_preferences_router,
+)
+from notification.api.templates_router import (
+    router as notification_templates_router,
+)
 
+app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(tenants_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(apps_router.router, prefix="/api/v1")

@@ -2,12 +2,14 @@ import asyncio
 import os
 from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
 
+import ucp_models.infrastructure  # noqa: F401
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import platform_orm.models  # noqa: F401
 from platform_orm.models.core import GlobalRegistry
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))

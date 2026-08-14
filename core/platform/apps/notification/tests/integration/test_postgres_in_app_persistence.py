@@ -18,6 +18,7 @@ async def test_save_notification_persists_to_database(db_session_factory):
         tenant = Tenant(
             id=tenant_id,
             name="Test Tenant 456",
+            slug=tenant_id,
             status="ACTIVE",
         )
         user = User(id="user-123", email="test@user.com", name="Test User", status="ACTIVE")

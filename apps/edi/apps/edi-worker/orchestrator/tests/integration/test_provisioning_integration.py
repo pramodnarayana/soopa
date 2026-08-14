@@ -216,3 +216,114 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
         assert replicated_partner is not None
         assert replicated_partner.name == "Integration Test Partner"
         assert replicated_partner.as2_id == "INT_TEST_AS2"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_provisioning_negative_unregistered_event_dropped(
+    e2e_context: dict[str, Any],
+) -> None:
+    """
+    Tests that if a cross-domain UCP event (like tenant.provisioned) leaks into the EDI
+    ProvisioningQueue, it is safely ignored and sent to the DLQ rather than crashing the worker.
+    """
+    ctx = e2e_context
+    worker_service = ctx["worker_service"]
+    message_publisher = ctx["message_publisher"]
+    queue_name = ctx["queue_name"]
+    tenant_id = ctx["tenant_id"]
+
+    # Send an unregistered UCP event
+    payload = {
+        "tenant_id": tenant_id,
+        "event_type": "tenant.provisioned",
+        "resource_id": "tenant_123",
+    }
+
+    await message_publisher.publish(queue_name, payload)
+    await asyncio.sleep(2)
+
+    # Worker processes the event. Since sqs_outbox yields None for unregistered events,
+    # process_next_event should return False.
+    processed = await worker_service.process_next_event()
+    assert processed is False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, Any]) -> None:
+    """
+    Tests that if a malformed event (missing required fields) is sent, the orchestrator
+    raises a PermanentProvisioningError and deletes the message without crashing the loop.
+    """
+    ctx = e2e_context
+    worker_service = ctx["worker_service"]
+    message_publisher = ctx["message_publisher"]
+    queue_name = ctx["queue_name"]
+    tenant_id = ctx["tenant_id"]
+
+    # Send an event missing resource_id
+    payload = {
+        "tenant_id": tenant_id,
+        "event_type": EdiEventType.edi_as2_partner_created.value,
+        # missing resource_id
+    }
+
+    await message_publisher.publish(queue_name, payload)
+    await asyncio.sleep(2)
+
+    # Worker processes the event. sqs_outbox deletes it and raises PermanentProvisioningError
+    # Wait, the worker_service lets the exception propagate?
+    # Let's check worker_service behavior. Actually, sqs_outbox yields the event,
+    # then worker_service tries to parse it, raises PermanentProvisioningError.
+    # sqs_outbox catches it on __aexit__ or generator exit and deletes it,
+    # but the exception propagates up through process_next_event.
+    with pytest.raises(Exception) as exc_info:
+        await worker_service.process_next_event()
+
+    assert "missing required resource_id" in str(exc_info.value)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
+    """
+    Tests that delivering the exact same event multiple times does not crash the orchestrator
+    and handles upserts gracefully.
+    """
+    ctx = e2e_context
+    db_router = ctx["db_router"]
+    worker_service = ctx["worker_service"]
+    message_publisher = ctx["message_publisher"]
+    queue_name = ctx["queue_name"]
+    partner_id = ctx["partner_id"]
+    tenant_id = ctx["tenant_id"]
+
+    payload = {
+        "tenant_id": tenant_id,
+        "event_type": EdiEventType.edi_as2_partner_created.value,
+        "resource_id": str(partner_id),
+    }
+
+    # Publish it twice
+    await message_publisher.publish(queue_name, payload)
+    await message_publisher.publish(queue_name, payload)
+    await asyncio.sleep(2)
+
+    # Process first event
+    processed_1 = await worker_service.process_next_event()
+    assert processed_1 is True
+
+    # Process second event
+    processed_2 = await worker_service.process_next_event()
+    assert processed_2 is True
+
+    # Verify replication still valid
+    async for tenant_session in db_router.get_tenant_session(
+        tenant_id, "shard_1", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    ):
+        res = await tenant_session.execute(
+            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+        )
+        replicated_partner = res.scalars().first()
+        assert replicated_partner is not None

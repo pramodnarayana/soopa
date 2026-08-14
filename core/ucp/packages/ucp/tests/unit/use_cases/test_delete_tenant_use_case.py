@@ -71,6 +71,7 @@ async def test_delete_tenant_success(
     tenant = Tenant.create(
         id="ten_123",
         name="Test",
+        slug="test",
         idp_tenant_id="zitadel-org-123",
         subscriptions=[],
     )
@@ -80,21 +81,19 @@ async def test_delete_tenant_success(
         id="usr_1", idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
     )
     mock_user_repo.find_users_by_tenant = AsyncMock(return_value=[mock_user])  # type: ignore
+    mock_user_repo.has_any_tenant_memberships = AsyncMock(return_value=False)  # type: ignore
     mock_tenant_repo.delete = AsyncMock()  # type: ignore
-    mock_user_repo.delete_orphaned_users = AsyncMock()  # type: ignore
+    mock_user_repo.delete = AsyncMock()  # type: ignore
     mock_org_provider.delete_organization = AsyncMock()  # type: ignore
-    mock_uow.register_event.return_value = None  # type: ignore
 
     await delete_use_case.execute("ten_123", "idemp-key")
 
     mock_tenant_repo.find_by_id.assert_called_once_with("ten_123")
     mock_user_repo.find_users_by_tenant.assert_called_once_with("ten_123")
-    mock_tenant_repo.delete.assert_awaited_once_with("ten_123", "idemp-key")
-    mock_user_repo.delete_orphaned_users.assert_awaited_once_with(["usr_1"])
-    mock_uow.register_event.assert_called_once_with(
-        event_type="TenantDeleted",
-        payload={"org_id": "zitadel-org-123"},
-        idempotency_key="idemp-key",
-        tenant_id="ten_123",
-    )
+    mock_tenant_repo.delete.assert_awaited_once_with(tenant, "idemp-key")
+
+    # User deletion assertions
+    mock_user_repo.has_any_tenant_memberships.assert_awaited_once_with("usr_1")
+    mock_user_repo.delete.assert_awaited_once_with(mock_user)
+
     mock_uow.commit.assert_awaited_once()

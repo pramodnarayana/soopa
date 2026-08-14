@@ -33,23 +33,8 @@ class ToggleUserStatusUseCase:
             if not user or not user.idp_user_id:
                 raise ResourceNotFoundError(f"User mapping not found for {command.user_id}")
 
-            # 1. Update local domain object state
-            if command.action == "activate":
-                user.activate()
-            else:
-                user.deactivate()
-
+            # 1. Update local domain object state & Register Outbox Event
+            user.change_status(action=command.action, org_id=tenant.idp_tenant_id)
             await self._uow.user_repo.save(user)
-
-            # 2. Register Outbox Event to Toggle IDP Status
-            self._uow.register_event(
-                event_type="UserStatusToggled",
-                payload={
-                    "idp_user_id": user.idp_user_id,
-                    "org_id": tenant.idp_tenant_id,
-                    "action": command.action,
-                },
-                tenant_id=tenant.id,
-            )
 
             await self._uow.commit()

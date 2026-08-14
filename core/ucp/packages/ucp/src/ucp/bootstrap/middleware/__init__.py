@@ -26,6 +26,7 @@ from ucp.adapters.inbound.http.middleware.authentication import (
     AuthenticationMiddleware,
 )
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
+from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.application.services.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.services.authenticators.jwt_strategy import JwtStrategy
@@ -47,10 +48,16 @@ def setup_middleware(app: FastAPI) -> None:
         async with _async_session_maker() as session:
             yield TenantRepository(session)
 
+    @contextlib.asynccontextmanager
+    async def role_repo_factory() -> AsyncGenerator[PostgresRoleRepository, None]:
+        async with _async_session_maker() as session:
+            yield PostgresRoleRepository(session)
+
     strategies = [
         ApiKeyStrategy(token_repo_factory=api_token_repo_factory),
         JwtStrategy(
             tenant_repo_factory=tenant_repo_factory,
+            role_repo_factory=role_repo_factory,
             token_verifier=get_token_verifier(),
         ),
     ]

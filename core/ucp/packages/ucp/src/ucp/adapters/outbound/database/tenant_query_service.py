@@ -1,6 +1,7 @@
 import typing
 from datetime import UTC
 
+import structlog
 from platform_orm.models.identity import Tenant as DbTenant
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,10 +9,50 @@ from ucp_models.subscriptions import App, AppSubscription
 
 from ucp.ports.outbound.tenant_query_service import ITenantQueryService, TenantReadModel
 
+logger = structlog.get_logger(__name__)
+
 
 class DatabaseTenantQueryService(ITenantQueryService):
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    # ------------------------------------------------------------------
+    # Private mapper — single source of truth for DbTenant → TenantReadModel.
+    # Fixes C2 (DRY violation: 3 identical construction blocks collapsed to 1).
+    # ------------------------------------------------------------------
+
+    def _map_row(self, row: DbTenant, app_slugs: list[str]) -> TenantReadModel:
+        return TenantReadModel(
+            id=row.id,
+            name=row.name,
+            slug=row.slug,
+            idp_tenant_id=row.idp_tenant_id,
+            status=typing.cast(
+                typing.Literal["active", "inactive"],
+                row.status,
+            ),
+            subscriptions=app_slugs,
+            created_at=row.created_at.replace(tzinfo=UTC),
+            updated_at=row.updated_at.replace(tzinfo=UTC),
+        )
+
+    async def _load_app_slugs(self, tenant_id: str) -> list[str]:
+        """Loads active application slugs for a single tenant."""
+        stmt = (
+            select(App.slug)
+            .join(AppSubscription, App.id == AppSubscription.app_id)
+            .where(
+                AppSubscription.tenant_id == tenant_id,
+                AppSubscription.status == "active",
+            )
+        )
+        result = await self.session.execute(stmt)
+        # 'app_slug' avoids shadowing any outer variable named 'slug' — fixes B2.
+        return [app_slug for (app_slug,) in result]
+
+    # ------------------------------------------------------------------
+    # Public query methods
+    # ------------------------------------------------------------------
 
     async def get_all_tenants(self) -> list[TenantReadModel]:
         stmt = select(DbTenant)
@@ -21,11 +62,15 @@ class DatabaseTenantQueryService(ITenantQueryService):
         if not rows:
             return []
 
+        # Bulk-fetch all active subscriptions in a single query
         tenant_ids = [row.id for row in rows]
         stmt_subs = (
             select(AppSubscription.tenant_id, App.slug)
             .join(App, App.id == AppSubscription.app_id)
-            .where(AppSubscription.tenant_id.in_(tenant_ids), AppSubscription.status == "active")
+            .where(
+                AppSubscription.tenant_id.in_(tenant_ids),
+                AppSubscription.status == "active",
+            )
         )
         subs_result = await self.session.execute(stmt_subs)
 
@@ -33,28 +78,7 @@ class DatabaseTenantQueryService(ITenantQueryService):
         for tenant_id, app_slug in subs_result:
             subs_by_tenant.setdefault(tenant_id, []).append(app_slug)
 
-        tenants = []
-        for row in rows:
-            slugs = subs_by_tenant.get(row.id, [])
-            tenants.append(
-                TenantReadModel(
-                    id=row.id,
-                    name=row.name,
-                    idp_tenant_id=row.idp_tenant_id,
-                    status=typing.cast(
-                        typing.Literal["active", "inactive"],
-                        row.status if hasattr(row, "status") else "active",
-                    ),
-                    subscriptions=slugs,
-                    created_at=row.created_at.replace(tzinfo=UTC),
-                    updated_at=(
-                        row.updated_at.replace(tzinfo=UTC)
-                        if hasattr(row, "updated_at") and row.updated_at
-                        else row.created_at.replace(tzinfo=UTC)
-                    ),
-                )
-            )
-        return tenants
+        return [self._map_row(row, subs_by_tenant.get(row.id, [])) for row in rows]
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None:
         stmt = select(DbTenant).where(
@@ -63,29 +87,19 @@ class DatabaseTenantQueryService(ITenantQueryService):
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
         if not row:
+            logger.info("tenant_query.not_found_by_id", tenant_id=tenant_id)
             return None
 
-        stmt_subs = (
-            select(App.slug)
-            .join(AppSubscription, App.id == AppSubscription.app_id)
-            .where(AppSubscription.tenant_id == row.id, AppSubscription.status == "active")
-        )
-        subs_result = await self.session.execute(stmt_subs)
-        slugs = [slug for (slug,) in subs_result]
+        app_slugs = await self._load_app_slugs(row.id)
+        return self._map_row(row, app_slugs)
 
-        return TenantReadModel(
-            id=row.id,
-            name=row.name,
-            idp_tenant_id=row.idp_tenant_id,
-            status=typing.cast(
-                typing.Literal["active", "inactive"],
-                row.status if hasattr(row, "status") else "active",
-            ),
-            subscriptions=slugs,
-            created_at=row.created_at.replace(tzinfo=UTC),
-            updated_at=(
-                row.updated_at.replace(tzinfo=UTC)
-                if hasattr(row, "updated_at") and row.updated_at
-                else row.created_at.replace(tzinfo=UTC)
-            ),
-        )
+    async def get_tenant_by_slug(self, slug: str) -> TenantReadModel | None:
+        stmt = select(DbTenant).where(DbTenant.slug == slug)
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if not row:
+            logger.info("tenant_query.not_found_by_slug", slug=slug)
+            return None
+
+        app_slugs = await self._load_app_slugs(row.id)
+        return self._map_row(row, app_slugs)

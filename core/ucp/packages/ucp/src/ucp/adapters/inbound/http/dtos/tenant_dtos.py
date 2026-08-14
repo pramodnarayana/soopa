@@ -36,6 +36,7 @@ class TenantResponse(BaseModel):
 
     id: str
     name: str
+    slug: str
     idp_tenant_id: str | None = Field(serialization_alias="zitadelOrgId")
     status: str
     subscriptions: list[str]
@@ -47,6 +48,7 @@ class TenantResponse(BaseModel):
         return cls(
             id=rm.id,
             name=rm.name,
+            slug=rm.slug,
             idp_tenant_id=rm.idp_tenant_id,
             status=rm.status,
             subscriptions=rm.subscriptions,

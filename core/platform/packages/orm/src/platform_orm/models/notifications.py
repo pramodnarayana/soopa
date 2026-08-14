@@ -91,3 +91,26 @@ class InAppNotification(NotificationBase, TimestampMixin):
         Index("ix_in_app_notif_tenant_user_read", "tenant_id", "user_id", "is_read", "created_at"),
         {"schema": "notifications"},
     )
+
+
+class UserNotificationPreference(NotificationBase, TimestampMixin):
+    __tablename__ = "user_notification_preferences"
+    ID_PREFIX = "notif_pref"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    channel: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    __table_args__: Any = (
+        UniqueConstraint(
+            "tenant_id", "user_id", "event_type", "channel", name="user_notif_pref_idx"
+        ),
+        {"schema": "notifications"},
+    )

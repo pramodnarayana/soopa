@@ -20,6 +20,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
         tenant = Tenant(
             id=tenant_id,
             name="Test Tenant",
+            slug=tenant_id,
             status="ACTIVE",
         )
         session.add(tenant)

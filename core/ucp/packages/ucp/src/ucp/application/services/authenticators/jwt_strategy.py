@@ -7,6 +7,8 @@ from identity.domain.authentication_strategy import IAuthenticationStrategy
 from identity.domain.identity_context import IdentityContext
 from identity.ports.token_verifier import TokenVerifier
 
+from ucp.domain.models.authorization import Capability
+from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 
 logger = structlog.get_logger(__name__)
@@ -20,9 +22,11 @@ class JwtStrategy(IAuthenticationStrategy):
     def __init__(
         self,
         tenant_repo_factory: Callable[[], AbstractAsyncContextManager[ITenantRepository]],
+        role_repo_factory: Callable[[], AbstractAsyncContextManager[IRoleRepository]],
         token_verifier: TokenVerifier,
     ):
         self.tenant_repo_factory = tenant_repo_factory
+        self.role_repo_factory = role_repo_factory
         self.token_verifier = token_verifier
 
     def can_handle(self, token: str) -> bool:
@@ -69,5 +73,26 @@ class JwtStrategy(IAuthenticationStrategy):
                     mapped_tenants.add(tid)
 
             identity.authorized_tenants = mapped_tenants
+
+        # Backwards compatibility: if Zitadel token claims they are "admin", grant legacy capabilities
+        if identity.is_platform_admin:
+            identity.capabilities.add(Capability.PLATFORM_ADMIN.value)
+        elif identity.roles and any(r.lower() in ("admin", "tenantadmin") for r in identity.roles):
+            identity.capabilities.add(Capability.TENANT_ADMIN.value)
+
+        # 3. Resolve Dynamic Postgres PBAC Capabilities
+        if identity.tenant_id:
+            async with self.role_repo_factory() as role_repo:
+                db_capabilities = await role_repo.get_user_capabilities(
+                    tenant_id=identity.tenant_id, user_id=identity.subject
+                )
+                identity.capabilities.update(db_capabilities)
+
+                # Also resolve platform-wide capabilities (where tenant_id is NULL)
+                platform_capabilities = await role_repo.get_user_capabilities(
+                    tenant_id=None,  # None represents platform-wide roles
+                    user_id=identity.subject,
+                )
+                identity.capabilities.update(platform_capabilities)
 
         return identity

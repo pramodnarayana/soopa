@@ -20,6 +20,6 @@ class ITenantRepository(Protocol):
         """Returns all tenants"""
         ...
 
-    async def delete(self, tenant_id: str, idempotency_key: str | None = None) -> None:
+    async def delete(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         """Deletes a tenant and its related local infrastructure"""
         ...

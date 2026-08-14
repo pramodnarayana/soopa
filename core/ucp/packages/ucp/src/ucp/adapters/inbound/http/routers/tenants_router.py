@@ -1,7 +1,11 @@
 from typing import Annotated, Any, Literal, cast
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from identity.domain.identity_context import IdentityContext
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,16 +16,24 @@ from ucp.adapters.inbound.http.dtos.tenant_dtos import (
     UpdateTenantNameRequest,
     UpdateTenantStatusRequest,
 )
-from ucp.adapters.inbound.http.guards.platform_auth_guard import require_platform_admin
 from ucp.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
+from ucp.api.dependencies.authorization import RequireCapability
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
+from ucp.application.use_cases.subscribe_app_use_case import (
+    SubscribeAppCommand,
+    SubscribeAppUseCase,
+)
 from ucp.application.use_cases.toggle_tenant_status_use_case import (
     ToggleTenantStatusCommand,
     ToggleTenantStatusUseCase,
+)
+from ucp.application.use_cases.unsubscribe_app_use_case import (
+    UnsubscribeAppCommand,
+    UnsubscribeAppUseCase,
 )
 from ucp.application.use_cases.update_tenant_name_use_case import (
     UpdateTenantNameCommand,
@@ -30,6 +42,7 @@ from ucp.application.use_cases.update_tenant_name_use_case import (
 from ucp.bootstrap.container import Container
 from ucp.core.config import get_settings
 from ucp.core.container import get_db_session
+from ucp.domain.models.authorization import Capability
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.project_provider import IProjectProvider
 from ucp.ports.outbound.tenant_query_service import ITenantQueryService
@@ -38,10 +51,14 @@ from ucp.ports.outbound.tenant_repository import ITenantRepository
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 
-@router.get("", response_model=list[TenantResponse])
+@router.get(
+    "",
+    response_model=list[TenantResponse],
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def find_all(  # type: ignore
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
@@ -50,10 +67,10 @@ async def find_all(  # type: ignore
     return [TenantResponse.from_read_model(t) for t in tenants]
 
 
-@router.get("/roles")
+@router.get("/roles", dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))])
 @inject
 async def get_roles(  # type: ignore
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
+    request: Request,
     project_provider: IProjectProvider = Depends(Provide[Container.project_provider]),
 ):
     roles = await project_provider.get_roles()
@@ -68,7 +85,11 @@ async def resolve_tenant(id: str, tenant_repo: ITenantRepository) -> "Tenant":
     return tenant  # type: ignore
 
 
-@router.get("/{tenant_id}", response_model=TenantResponse)
+@router.get(
+    "/{tenant_id}",
+    response_model=TenantResponse,
+    dependencies=[Depends(RequireCapability(Capability.TENANT_SETTINGS_READ))],
+)
 @inject
 async def find_one(  # type: ignore
     tenant_id: str,
@@ -83,11 +104,15 @@ async def find_one(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.post("", response_model=TenantResponse)
+@router.post(
+    "",
+    response_model=TenantResponse,
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def provision(  # type: ignore
+    request: Request,
     dto: ProvisionTenantRequest,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.provision_tenant_use_case.provider]),
@@ -103,12 +128,16 @@ async def provision(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.patch("/{tenant_id}/name", response_model=TenantResponse)
+@router.patch(
+    "/{tenant_id}/name",
+    response_model=TenantResponse,
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def update_name(  # type: ignore
+    request: Request,
     tenant_id: str,
     dto: UpdateTenantNameRequest,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.update_tenant_name_use_case.provider]),
@@ -125,12 +154,16 @@ async def update_name(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.patch("/{tenant_id}/status", response_model=TenantResponse)
+@router.patch(
+    "/{tenant_id}/status",
+    response_model=TenantResponse,
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def update_status(  # type: ignore
+    request: Request,
     tenant_id: str,
     dto: UpdateTenantStatusRequest,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
     use_case_factory=Depends(Provide[Container.toggle_tenant_status_use_case.provider]),
@@ -149,11 +182,15 @@ async def update_status(  # type: ignore
     return TenantResponse.from_read_model(tenant_rm)
 
 
-@router.delete("/{tenant_id}", status_code=204)
+@router.delete(
+    "/{tenant_id}",
+    status_code=204,
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def remove(  # type: ignore
+    request: Request,
     tenant_id: str,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
     tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
@@ -182,11 +219,15 @@ class SubscriptionResponse(BaseModel):
     status: str
 
 
-@router.get("/{id}/subscriptions", response_model=list[SubscriptionResponse])
+@router.get(
+    "/{id}/subscriptions",
+    response_model=list[SubscriptionResponse],
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def get_subscriptions(
+    request: Request,
     id: str,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     session: AsyncSession = Depends(get_db_session),
     tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
 ) -> list[SubscriptionResponse]:
@@ -203,51 +244,58 @@ async def get_subscriptions(
     ]
 
 
-@router.post("/{id}/subscriptions", response_model=SubscriptionResponse)
+@router.post(
+    "/{id}/subscriptions",
+    response_model=SubscriptionResponse,
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def subscribe_app(
+    request: Request,
     id: str,
     dto: SubscribeAppRequest,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
+    use_case_factory: Any = Depends(Provide[Container.subscribe_app_use_case.provider]),
 ) -> SubscriptionResponse:
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
-    tenant = await resolve_tenant(id, tenant_repo)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+    use_case: SubscribeAppUseCase = use_case_factory(uow__session=session)
+    command = SubscribeAppCommand(tenant_id=id, app_id=dto.appId)
 
     try:
-        tenant.subscribe(dto.appId)
-    except Exception as e:  # noqa: BLE001
+        await use_case.execute(command, idempotency_key)
+    except Exception as e:
+        logger.exception("app_subscription_failed", tenant_id=id, app_id=dto.appId)
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
-    await tenant_repo.save(tenant, idempotency_key)
     return SubscriptionResponse(
-        id=f"{tenant.id}_{dto.appId}", appId=dto.appId, tenantId=tenant.id, status="active"
+        id=f"{id}_{dto.appId}", appId=dto.appId, tenantId=id, status="active"
     )
 
 
-@router.delete("/{id}/subscriptions/{app_id}")
+@router.delete(
+    "/{id}/subscriptions/{app_id}",
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def unsubscribe_app(
+    request: Request,
     id: str,
     app_id: str,
-    _: Annotated[IdentityContext, Depends(require_platform_admin)],
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
+    use_case_factory: Any = Depends(Provide[Container.unsubscribe_app_use_case.provider]),
 ) -> dict[str, bool]:
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
-    tenant = await resolve_tenant(id, tenant_repo)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+    use_case: UnsubscribeAppUseCase = use_case_factory(uow__session=session)
+    command = UnsubscribeAppCommand(tenant_id=id, app_id=app_id)
 
     try:
-        tenant.unsubscribe_from_app(app_id)
-    except Exception as e:  # noqa: BLE001
+        await use_case.execute(command, idempotency_key)
+    except Exception as e:
+        logger.exception("app_unsubscription_failed", tenant_id=id, app_id=app_id)
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
-    await tenant_repo.save(tenant, idempotency_key)
     return {"success": True}

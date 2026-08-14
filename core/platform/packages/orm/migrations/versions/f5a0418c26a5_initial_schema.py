@@ -1,8 +1,8 @@
 """Initial schema
 
-Revision ID: 843b3e309769
+Revision ID: f5a0418c26a5
 Revises:
-Create Date: 2026-08-06 16:34:07.764942
+Create Date: 2026-08-13 23:52:48.108189
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "843b3e309769"
+revision: str = "f5a0418c26a5"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -36,12 +36,14 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("idp_tenant_id", sa.String(length=255), nullable=True),
         sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("slug", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_tenant_id"),
         sa.UniqueConstraint("name"),
+        sa.UniqueConstraint("slug"),
         schema="identity",
     )
     op.create_table(
@@ -261,6 +263,30 @@ def upgrade() -> None:
         schema="identity",
     )
     op.create_table(
+        "roles",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("description", sa.String(length=1024), nullable=True),
+        sa.Column("capabilities", postgresql.ARRAY(sa.String()), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_roles_tenant_id"), "roles", ["tenant_id"], unique=False, schema="identity"
+    )
+    op.create_index(
+        "uix_roles_tenant_name",
+        "roles",
+        ["tenant_id", "name"],
+        unique=True,
+        schema="identity",
+        postgresql_nulls_not_distinct=True,
+    )
+    op.create_table(
         "tenant_users",
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("user_id", sa.String(length=128), nullable=False),
@@ -272,50 +298,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["identity.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("tenant_id", "user_id"),
         schema="identity",
-    )
-    op.create_table(
-        "notification_templates",
-        sa.Column("id", sa.String(length=128), autoincrement=False, nullable=False),
-        sa.Column("tenant_id", sa.String(length=128), nullable=False),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("event_type", sa.String(length=255), nullable=False),
-        sa.Column("channel", sa.String(length=50), nullable=False),
-        sa.Column("subject_template", sa.Text(), nullable=True),
-        sa.Column("body_template", sa.Text(), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "event_type", "channel", name="notification_template_idx"),
-        schema="notifications",
-    )
-    op.create_table(
-        "app_subscriptions",
-        sa.Column("tenant_id", sa.String(length=128), nullable=False),
-        sa.Column("app_id", sa.String(length=128), nullable=False),
-        sa.Column("tier", sa.String(length=50), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(["app_id"], ["ucp.apps.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("tenant_id", "app_id"),
-        schema="ucp",
-    )
-    op.create_table(
-        "shard_registry",
-        sa.Column("tenant_id", sa.String(length=128), nullable=False),
-        sa.Column("app_id", sa.String(length=128), nullable=False),
-        sa.Column("shard_id", sa.String(length=128), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.ForeignKeyConstraint(["app_id"], ["ucp.apps.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["shard_id"], ["ucp.database_shards.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("tenant_id", "app_id"),
-        schema="ucp",
     )
     op.create_table(
         "in_app_notifications",
@@ -346,72 +328,110 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("event_type", sa.String(length=255), nullable=False),
         sa.Column(
-            "channels",
-            postgresql.JSONB(astext_type=sa.Text()),
-            server_default=sa.text("'[]'::jsonb"),
-            nullable=False,
+            "channels", postgresql.JSONB(astext_type=sa.Text()), server_default="[]", nullable=False
         ),
         sa.Column("destination_config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("tenant_id", "event_type", name="notification_route_idx"),
         schema="notifications",
     )
-
-    # --- Custom Postgres Triggers for Transactional Outbox ---
-    op.execute("""
-        CREATE OR REPLACE FUNCTION ucp_outbox_notify() RETURNS trigger AS $$
-        BEGIN
-            PERFORM pg_notify('ucp_outbox_wakeup', 'new_event');
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-    op.execute("""
-        CREATE TRIGGER trg_ucp_outbox_notify
-        AFTER INSERT ON ucp.outbox
-        FOR EACH ROW EXECUTE FUNCTION ucp_outbox_notify();
-    """)
-
-    op.execute("""
-        CREATE OR REPLACE FUNCTION notification_outbox_notify() RETURNS trigger AS $$
-        BEGIN
-            PERFORM pg_notify('notification_outbox_wakeup', 'new_event');
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-    op.execute("""
-        CREATE TRIGGER trg_notification_outbox_notify
-        AFTER INSERT ON notifications.notification_outbox
-        FOR EACH ROW EXECUTE FUNCTION notification_outbox_notify();
-    """)
+    op.create_table(
+        "notification_templates",
+        sa.Column("id", sa.String(length=128), autoincrement=False, nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("event_type", sa.String(length=255), nullable=False),
+        sa.Column("channel", sa.String(length=50), nullable=False),
+        sa.Column("subject_template", sa.Text(), nullable=True),
+        sa.Column("body_template", sa.Text(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("tenant_id", "event_type", "channel", name="notification_template_idx"),
+        schema="notifications",
+    )
+    op.create_table(
+        "user_notification_preferences",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("user_id", sa.String(length=128), nullable=False),
+        sa.Column("event_type", sa.String(length=255), nullable=False),
+        sa.Column("channel", sa.String(length=50), nullable=False),
+        sa.Column("is_enabled", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["identity.users.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "tenant_id", "user_id", "event_type", "channel", name="user_notif_pref_idx"
+        ),
+        schema="notifications",
+    )
+    op.create_table(
+        "app_subscriptions",
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("app_id", sa.String(length=128), nullable=False),
+        sa.Column("tier", sa.String(length=50), nullable=False),
+        sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["app_id"], ["ucp.apps.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("tenant_id", "app_id"),
+        schema="ucp",
+    )
+    op.create_table(
+        "shard_registry",
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("app_id", sa.String(length=128), nullable=False),
+        sa.Column("shard_id", sa.String(length=128), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("status", sa.String(length=50), nullable=False),
+        sa.ForeignKeyConstraint(["app_id"], ["ucp.apps.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["shard_id"], ["ucp.database_shards.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("tenant_id", "app_id"),
+        schema="ucp",
+    )
+    op.create_table(
+        "user_roles",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("user_id", sa.String(length=128), nullable=False),
+        sa.Column("role_id", sa.String(length=128), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["role_id"], ["identity.roles.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["identity.users.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        schema="identity",
+    )
+    op.create_index(
+        "uix_user_roles_tenant_user_role",
+        "user_roles",
+        ["tenant_id", "user_id", "role_id"],
+        unique=True,
+        schema="identity",
+        postgresql_nulls_not_distinct=True,
+    )
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
-    """Downgrade schema.
-
-    IMPORTANT — Squash Notice:
-    This is the sole migration for the platform schema. It includes:
-      - notifications.notification_templates.name (VARCHAR 255 NOT NULL)
-      - notifications.in_app_notifications.severity (VARCHAR 50 NOT NULL DEFAULT 'info')
-    Both of these columns were originally introduced in a separate migration
-    (39a39b965162) which was squashed into this initial schema during active
-    development. Downgrading this migration drops the entire schema, which
-    implicitly removes all columns introduced by the squash.
-    """
-
-    # --- Drop Custom Postgres Triggers ---
-    op.execute(
-        "DROP TRIGGER IF EXISTS trg_notification_outbox_notify ON notifications.notification_outbox;"
-    )
-    op.execute("DROP FUNCTION IF EXISTS notification_outbox_notify();")
-
-    op.execute("DROP TRIGGER IF EXISTS trg_ucp_outbox_notify ON ucp.outbox;")
-    op.execute("DROP FUNCTION IF EXISTS ucp_outbox_notify();")
-
+    """Downgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table("user_roles", schema="identity")
+    op.drop_table("shard_registry", schema="ucp")
+    op.drop_table("app_subscriptions", schema="ucp")
+    op.drop_table("user_notification_preferences", schema="notifications")
+    op.drop_table("notification_templates", schema="notifications")
     op.drop_table("notification_route_configurations", schema="notifications")
     op.drop_index(
         "ix_in_app_notif_tenant_user_read",
@@ -419,10 +439,9 @@ def downgrade() -> None:
         schema="notifications",
     )
     op.drop_table("in_app_notifications", schema="notifications")
-    op.drop_table("shard_registry", schema="ucp")
-    op.drop_table("app_subscriptions", schema="ucp")
-    op.drop_table("notification_templates", schema="notifications")
     op.drop_table("tenant_users", schema="identity")
+    op.drop_index(op.f("ix_identity_roles_tenant_id"), table_name="roles", schema="identity")
+    op.drop_table("roles", schema="identity")
     op.drop_index(
         op.f("ix_identity_api_tokens_tenant_id"), table_name="api_tokens", schema="identity"
     )

@@ -8,8 +8,8 @@ from .core import (
     UcpBase,
     UcpRegistry,
 )
-from .identity import ApiKey, ApiToken, Tenant, TenantUser, User
-from .notifications import NotificationOutbox, NotificationTemplate
+from .identity import ApiKey, ApiToken, Role, Tenant, TenantUser, User, UserRole
+from .notifications import NotificationOutbox, NotificationTemplate, UserNotificationPreference
 from .observability import SystemAuditLog
 from .scheduling import ScheduledJob
 from .webhooks import Webhook
@@ -24,6 +24,7 @@ __all__ = [
     "ObservabilityBase",
     "OutboxMixin",
     "PlatformRegistry",
+    "Role",
     "ScheduledJob",
     "SchedulingBase",
     "SystemAuditLog",
@@ -33,5 +34,7 @@ __all__ = [
     "UcpBase",
     "UcpRegistry",
     "User",
+    "UserNotificationPreference",
+    "UserRole",
     "Webhook",
 ]

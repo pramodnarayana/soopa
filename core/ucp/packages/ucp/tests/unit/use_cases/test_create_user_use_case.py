@@ -2,9 +2,9 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from ucp.application.use_cases.invite_user_use_case import (
-    InviteUserCommand,
-    InviteUserUseCase,
+from ucp.application.use_cases.create_user_use_case import (
+    CreateUserCommand,
+    CreateUserUseCase,
 )
 from ucp.core.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
@@ -45,23 +45,25 @@ def mock_uow(
 @pytest.fixture
 def use_case(
     mock_uow: UcpUnitOfWorkPort,
-) -> InviteUserUseCase:
-    return InviteUserUseCase(
+) -> CreateUserUseCase:
+    return CreateUserUseCase(
         uow=mock_uow,
     )
 
 
 @pytest.mark.asyncio
 async def test_invite_user_success(
-    use_case: InviteUserUseCase,
+    use_case: CreateUserUseCase,
     mock_tenant_repo: ITenantRepository,
     mock_user_repo: IUserRepository,
     mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     # Arrange
-    tenant = Tenant.create(id="ten_123", name="Test", idp_tenant_id="org-123", subscriptions=[])
+    tenant = Tenant.create(
+        id="ten_123", name="Test", slug="test", idp_tenant_id="org-123", subscriptions=[]
+    )
     mock_tenant_repo.find_by_id = AsyncMock(return_value=tenant)  # type: ignore
-    command = InviteUserCommand(
+    command = CreateUserCommand(
         tenant_id="ten_123",
         email="test@example.com",
         first_name="John",
@@ -73,19 +75,7 @@ async def test_invite_user_success(
     local_user_id = await use_case.execute(command)
 
     # Assert
-    mock_uow.register_event.assert_called_once_with(
-        event_type="UserInvited",
-        payload={
-            "org_id": "org-123",
-            "email": "test@example.com",
-            "first_name": "John",
-            "last_name": "Doe",
-            "role": "admin",
-        },
-        tenant_id="ten_123",
-    )
-
-    saved_user = mock_user_repo.save.call_args[0][0]  # type: ignore
+    saved_user = mock_user_repo.save.call_args_list[-1][0][0]  # type: ignore
     assert saved_user.email == "test@example.com"
     assert saved_user.id == local_user_id
     assert saved_user.idp_user_id is None
@@ -97,12 +87,12 @@ async def test_invite_user_success(
 
 @pytest.mark.asyncio
 async def test_invite_user_tenant_not_found(
-    use_case: InviteUserUseCase,
+    use_case: CreateUserUseCase,
     mock_tenant_repo: ITenantRepository,
 ) -> None:
     # Arrange
     mock_tenant_repo.find_by_id = AsyncMock(return_value=None)  # type: ignore
-    command = InviteUserCommand(
+    command = CreateUserCommand(
         tenant_id="ten_123",
         email="test@example.com",
         first_name="John",

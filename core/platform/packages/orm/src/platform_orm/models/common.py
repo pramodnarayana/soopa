@@ -31,7 +31,9 @@ class OutboxMixin:
 
     @declared_attr
     def attempts(cls) -> Mapped[int]:
-        return mapped_column(Integer, default=0)
+        from sqlalchemy import text
+
+        return mapped_column(Integer, server_default=text("0"), default=0)
 
     @declared_attr
     def published_at(cls) -> Mapped[datetime | None]:
@@ -43,12 +45,19 @@ class OutboxMixin:
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
-        return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+        from sqlalchemy import text
+
+        return mapped_column(
+            DateTime(timezone=True), server_default=text("now()"), default=lambda: datetime.now(UTC)
+        )
 
     @declared_attr
     def updated_at(cls) -> Mapped[datetime]:
+        from sqlalchemy import text
+
         return mapped_column(
             DateTime(timezone=True),
+            server_default=text("now()"),
             default=lambda: datetime.now(UTC),
             onupdate=lambda: datetime.now(UTC),
         )
@@ -67,12 +76,19 @@ class TimestampMixin:
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
-        return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+        from sqlalchemy import text
+
+        return mapped_column(
+            DateTime(timezone=True), server_default=text("now()"), default=lambda: datetime.now(UTC)
+        )
 
     @declared_attr
     def updated_at(cls) -> Mapped[datetime]:
+        from sqlalchemy import text
+
         return mapped_column(
             DateTime(timezone=True),
+            server_default=text("now()"),
             default=lambda: datetime.now(UTC),
             onupdate=lambda: datetime.now(UTC),
         )

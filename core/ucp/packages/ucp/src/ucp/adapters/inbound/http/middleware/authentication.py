@@ -52,9 +52,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self.public_paths = public_paths
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        logger.error(
-            "[AUTH_MIDDLEWARE] Intercepted request for path: {request.url.path}",
-            request_url_path=request.url.path,
+        logger.debug(
+            "auth_middleware_intercepted_request",
+            path=request.url.path,
         )
 
         if request.url.path in self.public_paths:
@@ -71,22 +71,22 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         # SSE clients must use Authorization header or cookie-based authentication.
 
         if token:
-            logger.error(
-                "[AUTH_MIDDLEWARE] Authorization header found. Token starts with: {token[:15]}...",
-                token15=token[:15],
+            logger.debug(
+                "auth_middleware_token_found",
+                token_prefix=token[:15],
             )
 
             # Chain of Responsibility / Strategy Execution
             strategy_found = False
             for strategy in self.strategies:
-                logger.error(
-                    "[AUTH_MIDDLEWARE] Evaluating strategy: {type(strategy).__name__}",
-                    val_0=type(strategy).__name__,
+                logger.debug(
+                    "auth_middleware_evaluating_strategy",
+                    strategy=type(strategy).__name__,
                 )
                 if strategy.can_handle(token):
-                    logger.error(
-                        "[AUTH_MIDDLEWARE] Strategy {type(strategy).__name__} claimed the token!",
-                        val_0=type(strategy).__name__,
+                    logger.debug(
+                        "auth_middleware_strategy_claimed_token",
+                        strategy=type(strategy).__name__,
                     )
                     strategy_found = True
                     try:
@@ -106,25 +106,23 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                         break
                     except TenantNotProvisionedError as e:
                         logger.warning(
-                            "[AUTH_MIDDLEWARE] Tenant not provisioned: {e.tenant_id}",
-                            e_tenant_id=e.tenant_id,
+                            "auth_middleware_tenant_not_provisioned",
+                            tenant_id=e.tenant_id,
                         )
                         return JSONResponse(status_code=403, content={"detail": str(e)})
 
             if not strategy_found:
-                logger.warning(
-                    "[AUTH_MIDDLEWARE] No authentication strategy could handle the provided token."
-                )
+                logger.warning("auth_middleware_no_strategy_found")
                 request.state.identity = None
                 request.scope["identity"] = None
         else:
-            logger.warning("[AUTH_MIDDLEWARE] NO Authorization header found on request.")
+            logger.debug("auth_middleware_no_authorization_header")
             request.state.identity = None
             request.scope["identity"] = None
 
-        logger.error(
-            "[AUTH_MIDDLEWARE] Proceeding to call_next for {request.url.path} with identity={getattr(request.state, 'identity', None)}",
-            request_url_path=request.url.path,
-            val_1=getattr(request.state, "identity", None),
+        logger.debug(
+            "auth_middleware_proceeding",
+            path=request.url.path,
+            has_identity=hasattr(request.state, "identity") and request.state.identity is not None,
         )
         return await call_next(request)

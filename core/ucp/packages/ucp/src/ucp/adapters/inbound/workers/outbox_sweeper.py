@@ -3,23 +3,25 @@ import contextlib
 import uuid
 from typing import Any
 
-import asyncpg
 import structlog
-from sqlalchemy.engine import make_url
 
-from ...domain.models.outbox_event import OutboxEvent
-from ...ports.outbox_publisher import OutboxPublisherPort
-from ...ports.outbox_repository import OutboxRepositoryPort
+from ucp.domain.models.outbox_event import OutboxEvent
+from ucp.ports.outbox_publisher import OutboxPublisherPort
+from ucp.ports.outbox_repository import OutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
 class ControlPlaneOutboxSweeper:
+    """
+    Fallback Sweeper worker that polls on a strict cron schedule
+    to sweep any stuck or failed events.
+    """
+
     def __init__(
         self,
         repository: OutboxRepositoryPort,
         publisher: OutboxPublisherPort,
-        database_url: str,
         poll_interval_seconds: int = 5,
         max_concurrent_events: int = 50,
         lock_lease_ms: int = 30000,
@@ -27,7 +29,6 @@ class ControlPlaneOutboxSweeper:
     ):
         self.repository = repository
         self.publisher = publisher
-        self.database_url = database_url
         self.worker_id = worker_id or str(uuid.uuid4())
         self.poll_interval_seconds = poll_interval_seconds
         self.max_concurrent_events = max_concurrent_events
@@ -35,7 +36,6 @@ class ControlPlaneOutboxSweeper:
         self.is_running = False
         self._task: asyncio.Task[Any] | None = None
         self._poll_event = asyncio.Event()
-        self._connection: asyncpg.Connection | None = None
 
     def start(self) -> None:
         if not self.is_running:
@@ -46,12 +46,6 @@ class ControlPlaneOutboxSweeper:
     async def stop(self) -> None:
         self.is_running = False
         self._poll_event.set()  # Wake up the polling loop to exit
-        if self._connection:
-            try:
-                await self._connection.remove_listener("ucp_outbox_wakeup", self._on_notify)
-                await self._connection.close()
-            except Exception as e:  # noqa: BLE001
-                logger.warning("outbox_sweeper_connection_close_error", error=str(e))
 
         if self._task:
             self._task.cancel()
@@ -59,41 +53,9 @@ class ControlPlaneOutboxSweeper:
                 await self._task
             logger.info("outbox_sweeper_stopped", worker_id=self.worker_id)
 
-    def _on_notify(
-        self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
-    ) -> None:
-        """Called instantly when Postgres trigger fires pg_notify."""
-        logger.debug("instant_wakeup_received", channel=channel, pid=pid)
-        self._poll_event.set()
-
-    async def _setup_listener(self) -> None:
-        """Sets up the Postgres NOTIFY listener for instant wakeups (Outbox Relay pattern)."""
-        if not self.database_url:
-            return
-        try:
-            # properly parse URL and extract dialect
-            url = make_url(self.database_url).set(drivername="postgresql")
-            asyncpg_url = url.render_as_string(hide_password=False)
-            self._connection = await asyncpg.connect(asyncpg_url)
-            await self._connection.add_listener("ucp_outbox_wakeup", self._on_notify)
-            logger.info("outbox_relay_listening", channel="ucp_outbox_wakeup")
-        except Exception:
-            if self._connection:
-                await self._connection.close()
-                self._connection = None
-            logger.exception("outbox_relay_connection_failed", fallback="pure_polling")
-
     async def _run_loop(self) -> None:
-        await self._setup_listener()
-
         async def _sweep() -> None:
             while self.is_running:
-                # Check connection health and reconnect if necessary
-                if self._connection and self._connection.is_closed():
-                    logger.warning("asyncpg_connection_lost", action="reconnecting")
-                    self._connection = None
-                    await self._setup_listener()
-
                 try:
                     await self.poll()
                 except asyncio.CancelledError:
@@ -102,7 +64,6 @@ class ControlPlaneOutboxSweeper:
                     logger.exception("outbox_sweeper_poll_loop_error")
 
                 if self.is_running:
-                    # Wait for EITHER the timer OR an instant wakeup from Postgres
                     self._poll_event.clear()
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
@@ -132,7 +93,7 @@ class ControlPlaneOutboxSweeper:
         )
 
         if events:
-            logger.debug("events_claimed", worker_id=self.worker_id, count=len(events))
+            logger.debug("sweeper_events_claimed", worker_id=self.worker_id, count=len(events))
 
             # 3. Execute concurrently
             tasks = [self.process_event(event) for event in events]
@@ -142,10 +103,12 @@ class ControlPlaneOutboxSweeper:
         try:
             await self.publisher.publish(event)
             await self.repository.mark_completed(event.id, self.worker_id)
-            logger.debug("outbox_event_processed", event_id=event.id, event_type=event.event_type)
+            logger.debug(
+                "outbox_event_processed_by_sweeper", event_id=event.id, event_type=event.event_type
+            )
         except Exception as e:
             logger.exception(
-                "outbox_event_processing_failed",
+                "outbox_event_processing_failed_by_sweeper",
                 event_id=event.id,
                 event_type=event.event_type,
             )

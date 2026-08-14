@@ -27,7 +27,7 @@ from ucp.bootstrap.lifespan import startup as ucp_startup
 logger = structlog.get_logger(__name__)
 
 
-from notification.bootstrap.lifespan import shutdown as notification_shutdown  # type: ignore[import-untyped]
+from notification.bootstrap.lifespan import shutdown as notification_shutdown
 from notification.bootstrap.lifespan import startup as notification_startup
 
 

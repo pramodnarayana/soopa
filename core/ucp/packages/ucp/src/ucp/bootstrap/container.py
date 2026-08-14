@@ -17,12 +17,14 @@ from ucp.application.use_cases.api_tokens import (
     ListApiTokensUseCase,
     UpdateApiTokenUseCase,
 )
+from ucp.application.use_cases.create_user_use_case import CreateUserUseCase
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.delete_user_use_case import DeleteUserUseCase
-from ucp.application.use_cases.invite_user_use_case import InviteUserUseCase
 from ucp.application.use_cases.provision_tenant_use_case import ProvisionTenantUseCase
+from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
 from ucp.application.use_cases.toggle_tenant_status_use_case import ToggleTenantStatusUseCase
 from ucp.application.use_cases.toggle_user_status_use_case import ToggleUserStatusUseCase
+from ucp.application.use_cases.unsubscribe_app_use_case import UnsubscribeAppUseCase
 from ucp.application.use_cases.update_tenant_name_use_case import UpdateTenantNameUseCase
 from ucp.application.use_cases.update_user_use_case import UpdateUserUseCase
 from ucp.core.container import _async_session_maker
@@ -109,10 +111,19 @@ class Container(containers.DeclarativeContainer):
         uow=uow,
     )
 
-    invite_user_use_case = providers.Factory(
-        InviteUserUseCase,
+    subscribe_app_use_case = providers.Factory(
+        SubscribeAppUseCase,
         uow=uow,
-        idp=user_provider,
+    )
+
+    unsubscribe_app_use_case = providers.Factory(
+        UnsubscribeAppUseCase,
+        uow=uow,
+    )
+
+    create_user_use_case = providers.Factory(
+        CreateUserUseCase,
+        uow=uow,
     )
 
     update_user_use_case = providers.Factory(

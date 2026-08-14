@@ -9,15 +9,20 @@ os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
 import asyncio
+import os
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from alembic import command
+from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from platform_orm.models.core import GlobalRegistry
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.waiting_utils import wait_for_logs
 from unified_api.main import app  # type: ignore
 
 from ucp.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
@@ -58,6 +63,28 @@ def postgres_container() -> "Any":
         yield postgres
 
 
+@pytest.fixture(scope="session")
+def localstack_container() -> "Any":
+    setup_script = str(Path(__file__).resolve().parents[5] / "infra" / "localstack-setup.sh")
+    localstack = DockerContainer("localstack/localstack:3.4.0")
+    localstack.with_exposed_ports(4566)
+    localstack.with_env("SERVICES", "sns,sqs")
+    localstack.with_volume_mapping(setup_script, "/etc/localstack/init/ready.d/init.sh", "ro")
+
+    with localstack:
+        wait_for_logs(localstack, r"LocalStack resources initialized successfully\.")
+
+        endpoint_url = (
+            f"http://{localstack.get_container_host_ip()}:{localstack.get_exposed_port(4566)}"
+        )
+
+        yield {
+            "endpoint_url": endpoint_url,
+            "sns_topic_arn": "arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo",
+            "sqs_queue_url": f"{endpoint_url}/000000000000/ucp-events.fifo",
+        }
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db_engine(postgres_container) -> "Any":  # type: ignore
     db_url = postgres_container.get_connection_url().replace(
@@ -74,9 +101,31 @@ async def db_engine(postgres_container) -> "Any":  # type: ignore
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
 
-        # Ensure models are imported
+    # Run Alembic migrations programmatically
+    alembic_ini_path = (
+        Path(__file__).resolve().parents[6]
+        / "core"
+        / "platform"
+        / "packages"
+        / "orm"
+        / "alembic.ini"
+    )
+    alembic_cfg = Config(str(alembic_ini_path))
 
-        await conn.run_sync(GlobalRegistry.metadata.create_all)
+    # Store old DATABASE_URL and inject the testcontainer URL
+    old_db_url = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = db_url
+
+    try:
+        # command.upgrade blocks and runs migrations synchronously
+        # We run it in a separate thread so its internal asyncio.run() doesn't conflict with pytest-asyncio
+        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+    finally:
+        # Restore environment
+        if old_db_url is not None:
+            os.environ["DATABASE_URL"] = old_db_url
+        else:
+            del os.environ["DATABASE_URL"]
 
     yield engine
     await engine.dispose()

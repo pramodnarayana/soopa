@@ -1,8 +1,19 @@
 import os
 from dataclasses import dataclass
 
+import structlog
+from sqlalchemy.exc import IntegrityError
+
+from ucp.core.exceptions import SlugExhaustedException
 from ucp.domain.models.tenant import Tenant
+from ucp.domain.services.slug_service import generate_slug
 from ucp.ports.uow import UcpUnitOfWorkPort
+
+logger = structlog.get_logger(__name__)
+
+# Maximum number of slug variants to try before giving up.
+# e.g. "acme-corp", "acme-corp-2", ..., "acme-corp-10"
+_MAX_SLUG_ATTEMPTS = 10
 
 
 @dataclass(frozen=True)
@@ -19,38 +30,82 @@ class ProvisionTenantCommand:
 
 
 class ProvisionTenantUseCase:
-    def __init__(
-        self,
-        uow: UcpUnitOfWorkPort,
-    ):
+    def __init__(self, uow: UcpUnitOfWorkPort) -> None:
         self.uow = uow
 
     async def execute(
         self, command: ProvisionTenantCommand, idempotency_key: str | None = None
     ) -> Tenant:
-        async with self.uow:
-            # 1. Generate a local ID for the tenant
-            local_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
+        # NOTE: Tenant ID generation intentionally lives here (application layer)
+        # because it requires os.urandom — a side-effectful infrastructure call.
+        # A future improvement is a TenantId value object with a generate() factory.
+        local_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
+        base_slug = generate_slug(command.name)
 
-            # 2. Create Tenant Domain Entity (idp_tenant_id is None until outbox worker provisions it)
-            tenant = Tenant.create(
-                id=local_id,
-                name=command.name,
-                idp_tenant_id=None,
-                subscriptions=[],
-            )
+        logger.info(
+            "provision_tenant.started",
+            tenant_id=local_id,
+            tenant_name=command.name,
+            base_slug=base_slug,
+            idempotency_key=idempotency_key,
+        )
 
-            # 3. Save to DB
-            await self.uow.tenant_repo.save(tenant, idempotency_key)
+        # Optimistic insert with DB-level uniqueness retry.
+        #
+        # We do NOT pre-load all existing slugs (TOCTOU race condition).
+        # Instead, we attempt an INSERT and retry with a numeric suffix on
+        # UNIQUE constraint violations — letting the database be the final
+        # authority. This is correct under concurrent provisioning.
+        for attempt in range(_MAX_SLUG_ATTEMPTS):
+            slug = base_slug if attempt == 0 else f"{base_slug}-{attempt + 1}"
 
-            # 4. Register Outbox Event to Provision in Zitadel
-            self.uow.register_event(
-                event_type="TenantProvisioned",
-                payload={"name": command.name},
-                idempotency_key=idempotency_key,
-                tenant_id=tenant.id,
-            )
+            try:
+                async with self.uow:
+                    tenant = Tenant.create(
+                        id=local_id,
+                        name=command.name,
+                        slug=slug,
+                        idp_tenant_id=None,
+                        subscriptions=[],
+                    )
 
-            await self.uow.commit()
+                    await self.uow.tenant_repo.save(tenant, idempotency_key)
+                    await self.uow.commit()
 
-            return tenant
+                logger.info(
+                    "provision_tenant.completed",
+                    tenant_id=tenant.id,
+                    slug=slug,
+                    attempt=attempt,
+                )
+                return tenant
+
+            except IntegrityError as exc:
+                orig = str(getattr(exc, "orig", exc))
+                # Only retry on the slug uniqueness constraint violation.
+                # All other IntegrityErrors (e.g. name conflict) are re-raised.
+                if "tenants_slug_key" in orig or 'unique constraint "tenants_slug_key"' in orig:
+                    logger.warning(
+                        "provision_tenant.slug_conflict",
+                        slug=slug,
+                        attempt=attempt,
+                        tenant_name=command.name,
+                    )
+                    continue
+                logger.exception(
+                    "provision_tenant.integrity_error",
+                    tenant_id=local_id,
+                    reason=orig,
+                )
+                raise
+
+        logger.error(
+            "provision_tenant.slug_exhausted",
+            tenant_name=command.name,
+            base_slug=base_slug,
+            max_attempts=_MAX_SLUG_ATTEMPTS,
+        )
+        raise SlugExhaustedException(
+            f"Could not allocate a unique slug for tenant name {command.name!r} "
+            f"after {_MAX_SLUG_ATTEMPTS} attempts."
+        )

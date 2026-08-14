@@ -16,6 +16,7 @@ async def test_outbox_save_and_fetch(db_session_factory):
         tenant = Tenant(
             id=tenant_id,
             name="Test Tenant",
+            slug=tenant_id,
             status="ACTIVE",
         )
         session.add(tenant)

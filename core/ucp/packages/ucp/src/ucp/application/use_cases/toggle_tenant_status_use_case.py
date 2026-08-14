@@ -29,11 +29,4 @@ class ToggleTenantStatusUseCase:
             tenant.change_status(command.status)
             await self._uow.tenant_repo.save(tenant, idempotency_key)
 
-            self._uow.register_event(
-                event_type="TenantStatusToggled",
-                payload={"org_id": tenant.idp_tenant_id, "active": command.status == "active"},
-                idempotency_key=idempotency_key,
-                tenant_id=tenant.id,
-            )
-
             await self._uow.commit()

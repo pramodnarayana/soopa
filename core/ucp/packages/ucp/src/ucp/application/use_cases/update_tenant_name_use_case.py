@@ -27,11 +27,4 @@ class UpdateTenantNameUseCase:
             tenant.rename(command.name)
             await self._uow.tenant_repo.save(tenant, idempotency_key)
 
-            self._uow.register_event(
-                event_type="TenantNameUpdated",
-                payload={"org_id": tenant.idp_tenant_id, "name": command.name},
-                idempotency_key=idempotency_key,
-                tenant_id=tenant.id,
-            )
-
             await self._uow.commit()

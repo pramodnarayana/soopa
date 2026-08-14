@@ -1,6 +1,12 @@
 from datetime import UTC, datetime
 from typing import Literal
 
+from ucp.domain.events.user_events import (
+    UserDeletedEvent,
+    UserMembershipRemovedEvent,
+    UserStatusToggledEvent,
+    UserUpdatedEvent,
+)
 from ucp.domain.models.aggregate_root import AggregateRoot
 
 
@@ -60,3 +66,42 @@ class User(AggregateRoot):
         if self.status != "inactive":
             self.status = "inactive"
             self.updated_at = datetime.now(UTC)
+
+    def update_profile(self, first_name: str, last_name: str, org_id: str, role: str) -> None:
+        self.name = f"{first_name} {last_name}".strip()
+        self.updated_at = datetime.now(UTC)
+        if self.idp_user_id:
+            self.add_domain_event(
+                UserUpdatedEvent(
+                    idp_user_id=self.idp_user_id,
+                    org_id=org_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    role=role,
+                )
+            )
+
+    def change_status(self, action: str, org_id: str) -> None:
+        if action == "deactivate":
+            self.deactivate()
+        elif action == "activate":
+            self.activate()
+
+        if self.idp_user_id:
+            self.add_domain_event(
+                UserStatusToggledEvent(
+                    idp_user_id=self.idp_user_id,
+                    org_id=org_id,
+                    action=action,
+                )
+            )
+
+    def mark_deleted(self) -> None:
+        if self.idp_user_id:
+            self.add_domain_event(UserDeletedEvent(idp_user_id=self.idp_user_id))
+
+    def remove_membership(self, tenant_id: str) -> None:
+        if self.idp_user_id:
+            self.add_domain_event(
+                UserMembershipRemovedEvent(idp_user_id=self.idp_user_id, org_id=tenant_id)
+            )

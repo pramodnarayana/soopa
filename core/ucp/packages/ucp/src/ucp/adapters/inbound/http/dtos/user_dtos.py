@@ -10,8 +10,8 @@ from pydantic import BaseModel, EmailStr, Field
 class CreateUserRequest(BaseModel):
     """Request body for POST /tenants/{tenant_id}/users/."""
 
-    first_name: str = Field(..., alias="firstName", min_length=1)
-    last_name: str = Field(..., alias="lastName", min_length=1)
+    first_name: str = Field(..., validation_alias="firstName", min_length=1)
+    last_name: str = Field(..., validation_alias="lastName", min_length=1)
     email: EmailStr
     role: str = Field(..., min_length=1)
 
@@ -19,8 +19,8 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     """Request body for PATCH /tenants/{tenant_id}/users/{user_id}."""
 
-    first_name: str = Field(..., alias="firstName", min_length=1)
-    last_name: str = Field(..., alias="lastName", min_length=1)
+    first_name: str = Field(..., validation_alias="firstName", min_length=1)
+    last_name: str = Field(..., validation_alias="lastName", min_length=1)
     role: str = Field(..., min_length=1)
 
 
@@ -35,9 +35,9 @@ class UserResponse(BaseModel):
 
     id: str
     email: str
-    display_name: str = Field(alias="displayName")
-    first_name: str = Field(alias="firstName")
-    last_name: str = Field(alias="lastName")
+    display_name: str = Field(validation_alias="displayName")
+    first_name: str = Field(validation_alias="firstName")
+    last_name: str = Field(validation_alias="lastName")
     state: str
     role: str
-    created_at: str = Field(alias="createdAt")
+    created_at: str = Field(validation_alias="createdAt")

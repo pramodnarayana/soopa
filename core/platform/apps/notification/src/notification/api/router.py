@@ -4,10 +4,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from notification.api import (
+    in_app_notifications_router,
+    preferences_router,
+    templates_router,
+    user_preferences_router,
+)
 from notification.bootstrap.container import Container
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
+
+router.include_router(in_app_notifications_router.router)
+router.include_router(preferences_router.router)
+router.include_router(templates_router.router)
+router.include_router(user_preferences_router.router)
 
 # Strict Event-Driven Architecture:
 # We do not expose synchronous REST endpoints for dispatching notifications.

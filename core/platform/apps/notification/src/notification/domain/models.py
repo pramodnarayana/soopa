@@ -43,3 +43,13 @@ class NotificationOutboxEvent:
     idempotency_key: str
     payload: dict[str, Any]
     id: str | None = None
+
+
+@dataclass(frozen=True)
+class UserNotificationPreference:
+    id: str
+    tenant_id: str
+    user_id: str
+    event_type: str
+    channel: Channel
+    is_enabled: bool

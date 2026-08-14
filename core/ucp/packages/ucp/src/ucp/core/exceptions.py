@@ -6,6 +6,10 @@ class ResourceNotFoundError(DomainError):
     """Raised when a requested resource is not found."""
 
 
+class InvalidCapabilityError(DomainError):
+    """Raised when an invalid or unknown capability is requested."""
+
+
 class IdempotencyConflictError(DomainError):
     """Raised when an idempotency key is reused with a different payload."""
 
@@ -16,6 +20,18 @@ class TenantRenameError(DomainError):
 
 class AppSubscriptionError(DomainError):
     """Raised when a subscription/unsubscription operation violates domain invariants."""
+
+
+class InvalidTenantNameError(DomainError):
+    """Raised when a tenant name cannot produce a valid URL-safe slug."""
+
+
+class SlugExhaustedException(DomainError):
+    """Raised when no unique slug variant could be allocated for a tenant name.
+
+    This should be extremely rare in practice (requires MAX_SLUG_ATTEMPTS concurrent
+    tenants with identical names). It is a domain error, not an infrastructure error.
+    """
 
 
 class InfrastructureError(Exception):

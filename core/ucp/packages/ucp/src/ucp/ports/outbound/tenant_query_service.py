@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 class TenantReadModel:
     id: str
     name: str
+    slug: str
     idp_tenant_id: str | None
     status: Literal["active", "inactive"]
     subscriptions: list[str]  # List of application slugs
@@ -23,3 +24,5 @@ class ITenantQueryService(Protocol):
     async def get_all_tenants(self) -> list[TenantReadModel]: ...
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None: ...
+
+    async def get_tenant_by_slug(self, slug: str) -> TenantReadModel | None: ...

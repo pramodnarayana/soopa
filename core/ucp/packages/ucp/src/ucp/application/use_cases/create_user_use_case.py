@@ -2,12 +2,13 @@ import os
 from dataclasses import dataclass
 
 from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.events.user_events import UserCreatedEvent
 from ucp.domain.models.user import User
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @dataclass(frozen=True)
-class InviteUserCommand:
+class CreateUserCommand:
     tenant_id: str
     email: str
     first_name: str
@@ -15,14 +16,14 @@ class InviteUserCommand:
     role: str
 
 
-class InviteUserUseCase:
+class CreateUserUseCase:
     def __init__(
         self,
         uow: UcpUnitOfWorkPort,
     ):
         self._uow = uow
 
-    async def execute(self, command: InviteUserCommand) -> str:
+    async def execute(self, command: CreateUserCommand) -> str:
         async with self._uow:
             tenant = await self._uow.tenant_repo.find_by_id(command.tenant_id)
             if not tenant:
@@ -51,17 +52,17 @@ class InviteUserUseCase:
             )
 
             # 3. Register Outbox Event to Create in IDP
-            self._uow.register_event(
-                event_type="UserInvited",
-                payload={
-                    "org_id": tenant.idp_tenant_id,
-                    "email": command.email,
-                    "first_name": command.first_name,
-                    "last_name": command.last_name,
-                    "role": command.role,
-                },
-                tenant_id=tenant.id,
+            new_user.add_domain_event(
+                UserCreatedEvent(
+                    org_id=tenant.idp_tenant_id,
+                    email=command.email,
+                    first_name=command.first_name,
+                    last_name=command.last_name,
+                    role=command.role,
+                )
             )
+            # Re-save the user to flush the event outbox
+            await self._uow.user_repo.save(new_user)
 
             await self._uow.commit()
 
