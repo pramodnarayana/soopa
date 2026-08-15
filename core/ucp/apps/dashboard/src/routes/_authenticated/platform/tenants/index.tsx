@@ -26,6 +26,7 @@ import { useGetTenants } from '@/domains/tenants/api/queries';
 interface Tenant {
   id: string;
   name: string;
+  slug: string;
   status: TenantStatus;
   createdAt: string;
   updatedAt: string;
@@ -173,7 +174,7 @@ function TenantsPage() {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void navigate({ to: `/platform/tenants/${tenant.id}` });
+                  void navigate({ to: `/platform/tenants/${tenant.slug}` });
                 }}
               >
                 Manage
@@ -334,7 +335,7 @@ function TenantsPage() {
           emptyTitle="No Tenants Provisioned"
           emptyDescription="Get started by provisioning your first tenant."
           onRowClick={(row) => {
-            void navigate({ to: `/platform/tenants/${row.original.id}` });
+            void navigate({ to: `/platform/tenants/${row.original.slug}` });
           }}
         />
       </div>

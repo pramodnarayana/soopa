@@ -20,7 +20,7 @@ class UnsubscribeAppUseCase:
         self, command: UnsubscribeAppCommand, idempotency_key: str | None = None
     ) -> None:
         async with self.uow as uow:
-            tenant = await resolve_tenant_or_raise(uow.tenant_repo, command.tenant_id)
+            tenant = await resolve_tenant_or_raise(uow, command.tenant_id)
 
             tenant.unsubscribe_from_app(command.app_id)
 

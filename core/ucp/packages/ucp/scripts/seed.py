@@ -48,16 +48,18 @@ async def main() -> None:
         # Upsert the platform tenant
         await conn.execute(
             """
-            INSERT INTO identity.tenants (id, name, idp_tenant_id, status, created_at, updated_at)
-            VALUES ($1, $2, $3, 'active', NOW(), NOW())
+            INSERT INTO identity.tenants (id, name, slug, idp_tenant_id, status, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, 'active', NOW(), NOW())
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
+                slug = EXCLUDED.slug,
                 idp_tenant_id = EXCLUDED.idp_tenant_id,
                 status = EXCLUDED.status,
                 updated_at = NOW()
             """,
             PLATFORM_SENTINEL_ID,
             "Platform Organization",
+            "platform",
             platform_org_id,
         )
         logger.info("Successfully seeded platform sentinel tenant.")

@@ -27,6 +27,12 @@ from ucp.application.use_cases.toggle_user_status_use_case import ToggleUserStat
 from ucp.application.use_cases.unsubscribe_app_use_case import UnsubscribeAppUseCase
 from ucp.application.use_cases.update_tenant_name_use_case import UpdateTenantNameUseCase
 from ucp.application.use_cases.update_user_use_case import UpdateUserUseCase
+from ucp.application.use_cases.webhooks import (
+    CreateWebhookUseCase,
+    DeleteWebhookUseCase,
+    ListWebhooksUseCase,
+    UpdateWebhookUseCase,
+)
 from ucp.core.container import _async_session_maker
 
 
@@ -142,4 +148,24 @@ class Container(containers.DeclarativeContainer):
         DeleteUserUseCase,
         uow=uow,
         idp=user_provider,
+    )
+
+    create_webhook_use_case = providers.Factory(
+        CreateWebhookUseCase,
+        uow=uow,
+    )
+
+    update_webhook_use_case = providers.Factory(
+        UpdateWebhookUseCase,
+        uow=uow,
+    )
+
+    list_webhooks_use_case = providers.Factory(
+        ListWebhooksUseCase,
+        uow=uow,
+    )
+
+    delete_webhook_use_case = providers.Factory(
+        DeleteWebhookUseCase,
+        uow=uow,
     )

@@ -1,8 +1,5 @@
 import structlog
-from platform_orm.models import Role as OrmRole
-from platform_orm.models import User as OrmUser
 from pydantic import BaseModel
-from sqlalchemy import select
 
 from ucp.core.exceptions import ResourceNotFoundError
 from ucp.ports.uow import UcpUnitOfWorkPort
@@ -30,21 +27,14 @@ class AssignUserRoleUseCase:
         bound_logger.info("assign_user_role.started")
 
         async with self.uow:
-            # Validate user belongs to the specified tenant
-            user_stmt = select(OrmUser).where(OrmUser.id == request.user_id)
-            user_result = await self.uow.session.execute(user_stmt)
-            user = user_result.scalar_one_or_none()
+            # Domain-Driven Design: Use Repository Ports to fetch aggregates, no ORM leakage.
+            user = await self.uow.user_repo.find_by_id_and_tenant(request.user_id, tenant_id or "")
             if not user:
-                raise ResourceNotFoundError(f"User '{request.user_id}' not found.")
-            if user.tenant_id != tenant_id:
                 raise ResourceNotFoundError(
-                    f"User '{request.user_id}' does not belong to tenant '{tenant_id}'."
+                    f"User '{request.user_id}' not found in tenant '{tenant_id}'."
                 )
 
-            # Validate role exists and is scoped correctly
-            role_stmt = select(OrmRole).where(OrmRole.id == request.role_id)
-            role_result = await self.uow.session.execute(role_stmt)
-            role = role_result.scalar_one_or_none()
+            role = await self.uow.role_repo.get_by_id(request.role_id)
             if not role:
                 raise ResourceNotFoundError(f"Role '{request.role_id}' not found.")
 
@@ -56,11 +46,18 @@ class AssignUserRoleUseCase:
                     f"and cannot be assigned in tenant '{tenant_id}'."
                 )
 
+            # Assign role via Aggregate Root to collect domain events
+            user.assign_role(role.id)
+
+            # Persist role assignment
             await self.uow.role_repo.assign_user_role(
                 tenant_id=tenant_id,
-                user_id=request.user_id,
-                role_id=request.role_id,
+                user_id=user.id,
+                role_id=role.id,
             )
+
+            # Persist aggregate (flushes events via outbox pattern)
+            await self.uow.user_repo.save(user)
             await self.uow.commit()
 
         bound_logger.info("assign_user_role.completed")

@@ -1,22 +1,23 @@
 import { Button } from '@soopa/ui/components/ui/button';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, notFound } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useUpdateTenantName } from '@/domains/tenants/api/mutations';
-import { useGetTenants } from '@/domains/tenants/api/queries';
+import { type Tenant, useGetTenants } from '@/domains/tenants/api/queries';
 
-export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantSlug/')({
   component: TenantOverviewPage,
 });
 
 function TenantOverviewPage() {
-  const { tenantId } = Route.useParams();
+  const { tenantSlug } = Route.useParams();
 
-  const { data: tenants = [] } = useGetTenants();
+  const { data: tenants = [], isLoading } = useGetTenants();
 
-  const tenant = tenants.find((t: { id: string; name: string }) => t.id === tenantId);
+  const tenant = tenants.find((t: Tenant) => t.slug === tenantSlug);
+
   const [name, setName] = useState('');
 
   useEffect(() => {
@@ -26,8 +27,9 @@ function TenantOverviewPage() {
   const updateNameMutationObj = useUpdateTenantName();
 
   const handleUpdateName = (newName: string) => {
+    if (!tenant) return;
     updateNameMutationObj.mutate(
-      { id: tenantId, name: newName },
+      { id: tenant.id, name: newName },
       {
         onSuccess: () => {
           toast.success('Tenant name updated successfully');
@@ -39,6 +41,7 @@ function TenantOverviewPage() {
     );
   };
 
+  if (!isLoading && !tenant) throw notFound();
   if (!tenant) return null;
 
   return (

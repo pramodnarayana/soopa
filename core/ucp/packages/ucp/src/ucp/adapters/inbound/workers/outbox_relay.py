@@ -84,7 +84,7 @@ class ControlPlaneOutboxRelay:
                 self._connection = None
             logger.exception("outbox_relay_connection_failed")
 
-    async def _run_loop(self) -> None:
+    async def _run_loop(self) -> None:  # noqa: C901
         await self._setup_listener()
 
         async def _relay() -> None:
@@ -92,7 +92,15 @@ class ControlPlaneOutboxRelay:
                 if self._connection and self._connection.is_closed():
                     logger.warning("asyncpg_connection_lost", action="reconnecting")
                     self._connection = None
+
+                if not self._connection:
                     await self._setup_listener()
+                    if not self._connection:
+                        await asyncio.sleep(5.0)
+                        continue
+
+                if self.is_running:
+                    self._poll_event.clear()
 
                 try:
                     await self.poll()
@@ -101,8 +109,7 @@ class ControlPlaneOutboxRelay:
                 except Exception:
                     logger.exception("outbox_relay_poll_error")
 
-                if self.is_running:
-                    self._poll_event.clear()
+                if self.is_running and not self._poll_event.is_set():
                     await self._poll_event.wait()
 
         try:

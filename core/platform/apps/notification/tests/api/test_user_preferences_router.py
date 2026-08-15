@@ -23,6 +23,7 @@ async def test_user_preferences_router():
     class MockIdentity:
         def __init__(self, user_id, authorized_tenants):
             self.user_id = user_id
+            self.subject = user_id
             self.authorized_tenants = authorized_tenants
 
     @app.middleware("http")

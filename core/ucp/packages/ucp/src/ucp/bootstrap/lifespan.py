@@ -46,7 +46,7 @@ _provisioner: InfrastructureProvisioner | None = None
 _engine = None
 
 
-async def startup() -> None:
+async def startup() -> None:  # noqa: C901
     """
     Starts all UCP background workers.
     Called by the Shell lifespan on application startup.
@@ -96,7 +96,7 @@ async def startup() -> None:
 
     if os.environ.get("APP_ENV", "production") in ("local", "test"):
         idp = DummyIdentityProvider()
-        idp_users = DummyIdentityProvider()  # Use DummyIdentityProvider as user provider for local/test
+        idp_users = DummyIdentityProvider()  # type: ignore
     else:
         idp = ZitadelIdentityProvider(org_provider=container.org_provider())
         idp_users = container.user_provider()

@@ -84,7 +84,11 @@ class ProvisionTenantUseCase:
                 # Only retry on the slug uniqueness constraint violation.
                 # All other IntegrityErrors (e.g. name conflict) are re-raised.
                 constraint_name = None
-                if hasattr(exc, "orig") and hasattr(exc.orig, "__cause__"):
+                if (
+                    hasattr(exc, "orig")
+                    and isinstance(exc.orig, BaseException)
+                    and exc.orig.__cause__
+                ):
                     constraint_name = getattr(exc.orig.__cause__, "constraint_name", None)
                 elif hasattr(exc, "orig"):
                     constraint_name = getattr(exc.orig, "constraint_name", None)

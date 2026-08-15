@@ -59,12 +59,14 @@ router = APIRouter(prefix="/tenants", tags=["Tenants"])
 @inject
 async def find_all(  # type: ignore
     request: Request,
+    page: int = 1,
+    limit: int = 50,
     session: AsyncSession = Depends(get_db_session),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
     query_service: ITenantQueryService = query_service_factory(session=session)
-    tenants = await query_service.get_all_tenants()
-    return [TenantResponse.from_read_model(t) for t in tenants]
+    paginated = await query_service.get_all_tenants(page=page, limit=limit)
+    return [TenantResponse.from_read_model(t) for t in paginated.items]
 
 
 @router.get("/roles", dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))])

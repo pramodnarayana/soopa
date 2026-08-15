@@ -16,6 +16,11 @@ class IRoleRepository(abc.ABC):
         """
 
     @abc.abstractmethod
+    @abc.abstractmethod
+    async def get_by_id(self, role_id: str) -> Role | None:
+        """Fetch a role by its ID."""
+
+    @abc.abstractmethod
     async def save(self, role: Role) -> None:
         """Persists a new or updated role."""
 

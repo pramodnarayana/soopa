@@ -29,6 +29,7 @@ from ucp.adapters.inbound.http.routers import (
     tenants_router,
     tokens_router,
     users_router,
+    webhooks_router,
 )
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
@@ -147,6 +148,7 @@ app.include_router(tenants_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(apps_router.router, prefix="/api/v1")
 app.include_router(tokens_router.router, prefix="/api/v1/tenants/{tenant_id}/tokens")
+app.include_router(webhooks_router.router)
 app.include_router(in_app_notifications_router)
 app.include_router(notification_preferences_router)
 app.include_router(notification_templates_router)

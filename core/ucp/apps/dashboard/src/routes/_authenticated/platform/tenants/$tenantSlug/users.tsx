@@ -29,7 +29,9 @@ import {
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
+import { HasCapability } from '@/components/auth/HasCapability';
 import { useGetRoles } from '@/domains/roles/api/queries';
+import { type Tenant, useGetTenants } from '@/domains/tenants/api/queries';
 import {
   useCreateTenantUser,
   useDeleteTenantUser,
@@ -81,7 +83,7 @@ const availableFields: FieldDef[] = [
   },
 ];
 
-export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/users')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantSlug/users')({
   component: TenantUsersPage,
 });
 
@@ -182,7 +184,11 @@ const UserActionsCell = ({
 
 // --- Main Page ---
 function TenantUsersPage() {
-  const { tenantId } = Route.useParams();
+  const { tenantSlug } = Route.useParams();
+
+  const { data: tenants = [] } = useGetTenants();
+  const tenant = tenants.find((t: Tenant) => t.slug === tenantSlug);
+  const tenantId = tenant?.id ?? '';
 
   const [showModal, setShowModal] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -363,15 +369,22 @@ function TenantUsersPage() {
             USER_STATUS_THEME.unknown;
 
           return (
-            <UserActionsCell
-              user={user}
-              isActive={isActive}
-              isKnownStatus={isKnownStatus}
-              isPending={isPending}
-              theme={theme}
-              onToggleStatus={handleToggleStatus}
-              onDelete={handleDeleteUser}
-            />
+            <HasCapability
+              capability="users:write"
+              fallback={
+                <div className="text-right pr-4 text-xs text-slate-400 font-medium">Read Only</div>
+              }
+            >
+              <UserActionsCell
+                user={user}
+                isActive={isActive}
+                isKnownStatus={isKnownStatus}
+                isPending={isPending}
+                theme={theme}
+                onToggleStatus={handleToggleStatus}
+                onDelete={handleDeleteUser}
+              />
+            </HasCapability>
           );
         },
       }),
@@ -502,10 +515,12 @@ function TenantUsersPage() {
               {users.length} user{users.length !== 1 ? 's' : ''} in this tenant
             </p>
           </div>
-          <Button id="create-user-btn" onClick={() => setShowModal(true)} size="cta">
-            <UserPlus className="w-5 h-5" />
-            Create User
-          </Button>
+          <HasCapability capability="users:write">
+            <Button id="create-user-btn" onClick={() => setShowModal(true)} size="cta">
+              <UserPlus className="w-5 h-5" />
+              Create User
+            </Button>
+          </HasCapability>
         </div>
 
         <div className="mb-4 flex justify-end">

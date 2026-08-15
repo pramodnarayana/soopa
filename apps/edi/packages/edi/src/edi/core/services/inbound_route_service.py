@@ -100,11 +100,7 @@ class InboundRouteService:
             if sftp_ids
             else {}
         )
-        webhook_names = (
-            await self.uow.webhooks.get_webhooks_by_ids(tenant_id, list(webhook_ids))
-            if webhook_ids
-            else {}
-        )
+        webhook_names: dict[str, str] = {}
 
         results: list[InboundRouteListEntity] = []
 

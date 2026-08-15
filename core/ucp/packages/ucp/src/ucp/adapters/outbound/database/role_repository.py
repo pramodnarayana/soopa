@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from typing import Any
 
 import structlog
 from platform_orm.models import Role as OrmRole
@@ -26,6 +27,20 @@ class PostgresRoleRepository(IRoleRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_by_id(self, role_id: str) -> DomainRole | None:
+        stmt = select(OrmRole).where(OrmRole.id == role_id)
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if not row:
+            return None
+        return DomainRole(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            name=row.name,
+            description=row.description,
+            capabilities=list(row.capabilities) if row.capabilities else [],
+        )
+
     async def get_user_capabilities(self, tenant_id: str | None, user_id: str) -> set[str]:
         """
         Queries the database for all roles assigned to the user within the given tenant,
@@ -34,6 +49,7 @@ class PostgresRoleRepository(IRoleRepository):
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id)
         bound_logger.debug("role_repo.get_user_capabilities.started")
 
+        tenant_filter: Any
         if tenant_id is None:
             tenant_filter = UserRole.tenant_id.is_(None)
         else:
@@ -101,7 +117,9 @@ class PostgresRoleRepository(IRoleRepository):
         try:
             await self.session.flush()
         except IntegrityError as e:
-            constraint_name = getattr(e.orig, "constraint_name", None) if hasattr(e, "orig") else None
+            constraint_name = (
+                getattr(e.orig, "constraint_name", None) if hasattr(e, "orig") else None
+            )
             logger.exception(
                 "role_repo.assign_user_role.integrity_error",
                 tenant_id=tenant_id,
@@ -111,7 +129,11 @@ class PostgresRoleRepository(IRoleRepository):
                 reason=str(e.orig) if hasattr(e, "orig") else str(e),
             )
             # Check for unique violation on user_role assignment
-            if constraint_name and "user_role" in constraint_name and "unique" in constraint_name.lower():
+            if (
+                constraint_name
+                and "user_role" in constraint_name
+                and "unique" in constraint_name.lower()
+            ):
                 raise IdempotencyConflictError(
                     f"Role '{role_id}' is already assigned to user '{user_id}' in tenant '{tenant_id}'."
                 ) from e

@@ -1,20 +1,18 @@
 import { Skeleton } from '@soopa/ui/components/ui/skeleton';
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
 import { ArrowLeft, Box, Building2, Users } from 'lucide-react';
-import { useGetTenants } from '@/domains/tenants/api/queries';
+import { type Tenant, useGetTenants } from '@/domains/tenants/api/queries';
 
-export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantSlug')({
   component: TenantLayout,
 });
 
 function TenantLayout() {
-  const { tenantId } = Route.useParams();
+  const { tenantSlug } = Route.useParams();
 
   const { data: tenants = [], isLoading } = useGetTenants();
 
-  const tenant = tenants.find(
-    (t: { id: string; name: string; status: string }) => t.id === tenantId,
-  );
+  const tenant = tenants.find((t: Tenant) => t.slug === tenantSlug);
 
   if (isLoading) {
     return (
@@ -66,8 +64,8 @@ function TenantLayout() {
         <div className="w-full">
           <nav className="flex items-center gap-8" aria-label="Tabs">
             <Link
-              to="/platform/tenants/$tenantId"
-              params={{ tenantId }}
+              to="/platform/tenants/$tenantSlug"
+              params={{ tenantSlug }}
               activeOptions={{ exact: true }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
@@ -75,16 +73,16 @@ function TenantLayout() {
               Overview
             </Link>
             <Link
-              to="/platform/tenants/$tenantId/users"
-              params={{ tenantId }}
+              to="/platform/tenants/$tenantSlug/users"
+              params={{ tenantSlug }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
               <Users className="w-4 h-4" />
               Users
             </Link>
             <Link
-              to="/platform/tenants/$tenantId/apps"
-              params={{ tenantId }}
+              to="/platform/tenants/$tenantSlug/apps"
+              params={{ tenantSlug }}
               className="group inline-flex items-center gap-2 pb-4 pt-2 border-b-[3px] font-semibold text-[15px] transition-colors border-transparent text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-primary"
             >
               <Box className="w-4 h-4" />

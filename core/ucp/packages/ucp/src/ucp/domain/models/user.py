@@ -113,3 +113,8 @@ class User(AggregateRoot):
             self.add_domain_event(
                 UserMembershipRemovedEvent(idp_user_id=self.idp_user_id, org_id=org_id)
             )
+
+    def assign_role(self, role_id: str) -> None:
+        from ucp.domain.events.role_events import UserRoleAssignedEvent
+
+        self.add_domain_event(UserRoleAssignedEvent(user_id=self.id, role_id=role_id))

@@ -3,11 +3,15 @@ from datetime import UTC
 
 import structlog
 from platform_orm.models.identity import Tenant as DbTenant
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App, AppSubscription
 
-from ucp.ports.outbound.tenant_query_service import ITenantQueryService, TenantReadModel
+from ucp.ports.outbound.tenant_query_service import (
+    ITenantQueryService,
+    PaginatedTenants,
+    TenantReadModel,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -54,15 +58,23 @@ class DatabaseTenantQueryService(ITenantQueryService):
     # Public query methods
     # ------------------------------------------------------------------
 
-    async def get_all_tenants(self) -> list[TenantReadModel]:
-        stmt = select(DbTenant)
+    async def get_all_tenants(self, page: int = 1, limit: int = 50) -> PaginatedTenants:
+        offset = (page - 1) * limit
+
+        # Get total count
+        count_stmt = select(func.count(DbTenant.id))
+        total = await self.session.scalar(count_stmt) or 0
+
+        if total == 0:
+            return PaginatedTenants(items=[], total=0, page=page, limit=limit)
+
+        stmt = select(DbTenant).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
 
         if not rows:
-            return []
+            return PaginatedTenants(items=[], total=total, page=page, limit=limit)
 
-        # Bulk-fetch all active subscriptions in a single query
         tenant_ids = [row.id for row in rows]
         stmt_subs = (
             select(AppSubscription.tenant_id, App.slug)
@@ -78,7 +90,8 @@ class DatabaseTenantQueryService(ITenantQueryService):
         for tenant_id, app_slug in subs_result:
             subs_by_tenant.setdefault(tenant_id, []).append(app_slug)
 
-        return [self._map_row(row, subs_by_tenant.get(row.id, [])) for row in rows]
+        items = [self._map_row(row, subs_by_tenant.get(row.id, [])) for row in rows]
+        return PaginatedTenants(items=items, total=total, page=page, limit=limit)
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None:
         stmt = select(DbTenant).where(

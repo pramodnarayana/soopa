@@ -20,7 +20,6 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-vite-plugin": "^1.167.23",
     "autoprefixer": "^10.5.4",
-    "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.25.0",

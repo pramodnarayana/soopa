@@ -27,7 +27,9 @@ class WebhookEventTranslator(EventTranslator):
         )
 
         resource_id = (
-            (nested_payload.get("resource_id") if nested_payload else None)
+            (nested_payload.get("webhook_id") if nested_payload else None)
+            or (nested_payload.get("resource_id") if nested_payload else None)
+            or external_payload.get("webhook_id")
             or external_payload.get("resource_id")
             or external_payload.get("id")
         )

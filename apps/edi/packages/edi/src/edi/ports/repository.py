@@ -10,7 +10,6 @@ from edi.ports.outbox_repository import (
 from edi.ports.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.tenant_repository import TenantRepositoryPort
 from edi.ports.transaction_repository import TransactionRepositoryPort
-from edi.ports.webhook_repository import WebhookRepositoryPort
 
 __all__ = [
     "AS2PartnershipRepositoryPort",
@@ -23,5 +22,4 @@ __all__ = [
     "SFTPPartnerRepositoryPort",
     "TenantRepositoryPort",
     "TransactionRepositoryPort",
-    "WebhookRepositoryPort",
 ]

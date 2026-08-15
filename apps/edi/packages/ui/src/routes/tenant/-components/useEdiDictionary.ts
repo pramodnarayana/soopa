@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { useEffect, useMemo, useState } from 'react';
 
 export interface EdiDictionary {
@@ -60,10 +59,11 @@ export function useEdiDictionary(data: EdiDocument | EdiDocument[]) {
 
       try {
         // 2. Fetch base dictionary
-        const baseRes = await axios.get<EdiDictionary>(`/edidescription/${standard}.json`);
+        const baseRes = await fetch(`/edidescription/${standard}.json`);
+        if (!baseRes.ok) throw new Error('Base dictionary fetch failed');
         if (isCancelled) return;
 
-        let finalDict = baseRes.data;
+        let finalDict = (await baseRes.json()) as EdiDictionary;
 
         // 3. Try fetching version-specific override
         // Update: use the existing x12.json by key unless distinct X12 5011 release data is available
@@ -76,23 +76,26 @@ export function useEdiDictionary(data: EdiDocument | EdiDocument[]) {
         }
 
         try {
-          const overrideRes = await axios.get<Partial<EdiDictionary>>(
-            `/edidescription/${standard}_${version}.json`,
-          );
-          if (isCancelled) return;
-          // Deep merge the overrides
-          finalDict = {
-            segments: { ...finalDict.segments, ...(overrideRes.data.segments || {}) },
-            elements: { ...finalDict.elements, ...(overrideRes.data.elements || {}) },
-          };
-        } catch (err: unknown) {
-          if (axios.isAxiosError(err) && err.response?.status === 404) {
+          const overrideRes = await fetch(`/edidescription/${standard}_${version}.json`);
+          if (overrideRes.status === 404) {
             console.log(
               `No version override found for ${standard}_${version}.json, using base dictionary.`,
             );
+          } else if (overrideRes.ok) {
+            const overrideData = (await overrideRes.json()) as Partial<EdiDictionary>;
+            if (isCancelled) return;
+            // Deep merge the overrides
+            finalDict = {
+              segments: { ...finalDict.segments, ...(overrideData.segments || {}) },
+              elements: { ...finalDict.elements, ...(overrideData.elements || {}) },
+            };
           } else {
-            console.warn(`Failed to fetch version override for ${standard}_${version}.json:`, err);
+            console.warn(
+              `Failed to fetch version override for ${standard}_${version}.json, status: ${overrideRes.status}`,
+            );
           }
+        } catch (err: unknown) {
+          console.warn(`Failed to fetch version override for ${standard}_${version}.json:`, err);
         }
 
         if (!isCancelled) {

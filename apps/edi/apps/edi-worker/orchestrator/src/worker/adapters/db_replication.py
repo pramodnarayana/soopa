@@ -387,14 +387,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
         tenant_filter = tenant_model.tenant_id == tenant_id
         if include_shared:
-            tenant_filter = (tenant_model.tenant_id == tenant_id) | (tenant_model.tenant_id == SHARED_TENANT_ID)
+            tenant_filter = (tenant_model.tenant_id == tenant_id) | (
+                tenant_model.tenant_id == SHARED_TENANT_ID
+            )
 
         tenant_ids: set[str] = set(
-            (
-                await tenant_session.execute(
-                    select(tenant_model.id).where(tenant_filter)
-                )
-            )
+            (await tenant_session.execute(select(tenant_model.id).where(tenant_filter)))
             .scalars()
             .all()
         )

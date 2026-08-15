@@ -15,13 +15,21 @@ class TenantReadModel:
     updated_at: datetime
 
 
+@dataclass(frozen=True)
+class PaginatedTenants:
+    items: list[TenantReadModel]
+    total: int
+    page: int
+    limit: int
+
+
 class ITenantQueryService(Protocol):
     """
     CQRS Read Service Port for Tenants.
     This service bypasses the Domain Model entirely to perform optimized read operations.
     """
 
-    async def get_all_tenants(self) -> list[TenantReadModel]: ...
+    async def get_all_tenants(self, page: int = 1, limit: int = 50) -> PaginatedTenants: ...
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None: ...
 

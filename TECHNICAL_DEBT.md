@@ -4,9 +4,10 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 
 
 
-## [Authorization Architecture] Implement Dynamic Enterprise-Grade PBAC/ABAC
+## [RESOLVED] [Authorization Architecture] Implement Dynamic Enterprise-Grade PBAC/ABAC
 
 - **Date Added**: 2026-07-27
+- **Status**: ✅ RESOLVED
 - **Description**: The system currently relies on hardcoded Magic Roles (`PlatformAdmin`, `TenantAdmin`, `TenantUser`) provisioned via Terraform and statically checked via strings in the frontend/backend. This is not true enterprise-grade PBAC/ABAC. We lack a dynamic, database-driven authorization engine that allows customers to create custom roles, manage capabilities via the UI, and map them to dynamic attributes.
 - **Action Item**: Implement a true Enterprise-Grade Dynamic PBAC/ABAC engine (e.g., using OpenFGA, Keto, or a dedicated robust PostgreSQL schema with caching). Build a complete Role Management UI for tenants to create custom roles and assign granular capabilities. Refactor the backend middleware and frontend React components to fetch and enforce these dynamic capabilities, completely eradicating static magic strings from the codebase.
 
@@ -58,9 +59,10 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Action Item**: Implement a strict end-to-end OpenAPI code generation pipeline using Orval (`orval.dev`) or `openapi-ts`. Configure the tool to download FastAPI's native `openapi.json` during the build step and auto-generate strictly-typed React Query hooks and frontend API clients. This ensures that any breaking changes in the backend API instantly fail the frontend TypeScript build at compile time.
 
 
-## [Notifications] In-App Notification Delivery UX
+## [RESOLVED] [Notifications] In-App Notification Delivery UX
 
 - **Date Added**: 2026-08-11
+- **Status**: ✅ RESOLVED
 - **Description**: The Notification Engine now delivers real-time In-App notifications via Server-Sent Events (SSE) and supports tenant-scoped event_type routing. However, user-level subscription preferences are not yet implemented - users cannot opt-in/opt-out of specific notification channels on a per-user basis.
 - **Action Item**: Implement user-level notification preferences allowing individual users to configure which event_type notifications they receive via In-App vs. Email channels. This requires extending the preferences system to support user-scoped overrides on top of tenant-wide routing rules, and applying those preferences during recipient/channel resolution in the notification delivery pipeline.
 
@@ -111,5 +113,32 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 ## [Security/UX] Hide Internal Tenant IDs from Client-Facing URLs
 
 - **Date Added**: 2026-08-13
-- **Description**: The dashboard URL currently exposes the internal database Tenant ID (e.g., `http://localhost:5173/platform/tenants/ten_000000000000000000000000`). This leaks internal identifiers and creates an ugly user experience.
-- **Action Item**: Implement a URL slug or UUID-based routing mechanism to mask internal tenant IDs from the frontend routing layer.
+- **Status**: ✅ RESOLVED
+- **Solution**: Added an immutable `slug` field (e.g., `acme-corp`) to the `identity.tenants` table, auto-generated at provision time from the tenant name. The frontend TanStack Router routes were updated to use `$tenantSlug` instead of `$tenantId`. The internal `ten_...` ID is no longer exposed in any client-facing URL.
+
+## [Security/UX] Slug Redirect Trail for Self-Service Tenant Portals
+
+- **Date Added**: 2026-08-14
+- **Description**: The current slug implementation is intentionally immutable — if a tenant renames itself, the slug does not change. This is acceptable for the internal platform admin dashboard (operators update their bookmarks manually), but will become a problem when customer-facing self-service tenant portals are introduced (e.g., `yourplatform.com/t/acme-corp/portal`). At that point, slug changes would break bookmarked and shared URLs in the wild.
+- **Action Item**: When self-service tenant sign-in / customer-facing portals are built, implement a `tenant_slug_history` table that permanently reserves old slugs and issues `HTTP 301` redirects to the current slug. The redirect middleware should sit in the `unified-api` shell. Historical slugs must participate in the global unique constraint to prevent slug hijacking (a new tenant claiming a released slug to impersonate a renamed one).
+
+
+## [DONE] Backend Database Dual-Architecture (ORM vs Raw SQL)
+**Category**: Architecture
+**Impact**: Medium
+**Description**: The codebase was audited for mixing SQLAlchemy 2.0 ORM features with raw SQL executions via `session.execute(text("..."))` for standard CRUD operations. The audit confirmed that raw SQL is currently only used for valid infrastructure boundaries (e.g. database migrations, testing truncates, PostgreSQL NOTIFY commands, and schema constraints), while all CRUD Repositories correctly use SQLAlchemy 2.0 typed constructs (`select()`, `insert()`, etc).
+- **Status**: ✅ RESOLVED
+
+**Audit Results**: Audit complete, no CRUD violation found.
+
+## [DONE] Frontend API Client Dual-Architecture (Axios vs Fetch)
+**Category**: Architecture
+**Impact**: Low
+**Description**: Found a tiny pocket of `axios` usage inside `apps/edi/packages/ui/src` while the rest of the monorepo standardizes on native `fetch`.
+- **Status**: ✅ RESOLVED
+
+**Fix details**: Replaced the `axios` implementation inside `createNetworkContext.tsx` and related hooks with a custom native `fetch` wrapper that preserves the identical `.get()`, `.post()` API signatures for backwards compatibility. Uninstalled `axios` from all `package.json` files.
+**Category**: Architecture
+**Impact**: High
+**Description**: The recent Hexagonal Architecture refactoring of Webhooks correctly extracted the logic into Use Cases, Ports, and Adapters. However, the entire Webhook feature was incorrectly implemented inside the EDI application module (`apps/edi/packages/edi/src/edi/...`). Webhooks are a core platform capability that belong in the UCP (User Control Plane) boundary.
+**Status**: Resolved. Webhook Use Cases, Router, and Domain Models have been extracted to UCP, and EDI now correctly subscribes to `webhook.created` via the global outbox.

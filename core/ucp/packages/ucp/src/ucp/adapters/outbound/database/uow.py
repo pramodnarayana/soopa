@@ -8,6 +8,7 @@ from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRe
 from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.adapters.outbound.database.user_repository import UserRepository
+from ucp.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 
@@ -19,7 +20,7 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         self.api_token_repo = PostgresApiTokenRepository(session=self.session)
         self.app_repo = PostgresAppRepository(session=self.session)
         self.role_repo = PostgresRoleRepository(session=self.session)
-        self.role_repo = PostgresRoleRepository(session=self.session)
+        self.webhook_repo = SqlAlchemyWebhookRepository(session=self.session)
 
     async def __aenter__(self) -> Self:
         if not self.session.in_transaction():

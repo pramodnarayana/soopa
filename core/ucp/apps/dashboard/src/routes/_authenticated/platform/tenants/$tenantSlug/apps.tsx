@@ -12,13 +12,18 @@ import { Box, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSubscribeTenant, useUnsubscribeTenant } from '@/domains/apps/api/mutations';
 import { useGetApps, useGetTenantSubscriptions } from '@/domains/apps/api/queries';
+import { type Tenant, useGetTenants } from '@/domains/tenants/api/queries';
 
-export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantId/apps')({
+export const Route = createFileRoute('/_authenticated/platform/tenants/$tenantSlug/apps')({
   component: TenantAppsPage,
 });
 
 function TenantAppsPage() {
-  const { tenantId } = Route.useParams();
+  const { tenantSlug } = Route.useParams();
+
+  const { data: tenants = [] } = useGetTenants();
+  const tenant = tenants.find((t: Tenant) => t.slug === tenantSlug);
+  const tenantId = tenant?.id ?? '';
 
   const { data: apps = [], isLoading: appsLoading } = useGetApps();
   const { data: subscriptions = [], isLoading: subsLoading } = useGetTenantSubscriptions(tenantId);

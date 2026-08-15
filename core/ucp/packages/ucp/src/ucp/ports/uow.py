@@ -6,6 +6,7 @@ from ucp.ports.outbound.app_repository import IAppRepository
 from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.webhook_repository import WebhookRepositoryPort
 
 
 class UcpUnitOfWorkPort(ABC):
@@ -19,6 +20,7 @@ class UcpUnitOfWorkPort(ABC):
     api_token_repo: ApiTokenRepositoryPort
     app_repo: IAppRepository
     role_repo: IRoleRepository
+    webhook_repo: WebhookRepositoryPort
 
     @abstractmethod
     async def __aenter__(self) -> Self:
