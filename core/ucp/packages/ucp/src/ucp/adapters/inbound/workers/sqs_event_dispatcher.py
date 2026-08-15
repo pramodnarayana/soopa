@@ -20,7 +20,6 @@ class SqsEventDispatcherWorker:
         self.event_listener = event_listener
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
-        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # Route mapping: event_type -> list of async handlers
         self._handlers: dict[str, list[Callable[[UcpEventMessage], Any]]] = {}
@@ -44,13 +43,6 @@ class SqsEventDispatcherWorker:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-
-        if self._background_tasks:
-            for task in list(self._background_tasks):
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
-            self._background_tasks.clear()
 
         logger.info("sqs_event_dispatcher_stopped")
 
@@ -95,14 +87,14 @@ class SqsEventDispatcherWorker:
         # Running sequentially here to ensure if one fails, the message is not deleted.
         for handler in handlers:
             try:
-                if asyncio.iscoroutinefunction(handler):
-                    await handler(event)
-                else:
-                    handler(event)
+                result = handler(event)
+                if asyncio.iscoroutine(result) or asyncio.isfuture(result):
+                    await result
             except Exception:
+                handler_name = getattr(handler, "__name__", repr(handler))
                 logger.exception(
                     "handler_failed_processing_event",
                     event_type=event.event_type,
-                    handler_name=handler.__name__,
+                    handler_name=handler_name,
                 )
                 raise  # Propagate to prevent message deletion

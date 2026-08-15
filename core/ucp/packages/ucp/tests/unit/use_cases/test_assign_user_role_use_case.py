@@ -1,4 +1,4 @@
-from unittest.mock import create_autospec
+from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
@@ -6,6 +6,7 @@ from ucp.application.use_cases.roles.assign_user_role_use_case import (
     AssignUserRoleRequest,
     AssignUserRoleUseCase,
 )
+from ucp.core.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.uow import UcpUnitOfWorkPort
 
@@ -54,3 +55,29 @@ async def test_assign_user_role_success(
 
     # Verify Transaction commit
     mock_uow.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_assign_user_role_resource_not_found(
+    use_case: AssignUserRoleUseCase, mock_uow: UcpUnitOfWorkPort
+):
+    # Arrange
+    tenant_id = "ten_123"
+    request = AssignUserRoleRequest(
+        user_id="usr_nonexistent",
+        role_id="rol_xyz",
+    )
+
+    # Mock the repository to raise ResourceNotFoundError
+    mock_uow.role_repo.assign_user_role.side_effect = ResourceNotFoundError(
+        "User 'usr_nonexistent' not found."
+    )
+
+    # Act & Assert
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        await use_case.execute(tenant_id=tenant_id, request=request)
+
+    assert "not found" in str(exc_info.value).lower()
+
+    # Verify commit was NOT called
+    mock_uow.commit.assert_not_awaited()

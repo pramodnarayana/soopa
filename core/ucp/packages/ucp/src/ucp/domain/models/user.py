@@ -82,6 +82,9 @@ class User(AggregateRoot):
             )
 
     def change_status(self, action: str, org_id: str) -> None:
+        if action not in ("activate", "deactivate"):
+            raise ValueError(f"Invalid action '{action}'. Must be 'activate' or 'deactivate'.")
+
         if action == "deactivate":
             self.deactivate()
         elif action == "activate":
@@ -100,8 +103,13 @@ class User(AggregateRoot):
         if self.idp_user_id:
             self.add_domain_event(UserDeletedEvent(idp_user_id=self.idp_user_id))
 
-    def remove_membership(self, tenant_id: str) -> None:
+    def remove_membership(self, org_id: str) -> None:
+        """Remove user from an organization (IdP tenant).
+
+        Args:
+            org_id: The Identity Provider's organization/tenant ID, not the UCP tenant ID.
+        """
         if self.idp_user_id:
             self.add_domain_event(
-                UserMembershipRemovedEvent(idp_user_id=self.idp_user_id, org_id=tenant_id)
+                UserMembershipRemovedEvent(idp_user_id=self.idp_user_id, org_id=org_id)
             )

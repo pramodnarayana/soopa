@@ -102,14 +102,28 @@ class ControlPlaneOutboxSweeper:
     async def process_event(self, event: OutboxEvent) -> None:
         try:
             await self.publisher.publish(event)
+        except Exception as e:
+            logger.exception(
+                "outbox_event_publishing_failed_by_sweeper",
+                event_id=event.id,
+                event_type=event.event_type,
+            )
+            try:
+                await self.repository.mark_failed(event.id, self.worker_id, str(e))
+            except Exception:
+                logger.exception(
+                    "outbox_event_mark_failed_error",
+                    event_id=event.id,
+                )
+            return
+
+        try:
             await self.repository.mark_completed(event.id, self.worker_id)
             logger.debug(
                 "outbox_event_processed_by_sweeper", event_id=event.id, event_type=event.event_type
             )
-        except Exception as e:
+        except Exception:
             logger.exception(
-                "outbox_event_processing_failed_by_sweeper",
+                "outbox_event_mark_completed_error",
                 event_id=event.id,
-                event_type=event.event_type,
             )
-            await self.repository.mark_failed(event.id, self.worker_id, str(e))

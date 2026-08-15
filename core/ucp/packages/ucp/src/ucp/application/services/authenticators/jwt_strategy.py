@@ -77,22 +77,23 @@ class JwtStrategy(IAuthenticationStrategy):
         # Backwards compatibility: if Zitadel token claims they are "admin", grant legacy capabilities
         if identity.is_platform_admin:
             identity.capabilities.add(Capability.PLATFORM_ADMIN.value)
-        elif identity.roles and any(r.lower() in ("admin", "tenantadmin") for r in identity.roles):
-            identity.capabilities.add(Capability.TENANT_ADMIN.value)
+        # Note: Tenant-scoped admin grants from roles are now resolved via database roles only
+        # to prevent cross-tenant privilege escalation
 
         # 3. Resolve Dynamic Postgres PBAC Capabilities
-        if identity.tenant_id:
-            async with self.role_repo_factory() as role_repo:
+        async with self.role_repo_factory() as role_repo:
+            # Resolve platform-wide capabilities (where tenant_id is NULL)
+            platform_capabilities = await role_repo.get_user_capabilities(
+                tenant_id=None,  # None represents platform-wide roles
+                user_id=identity.subject,
+            )
+            identity.capabilities.update(platform_capabilities)
+
+            # Resolve tenant-specific capabilities if tenant is set
+            if identity.tenant_id:
                 db_capabilities = await role_repo.get_user_capabilities(
                     tenant_id=identity.tenant_id, user_id=identity.subject
                 )
                 identity.capabilities.update(db_capabilities)
-
-                # Also resolve platform-wide capabilities (where tenant_id is NULL)
-                platform_capabilities = await role_repo.get_user_capabilities(
-                    tenant_id=None,  # None represents platform-wide roles
-                    user_id=identity.subject,
-                )
-                identity.capabilities.update(platform_capabilities)
 
         return identity

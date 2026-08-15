@@ -125,7 +125,7 @@ async def db_engine(postgres_container) -> "Any":  # type: ignore
         if old_db_url is not None:
             os.environ["DATABASE_URL"] = old_db_url
         else:
-            del os.environ["DATABASE_URL"]
+            os.environ.pop("DATABASE_URL", None)
 
     yield engine
     await engine.dispose()

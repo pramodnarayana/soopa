@@ -1,9 +1,8 @@
 import pytest
 from httpx import AsyncClient
+from platform_orm.models.identity import Tenant as OrmTenant
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from ucp.domain.models.tenant import Tenant
 
 pytestmark = pytest.mark.integration
 
@@ -19,13 +18,12 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     emitting the outbox event successfully without raising IDP-related DI errors.
     """
     # 1. Arrange: Create a Tenant to associate the user with
-    tenant = Tenant.create(
+    tenant = OrmTenant(
         id="tenant_test_123",
         name="Test Tenant",
         slug="test-tenant",
+        idp_tenant_id="mock_org_id",
     )
-    # We must assign an idp_tenant_id to bypass the use case validation
-    tenant.idp_tenant_id = "mock_org_id"
     db_session.add(tenant)
     await db_session.commit()
 

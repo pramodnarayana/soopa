@@ -24,9 +24,9 @@ class FakeUserPrefRepo(UserNotificationPreferenceRepositoryPort):
         self.prefs = {}
 
     async def get_preference(
-        self, tenant_id: str, user_id: str
+        self, tenant_id: str, user_id: str, event_type: str, channel: str
     ) -> UserNotificationPreference | None:
-        return self.prefs.get((tenant_id, user_id))
+        return self.prefs.get((tenant_id, user_id, event_type, channel))
 
     async def get_user_preferences(
         self, tenant_id: str, user_id: str
@@ -34,7 +34,7 @@ class FakeUserPrefRepo(UserNotificationPreferenceRepositoryPort):
         return [p for p in self.prefs.values() if p.tenant_id == tenant_id and p.user_id == user_id]
 
     async def save_preference(self, preference: UserNotificationPreference) -> None:
-        self.prefs[(preference.tenant_id, preference.user_id)] = preference
+        self.prefs[(preference.tenant_id, preference.user_id, preference.event_type, preference.channel.value)] = preference
 
 
 class FakeTemplateRepo(TemplateRepositoryPort):

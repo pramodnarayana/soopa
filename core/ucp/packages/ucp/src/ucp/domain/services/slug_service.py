@@ -26,8 +26,8 @@ def generate_slug(name: str) -> str:
     slug = name.lower().strip()
     # Normalise accented characters to their ASCII base (best-effort)
     slug = _transliterate(slug)
-    # Remove every character that is not lowercase ASCII, digit, space, or hyphen
-    slug = re.sub(r"[^a-z0-9\s\-]", "", slug)
+    # Remove every character that is not lowercase ASCII, digit, space, underscore, or hyphen
+    slug = re.sub(r"[^a-z0-9\s_\-]", "", slug)
     # Collapse whitespace and underscores into single hyphens
     slug = re.sub(r"[\s_]+", "-", slug)
     # Collapse multiple consecutive hyphens

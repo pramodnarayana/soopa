@@ -64,39 +64,40 @@ async def startup() -> None:
     _engine = create_async_engine(database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
 
-    _publisher = SnsOutboxPublisher(
+    _repository = PostgresOutboxRepository(session_factory)
+
+    relay_publisher = SnsOutboxPublisher(
         topic_arn=settings.sns_tenant_events_topic_arn,
         endpoint_url=settings.aws_endpoint_url,
     )
-    _repository = PostgresOutboxRepository(session_factory)
-
     _relay = ControlPlaneOutboxRelay(
         repository=_repository,
-        publisher=_publisher,
+        publisher=relay_publisher,
         database_url=database_url,
     )
     _relay.start()
     logger.info("ucp_outbox_relay_started")
 
+    sweeper_publisher = SnsOutboxPublisher(
+        topic_arn=settings.sns_tenant_events_topic_arn,
+        endpoint_url=settings.aws_endpoint_url,
+    )
     _sweeper = ControlPlaneOutboxSweeper(
         repository=_repository,
-        publisher=_publisher,
+        publisher=sweeper_publisher,
         poll_interval_seconds=int(os.environ.get("OUTBOX_POLL_INTERVAL_SECONDS", "5")),
     )
     _sweeper.start()
     logger.info("ucp_outbox_sweeper_started")
 
+    container = Container()
     idp: IdentityProviderPort
     idp_users: IUserIdentityProvider
+
     if os.environ.get("APP_ENV", "production") in ("local", "test"):
         idp = DummyIdentityProvider()
-        # TODO: Implement DummyUserIdentityProvider for local/test if needed.
-        # For now we use the mock, or we could just use the real adapter but it'll fail.
-        # But this is just background sync so the exceptions will be logged.
-        container = Container()
-        idp_users = container.user_provider()
+        idp_users = DummyIdentityProvider()  # Use DummyIdentityProvider as user provider for local/test
     else:
-        container = Container()
         idp = ZitadelIdentityProvider(org_provider=container.org_provider())
         idp_users = container.user_provider()
 
@@ -116,39 +117,49 @@ async def startup() -> None:
 
     # Notice how we can map multiple handlers, or handle different events cleanly
     async def identity_tenant_provisioned_handler(event: Any) -> None:
-        await _identity_service.handle_tenant_provisioned(event.tenant_id)
+        service = _identity_service
+        if service:
+            await service.handle_tenant_provisioned(event.tenant_id)
 
     async def identity_user_created_handler(event: Any) -> None:
-        payload = event.payload
-        await _identity_service.handle_user_created(
-            org_id=payload["org_id"],
-            email=payload["email"],
-            first_name=payload["first_name"],
-            last_name=payload["last_name"],
-            role=payload["role"],
-        )
+        service = _identity_service
+        if service:
+            payload = event.payload
+            await service.handle_user_created(
+                org_id=payload["org_id"],
+                email=payload["email"],
+                first_name=payload["first_name"],
+                last_name=payload["last_name"],
+                role=payload["role"],
+            )
 
     async def identity_user_updated_handler(event: Any) -> None:
-        payload = event.payload
-        await _identity_service.handle_user_updated(
-            idp_user_id=payload["idp_user_id"],
-            org_id=payload["org_id"],
-            first_name=payload["first_name"],
-            last_name=payload["last_name"],
-            role=payload["role"],
-        )
+        service = _identity_service
+        if service:
+            payload = event.payload
+            await service.handle_user_updated(
+                idp_user_id=payload["idp_user_id"],
+                org_id=payload["org_id"],
+                first_name=payload["first_name"],
+                last_name=payload["last_name"],
+                role=payload["role"],
+            )
 
     async def identity_user_status_toggled_handler(event: Any) -> None:
-        payload = event.payload
-        await _identity_service.handle_user_status_toggled(
-            idp_user_id=payload["idp_user_id"],
-            org_id=payload["org_id"],
-            action=payload["action"],
-        )
+        service = _identity_service
+        if service:
+            payload = event.payload
+            await service.handle_user_status_toggled(
+                idp_user_id=payload["idp_user_id"],
+                org_id=payload["org_id"],
+                action=payload["action"],
+            )
 
     async def identity_user_deleted_handler(event: Any) -> None:
-        payload = event.payload
-        await _identity_service.handle_user_deleted(idp_user_id=payload["idp_user_id"])
+        service = _identity_service
+        if service:
+            payload = event.payload
+            await service.handle_user_deleted(idp_user_id=payload["idp_user_id"])
 
     # Use exact event names matching domain event `event_name` properties
     _dispatcher.subscribe("tenant.provisioned", identity_tenant_provisioned_handler)

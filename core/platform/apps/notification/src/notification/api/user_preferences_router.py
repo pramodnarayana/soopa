@@ -10,7 +10,7 @@ from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel
 
-from notification.api.authorization import assert_tenant_authorized
+from notification.api.authorization import assert_tenant_authorized, assert_user_matches_identity
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
 from notification.bootstrap.container import Container
 from notification.domain.models import Channel, UserNotificationPreference
@@ -62,7 +62,7 @@ async def get_user_preferences(
     ),
 ) -> list[UserNotificationPreference]:
     assert_tenant_authorized(request, tenant_id)
-    # TODO: Add specific user_id authorization here if needed (e.g. users can only read their own)
+    assert_user_matches_identity(request, user_id)
     return await repo.get_user_preferences(tenant_id, user_id)
 
 
@@ -85,6 +85,7 @@ async def update_user_preference(
     ),
 ) -> UserNotificationPreference:
     assert_tenant_authorized(request, tenant_id)
+    assert_user_matches_identity(request, user_id)
 
     return await use_case.execute(
         tenant_id=tenant_id,

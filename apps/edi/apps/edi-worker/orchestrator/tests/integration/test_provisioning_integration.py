@@ -22,6 +22,7 @@ from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from worker.adapters.sqs_outbox import SqsOutboxAdapter
 from worker.adapters.sqs_publisher import SqsPublisherAdapter
+from worker.core.errors import PermanentProvisioningError
 from worker.core.service import ProvisioningWorkerService
 
 load_dotenv()
@@ -278,7 +279,7 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
     # then worker_service tries to parse it, raises PermanentProvisioningError.
     # sqs_outbox catches it on __aexit__ or generator exit and deletes it,
     # but the exception propagates up through process_next_event.
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(PermanentProvisioningError) as exc_info:
         await worker_service.process_next_event()
 
     assert "missing required resource_id" in str(exc_info.value)

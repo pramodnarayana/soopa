@@ -1,14 +1,13 @@
 from typing import Annotated, Any, Literal, cast
 
 import structlog
-
-logger = structlog.get_logger(__name__)
-
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from identity.domain.identity_context import IdentityContext
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = structlog.get_logger(__name__)
 
 from ucp.adapters.inbound.http.dtos.tenant_dtos import (
     ProvisionTenantRequest,
@@ -42,6 +41,7 @@ from ucp.application.use_cases.update_tenant_name_use_case import (
 from ucp.bootstrap.container import Container
 from ucp.core.config import get_settings
 from ucp.core.container import get_db_session
+from ucp.core.exceptions import ResourceNotFoundError
 from ucp.domain.models.authorization import Capability
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.project_provider import IProjectProvider
@@ -263,11 +263,11 @@ async def subscribe_app(
 
     try:
         await use_case.execute(command, idempotency_key)
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("app_subscription_failed", tenant_id=id, app_id=dto.appId)
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Subscription failed") from e
 
     return SubscriptionResponse(
         id=f"{id}_{dto.appId}", appId=dto.appId, tenantId=id, status="active"
@@ -292,10 +292,10 @@ async def unsubscribe_app(
 
     try:
         await use_case.execute(command, idempotency_key)
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("app_unsubscription_failed", tenant_id=id, app_id=app_id)
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Unsubscription failed") from e
 
     return {"success": True}

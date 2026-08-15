@@ -18,6 +18,7 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantUseCase,
 )
 from ucp.ports.identity_provider import IdentityProviderPort
+from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
 
 pytestmark = pytest.mark.integration
 
@@ -37,6 +38,8 @@ async def test_identity_sync_flow(
     # 1. Setup Mocks and Infrastructure Ports
     mock_idp = create_autospec(IdentityProviderPort, instance=True)
     mock_idp.sync_tenant = AsyncMock()
+
+    mock_user_idp = create_autospec(IUserIdentityProvider, instance=True)
 
     # Outbox Setup
     outbox_repo = PostgresOutboxRepository(lambda: db_session)  # type: ignore
@@ -63,7 +66,9 @@ async def test_identity_sync_flow(
     dispatcher = SqsEventDispatcherWorker(event_listener)
 
     # Identity Sync Service (Pure Domain Handler)
-    identity_service = IdentitySyncService(identity_provider=mock_idp)
+    identity_service = IdentitySyncService(
+        identity_provider=mock_idp, user_identity_provider=mock_user_idp
+    )
 
     async def tenant_provisioned_handler(event) -> None:
         await identity_service.handle_tenant_provisioned(event.tenant_id)

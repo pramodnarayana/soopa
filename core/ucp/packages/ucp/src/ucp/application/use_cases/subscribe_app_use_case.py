@@ -1,7 +1,7 @@
 import structlog
 from pydantic import BaseModel
 
-from ucp.core.exceptions import ResourceNotFoundError
+from ucp.application.use_cases._tenant_helpers import resolve_tenant_or_raise
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -20,11 +20,7 @@ class SubscribeAppUseCase:
         self, command: SubscribeAppCommand, idempotency_key: str | None = None
     ) -> None:
         async with self.uow as uow:
-            tenant = await uow.tenant_repo.find_by_id(command.tenant_id)
-            if not tenant:
-                tenant = await uow.tenant_repo.find_by_idp_tenant_id(command.tenant_id)
-                if not tenant:
-                    raise ResourceNotFoundError("Tenant not found")
+            tenant = await resolve_tenant_or_raise(uow.tenant_repo, command.tenant_id)
 
             tenant.subscribe(command.app_id)
 

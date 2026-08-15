@@ -4,14 +4,14 @@ These Pydantic models are the API contract — they live at the HTTP boundary an
 must NOT be imported from the Application or Domain layers.
 """
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, EmailStr, Field
 
 
 class CreateUserRequest(BaseModel):
     """Request body for POST /tenants/{tenant_id}/users/."""
 
-    first_name: str = Field(..., validation_alias="firstName", min_length=1)
-    last_name: str = Field(..., validation_alias="lastName", min_length=1)
+    first_name: str = Field(..., validation_alias=AliasChoices("firstName", "first_name"), min_length=1)
+    last_name: str = Field(..., validation_alias=AliasChoices("lastName", "last_name"), min_length=1)
     email: EmailStr
     role: str = Field(..., min_length=1)
 
@@ -19,8 +19,8 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     """Request body for PATCH /tenants/{tenant_id}/users/{user_id}."""
 
-    first_name: str = Field(..., validation_alias="firstName", min_length=1)
-    last_name: str = Field(..., validation_alias="lastName", min_length=1)
+    first_name: str = Field(..., validation_alias=AliasChoices("firstName", "first_name"), min_length=1)
+    last_name: str = Field(..., validation_alias=AliasChoices("lastName", "last_name"), min_length=1)
     role: str = Field(..., min_length=1)
 
 

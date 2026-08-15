@@ -81,10 +81,15 @@ class ProvisionTenantUseCase:
                 return tenant
 
             except IntegrityError as exc:
-                orig = str(getattr(exc, "orig", exc))
                 # Only retry on the slug uniqueness constraint violation.
                 # All other IntegrityErrors (e.g. name conflict) are re-raised.
-                if "tenants_slug_key" in orig or 'unique constraint "tenants_slug_key"' in orig:
+                constraint_name = None
+                if hasattr(exc, "orig") and hasattr(exc.orig, "__cause__"):
+                    constraint_name = getattr(exc.orig.__cause__, "constraint_name", None)
+                elif hasattr(exc, "orig"):
+                    constraint_name = getattr(exc.orig, "constraint_name", None)
+
+                if constraint_name == "tenants_slug_key":
                     logger.warning(
                         "provision_tenant.slug_conflict",
                         slug=slug,
@@ -92,9 +97,12 @@ class ProvisionTenantUseCase:
                         tenant_name=command.name,
                     )
                     continue
+
+                orig = str(getattr(exc, "orig", exc))
                 logger.exception(
                     "provision_tenant.integrity_error",
                     tenant_id=local_id,
+                    constraint_name=constraint_name,
                     reason=orig,
                 )
                 raise

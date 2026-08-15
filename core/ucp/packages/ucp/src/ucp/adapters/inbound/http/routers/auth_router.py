@@ -23,6 +23,6 @@ async def get_me(request: Request) -> dict[str, Any]:
         "name": identity.claims.get("name"),
         "tenantId": identity.tenant_id,
         "isPlatformAdmin": identity.is_platform_admin,
-        "capabilities": list(identity.capabilities),
-        "authorizedTenants": list(identity.authorized_tenants),
+        "capabilities": sorted(list(identity.capabilities)),
+        "authorizedTenants": sorted(list(identity.authorized_tenants)),
     }
