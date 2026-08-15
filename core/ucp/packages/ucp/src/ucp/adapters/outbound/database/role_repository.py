@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 
 from ucp.core.exceptions import IdempotencyConflictError, ResourceNotFoundError
-from ucp.domain.events.role_events import UserRoleAssignedEvent
 from ucp.domain.models.authorization import Role as DomainRole
 from ucp.ports.outbound.role_repository import IRoleRepository
 
@@ -141,17 +140,6 @@ class PostgresRoleRepository(IRoleRepository):
             raise ResourceNotFoundError(
                 f"Cannot assign role: User '{user_id}' or Role '{role_id}' not found."
             ) from e
-
-        # Emit Outbox Event directly since we aren't loading an AggregateRoot
-        event = UserRoleAssignedEvent(user_id=user_id, role_id=role_id)
-        outbox_event = ControlPlaneOutbox(
-            id=f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
-            idempotency_key=f"{event.event_name}_{user_id}_{role_id}_{user_role_id}",
-            tenant_id=tenant_id,
-            event_type=event.event_name,
-            payload=json.loads(event.model_dump_json()),
-        )
-        self.session.add(outbox_event)
 
         bound_logger.info("role_repo.assign_user_role.completed")
 

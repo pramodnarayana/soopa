@@ -102,7 +102,9 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
     global_session.add(shard)
     await global_session.commit()
 
-    tenant = Tenant(id=f"ten_{suffix}", name=tenant_name, idp_tenant_id=f"idp_{suffix}")
+    tenant = Tenant(
+        id=f"ten_{suffix}", name=tenant_name, idp_tenant_id=f"idp_{suffix}", slug=f"tenant-{suffix}"
+    )
     global_session.add(tenant)
     await global_session.commit()
 
