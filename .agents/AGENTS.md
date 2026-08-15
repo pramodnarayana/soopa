@@ -47,6 +47,7 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Comprehensive Coverage**: We should always put enough logs for observability. Log major state transitions (e.g., started, completed), skipped actions, and dropped events so that every operational flow is fully traceable.
 
 # Architectural Consistency (No Dual-Architectures)
+
 - **Strict Consistency Enforcement**: REJECT code that introduces or perpetuates dual-architectures (implementing the same pattern in two different ways across the codebase). Explicitly flag and reject:
     - **Frontend**: Mixing UI component libraries (e.g., Radix UI vs Base UI), state management paradigms, or API clients (Axios vs native fetch).
     - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.

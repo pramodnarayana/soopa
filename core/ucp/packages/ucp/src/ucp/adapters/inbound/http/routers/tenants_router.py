@@ -51,9 +51,16 @@ from ucp.ports.outbound.tenant_repository import ITenantRepository
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
 
+class PaginatedTenantsResponse(BaseModel):
+    items: list[TenantResponse]
+    total: int
+    page: int
+    limit: int
+
+
 @router.get(
     "",
-    response_model=list[TenantResponse],
+    response_model=PaginatedTenantsResponse,
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
@@ -66,7 +73,12 @@ async def find_all(  # type: ignore
 ):
     query_service: ITenantQueryService = query_service_factory(session=session)
     paginated = await query_service.get_all_tenants(page=page, limit=limit)
-    return [TenantResponse.from_read_model(t) for t in paginated.items]
+    return PaginatedTenantsResponse(
+        items=[TenantResponse.from_read_model(t) for t in paginated.items],
+        total=paginated.total,
+        page=paginated.page,
+        limit=paginated.limit,
+    )
 
 
 @router.get("/roles", dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))])

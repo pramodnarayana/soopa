@@ -105,15 +105,13 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
         webhook.clear_domain_events()
 
     async def delete_webhook(
-        self, tenant_id: str, webhook_id: str, idempotency_key: str | None = None
+        self, webhook: WebhookDomainModel, idempotency_key: str | None = None
     ) -> None:
-        # We find it first so we can flush deletion events if any (currently none, but good practice)
-        model = await self.find_by_id(tenant_id, webhook_id)
-        if model:
-            self._flush_events(model, idempotency_key)
-            await self.session.execute(
-                delete(DbWebhook).where(
-                    DbWebhook.id == webhook_id, DbWebhook.tenant_id == tenant_id
-                )
+        # Flush events from the aggregate loaded by DeleteWebhookUseCase
+        self._flush_events(webhook, idempotency_key)
+        await self.session.execute(
+            delete(DbWebhook).where(
+                DbWebhook.id == webhook.id, DbWebhook.tenant_id == webhook.tenant_id
             )
-            await self.session.flush()
+        )
+        await self.session.flush()

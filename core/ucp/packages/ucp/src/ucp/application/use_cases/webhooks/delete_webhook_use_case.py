@@ -27,8 +27,9 @@ class DeleteWebhookUseCase:
                 WebhookDeletedEvent(tenant_id=tenant_id, webhook_id=webhook_id)
             )
 
+            # Pass the loaded aggregate to delete_webhook so it can flush events
             await self.uow.webhook_repo.delete_webhook(
-                tenant_id=tenant_id, webhook_id=webhook_id, idempotency_key=idempotency_key
+                webhook=webhook, idempotency_key=idempotency_key
             )
             await self.uow.commit()
 

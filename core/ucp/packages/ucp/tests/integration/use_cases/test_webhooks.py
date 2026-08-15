@@ -14,13 +14,10 @@ from ucp.application.use_cases.webhooks import (
     UpdateWebhookUseCase,
 )
 
-# Note: the test suite runs with pytest -m "not integration" by default unless configured otherwise.
-# We don't use pytest.mark.integration here so it runs with the standard suite, or we can use it and run with -m integration.
-# Given the user state shows tests passing without marks warning, I will avoid custom marks that emit warnings unless registered.
+pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="docker socket issues on agent environment")
 async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     """
     Narrow integration test for Webhook Use Cases.

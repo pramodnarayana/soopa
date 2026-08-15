@@ -30,6 +30,12 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
         user_id = f"usr_{uuid.uuid4().hex[:12]}"
         role_id = f"rol_{uuid.uuid4().hex[:12]}"
 
+        # Seed Tenant first (required for foreign key relationship)
+        from ucp.domain.models.tenant import Tenant
+        tenant = Tenant.create(name="Test Tenant")
+        tenant._id = tenant_id  # Override generated ID for test consistency
+        await uow.tenant_repo.save(tenant)
+
         # Seed User
         user = User.create(
             id=user_id, idp_user_id=None, email="test@example.com", name="Integration Test User"

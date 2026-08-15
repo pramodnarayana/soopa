@@ -14,6 +14,10 @@ class WebhookCreatedEvent(DomainEvent):
         self.webhook_id = webhook_id
         self.event_type = "webhook.created"
 
+    @property
+    def event_name(self) -> str:
+        return self.event_type
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "tenant_id": self.tenant_id,
@@ -33,6 +37,10 @@ class WebhookUpdatedEvent(DomainEvent):
         self.webhook_id = webhook_id
         self.event_type = "webhook.updated"
 
+    @property
+    def event_name(self) -> str:
+        return self.event_type
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "tenant_id": self.tenant_id,
@@ -51,6 +59,10 @@ class WebhookDeletedEvent(DomainEvent):
         self.tenant_id = tenant_id
         self.webhook_id = webhook_id
         self.event_type = "webhook.deleted"
+
+    @property
+    def event_name(self) -> str:
+        return self.event_type
 
     def to_dict(self) -> dict[str, Any]:
         return {

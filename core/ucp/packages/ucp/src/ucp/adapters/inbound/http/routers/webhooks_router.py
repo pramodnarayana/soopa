@@ -105,10 +105,11 @@ async def delete_webhook(
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
     use_case_factory: Any = Depends(Provide[Container.delete_webhook_use_case.provider]),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> None:
     """Deletes a webhook destination."""
     try:
         use_case: DeleteWebhookUseCase = use_case_factory(uow__session=session)
-        await use_case.execute(tenant_id=tenant_id, webhook_id=webhook_id)
+        await use_case.execute(tenant_id=tenant_id, webhook_id=webhook_id, idempotency_key=idempotency_key)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

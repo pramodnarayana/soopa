@@ -68,7 +68,7 @@ class DatabaseTenantQueryService(ITenantQueryService):
         if total == 0:
             return PaginatedTenants(items=[], total=0, page=page, limit=limit)
 
-        stmt = select(DbTenant).limit(limit).offset(offset)
+        stmt = select(DbTenant).order_by(DbTenant.id).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
 

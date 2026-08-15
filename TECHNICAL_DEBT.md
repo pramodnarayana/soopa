@@ -124,6 +124,7 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 
 
 ## [DONE] Backend Database Dual-Architecture (ORM vs Raw SQL)
+
 **Category**: Architecture
 **Impact**: Medium
 **Description**: The codebase was audited for mixing SQLAlchemy 2.0 ORM features with raw SQL executions via `session.execute(text("..."))` for standard CRUD operations. The audit confirmed that raw SQL is currently only used for valid infrastructure boundaries (e.g. database migrations, testing truncates, PostgreSQL NOTIFY commands, and schema constraints), while all CRUD Repositories correctly use SQLAlchemy 2.0 typed constructs (`select()`, `insert()`, etc).
@@ -132,12 +133,16 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 **Audit Results**: Audit complete, no CRUD violation found.
 
 ## [DONE] Frontend API Client Dual-Architecture (Axios vs Fetch)
+
 **Category**: Architecture
 **Impact**: Low
 **Description**: Found a tiny pocket of `axios` usage inside `apps/edi/packages/ui/src` while the rest of the monorepo standardizes on native `fetch`.
 - **Status**: ✅ RESOLVED
 
 **Fix details**: Replaced the `axios` implementation inside `createNetworkContext.tsx` and related hooks with a custom native `fetch` wrapper that preserves the identical `.get()`, `.post()` API signatures for backwards compatibility. Uninstalled `axios` from all `package.json` files.
+
+## [DONE] Webhooks Bounded Context Migration
+
 **Category**: Architecture
 **Impact**: High
 **Description**: The recent Hexagonal Architecture refactoring of Webhooks correctly extracted the logic into Use Cases, Ports, and Adapters. However, the entire Webhook feature was incorrectly implemented inside the EDI application module (`apps/edi/packages/edi/src/edi/...`). Webhooks are a core platform capability that belong in the UCP (User Control Plane) boundary.

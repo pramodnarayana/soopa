@@ -12,5 +12,5 @@ class WebhookRepositoryPort(Protocol):
         self, webhook: WebhookDomainModel, idempotency_key: str | None = None
     ) -> None: ...
     async def delete_webhook(
-        self, tenant_id: str, webhook_id: str, idempotency_key: str | None = None
+        self, webhook: WebhookDomainModel, idempotency_key: str | None = None
     ) -> None: ...

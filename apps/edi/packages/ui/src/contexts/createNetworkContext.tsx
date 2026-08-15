@@ -51,8 +51,21 @@ export function createNetworkContext(hookName: string) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+        // Combine caller-provided signal with timeout signal
+        let combinedSignal = controller.signal;
+        if (init.signal) {
+          const callerSignal = init.signal;
+          // Browser-compatible signal combination: listen to both signals
+          const abortHandler = () => controller.abort();
+          callerSignal.addEventListener('abort', abortHandler, { once: true });
+          // Clean up listener if timeout fires first
+          controller.signal.addEventListener('abort', () => {
+            callerSignal.removeEventListener('abort', abortHandler);
+          }, { once: true });
+        }
+
         try {
-          const response = await fetch(fullUrl, { ...init, headers, signal: controller.signal });
+          const response = await fetch(fullUrl, { ...init, headers, signal: combinedSignal });
 
           if (!response.ok) {
             let message = response.statusText;
@@ -80,7 +93,7 @@ export function createNetworkContext(hookName: string) {
           const res = await baseFetch(url, {
             ...config,
             method: 'POST',
-            body: data ? JSON.stringify(data) : undefined,
+            body: data !== undefined ? JSON.stringify(data) : undefined,
           });
           if (res.status === 204) return { data: undefined as unknown as T };
           return { data: (await res.json()) as T };
@@ -89,7 +102,7 @@ export function createNetworkContext(hookName: string) {
           const res = await baseFetch(url, {
             ...config,
             method: 'PATCH',
-            body: data ? JSON.stringify(data) : undefined,
+            body: data !== undefined ? JSON.stringify(data) : undefined,
           });
           if (res.status === 204) return { data: undefined as unknown as T };
           return { data: (await res.json()) as T };

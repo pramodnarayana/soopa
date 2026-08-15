@@ -27,6 +27,8 @@ class ITenantQueryService(Protocol):
     """
     CQRS Read Service Port for Tenants.
     This service bypasses the Domain Model entirely to perform optimized read operations.
+
+    Stable tenant sort order: ORDER BY id ASC for deterministic pagination.
     """
 
     async def get_all_tenants(self, page: int = 1, limit: int = 50) -> PaginatedTenants: ...

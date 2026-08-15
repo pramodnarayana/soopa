@@ -98,6 +98,26 @@ async def test_user_preferences_router():
                 json={"is_enabled": True},
             )
             assert response.status_code == 422
+
+            # 4. GET with different user in x-mock-user header (IDOR test - same tenant)
+            different_user = "different-user-456"
+            response = await ac.get(
+                f"/api/v1/users/{tenant_id}/{user_id}/notification-preferences",
+                headers={"x-mock-user": different_user},
+            )
+            assert response.status_code == 403
+            # Verify repository was not called for unauthorized access
+            mock_repo.get_user_preferences.assert_called_once()  # Only from step 1
+
+            # 5. PATCH with different user in x-mock-user header (IDOR test - same tenant)
+            response = await ac.patch(
+                f"/api/v1/users/{tenant_id}/{user_id}/notification-preferences/invoice.payment_failed/EMAIL",
+                json={"is_enabled": True},
+                headers={"x-mock-user": different_user},
+            )
+            assert response.status_code == 403
+            # Verify use case was not called for unauthorized access
+            mock_use_case.execute.assert_called_once()  # Only from step 2
     finally:
         container.update_user_preference_use_case.reset_override()
         container.user_preference_repository.reset_override()
