@@ -1,9 +1,9 @@
 import os
 from collections.abc import Sequence
-from datetime import UTC
+from datetime import UTC, datetime
 
 from platform_orm.models import Webhook as DbWebhook
-from sqlalchemy import delete, select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 
@@ -30,7 +30,9 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
 
     async def list_webhooks(self, tenant_id: str) -> Sequence[WebhookDomainModel]:
         result = await self.session.execute(
-            select(DbWebhook).where(DbWebhook.tenant_id == tenant_id)
+            select(DbWebhook).where(
+                DbWebhook.tenant_id == tenant_id, DbWebhook.deleted_at.is_(None)
+            )
         )
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
@@ -39,14 +41,20 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
             return {}
         result = await self.session.execute(
             select(DbWebhook.id, DbWebhook.name).where(
-                DbWebhook.id.in_(ids), DbWebhook.tenant_id == tenant_id
+                DbWebhook.id.in_(ids),
+                DbWebhook.tenant_id == tenant_id,
+                DbWebhook.deleted_at.is_(None),
             )
         )
         return {row.id: row.name for row in result.all()}
 
     async def find_by_id(self, tenant_id: str, webhook_id: str) -> WebhookDomainModel | None:
         result = await self.session.execute(
-            select(DbWebhook).where(DbWebhook.id == webhook_id, DbWebhook.tenant_id == tenant_id)
+            select(DbWebhook).where(
+                DbWebhook.id == webhook_id,
+                DbWebhook.tenant_id == tenant_id,
+                DbWebhook.deleted_at.is_(None),
+            )
         )
         record = result.scalars().first()
         if not record:
@@ -55,7 +63,9 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
 
     async def save(self, webhook: WebhookDomainModel, idempotency_key: str | None = None) -> None:
         stmt = select(DbWebhook).where(
-            DbWebhook.id == webhook.id, DbWebhook.tenant_id == webhook.tenant_id
+            DbWebhook.id == webhook.id,
+            DbWebhook.tenant_id == webhook.tenant_id,
+            DbWebhook.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         record = result.scalars().first()
@@ -107,11 +117,11 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
     async def delete_webhook(
         self, webhook: WebhookDomainModel, idempotency_key: str | None = None
     ) -> None:
-        # Flush events from the aggregate loaded by DeleteWebhookUseCase
+        # Flush domain events from the aggregate before soft-deleting
         self._flush_events(webhook, idempotency_key)
         await self.session.execute(
-            delete(DbWebhook).where(
-                DbWebhook.id == webhook.id, DbWebhook.tenant_id == webhook.tenant_id
-            )
+            update(DbWebhook)
+            .where(DbWebhook.id == webhook.id, DbWebhook.tenant_id == webhook.tenant_id)
+            .values(deleted_at=datetime.now(UTC))
         )
         await self.session.flush()

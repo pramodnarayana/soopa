@@ -32,8 +32,10 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
 
         # Seed Tenant first (required for foreign key relationship)
         from ucp.domain.models.tenant import Tenant
-        tenant = Tenant.create(name="Test Tenant")
-        tenant._id = tenant_id  # Override generated ID for test consistency
+
+        tenant = Tenant.create(
+            id=tenant_id, name="Test Tenant", slug="test-tenant-slug", idp_tenant_id=None
+        )  # Override generated ID for test consistency
         await uow.tenant_repo.save(tenant)
 
         # Seed User
@@ -75,6 +77,45 @@ async def test_assign_user_role_not_found(db_session: AsyncSession) -> None:
 
         tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
         request = AssignUserRoleRequest(user_id="usr_doesnt_exist", role_id="rol_xyz")
+
+        with pytest.raises(ResourceNotFoundError):
+            await use_case.execute(tenant_id=tenant_id, request=request)
+
+
+@pytest.mark.asyncio
+async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None:
+    """
+    Narrow integration test: assigning a non-existent role_id must raise ResourceNotFoundError.
+    The user and tenant exist — only the role is missing.
+    """
+    async with db_session.begin_nested():
+        uow = SqlAlchemyUcpUnitOfWork(db_session)
+        use_case = AssignUserRoleUseCase(uow)
+
+        tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
+        user_id = f"usr_{uuid.uuid4().hex[:12]}"
+        role_id = f"rol_{uuid.uuid4().hex[:12]}"  # never seeded
+
+        from ucp.domain.models.tenant import Tenant
+
+        tenant = Tenant.create(
+            id=tenant_id,
+            name=f"Tenant {tenant_id}",
+            slug=f"tenant-{tenant_id}",
+            idp_tenant_id=None,
+        )
+        await uow.tenant_repo.save(tenant)
+
+        user = User.create(
+            id=user_id, idp_user_id=None, email=f"{user_id}@test.com", name="Test User"
+        )
+        await uow.user_repo.save(user)
+        await uow.user_repo.save_tenant_membership(
+            tenant_id=tenant_id, user_id=user_id, role="viewer"
+        )
+        await db_session.flush()
+
+        request = AssignUserRoleRequest(user_id=user_id, role_id=role_id)
 
         with pytest.raises(ResourceNotFoundError):
             await use_case.execute(tenant_id=tenant_id, request=request)

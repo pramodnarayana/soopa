@@ -16,7 +16,11 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from ucp.core.exceptions import IdentityProviderError, ResourceNotFoundError
+from ucp.core.exceptions import (
+    IdempotencyConflictError,
+    IdentityProviderError,
+    ResourceNotFoundError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -39,6 +43,20 @@ def setup_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=404,
             content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(IdempotencyConflictError)
+    async def idempotency_conflict_exception_handler(
+        request: Request, exc: IdempotencyConflictError
+    ) -> JSONResponse:
+        logger.warning(
+            "idempotency_conflict",
+            path=request.url.path,
+            reason=str(exc),
+        )
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(exc), "type": "idempotency_conflict"},
         )
 
     @app.exception_handler(IdentityProviderError)

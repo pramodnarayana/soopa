@@ -3,6 +3,7 @@ from typing import Any, Self
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ucp.adapters.outbound.database.idempotency_repository import SqlAlchemyIdempotencyRepository
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
 from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
@@ -21,6 +22,7 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         self.app_repo = PostgresAppRepository(session=self.session)
         self.role_repo = PostgresRoleRepository(session=self.session)
         self.webhook_repo = SqlAlchemyWebhookRepository(session=self.session)
+        self.idempotency_repo = SqlAlchemyIdempotencyRepository(session=self.session)
 
     async def __aenter__(self) -> Self:
         if not self.session.in_transaction():

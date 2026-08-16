@@ -1,4 +1,4 @@
-from .common import OutboxMixin, TimestampMixin
+from .common import OutboxMixin, SoftDeleteMixin, TimestampMixin
 from .core import (
     IdentityBase,
     NotificationBase,
@@ -8,6 +8,7 @@ from .core import (
     UcpBase,
     UcpRegistry,
 )
+from .idempotency import IdempotencyResult
 from .identity import ApiKey, ApiToken, Role, Tenant, TenantUser, User, UserRole
 from .notifications import NotificationOutbox, NotificationTemplate, UserNotificationPreference
 from .observability import SystemAuditLog
@@ -17,6 +18,7 @@ from .webhooks import Webhook
 __all__ = [
     "ApiKey",
     "ApiToken",
+    "IdempotencyResult",
     "IdentityBase",
     "NotificationBase",
     "NotificationOutbox",
@@ -27,6 +29,7 @@ __all__ = [
     "Role",
     "ScheduledJob",
     "SchedulingBase",
+    "SoftDeleteMixin",
     "SystemAuditLog",
     "Tenant",
     "TenantUser",

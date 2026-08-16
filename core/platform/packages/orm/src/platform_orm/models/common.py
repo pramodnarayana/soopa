@@ -92,3 +92,15 @@ class TimestampMixin:
             default=lambda: datetime.now(UTC),
             onupdate=lambda: datetime.now(UTC),
         )
+
+
+class SoftDeleteMixin:
+    """Provides soft deletion capabilities for models."""
+
+    @declared_attr
+    def deleted_at(cls) -> Mapped[datetime | None]:
+        return mapped_column(DateTime(timezone=True), nullable=True)
+
+    @declared_attr
+    def deleted_by(cls) -> Mapped[str | None]:
+        return mapped_column(String, nullable=True)

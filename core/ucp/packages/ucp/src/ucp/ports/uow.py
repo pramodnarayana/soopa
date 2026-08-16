@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Self
 
 from ucp.ports.api_token_repository import ApiTokenRepositoryPort
+from ucp.ports.idempotency_repository import IdempotencyRepositoryPort
 from ucp.ports.outbound.app_repository import IAppRepository
 from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
@@ -21,6 +22,7 @@ class UcpUnitOfWorkPort(ABC):
     app_repo: IAppRepository
     role_repo: IRoleRepository
     webhook_repo: WebhookRepositoryPort
+    idempotency_repo: IdempotencyRepositoryPort
 
     @abstractmethod
     async def __aenter__(self) -> Self:

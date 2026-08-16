@@ -1,0 +1,85 @@
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from platform_orm.models.idempotency import IdempotencyResult
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ucp.core.exceptions import IdempotencyConflictError
+from ucp.ports.idempotency_repository import IdempotencyRepositoryPort
+
+
+class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_result(
+        self, tenant_id: str, idempotency_key: str
+    ) -> tuple[bool, dict[str, Any] | None, int | None]:
+        expires_at = datetime.now(UTC) + timedelta(hours=24)
+
+        # Attempt to insert. If the row is new, we own the processing lock.
+        # ON CONFLICT DO NOTHING ensures concurrent requests skip the insert cleanly.
+        stmt = (
+            insert(IdempotencyResult)
+            .values(
+                idempotency_key=idempotency_key,
+                tenant_id=tenant_id,
+                status="IN_PROGRESS",
+                expires_at=expires_at,
+            )
+            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .returning(IdempotencyResult.idempotency_key)
+        )
+
+        insert_result = await self.session.execute(stmt)
+        inserted_key = insert_result.scalars().first()
+
+        if inserted_key:
+            # We just inserted it, so we own the processing lock
+            return False, None, None
+
+        # Row already exists, so let's fetch it
+        result = await self.session.execute(
+            select(IdempotencyResult).where(
+                IdempotencyResult.idempotency_key == idempotency_key,
+                IdempotencyResult.tenant_id == tenant_id,
+            )
+        )
+        record = result.scalars().first()
+
+        if not record:
+            # Extremely rare race condition (deleted right after our insert failed)
+            return False, None, None
+
+        if record.status == "COMPLETED":
+            return True, record.response_body, record.response_status_code
+        elif record.status == "IN_PROGRESS":
+            raise IdempotencyConflictError(
+                f"Request with idempotency key {idempotency_key} is already in progress."
+            )
+        else:
+            return False, None, None
+
+    async def save_result(
+        self,
+        tenant_id: str,
+        idempotency_key: str,
+        response_body: dict[str, Any],
+        response_status_code: int,
+    ) -> None:
+        result = await self.session.execute(
+            select(IdempotencyResult)
+            .where(
+                IdempotencyResult.idempotency_key == idempotency_key,
+                IdempotencyResult.tenant_id == tenant_id,
+            )
+            .with_for_update()
+        )
+        record = result.scalars().first()
+        if record:
+            record.status = "COMPLETED"
+            record.response_body = response_body
+            record.response_status_code = response_status_code
+            record.updated_at = datetime.now(UTC)

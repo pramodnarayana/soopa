@@ -2,7 +2,7 @@ from typing import Annotated, Any, Literal, cast
 
 import structlog
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from identity.domain.identity_context import IdentityContext
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,8 +66,8 @@ class PaginatedTenantsResponse(BaseModel):
 @inject
 async def find_all(  # type: ignore
     request: Request,
-    page: int = 1,
-    limit: int = 50,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(50, ge=1, le=1000, description="Items per page"),
     session: AsyncSession = Depends(get_db_session),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
