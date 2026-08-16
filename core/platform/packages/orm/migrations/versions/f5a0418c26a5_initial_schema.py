@@ -423,22 +423,15 @@ def upgrade() -> None:
     )
     op.create_table(
         "idempotency_results",
-        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("response_status_code", sa.Integer(), nullable=True),
         sa.Column("response_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("idempotency_key"),
-        schema="ucp",
-    )
-    op.create_index(
-        op.f("ix_ucp_idempotency_results_tenant_id"),
-        "idempotency_results",
-        ["tenant_id"],
-        unique=False,
+        sa.PrimaryKeyConstraint("tenant_id", "idempotency_key"),
         schema="ucp",
     )
     op.add_column(

@@ -15,9 +15,10 @@ class IdempotencyResult(UcpBase):
     """
 
     __tablename__ = "idempotency_results"
+    __table_args__ = {"schema": "ucp"}
 
+    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idempotency_key: Mapped[str] = mapped_column(String(255), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     # Lifecycle: IN_PROGRESS → COMPLETED | ERROR
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="IN_PROGRESS")
     response_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)

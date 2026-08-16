@@ -115,13 +115,13 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
         webhook.clear_domain_events()
 
     async def delete_webhook(
-        self, webhook: WebhookDomainModel, idempotency_key: str | None = None
+        self, webhook: WebhookDomainModel, deleted_by: str, idempotency_key: str | None = None
     ) -> None:
         # Flush domain events from the aggregate before soft-deleting
         self._flush_events(webhook, idempotency_key)
         await self.session.execute(
             update(DbWebhook)
             .where(DbWebhook.id == webhook.id, DbWebhook.tenant_id == webhook.tenant_id)
-            .values(deleted_at=datetime.now(UTC))
+            .values(deleted_at=datetime.now(UTC), deleted_by=deleted_by)
         )
         await self.session.flush()

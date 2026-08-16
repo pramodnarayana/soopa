@@ -110,6 +110,11 @@ async def delete_webhook(
     """Deletes a webhook destination."""
     try:
         use_case: DeleteWebhookUseCase = use_case_factory(uow__session=session)
-        await use_case.execute(tenant_id=tenant_id, webhook_id=webhook_id, idempotency_key=idempotency_key)
+        await use_case.execute(
+            tenant_id=tenant_id,
+            webhook_id=webhook_id,
+            deleted_by=context.subject,
+            idempotency_key=idempotency_key,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

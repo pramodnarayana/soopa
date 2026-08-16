@@ -12,7 +12,11 @@ class DeleteWebhookUseCase:
         self.uow = uow
 
     async def execute(
-        self, tenant_id: str, webhook_id: str, idempotency_key: str | None = None
+        self,
+        tenant_id: str,
+        webhook_id: str,
+        deleted_by: str,
+        idempotency_key: str | None = None,
     ) -> None:
         bound_logger = logger.bind(tenant_id=tenant_id, webhook_id=webhook_id)
         bound_logger.info("delete_webhook.started", idempotency_key=idempotency_key)
@@ -49,7 +53,7 @@ class DeleteWebhookUseCase:
 
             # Pass the loaded aggregate to delete_webhook so it can flush events
             await self.uow.webhook_repo.delete_webhook(
-                webhook=webhook, idempotency_key=idempotency_key
+                webhook=webhook, deleted_by=deleted_by, idempotency_key=idempotency_key
             )
             await self.uow.commit()
 
