@@ -1,3 +1,4 @@
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -23,58 +24,83 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
   useEffect(() => {
     if (!userId || !tenantId || !accessToken || !apiUrl) return;
 
-    // Note: EventSource doesn't support custom headers, so we use tenant_id query param
-    // for tenant middleware compatibility. Authentication should be handled via cookie-based
-    // session or a ticket-based mechanism on the backend (see authentication.py).
-    // TODO: Implement proper SSE authentication mechanism (ticket or cookie-based)
-    const eventSource = new EventSource(
-      `${apiUrl}/${tenantId}/users/${userId}/stream?tenant_id=${tenantId}`,
-    );
-
+    const abortController = new AbortController();
     let consecutiveErrorCount = 0;
     const MAX_CONSECUTIVE_ERRORS = 5;
 
-    eventSource.onmessage = (event) => {
-      // Reset error counter on successful message
-      consecutiveErrorCount = 0;
-
+    const connectSSE = async () => {
       try {
-        const newNotification = JSON.parse(event.data);
-        // Inject directly into React Query cache instantly
-        queryClient.setQueryData<InAppNotification[]>(
-          ['notifications', tenantId, userId],
-          (old) => {
-            if (!old) return [newNotification];
-            // Prevent duplicates if already fetched
-            if (old.some((n) => n.id === newNotification.id)) return old;
-            return [newNotification, ...old];
+        await fetchEventSource(
+          `${apiUrl}/${tenantId}/users/${userId}/stream?tenant_id=${tenantId}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'text/event-stream',
+            },
+            signal: abortController.signal,
+            onopen: async (response) => {
+              if (response.ok) {
+                consecutiveErrorCount = 0;
+                return;
+              }
+              if (response.status === 401 || response.status === 403) {
+                // Stop retrying on permanent auth errors
+                throw new Error(`Authentication error: ${response.status}`);
+              }
+            },
+            onmessage: (event) => {
+              consecutiveErrorCount = 0;
+              try {
+                const newNotification = JSON.parse(event.data);
+                queryClient.setQueryData<InAppNotification[]>(
+                  ['notifications', tenantId, userId],
+                  (old) => {
+                    if (!old) return [newNotification];
+                    if (old.some((n) => n.id === newNotification.id)) return old;
+                    return [newNotification, ...old];
+                  },
+                );
+              } catch (err) {
+                console.error('Failed to parse incoming SSE notification', err);
+              }
+            },
+            onerror: (error) => {
+              console.error('SSE stream error:', error);
+              consecutiveErrorCount++;
+
+              if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
+                console.error(
+                  `SSE connection failed ${MAX_CONSECUTIVE_ERRORS} times consecutively. Closing connection to prevent infinite reconnect loop.`,
+                );
+                abortController.abort();
+                // Prevent further retries by throwing
+                throw error;
+              }
+
+              // Invalidate the notifications query to trigger a REST fallback
+              void queryClient.invalidateQueries({ queryKey: ['notifications', tenantId, userId] });
+
+              // Allow fetch-event-source to retry automatically
+              return undefined;
+            },
+            onclose: () => {
+              // Let it auto-reconnect if it closed gracefully
+              return;
+            },
           },
         );
       } catch (err) {
-        console.error('Failed to parse incoming SSE notification', err);
+        console.error('SSE connection aborted or failed:', err);
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error('SSE stream error:', error);
-      consecutiveErrorCount++;
-
-      if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
-        console.error(
-          `SSE connection failed ${MAX_CONSECUTIVE_ERRORS} times consecutively. Closing connection to prevent infinite reconnect loop.`,
-        );
-        eventSource.close();
-        return;
-      }
-
-      // Invalidate the notifications query to trigger a REST fallback
-      void queryClient.invalidateQueries({ queryKey: ['notifications', tenantId, userId] });
-    };
+    void connectSSE();
 
     return () => {
-      eventSource.close();
+      abortController.abort();
     };
-  }, [userId, tenantId, accessToken, queryClient]);
+  }, [userId, tenantId, accessToken, queryClient, apiUrl]);
 
   return useQuery({
     queryKey: ['notifications', tenantId, userId],

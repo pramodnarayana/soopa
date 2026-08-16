@@ -69,12 +69,18 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
     async def update(
         self, token_id: str, tenant_id: str, **kwargs: Any
     ) -> ApiTokenDomainModel | None:
+        kwargs.pop("deleted_at", None)
+
         if not kwargs:
             return await self.get_by_id(token_id, tenant_id)
 
         result = await self.session.execute(
             update(ApiTokenORM)
-            .where(ApiTokenORM.id == token_id, ApiTokenORM.tenant_id == tenant_id)
+            .where(
+                ApiTokenORM.id == token_id,
+                ApiTokenORM.tenant_id == tenant_id,
+                ApiTokenORM.deleted_at.is_(None),
+            )
             .values(**kwargs)
             .returning(ApiTokenORM)
         )

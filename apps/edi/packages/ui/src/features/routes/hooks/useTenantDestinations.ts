@@ -23,7 +23,7 @@ export function useTenantDestinations(direction: Direction) {
     queryFn: async () => {
       if (direction === Direction.INBOUND) {
         const [webhooksRes, partnersRes] = await Promise.all([
-          ucpApi.get(`/tenants/${tenantId}/edi/webhooks`),
+          ucpApi.get(`/tenants/${tenantId}/webhooks`),
           ediApi.get('/trading-partners'),
         ]);
 

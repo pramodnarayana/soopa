@@ -47,7 +47,7 @@ class AssignUserRoleUseCase:
                 )
 
             # Assign role via Aggregate Root to collect domain events
-            user.assign_role(role.id)
+            user.assign_role(role_id=role.id, role_name=role.name, tenant_id=tenant_id)
 
             # Persist role assignment
             await self.uow.role_repo.assign_user_role(

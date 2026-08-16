@@ -63,6 +63,7 @@ class RequireCapability:
                 tenant_id=identity.tenant_id,
                 user_id=identity.subject,
                 required_capability=self.required_capability,
+                actual_capabilities=list(identity.capabilities),
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

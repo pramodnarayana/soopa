@@ -60,12 +60,14 @@ class BotsEDIAdapter(EDITransformerPort):
             ]
             return ast_dict, parsed_errors
         except Exception as e:
-            logger.exception("Bots error during AST generation")
             error_msg = str(e)
             parsed_errors = []
 
             if error_msg.startswith("[") or "Details:" in error_msg:
                 parsed_errors = [line.strip() for line in error_msg.split("\n") if line.strip()]
+                logger.warning("bots_adapter.validation_failed", error=error_msg)
+            else:
+                logger.exception("bots_adapter.system_error")
 
             raise TransformationError(f"AST generation failed: {e}", errors=parsed_errors) from e
 
@@ -168,8 +170,8 @@ class BotsEDIAdapter(EDITransformerPort):
         This transforms raw X12/EDIFACT bytes into our pristine domain model.
         """
         logger.info(
-            "Invoking stateless Bots adapter with {len(raw_edi)} bytes of payload",
-            val_0=len(raw_edi),
+            "bots_adapter.transform_started",
+            payload_length=len(raw_edi),
         )
 
         # Validate payload before attempting to load backend

@@ -50,8 +50,9 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
             if hasattr(exc, "orig"):
                 # psycopg (asyncpg) exposes pgcode via the orig exception
                 pgcode = getattr(exc.orig, "pgcode", None)
-                if hasattr(exc.orig, "__cause__"):
-                    constraint_name = getattr(exc.orig.__cause__, "constraint_name", None)
+                orig_cause = getattr(exc.orig, "__cause__", None)
+                if orig_cause is not None:
+                    constraint_name = getattr(orig_cause, "constraint_name", None)
                 else:
                     constraint_name = getattr(exc.orig, "constraint_name", None)
 

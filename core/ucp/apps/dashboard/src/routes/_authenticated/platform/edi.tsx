@@ -18,8 +18,7 @@ function EdiLayout() {
   return (
     <EdiUIProvider
       baseUrl={baseUrl}
-      ediPlatformBaseUrl={`${config.ucpApiUrl}/api/v1`}
-      ucpBaseUrl={`${config.ucpApiUrl}/api/v1`}
+      ucpBaseUrl={`${config.ucpApiUrl}/api/v1/`}
       token={token}
       tenantId={tenantId}
     >

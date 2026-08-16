@@ -31,13 +31,25 @@ def mock_idp() -> IUserIdentityProvider:
     return mock  # type: ignore
 
 
+from ucp.domain.models.authorization import Role
+from ucp.ports.outbound.role_repository import IRoleRepository
+
+
+@pytest.fixture
+def mock_role_repo() -> IRoleRepository:
+    return create_autospec(IRoleRepository, instance=True)  # type: ignore
+
+
 @pytest.fixture
 def mock_uow(
-    mock_tenant_repo: ITenantRepository, mock_user_repo: IUserRepository
+    mock_tenant_repo: ITenantRepository,
+    mock_user_repo: IUserRepository,
+    mock_role_repo: IRoleRepository,
 ) -> UcpUnitOfWorkPort:
     uow = create_autospec(UcpUnitOfWorkPort, instance=True)  # type: ignore
     uow.tenant_repo = mock_tenant_repo
     uow.user_repo = mock_user_repo
+    uow.role_repo = mock_role_repo
     uow.__aenter__.return_value = uow
     return uow
 
@@ -56,6 +68,7 @@ async def test_invite_user_success(
     use_case: CreateUserUseCase,
     mock_tenant_repo: ITenantRepository,
     mock_user_repo: IUserRepository,
+    mock_role_repo: IRoleRepository,
     mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     # Arrange
@@ -63,6 +76,10 @@ async def test_invite_user_success(
         id="ten_123", name="Test", slug="test", idp_tenant_id="org-123", subscriptions=[]
     )
     mock_tenant_repo.find_by_id = AsyncMock(return_value=tenant)  # type: ignore
+
+    mock_role = Role(id="role_123", tenant_id=None, name="Tenant Admin", description="")
+    mock_role_repo.get_global_role_by_name = AsyncMock(return_value=mock_role)  # type: ignore
+
     command = CreateUserCommand(
         tenant_id="ten_123",
         email="test@example.com",
@@ -80,9 +97,11 @@ async def test_invite_user_success(
     assert saved_user.id == local_user_id
     assert saved_user.idp_user_id is None
 
-    mock_user_repo.save_tenant_membership.assert_called_once_with(  # type: ignore
-        tenant_id="ten_123", user_id=local_user_id, role="admin"
-    )
+    # Verify UserRoleAssignedEvent was added
+    role_events = [e for e in saved_user.domain_events if e.event_name == "user_role_assigned"]
+    assert len(role_events) == 1
+    assert role_events[0].role_id == "role_123"
+    assert role_events[0].tenant_id == "ten_123"
 
 
 @pytest.mark.asyncio

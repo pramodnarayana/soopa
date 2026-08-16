@@ -1,9 +1,13 @@
 from datetime import UTC, datetime
 from typing import Literal, cast
 
-from platform_orm.models.identity import TenantUser
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+from platform_orm.models.identity import Role, UserRole
 from platform_orm.models.identity import User as DbUser
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 
@@ -15,11 +19,17 @@ class UserRepository(IUserRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def has_any_tenant_memberships(self, user_id: str) -> bool:
+        stmt = select(UserRole).where(UserRole.user_id == user_id).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
     async def find_users_by_tenant(self, tenant_id: str) -> list[User]:
         stmt = (
-            select(DbUser, TenantUser.role)
-            .join(TenantUser, TenantUser.user_id == DbUser.id)
-            .where(and_(TenantUser.tenant_id == tenant_id, DbUser.deleted_at.is_(None)))
+            select(DbUser, Role.name)
+            .join(UserRole, UserRole.user_id == DbUser.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(and_(UserRole.tenant_id == tenant_id, DbUser.deleted_at.is_(None)))
         )
         result = await self.session.execute(stmt)
         rows = result.all()
@@ -57,13 +67,52 @@ class UserRepository(IUserRepository):
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )
 
+    async def find_by_idp_user_id(self, idp_user_id: str) -> User | None:
+        stmt = select(DbUser).where(
+            and_(DbUser.idp_user_id == idp_user_id, DbUser.deleted_at.is_(None))
+        )
+        result = await self.session.execute(stmt)
+        db_user = result.scalar_one_or_none()
+
+        if not db_user:
+            return None
+
+        return User(
+            id=db_user.id,
+            idp_user_id=db_user.idp_user_id,
+            email=db_user.email,
+            name=db_user.name or "",
+            status=cast(Literal["active", "inactive"], db_user.status),
+            created_at=db_user.created_at.replace(tzinfo=UTC),
+            updated_at=db_user.updated_at.replace(tzinfo=UTC),
+        )
+
+    async def find_by_id(self, user_id: str) -> User | None:
+        stmt = select(DbUser).where(and_(DbUser.id == user_id, DbUser.deleted_at.is_(None)))
+        result = await self.session.execute(stmt)
+        db_user = result.scalar_one_or_none()
+
+        if not db_user:
+            return None
+
+        return User(
+            id=db_user.id,
+            idp_user_id=db_user.idp_user_id,
+            email=db_user.email,
+            name=db_user.name or "",
+            status=cast(Literal["active", "inactive"], db_user.status),
+            created_at=db_user.created_at.replace(tzinfo=UTC),
+            updated_at=db_user.updated_at.replace(tzinfo=UTC),
+        )
+
     async def find_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
         stmt = (
-            select(DbUser, TenantUser.role)
-            .join(TenantUser, TenantUser.user_id == DbUser.id)
+            select(DbUser, Role.name)
+            .join(UserRole, UserRole.user_id == DbUser.id)
+            .join(Role, Role.id == UserRole.role_id)
             .where(
                 and_(
-                    TenantUser.tenant_id == tenant_id,
+                    UserRole.tenant_id == tenant_id,
                     DbUser.id == user_id,
                     DbUser.deleted_at.is_(None),
                 )
@@ -122,32 +171,6 @@ class UserRepository(IUserRepository):
 
         self._flush_events(user)
 
-    async def save_tenant_membership(self, tenant_id: str, user_id: str, role: str) -> None:
-        stmt = select(TenantUser).where(
-            and_(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user_id)
-        )
-        result = await self.session.execute(stmt)
-        tenant_user = result.scalar_one_or_none()
-
-        if tenant_user:
-            tenant_user.role = role
-        else:
-            tenant_user = TenantUser(tenant_id=tenant_id, user_id=user_id, role=role)
-            self.session.add(tenant_user)
-
-    async def remove_tenant_membership(self, tenant_id: str, user: User) -> None:
-        stmt = delete(TenantUser).where(
-            and_(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
-        )
-        await self.session.execute(stmt)
-        self._flush_events(user)
-
-    async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        """Check if a user has any remaining tenant memberships."""
-        stmt = select(TenantUser).where(TenantUser.user_id == user_id)
-        result = await self.session.execute(stmt)
-        return result.first() is not None
-
     def _flush_events(self, user: User, idempotency_key: str | None = None) -> None:
         import json
         import os
@@ -156,14 +179,18 @@ class UserRepository(IUserRepository):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
-            # In UCP outbox, tenant_id is traditionally used to shard events or partition them.
-            # If an event has an org_id (like UserUpdatedEvent), we can infer it.
-            # Alternatively, we can leave it null if it's a global user event, but the DB schema might require it.
-            # Wait, the DB schema has tenant_id nullable=True!
-            # Let's extract org_id if it exists.
             payload_dict = json.loads(event.model_dump_json())
-            tenant_id = getattr(event, "org_id", None) or payload_dict.get("org_id", None)
-
+            tenant_id = event.get_routing_tenant_id()
+            if tenant_id is None and event_name != "UserDeleted":
+                # Only global events are allowed to have a null tenant ID. In practice, the Outbox table
+                # might enforce NOT NULL. If it does, we need a fallback or fail fast.
+                logger.error(
+                    "outbox_event_missing_tenant_id",
+                    event_name=event_name,
+                    event_payload=payload_dict,
+                )
+                # If outbox requires it, we raise here to fail fast instead of hitting DB constraint
+                # raise ValueError(f"Event {event_name} missing required routing tenant_id")
             final_idemp_key = (
                 f"{idempotency_key}_{index}"
                 if idempotency_key

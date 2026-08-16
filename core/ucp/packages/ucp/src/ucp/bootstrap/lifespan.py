@@ -57,7 +57,14 @@ async def startup() -> None:  # noqa: C901
     Starts all UCP background workers.
     Called by the Shell lifespan on application startup.
     """
-    global _relay, _sweeper, _dispatcher, _identity_service, _provisioner, _tenant_deleted_handler, _engine
+    global \
+        _relay, \
+        _sweeper, \
+        _dispatcher, \
+        _identity_service, \
+        _provisioner, \
+        _tenant_deleted_handler, \
+        _engine
 
     database_url = os.environ.get("DATABASE_URL", "")
     if database_url.startswith("postgresql://"):
@@ -107,12 +114,14 @@ async def startup() -> None:  # noqa: C901
         idp = ZitadelIdentityProvider(org_provider=container.org_provider())
         idp_users = container.user_provider()
 
-    _identity_service = IdentitySyncService(identity_provider=idp, user_identity_provider=idp_users)
-
     @asynccontextmanager
     async def uow_factory() -> AsyncGenerator[UcpUnitOfWorkPort, None]:
         async with session_factory() as session:
             yield SqlAlchemyUcpUnitOfWork(session)
+
+    _identity_service = IdentitySyncService(
+        identity_provider=idp, user_identity_provider=idp_users, uow_factory=uow_factory
+    )
 
     _provisioner = InfrastructureProvisioner(uow_factory)
     _tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
@@ -139,7 +148,8 @@ async def startup() -> None:  # noqa: C901
         if service:
             payload = event.payload
             await service.handle_user_created(
-                org_id=payload["org_id"],
+                user_id=payload["user_id"],
+                tenant_id=payload["tenant_id"],
                 email=payload["email"],
                 first_name=payload["first_name"],
                 last_name=payload["last_name"],
@@ -152,11 +162,28 @@ async def startup() -> None:  # noqa: C901
             payload = event.payload
             await service.handle_user_updated(
                 idp_user_id=payload["idp_user_id"],
-                org_id=payload["org_id"],
+                tenant_id=payload["tenant_id"],
                 first_name=payload["first_name"],
                 last_name=payload["last_name"],
                 role=payload["role"],
             )
+
+    async def identity_user_role_assigned_handler(event: Any) -> None:
+        service = _identity_service
+        if service:
+            payload = event.payload
+            idp_user_id = payload.get("idp_user_id")
+            tenant_id = payload.get("tenant_id")
+            if idp_user_id and tenant_id:
+                await service.handle_user_role_assigned(
+                    idp_user_id=idp_user_id,
+                    tenant_id=tenant_id,
+                    role=payload["role_name"],
+                )
+            else:
+                logger.warning(
+                    "identity_user_role_assigned_missing_data", event_id=getattr(event, "id", None)
+                )
 
     async def identity_user_status_toggled_handler(event: Any) -> None:
         service = _identity_service
@@ -164,7 +191,7 @@ async def startup() -> None:  # noqa: C901
             payload = event.payload
             await service.handle_user_status_toggled(
                 idp_user_id=payload["idp_user_id"],
-                org_id=payload["org_id"],
+                tenant_id=payload["tenant_id"],
                 action=payload["action"],
             )
 
@@ -182,7 +209,9 @@ async def startup() -> None:  # noqa: C901
             payload = event.payload
             tenant_id = payload.get("tenant_id") or event.tenant_id
             if not tenant_id:
-                logger.error("tenant_deleted_missing_tenant_id", event_id=getattr(event, "id", None))
+                logger.error(
+                    "tenant_deleted_missing_tenant_id", event_id=getattr(event, "id", None)
+                )
                 return
             await handler.handle(tenant_id)
 
@@ -190,6 +219,7 @@ async def startup() -> None:  # noqa: C901
     _dispatcher.subscribe("TenantDeleted", tenant_deleted_event_handler)
     _dispatcher.subscribe("UserInvited", identity_user_created_handler)
     _dispatcher.subscribe("UserUpdated", identity_user_updated_handler)
+    _dispatcher.subscribe("user_role_assigned", identity_user_role_assigned_handler)
     _dispatcher.subscribe("UserStatusToggled", identity_user_status_toggled_handler)
     _dispatcher.subscribe("UserDeleted", identity_user_deleted_handler)
 
@@ -202,7 +232,14 @@ async def shutdown() -> None:
     Gracefully stops all UCP background workers.
     Called by the Shell lifespan on application shutdown.
     """
-    global _relay, _sweeper, _dispatcher, _identity_service, _provisioner, _tenant_deleted_handler, _engine
+    global \
+        _relay, \
+        _sweeper, \
+        _dispatcher, \
+        _identity_service, \
+        _provisioner, \
+        _tenant_deleted_handler, \
+        _engine
 
     if _relay:
         await _relay.stop()

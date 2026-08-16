@@ -6,8 +6,16 @@ class ResourceNotFoundError(DomainError):
     """Raised when a requested resource is not found."""
 
 
+class StateConflictError(DomainError):
+    """Raised when an operation conflicts with the current state of a resource."""
+
+
 class InvalidCapabilityError(DomainError):
     """Raised when an invalid or unknown capability is requested."""
+
+
+class InvalidRoleMappingError(DomainError):
+    """Raised when an external role string cannot be mapped to a valid PBAC role."""
 
 
 class IdempotencyConflictError(DomainError):

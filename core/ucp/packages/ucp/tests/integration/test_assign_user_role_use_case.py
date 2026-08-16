@@ -43,9 +43,21 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
             id=user_id, idp_user_id=None, email="test@example.com", name="Integration Test User"
         )
         await uow.user_repo.save(user)
-        # We need a TenantUser relationship to allow find_by_id_and_tenant to work
-        await uow.user_repo.save_tenant_membership(
-            tenant_id=tenant_id, user_id=user.id, role="viewer"
+
+        # Seed Role and assign to user — replaces the old TenantUser junction table.
+        # find_by_id_and_tenant now joins on identity.user_roles via PBAC.
+        seed_role_id = f"rol_{uuid.uuid4().hex[:12]}"
+        seed_role = Role.create(
+            id=seed_role_id,
+            tenant_id=tenant_id,
+            name="Viewer",
+            description="Seed role for test scaffolding",
+            capabilities=["users:read"],
+        )
+        await uow.role_repo.save(seed_role)
+        await db_session.flush()
+        await uow.role_repo.assign_user_role(
+            tenant_id=tenant_id, user_id=user_id, role_id=seed_role_id
         )
 
         # Seed Role
@@ -110,8 +122,19 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
             id=user_id, idp_user_id=None, email=f"{user_id}@test.com", name="Test User"
         )
         await uow.user_repo.save(user)
-        await uow.user_repo.save_tenant_membership(
-            tenant_id=tenant_id, user_id=user_id, role="viewer"
+        # Seed PBAC membership so find_by_id_and_tenant can resolve the user.
+        seed_role_id2 = f"rol_{uuid.uuid4().hex[:12]}"
+        seed_role2 = Role.create(
+            id=seed_role_id2,
+            tenant_id=tenant_id,
+            name="Viewer",
+            description="Seed role for test scaffolding",
+            capabilities=["users:read"],
+        )
+        await uow.role_repo.save(seed_role2)
+        await db_session.flush()
+        await uow.role_repo.assign_user_role(
+            tenant_id=tenant_id, user_id=user_id, role_id=seed_role_id2
         )
         await db_session.flush()
 

@@ -4,9 +4,9 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import structlog
-from platform_orm.models.identity import TenantUser
+from platform_orm.models.identity import Role, UserRole
 from platform_orm.models.notifications import InAppNotification
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .channels.in_app_delivery_strategy import InAppPersistencePort
@@ -27,10 +27,16 @@ class PostgresInAppPersistence(InAppPersistencePort):
             if target_user_id:
                 user_ids = [target_user_id]
             else:
-                stmt = select(TenantUser.user_id).where(
-                    TenantUser.tenant_id == tenant_id,
-                    func.lower(TenantUser.role).in_(["admin", "owner"]),
-                    TenantUser.active.is_(True),
+                # Fan out to all users holding an admin-level role in this tenant via PBAC.
+                # TenantAdmin is the canonical admin role name.
+                stmt = (
+                    select(UserRole.user_id)
+                    .join(Role, Role.id == UserRole.role_id)
+                    .where(
+                        UserRole.tenant_id == tenant_id,
+                        Role.name.in_(["TenantAdmin", "PlatformAdmin"]),
+                    )
+                    .distinct()
                 )
                 result = await session.execute(stmt)
                 user_ids = result.scalars().all()

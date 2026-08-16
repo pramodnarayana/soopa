@@ -68,21 +68,21 @@ class User(AggregateRoot):
             self.status = "inactive"
             self.updated_at = datetime.now(UTC)
 
-    def update_profile(self, first_name: str, last_name: str, org_id: str, role: str) -> None:
+    def update_profile(self, first_name: str, last_name: str, tenant_id: str, role: str) -> None:
         self.name = f"{first_name} {last_name}".strip()
         self.updated_at = datetime.now(UTC)
         if self.idp_user_id:
             self.add_domain_event(
                 UserUpdatedEvent(
                     idp_user_id=self.idp_user_id,
-                    org_id=org_id,
+                    tenant_id=tenant_id,
                     first_name=first_name,
                     last_name=last_name,
                     role=role,
                 )
             )
 
-    def change_status(self, action: str, org_id: str) -> None:
+    def change_status(self, action: str, tenant_id: str) -> None:
         if action not in ("activate", "deactivate"):
             raise ValueError(f"Invalid action '{action}'. Must be 'activate' or 'deactivate'.")
 
@@ -95,7 +95,7 @@ class User(AggregateRoot):
             self.add_domain_event(
                 UserStatusToggledEvent(
                     idp_user_id=self.idp_user_id,
-                    org_id=org_id,
+                    tenant_id=tenant_id,
                     action=action,
                 )
             )
@@ -114,18 +114,26 @@ class User(AggregateRoot):
         if self.idp_user_id:
             self.add_domain_event(UserDeletedEvent(idp_user_id=self.idp_user_id))
 
-    def remove_membership(self, org_id: str) -> None:
-        """Remove user from an organization (IdP tenant).
+    def remove_membership(self, tenant_id: str) -> None:
+        """Remove user from a UCP tenant.
 
         Args:
-            org_id: The Identity Provider's organization/tenant ID, not the UCP tenant ID.
+            tenant_id: The local UCP tenant ID.
         """
         if self.idp_user_id:
             self.add_domain_event(
-                UserMembershipRemovedEvent(idp_user_id=self.idp_user_id, org_id=org_id)
+                UserMembershipRemovedEvent(idp_user_id=self.idp_user_id, tenant_id=tenant_id)
             )
 
-    def assign_role(self, role_id: str) -> None:
+    def assign_role(self, role_id: str, role_name: str, tenant_id: str | None) -> None:
         from ucp.domain.events.role_events import UserRoleAssignedEvent
 
-        self.add_domain_event(UserRoleAssignedEvent(user_id=self.id, role_id=role_id))
+        self.add_domain_event(
+            UserRoleAssignedEvent(
+                user_id=self.id,
+                role_id=role_id,
+                role_name=role_name,
+                tenant_id=tenant_id,
+                idp_user_id=self.idp_user_id,
+            )
+        )

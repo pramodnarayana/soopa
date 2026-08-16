@@ -26,6 +26,7 @@ class ProvisionTenantCommand:
     """
 
     name: str
+    creator_id: str
 
 
 class ProvisionTenantUseCase:
@@ -45,6 +46,7 @@ class ProvisionTenantUseCase:
             "provision_tenant.started",
             tenant_id=local_id,
             tenant_name=command.name,
+            creator_id=command.creator_id,
             base_slug=base_slug,
             idempotency_key=idempotency_key,
         )
@@ -69,6 +71,7 @@ class ProvisionTenantUseCase:
                     )
 
                     await self.uow.tenant_repo.save(tenant, idempotency_key)
+
                     await self.uow.commit()
 
                 logger.info(

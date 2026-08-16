@@ -1,9 +1,13 @@
 import json
 import os
+
+import structlog
+
+logger = structlog.get_logger(__name__)
 import typing
 from datetime import UTC, datetime
 
-from platform_orm.models.identity import ApiKey, ApiToken, Role, TenantUser
+from platform_orm.models.identity import ApiKey, ApiToken, Role, UserRole
 from platform_orm.models.identity import Tenant as DbTenant
 from platform_orm.models.webhooks import Webhook
 from sqlalchemy import delete, select, update
@@ -111,6 +115,10 @@ class TenantRepository(ITenantRepository):
             )
             self.session.add(db_tenant)
 
+        # 2. Save Subscriptions (Child Entities)
+        for sub in tenant.subscriptions:
+            await self.upsert_app_subscription(tenant.id, sub.app_id, sub.status)
+
         # 3. Process Outbox Events (Domain Events)
         self._flush_events(tenant, idempotency_key)
 
@@ -125,12 +133,21 @@ class TenantRepository(ITenantRepository):
                 else getattr(event, "id", f"{event_name}_{tenant.id}_{index}")
             )
 
+            payload_dict = json.loads(event.model_dump_json())
+            tenant_id = event.get_routing_tenant_id()
+            if tenant_id is None:
+                logger.error(
+                    "outbox_event_missing_tenant_id",
+                    event_name=event_name,
+                    event_payload=payload_dict,
+                )
+
             outbox_event = ControlPlaneOutbox(
                 id=outbox_id,
                 idempotency_key=final_idemp_key,
-                tenant_id=tenant.id,
+                tenant_id=tenant_id,
                 event_type=event_name,
-                payload=json.loads(event.model_dump_json()),
+                payload=payload_dict,
             )
             self.session.add(outbox_event)
 
@@ -152,7 +169,7 @@ class TenantRepository(ITenantRepository):
             )
 
         # Hard delete junction/metadata tables
-        await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))
+        await self.session.execute(delete(UserRole).where(UserRole.tenant_id == tenant_id))
         await self.session.execute(
             delete(ShardRegistry).where(ShardRegistry.tenant_id == tenant_id)
         )
@@ -197,9 +214,7 @@ class TenantRepository(ITenantRepository):
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
         from sqlalchemy.dialects.postgresql import insert
 
-        stmt = insert(ShardRegistry).values(
-            tenant_id=tenant_id, app_id=app_id, shard_id=shard_id
-        )
+        stmt = insert(ShardRegistry).values(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
         stmt = stmt.on_conflict_do_update(
             index_elements=["tenant_id", "app_id"], set_={"shard_id": shard_id}
         )
@@ -222,3 +237,6 @@ class TenantRepository(ITenantRepository):
         )
         result = await self.session.execute(stmt)
         return [TenantSubscription(app_id=app_id, status=status) for app_id, status in result.all()]
+
+
+logger = structlog.get_logger(__name__)

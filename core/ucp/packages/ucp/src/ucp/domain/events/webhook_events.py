@@ -8,11 +8,9 @@ class WebhookCreatedEvent(DomainEvent):
     Emitted when a new Webhook is created.
     """
 
-    def __init__(self, tenant_id: str, webhook_id: str):
-        super().__init__()
-        self.tenant_id = tenant_id
-        self.webhook_id = webhook_id
-        self.event_type = "webhook.created"
+    tenant_id: str
+    webhook_id: str
+    event_type: str = "webhook.created"
 
     @property
     def event_name(self) -> str:
@@ -31,11 +29,9 @@ class WebhookUpdatedEvent(DomainEvent):
     Emitted when a Webhook is updated.
     """
 
-    def __init__(self, tenant_id: str, webhook_id: str):
-        super().__init__()
-        self.tenant_id = tenant_id
-        self.webhook_id = webhook_id
-        self.event_type = "webhook.updated"
+    tenant_id: str
+    webhook_id: str
+    event_type: str = "webhook.updated"
 
     @property
     def event_name(self) -> str:
@@ -54,11 +50,9 @@ class WebhookDeletedEvent(DomainEvent):
     Emitted when a Webhook is deleted.
     """
 
-    def __init__(self, tenant_id: str, webhook_id: str):
-        super().__init__()
-        self.tenant_id = tenant_id
-        self.webhook_id = webhook_id
-        self.event_type = "webhook.deleted"
+    tenant_id: str
+    webhook_id: str
+    event_type: str = "webhook.deleted"
 
     @property
     def event_name(self) -> str:

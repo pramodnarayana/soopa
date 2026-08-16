@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEdiNetwork } from '../../../contexts/EdiNetworkContext';
-import { useEdiPlatformNetwork } from '../../../contexts/EdiPlatformNetworkContext';
+import { useUcpNetwork } from '../../../contexts/UcpNetworkContext';
 import { useToastMutation } from '../../../hooks/use-toast-mutation';
 import type {
   AS2Partnership,
@@ -45,7 +45,7 @@ import {
 } from './partnerSchemas';
 
 export function useAS2PartnersQuery() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartners(),
     queryFn: async (): Promise<Partner[]> => {
@@ -56,7 +56,7 @@ export function useAS2PartnersQuery() {
 }
 
 export function useAS2PartnershipsQuery() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useQuery({
     queryKey: partnersKeys.platformPartnerships(),
     queryFn: async (): Promise<AS2Partnership[]> => {
@@ -67,7 +67,7 @@ export function useAS2PartnershipsQuery() {
 }
 
 export function useCertificatesExportQuery(partnerId: string) {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useQuery({
     queryKey: partnersKeys.certificates(partnerId),
     queryFn: async (): Promise<CertificatesExport> => {
@@ -99,7 +99,7 @@ export function useTenantPartnersQuery() {
 // ─────────────────────────────────────────────
 
 export function useCreateAS2PartnerMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
 
   return useToastMutation(
     async (payload: CreatePartnerPayload) => {
@@ -115,7 +115,7 @@ export function useCreateAS2PartnerMutation() {
 }
 
 export function useUpdateAS2PartnerMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdatePartnerPayload }) => {
@@ -128,7 +128,7 @@ export function useUpdateAS2PartnerMutation() {
 }
 
 export function useDeleteAS2PartnerMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useToastMutation(
     async (id: string) => {
       await api.delete(`platform/trading-partners/as2/trading-partners/${id}`);
@@ -139,7 +139,7 @@ export function useDeleteAS2PartnerMutation() {
 }
 
 export function useDeleteCertificateSecretMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useMutation({
     mutationFn: async (vaultRef: string) => {
       await api.delete(
@@ -154,7 +154,7 @@ export function useDeleteCertificateSecretMutation() {
 // ─────────────────────────────────────────────
 
 export function useCreateAS2PartnershipMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
 
   return useToastMutation(
     async (payload: CreateAS2PartnershipPayload) => {
@@ -170,7 +170,7 @@ export function useCreateAS2PartnershipMutation() {
 }
 
 export function useUpdateAS2PartnershipMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
 
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: UpdateAS2PartnershipPayload }) => {
@@ -184,7 +184,7 @@ export function useUpdateAS2PartnershipMutation() {
 }
 
 export function useDeleteAS2PartnershipMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
 
   return useToastMutation(
     async (id: string) => {
@@ -242,7 +242,7 @@ export function useDeleteSftpPartner() {
 // ─────────────────────────────────────────────
 
 export function useRotateCertificatesMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useToastMutation(
     async ({ id, payload }: { id: string; payload: RotateCertPayload }) => {
       const res = await api.put(
@@ -257,7 +257,7 @@ export function useRotateCertificatesMutation() {
 }
 
 export function useGenerateCertificateMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useToastMutation(async (payload: GenerateCertRequest) => {
     const res = await api.post<GenerateCertResponse>(
       '/platform/trading-partners/as2/certificates/generate',
@@ -308,7 +308,7 @@ export function useTestExistingSftpConnectionMutation() {
 }
 
 export function useTestAs2PartnershipConnectionMutation() {
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
   return useMutation({
     mutationFn: async ({ id, custom_payload }: { id: string; custom_payload?: string }) => {
       const res = await api.post<{

@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/webhooks", tags=["Webhook
 def _webhook_response(webhook: Any, tenant_id: str) -> WebhookResponse:
     """Shared mapper from ORM Webhook record to WebhookResponse DTO."""
     return WebhookResponse(
-        webhook_id=webhook.id,
+        id=webhook.id,
         tenant_id=tenant_id,
         name=webhook.name,
         active=webhook.active,

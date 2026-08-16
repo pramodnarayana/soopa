@@ -40,6 +40,22 @@ class PostgresRoleRepository(IRoleRepository):
             capabilities=list(row.capabilities) if row.capabilities else [],
         )
 
+    async def get_global_role_by_name(self, name: str) -> DomainRole | None:
+        stmt = select(OrmRole).where(
+            OrmRole.name == name, OrmRole.tenant_id.is_(None), OrmRole.deleted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if not row:
+            return None
+        return DomainRole(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            name=row.name,
+            description=row.description,
+            capabilities=list(row.capabilities) if row.capabilities else [],
+        )
+
     async def get_user_capabilities(self, tenant_id: str | None, user_id: str) -> set[str]:
         """
         Queries the database for all roles assigned to the user within the given tenant,
@@ -102,6 +118,12 @@ class PostgresRoleRepository(IRoleRepository):
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id, role_id=role_id)
         bound_logger.info("role_repo.assign_user_role.started")
 
+        # Verify the role exists and is not soft-deleted
+        stmt = select(OrmRole.id).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        if not result.scalar_one_or_none():
+            raise ResourceNotFoundError(f"Role '{role_id}' not found or is inactive.")
+
         user_role_id = f"urol_{uuid.uuid4().hex[:16]}"
         user_role = UserRole(
             id=user_role_id,
@@ -140,17 +162,42 @@ class PostgresRoleRepository(IRoleRepository):
 
         bound_logger.info("role_repo.assign_user_role.completed")
 
+    async def remove_user_roles(self, tenant_id: str | None, user_id: str) -> None:
+        from sqlalchemy import delete
+
+        bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id)
+        bound_logger.info("role_repo.remove_user_roles.started")
+
+        tenant_filter = (
+            UserRole.tenant_id.is_(None) if tenant_id is None else UserRole.tenant_id == tenant_id
+        )
+        stmt = delete(UserRole).where(tenant_filter, UserRole.user_id == user_id)
+
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+        bound_logger.info("role_repo.remove_user_roles.completed")
+
+    async def has_any_tenant_memberships(self, user_id: str) -> bool:
+        """Check if a user has any remaining tenant memberships by querying UserRole."""
+        stmt = select(UserRole).where(UserRole.user_id == user_id, UserRole.tenant_id.is_not(None))
+        result = await self.session.execute(stmt)
+        return result.first() is not None
+
     def _flush_events(self, role: DomainRole, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(role.domain_events):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
             payload_dict = json.loads(event.model_dump_json())
-            tenant_id = (
-                getattr(event, "tenant_id", None)
-                or payload_dict.get("tenant_id", None)
-                or role.tenant_id
-            )
+            payload_dict = json.loads(event.model_dump_json())
+            tenant_id = event.get_routing_tenant_id()
+            if tenant_id is None and event_name != "role_created":
+                logger.error(
+                    "outbox_event_missing_tenant_id",
+                    event_name=event_name,
+                    event_payload=payload_dict,
+                )
 
             final_idemp_key = (
                 f"{idempotency_key}_{index}"

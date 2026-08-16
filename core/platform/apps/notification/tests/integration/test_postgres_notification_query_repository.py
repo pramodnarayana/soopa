@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from platform_orm.models.identity import Tenant, TenantUser, User
+from platform_orm.models.identity import Role, Tenant, User, UserRole
 from platform_orm.models.notifications import InAppNotification
 
 from notification.adapters.outbound.postgres_notification_query_repository import (
@@ -30,7 +30,19 @@ async def test_notification_query_and_mark_read(db_session_factory):
 
         await session.flush()
 
-        tenant_user = TenantUser(tenant_id=tenant_id, user_id=user_id, role="admin", active=True)
+        role = Role(
+            id=f"rol_{uuid.uuid4().hex[:12]}",
+            tenant_id=tenant_id,
+            name="TenantAdmin",
+            description="Admin role",
+            capabilities=["users:write"],
+        )
+        session.add(role)
+        await session.flush()
+
+        tenant_user = UserRole(
+            id=f"urol_{uuid.uuid4().hex}", tenant_id=tenant_id, user_id=user_id, role_id=role.id
+        )
         session.add(tenant_user)
 
         notification = InAppNotification(

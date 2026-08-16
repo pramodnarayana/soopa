@@ -37,10 +37,14 @@ class DeleteUserUseCase:
             user.remove_membership(tenant.idp_tenant_id or command.tenant_id)
 
             # 2. The repository translates the state to the DB and flushes events
-            await self._uow.user_repo.remove_tenant_membership(command.tenant_id, user)
+            await self._uow.role_repo.remove_user_roles(
+                tenant_id=command.tenant_id, user_id=user.id
+            )
+            # Re-save the user to flush domain events
+            await self._uow.user_repo.save(user)
 
             # 3. Check if user is fully orphaned
-            has_memberships = await self._uow.user_repo.has_any_tenant_memberships(user.id)
+            has_memberships = await self._uow.role_repo.has_any_tenant_memberships(user.id)
             if not has_memberships:
                 user.mark_deleted()
                 await self._uow.user_repo.delete(user)

@@ -38,9 +38,10 @@ class StandardRole(StrEnum):
     Standard out-of-the-box roles that should be seeded.
     """
 
-    PLATFORM_ADMIN = "Platform Admin"
-    TENANT_ADMIN = "Tenant Admin"
+    PLATFORM_ADMIN = "PlatformAdmin"
+    TENANT_ADMIN = "TenantAdmin"
     VIEWER = "Viewer"
+    DEVELOPER = "Developer"
 
 
 from ucp.domain.events.role_events import RoleCreatedEvent

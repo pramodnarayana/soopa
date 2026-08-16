@@ -134,7 +134,12 @@ async def provision(  # type: ignore
 ):
     use_case: ProvisionTenantUseCase = use_case_factory(uow__session=session)
     query_service: ITenantQueryService = query_service_factory(session=session)
-    command = ProvisionTenantCommand(name=dto.name)
+
+    # We enforce PLATFORM_ADMIN capability, so request.state.identity is guaranteed to be present
+    identity: IdentityContext = request.state.identity
+    creator_id = identity.subject
+
+    command = ProvisionTenantCommand(name=dto.name, creator_id=creator_id)
     tenant = await use_case.execute(command, idempotency_key)
 
     tenant_rm = await query_service.get_tenant_by_id(tenant.id)
