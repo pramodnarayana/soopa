@@ -23,7 +23,11 @@ class UserRepository(IUserRepository):
         stmt = (
             select(UserRole)
             .join(Role, Role.id == UserRole.role_id)
-            .where(UserRole.user_id == user_id, Role.deleted_at.is_(None))
+            .where(
+                UserRole.user_id == user_id,
+                UserRole.tenant_id.is_not(None),
+                Role.deleted_at.is_(None),
+            )
             .limit(1)
         )
         result = await self.session.execute(stmt)

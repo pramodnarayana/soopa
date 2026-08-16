@@ -47,7 +47,10 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
             },
             signal: abortController.signal,
             onopen: async (response) => {
-              if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+              if (
+                response.ok &&
+                response.headers.get('content-type')?.includes('text/event-stream')
+              ) {
                 consecutiveErrorCount = 0;
                 return;
               }
@@ -95,8 +98,7 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
               return undefined;
             },
             onclose: () => {
-              // Let it auto-reconnect if it closed gracefully
-              return;
+              throw new Error('SSE stream closed normally');
             },
           },
         );

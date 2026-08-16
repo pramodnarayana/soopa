@@ -94,6 +94,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
             message_id = msg["MessageId"]
             body_str = msg["Body"]
 
+            yielded = False
             event_data: Any = {}
             try:
                 raw_body = json.loads(body_str)
@@ -109,6 +110,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
 
                 event_message = UcpEventMessage.model_validate(event_data)
 
+                yielded = True
                 # Yield the message to the pure business logic
                 yield event_message
 
@@ -126,7 +128,8 @@ class SqsUcpEventListener(UcpEventListenerPort):
                 await sqs_client.delete_message(
                     QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
                 )
-                yield None
+                if not yielded:
+                    yield None
             except Exception as e:
                 # Log the error but DO NOT raise. If we raise, it crashes the entire
                 # polling loop in SqsEventDispatcherWorker, forcing it to sleep for 5 seconds.
@@ -143,6 +146,8 @@ class SqsUcpEventListener(UcpEventListenerPort):
                     error=str(e),
                     event_type=event_type,
                 )
+                if not yielded:
+                    yield None
 
         except ClientError:
             logger.exception("sqs_client_error")

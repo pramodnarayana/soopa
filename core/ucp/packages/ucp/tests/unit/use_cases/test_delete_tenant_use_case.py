@@ -67,6 +67,7 @@ async def test_delete_tenant_success(
     mock_tenant_repo: ITenantRepository,
     mock_user_repo: IUserRepository,
     mock_uow: UcpUnitOfWorkPort,
+    mock_org_provider: IOrganizationProvider,
 ) -> None:
     tenant = Tenant.create(
         id="ten_123",

@@ -193,7 +193,16 @@ class PostgresRoleRepository(IRoleRepository):
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
         """Check if a user has any remaining tenant memberships by querying UserRole."""
-        stmt = select(UserRole).where(UserRole.user_id == user_id, UserRole.tenant_id.is_not(None))
+        stmt = (
+            select(UserRole)
+            .join(OrmRole, OrmRole.id == UserRole.role_id)
+            .where(
+                UserRole.user_id == user_id,
+                UserRole.tenant_id.is_not(None),
+                OrmRole.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.first() is not None
 
