@@ -66,7 +66,7 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
             tenant_id=tenant_id,
             name="Test Role",
             description="A test role",
-            capabilities=["users:read"],
+            capabilities=["users:write"],
         )
         await uow.role_repo.save(role)
         await db_session.flush()
@@ -78,7 +78,7 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
         # 3. Verify
         # Check if the role capability is now attached to the user for that tenant
         capabilities = await uow.role_repo.get_user_capabilities(tenant_id, user_id)
-        assert "users:read" in capabilities
+        assert "users:write" in capabilities
 
 
 @pytest.mark.asyncio

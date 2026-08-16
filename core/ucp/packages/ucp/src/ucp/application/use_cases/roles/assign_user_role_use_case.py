@@ -26,6 +26,9 @@ class AssignUserRoleUseCase:
         )
         bound_logger.info("assign_user_role.started")
 
+        if not tenant_id:
+            raise ValueError("Role assignment requires a valid tenant ID.")
+
         async with self.uow:
             # Domain-Driven Design: Use Repository Ports to fetch aggregates, no ORM leakage.
             user = await self.uow.user_repo.find_by_id_and_tenant(request.user_id, tenant_id or "")

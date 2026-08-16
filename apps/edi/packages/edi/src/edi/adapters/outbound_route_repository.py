@@ -60,7 +60,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
                     AS2Partner.tenant_id.in_([tenant_id, PLATFORM_TENANT_ID]),
-                    AS2Partner.deleted_at.is_(None),
+                    AS2Partner.active.is_(True),
                 )
             )
             if not result.scalar_one_or_none():

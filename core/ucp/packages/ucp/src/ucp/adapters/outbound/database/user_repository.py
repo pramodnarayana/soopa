@@ -41,24 +41,28 @@ class UserRepository(IUserRepository):
                     Role.deleted_at.is_(None),
                 )
             )
+            .order_by(DbUser.id, Role.name)
         )
         result = await self.session.execute(stmt)
         rows = result.all()
 
-        users = []
+        users_by_id = {}
         for db_user, role in rows:
-            u = User(
-                id=db_user.id,
-                idp_user_id=db_user.idp_user_id,
-                email=db_user.email,
-                name=db_user.name or "",
-                status=db_user.status,
-                created_at=db_user.created_at.replace(tzinfo=UTC),
-                updated_at=db_user.updated_at.replace(tzinfo=UTC),
-            )
-            u.role = role  # type: ignore
-            users.append(u)
-        return users
+            if db_user.id not in users_by_id:
+                u = User(
+                    id=db_user.id,
+                    idp_user_id=db_user.idp_user_id,
+                    email=db_user.email,
+                    name=db_user.name or "",
+                    status=db_user.status,
+                    created_at=db_user.created_at.replace(tzinfo=UTC),
+                    updated_at=db_user.updated_at.replace(tzinfo=UTC),
+                )
+                # Enforce a canonical role (alphabetically first) when multiple exist
+                u.role = role  # type: ignore
+                users_by_id[db_user.id] = u
+
+        return list(users_by_id.values())
 
     async def find_by_email(self, email: str) -> User | None:
         stmt = select(DbUser).where(and_(DbUser.email == email, DbUser.deleted_at.is_(None)))
@@ -129,8 +133,10 @@ class UserRepository(IUserRepository):
                     Role.deleted_at.is_(None),
                 )
             )
+            .order_by(Role.name)
         )
         result = await self.session.execute(stmt)
+        # Enforce canonical role deterministically (alphabetically first)
         row = result.first()
 
         if not row:
@@ -142,7 +148,7 @@ class UserRepository(IUserRepository):
             idp_user_id=db_user.idp_user_id,
             email=db_user.email,
             name=db_user.name or "",
-            status=db_user.status,
+            status=cast(Literal["active", "inactive"], db_user.status),
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )

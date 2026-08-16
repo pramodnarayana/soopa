@@ -13,8 +13,6 @@ logger = structlog.get_logger(__name__)
 class StateConflictError(Exception):
     """Raised when a resource is not in the expected state for an operation."""
 
-    pass
-
 
 class IdentitySyncService:
     """
@@ -40,6 +38,7 @@ class IdentitySyncService:
         if self.uow_factory is None:
             raise ValueError("uow_factory is required to resolve tenant IDs")
 
+        assert self.uow_factory is not None
         async with self.uow_factory() as uow:
             tenant = await uow.tenant_repo.find_by_id(tenant_id)
             if not tenant or not tenant.idp_tenant_id:
@@ -89,6 +88,7 @@ class IdentitySyncService:
             )
 
             # Update the local database with the newly generated idp_user_id
+            assert self.uow_factory is not None
             async with self.uow_factory() as uow:
                 local_user = await uow.user_repo.find_by_id(user_id)
                 if local_user:

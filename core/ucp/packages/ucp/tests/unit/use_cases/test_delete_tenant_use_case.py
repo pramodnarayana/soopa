@@ -15,26 +15,26 @@ from ucp.ports.uow import UcpUnitOfWorkPort
 @pytest.fixture
 def mock_tenant_repo() -> ITenantRepository:
     """Strict mock that enforces the ITenantRepository port interface."""
-    return create_autospec(ITenantRepository, instance=True)  # type: ignore
+    return create_autospec(ITenantRepository, instance=True)
 
 
 @pytest.fixture
 def mock_user_repo() -> IUserRepository:
     """Strict mock that enforces the IUserRepository port interface."""
-    return create_autospec(IUserRepository, instance=True)  # type: ignore
+    return create_autospec(IUserRepository, instance=True)
 
 
 @pytest.fixture
 def mock_org_provider() -> IOrganizationProvider:
     """Strict mock that enforces the IOrganizationProvider port interface."""
-    return create_autospec(IOrganizationProvider, instance=True)  # type: ignore
+    return create_autospec(IOrganizationProvider, instance=True)
 
 
 @pytest.fixture
 def mock_uow(
     mock_tenant_repo: ITenantRepository, mock_user_repo: IUserRepository
 ) -> UcpUnitOfWorkPort:
-    uow = create_autospec(UcpUnitOfWorkPort, instance=True)  # type: ignore
+    uow = create_autospec(UcpUnitOfWorkPort, instance=True)
     uow.tenant_repo = mock_tenant_repo
     uow.user_repo = mock_user_repo
     uow.__aenter__.return_value = uow
@@ -55,7 +55,7 @@ async def test_delete_tenant_not_found(
     delete_use_case: DeleteTenantUseCase,
     mock_tenant_repo: ITenantRepository,
 ) -> None:
-    mock_tenant_repo.find_by_id = AsyncMock(return_value=None)  # type: ignore
+    mock_tenant_repo.find_by_id = AsyncMock(return_value=None)
 
     with pytest.raises(ResourceNotFoundError):
         await delete_use_case.execute("ten_invalid")
@@ -75,16 +75,16 @@ async def test_delete_tenant_success(
         idp_tenant_id="zitadel-org-123",
         subscriptions=[],
     )
-    mock_tenant_repo.find_by_id = AsyncMock(return_value=tenant)  # type: ignore
+    mock_tenant_repo.find_by_id = AsyncMock(return_value=tenant)
 
     mock_user = User.create(
         id="usr_1", idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
     )
-    mock_user_repo.find_users_by_tenant = AsyncMock(return_value=[mock_user])  # type: ignore
-    mock_user_repo.has_any_tenant_memberships = AsyncMock(return_value=False)  # type: ignore
-    mock_tenant_repo.delete = AsyncMock()  # type: ignore
-    mock_user_repo.delete = AsyncMock()  # type: ignore
-    mock_org_provider.delete_organization = AsyncMock()  # type: ignore
+    mock_user_repo.find_users_by_tenant = AsyncMock(return_value=[mock_user])
+    mock_user_repo.has_any_tenant_memberships = AsyncMock(return_value=False)
+    mock_tenant_repo.delete = AsyncMock()
+    mock_user_repo.delete = AsyncMock()
+    mock_org_provider.delete_organization = AsyncMock()
 
     await delete_use_case.execute("ten_123", "idemp-key")
 

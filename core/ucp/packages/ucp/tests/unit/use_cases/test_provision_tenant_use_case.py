@@ -16,7 +16,7 @@ from ucp.ports.uow import UcpUnitOfWorkPort
 @pytest.fixture
 def mock_tenant_repo() -> ITenantRepository:
     """Strict mock that enforces the ITenantRepository port interface."""
-    return create_autospec(ITenantRepository, instance=True)  # type: ignore
+    return create_autospec(ITenantRepository, instance=True)
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def mock_role_repo() -> IRoleRepository:
     mock.get_global_role_by_name = AsyncMock(return_value=tenant_admin_role)
     mock.assign_user_role = AsyncMock(return_value=None)
 
-    return mock  # type: ignore
+    return mock
 
 
 @pytest.fixture
@@ -45,20 +45,20 @@ def mock_org_provider() -> IOrganizationProvider:
     """Strict mock that enforces the IOrganizationProvider port interface."""
     mock = create_autospec(IOrganizationProvider, instance=True)
     mock.create_organization = AsyncMock(return_value=("zitadel-org-123", "org-name"))
-    return mock  # type: ignore
+    return mock
 
 
 @pytest.fixture
 def mock_user_identity_provider() -> IUserIdentityProvider:
     """Strict mock that enforces the IUserIdentityProvider port interface."""
-    return create_autospec(IUserIdentityProvider, instance=True)  # type: ignore
+    return create_autospec(IUserIdentityProvider, instance=True)
 
 
 @pytest.fixture
 def mock_uow(
     mock_tenant_repo: ITenantRepository, mock_role_repo: IRoleRepository
 ) -> UcpUnitOfWorkPort:
-    uow = create_autospec(UcpUnitOfWorkPort, instance=True)  # type: ignore
+    uow = create_autospec(UcpUnitOfWorkPort, instance=True)
     uow.tenant_repo = mock_tenant_repo
     uow.role_repo = mock_role_repo
 
@@ -111,10 +111,10 @@ async def test_provision_tenant_success(
     tenant = await provision_use_case.execute(command, idempotency_key="idemp-1")
 
     # Assert - correct calls to the ports
-    mock_tenant_repo.save.assert_called_once()  # type: ignore
+    mock_tenant_repo.save.assert_called_once()
 
     # Assert — the tenant passed to save is correct
-    saved_tenant = mock_tenant_repo.save.call_args[0][0]  # type: ignore
+    saved_tenant = mock_tenant_repo.save.call_args[0][0]
     assert saved_tenant.name == "Test Tenant"
     assert saved_tenant.idp_tenant_id is None
     assert saved_tenant.id.startswith("ten_")

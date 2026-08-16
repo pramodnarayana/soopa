@@ -48,14 +48,16 @@ class OutboxRelayWorker:
                             async with asyncio.timeout(EVENT_PROCESSING_TIMEOUT_SECONDS):
                                 await self.process_event(event)
                             await self.outbox_repo.mark_completed(event.id, self.worker_id)
-                        except asyncio.TimeoutError:
-                            logger.error(
+                        except TimeoutError:
+                            logger.exception(
                                 "outbox_event_processing_timeout",
                                 event_id=event.id,
                                 timeout_seconds=EVENT_PROCESSING_TIMEOUT_SECONDS,
                             )
                             await self.outbox_repo.mark_failed(
-                                event.id, self.worker_id, f"Timeout after {EVENT_PROCESSING_TIMEOUT_SECONDS}s"
+                                event.id,
+                                self.worker_id,
+                                f"Timeout after {EVENT_PROCESSING_TIMEOUT_SECONDS}s",
                             )
                         except Exception as e:
                             logger.exception("outbox_event_processing_failed", event_id=event.id)
@@ -67,7 +69,7 @@ class OutboxRelayWorker:
                 iterations += 1
 
         if hasattr(self.publisher, "__aenter__"):
-            async with self.publisher:  # type: ignore
+            async with self.publisher:
                 await _run()
         else:
             await _run()

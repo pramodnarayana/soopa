@@ -24,7 +24,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
         endpoint_url: str | None = None,
     ):
         if not queue_url:
-            logger.exception(
+            logger.error(
                 "sqs_listener_missing_queue_url",
                 message="SQS Listener started without a Queue URL! Please set SQS_UCP_EVENTS_QUEUE_URL in your .env",
             )

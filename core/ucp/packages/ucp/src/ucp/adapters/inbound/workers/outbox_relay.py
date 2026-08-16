@@ -114,7 +114,7 @@ class ControlPlaneOutboxRelay:
 
         try:
             if hasattr(self.publisher, "__aenter__"):
-                async with self.publisher:  # type: ignore
+                async with self.publisher:
                     await _relay()
             else:
                 await _relay()
