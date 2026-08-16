@@ -286,10 +286,7 @@ export function EdiToolPage() {
       setValidationErrors(res.validationErrors);
       setOutputResult(res.outputResult);
     },
-    onError: (
-      error: Error | import('axios').AxiosError,
-      variables: { action: string; payload: string },
-    ) => {
+    onError: (error: Error, variables: { action: string; payload: string }) => {
       const currentAction = inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI';
       if (variables.payload !== debouncedPayload || variables.action !== currentAction) {
         return; // Ignore stale error responses
@@ -298,9 +295,7 @@ export function EdiToolPage() {
       setValidationErrors([]);
       setIsValid(false);
 
-      let errorDetail =
-        ('response' in error ? (error.response?.data as { detail?: string })?.detail : undefined) ||
-        error.message;
+      let errorDetail = error.message;
       if (typeof errorDetail !== 'string') {
         errorDetail = JSON.stringify(errorDetail);
       }

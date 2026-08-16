@@ -100,11 +100,7 @@ class InboundRouteService:
             if sftp_ids
             else {}
         )
-        webhook_names = (
-            await self.uow.webhooks.get_webhooks_by_ids(tenant_id, list(webhook_ids))
-            if webhook_ids
-            else {}
-        )
+        webhook_names: dict[str, str] = {}
 
         results: list[InboundRouteListEntity] = []
 
@@ -116,7 +112,9 @@ class InboundRouteService:
                     r.sftp_partner_id, str(r.sftp_partner_id)
                 )
             if r.webhook_id:
-                return ConnectionType.WEBHOOK, webhook_names.get(r.webhook_id, str(r.webhook_id))
+                # Use a persisted route display name (r.name) as fallback, then ID
+                display_name = webhook_names.get(r.webhook_id) or r.name or str(r.webhook_id)
+                return ConnectionType.WEBHOOK, display_name
             return "UNKNOWN", "Unknown"
 
         for r in inbound:

@@ -15,7 +15,6 @@ from edi.adapters.platform_settings_repository import SqlAlchemyPlatformSettings
 from edi.adapters.sftp_repository import SqlAlchemySFTPPartnerRepository
 from edi.adapters.tenant_repository import SqlAlchemyTenantRepository
 from edi.adapters.transaction_repository import SqlAlchemyTransactionRepository
-from edi.adapters.webhook_repository import SqlAlchemyWebhookRepository
 from edi.ports.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.as2_partnership_repository import AS2PartnershipRepositoryPort
 from edi.ports.edi_header_repository import EdiHeaderRepositoryPort
@@ -29,7 +28,6 @@ from edi.ports.platform_settings_repository import PlatformSettingsRepositoryPor
 from edi.ports.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.tenant_repository import TenantRepositoryPort
 from edi.ports.transaction_repository import TransactionRepositoryPort
-from edi.ports.webhook_repository import WebhookRepositoryPort
 
 
 class SqlAlchemyControlPlaneUnitOfWork:
@@ -45,7 +43,6 @@ class SqlAlchemyControlPlaneUnitOfWork:
     control_plane_outbox: ControlPlaneOutboxRepositoryPort
     sftp_partners: SFTPPartnerRepositoryPort
     tenants: TenantRepositoryPort
-    webhooks: WebhookRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
 
@@ -64,7 +61,6 @@ class SqlAlchemyControlPlaneUnitOfWork:
         self.control_plane_outbox = SqlAlchemyControlPlaneOutboxRepository(gs)
         self.sftp_partners = SqlAlchemySFTPPartnerRepository(gs)
         self.tenants = SqlAlchemyTenantRepository(gs)
-        self.webhooks = SqlAlchemyWebhookRepository(gs)
         self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
         self.platform_settings = SqlAlchemyPlatformSettingsRepository(gs)
 

@@ -8,13 +8,40 @@ from notification.domain.models import (
     NotificationEvent,
     NotificationOutboxEvent,
     Template,
+    UserNotificationPreference,
 )
 from notification.ports.interfaces import (
     NotificationRouteRepositoryPort,
     TemplateRendererPort,
     TemplateRepositoryPort,
+    UserNotificationPreferenceRepositoryPort,
 )
 from notification.ports.outbox_repository import NotificationOutboxRepositoryPort
+
+
+class FakeUserPrefRepo(UserNotificationPreferenceRepositoryPort):
+    def __init__(self):
+        self.prefs = {}
+
+    async def get_preference(
+        self, tenant_id: str, user_id: str, event_type: str, channel: str
+    ) -> UserNotificationPreference | None:
+        return self.prefs.get((tenant_id, user_id, event_type, channel))
+
+    async def get_user_preferences(
+        self, tenant_id: str, user_id: str
+    ) -> list[UserNotificationPreference]:
+        return [p for p in self.prefs.values() if p.tenant_id == tenant_id and p.user_id == user_id]
+
+    async def save_preference(self, preference: UserNotificationPreference) -> None:
+        self.prefs[
+            (
+                preference.tenant_id,
+                preference.user_id,
+                preference.event_type,
+                preference.channel.value,
+            )
+        ] = preference
 
 
 class FakeTemplateRepo(TemplateRepositoryPort):
@@ -58,8 +85,9 @@ async def test_dispatch_success():
     renderer = FakeTemplateRenderer()
     outbox = FakeOutboxRepo()
     routes = FakeRouteRepo()
+    user_prefs = FakeUserPrefRepo()
 
-    uc = DispatchNotificationUseCase(template_repo, renderer, outbox, routes)
+    uc = DispatchNotificationUseCase(template_repo, renderer, outbox, routes, user_prefs)
 
     tenant_id = "t1"
     event_type = "invoice.created"
@@ -103,7 +131,11 @@ async def test_dispatch_success():
 @pytest.mark.asyncio
 async def test_dispatch_no_routes():
     uc = DispatchNotificationUseCase(
-        FakeTemplateRepo(), FakeTemplateRenderer(), FakeOutboxRepo(), FakeRouteRepo()
+        FakeTemplateRepo(),
+        FakeTemplateRenderer(),
+        FakeOutboxRepo(),
+        FakeRouteRepo(),
+        FakeUserPrefRepo(),
     )
 
     event = NotificationEvent(tenant_id="t1", event_type="unknown", data={})

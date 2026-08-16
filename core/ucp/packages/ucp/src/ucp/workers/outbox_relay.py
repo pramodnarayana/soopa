@@ -150,6 +150,12 @@ class OutboxRelayWorker:
                 action=event.payload["action"],
             )
 
+        elif event.event_type == "UserMembershipRemoved":
+            await self.user_provider.remove_tenant_role(
+                user_id=event.payload["idp_user_id"],
+                org_id=event.payload["org_id"],
+            )
+
         elif event.event_type == "UserDeleted":
             await self.user_provider.delete_user(event.payload["idp_user_id"])
 

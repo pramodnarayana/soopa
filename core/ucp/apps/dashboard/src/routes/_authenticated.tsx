@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { useAuth } from 'react-oidc-context';
 import { apiClient } from '@/lib/api-client';
+import { AuthorizationProvider } from '../contexts/AuthorizationContext';
 
 export const Route = createFileRoute('/_authenticated')({
   component: AuthenticatedLayout,
@@ -64,8 +65,8 @@ function AuthenticatedLayout() {
   }
 
   return (
-    <>
+    <AuthorizationProvider>
       <Outlet />
-    </>
+    </AuthorizationProvider>
   );
 }

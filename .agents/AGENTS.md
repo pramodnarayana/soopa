@@ -44,3 +44,11 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Structured JSON Logging**: ALWAYS use the injected `ILogger` port or `structlog.get_logger()` from the platform observability package.
 - **Context Injection (No String Interpolation)**: NEVER use f-strings to inject variables into log messages. ALWAYS use structured context binding (e.g., `logger.info("event_processed", tenant_id=tenant_id, event_id=event.id)` or `bound_logger = logger.bind(tenant_id=tenant_id)`).
 - **Exceptions**: Use `logger.exception("operation_failed", reason=...)` inside except blocks to automatically capture the stack trace into the structured log payload.
+- **Comprehensive Coverage**: We should always put enough logs for observability. Log major state transitions (e.g., started, completed), skipped actions, and dropped events so that every operational flow is fully traceable.
+
+# Architectural Consistency (No Dual-Architectures)
+
+- **Strict Consistency Enforcement**: REJECT code that introduces or perpetuates dual-architectures (implementing the same pattern in two different ways across the codebase). Explicitly flag and reject:
+    - **Frontend**: Mixing UI component libraries (e.g., Radix UI vs Base UI), state management paradigms, or API clients (Axios vs native fetch).
+    - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.
+    - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.

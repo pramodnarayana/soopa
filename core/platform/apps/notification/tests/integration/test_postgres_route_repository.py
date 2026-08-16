@@ -18,6 +18,7 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
         tenant = Tenant(
             id=tenant_id,
             name="Test Tenant",
+            slug=tenant_id,
             status="ACTIVE",
         )
         session.add(tenant)

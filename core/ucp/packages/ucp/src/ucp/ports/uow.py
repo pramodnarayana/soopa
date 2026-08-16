@@ -2,9 +2,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Self
 
 from ucp.ports.api_token_repository import ApiTokenRepositoryPort
+from ucp.ports.idempotency_repository import IdempotencyRepositoryPort
 from ucp.ports.outbound.app_repository import IAppRepository
+from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.webhook_repository import WebhookRepositoryPort
 
 
 class UcpUnitOfWorkPort(ABC):
@@ -17,6 +20,9 @@ class UcpUnitOfWorkPort(ABC):
     user_repo: IUserRepository
     api_token_repo: ApiTokenRepositoryPort
     app_repo: IAppRepository
+    role_repo: IRoleRepository
+    webhook_repo: WebhookRepositoryPort
+    idempotency_repo: IdempotencyRepositoryPort
 
     @abstractmethod
     async def __aenter__(self) -> Self:
@@ -33,13 +39,3 @@ class UcpUnitOfWorkPort(ABC):
     @abstractmethod
     async def rollback(self) -> None:
         pass
-
-    @abstractmethod
-    def register_event(
-        self,
-        event_type: str,
-        payload: dict[str, Any],
-        idempotency_key: str | None = None,
-        tenant_id: str | None = None,
-    ) -> None:
-        """Register a domain event to be saved in the transactional outbox upon commit."""

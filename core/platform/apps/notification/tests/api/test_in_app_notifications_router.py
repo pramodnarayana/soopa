@@ -20,6 +20,7 @@ async def test_in_app_notifications_router_integration(db_session_factory):
         tenant = Tenant(
             id=tenant_id,
             name="Test Tenant",
+            slug=tenant_id,
             status="ACTIVE",
         )
         session.add(tenant)
@@ -69,8 +70,8 @@ async def test_in_app_notifications_router_integration(db_session_factory):
     app = FastAPI()
 
     class MockIdentity:
-        def __init__(self, user_id, authorized_tenants):
-            self.user_id = user_id
+        def __init__(self, subject, authorized_tenants):
+            self.subject = subject
             self.authorized_tenants = authorized_tenants
 
     @app.middleware("http")
@@ -83,7 +84,7 @@ async def test_in_app_notifications_router_integration(db_session_factory):
         tenant_context = request.headers.get("x-mock-tenant", tenant_id)
         user_context = request.headers.get("x-mock-user", user_id)
         request.state.identity = MockIdentity(
-            user_id=user_context, authorized_tenants={tenant_context}
+            subject=user_context, authorized_tenants={tenant_context}
         )
         return await call_next(request)
 

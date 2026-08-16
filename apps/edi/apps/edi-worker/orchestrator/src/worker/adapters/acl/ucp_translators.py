@@ -1,47 +1,6 @@
-from enum import StrEnum
 from typing import Any
 
 from worker.adapters.acl.base import EventTranslator
-
-
-# Legacy UCP events used by the worker for full sync
-class LegacyUcpEventType(StrEnum):
-    PROVISION_ALL_TENANTS = "tenant.provision_all"
-    PROVISION_TENANT = "tenant.provision"
-
-
-class TenantProvisionedTranslator(EventTranslator):
-    """
-    Translates a UCP 'TENANT_PROVISIONED' event to an EDI 'provision_tenant' event.
-    """
-
-    def translate(self, external_payload: dict[str, Any]) -> dict[str, Any]:
-        # Normalize to dict if needed
-        if not isinstance(external_payload, dict):
-            raise TypeError("Malformed provisioning event: payload must be a mapping")
-
-        # Handle both flat payload and nested 'payload' structure from UCP
-        nested_payload = external_payload.get("payload")
-        if nested_payload is not None and not isinstance(nested_payload, dict):
-            nested_payload = {}
-
-        tenant_id = (
-            (nested_payload.get("tenantId") if nested_payload else None)
-            or (nested_payload.get("id") if nested_payload else None)
-            or external_payload.get("tenantId")
-            or external_payload.get("id")
-        )
-
-        if not tenant_id:
-            raise ValueError("Malformed provisioning event: tenant identifier not found")
-
-        # Re-map to match Orchestrator's internal schema requirements
-        # Re-map to match Orchestrator's internal schema requirements (flat ProvisioningEvent)
-        return {
-            "tenant_id": tenant_id,
-            "event_type": LegacyUcpEventType.PROVISION_TENANT.value,
-            "resource_id": tenant_id,
-        }
 
 
 class WebhookEventTranslator(EventTranslator):
@@ -68,7 +27,9 @@ class WebhookEventTranslator(EventTranslator):
         )
 
         resource_id = (
-            (nested_payload.get("resource_id") if nested_payload else None)
+            (nested_payload.get("webhook_id") if nested_payload else None)
+            or (nested_payload.get("resource_id") if nested_payload else None)
+            or external_payload.get("webhook_id")
             or external_payload.get("resource_id")
             or external_payload.get("id")
         )

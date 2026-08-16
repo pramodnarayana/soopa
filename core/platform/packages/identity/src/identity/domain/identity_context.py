@@ -95,6 +95,7 @@ class IdentityContext(BaseModel):
     tenant_mapping: dict[str, str] = Field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
+    capabilities: set[str] = Field(default_factory=set)
     claims: dict[str, Any]
 
     @property
@@ -166,5 +167,6 @@ def identity_context_from_claims(
         tenant_mapping=tenant_mapping or {},
         roles=tuple(claims.roles),
         permissions=tuple(claims.permissions),
+        capabilities=set(),
         claims=claims.model_dump(mode="json"),
     )

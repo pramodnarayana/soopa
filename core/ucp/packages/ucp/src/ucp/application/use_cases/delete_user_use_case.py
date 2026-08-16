@@ -19,28 +19,30 @@ class DeleteUserUseCase:
 
     async def execute(self, command: DeleteUserCommand) -> None:
         async with self._uow:
-            tenant_users = await self._uow.user_repo.find_users_by_tenant(command.tenant_id)
-            user = next((u for u in tenant_users if u.id == command.user_id), None)
+            user = await self._uow.user_repo.find_by_id_and_tenant(
+                command.user_id, command.tenant_id
+            )
 
             if not user or not user.idp_user_id:
                 raise ResourceNotFoundError(
                     f"User {command.user_id} not found or missing IDP mapping in tenant {command.tenant_id}"
                 )
 
-            # 1. Remove tenant membership first
-            await self._uow.user_repo.remove_tenant_membership(command.tenant_id, command.user_id)
+            # Resolve tenant to get idp_tenant_id for the event
+            tenant = await self._uow.tenant_repo.find_by_id(command.tenant_id)
+            if not tenant:
+                raise ResourceNotFoundError(f"Tenant {command.tenant_id} not found")
 
-            # 2. Check if user has any remaining memberships
-            has_memberships = await self._uow.user_repo.has_any_tenant_memberships(command.user_id)
+            # 1. The aggregate handles its own invariant checks and event emissions
+            user.remove_membership(tenant.idp_tenant_id or command.tenant_id)
 
-            # 3. Only delete user locally and register outbox event if orphaned
+            # 2. The repository translates the state to the DB and flushes events
+            await self._uow.user_repo.remove_tenant_membership(command.tenant_id, user)
+
+            # 3. Check if user is fully orphaned
+            has_memberships = await self._uow.user_repo.has_any_tenant_memberships(user.id)
             if not has_memberships:
-                await self._uow.user_repo.delete_orphaned_users([command.user_id])
-
-                self._uow.register_event(
-                    event_type="UserDeleted",
-                    payload={"idp_user_id": user.idp_user_id},
-                    tenant_id=command.tenant_id,
-                )
+                user.mark_deleted()
+                await self._uow.user_repo.delete(user)
 
             await self._uow.commit()

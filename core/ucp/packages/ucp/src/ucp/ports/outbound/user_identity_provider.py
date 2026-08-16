@@ -20,6 +20,10 @@ class IUserIdentityProvider(Protocol):
         """Updates a user's role within a specific tenant (org)."""
         ...
 
+    async def remove_tenant_role(self, user_id: str, org_id: str) -> None:
+        """Removes all roles for a user within a specific tenant (org)."""
+        ...
+
     async def update_user_profile(
         self,
         user_id: str,

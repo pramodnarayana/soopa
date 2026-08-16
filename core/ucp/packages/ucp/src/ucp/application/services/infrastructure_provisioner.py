@@ -1,11 +1,11 @@
-from typing import Any
-
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
+
+from ucp.ports.ucp_event_listener import UcpEventMessage
 
 logger = structlog.get_logger(__name__)
 
@@ -19,17 +19,14 @@ class InfrastructureProvisioner:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self.session_factory = session_factory
 
-    async def handle_app_subscribed(self, event_data: dict[str, Any]) -> None:
+    async def handle_app_subscribed(self, event: UcpEventMessage) -> None:
         """
         Handles the 'app.subscribed' event (2-hop provisioning).
         """
-        tenant_id = event_data.get("tenantId")
-        event_id = event_data.get("eventId")
+        tenant_id = event.tenant_id
+        event_id = event.id
         if not tenant_id or not event_id:
-            logger.error(
-                "Cannot provision infrastructure: missing tenantId/eventId in event: {event_data}",
-                event_data=event_data,
-            )
+            logger.error("Cannot provision infrastructure: missing tenant_id/event_id in event")
             return
 
         try:
@@ -96,17 +93,14 @@ class InfrastructureProvisioner:
                 "Failed to process app.subscribed for event {event_id}", event_id=event_id
             )
 
-    async def handle_app_unsubscribed(self, event_data: dict[str, Any]) -> None:
+    async def handle_app_unsubscribed(self, event: UcpEventMessage) -> None:
         """
         Handles the 'app.unsubscribed' event by setting the subscription status to 'inactive'.
         """
-        tenant_id = event_data.get("tenantId")
-        event_id = event_data.get("eventId")
+        tenant_id = event.tenant_id
+        event_id = event.id
         if not tenant_id or not event_id:
-            logger.error(
-                "Cannot process unsubscription: missing tenantId/eventId in event: {event_data}",
-                event_data=event_data,
-            )
+            logger.error("Cannot process unsubscription: missing tenant_id/event_id in event")
             return
 
         try:

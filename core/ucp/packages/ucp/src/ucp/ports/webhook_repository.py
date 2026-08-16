@@ -1,0 +1,16 @@
+from collections.abc import Sequence
+from typing import Protocol
+
+from ucp.domain.models.webhook import WebhookDomainModel
+
+
+class WebhookRepositoryPort(Protocol):
+    async def list_webhooks(self, tenant_id: str) -> Sequence[WebhookDomainModel]: ...
+    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]: ...
+    async def find_by_id(self, tenant_id: str, webhook_id: str) -> WebhookDomainModel | None: ...
+    async def save(
+        self, webhook: WebhookDomainModel, idempotency_key: str | None = None
+    ) -> None: ...
+    async def delete_webhook(
+        self, webhook: WebhookDomainModel, deleted_by: str, idempotency_key: str | None = None
+    ) -> None: ...

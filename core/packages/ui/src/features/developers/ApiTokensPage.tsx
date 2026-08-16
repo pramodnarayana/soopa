@@ -393,7 +393,7 @@ function TokenRowActions({ config, token }: { config: ApiTokenHookConfig; token:
           console.error('Failed to toggle token status:', error);
           toast.error('Failed to toggle token status. Please try again.');
         },
-      }
+      },
     );
   };
 

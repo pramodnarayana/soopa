@@ -4,7 +4,6 @@ import structlog
 
 from worker.adapters.acl.base import EventTranslator
 from worker.adapters.acl.ucp_translators import (
-    TenantProvisionedTranslator,
     WebhookEventTranslator,
 )
 
@@ -22,7 +21,6 @@ class UcpEventNames:
 
 # Registry mapping external event names to their concrete translator strategies
 _TRANSLATOR_REGISTRY: dict[str, EventTranslator] = {
-    UcpEventNames.TENANT_PROVISIONED: TenantProvisionedTranslator(),
     UcpEventNames.WEBHOOK_CREATED: WebhookEventTranslator(UcpEventNames.WEBHOOK_CREATED),
     UcpEventNames.WEBHOOK_UPDATED: WebhookEventTranslator(UcpEventNames.WEBHOOK_UPDATED),
     UcpEventNames.WEBHOOK_DELETED: WebhookEventTranslator(UcpEventNames.WEBHOOK_DELETED),

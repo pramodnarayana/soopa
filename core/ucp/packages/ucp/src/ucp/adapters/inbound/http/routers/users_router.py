@@ -11,13 +11,14 @@ from ucp.adapters.inbound.http.dtos.user_dtos import (
     UpdateUserRequest,
 )
 from ucp.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
+from ucp.api.dependencies.authorization import RequireCapability
+from ucp.application.use_cases.create_user_use_case import (
+    CreateUserCommand,
+    CreateUserUseCase,
+)
 from ucp.application.use_cases.delete_user_use_case import (
     DeleteUserCommand,
     DeleteUserUseCase,
-)
-from ucp.application.use_cases.invite_user_use_case import (
-    InviteUserCommand,
-    InviteUserUseCase,
 )
 from ucp.application.use_cases.toggle_user_status_use_case import (
     ToggleUserStatusCommand,
@@ -30,13 +31,14 @@ from ucp.application.use_cases.update_user_use_case import (
 from ucp.bootstrap.container import Container
 from ucp.core.container import get_db_session
 from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.models.authorization import Capability
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_repository import IUserRepository
 
 router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["Users"])
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(RequireCapability(Capability.USERS_READ))])
 @inject
 async def get_users(  # type: ignore
     request: Request,
@@ -77,7 +79,7 @@ async def get_users(  # type: ignore
     return {"result": result}
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
 @inject
 async def create_user(  # type: ignore
     request: Request,
@@ -85,11 +87,11 @@ async def create_user(  # type: ignore
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.invite_user_use_case.provider]),
+    use_case_factory=Depends(Provide[Container.create_user_use_case.provider]),
 ):
-    use_case: InviteUserUseCase = use_case_factory(uow__session=session)
+    use_case: CreateUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
-    command = InviteUserCommand(
+    command = CreateUserCommand(
         tenant_id=canonical_tenant_id,
         email=dto.email,
         first_name=dto.first_name,
@@ -106,7 +108,7 @@ async def create_user(  # type: ignore
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.patch("/{user_id}")
+@router.patch("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
 @inject
 async def update_user(  # type: ignore
     request: Request,
@@ -136,7 +138,9 @@ async def update_user(  # type: ignore
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.patch("/{user_id}/status")
+@router.patch(
+    "/{user_id}/status", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))]
+)
 @inject
 async def toggle_status(  # type: ignore
     request: Request,
@@ -164,7 +168,7 @@ async def toggle_status(  # type: ignore
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
 @inject
 async def delete_user(  # type: ignore
     request: Request,

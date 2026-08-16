@@ -12,8 +12,12 @@ class IUserRepository(Protocol):
         """Finds a user by their email address"""
         ...
 
-    async def delete_orphaned_users(self, user_ids: list[str]) -> None:
-        """Deletes users if they are not associated with any active tenants"""
+    async def find_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
+        """Finds a user by ID within a specific tenant context."""
+        ...
+
+    async def delete(self, user: User) -> None:
+        """Delete a user."""
         ...
 
     async def save(self, user: User) -> None:
@@ -24,8 +28,8 @@ class IUserRepository(Protocol):
         """Upserts a tenant-user relationship and role."""
         ...
 
-    async def remove_tenant_membership(self, tenant_id: str, user_id: str) -> None:
-        """Removes a user from a tenant."""
+    async def remove_tenant_membership(self, tenant_id: str, user: User) -> None:
+        """Removes a user from a tenant and flushes events."""
         ...
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:

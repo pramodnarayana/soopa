@@ -62,12 +62,6 @@ async def test_provision_tenant_success(
     tenant = await provision_use_case.execute(command, idempotency_key="idemp-1")
 
     # Assert - correct calls to the ports
-    mock_uow.register_event.assert_called_once_with(
-        event_type="TenantProvisioned",
-        payload={"name": "Test Tenant"},
-        idempotency_key="idemp-1",
-        tenant_id=tenant.id,
-    )
     mock_tenant_repo.save.assert_called_once()  # type: ignore
 
     # Assert — the tenant passed to save is correct

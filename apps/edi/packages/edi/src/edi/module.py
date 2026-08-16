@@ -40,7 +40,6 @@ from edi.routers import (
 )
 from edi.routers.tenant import dashboard
 from edi.routers.trading_partners import as2_receive, platform
-from edi.routers.webhooks import webhook
 
 logger = structlog.get_logger(__name__)
 
@@ -124,7 +123,6 @@ def create_edi_app() -> FastAPI:
     app.include_router(transactions.router)
     app.include_router(explorer.router)
     app.include_router(dashboard.router)
-    app.include_router(webhook.router)
 
     @app.get("/api/me", tags=["Identity"])
     async def get_me(

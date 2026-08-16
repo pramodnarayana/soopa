@@ -37,11 +37,17 @@ from notification.adapters.outbound.postgres_route_repository import PostgresRou
 from notification.adapters.outbound.postgres_template_repository import (
     PostgresTemplateRepository,
 )
+from notification.adapters.outbound.postgres_user_preference_repository import (
+    PostgresUserNotificationPreferenceRepository,
+)
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from notification.application.consumer import NotificationConsumerWorker
 from notification.application.dispatch_use_case import DispatchNotificationUseCase
 from notification.application.outbox_sweeper import NotificationOutboxSweeper
 from notification.application.stream_manager import NotificationStreamManager
+from notification.application.update_user_preference_use_case import (
+    UpdateUserPreferenceUseCase,
+)
 from notification.config import NotificationEngineSettings
 
 logger = structlog.get_logger(__name__)
@@ -142,6 +148,11 @@ class Container(containers.DeclarativeContainer):
         session_factory=session_factory,
     )
 
+    user_preference_repository = providers.Factory(
+        PostgresUserNotificationPreferenceRepository,
+        session_factory=session_factory,
+    )
+
     query_repository = providers.Factory(
         PostgresNotificationQueryRepository,
         session_factory=session_factory,
@@ -181,6 +192,12 @@ class Container(containers.DeclarativeContainer):
         template_renderer=template_renderer,
         outbox_repo=outbox_repository,
         route_repo=route_repository,
+        user_pref_repo=user_preference_repository,
+    )
+
+    update_user_preference_use_case = providers.Factory(
+        UpdateUserPreferenceUseCase,
+        repo=user_preference_repository,
     )
 
     # -----------------------------------------------------------------------

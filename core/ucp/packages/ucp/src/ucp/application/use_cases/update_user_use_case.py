@@ -37,8 +37,13 @@ class UpdateUserUseCase:
                     f"User {command.user_id} not found or missing IDP mapping in tenant {command.tenant_id}"
                 )
 
-            # 1. Update Local User Domain Object
-            user.name = f"{command.first_name} {command.last_name}".strip()
+            # 1. Update Local User Domain Object & Register Outbox Event
+            user.update_profile(
+                first_name=command.first_name,
+                last_name=command.last_name,
+                org_id=tenant.idp_tenant_id,
+                role=command.role,
+            )
             await self._uow.user_repo.save(user)
 
             # 2. Update Tenant Membership Role
@@ -46,19 +51,6 @@ class UpdateUserUseCase:
                 tenant_id=tenant.id,
                 user_id=user.id,
                 role=command.role,
-            )
-
-            # 3. Register Outbox Event to Update IDP
-            self._uow.register_event(
-                event_type="UserUpdated",
-                payload={
-                    "idp_user_id": user.idp_user_id,
-                    "org_id": tenant.idp_tenant_id,
-                    "first_name": command.first_name,
-                    "last_name": command.last_name,
-                    "role": command.role,
-                },
-                tenant_id=tenant.id,
             )
 
             await self._uow.commit()

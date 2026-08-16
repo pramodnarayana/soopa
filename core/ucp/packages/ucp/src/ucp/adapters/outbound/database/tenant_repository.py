@@ -25,17 +25,14 @@ class TenantRepository(ITenantRepository):
         return Tenant(
             id=row.id,
             name=row.name,
+            slug=row.slug,
             idp_tenant_id=row.idp_tenant_id,
             status=typing.cast(
                 typing.Literal["active", "inactive"],
-                row.status if hasattr(row, "status") else "active",
+                row.status,
             ),
             created_at=row.created_at.replace(tzinfo=UTC),
-            updated_at=(
-                row.updated_at.replace(tzinfo=UTC)
-                if hasattr(row, "updated_at") and row.updated_at
-                else row.created_at.replace(tzinfo=UTC)
-            ),
+            updated_at=row.updated_at.replace(tzinfo=UTC),
             subscriptions=subscriptions or [],
         )
 
@@ -97,10 +94,13 @@ class TenantRepository(ITenantRepository):
             db_tenant.name = tenant.name
             db_tenant.idp_tenant_id = tenant.idp_tenant_id
             db_tenant.status = tenant.status
+            # Slug is intentionally immutable — not updated on rename.
+            # See TECHNICAL_DEBT.md: "Slug Redirect Trail for Self-Service Tenant Portals".
         else:
             db_tenant = DbTenant(
                 id=tenant.id,
                 name=tenant.name,
+                slug=tenant.slug,
                 idp_tenant_id=tenant.idp_tenant_id,
                 status=tenant.status,
                 created_at=tenant.created_at.replace(tzinfo=None),
@@ -109,6 +109,9 @@ class TenantRepository(ITenantRepository):
             self.session.add(db_tenant)
 
         # 3. Process Outbox Events (Domain Events)
+        self._flush_events(tenant, idempotency_key)
+
+    def _flush_events(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(tenant.domain_events):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
@@ -128,7 +131,11 @@ class TenantRepository(ITenantRepository):
             )
             self.session.add(outbox_event)
 
-    async def delete(self, tenant_id: str, idempotency_key: str | None = None) -> None:
+        tenant.clear_domain_events()
+
+    async def delete(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
+        tenant_id = tenant.id
+        self._flush_events(tenant, idempotency_key)
         await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))
         await self.session.execute(delete(ApiToken).where(ApiToken.tenant_id == tenant_id))
         await self.session.execute(delete(ApiKey).where(ApiKey.tenant_id == tenant_id))

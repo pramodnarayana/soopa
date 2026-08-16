@@ -1,9 +1,7 @@
-import asyncio
-
 import structlog
 
 from ...ports.identity_provider import IdentityProviderPort
-from ...ports.ucp_event_listener import UcpEventListenerPort
+from ...ports.outbound.user_identity_provider import IUserIdentityProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -16,68 +14,113 @@ class IdentitySyncService:
 
     def __init__(
         self,
-        event_listener: UcpEventListenerPort,
         identity_provider: IdentityProviderPort,
+        user_identity_provider: IUserIdentityProvider,
     ):
-        self.event_listener = event_listener
         self.identity_provider = identity_provider
-        self.is_running = False
-        self._task: asyncio.Task[None] | None = None
+        self.user_identity_provider = user_identity_provider
 
-    def start(self) -> None:
-        if not self.is_running:
-            self.is_running = True
-            self._task = asyncio.create_task(self._run_loop())
-            logger.info("identity_sync_service_started")
-
-    async def stop(self) -> None:
-        self.is_running = False
-        if self._task:
-            self._task.cancel()
-            import contextlib
-
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
-            self._task = None
-            logger.info("identity_sync_service_stopped")
-
-    async def _run_loop(self) -> None:
+    async def handle_tenant_provisioned(self, tenant_id: str) -> None:
+        """
+        Synchronizes a newly provisioned tenant to the Identity Provider.
+        """
+        bound_logger = logger.bind(tenant_id=tenant_id)
+        bound_logger.info("syncing_tenant_to_identity_provider", tenant_id=tenant_id)
         try:
-            # If the listener supports context management (e.g. SQS Connection pooling)
-            if hasattr(self.event_listener, "__aenter__"):
-                async with self.event_listener:  # type: ignore
-                    await self._poll_continuous()
-            else:
-                await self._poll_continuous()
-        except asyncio.CancelledError:
-            pass
+            await self.identity_provider.sync_tenant(tenant_id)
+            bound_logger.info("identity_sync_tenant_successful", tenant_id=tenant_id)
         except Exception:
-            logger.exception("identity_sync_service_run_loop_fatal_error")
-        finally:
-            self.is_running = False
+            bound_logger.exception("identity_sync_tenant_failed", tenant_id=tenant_id)
+            raise
 
-    async def _poll_continuous(self) -> None:
-        while self.is_running:
-            try:
-                # The listener manages the message lifecycle/ACK via context manager
-                async with self.event_listener.process_next_event() as event:
-                    if not event:
-                        await asyncio.sleep(0.1)
-                        continue
+    async def handle_user_created(
+        self, org_id: str, email: str, first_name: str, last_name: str, role: str
+    ) -> None:
+        """
+        Synchronizes a newly created UCP user to the Identity Provider.
+        Creates the user and assigns the given role.
+        """
+        bound_logger = logger.bind(org_id=org_id, email=email, role=role)
+        bound_logger.info("syncing_new_user_to_identity_provider", action="create")
+        try:
+            user_id = await self.user_identity_provider.create_user(
+                org_id=org_id,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            bound_logger.info("identity_sync_create_user_successful", idp_user_id=user_id)
 
-                    bound_logger = logger.bind(
-                        tenant_id=event.tenant_id, event_type=event.event_type
-                    )
+            await self.user_identity_provider.assign_tenant_role(
+                user_id=user_id, org_id=org_id, role=role
+            )
+            bound_logger.info(
+                "identity_sync_assign_role_successful", idp_user_id=user_id, role=role
+            )
+        except Exception:
+            bound_logger.exception("identity_sync_new_user_failed")
+            raise
 
-                    if event.event_type == "TenantProvisioned":
-                        bound_logger.info("syncing_tenant_to_identity_provider")
-                        await self.identity_provider.sync_tenant(event.tenant_id)
-                        bound_logger.debug("identity_sync_successful")
-                    else:
-                        bound_logger.debug("identity_sync_event_ignored")
+    async def handle_user_updated(
+        self, idp_user_id: str, org_id: str, first_name: str, last_name: str, role: str
+    ) -> None:
+        """
+        Synchronizes profile and role updates to the Identity Provider.
+        """
+        bound_logger = logger.bind(idp_user_id=idp_user_id, org_id=org_id)
+        bound_logger.info("syncing_user_update_to_identity_provider", action="update")
+        try:
+            await self.user_identity_provider.update_user_profile(
+                user_id=idp_user_id,
+                org_id=org_id,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            bound_logger.debug("identity_sync_update_profile_successful")
 
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.exception("identity_sync_service_poll_error")
-                await asyncio.sleep(5)
+            await self.user_identity_provider.update_tenant_role(
+                user_id=idp_user_id, org_id=org_id, role=role
+            )
+            bound_logger.debug("identity_sync_update_role_successful", role=role)
+        except Exception:
+            bound_logger.exception("identity_sync_user_update_failed")
+            raise
+
+    async def handle_user_status_toggled(self, idp_user_id: str, org_id: str, action: str) -> None:
+        """
+        Activates or deactivates a user in the Identity Provider.
+        """
+        bound_logger = logger.bind(idp_user_id=idp_user_id, org_id=org_id, action=action)
+        bound_logger.info("syncing_user_status_toggle_to_identity_provider")
+        try:
+            if action not in ("activate", "deactivate"):
+                raise ValueError(f"Invalid action for toggle user status: {action}")
+
+            from typing import Literal
+
+            valid_action: Literal["activate", "deactivate"] = (
+                "activate" if action == "activate" else "deactivate"
+            )
+
+            await self.user_identity_provider.toggle_user_status(
+                user_id=idp_user_id,
+                org_id=org_id,
+                action=valid_action,
+            )
+            bound_logger.info("identity_sync_status_toggle_successful")
+        except Exception:
+            bound_logger.exception("identity_sync_status_toggle_failed")
+            raise
+
+    async def handle_user_deleted(self, idp_user_id: str) -> None:
+        """
+        Deletes a user from the Identity Provider.
+        """
+        bound_logger = logger.bind(idp_user_id=idp_user_id)
+        bound_logger.info("syncing_user_deletion_to_identity_provider", action="delete")
+        try:
+            await self.user_identity_provider.delete_user(user_id=idp_user_id)
+            bound_logger.info("identity_sync_user_deletion_successful")
+        except Exception:
+            bound_logger.exception("identity_sync_user_deletion_failed")
+            raise

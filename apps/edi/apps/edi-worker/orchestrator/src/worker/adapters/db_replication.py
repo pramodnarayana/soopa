@@ -55,6 +55,56 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         self.tenant_port = tenant_port
 
     # -----------------------------------------------------------------------
+    # Full Sync Driver
+    # -----------------------------------------------------------------------
+
+    async def replicate_tenant_configuration(self, tenant_id: str) -> None:
+        """
+        Full topological state sync.
+        Used for initial tenant provisioning or disaster recovery reconciliation.
+        """
+        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
+            try:
+                # 1. Upsert all entities in top-down topological order
+                for layer in _TOPOLOGICAL_LAYERS:
+                    for entity_key in layer:
+                        spec = REPLICATION_GRAPH[entity_key]
+                        stmt = _build_fetch_all_stmt(spec, tenant_id)
+                        res = await global_session.execute(stmt)
+                        entities = res.scalars().all()
+
+                        for entity in entities:
+                            source_tenant_id = getattr(entity, "tenant_id", None) or tenant_id
+                            await self._upsert_entity(
+                                tenant_session, source_tenant_id, entity, spec.tenant_model
+                            )
+                        await tenant_session.flush()
+
+                # 2. Sync deletes in bottom-up topological order
+                for layer in _REVERSE_TOPOLOGICAL_LAYERS:
+                    for entity_key in layer:
+                        spec = REPLICATION_GRAPH[entity_key]
+                        await self._sync_deletes(
+                            tenant_id,
+                            global_session,
+                            tenant_session,
+                            spec.global_model,
+                            spec.tenant_model,
+                            spec.include_shared,
+                        )
+
+                await tenant_session.commit()
+                logger.info(
+                    "[REPLICATION] Successfully performed full state sync for tenant={tenant_id}."
+                )
+
+            except Exception as e:
+                await tenant_session.rollback()
+                raise TransientProvisioningError(
+                    f"Full replication failed for tenant {tenant_id}: {e}"
+                ) from e
+
+    # -----------------------------------------------------------------------
     # Session Context Managers
     # -----------------------------------------------------------------------
 
@@ -86,62 +136,6 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         async with aclosing(tenant_gen) as tenant_ctx:
             tenant_session = await tenant_ctx.__anext__()
             yield tenant_session
-
-    # -----------------------------------------------------------------------
-    # Full Tenant Sync  (PROVISION_ALL_TENANTS broadcasts only)
-    # -----------------------------------------------------------------------
-
-    async def replicate_tenant_configuration(self, tenant_id: str) -> None:
-        """Full tenant state sync driven entirely by the REPLICATION_GRAPH."""
-        async with self._get_sessions(tenant_id) as (global_session, tenant_session):
-            try:
-                await self._do_replicate(tenant_id, global_session, tenant_session)
-                await tenant_session.commit()
-                logger.info(
-                    "[REPLICATION] Full configuration sync complete for tenant={tenant_id}.",
-                    tenant_id=tenant_id,
-                )
-            except Exception as e:
-                await tenant_session.rollback()
-                raise TransientProvisioningError(
-                    "Full configuration sync failed for tenant={tenant_id}: {e}"
-                ) from e
-
-    async def _do_replicate(
-        self,
-        tenant_id: str,
-        global_session: AsyncSession,
-        tenant_session: AsyncSession,
-    ) -> None:
-        """
-        Upserts all replicated entities for a tenant in topological layer order
-        (dependencies before dependents), then purges stale records in reverse
-        layer order (dependents before dependencies) to respect FK constraints.
-        """
-        # --- Upserts: topological order (leaf entities first) ---
-        for layer in _TOPOLOGICAL_LAYERS:
-            for entity_key in layer:
-                spec = REPLICATION_GRAPH[entity_key]
-                stmt = _build_fetch_all_stmt(spec, tenant_id)
-                result = await global_session.execute(stmt)
-                for entity in result.scalars().all():
-                    source_tenant_id = getattr(entity, "tenant_id", None) or tenant_id
-                    await self._upsert_entity(
-                        tenant_session, source_tenant_id, entity, spec.tenant_model
-                    )
-
-        # --- Deletes: reverse topological order (dependents first) ---
-        for layer in _REVERSE_TOPOLOGICAL_LAYERS:
-            for entity_key in layer:
-                spec = REPLICATION_GRAPH[entity_key]
-                await self._sync_deletes(
-                    tenant_id,
-                    global_session,
-                    tenant_session,
-                    spec.global_model,
-                    spec.tenant_model,
-                    spec.include_shared,
-                )
 
     # -----------------------------------------------------------------------
     # Generic Granular Replication Driver  (dependency-aware, one entity)
@@ -390,12 +384,15 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             )
 
         global_ids: set[str] = set((await global_session.execute(global_stmt)).scalars().all())
-        tenant_ids: set[str] = set(
-            (
-                await tenant_session.execute(
-                    select(tenant_model.id).where(tenant_model.tenant_id == tenant_id)
-                )
+
+        tenant_filter = tenant_model.tenant_id == tenant_id
+        if include_shared:
+            tenant_filter = (tenant_model.tenant_id == tenant_id) | (
+                tenant_model.tenant_id == SHARED_TENANT_ID
             )
+
+        tenant_ids: set[str] = set(
+            (await tenant_session.execute(select(tenant_model.id).where(tenant_filter)))
             .scalars()
             .all()
         )

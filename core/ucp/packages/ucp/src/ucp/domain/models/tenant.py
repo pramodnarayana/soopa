@@ -6,7 +6,10 @@ from ucp.core.exceptions import AppSubscriptionError, TenantRenameError
 from ucp.domain.events.tenant_events import (
     AppSubscribedEvent,
     AppUnsubscribedEvent,
+    TenantDeletedEvent,
+    TenantNameUpdatedEvent,
     TenantProvisionedEvent,
+    TenantStatusToggledEvent,
 )
 from ucp.domain.models.aggregate_root import AggregateRoot
 
@@ -24,6 +27,7 @@ class Tenant(AggregateRoot):
         self,
         id: str,
         name: str,
+        slug: str,
         idp_tenant_id: str | None,
         status: Literal["active", "inactive"],
         created_at: datetime,
@@ -33,6 +37,7 @@ class Tenant(AggregateRoot):
         super().__init__()
         self.id = id
         self.name = name
+        self.slug = slug
         self.idp_tenant_id = idp_tenant_id
         self.status = status
         self.created_at = created_at
@@ -44,6 +49,7 @@ class Tenant(AggregateRoot):
         cls,
         id: str,
         name: str,
+        slug: str,
         idp_tenant_id: str | None,
         subscriptions: list[TenantSubscription] | None = None,
     ) -> "Tenant":
@@ -51,6 +57,7 @@ class Tenant(AggregateRoot):
         tenant = cls(
             id=id,
             name=name,
+            slug=slug,
             idp_tenant_id=idp_tenant_id,
             status="active",
             created_at=now,
@@ -71,6 +78,8 @@ class Tenant(AggregateRoot):
             raise TenantRenameError("Tenant name cannot be empty.")
         self.name = new_name.strip()
         self.updated_at = datetime.now(UTC)
+        if self.idp_tenant_id:
+            self.add_domain_event(TenantNameUpdatedEvent(org_id=self.idp_tenant_id, name=self.name))
 
     def set_idp_tenant_id(self, idp_tenant_id: str) -> None:
         if self.idp_tenant_id:
@@ -111,3 +120,13 @@ class Tenant(AggregateRoot):
         if self.status != new_status:
             self.status = new_status
             self.updated_at = datetime.now(UTC)
+            if self.idp_tenant_id:
+                self.add_domain_event(
+                    TenantStatusToggledEvent(
+                        org_id=self.idp_tenant_id, active=self.status == "active"
+                    )
+                )
+
+    def mark_deleted(self) -> None:
+        if self.idp_tenant_id:
+            self.add_domain_event(TenantDeletedEvent(org_id=self.idp_tenant_id))

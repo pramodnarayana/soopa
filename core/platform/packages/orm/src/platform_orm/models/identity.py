@@ -14,6 +14,7 @@ class Tenant(IdentityBase):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
@@ -135,3 +136,70 @@ class ApiKey(IdentityBase):
     active: Mapped[bool] = mapped_column(default=True, server_default="true")
 
     __table_args__ = ({"schema": "identity"},)
+
+
+class Role(IdentityBase):
+    __tablename__ = "roles"
+    ID_PREFIX = "rol"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("identity.tenants.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    capabilities: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        Index(
+            "uix_roles_tenant_name",
+            "tenant_id",
+            "name",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+        {"schema": "identity"},
+    )
+
+
+class UserRole(IdentityBase):
+    __tablename__ = "user_roles"
+
+    ID_PREFIX = "urol"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False
+    )
+    role_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.roles.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        Index(
+            "uix_user_roles_tenant_user_role",
+            "tenant_id",
+            "user_id",
+            "role_id",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+        {"schema": "identity"},
+    )

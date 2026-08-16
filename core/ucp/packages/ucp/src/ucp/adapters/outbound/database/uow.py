@@ -1,14 +1,15 @@
-import json
-import uuid
 from typing import Any, Self
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ucp.adapters.outbound.database.idempotency_repository import SqlAlchemyIdempotencyRepository
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
+from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.adapters.outbound.database.user_repository import UserRepository
+from ucp.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 
@@ -19,7 +20,9 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         self.user_repo = UserRepository(session=self.session)
         self.api_token_repo = PostgresApiTokenRepository(session=self.session)
         self.app_repo = PostgresAppRepository(session=self.session)
-        self._events: list[dict[str, Any]] = []
+        self.role_repo = PostgresRoleRepository(session=self.session)
+        self.webhook_repo = SqlAlchemyWebhookRepository(session=self.session)
+        self.idempotency_repo = SqlAlchemyIdempotencyRepository(session=self.session)
 
     async def __aenter__(self) -> Self:
         if not self.session.in_transaction():
@@ -33,43 +36,8 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         # True UnitOfWork requires explicit .commit() call in the UseCase.
 
     async def commit(self) -> None:
-        if self._events:
-            query = text("""
-                INSERT INTO ucp.outbox (id, event_type, payload, idempotency_key, tenant_id, status)
-                VALUES (:id, :event_type, :payload, :idempotency_key, :tenant_id, 'PENDING')
-            """)
-            for event in self._events:
-                await self.session.execute(
-                    query,
-                    {
-                        "id": event["id"],
-                        "event_type": event["event_type"],
-                        "payload": json.dumps(event["payload"]),
-                        "idempotency_key": event["idempotency_key"],
-                        "tenant_id": event["tenant_id"],
-                    },
-                )
-            self._events.clear()
-
+        await self.session.execute(text("NOTIFY ucp_outbox_wakeup;"))
         await self.session.commit()
 
     async def rollback(self) -> None:
-        self._events.clear()
         await self.session.rollback()
-
-    def register_event(
-        self,
-        event_type: str,
-        payload: dict[str, Any],
-        idempotency_key: str | None = None,
-        tenant_id: str | None = None,
-    ) -> None:
-        self._events.append(
-            {
-                "id": str(uuid.uuid4()),
-                "event_type": event_type,
-                "payload": payload,
-                "idempotency_key": idempotency_key,
-                "tenant_id": tenant_id,
-            }
-        )

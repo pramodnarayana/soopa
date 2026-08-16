@@ -13,7 +13,6 @@ from edi.ports.platform_settings_repository import PlatformSettingsRepositoryPor
 from edi.ports.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.tenant_repository import TenantRepositoryPort
 from edi.ports.transaction_repository import TransactionRepositoryPort
-from edi.ports.webhook_repository import WebhookRepositoryPort
 
 
 class ControlPlaneUnitOfWorkPort(Protocol):
@@ -29,7 +28,6 @@ class ControlPlaneUnitOfWorkPort(Protocol):
     control_plane_outbox: ControlPlaneOutboxRepositoryPort
     sftp_partners: SFTPPartnerRepositoryPort
     tenants: TenantRepositoryPort
-    webhooks: WebhookRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
 

@@ -24,15 +24,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   const { data: tenant } = useGetTenant(tenantId ?? '');
 
-  if (auth.isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50/50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  if (!auth.isLoading && !tenantId) {
+  if (!tenantId) {
     // Log diagnostic details without exposing PII in the error message
     logger.error('Tenant ID resolution failed', {
       hasToken: !!token,
@@ -119,7 +111,12 @@ export function TenantProvider({ children }: TenantProviderProps) {
   );
 
   return (
-    <TenantContext.Provider value={{ tenantId: finalTenantId, token }}>
+    <TenantContext.Provider
+      value={{
+        tenantId: finalTenantId,
+        token,
+      }}
+    >
       {children({
         sidebarHeader,
         userProfile,

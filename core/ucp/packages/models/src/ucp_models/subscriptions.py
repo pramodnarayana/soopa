@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime
 
 from platform_orm.models.core import UcpBase
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -45,3 +45,5 @@ class AppSubscription(UcpBase):
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
+
+    __table_args__ = (Index("idx_app_subs_tenant_status", "tenant_id", "status"),)

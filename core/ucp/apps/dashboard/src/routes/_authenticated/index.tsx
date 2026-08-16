@@ -6,7 +6,17 @@ export const Route = createFileRoute('/_authenticated/')({
 });
 
 function DashboardSwitch() {
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const { isPlatformAdmin, isLoading } = useIsPlatformAdmin();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   if (isPlatformAdmin) {
     return <Navigate to="/platform" replace />;

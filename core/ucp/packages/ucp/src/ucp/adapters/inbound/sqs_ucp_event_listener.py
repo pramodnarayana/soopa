@@ -23,6 +23,13 @@ class SqsUcpEventListener(UcpEventListenerPort):
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
     ):
+        if not queue_url:
+            logger.error(
+                "sqs_listener_missing_queue_url",
+                message="SQS Listener started without a Queue URL! Please set SQS_UCP_EVENTS_QUEUE_URL in your .env",
+            )
+            raise ValueError("SQS Queue URL must be provided to SqsUcpEventListener")
+
         self.queue_url = queue_url
         self.region_name = region_name
         self.endpoint_url = endpoint_url
@@ -49,9 +56,6 @@ class SqsUcpEventListener(UcpEventListenerPort):
 
     @asynccontextmanager
     async def process_next_event(self) -> AsyncGenerator[UcpEventMessage | None, None]:
-        if not self.queue_url:
-            yield None
-            return
 
         # Use shared client if available, else create one-off
         if self._client:

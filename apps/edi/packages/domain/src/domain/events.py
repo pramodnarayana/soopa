@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 
 class UcpEventType(StrEnum):
-    tenant_provisioned = "tenant.provisioned"
     app_subscribed = "app.subscribed"
     app_unsubscribed = "app.unsubscribed"
     api_key_created = "api_key.created"

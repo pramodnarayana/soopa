@@ -35,7 +35,9 @@ def test_validate_target_url(monkeypatch: MagicMock) -> None:
 
     monkeypatch.setattr(worker.core.security, "IS_DEV", False)
 
-    def mock_getaddrinfo(host: str, *args: Any, **kwargs: Any) -> list[tuple[None, None, None, None, tuple[str, int]]]:
+    def mock_getaddrinfo(
+        host: str, *args: Any, **kwargs: Any
+    ) -> list[tuple[None, None, None, None, tuple[str, int]]]:
         if host == "example.com":
             return [(None, None, None, None, ("93.184.216.34", 80))]
         return [(None, None, None, None, (host, 80))]
@@ -100,7 +102,9 @@ async def test_tenant_resolver_integration(router: DatabaseRouter) -> None:
     global_session.add(shard)
     await global_session.commit()
 
-    tenant = Tenant(id=f"ten_{suffix}", name=tenant_name, idp_tenant_id=f"idp_{suffix}")
+    tenant = Tenant(
+        id=f"ten_{suffix}", name=tenant_name, idp_tenant_id=f"idp_{suffix}", slug=f"tenant-{suffix}"
+    )
     global_session.add(tenant)
     await global_session.commit()
 

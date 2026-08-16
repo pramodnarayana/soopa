@@ -4,6 +4,7 @@ import { apiClient } from '@/lib/api-client';
 export interface Tenant {
   id: string;
   name: string;
+  slug: string;
   status: 'active' | 'inactive';
   createdAt: string;
   updatedAt: string;

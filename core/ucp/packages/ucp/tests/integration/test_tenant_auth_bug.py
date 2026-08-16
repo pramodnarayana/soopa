@@ -42,13 +42,18 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
 
     # Remove the generic guard overrides so the REAL auth logic executes!
     from ucp.adapters.inbound.http.guards import tenant_auth_guard
+    from ucp.domain.models.authorization import Capability
 
     if tenant_auth_guard.require_tenant_member in app.dependency_overrides:
         del app.dependency_overrides[tenant_auth_guard.require_tenant_member]
 
     # We create an IdentityContext exactly like Zitadel gives us.
     raw_identity = IdentityContext(
-        subject="385223078428278787", tenant_id=None, authorized_tenants={idp_id}, claims={}
+        subject="385223078428278787",
+        tenant_id=None,
+        authorized_tenants={idp_id},
+        claims={},
+        capabilities={Capability.TENANT_ADMIN.value},
     )
 
     # We override the authenticate_bearer_token function that the middleware calls
