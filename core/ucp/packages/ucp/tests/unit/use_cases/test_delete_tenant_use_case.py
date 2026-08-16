@@ -6,7 +6,6 @@ from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.core.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.domain.models.user import User
-from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.tenant_repository import ITenantRepository
 from ucp.ports.outbound.user_repository import IUserRepository
 from ucp.ports.uow import UcpUnitOfWorkPort
@@ -22,12 +21,6 @@ def mock_tenant_repo() -> ITenantRepository:
 def mock_user_repo() -> IUserRepository:
     """Strict mock that enforces the IUserRepository port interface."""
     return create_autospec(IUserRepository, instance=True)
-
-
-@pytest.fixture
-def mock_org_provider() -> IOrganizationProvider:
-    """Strict mock that enforces the IOrganizationProvider port interface."""
-    return create_autospec(IOrganizationProvider, instance=True)
 
 
 @pytest.fixture
@@ -67,7 +60,6 @@ async def test_delete_tenant_success(
     mock_tenant_repo: ITenantRepository,
     mock_user_repo: IUserRepository,
     mock_uow: UcpUnitOfWorkPort,
-    mock_org_provider: IOrganizationProvider,
 ) -> None:
     tenant = Tenant.create(
         id="ten_123",
@@ -85,7 +77,6 @@ async def test_delete_tenant_success(
     mock_user_repo.has_any_tenant_memberships = AsyncMock(return_value=False)
     mock_tenant_repo.delete = AsyncMock()
     mock_user_repo.delete = AsyncMock()
-    mock_org_provider.delete_organization = AsyncMock()
 
     await delete_use_case.execute("ten_123", "idemp-key")
 

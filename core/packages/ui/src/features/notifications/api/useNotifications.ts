@@ -51,7 +51,6 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
                 response.ok &&
                 response.headers.get('content-type')?.includes('text/event-stream')
               ) {
-                consecutiveErrorCount = 0;
                 return;
               }
               if (response.status === 401 || response.status === 403) {
@@ -60,7 +59,6 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
               throw new Error(`Unexpected response: ${response.status} ${response.statusText}`);
             },
             onmessage: (event) => {
-              consecutiveErrorCount = 0;
               try {
                 const newNotification = JSON.parse(event.data);
                 queryClient.setQueryData<InAppNotification[]>(
@@ -71,6 +69,8 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
                     return [newNotification, ...old];
                   },
                 );
+                // Reset error count only after successfully processing a message
+                consecutiveErrorCount = 0;
               } catch (err) {
                 console.error('Failed to parse incoming SSE notification', err);
               }

@@ -213,12 +213,10 @@ class PostgresRoleRepository(IRoleRepository):
 
             payload_dict = json.loads(event.model_dump_json())
             tenant_id = event.get_routing_tenant_id()
-            if tenant_id is None and event_name != "role_created":
-                logger.error(
-                    "outbox_event_missing_tenant_id",
-                    event_name=event_name,
-                    event_payload=payload_dict,
-                )
+            if tenant_id is None:
+                from identity.domain.identity_context import PLATFORM_TENANT_ID
+
+                tenant_id = PLATFORM_TENANT_ID
 
             final_idemp_key = (
                 f"{idempotency_key}_{index}"
