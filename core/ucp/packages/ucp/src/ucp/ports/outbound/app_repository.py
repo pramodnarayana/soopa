@@ -11,3 +11,7 @@ class IAppRepository(Protocol):
     async def find_all(self) -> list[App]:
         """Retrieves all registered platform applications."""
         ...
+
+    async def find_by_id(self, app_id: str) -> App | None:
+        """Finds a platform application by ID"""
+        ...

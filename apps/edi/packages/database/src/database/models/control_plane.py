@@ -1,6 +1,6 @@
 import os
 
-from platform_orm.models.common import OutboxMixin, TimestampMixin
+from platform_orm.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
@@ -59,13 +59,13 @@ class AS2Partnership(EdiGlobalBase, AS2PartnershipMixin, TimestampMixin):
     )
 
 
-class SFTPPartner(EdiGlobalBase, SFTPPartnerMixin, TimestampMixin):
+class SFTPPartner(EdiGlobalBase, SFTPPartnerMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "sftp_partners"
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 
 
-class InboundRoute(EdiGlobalBase, InboundRouteMixin, TimestampMixin):
+class InboundRoute(EdiGlobalBase, InboundRouteMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "inbound_routes"
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -98,7 +98,7 @@ class InboundRoute(EdiGlobalBase, InboundRouteMixin, TimestampMixin):
     )
 
 
-class OutboundRoute(EdiGlobalBase, OutboundRouteMixin, TimestampMixin):
+class OutboundRoute(EdiGlobalBase, OutboundRouteMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "outbound_routes"
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -126,7 +126,7 @@ class OutboundRoute(EdiGlobalBase, OutboundRouteMixin, TimestampMixin):
     )
 
 
-class OutboundEdiHeader(EdiGlobalBase, OutboundEdiHeaderMixin, TimestampMixin):
+class OutboundEdiHeader(EdiGlobalBase, OutboundEdiHeaderMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "outbound_edi_headers"
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)

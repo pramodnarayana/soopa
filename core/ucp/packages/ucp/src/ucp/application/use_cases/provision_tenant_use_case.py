@@ -2,9 +2,8 @@ import os
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy.exc import IntegrityError
 
-from ucp.core.exceptions import SlugExhaustedException
+from ucp.core.exceptions import DuplicateEntityError, SlugExhaustedException
 from ucp.domain.models.tenant import Tenant
 from ucp.domain.services.slug_service import generate_slug
 from ucp.ports.uow import UcpUnitOfWorkPort
@@ -80,20 +79,10 @@ class ProvisionTenantUseCase:
                 )
                 return tenant
 
-            except IntegrityError as exc:
+            except DuplicateEntityError as exc:
                 # Only retry on the slug uniqueness constraint violation.
-                # All other IntegrityErrors (e.g. name conflict) are re-raised.
-                constraint_name = None
-                if (
-                    hasattr(exc, "orig")
-                    and isinstance(exc.orig, BaseException)
-                    and exc.orig.__cause__
-                ):
-                    constraint_name = getattr(exc.orig.__cause__, "constraint_name", None)
-                elif hasattr(exc, "orig"):
-                    constraint_name = getattr(exc.orig, "constraint_name", None)
-
-                if constraint_name == "tenants_slug_key":
+                # All other DuplicateEntityError constraints (e.g. name conflict) are re-raised.
+                if exc.constraint_name == "tenants_slug_key":
                     logger.warning(
                         "provision_tenant.slug_conflict",
                         slug=slug,
@@ -102,12 +91,11 @@ class ProvisionTenantUseCase:
                     )
                     continue
 
-                orig = str(getattr(exc, "orig", exc))
                 logger.exception(
                     "provision_tenant.integrity_error",
                     tenant_id=local_id,
-                    constraint_name=constraint_name,
-                    reason=orig,
+                    constraint_name=exc.constraint_name,
+                    reason=str(exc),
                 )
                 raise
 

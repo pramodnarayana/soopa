@@ -23,3 +23,15 @@ class ITenantRepository(Protocol):
     async def delete(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         """Deletes a tenant and its related local infrastructure"""
         ...
+
+    async def soft_delete_tenant_infrastructure(self, tenant_id: str) -> None:
+        """Soft deletes all identities and infrastructure for a tenant (e.g. Webhooks, Roles, API Keys)"""
+        ...
+
+    async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
+        """Allocates a database shard for a tenant's application subscription"""
+        ...
+
+    async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
+        """Upserts an application subscription status for a tenant"""
+        ...

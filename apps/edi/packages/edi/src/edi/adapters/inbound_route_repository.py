@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     AS2Partner,
@@ -7,7 +9,7 @@ from database.models.control_plane import (
 from domain.models import InboundRouteDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from platform_orm.models import Webhook
-from sqlalchemy import delete, or_, select
+from sqlalchemy import or_, select, update
 
 from edi.domain.models import (
     CreateInboundRouteCmd,
@@ -94,7 +96,9 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     ) -> bool:
         result = await self.session.execute(
             select(InboundRoute).where(
-                InboundRoute.id == route_id, InboundRoute.tenant_id == tenant_id
+                InboundRoute.id == route_id,
+                InboundRoute.tenant_id == tenant_id,
+                InboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
@@ -146,6 +150,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             InboundRoute.isa_sender_id == isa_sender_id,
             InboundRoute.isa_receiver_id == isa_receiver_id,
             InboundRoute.tenant_id == tenant_id,
+            InboundRoute.deleted_at.is_(None),
         )
         if transaction_type:
             stmt = stmt.where(
@@ -163,7 +168,9 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
 
     async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
         result = await self.session.execute(
-            select(InboundRoute).where(InboundRoute.tenant_id == tenant_id)
+            select(InboundRoute).where(
+                InboundRoute.tenant_id == tenant_id, InboundRoute.deleted_at.is_(None)
+            )
         )
         return [InboundRouteDomainModel.model_validate(r) for r in result.scalars().all()]
 
@@ -173,6 +180,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 InboundRoute.isa_sender_id == isa_sender_id,
                 InboundRoute.isa_receiver_id == isa_receiver_id,
                 InboundRoute.active.is_(True),
+                InboundRoute.deleted_at.is_(None),
             )
         )
         rows = result.scalars().all()
@@ -186,9 +194,13 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
 
     async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
         result = await self.session.execute(
-            delete(InboundRoute).where(
-                InboundRoute.id == route_id, InboundRoute.tenant_id == tenant_id
+            update(InboundRoute)
+            .where(
+                InboundRoute.id == route_id,
+                InboundRoute.tenant_id == tenant_id,
+                InboundRoute.deleted_at.is_(None),
             )
+            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
         )
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)

@@ -1,4 +1,4 @@
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Literal, cast
 
 from platform_orm.models.identity import TenantUser
@@ -19,7 +19,7 @@ class UserRepository(IUserRepository):
         stmt = (
             select(DbUser, TenantUser.role)
             .join(TenantUser, TenantUser.user_id == DbUser.id)
-            .where(TenantUser.tenant_id == tenant_id)
+            .where(and_(TenantUser.tenant_id == tenant_id, DbUser.deleted_at.is_(None)))
         )
         result = await self.session.execute(stmt)
         rows = result.all()
@@ -40,7 +40,7 @@ class UserRepository(IUserRepository):
         return users
 
     async def find_by_email(self, email: str) -> User | None:
-        stmt = select(DbUser).where(DbUser.email == email)
+        stmt = select(DbUser).where(and_(DbUser.email == email, DbUser.deleted_at.is_(None)))
         result = await self.session.execute(stmt)
         db_user = result.scalar_one_or_none()
 
@@ -61,7 +61,13 @@ class UserRepository(IUserRepository):
         stmt = (
             select(DbUser, TenantUser.role)
             .join(TenantUser, TenantUser.user_id == DbUser.id)
-            .where(and_(TenantUser.tenant_id == tenant_id, DbUser.id == user_id))
+            .where(
+                and_(
+                    TenantUser.tenant_id == tenant_id,
+                    DbUser.id == user_id,
+                    DbUser.deleted_at.is_(None),
+                )
+            )
         )
         result = await self.session.execute(stmt)
         row = result.first()
@@ -83,8 +89,15 @@ class UserRepository(IUserRepository):
         return u
 
     async def delete(self, user: User) -> None:
-        stmt = delete(DbUser).where(DbUser.id == user.id)
-        await self.session.execute(stmt)
+        stmt = select(DbUser).where(DbUser.id == user.id)
+        result = await self.session.execute(stmt)
+        db_user = result.scalar_one_or_none()
+        if db_user:
+            db_user.deleted_at = (
+                user.deleted_at.replace(tzinfo=None)
+                if user.deleted_at
+                else datetime.now(UTC).replace(tzinfo=None)
+            )
         self._flush_events(user)
 
     async def save(self, user: User) -> None:

@@ -26,6 +26,7 @@ from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOu
 from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProvider
 from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProvider
 from ucp.adapters.outbound.messaging.sns_outbox_publisher import SnsOutboxPublisher
+from ucp.application.handlers.tenant_deleted_handler import TenantDeletedEventHandler
 from ucp.application.services.identity_sync_service import IdentitySyncService
 from ucp.application.services.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.bootstrap.container import Container
@@ -102,7 +103,20 @@ async def startup() -> None:  # noqa: C901
         idp_users = container.user_provider()
 
     _identity_service = IdentitySyncService(identity_provider=idp, user_identity_provider=idp_users)
-    _provisioner = InfrastructureProvisioner(session_factory)
+
+    from collections.abc import AsyncGenerator
+    from contextlib import asynccontextmanager
+
+    from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
+    from ucp.ports.uow import UcpUnitOfWorkPort
+
+    @asynccontextmanager
+    async def uow_factory() -> AsyncGenerator[UcpUnitOfWorkPort, None]:
+        async with session_factory() as session:
+            yield SqlAlchemyUcpUnitOfWork(session)
+
+    _provisioner = InfrastructureProvisioner(uow_factory)
+    _tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
 
     _dispatcher = SqsEventDispatcherWorker(
         event_listener=SqsUcpEventListener(
@@ -162,7 +176,16 @@ async def startup() -> None:  # noqa: C901
             await service.handle_user_deleted(idp_user_id=payload["idp_user_id"])
 
     # Use exact event names matching domain event `event_name` properties
+
+    async def tenant_deleted_event_handler(event: Any) -> None:
+        handler = _tenant_deleted_handler
+        if handler:
+            payload = event.payload
+            tenant_id = payload.get("tenant_id") or event.tenant_id
+            await handler.handle(tenant_id)
+
     _dispatcher.subscribe("tenant.provisioned", identity_tenant_provisioned_handler)
+    _dispatcher.subscribe("TenantDeletedEvent", tenant_deleted_event_handler)
     _dispatcher.subscribe("UserInvited", identity_user_created_handler)
     _dispatcher.subscribe("UserUpdated", identity_user_updated_handler)
     _dispatcher.subscribe("UserStatusToggled", identity_user_status_toggled_handler)

@@ -27,7 +27,7 @@ class PostgresRoleRepository(IRoleRepository):
         self.session = session
 
     async def get_by_id(self, role_id: str) -> DomainRole | None:
-        stmt = select(OrmRole).where(OrmRole.id == role_id)
+        stmt = select(OrmRole).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
         if not row:
@@ -57,10 +57,7 @@ class PostgresRoleRepository(IRoleRepository):
         stmt = (
             select(OrmRole.capabilities)
             .join(UserRole, OrmRole.id == UserRole.role_id)
-            .where(
-                tenant_filter,
-                UserRole.user_id == user_id,
-            )
+            .where(tenant_filter, UserRole.user_id == user_id, OrmRole.deleted_at.is_(None))
         )
 
         result = await self.session.execute(stmt)

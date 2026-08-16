@@ -1,7 +1,8 @@
+from datetime import UTC, datetime
 from typing import Any
 
 from platform_orm.models.identity import ApiToken as ApiTokenORM
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.domain.models.api_token import ApiTokenDomainModel
@@ -43,7 +44,7 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
     async def get_all_by_tenant(self, tenant_id: str) -> list[ApiTokenDomainModel]:
         result = await self.session.execute(
             select(ApiTokenORM)
-            .where(ApiTokenORM.tenant_id == tenant_id)
+            .where(ApiTokenORM.tenant_id == tenant_id, ApiTokenORM.deleted_at.is_(None))
             .order_by(ApiTokenORM.created_at.desc())
         )
         return [self._to_domain(r) for r in result.scalars().all()]
@@ -51,7 +52,9 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
     async def get_by_id(self, token_id: str, tenant_id: str) -> ApiTokenDomainModel | None:
         result = await self.session.execute(
             select(ApiTokenORM).where(
-                ApiTokenORM.id == token_id, ApiTokenORM.tenant_id == tenant_id
+                ApiTokenORM.id == token_id,
+                ApiTokenORM.tenant_id == tenant_id,
+                ApiTokenORM.deleted_at.is_(None),
             )
         )
         orm_model = result.scalar_one_or_none()
@@ -80,9 +83,13 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
 
     async def delete(self, token_id: str, tenant_id: str) -> bool:
         result = await self.session.execute(
-            delete(ApiTokenORM).where(
-                ApiTokenORM.id == token_id, ApiTokenORM.tenant_id == tenant_id
+            update(ApiTokenORM)
+            .where(
+                ApiTokenORM.id == token_id,
+                ApiTokenORM.tenant_id == tenant_id,
+                ApiTokenORM.deleted_at.is_(None),
             )
+            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
         )
         return getattr(result, "rowcount", 0) > 0
 
@@ -91,6 +98,7 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
             select(ApiTokenORM).where(
                 ApiTokenORM.client_id == client_id,
                 ApiTokenORM.active,
+                ApiTokenORM.deleted_at.is_(None),
             )
         )
         orm_model = result.scalar_one_or_none()

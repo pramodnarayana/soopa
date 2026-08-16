@@ -1,11 +1,12 @@
 import json
 import os
 import typing
-from datetime import UTC
+from datetime import UTC, datetime
 
-from platform_orm.models.identity import ApiKey, ApiToken, TenantUser
+from platform_orm.models.identity import ApiKey, ApiToken, Role, TenantUser
 from platform_orm.models.identity import Tenant as DbTenant
-from sqlalchemy import delete, select
+from platform_orm.models.webhooks import Webhook
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
@@ -37,7 +38,7 @@ class TenantRepository(ITenantRepository):
         )
 
     async def find_by_id(self, id: str) -> Tenant | None:
-        stmt = select(DbTenant).where(DbTenant.id == id)
+        stmt = select(DbTenant).where(DbTenant.id == id, DbTenant.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
         if not row:
@@ -47,7 +48,9 @@ class TenantRepository(ITenantRepository):
         return self._map_to_domain(row, subs)
 
     async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Tenant | None:
-        stmt = select(DbTenant).where(DbTenant.idp_tenant_id == idp_tenant_id)
+        stmt = select(DbTenant).where(
+            DbTenant.idp_tenant_id == idp_tenant_id, DbTenant.deleted_at.is_(None)
+        )
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
         if not row:
@@ -57,7 +60,7 @@ class TenantRepository(ITenantRepository):
         return self._map_to_domain(row, subs)
 
     async def find_all(self) -> list[Tenant]:
-        stmt = select(DbTenant)
+        stmt = select(DbTenant).where(DbTenant.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
 
@@ -136,19 +139,85 @@ class TenantRepository(ITenantRepository):
     async def delete(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         tenant_id = tenant.id
         self._flush_events(tenant, idempotency_key)
+
+        # Soft delete the DbTenant record
+        stmt = select(DbTenant).where(DbTenant.id == tenant_id)
+        result = await self.session.execute(stmt)
+        db_tenant = result.scalar_one_or_none()
+        if db_tenant:
+            db_tenant.deleted_at = (
+                tenant.deleted_at.replace(tzinfo=None)
+                if tenant.deleted_at
+                else datetime.now(UTC).replace(tzinfo=None)
+            )
+
+        # Hard delete junction/metadata tables
         await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))
-        await self.session.execute(delete(ApiToken).where(ApiToken.tenant_id == tenant_id))
-        await self.session.execute(delete(ApiKey).where(ApiKey.tenant_id == tenant_id))
         await self.session.execute(
             delete(ShardRegistry).where(ShardRegistry.tenant_id == tenant_id)
         )
         await self.session.execute(
             delete(AppSubscription).where(AppSubscription.tenant_id == tenant_id)
         )
+
+        # Note: ApiToken, ApiKey, Webhook, and Role cascades are handled asynchronously via TenantDeletedEventHandler
+        # They will call soft_delete_tenant_infrastructure in a separate transaction
+
+    async def soft_delete_tenant_infrastructure(self, tenant_id: str) -> None:
+        now = datetime.now(UTC).replace(tzinfo=None)
+
+        # Soft delete Webhooks
         await self.session.execute(
-            delete(ControlPlaneOutbox).where(ControlPlaneOutbox.tenant_id == tenant_id)
+            update(Webhook)
+            .where(Webhook.tenant_id == tenant_id, Webhook.deleted_at.is_(None))
+            .values(deleted_at=now)
         )
-        await self.session.execute(delete(DbTenant).where(DbTenant.id == tenant_id))
+
+        # Soft delete Roles
+        await self.session.execute(
+            update(Role)
+            .where(Role.tenant_id == tenant_id, Role.deleted_at.is_(None))
+            .values(deleted_at=now)
+        )
+
+        # Soft delete ApiTokens
+        await self.session.execute(
+            update(ApiToken)
+            .where(ApiToken.tenant_id == tenant_id, ApiToken.deleted_at.is_(None))
+            .values(deleted_at=now)
+        )
+
+        # Soft delete ApiKeys
+        await self.session.execute(
+            update(ApiKey)
+            .where(ApiKey.tenant_id == tenant_id, ApiKey.deleted_at.is_(None))
+            .values(deleted_at=now)
+        )
+
+    async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
+        shard_stmt = select(ShardRegistry).where(
+            ShardRegistry.tenant_id == tenant_id, ShardRegistry.app_id == app_id
+        )
+        existing_shard = await self.session.scalar(shard_stmt)
+
+        if not existing_shard:
+            new_shard = ShardRegistry(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
+            self.session.add(new_shard)
+        else:
+            existing_shard.shard_id = shard_id
+
+    async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
+        sub_stmt = select(AppSubscription).where(
+            AppSubscription.tenant_id == tenant_id, AppSubscription.app_id == app_id
+        )
+        existing_sub = await self.session.scalar(sub_stmt)
+        if not existing_sub:
+            new_sub = AppSubscription(
+                tenant_id=tenant_id, app_id=app_id, tier="standard", status=status
+            )
+            self.session.add(new_sub)
+        else:
+            existing_sub.status = status
 
     async def _load_subscription_ids(self, tenant_id: str) -> list[TenantSubscription]:
         stmt = select(AppSubscription.app_id, AppSubscription.status).where(

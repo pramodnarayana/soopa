@@ -31,6 +31,7 @@ class User(AggregateRoot):
         self.status = status
         self.created_at = created_at
         self.updated_at = updated_at
+        self.deleted_at: datetime | None = None
 
     @classmethod
     def create(
@@ -100,6 +101,16 @@ class User(AggregateRoot):
             )
 
     def mark_deleted(self) -> None:
+        """Logically deletes this user.
+
+        Sets deleted_at to signal soft deletion and emits UserDeletedEvent
+        to cascade the deletion to the IdP user record asynchronously.
+        No PII anonymization is applied at this stage — deferred to a future ticket.
+        """
+        if self.deleted_at is not None:
+            raise ValueError(f"User '{self.id}' has already been deleted.")
+        self.deleted_at = datetime.now(UTC)
+        self.updated_at = self.deleted_at
         if self.idp_user_id:
             self.add_domain_event(UserDeletedEvent(idp_user_id=self.idp_user_id))
 

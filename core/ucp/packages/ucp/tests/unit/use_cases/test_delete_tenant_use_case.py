@@ -91,9 +91,11 @@ async def test_delete_tenant_success(
     mock_tenant_repo.find_by_id.assert_called_once_with("ten_123")
     mock_user_repo.find_users_by_tenant.assert_called_once_with("ten_123")
     mock_tenant_repo.delete.assert_awaited_once_with(tenant, "idemp-key")
+    assert tenant.deleted_at is not None
 
     # User deletion assertions
     mock_user_repo.has_any_tenant_memberships.assert_awaited_once_with("usr_1")
     mock_user_repo.delete.assert_awaited_once_with(mock_user)
+    assert mock_user.deleted_at is not None
 
     mock_uow.commit.assert_awaited_once()

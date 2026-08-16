@@ -36,8 +36,24 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         # True UnitOfWork requires explicit .commit() call in the UseCase.
 
     async def commit(self) -> None:
-        await self.session.execute(text("NOTIFY ucp_outbox_wakeup;"))
-        await self.session.commit()
+        from sqlalchemy.exc import IntegrityError
+
+        from ucp.core.exceptions import DuplicateEntityError
+
+        try:
+            await self.session.execute(text("NOTIFY ucp_outbox_wakeup;"))
+            await self.session.commit()
+        except IntegrityError as exc:
+            constraint_name = None
+            if hasattr(exc, "orig") and isinstance(exc.orig, BaseException) and exc.orig.__cause__:
+                constraint_name = getattr(exc.orig.__cause__, "constraint_name", None)
+            elif hasattr(exc, "orig"):
+                constraint_name = getattr(exc.orig, "constraint_name", None)
+
+            raise DuplicateEntityError(
+                message="A unique constraint was violated.",
+                constraint_name=constraint_name,
+            ) from exc
 
     async def rollback(self) -> None:
         await self.session.rollback()

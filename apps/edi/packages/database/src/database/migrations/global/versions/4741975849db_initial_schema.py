@@ -75,7 +75,16 @@ def upgrade() -> None:
         sa.Column("default_version", sa.String(length=50), server_default="004010", nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        schema="edi",
+    )
+    op.create_index(
+        op.f("ix_edi_outbound_edi_headers_deleted_at"),
+        "outbound_edi_headers",
+        ["deleted_at"],
+        unique=False,
         schema="edi",
     )
     op.create_index(
@@ -138,7 +147,16 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        schema="edi",
+    )
+    op.create_index(
+        op.f("ix_edi_sftp_partners_deleted_at"),
+        "sftp_partners",
+        ["deleted_at"],
+        unique=False,
         schema="edi",
     )
     op.create_index(
@@ -190,6 +208,8 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.CheckConstraint(
             "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_inbound_routes_exactly_one_dest",
@@ -207,6 +227,13 @@ def upgrade() -> None:
             ["ucp.webhooks.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
+        schema="edi",
+    )
+    op.create_index(
+        op.f("ix_edi_inbound_routes_deleted_at"),
+        "inbound_routes",
+        ["deleted_at"],
+        unique=False,
         schema="edi",
     )
     op.create_index(
@@ -236,6 +263,8 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.CheckConstraint(
             "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
@@ -249,6 +278,13 @@ def upgrade() -> None:
             ["edi.sftp_partners.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
+        schema="edi",
+    )
+    op.create_index(
+        op.f("ix_edi_outbound_routes_deleted_at"),
+        "outbound_routes",
+        ["deleted_at"],
+        unique=False,
         schema="edi",
     )
     op.create_index(
@@ -281,6 +317,8 @@ def upgrade() -> None:
         AFTER INSERT ON edi.outbox
         FOR EACH ROW EXECUTE FUNCTION edi_outbox_notify();
     """)
+    # ---------------------------------------------------------------------------
+    # Soft Delete enabled natively in table definitions.
     # ### end Alembic commands ###
 
 

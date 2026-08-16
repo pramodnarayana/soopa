@@ -29,3 +29,18 @@ class PostgresAppRepository(IAppRepository):
             )
             for row in rows
         ]
+
+    async def find_by_id(self, app_id: str) -> App | None:
+        stmt = select(DbApp).where(DbApp.id == app_id)
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+
+        if not row:
+            return None
+
+        return App(
+            id=row.id,
+            slug=row.slug,
+            name=row.name,
+            description=row.description or "",
+        )
