@@ -13,6 +13,8 @@ Architecture note:
 """
 
 import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
@@ -23,6 +25,7 @@ from ucp.adapters.inbound.workers.outbox_relay import ControlPlaneOutboxRelay
 from ucp.adapters.inbound.workers.outbox_sweeper import ControlPlaneOutboxSweeper
 from ucp.adapters.inbound.workers.sqs_event_dispatcher import SqsEventDispatcherWorker
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
+from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProvider
 from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProvider
 from ucp.adapters.outbound.messaging.sns_outbox_publisher import SnsOutboxPublisher
@@ -33,6 +36,7 @@ from ucp.bootstrap.container import Container
 from ucp.core.config import get_settings
 from ucp.ports.identity_provider import IdentityProviderPort
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.uow import UcpUnitOfWorkPort
 
 settings = get_settings()
 logger = structlog.get_logger(__name__)
@@ -44,6 +48,7 @@ _sweeper: ControlPlaneOutboxSweeper | None = None
 _dispatcher: SqsEventDispatcherWorker | None = None
 _identity_service: IdentitySyncService | None = None
 _provisioner: InfrastructureProvisioner | None = None
+_tenant_deleted_handler: TenantDeletedEventHandler | None = None
 _engine = None
 
 
@@ -52,7 +57,7 @@ async def startup() -> None:  # noqa: C901
     Starts all UCP background workers.
     Called by the Shell lifespan on application startup.
     """
-    global _relay, _sweeper, _dispatcher, _identity_service, _provisioner, _engine
+    global _relay, _sweeper, _dispatcher, _identity_service, _provisioner, _tenant_deleted_handler, _engine
 
     database_url = os.environ.get("DATABASE_URL", "")
     if database_url.startswith("postgresql://"):
@@ -103,12 +108,6 @@ async def startup() -> None:  # noqa: C901
         idp_users = container.user_provider()
 
     _identity_service = IdentitySyncService(identity_provider=idp, user_identity_provider=idp_users)
-
-    from collections.abc import AsyncGenerator
-    from contextlib import asynccontextmanager
-
-    from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-    from ucp.ports.uow import UcpUnitOfWorkPort
 
     @asynccontextmanager
     async def uow_factory() -> AsyncGenerator[UcpUnitOfWorkPort, None]:
@@ -182,10 +181,13 @@ async def startup() -> None:  # noqa: C901
         if handler:
             payload = event.payload
             tenant_id = payload.get("tenant_id") or event.tenant_id
+            if not tenant_id:
+                logger.error("tenant_deleted_missing_tenant_id", event_id=getattr(event, "id", None))
+                return
             await handler.handle(tenant_id)
 
     _dispatcher.subscribe("tenant.provisioned", identity_tenant_provisioned_handler)
-    _dispatcher.subscribe("TenantDeletedEvent", tenant_deleted_event_handler)
+    _dispatcher.subscribe("TenantDeleted", tenant_deleted_event_handler)
     _dispatcher.subscribe("UserInvited", identity_user_created_handler)
     _dispatcher.subscribe("UserUpdated", identity_user_updated_handler)
     _dispatcher.subscribe("UserStatusToggled", identity_user_status_toggled_handler)
@@ -200,7 +202,7 @@ async def shutdown() -> None:
     Gracefully stops all UCP background workers.
     Called by the Shell lifespan on application shutdown.
     """
-    global _relay, _sweeper, _dispatcher, _identity_service, _provisioner, _engine
+    global _relay, _sweeper, _dispatcher, _identity_service, _provisioner, _tenant_deleted_handler, _engine
 
     if _relay:
         await _relay.stop()
@@ -219,14 +221,12 @@ async def shutdown() -> None:
 
     _identity_service = None
     _provisioner = None
+    _tenant_deleted_handler = None
 
     if _engine:
         await _engine.dispose()
         _engine = None
 
-
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 

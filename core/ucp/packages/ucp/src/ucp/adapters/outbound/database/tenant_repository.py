@@ -195,29 +195,26 @@ class TenantRepository(ITenantRepository):
         )
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
-        shard_stmt = select(ShardRegistry).where(
-            ShardRegistry.tenant_id == tenant_id, ShardRegistry.app_id == app_id
-        )
-        existing_shard = await self.session.scalar(shard_stmt)
+        from sqlalchemy.dialects.postgresql import insert
 
-        if not existing_shard:
-            new_shard = ShardRegistry(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
-            self.session.add(new_shard)
-        else:
-            existing_shard.shard_id = shard_id
+        stmt = insert(ShardRegistry).values(
+            tenant_id=tenant_id, app_id=app_id, shard_id=shard_id
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["tenant_id", "app_id"], set_={"shard_id": shard_id}
+        )
+        await self.session.execute(stmt)
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
-        sub_stmt = select(AppSubscription).where(
-            AppSubscription.tenant_id == tenant_id, AppSubscription.app_id == app_id
+        from sqlalchemy.dialects.postgresql import insert
+
+        stmt = insert(AppSubscription).values(
+            tenant_id=tenant_id, app_id=app_id, tier="standard", status=status
         )
-        existing_sub = await self.session.scalar(sub_stmt)
-        if not existing_sub:
-            new_sub = AppSubscription(
-                tenant_id=tenant_id, app_id=app_id, tier="standard", status=status
-            )
-            self.session.add(new_sub)
-        else:
-            existing_sub.status = status
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["tenant_id", "app_id"], set_={"status": status}
+        )
+        await self.session.execute(stmt)
 
     async def _load_subscription_ids(self, tenant_id: str) -> list[TenantSubscription]:
         stmt = select(AppSubscription.app_id, AppSubscription.status).where(

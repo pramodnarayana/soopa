@@ -38,6 +38,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 select(Webhook.id).where(
                     Webhook.id == webhook_id,
                     Webhook.tenant_id == tenant_id,
+                    Webhook.deleted_at.is_(None),
                 )
             )
             if not result.scalar_one_or_none():
@@ -60,7 +61,9 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         if sftp_id:
             result = await self.session.execute(
                 select(SFTPPartner.id).where(
-                    SFTPPartner.id == sftp_id, SFTPPartner.tenant_id == tenant_id
+                    SFTPPartner.id == sftp_id,
+                    SFTPPartner.tenant_id == tenant_id,
+                    SFTPPartner.deleted_at.is_(None),
                 )
             )
             if not result.scalar_one_or_none():
@@ -200,7 +203,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 InboundRoute.tenant_id == tenant_id,
                 InboundRoute.deleted_at.is_(None),
             )
-            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
+            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)

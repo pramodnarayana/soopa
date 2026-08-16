@@ -70,7 +70,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         if sftp_id:
             result = await self.session.execute(
                 select(SFTPPartner.id).where(
-                    SFTPPartner.id == sftp_id, SFTPPartner.tenant_id == tenant_id
+                    SFTPPartner.id == sftp_id,
+                    SFTPPartner.tenant_id == tenant_id,
+                    SFTPPartner.deleted_at.is_(None),
                 )
             )
             if not result.scalar_one_or_none():
@@ -135,7 +137,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                 OutboundRoute.tenant_id == tenant_id,
                 OutboundRoute.deleted_at.is_(None),
             )
-            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
+            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)
