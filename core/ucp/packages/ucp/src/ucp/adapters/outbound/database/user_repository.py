@@ -20,7 +20,12 @@ class UserRepository(IUserRepository):
         self.session = session
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        stmt = select(UserRole).where(UserRole.user_id == user_id).limit(1)
+        stmt = (
+            select(UserRole)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(UserRole.user_id == user_id, Role.deleted_at.is_(None))
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
@@ -29,7 +34,13 @@ class UserRepository(IUserRepository):
             select(DbUser, Role.name)
             .join(UserRole, UserRole.user_id == DbUser.id)
             .join(Role, Role.id == UserRole.role_id)
-            .where(and_(UserRole.tenant_id == tenant_id, DbUser.deleted_at.is_(None)))
+            .where(
+                and_(
+                    UserRole.tenant_id == tenant_id,
+                    DbUser.deleted_at.is_(None),
+                    Role.deleted_at.is_(None),
+                )
+            )
         )
         result = await self.session.execute(stmt)
         rows = result.all()
@@ -115,6 +126,7 @@ class UserRepository(IUserRepository):
                     UserRole.tenant_id == tenant_id,
                     DbUser.id == user_id,
                     DbUser.deleted_at.is_(None),
+                    Role.deleted_at.is_(None),
                 )
             )
         )
@@ -187,7 +199,8 @@ class UserRepository(IUserRepository):
                 logger.error(
                     "outbox_event_missing_tenant_id",
                     event_name=event_name,
-                    event_payload=payload_dict,
+                    event_id=getattr(event, "id", "unknown"),
+                    user_id=user.id,
                 )
                 # If outbox requires it, we raise here to fail fast instead of hitting DB constraint
                 # raise ValueError(f"Event {event_name} missing required routing tenant_id")

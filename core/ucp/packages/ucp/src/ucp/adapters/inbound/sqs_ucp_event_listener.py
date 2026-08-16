@@ -94,6 +94,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
             message_id = msg["MessageId"]
             body_str = msg["Body"]
 
+            event_data: Any = {}
             try:
                 raw_body = json.loads(body_str)
                 # Handle SNS Envelope
@@ -131,13 +132,16 @@ class SqsUcpEventListener(UcpEventListenerPort):
                 # polling loop in SqsEventDispatcherWorker, forcing it to sleep for 5 seconds.
                 # By swallowing it here, we ensure the message is NOT deleted (so SQS will retry it later),
                 # but the worker can immediately continue polling the next message.
+                event_type = (
+                    event_data.get("event_type", "unknown")
+                    if isinstance(event_data, dict)
+                    else "unknown"
+                )
                 logger.exception(
                     "ucp_event_processing_failed",
                     message_id=message_id,
                     error=str(e),
-                    event_type=event_data.get("event_type", "unknown")
-                    if "event_data" in locals()
-                    else "unknown",
+                    event_type=event_type,
                 )
 
         except ClientError:

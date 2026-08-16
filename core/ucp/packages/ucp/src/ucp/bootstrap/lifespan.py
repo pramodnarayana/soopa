@@ -174,11 +174,12 @@ async def startup() -> None:  # noqa: C901
             payload = event.payload
             idp_user_id = payload.get("idp_user_id")
             tenant_id = payload.get("tenant_id")
-            if idp_user_id and tenant_id:
+            role_name = payload.get("role_name")
+            if idp_user_id and tenant_id and role_name:
                 await service.handle_user_role_assigned(
                     idp_user_id=idp_user_id,
                     tenant_id=tenant_id,
-                    role=payload["role_name"],
+                    role=role_name,
                 )
             else:
                 logger.warning(

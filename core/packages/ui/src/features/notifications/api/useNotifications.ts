@@ -11,6 +11,13 @@ export interface InAppNotification {
   created_at: string;
 }
 
+class FatalAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FatalAuthError';
+  }
+}
+
 export interface NotificationContext {
   tenantId: string;
   userId: string;
@@ -40,14 +47,14 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
             },
             signal: abortController.signal,
             onopen: async (response) => {
-              if (response.ok) {
+              if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
                 consecutiveErrorCount = 0;
                 return;
               }
               if (response.status === 401 || response.status === 403) {
-                // Stop retrying on permanent auth errors
-                throw new Error(`Authentication error: ${response.status}`);
+                throw new FatalAuthError(`Authentication error: ${response.status}`);
               }
+              throw new Error(`Unexpected response: ${response.status} ${response.statusText}`);
             },
             onmessage: (event) => {
               consecutiveErrorCount = 0;
@@ -66,6 +73,12 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
               }
             },
             onerror: (error) => {
+              if (error instanceof FatalAuthError) {
+                console.error('Fatal authentication error, stopping SSE:', error);
+                abortController.abort();
+                throw error;
+              }
+
               console.error('SSE stream error:', error);
               consecutiveErrorCount++;
 
@@ -74,14 +87,11 @@ export function useNotifications({ tenantId, userId, accessToken, apiUrl }: Noti
                   `SSE connection failed ${MAX_CONSECUTIVE_ERRORS} times consecutively. Closing connection to prevent infinite reconnect loop.`,
                 );
                 abortController.abort();
-                // Prevent further retries by throwing
                 throw error;
               }
 
-              // Invalidate the notifications query to trigger a REST fallback
               void queryClient.invalidateQueries({ queryKey: ['notifications', tenantId, userId] });
 
-              // Allow fetch-event-source to retry automatically
               return undefined;
             },
             onclose: () => {

@@ -72,19 +72,15 @@ function _parseTransformSuccessResult(data: TransformResponse): {
       meta?: { validation_errors?: string[] };
     };
 
-    console.log('EDI Tool Debug: Parsed Backend Response:', parsed);
-
     if (parsed.data !== undefined && parsed.meta) {
       const resultString =
         typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data, null, 2);
-      console.log('EDI Tool Debug: Returning outputResult of length:', resultString.length);
       return {
         outputResult: resultString,
         validationErrors: parsed.meta.validation_errors || [],
       };
     }
   } catch (err) {
-    console.warn('EDI Tool Debug: JSON.parse failed:', err);
     // Ignore JSON parse errors and return raw result
   }
 

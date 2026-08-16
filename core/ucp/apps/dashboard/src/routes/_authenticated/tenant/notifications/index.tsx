@@ -11,7 +11,21 @@ function NotificationsRoute() {
   const { tenantId, token } = useTenantContext();
   // Use canonical platform user ID (usr_...) from /auth/me, NOT the raw Zitadel IDP sub.
   // This enforces the architectural rule: all internal operations use platform-canonical IDs.
-  const { data: authUser } = useAuthUser();
+  const { data: authUser, isLoading, isError, refetch } = useAuthUser();
+
+  if (isLoading) {
+    return <div>Loading user information...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div>
+        <p>Failed to load user information.</p>
+        <button onClick={() => refetch()}>Retry</button>
+      </div>
+    );
+  }
+
   const canonicalUserId = authUser?.subject ?? '';
 
   if (!token || !tenantId || !canonicalUserId) {

@@ -28,13 +28,8 @@ class DeleteUserUseCase:
                     f"User {command.user_id} not found or missing IDP mapping in tenant {command.tenant_id}"
                 )
 
-            # Resolve tenant to get idp_tenant_id for the event
-            tenant = await self._uow.tenant_repo.find_by_id(command.tenant_id)
-            if not tenant:
-                raise ResourceNotFoundError(f"Tenant {command.tenant_id} not found")
-
             # 1. The aggregate handles its own invariant checks and event emissions
-            user.remove_membership(tenant.idp_tenant_id or command.tenant_id)
+            user.remove_membership(command.tenant_id)
 
             # 2. The repository translates the state to the DB and flushes events
             await self._uow.role_repo.remove_user_roles(

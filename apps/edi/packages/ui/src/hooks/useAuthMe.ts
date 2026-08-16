@@ -28,7 +28,7 @@ export function useAuthMe(): { data: AuthMe | undefined; isLoading: boolean } {
 
   return useQuery({
     queryKey: ['auth', 'me'],
-    queryFn: () => api.get<AuthMe>('/api/v1/auth/me').then((res) => res.data),
+    queryFn: () => api.get<AuthMe>('/auth/me').then((res) => res.data),
     staleTime: 5 * 60 * 1000, // 5 minutes — identity doesn't change often
   });
 }

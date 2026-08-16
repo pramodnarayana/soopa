@@ -31,7 +31,7 @@ class InfrastructureProvisioner:
         tenant_id = event.tenant_id
         event_id = event.id
         if not tenant_id or not event_id:
-            logger.error("app_subscribed_missing_ids")
+            logger.error("app_subscribed_missing_ids", tenant_id=tenant_id, event_id=event_id)
             return
 
         try:
@@ -76,7 +76,7 @@ class InfrastructureProvisioner:
         tenant_id = event.tenant_id
         event_id = event.id
         if not tenant_id or not event_id:
-            logger.error("app_unsubscribed_missing_ids")
+            logger.error("app_unsubscribed_missing_ids", tenant_id=tenant_id, event_id=event_id)
             return
 
         try:

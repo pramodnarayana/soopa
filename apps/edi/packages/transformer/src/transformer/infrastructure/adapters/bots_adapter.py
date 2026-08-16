@@ -59,17 +59,14 @@ class BotsEDIAdapter(EDITransformerPort):
                 line.strip() for err in errors for line in str(err).split("\n") if line.strip()
             ]
             return ast_dict, parsed_errors
-        except Exception as e:
+        except ValueError as e:
             error_msg = str(e)
-            parsed_errors = []
-
-            if error_msg.startswith("[") or "Details:" in error_msg:
-                parsed_errors = [line.strip() for line in error_msg.split("\n") if line.strip()]
-                logger.warning("bots_adapter.validation_failed", error=error_msg)
-            else:
-                logger.exception("bots_adapter.system_error")
-
+            parsed_errors = [line.strip() for line in error_msg.split("\n") if line.strip()]
+            logger.warning("bots_adapter.validation_failed", error=error_msg)
             raise TransformationError(f"AST generation failed: {e}", errors=parsed_errors) from e
+        except Exception as e:
+            logger.exception("bots_adapter.system_error")
+            raise TransformationError(f"AST generation failed: {e}", errors=[]) from e
 
     def serialize_to_edi(self, ast_dict: JsonDict, standard: str = "x12") -> tuple[str, list[str]]:
         """

@@ -1,3 +1,4 @@
+import contextlib
 import typing
 
 import structlog
@@ -7,6 +8,12 @@ from ...ports.outbound.user_identity_provider import IUserIdentityProvider
 from ...ports.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+
+class StateConflictError(Exception):
+    """Raised when a resource is not in the expected state for an operation."""
+
+    pass
 
 
 class IdentitySyncService:
@@ -19,11 +26,27 @@ class IdentitySyncService:
         self,
         identity_provider: IdentityProviderPort,
         user_identity_provider: IUserIdentityProvider,
-        uow_factory: "typing.Callable[[], typing.AsyncContextManager[UcpUnitOfWorkPort]] | None" = None,
+        uow_factory: "typing.Callable[[], contextlib.AbstractAsyncContextManager[UcpUnitOfWorkPort]] | None" = None,
     ):
         self.identity_provider = identity_provider
         self.user_identity_provider = user_identity_provider
         self.uow_factory = uow_factory
+
+    async def _resolve_idp_tenant_id(self, tenant_id: str) -> str:
+        """
+        Resolves the IDP tenant ID for the given platform tenant ID.
+        Raises StateConflictError if the tenant is not provisioned.
+        """
+        if self.uow_factory is None:
+            raise ValueError("uow_factory is required to resolve tenant IDs")
+
+        async with self.uow_factory() as uow:
+            tenant = await uow.tenant_repo.find_by_id(tenant_id)
+            if not tenant or not tenant.idp_tenant_id:
+                raise StateConflictError(
+                    f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
+                )
+            return tenant.idp_tenant_id
 
     async def handle_tenant_provisioned(self, tenant_id: str) -> None:
         """
@@ -45,21 +68,10 @@ class IdentitySyncService:
         Synchronizes a newly created UCP user to the Identity Provider.
         Creates the user and assigns the given role.
         """
-        bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, email=email, role=role)
+        bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, role=role)
         bound_logger.info("syncing_new_user_to_identity_provider", action="create")
         try:
-            if self.uow_factory is None:
-                raise ValueError("uow_factory is required to resolve tenant IDs")
-
-            async with self.uow_factory() as uow:
-                tenant = await uow.tenant_repo.find_by_id(tenant_id)
-                if not tenant or not tenant.idp_tenant_id:
-                    from ucp.core.exceptions import StateConflictError
-
-                    raise StateConflictError(
-                        f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
-                    )
-                idp_tenant_id = tenant.idp_tenant_id
+            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
 
             idp_user_id = await self.user_identity_provider.create_user(
                 org_id=idp_tenant_id,
@@ -77,16 +89,15 @@ class IdentitySyncService:
             )
 
             # Update the local database with the newly generated idp_user_id
-            if self.uow_factory is not None:
-                async with self.uow_factory() as uow:
-                    local_user = await uow.user_repo.find_by_id(user_id)
-                    if local_user:
-                        local_user.idp_user_id = idp_user_id
-                        await uow.user_repo.save(local_user)
-                        await uow.commit()
-                        bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
-                    else:
-                        bound_logger.warning("identity_sync_local_user_not_found_for_update")
+            async with self.uow_factory() as uow:
+                local_user = await uow.user_repo.find_by_id(user_id)
+                if local_user:
+                    local_user.idp_user_id = idp_user_id
+                    await uow.user_repo.save(local_user)
+                    await uow.commit()
+                    bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
+                else:
+                    bound_logger.warning("identity_sync_local_user_not_found_for_update")
 
         except Exception:
             bound_logger.exception("identity_sync_new_user_failed")
@@ -100,18 +111,7 @@ class IdentitySyncService:
         bound_logger.info("syncing_user_role_assigned_to_identity_provider")
 
         try:
-            if self.uow_factory is None:
-                raise ValueError("uow_factory is required to resolve tenant IDs")
-
-            async with self.uow_factory() as uow:
-                tenant = await uow.tenant_repo.find_by_id(tenant_id)
-                if not tenant or not tenant.idp_tenant_id:
-                    from ucp.core.exceptions import StateConflictError
-
-                    raise StateConflictError(
-                        f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
-                    )
-                idp_tenant_id = tenant.idp_tenant_id
+            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
 
             await self.user_identity_provider.assign_tenant_role(
                 user_id=idp_user_id, org_id=idp_tenant_id, role=role
@@ -130,18 +130,7 @@ class IdentitySyncService:
         bound_logger = logger.bind(idp_user_id=idp_user_id, tenant_id=tenant_id)
         bound_logger.info("syncing_user_update_to_identity_provider", action="update")
         try:
-            if self.uow_factory is None:
-                raise ValueError("uow_factory is required to resolve tenant IDs")
-
-            async with self.uow_factory() as uow:
-                tenant = await uow.tenant_repo.find_by_id(tenant_id)
-                if not tenant or not tenant.idp_tenant_id:
-                    from ucp.core.exceptions import StateConflictError
-
-                    raise StateConflictError(
-                        f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
-                    )
-                idp_tenant_id = tenant.idp_tenant_id
+            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
 
             await self.user_identity_provider.update_user_profile(
                 user_id=idp_user_id,
@@ -168,18 +157,7 @@ class IdentitySyncService:
         bound_logger = logger.bind(idp_user_id=idp_user_id, tenant_id=tenant_id, action=action)
         bound_logger.info("syncing_user_status_toggle_to_identity_provider")
         try:
-            if self.uow_factory is None:
-                raise ValueError("uow_factory is required to resolve tenant IDs")
-
-            async with self.uow_factory() as uow:
-                tenant = await uow.tenant_repo.find_by_id(tenant_id)
-                if not tenant or not tenant.idp_tenant_id:
-                    from ucp.core.exceptions import StateConflictError
-
-                    raise StateConflictError(
-                        f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
-                    )
-                idp_tenant_id = tenant.idp_tenant_id
+            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
 
             if action not in ("activate", "deactivate"):
                 raise ValueError(f"Invalid action for toggle user status: {action}")

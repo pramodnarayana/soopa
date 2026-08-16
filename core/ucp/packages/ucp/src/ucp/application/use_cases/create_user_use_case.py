@@ -31,7 +31,6 @@ class CreateUserUseCase:
         logger.info(
             "create_user.started",
             tenant_id=command.tenant_id,
-            email=command.email,
             role=command.role,
         )
         async with self._uow:

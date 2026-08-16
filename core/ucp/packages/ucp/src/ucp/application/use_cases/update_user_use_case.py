@@ -48,12 +48,10 @@ class UpdateUserUseCase:
             await self._uow.user_repo.save(user)
 
             # 2. Update Tenant Membership Role using PBAC
-            pbac_role_name = command.role
-
-            pbac_role = await self._uow.role_repo.get_global_role_by_name(pbac_role_name)
+            pbac_role = await self._uow.role_repo.get_global_role_by_name(command.role)
             if not pbac_role:
                 raise ResourceNotFoundError(
-                    f"Global PBAC Role '{pbac_role_name}' is not seeded in the database."
+                    f"Global PBAC Role '{command.role}' is not seeded in the database."
                 )
 
             # Remove existing role mappings for the user in this tenant

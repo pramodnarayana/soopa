@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import structlog
-from platform_orm.models.identity import Role, UserRole
+from platform_orm.models.identity import Role, User, UserRole
 from platform_orm.models.notifications import InAppNotification
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,14 +27,18 @@ class PostgresInAppPersistence(InAppPersistencePort):
             if target_user_id:
                 user_ids = [target_user_id]
             else:
-                # Fan out to all users holding an admin-level role in this tenant via PBAC.
+                # Fan out to all active users holding an admin-level role in this tenant via PBAC.
                 # TenantAdmin is the canonical admin role name.
                 stmt = (
                     select(UserRole.user_id)
                     .join(Role, Role.id == UserRole.role_id)
+                    .join(User, User.id == UserRole.user_id)
                     .where(
                         UserRole.tenant_id == tenant_id,
                         Role.name.in_(["TenantAdmin", "PlatformAdmin"]),
+                        Role.deleted_at.is_(None),
+                        User.deleted_at.is_(None),
+                        User.status == "active",
                     )
                     .distinct()
                 )
@@ -44,7 +48,7 @@ class PostgresInAppPersistence(InAppPersistencePort):
             if not user_ids:
                 logger.warning(
                     "No recipients found for in-app notification: tenant_id=%s, target_user_id=%s, "
-                    "event_type=%s. No active admin/owner users available.",
+                    "event_type=%s. No active admin users with non-deleted roles available.",
                     tenant_id,
                     data.get("target_user_id"),
                     data.get("event_type"),

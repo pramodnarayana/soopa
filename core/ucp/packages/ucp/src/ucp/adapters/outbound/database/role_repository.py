@@ -118,8 +118,21 @@ class PostgresRoleRepository(IRoleRepository):
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id, role_id=role_id)
         bound_logger.info("role_repo.assign_user_role.started")
 
-        # Verify the role exists and is not soft-deleted
-        stmt = select(OrmRole.id).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
+        # Verify the role exists, is not soft-deleted, and has appropriate scope
+        if tenant_id is None:
+            # Assigning a global role: must be a global role (tenant_id IS NULL)
+            stmt = select(OrmRole.id).where(
+                OrmRole.id == role_id,
+                OrmRole.deleted_at.is_(None),
+                OrmRole.tenant_id.is_(None),
+            )
+        else:
+            # Assigning a tenant-scoped role: accept global roles OR tenant-specific roles
+            stmt = select(OrmRole.id).where(
+                OrmRole.id == role_id,
+                OrmRole.deleted_at.is_(None),
+                (OrmRole.tenant_id.is_(None) | (OrmRole.tenant_id == tenant_id)),
+            )
         result = await self.session.execute(stmt)
         if not result.scalar_one_or_none():
             raise ResourceNotFoundError(f"Role '{role_id}' not found or is inactive.")
@@ -189,7 +202,6 @@ class PostgresRoleRepository(IRoleRepository):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
-            payload_dict = json.loads(event.model_dump_json())
             payload_dict = json.loads(event.model_dump_json())
             tenant_id = event.get_routing_tenant_id()
             if tenant_id is None and event_name != "role_created":
