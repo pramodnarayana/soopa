@@ -41,13 +41,13 @@ class OtelTracer(ITracer):
 
     def __init__(self, service_name: str, otlp_endpoint: str | None = None):
         resource = Resource(attributes={SERVICE_NAME: service_name})
-        provider = TracerProvider(resource=resource)
 
+        # Configure Tracing
+        trace_provider = TracerProvider(resource=resource)
         if otlp_endpoint:
-            exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
-            provider.add_span_processor(BatchSpanProcessor(exporter))
-
-        trace.set_tracer_provider(provider)
+            trace_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            trace_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+        trace.set_tracer_provider(trace_provider)
         self._tracer = trace.get_tracer(service_name)
 
     @contextmanager

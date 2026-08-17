@@ -1,0 +1,119 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  filter/ucp:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] != "ucp"'
+    metrics:
+      metric:
+        - 'resource.attributes["service.name"] != "ucp"'
+    logs:
+      log_record:
+        - 'resource.attributes["service.name"] != "ucp"'
+  filter/edi:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] != "edi"'
+    metrics:
+      metric:
+        - 'resource.attributes["service.name"] != "edi"'
+    logs:
+      log_record:
+        - 'resource.attributes["service.name"] != "edi"'
+  filter/notification:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] != "notification"'
+    metrics:
+      metric:
+        - 'resource.attributes["service.name"] != "notification"'
+    logs:
+      log_record:
+        - 'resource.attributes["service.name"] != "notification"'
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/openobserve/default:
+    endpoint: "${env:OPENOBSERVE_OTLP_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      Authorization: "Basic ${env:OPENOBSERVE_BASIC_AUTH}"
+      organization: "local_dev"
+  otlp/openobserve/ucp:
+    endpoint: "${env:OPENOBSERVE_OTLP_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      Authorization: "Basic ${env:OPENOBSERVE_BASIC_AUTH}"
+      organization: "local_dev"
+      stream-name: "ucp"
+  otlp/openobserve/edi:
+    endpoint: "${env:OPENOBSERVE_OTLP_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      Authorization: "Basic ${env:OPENOBSERVE_BASIC_AUTH}"
+      organization: "local_dev"
+      stream-name: "edi"
+  otlp/openobserve/notification:
+    endpoint: "${env:OPENOBSERVE_OTLP_ENDPOINT}"
+    tls:
+      insecure: true
+    headers:
+      Authorization: "Basic ${env:OPENOBSERVE_BASIC_AUTH}"
+      organization: "local_dev"
+      stream-name: "notification"
+
+service:
+  pipelines:
+    traces/ucp:
+      receivers: [otlp]
+      processors: [filter/ucp, batch]
+      exporters: [debug, otlp/openobserve/ucp]
+    traces/edi:
+      receivers: [otlp]
+      processors: [filter/edi, batch]
+      exporters: [debug, otlp/openobserve/edi]
+    metrics/ucp:
+      receivers: [otlp]
+      processors: [filter/ucp, batch]
+      exporters: [debug, otlp/openobserve/ucp]
+    metrics/edi:
+      receivers: [otlp]
+      processors: [filter/edi, batch]
+      exporters: [debug, otlp/openobserve/edi]
+    logs/ucp:
+      receivers: [otlp]
+      processors: [filter/ucp, batch]
+      exporters: [debug, otlp/openobserve/ucp]
+    logs/edi:
+      receivers: [otlp]
+      processors: [filter/edi, batch]
+      exporters: [debug, otlp/openobserve/edi]
+    traces/notification:
+      receivers: [otlp]
+      processors: [filter/notification, batch]
+      exporters: [debug, otlp/openobserve/notification]
+    metrics/notification:
+      receivers: [otlp]
+      processors: [filter/notification, batch]
+      exporters: [debug, otlp/openobserve/notification]
+    logs/notification:
+      receivers: [otlp]
+      processors: [filter/notification, batch]
+      exporters: [debug, otlp/openobserve/notification]

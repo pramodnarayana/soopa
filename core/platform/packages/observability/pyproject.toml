@@ -13,7 +13,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.45b0",
     "opentelemetry-instrumentation-sqlalchemy>=0.45b0",
     # Metrics
-    "prometheus-client>=0.20.0",
+    # (Metrics are now natively handled by opentelemetry-sdk)
     # Logging
     "structlog>=24.1.0",
 ]
@@ -34,28 +34,28 @@ DEP002 = [
 "opentelemetry-sdk" = ["opentelemetry"]
 
 [tool.pyright]
-venvPath = "../../../../.."
+venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
     "../../identity/src",
     "src",
     "../../schemas/python/src",
-    "../../../../../core/platform/packages/orm/src",
-    "../../../../../apps/edi/packages/pipeline/src",
-    "../../../../../apps/edi/packages/grammar/src",
-    "../../../../../apps/edi/packages/config/src",
-    "../../../../../apps/edi/packages/security/src",
-    "../../../../../apps/edi/packages/patches/src",
-    "../../../../../apps/edi/packages/transformer/src",
-    "../../../../../apps/edi/packages/as2_core/src",
-    "../../../../../apps/edi/packages/bots_core/src",
-    "../../../../../apps/edi/packages/domain/src",
-    "../../../../../apps/edi/apps/edi-worker/compute/src",
-    "../../../../../apps/edi/apps/edi-worker/ucp-sync/src",
-    "../../../../../apps/edi/apps/edi-worker/orchestrator/src",
-    "../../../../../apps/edi/apps/edi-as2-server/src",
-    "../../../../../apps/edi/packages/edi/src",
+    "../../../../core/platform/packages/orm/src",
+    "../../../../apps/edi/packages/pipeline/src",
+    "../../../../apps/edi/packages/grammar/src",
+    "../../../../apps/edi/packages/config/src",
+    "../../../../apps/edi/packages/security/src",
+    "../../../../apps/edi/packages/patches/src",
+    "../../../../apps/edi/packages/transformer/src",
+    "../../../../apps/edi/packages/as2_core/src",
+    "../../../../apps/edi/packages/bots_core/src",
+    "../../../../apps/edi/packages/domain/src",
+    "../../../../apps/edi/apps/edi-worker/compute/src",
+    "../../../../apps/edi/apps/edi-worker/ucp-sync/src",
+    "../../../../apps/edi/apps/edi-worker/orchestrator/src",
+    "../../../../apps/edi/apps/edi-as2-server/src",
+    "../../../../apps/edi/packages/edi/src",
 ]
 
 [tool.ruff]
-extend = "../../../../../pyproject.toml"
+extend = "../../../../pyproject.toml"
