@@ -17,18 +17,14 @@ def memory_exporter():
 @pytest.fixture
 def otel_tracer(memory_exporter, monkeypatch):
     # Patch OtelTracer to use the memory exporter for testing
-    original_init = OtelTracer.__init__
-
     def patched_init(self, service_name, otlp_endpoint=None):
-        from opentelemetry import trace
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
 
         resource = Resource(attributes={SERVICE_NAME: service_name})
         trace_provider = TracerProvider(resource=resource)
         trace_provider.add_span_processor(SimpleSpanProcessor(memory_exporter))
-        trace.set_tracer_provider(trace_provider)
-        self._tracer = trace.get_tracer(service_name)
+        self._tracer = trace_provider.get_tracer(service_name)
 
     monkeypatch.setattr(OtelTracer, "__init__", patched_init)
     tracer = OtelTracer(service_name="test-service")

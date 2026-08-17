@@ -13,8 +13,6 @@ def memory_reader():
 @pytest.fixture
 def otel_metrics(memory_reader, monkeypatch):
     # Patch OtelMetrics to use the memory reader for testing
-    original_init = OtelMetrics.__init__
-
     def patched_init(self, service_name, otlp_endpoint=None):
         # Call original init but ignore otlp_endpoint
         from opentelemetry import metrics

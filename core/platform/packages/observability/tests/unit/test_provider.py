@@ -7,7 +7,7 @@ def test_observability_provider_initialization():
     # Capture existing state
     old_tracer = ObservabilityProvider._tracer
     old_metrics = ObservabilityProvider._metrics
-    old_logger = ObservabilityProvider._logger
+    old_logger = ObservabilityProvider._default_logger
 
     try:
         mock_tracer = MagicMock()
@@ -27,4 +27,4 @@ def test_observability_provider_initialization():
         # Restore previous state
         ObservabilityProvider._tracer = old_tracer
         ObservabilityProvider._metrics = old_metrics
-        ObservabilityProvider._logger = old_logger
+        ObservabilityProvider._default_logger = old_logger
