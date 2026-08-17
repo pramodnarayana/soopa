@@ -10,6 +10,7 @@ from identity.ports.token_verifier import TokenVerifier
 from ucp.domain.models.authorization import Capability
 from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.user_repository import IUserRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -22,10 +23,12 @@ class JwtStrategy(IAuthenticationStrategy):
     def __init__(
         self,
         tenant_repo_factory: Callable[[], AbstractAsyncContextManager[ITenantRepository]],
+        user_repo_factory: Callable[[], AbstractAsyncContextManager[IUserRepository]],
         role_repo_factory: Callable[[], AbstractAsyncContextManager[IRoleRepository]],
         token_verifier: TokenVerifier,
     ):
         self.tenant_repo_factory = tenant_repo_factory
+        self.user_repo_factory = user_repo_factory
         self.role_repo_factory = role_repo_factory
         self.token_verifier = token_verifier
 
@@ -34,7 +37,7 @@ class JwtStrategy(IAuthenticationStrategy):
         # strategy if no other strategy claims the token.
         return True
 
-    async def authenticate(self, token: str) -> IdentityContext:
+    async def authenticate(self, token: str) -> IdentityContext:  # noqa: C901
         # Note: We let AuthenticationError propagate up so the caller handles it
         identity: IdentityContext = await authenticate_bearer_token(
             f"Bearer {token}", self.token_verifier
@@ -73,6 +76,13 @@ class JwtStrategy(IAuthenticationStrategy):
                     mapped_tenants.add(tid)
 
             identity.authorized_tenants = mapped_tenants
+
+        # Map IdP user ID to Canonical UCP user ID
+        if identity.subject and not identity.subject.startswith("usr_"):
+            async with self.user_repo_factory() as user_repo:
+                resolved_u = await user_repo.find_by_idp_user_id(identity.subject)
+                if resolved_u:
+                    identity.subject = resolved_u.id
 
         # Backwards compatibility: if Zitadel token claims they are "admin", grant legacy capabilities
         if identity.is_platform_admin:

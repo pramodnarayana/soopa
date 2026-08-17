@@ -34,6 +34,7 @@ from ucp.adapters.inbound.http.routers import (
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.user_repository import UserRepository
 from ucp.application.services.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.services.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
@@ -87,6 +88,12 @@ async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepositor
 
 
 @contextlib.asynccontextmanager
+async def user_repo_factory() -> collections.abc.AsyncIterator[UserRepository]:
+    async with _async_session_maker() as session:
+        yield UserRepository(session)
+
+
+@contextlib.asynccontextmanager
 async def role_repo_factory() -> collections.abc.AsyncIterator[PostgresRoleRepository]:
     async with _async_session_maker() as session:
         yield PostgresRoleRepository(session)
@@ -98,6 +105,7 @@ app.add_middleware(
         ApiKeyStrategy(token_repo_factory=api_token_repo_factory),
         JwtStrategy(
             tenant_repo_factory=tenant_repo_factory,
+            user_repo_factory=user_repo_factory,
             role_repo_factory=role_repo_factory,
             token_verifier=get_token_verifier(),
         ),

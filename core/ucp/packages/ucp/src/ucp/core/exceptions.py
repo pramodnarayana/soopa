@@ -6,8 +6,16 @@ class ResourceNotFoundError(DomainError):
     """Raised when a requested resource is not found."""
 
 
+class StateConflictError(DomainError):
+    """Raised when an operation conflicts with the current state of a resource."""
+
+
 class InvalidCapabilityError(DomainError):
     """Raised when an invalid or unknown capability is requested."""
+
+
+class InvalidRoleMappingError(DomainError):
+    """Raised when an external role string cannot be mapped to a valid PBAC role."""
 
 
 class IdempotencyConflictError(DomainError):
@@ -45,3 +53,11 @@ class IdentityProviderError(InfrastructureError):
         super().__init__(message)
         self.original_error = original_error
         self.status_code = status_code
+
+
+class DuplicateEntityError(InfrastructureError):
+    """Raised when an infrastructure constraint (e.g. unique constraint) is violated."""
+
+    def __init__(self, message: str, constraint_name: str | None = None):
+        super().__init__(message)
+        self.constraint_name = constraint_name

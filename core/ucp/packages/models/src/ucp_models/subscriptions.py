@@ -46,4 +46,7 @@ class AppSubscription(UcpBase):
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
 
-    __table_args__ = (Index("idx_app_subs_tenant_status", "tenant_id", "status"),)
+    __table_args__ = (
+        Index("idx_app_subs_tenant_status", "tenant_id", "status"),
+        {"schema": "ucp"},
+    )

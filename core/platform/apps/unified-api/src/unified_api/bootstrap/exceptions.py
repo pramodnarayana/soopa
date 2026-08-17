@@ -41,7 +41,8 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
     async def resource_not_found_exception_handler(
         request: Request, exc: ResourceNotFoundError
     ) -> JSONResponse:
-        logger.warning("ResourceNotFoundError at %s: %s", request.url.path, exc)
+        sanitized_path = request.url.path.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        logger.warning("ResourceNotFoundError at %s: %s", sanitized_path, exc)
         return JSONResponse(
             status_code=404,
             content={"detail": str(exc)},
@@ -51,7 +52,8 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
     async def identity_provider_exception_handler(
         request: Request, exc: IdentityProviderError
     ) -> JSONResponse:
-        logger.error("IdentityProviderError at %s: %s", request.url.path, exc)
+        sanitized_path = request.url.path.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        logger.error("IdentityProviderError at %s: %s", sanitized_path, exc)
         return JSONResponse(
             status_code=500,
             content={"detail": "An internal identity provider error occurred."},
@@ -72,7 +74,8 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
                 error_dict["ctx"] = {k: str(v) for k, v in ctx.items()}
             sanitized_errors.append(error_dict)
 
-        logger.error("422 Error at %s: %s", request.url.path, sanitized_errors)
+        sanitized_path = request.url.path.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        logger.error("422 Error at %s: %s", sanitized_path, sanitized_errors)
         return JSONResponse(
             status_code=422,
             content={"detail": sanitized_errors},
@@ -82,7 +85,8 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
     async def orchestration_exception_handler(
         request: Request, exc: OrchestrationError
     ) -> JSONResponse:
-        logger.error("OrchestrationError at %s: %s", request.url.path, exc)
+        sanitized_path = request.url.path.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        logger.error("OrchestrationError at %s: %s", sanitized_path, exc)
         return JSONResponse(
             status_code=500,
             content={"detail": str(exc)},
@@ -90,8 +94,18 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(VaultError)
     async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
-        logger.error("VaultError at %s: %s", request.url.path, exc)
+        sanitized_path = request.url.path.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        logger.error("VaultError at %s: %s", sanitized_path, exc)
         return JSONResponse(
             status_code=500,
             content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        sanitized_path = request.url.path.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        logger.exception("Unhandled exception at %s", sanitized_path)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
         )

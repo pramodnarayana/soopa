@@ -4,10 +4,11 @@ from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
+from platform_orm.models.common import SoftDeleteMixin
 from platform_orm.models.core import IdentityBase
 
 
-class Tenant(IdentityBase):
+class Tenant(IdentityBase, SoftDeleteMixin):
     __tablename__ = "tenants"
     ID_PREFIX = "ten"
 
@@ -27,7 +28,7 @@ class Tenant(IdentityBase):
     __table_args__ = ({"schema": "identity"},)
 
 
-class User(IdentityBase):
+class User(IdentityBase, SoftDeleteMixin):
     __tablename__ = "users"
     ID_PREFIX = "usr"
 
@@ -74,7 +75,7 @@ class TenantUser(IdentityBase):
     __table_args__ = ({"schema": "identity"},)
 
 
-class ApiToken(IdentityBase):
+class ApiToken(IdentityBase, SoftDeleteMixin):
     """
     Platform-managed API keys for machine-to-machine (ERP → Platform) authentication.
     """
@@ -107,7 +108,7 @@ class ApiToken(IdentityBase):
     __table_args__ = ({"schema": "identity"},)
 
 
-class ApiKey(IdentityBase):
+class ApiKey(IdentityBase, SoftDeleteMixin):
     """
     Platform-managed API keys.
     """
@@ -138,7 +139,7 @@ class ApiKey(IdentityBase):
     __table_args__ = ({"schema": "identity"},)
 
 
-class Role(IdentityBase):
+class Role(IdentityBase, SoftDeleteMixin):
     __tablename__ = "roles"
     ID_PREFIX = "rol"
 

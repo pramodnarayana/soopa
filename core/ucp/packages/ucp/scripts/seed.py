@@ -102,20 +102,55 @@ async def main() -> None:
             "Platform Admin",
         )
 
-        # Map the user to the platform tenant
+        # Seed Global PBAC Roles
+        logger.info("Seeding global standard roles...")
+
+        # We need UUID-based IDs for roles. We can just use static ones or generate them.
+        # Using deterministic hashes of the role name so they are idempotent
+        import hashlib
+
+        def hash_id(prefix: str, text: str) -> str:
+            h = hashlib.sha256(text.encode()).hexdigest()[:16]
+            return f"{prefix}_{h}"
+
+        platform_admin_role_id = hash_id("rol", "PlatformAdmin")
+        tenant_admin_role_id = hash_id("rol", "TenantAdmin")
+        viewer_role_id = hash_id("rol", "Viewer")
+
         await conn.execute(
             """
-            INSERT INTO identity.tenant_users (tenant_id, user_id, role, active, created_at, updated_at)
-            VALUES ($1, $2, 'admin', true, NOW(), NOW())
-            ON CONFLICT (tenant_id, user_id) DO UPDATE SET
-                role = EXCLUDED.role,
-                active = EXCLUDED.active,
+            INSERT INTO identity.roles (id, tenant_id, name, description, capabilities, created_at, updated_at)
+            VALUES
+                ($1, NULL, 'PlatformAdmin', 'Full access to the entire platform.', ARRAY['platform:admin'], NOW(), NOW()),
+                ($2, NULL, 'TenantAdmin', 'Full access to manage a specific tenant.', ARRAY['tenant:admin', 'tenant_settings:read', 'tenant_settings:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'api_keys:read', 'api_keys:write', 'webhooks:read', 'webhooks:write', 'invoices:read', 'invoices:write'], NOW(), NOW()),
+                ($3, NULL, 'Viewer', 'Read-only access to a specific tenant.', ARRAY['tenant_settings:read', 'users:read', 'roles:read', 'api_keys:read', 'webhooks:read', 'invoices:read'], NOW(), NOW())
+            ON CONFLICT (tenant_id, name) DO UPDATE SET
+                description = EXCLUDED.description,
+                capabilities = EXCLUDED.capabilities,
                 updated_at = NOW()
             """,
+            platform_admin_role_id,
+            tenant_admin_role_id,
+            viewer_role_id,
+        )
+        logger.info("Successfully seeded global roles.")
+
+        # Map the user to the platform tenant using user_roles
+        # Note: Platform Admin role is global (tenant_id=None or tenant_id=PLATFORM_SENTINEL_ID)
+        # We assign it scoped to PLATFORM_SENTINEL_ID here for consistency with tenant context
+        user_role_id = f"urol_{os.urandom(12).hex()}"
+        await conn.execute(
+            """
+            INSERT INTO identity.user_roles (id, tenant_id, user_id, role_id, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (tenant_id, user_id, role_id) DO NOTHING
+            """,
+            user_role_id,
             PLATFORM_SENTINEL_ID,
             platform_user_id,
+            platform_admin_role_id,
         )
-        logger.info("Successfully seeded platform admin user and mapped to tenant.")
+        logger.info("Successfully seeded platform admin user and mapped to tenant roles.")
 
         logger.info("Seeding platform apps...")
 

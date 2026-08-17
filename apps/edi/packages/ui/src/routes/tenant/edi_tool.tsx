@@ -5,7 +5,7 @@ import { createRoute } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle, Copy, FileCode, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EdiEditorPane } from '../../components/ui/edi-editor-pane';
-import { useEdiPlatformNetwork } from '../../contexts/EdiPlatformNetworkContext';
+import { useUcpNetwork } from '../../contexts/UcpNetworkContext';
 import { useToast } from '../../hooks/use-toast';
 import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
 import { Route as appRoute } from '../tenant';
@@ -49,9 +49,20 @@ function _parseTransformSuccessResult(data: TransformResponse): {
   validationErrors: string[];
 } {
   if (!data.result) {
+    let parsedErrors: string[] = [];
+    if (data.error) {
+      try {
+        const parsedError = JSON.parse(data.error);
+        if (parsedError.errors && Array.isArray(parsedError.errors)) {
+          parsedErrors = parsedError.errors;
+        }
+      } catch {
+        // Ignore parse errors on the error string
+      }
+    }
     return {
       outputResult: data.valid ? 'Valid format.' : data.error || 'Unknown error occurred.',
-      validationErrors: [],
+      validationErrors: parsedErrors,
     };
   }
 
@@ -60,14 +71,16 @@ function _parseTransformSuccessResult(data: TransformResponse): {
       data?: unknown;
       meta?: { validation_errors?: string[] };
     };
+
     if (parsed.data !== undefined && parsed.meta) {
+      const resultString =
+        typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data, null, 2);
       return {
-        outputResult:
-          typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data, null, 2),
+        outputResult: resultString,
         validationErrors: parsed.meta.validation_errors || [],
       };
     }
-  } catch {
+  } catch (err) {
     // Ignore JSON parse errors and return raw result
   }
 
@@ -165,7 +178,7 @@ const EdiCodeViewer = ({
   validationErrors: string[];
   onEditorWillMount: (monaco: typeof import('monaco-editor')) => void;
 }) => (
-  <div className="flex flex-col h-full relative">
+  <div className="flex flex-col w-full h-full relative">
     {validationErrors.length > 0 && (
       <div className="bg-red-50 border-b border-red-200 p-3 shrink-0">
         <div className="flex items-center gap-2 text-red-800 font-bold text-sm mb-2">
@@ -260,7 +273,7 @@ export function EdiToolPage() {
 
   const { toast } = useToast();
 
-  const api = useEdiPlatformNetwork();
+  const api = useUcpNetwork();
 
   interface TransformResponse {
     valid: boolean;
@@ -481,7 +494,7 @@ export function EdiToolPage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 p-0 bg-card min-h-0 flex">
+          <div className="flex-1 p-0 bg-card min-h-0 flex flex-col">
             <EdiOutputViewer
               outputFormat={outputFormat}
               inputFormat={inputFormat}

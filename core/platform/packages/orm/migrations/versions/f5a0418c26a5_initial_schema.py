@@ -40,10 +40,19 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_tenant_id"),
         sa.UniqueConstraint("name"),
         sa.UniqueConstraint("slug"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_tenants_deleted_at"),
+        "tenants",
+        ["deleted_at"],
+        unique=False,
         schema="identity",
     )
     op.create_table(
@@ -55,8 +64,17 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_user_id"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_users_deleted_at"),
+        "users",
+        ["deleted_at"],
+        unique=False,
         schema="identity",
     )
     op.create_index(
@@ -210,7 +228,16 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        schema="ucp",
+    )
+    op.create_index(
+        op.f("ix_ucp_webhooks_deleted_at"),
+        "webhooks",
+        ["deleted_at"],
+        unique=False,
         schema="ucp",
     )
     op.create_index(
@@ -226,9 +253,18 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("active", sa.Boolean(), server_default="true", nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("key_hash"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_api_keys_deleted_at"),
+        "api_keys",
+        ["deleted_at"],
+        unique=False,
         schema="identity",
     )
     op.create_index(
@@ -250,9 +286,18 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("client_id"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_api_tokens_deleted_at"),
+        "api_tokens",
+        ["deleted_at"],
+        unique=False,
         schema="identity",
     )
     op.create_index(
@@ -271,8 +316,17 @@ def upgrade() -> None:
         sa.Column("capabilities", postgresql.ARRAY(sa.String()), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["identity.tenants.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_roles_deleted_at"),
+        "roles",
+        ["deleted_at"],
+        unique=False,
         schema="identity",
     )
     op.create_index(
@@ -434,11 +488,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("tenant_id", "idempotency_key"),
         schema="ucp",
     )
-    op.add_column(
-        "webhooks", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True), schema="ucp"
-    )
-    op.add_column("webhooks", sa.Column("deleted_by", sa.String(), nullable=True), schema="ucp")
-    # ### end Alembic commands ###
+    # ---------------------------------------------------------------------------
+    # Soft Delete natively included in entity schema definitions.
 
 
 def downgrade() -> None:

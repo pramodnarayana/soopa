@@ -1,9 +1,10 @@
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import OutboundEdiHeader
 from domain.models import OutboundEdiHeaderDomainModel
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 
 from edi.domain.models import CreateOutboundEdiHeaderCmd, UpdateOutboundEdiHeaderCmd
 from edi.ports.edi_header_repository import EdiHeaderRepositoryPort
@@ -42,6 +43,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
             .where(
                 OutboundEdiHeader.id == header_id,
                 OutboundEdiHeader.tenant_id == tid_str,
+                OutboundEdiHeader.deleted_at.is_(None),
             )
             .values(**values)
         )
@@ -51,9 +53,14 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
 
     async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> bool:
         tid_str = tenant_id
-        stmt = delete(OutboundEdiHeader).where(
-            OutboundEdiHeader.id == header_id,
-            OutboundEdiHeader.tenant_id == tid_str,
+        stmt = (
+            update(OutboundEdiHeader)
+            .where(
+                OutboundEdiHeader.id == header_id,
+                OutboundEdiHeader.tenant_id == tid_str,
+                OutboundEdiHeader.deleted_at.is_(None),
+            )
+            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
         )
         result = await self.session.execute(stmt)
         await self.session.flush()
@@ -63,7 +70,9 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         self, tenant_id: str
     ) -> Sequence[OutboundEdiHeaderDomainModel]:
         tid_str = tenant_id
-        stmt = select(OutboundEdiHeader).where(OutboundEdiHeader.tenant_id == tid_str)
+        stmt = select(OutboundEdiHeader).where(
+            OutboundEdiHeader.tenant_id == tid_str, OutboundEdiHeader.deleted_at.is_(None)
+        )
         result = await self.session.execute(stmt)
         return [OutboundEdiHeaderDomainModel.model_validate(r) for r in result.scalars().all()]
 
@@ -74,6 +83,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         stmt = select(OutboundEdiHeader).where(
             OutboundEdiHeader.tenant_id == tid_str,
             OutboundEdiHeader.trading_partner_id == trading_partner_id,
+            OutboundEdiHeader.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()

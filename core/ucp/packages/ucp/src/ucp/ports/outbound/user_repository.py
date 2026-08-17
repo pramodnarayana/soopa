@@ -8,8 +8,20 @@ class IUserRepository(Protocol):
         """Finds all users associated with a specific tenant"""
         ...
 
+    async def has_any_tenant_memberships(self, user_id: str) -> bool:
+        """Checks if a user belongs to any active tenants"""
+        ...
+
     async def find_by_email(self, email: str) -> User | None:
         """Finds a user by their email address"""
+        ...
+
+    async def find_by_id(self, user_id: str) -> User | None:
+        """Finds a user by ID independent of tenant context."""
+        ...
+
+    async def find_by_idp_user_id(self, idp_user_id: str) -> User | None:
+        """Finds a user by their external Identity Provider User ID."""
         ...
 
     async def find_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
@@ -22,16 +34,4 @@ class IUserRepository(Protocol):
 
     async def save(self, user: User) -> None:
         """Persists a User aggregate to the database."""
-        ...
-
-    async def save_tenant_membership(self, tenant_id: str, user_id: str, role: str) -> None:
-        """Upserts a tenant-user relationship and role."""
-        ...
-
-    async def remove_tenant_membership(self, tenant_id: str, user: User) -> None:
-        """Removes a user from a tenant and flushes events."""
-        ...
-
-    async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        """Checks if a user has any tenant memberships."""
         ...

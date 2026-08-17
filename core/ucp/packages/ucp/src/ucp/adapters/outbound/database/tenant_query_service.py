@@ -62,13 +62,19 @@ class DatabaseTenantQueryService(ITenantQueryService):
         offset = (page - 1) * limit
 
         # Get total count
-        count_stmt = select(func.count(DbTenant.id))
+        count_stmt = select(func.count(DbTenant.id)).where(DbTenant.deleted_at.is_(None))
         total = await self.session.scalar(count_stmt) or 0
 
         if total == 0:
             return PaginatedTenants(items=[], total=0, page=page, limit=limit)
 
-        stmt = select(DbTenant).order_by(DbTenant.id).limit(limit).offset(offset)
+        stmt = (
+            select(DbTenant)
+            .where(DbTenant.deleted_at.is_(None))
+            .order_by(DbTenant.id)
+            .limit(limit)
+            .offset(offset)
+        )
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
 
@@ -95,7 +101,8 @@ class DatabaseTenantQueryService(ITenantQueryService):
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None:
         stmt = select(DbTenant).where(
-            (DbTenant.id == tenant_id) | (DbTenant.idp_tenant_id == tenant_id)
+            ((DbTenant.id == tenant_id) | (DbTenant.idp_tenant_id == tenant_id))
+            & DbTenant.deleted_at.is_(None)
         )
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
@@ -107,7 +114,7 @@ class DatabaseTenantQueryService(ITenantQueryService):
         return self._map_row(row, app_slugs)
 
     async def get_tenant_by_slug(self, slug: str) -> TenantReadModel | None:
-        stmt = select(DbTenant).where(DbTenant.slug == slug)
+        stmt = select(DbTenant).where(DbTenant.slug == slug, DbTenant.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
         if not row:

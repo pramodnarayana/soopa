@@ -42,6 +42,7 @@ class Tenant(AggregateRoot):
         self.status = status
         self.created_at = created_at
         self.updated_at = updated_at
+        self.deleted_at: datetime | None = None
         self.subscriptions = subscriptions if subscriptions is not None else []
 
     @classmethod
@@ -128,5 +129,15 @@ class Tenant(AggregateRoot):
                 )
 
     def mark_deleted(self) -> None:
+        """Logically deletes this tenant.
+
+        Sets deleted_at to signal soft deletion and emits TenantDeletedEvent
+        to cascade the deletion to the IdP organization asynchronously.
+        Raises AlreadyDeletedError if the tenant has already been deleted.
+        """
+        if self.deleted_at is not None:
+            raise ValueError(f"Tenant '{self.id}' has already been deleted.")
+        self.deleted_at = datetime.now(UTC)
+        self.updated_at = self.deleted_at
         if self.idp_tenant_id:
             self.add_domain_event(TenantDeletedEvent(org_id=self.idp_tenant_id))

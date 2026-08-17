@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useDashboardData } from '../features/dashboard/api/useDashboardData';
 import { SFTPPartnersProvider } from '../features/partners/context/SFTPPartnersContext';
+import { useAuthMe } from '../hooks/useAuthMe';
 import { Route as rootRoute } from './__root';
 
 export const Route = createRoute({
@@ -97,6 +98,10 @@ export function AppLayout() {
   const redirectTriggered = useRef(false);
   // 1. Fetch user data (role, features)
   const { data: userProfile, isLoading: isProfileLoading } = useDashboardData();
+  // Use canonical platform user ID (usr_...) from /auth/me, NOT the raw Zitadel IDP sub.
+  // This enforces the architectural rule: all internal operations use platform-canonical IDs.
+  const { data: authMe } = useAuthMe();
+  const canonicalUserId = authMe?.subject ?? '';
 
   // 2. Strict Authentication Guard
   useEffect(() => {
@@ -212,10 +217,10 @@ export function AppLayout() {
       {/* Main Content Area */}
       <main className="flex-1 ml-72 flex flex-col min-h-screen">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 px-8 flex items-center justify-end shadow-sm">
-          {tenantId && auth.user?.profile?.sub && auth.user?.access_token && (
+          {tenantId && canonicalUserId && auth.user?.access_token && (
             <NotificationBell
               tenantId={tenantId}
-              userId={auth.user.profile.sub}
+              userId={canonicalUserId}
               accessToken={auth.user.access_token}
               apiUrl={
                 `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(

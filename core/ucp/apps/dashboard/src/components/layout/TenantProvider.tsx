@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { TenantContext } from '../../contexts/TenantContext';
 import { useGetTenant } from '../../domains/tenants/api/queries';
+import { useAuthUser } from '../../hooks/useAuthUser';
 import { resolveTenantId } from '../../lib/auth';
 
 const logger = console;
@@ -21,6 +22,11 @@ export function TenantProvider({ children }: TenantProviderProps) {
   const auth = useAuth();
   const token = auth.user?.access_token ?? '';
   const tenantId = resolveTenantId(token, auth.user?.profile ?? {});
+  // Use the canonical platform user ID (usr_...) from our own /auth/me endpoint,
+  // NOT the raw OIDC `sub` from the JWT (which is the Zitadel numeric IDP user ID).
+  // This ensures our IDOR guards comparing against identity.subject always pass.
+  const { data: authUser } = useAuthUser();
+  const canonicalUserId = authUser?.subject ?? '';
 
   const { data: tenant } = useGetTenant(tenantId ?? '');
 
@@ -101,7 +107,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
   const headerContent = (
     <NotificationBell
       tenantId={tenant?.id ?? ''}
-      userId={auth.user?.profile.sub ?? ''}
+      userId={canonicalUserId}
       accessToken={token}
       apiUrl={
         `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(/\/+$/, '') +

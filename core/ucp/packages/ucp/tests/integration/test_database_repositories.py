@@ -25,6 +25,7 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
         new_tenant = Tenant(
             id=tenant_id,
             name="Test Tenant",
+            slug="test-tenant",
             idp_tenant_id="idp_test_123",
             status="active",
             created_at=datetime.now(UTC),

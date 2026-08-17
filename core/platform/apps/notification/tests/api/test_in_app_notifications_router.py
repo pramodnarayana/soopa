@@ -3,7 +3,7 @@ import uuid
 import pytest
 from dependency_injector import providers
 from httpx import ASGITransport, AsyncClient
-from platform_orm.models.identity import Tenant, TenantUser, User
+from platform_orm.models.identity import Role, Tenant, User, UserRole
 from platform_orm.models.notifications import InAppNotification
 
 
@@ -33,11 +33,26 @@ async def test_in_app_notifications_router_integration(db_session_factory):
 
         await session.flush()
 
-        tenant_user = TenantUser(tenant_id=tenant_id, user_id=user_id, role="admin", active=True)
+        role = Role(
+            id=f"rol_{uuid.uuid4().hex[:12]}",
+            tenant_id=tenant_id,
+            name="TenantAdmin",
+            description="Admin role",
+            capabilities=["users:write"],
+        )
+        session.add(role)
+        await session.flush()
+
+        tenant_user = UserRole(
+            id=f"urol_{uuid.uuid4().hex}", tenant_id=tenant_id, user_id=user_id, role_id=role.id
+        )
         session.add(tenant_user)
 
-        other_tenant_user = TenantUser(
-            tenant_id=tenant_id, user_id=other_user_id, role="admin", active=True
+        other_tenant_user = UserRole(
+            id=f"urol_{uuid.uuid4().hex}",
+            tenant_id=tenant_id,
+            user_id=other_user_id,
+            role_id=role.id,
         )
         session.add(other_tenant_user)
 

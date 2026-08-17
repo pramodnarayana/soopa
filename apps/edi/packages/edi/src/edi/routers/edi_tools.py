@@ -29,7 +29,7 @@ async def _handle_edi_to_json(
     request: TransformRequest, adapter: BotsEDIAdapter
 ) -> TransformResponse:
     raw_bytes = request.payload.encode("utf-8")
-    logger.info("EDI TOOL RECEIVED PAYLOAD LENGTH: {len(raw_bytes)}", val_0=len(raw_bytes))
+    logger.info("edi_tool.received_payload", payload_length=len(raw_bytes))
 
     # Delegate parsing and validation to the common BotsEDIAdapter
     ast_dict, errors = await asyncio.to_thread(adapter.get_raw_ast, raw_bytes)
@@ -41,7 +41,9 @@ async def _handle_edi_to_json(
         return TransformResponse(result=json.dumps(envelope, indent=2), valid=False)
 
     envelope = {"meta": {"valid": True, "validation_errors": []}, "data": ast_dict}
-    return TransformResponse(result=json.dumps(envelope, indent=2), valid=True)
+    result_str = json.dumps(envelope, indent=2)
+    logger.info("edi_tool.success", ast_keys=list(ast_dict.keys()), result_length=len(result_str))
+    return TransformResponse(result=result_str, valid=True)
 
 
 async def _handle_json_to_edi(
@@ -90,16 +92,16 @@ async def transform_payload(request: TransformRequest) -> TransformResponse:
         return await handler(request, adapter)
 
     except TransformationError as e:
-        logger.exception("Translation error in EDI tool")
-
         # If the AST generation completely crashed (e.g. fatal syntax error),
         # get_raw_ast will still raise TransformationError
         if e.errors:
+            logger.info("edi_tool.validation_failed", errors=e.errors)
             structured_error = {"status": "fatal_validation_failed", "errors": e.errors}
             return TransformResponse(
                 result=None, valid=False, error=json.dumps(structured_error, indent=2)
             )
 
+        logger.exception("edi_tool.system_error")
         return TransformResponse(
             result=None,
             valid=False,

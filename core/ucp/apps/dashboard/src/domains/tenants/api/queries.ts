@@ -12,10 +12,20 @@ export interface Tenant {
   subscriptions: any[];
 }
 
+export interface PaginatedTenants {
+  items: Tenant[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export const useGetTenants = () => {
   return useQuery({
     queryKey: ['tenants'],
-    queryFn: () => apiClient.get<Tenant[]>('/tenants'),
+    queryFn: async () => {
+      const response = await apiClient.get<PaginatedTenants>('/tenants');
+      return response.items || [];
+    },
   });
 };
 

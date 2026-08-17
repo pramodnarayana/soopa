@@ -10,6 +10,9 @@ class TenantProvisionedEvent(DomainEvent):
     def event_name(self) -> str:
         return "tenant.provisioned"
 
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
 
 class AppSubscribedEvent(DomainEvent):
     tenant_id: str
@@ -18,6 +21,9 @@ class AppSubscribedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return "app.subscribed"
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
 
 
 class AppUnsubscribedEvent(DomainEvent):
@@ -28,6 +34,9 @@ class AppUnsubscribedEvent(DomainEvent):
     def event_name(self) -> str:
         return "app.unsubscribed"
 
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
 
 class TenantNameUpdatedEvent(DomainEvent):
     org_id: str
@@ -36,6 +45,9 @@ class TenantNameUpdatedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return "TenantNameUpdated"
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.org_id
 
 
 class TenantStatusToggledEvent(DomainEvent):
@@ -46,6 +58,9 @@ class TenantStatusToggledEvent(DomainEvent):
     def event_name(self) -> str:
         return "TenantStatusToggled"
 
+    def get_routing_tenant_id(self) -> str | None:
+        return self.org_id
+
 
 class TenantDeletedEvent(DomainEvent):
     org_id: str
@@ -53,3 +68,6 @@ class TenantDeletedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return "TenantDeleted"
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.org_id

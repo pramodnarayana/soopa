@@ -72,7 +72,7 @@ class ControlPlaneOutboxSweeper:
 
         try:
             if hasattr(self.publisher, "__aenter__"):
-                async with self.publisher:  # type: ignore
+                async with self.publisher:
                     await _sweep()
             else:
                 await _sweep()

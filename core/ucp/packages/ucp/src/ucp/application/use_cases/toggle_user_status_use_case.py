@@ -27,14 +27,15 @@ class ToggleUserStatusUseCase:
                     f"Tenant {command.tenant_id} not found or missing IDP organization"
                 )
 
-            tenant_users = await self._uow.user_repo.find_users_by_tenant(command.tenant_id)
-            user = next((u for u in tenant_users if u.id == command.user_id), None)
+            user = await self._uow.user_repo.find_by_id_and_tenant(
+                user_id=command.user_id, tenant_id=command.tenant_id
+            )
 
             if not user or not user.idp_user_id:
                 raise ResourceNotFoundError(f"User mapping not found for {command.user_id}")
 
             # 1. Update local domain object state & Register Outbox Event
-            user.change_status(action=command.action, org_id=tenant.idp_tenant_id)
+            user.change_status(action=command.action, tenant_id=command.tenant_id)
             await self._uow.user_repo.save(user)
 
             await self._uow.commit()

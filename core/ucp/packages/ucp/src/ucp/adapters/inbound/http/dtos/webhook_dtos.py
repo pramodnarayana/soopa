@@ -16,7 +16,7 @@ class UpdateWebhookRequest(BaseModel):
 
 
 class WebhookResponse(BaseModel):
-    webhook_id: str
+    id: str
     tenant_id: str
     name: str
     url: str | None

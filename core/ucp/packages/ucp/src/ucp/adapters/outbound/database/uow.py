@@ -1,6 +1,7 @@
 from typing import Any, Self
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.outbound.database.idempotency_repository import SqlAlchemyIdempotencyRepository
@@ -10,6 +11,7 @@ from ucp.adapters.outbound.database.role_repository import PostgresRoleRepositor
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.adapters.outbound.database.user_repository import UserRepository
 from ucp.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
+from ucp.core.exceptions import DuplicateEntityError
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 
@@ -36,8 +38,39 @@ class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):
         # True UnitOfWork requires explicit .commit() call in the UseCase.
 
     async def commit(self) -> None:
-        await self.session.execute(text("NOTIFY ucp_outbox_wakeup;"))
-        await self.session.commit()
+        try:
+            await self.session.execute(text("NOTIFY ucp_outbox_wakeup;"))
+            await self.session.commit()
+        except IntegrityError as exc:
+            # Only convert unique constraint violations to DuplicateEntityError.
+            # Re-raise other integrity errors (foreign-key, NOT NULL, check, exclusion).
+            pgcode = None
+            sqlstate = None
+            constraint_name = None
+
+            if hasattr(exc, "orig"):
+                # psycopg (asyncpg) exposes pgcode and sqlstate via the orig exception
+                pgcode = getattr(exc.orig, "pgcode", None)
+                sqlstate = getattr(exc.orig, "sqlstate", None)
+                orig_cause = getattr(exc.orig, "__cause__", None)
+                if orig_cause is not None:
+                    constraint_name = getattr(orig_cause, "constraint_name", None)
+                    if not pgcode:
+                        pgcode = getattr(orig_cause, "pgcode", None)
+                    if not sqlstate:
+                        sqlstate = getattr(orig_cause, "sqlstate", None)
+                else:
+                    constraint_name = getattr(exc.orig, "constraint_name", None)
+
+            # PostgreSQL error code 23505 = unique_violation
+            if pgcode == "23505" or sqlstate == "23505":
+                raise DuplicateEntityError(
+                    message="A unique constraint was violated.",
+                    constraint_name=constraint_name,
+                ) from exc
+
+            # Re-raise all other IntegrityErrors unchanged
+            raise
 
     async def rollback(self) -> None:
         await self.session.rollback()

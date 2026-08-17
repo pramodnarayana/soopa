@@ -8,6 +8,7 @@ export function createNetworkContext(hookName: string) {
     api: {
       get: <T = any>(url: string, config?: CustomRequestInit) => Promise<{ data: T }>;
       post: <T = any>(url: string, data?: any, config?: CustomRequestInit) => Promise<{ data: T }>;
+      put: <T = any>(url: string, data?: any, config?: CustomRequestInit) => Promise<{ data: T }>;
       patch: <T = any>(url: string, data?: any, config?: CustomRequestInit) => Promise<{ data: T }>;
       delete: <T = any>(url: string, config?: CustomRequestInit) => Promise<{ data: T }>;
     };
@@ -34,7 +35,9 @@ export function createNetworkContext(hookName: string) {
           headers.set('Content-Type', 'application/json');
         }
 
-        let fullUrl = `${baseUrl}${url}`;
+        const normalizedBase = baseUrl.replace(/\/$/, '');
+        const normalizedPath = url.replace(/^\//, '');
+        let fullUrl = `${normalizedBase}/${normalizedPath}`;
         if (init.params) {
           const searchParams = new URLSearchParams();
           for (const [key, value] of Object.entries(init.params)) {
@@ -59,9 +62,13 @@ export function createNetworkContext(hookName: string) {
           const abortHandler = () => controller.abort();
           callerSignal.addEventListener('abort', abortHandler, { once: true });
           // Clean up listener if timeout fires first
-          controller.signal.addEventListener('abort', () => {
-            callerSignal.removeEventListener('abort', abortHandler);
-          }, { once: true });
+          controller.signal.addEventListener(
+            'abort',
+            () => {
+              callerSignal.removeEventListener('abort', abortHandler);
+            },
+            { once: true },
+          );
         }
 
         try {
@@ -93,6 +100,15 @@ export function createNetworkContext(hookName: string) {
           const res = await baseFetch(url, {
             ...config,
             method: 'POST',
+            body: data !== undefined ? JSON.stringify(data) : undefined,
+          });
+          if (res.status === 204) return { data: undefined as unknown as T };
+          return { data: (await res.json()) as T };
+        },
+        put: async <T = any>(url: string, data?: any, config?: CustomRequestInit) => {
+          const res = await baseFetch(url, {
+            ...config,
+            method: 'PUT',
             body: data !== undefined ? JSON.stringify(data) : undefined,
           });
           if (res.status === 204) return { data: undefined as unknown as T };

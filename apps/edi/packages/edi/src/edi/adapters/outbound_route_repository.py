@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from database.models.control_plane import (
     AS2Partner,
@@ -6,7 +8,7 @@ from database.models.control_plane import (
 )
 from domain.models import OutboundRouteDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import delete, select
+from sqlalchemy import select, update
 
 from edi.domain.models import (
     UNSET,
@@ -25,7 +27,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         self, tenant_id: str, route_id: str
     ) -> OutboundRouteDomainModel | None:
         stmt = select(OutboundRoute).where(
-            OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+            OutboundRoute.id == route_id,
+            OutboundRoute.tenant_id == tenant_id,
+            OutboundRoute.deleted_at.is_(None),
         )
         res = await self.session.execute(stmt)
         record = res.scalar_one_or_none()
@@ -38,6 +42,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             select(OutboundRoute).where(
                 OutboundRoute.tenant_id == tenant_id,
                 OutboundRoute.trading_partner_id == trading_partner_id,
+                OutboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
@@ -55,6 +60,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
                     AS2Partner.tenant_id.in_([tenant_id, PLATFORM_TENANT_ID]),
+                    AS2Partner.active.is_(True),
                 )
             )
             if not result.scalar_one_or_none():
@@ -65,7 +71,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         if sftp_id:
             result = await self.session.execute(
                 select(SFTPPartner.id).where(
-                    SFTPPartner.id == sftp_id, SFTPPartner.tenant_id == tenant_id
+                    SFTPPartner.id == sftp_id,
+                    SFTPPartner.tenant_id == tenant_id,
+                    SFTPPartner.deleted_at.is_(None),
                 )
             )
             if not result.scalar_one_or_none():
@@ -94,7 +102,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
     ) -> bool:
         result = await self.session.execute(
             select(OutboundRoute).where(
-                OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+                OutboundRoute.id == route_id,
+                OutboundRoute.tenant_id == tenant_id,
+                OutboundRoute.deleted_at.is_(None),
             )
         )
         record_route = result.scalar_one_or_none()
@@ -122,15 +132,21 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
 
     async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
         result = await self.session.execute(
-            delete(OutboundRoute).where(
-                OutboundRoute.id == route_id, OutboundRoute.tenant_id == tenant_id
+            update(OutboundRoute)
+            .where(
+                OutboundRoute.id == route_id,
+                OutboundRoute.tenant_id == tenant_id,
+                OutboundRoute.deleted_at.is_(None),
             )
+            .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
         await self.session.flush()
         return bool(getattr(result, "rowcount", 0) > 0)
 
     async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteDomainModel]:
         outbound_result = await self.session.execute(
-            select(OutboundRoute).where(OutboundRoute.tenant_id == tenant_id)
+            select(OutboundRoute).where(
+                OutboundRoute.tenant_id == tenant_id, OutboundRoute.deleted_at.is_(None)
+            )
         )
         return [OutboundRouteDomainModel.model_validate(r) for r in outbound_result.scalars().all()]

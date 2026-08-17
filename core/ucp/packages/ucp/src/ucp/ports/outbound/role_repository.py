@@ -21,6 +21,10 @@ class IRoleRepository(abc.ABC):
         """Fetch a role by its ID."""
 
     @abc.abstractmethod
+    async def get_global_role_by_name(self, name: str) -> Role | None:
+        """Fetch a global role (tenant_id is NULL) by its name."""
+
+    @abc.abstractmethod
     async def save(self, role: Role) -> None:
         """Persists a new or updated role."""
 
@@ -28,4 +32,16 @@ class IRoleRepository(abc.ABC):
     async def assign_user_role(self, tenant_id: str | None, user_id: str, role_id: str) -> None:
         """
         Assign a role to a user.
+        """
+
+    @abc.abstractmethod
+    async def remove_user_roles(self, tenant_id: str | None, user_id: str) -> None:
+        """
+        Removes all roles assigned to a user within a specific tenant context.
+        """
+
+    @abc.abstractmethod
+    async def has_any_tenant_memberships(self, user_id: str) -> bool:
+        """
+        Checks if a user has any tenant memberships by looking for any UserRole assigned to them.
         """
