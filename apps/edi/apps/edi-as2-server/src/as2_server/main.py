@@ -10,8 +10,8 @@ from database.s3 import Aioboto3PayloadStorage
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
+    OtelMetrics,
     OtelTracer,
-    PrometheusMetrics,
     StructlogLogger,
 )
 
@@ -27,7 +27,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             service_name=settings.otel.service_name,
             otlp_endpoint=settings.otel.exporter_otlp_endpoint,
         ),
-        metrics=PrometheusMetrics(namespace="edi"),
+        metrics=OtelMetrics(
+            service_name=settings.otel.service_name,
+            otlp_endpoint=settings.otel.exporter_otlp_endpoint,
+        ),
         logger=StructlogLogger(name="edi", log_level=settings.log_level),
     )
 

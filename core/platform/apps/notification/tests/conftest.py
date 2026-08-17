@@ -19,9 +19,12 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
-def postgres_container():
-    with PostgresContainer("postgres:15-alpine") as postgres:
-        yield postgres
+def postgres_container(request):
+    """Spin up a real Postgres database for the test session."""
+    postgres = PostgresContainer("postgres:15-alpine")
+    postgres.start()
+    request.addfinalizer(postgres.stop)
+    return postgres
 
 
 @pytest_asyncio.fixture(scope="function")

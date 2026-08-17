@@ -58,31 +58,35 @@ def event_loop() -> "Any":
 
 
 @pytest.fixture(scope="session")
-def postgres_container() -> "Any":
-    with PostgresContainer("postgres:15-alpine") as postgres:
-        yield postgres
+def postgres_container(request) -> "Any":
+    postgres = PostgresContainer("postgres:15-alpine")
+    postgres.start()
+    request.addfinalizer(postgres.stop)
+    return postgres
 
 
 @pytest.fixture(scope="session")
-def localstack_container() -> "Any":
-    setup_script = str(Path(__file__).resolve().parents[5] / "infra" / "localstack-setup.sh")
+def localstack_container(request) -> "Any":
+    setup_script = str(Path(__file__).resolve().parents[5] / "infra" / "localstack" / "localstack-setup.sh")
     localstack = DockerContainer("localstack/localstack:3.4.0")
     localstack.with_exposed_ports(4566)
     localstack.with_env("SERVICES", "sns,sqs")
     localstack.with_volume_mapping(setup_script, "/etc/localstack/init/ready.d/init.sh", "ro")
 
-    with localstack:
-        wait_for_logs(localstack, r"LocalStack resources initialized successfully\.")
+    localstack.start()
+    request.addfinalizer(localstack.stop)
 
-        endpoint_url = (
-            f"http://{localstack.get_container_host_ip()}:{localstack.get_exposed_port(4566)}"
-        )
+    wait_for_logs(localstack, r"LocalStack resources initialized successfully\.")
 
-        yield {
-            "endpoint_url": endpoint_url,
-            "sns_topic_arn": "arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo",
-            "sqs_queue_url": f"{endpoint_url}/000000000000/ucp-events.fifo",
-        }
+    endpoint_url = (
+        f"http://{localstack.get_container_host_ip()}:{localstack.get_exposed_port(4566)}"
+    )
+
+    return {
+        "endpoint_url": endpoint_url,
+        "sns_topic_arn": "arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo",
+        "sqs_queue_url": f"{endpoint_url}/000000000000/ucp-events.fifo",
+    }
 
 
 @pytest_asyncio.fixture(scope="function")

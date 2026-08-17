@@ -41,13 +41,18 @@ class ObservabilityProvider:
 
         Example (production):
             from observability.adapters.otel import OtelTracer
-            from observability.adapters.prometheus import PrometheusMetrics
+            from observability.adapters.otel_metrics import OtelMetrics
             from observability.adapters.structlog_adapter import StructlogLogger
 
             ObservabilityProvider.configure(
                 tracer=OtelTracer(service_name="as2-server", otlp_endpoint="..."),
-                metrics=PrometheusMetrics(),
-                logger=StructlogLogger("edi", log_level="INFO"),
+                metrics=OtelMetrics(service_name="as2-server", otlp_endpoint="..."),
+                logger=StructlogLogger(
+                    name="edi",
+                    log_level="INFO",
+                    service_name="as2-server",
+                    otlp_endpoint="..."
+                ),
             )
 
         Example (tests — uses built-in defaults, no infrastructure needed):

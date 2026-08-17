@@ -3,3 +3,4 @@ include:
   - core/infra/docker-compose.yml
   - core/ucp/docker-compose.yml
   - apps/edi/docker-compose.yml
+  - core/infra/observability/docker-compose.yml

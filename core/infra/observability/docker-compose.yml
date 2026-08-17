@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # OpenObserve — Unified Logs, Metrics, and Traces Backend
+  # UI: http://localhost:5080 (root@example.com / ComplexPassword)
+  # ---------------------------------------------------------------------------
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.11.0
+    container_name: openobserve
+    ports:
+      - "5080:5080" # UI and HTTP API
+      - "5081:5081" # OTLP gRPC endpoint
+    environment:
+      - ZO_ROOT_USER_EMAIL=${OPENOBSERVE_USER}
+      - ZO_ROOT_USER_PASSWORD=${OPENOBSERVE_PASSWORD}
+      - ZO_DATA_DIR=/data
+      - ZO_PROMETHEUS_ENABLE=true
+      - ZO_TELEMETRY=false
+    volumes:
+      - openobserve_data:/data
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector
+  # Receives OTLP traces/metrics/logs from all services,
+  # then forwards them to OpenObserve.
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    environment:
+      - OPENOBSERVE_BASIC_AUTH=${OPENOBSERVE_BASIC_AUTH}
+      - OPENOBSERVE_OTLP_ENDPOINT=${OPENOBSERVE_OTLP_ENDPOINT}
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver (services send telemetry here)
+      - "4318:4318"   # OTLP HTTP receiver
+    depends_on:
+      - openobserve
+
+volumes:
+  openobserve_data:

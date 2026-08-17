@@ -2,14 +2,14 @@
 
 from .noop import NoOpLogger, NoOpMetrics, NoOpTracer
 from .otel import OtelTracer
-from .prometheus import PrometheusMetrics
+from .otel_metrics import OtelMetrics
 from .structlog_adapter import StructlogLogger
 
 __all__ = [
     "NoOpLogger",
     "NoOpMetrics",
     "NoOpTracer",
+    "OtelMetrics",
     "OtelTracer",
-    "PrometheusMetrics",
     "StructlogLogger",
 ]

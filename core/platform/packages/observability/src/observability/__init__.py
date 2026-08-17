@@ -12,7 +12,7 @@ Adapters are implementation details. Services should never import them directly.
 # Adapters — exposed for convenience at the composition root (e.g. main.py lifespan)
 from .adapters.noop import NoOpLogger, NoOpMetrics, NoOpTracer
 from .adapters.otel import OtelTracer
-from .adapters.prometheus import PrometheusMetrics
+from .adapters.otel_metrics import OtelMetrics
 from .adapters.structlog_adapter import StructlogLogger
 from .ports.logger import ILogger
 from .ports.metrics import IMetrics
@@ -34,6 +34,6 @@ __all__ = [  # noqa: RUF022 - intentionally grouped by layer: Ports → Provider
     "NoOpMetrics",
     "NoOpLogger",
     "OtelTracer",
-    "PrometheusMetrics",
+    "OtelMetrics",
     "StructlogLogger",
 ]

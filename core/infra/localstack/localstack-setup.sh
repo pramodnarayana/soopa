@@ -21,7 +21,7 @@ awslocal sqs set-queue-attributes \
 
 awslocal sqs set-queue-attributes \
     --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/ucp-events.fifo \
-    --attributes Policy='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sns.amazonaws.com"},"Action":"sqs:SendMessage","Resource":"arn:aws:sqs:us-east-1:000000000000:ucp-events.fifo","Condition":{"ArnEquals":{"aws:SourceArn":"arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo"}}}]}'
+    --attributes Policy='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"sns.amazonaws.com"},"Action":"sqs:SendMessage","Resource":"arn:aws:sqs:us-east-1:000000000000:ucp-events.fifo","Condition":{"ArnEquals":{"aws:SourceArn":["arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo","arn:aws:sns:us-east-1:000000000000:ucp-user-events.fifo"]}}}]}'
 
 # 4. Subscribe SQS Queues to SNS Topics
 awslocal sns subscribe \
@@ -36,6 +36,11 @@ awslocal sns subscribe \
 
 awslocal sns subscribe \
     --topic-arn arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo \
+    --protocol sqs \
+    --notification-endpoint arn:aws:sqs:us-east-1:000000000000:ucp-events.fifo
+
+awslocal sns subscribe \
+    --topic-arn arn:aws:sns:us-east-1:000000000000:ucp-user-events.fifo \
     --protocol sqs \
     --notification-endpoint arn:aws:sqs:us-east-1:000000000000:ucp-events.fifo
 
