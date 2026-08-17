@@ -25,13 +25,13 @@ processors:
     error_mode: ignore
     traces:
       span:
-        - 'resource.attributes["service.name"] != "edi"'
+        - 'resource.attributes["service.name"] != "edi" and resource.attributes["service.name"] != "edi-as2-server"'
     metrics:
       metric:
-        - 'resource.attributes["service.name"] != "edi"'
+        - 'resource.attributes["service.name"] != "edi" and resource.attributes["service.name"] != "edi-as2-server"'
     logs:
       log_record:
-        - 'resource.attributes["service.name"] != "edi"'
+        - 'resource.attributes["service.name"] != "edi" and resource.attributes["service.name"] != "edi-as2-server"'
   filter/notification:
     error_mode: ignore
     traces:

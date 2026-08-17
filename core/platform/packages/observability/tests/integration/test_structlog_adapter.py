@@ -15,7 +15,9 @@ _logger_provider = LoggerProvider(resource=_resource)
 _logger_provider.add_log_record_processor(SimpleLogRecordProcessor(_memory_log_exporter))
 set_logger_provider(_logger_provider)
 
-trace.set_tracer_provider(TracerProvider())
+# Set tracer provider once at module level
+if trace.get_tracer_provider().__class__.__name__ == "ProxyTracerProvider":
+    trace.set_tracer_provider(TracerProvider())
 
 
 @pytest.fixture

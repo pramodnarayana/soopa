@@ -124,7 +124,7 @@ class StructlogLogger(ILogger):
                 resource = Resource(attributes={SERVICE_NAME: service_name})
                 logger_provider = LoggerProvider(resource=resource)
                 if otlp_endpoint:
-                    log_exporter = OTLPLogExporter(endpoint=otlp_endpoint, insecure=True)
+                    log_exporter = OTLPLogExporter(endpoint=otlp_endpoint)
                     logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
                 set_logger_provider(logger_provider)
             _configure_structlog(log_level)

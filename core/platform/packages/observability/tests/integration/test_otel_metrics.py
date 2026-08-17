@@ -1,33 +1,36 @@
 import pytest
-from opentelemetry import metrics
-from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
 from observability.adapters.otel_metrics import OtelMetrics
-
-# Global test setup
-_memory_reader = InMemoryMetricReader()
-_resource = Resource(attributes={SERVICE_NAME: "test-service"})
-_new_provider = MeterProvider(resource=_resource, metric_readers=[_memory_reader])
-metrics.set_meter_provider(_new_provider)
 
 
 @pytest.fixture
 def memory_reader():
-    # Metrics aren't automatically cleared from the memory reader between tests, but
-    # since we are just checking get_metrics_data we'll just re-init it?
-    # Wait, get_metrics_data() on InMemoryMetricReader clears the metrics? No it doesn't.
-    # Actually it might. We'll just return it.
-    return _memory_reader
+    # Create a memory reader for testing
+    return InMemoryMetricReader()
 
 
 @pytest.fixture
-def otel_metrics(memory_reader):
+def otel_metrics(memory_reader, monkeypatch):
+    # Patch OtelMetrics to use the memory reader for testing
+    original_init = OtelMetrics.__init__
+
+    def patched_init(self, service_name, otlp_endpoint=None):
+        # Call original init but ignore otlp_endpoint
+        from opentelemetry import metrics
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+
+        self._service_name = service_name
+        resource = Resource(attributes={SERVICE_NAME: service_name})
+        provider = MeterProvider(resource=resource, metric_readers=[memory_reader])
+        metrics.set_meter_provider(provider)
+        self._meter = provider.get_meter(service_name)
+        self._counters = {}
+        self._histograms = {}
+
+    monkeypatch.setattr(OtelMetrics, "__init__", patched_init)
     metrics_adapter = OtelMetrics(service_name="test-service")
-    # Clear cache
-    metrics_adapter._counters = {}
-    metrics_adapter._histograms = {}
     return metrics_adapter
 
 

@@ -35,20 +35,23 @@ def create_organization(name: str) -> None:
 
     bound_logger = logger.bind(organization_name=name)
     try:
-        with urllib.request.urlopen(req) as response:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
             res_body = response.read().decode("utf-8")
             bound_logger.info("organization_provisioned_successfully", response=res_body)
     except urllib.error.HTTPError as e:
-        if e.code == 409 or e.code == 400:
+        error_body = e.read().decode("utf-8")
+        if e.code == 409 or (e.code == 400 and "already exists" in error_body.lower()):
             bound_logger.info("organization_already_exists", http_status=e.code)
         else:
             bound_logger.exception(
                 "organization_provisioning_failed",
                 http_status=e.code,
-                reason=e.read().decode("utf-8"),
+                reason=error_body,
             )
+            raise
     except Exception:
         bound_logger.exception("organization_provisioning_connection_error")
+        raise
 
 
 if __name__ == "__main__":

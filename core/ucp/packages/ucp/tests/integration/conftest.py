@@ -67,7 +67,7 @@ def postgres_container(request) -> "Any":
 
 @pytest.fixture(scope="session")
 def localstack_container(request) -> "Any":
-    setup_script = str(Path(__file__).resolve().parents[5] / "infra" / "localstack-setup.sh")
+    setup_script = str(Path(__file__).resolve().parents[5] / "infra" / "localstack" / "localstack-setup.sh")
     localstack = DockerContainer("localstack/localstack:3.4.0")
     localstack.with_exposed_ports(4566)
     localstack.with_env("SERVICES", "sns,sqs")

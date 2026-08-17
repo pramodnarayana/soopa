@@ -1,16 +1,11 @@
 import pytest
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from observability.adapters.otel import OtelTracer
 
-# Global setup for TracerProvider
+# Global setup for memory exporter
 _memory_exporter = InMemorySpanExporter()
-_provider = TracerProvider()
-_provider.add_span_processor(SimpleSpanProcessor(_memory_exporter))
-trace.set_tracer_provider(_provider)
 
 
 @pytest.fixture
@@ -20,7 +15,22 @@ def memory_exporter():
 
 
 @pytest.fixture
-def otel_tracer(memory_exporter):
+def otel_tracer(memory_exporter, monkeypatch):
+    # Patch OtelTracer to use the memory exporter for testing
+    original_init = OtelTracer.__init__
+
+    def patched_init(self, service_name, otlp_endpoint=None):
+        from opentelemetry import trace
+        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+        from opentelemetry.sdk.trace import TracerProvider
+
+        resource = Resource(attributes={SERVICE_NAME: service_name})
+        trace_provider = TracerProvider(resource=resource)
+        trace_provider.add_span_processor(SimpleSpanProcessor(memory_exporter))
+        trace.set_tracer_provider(trace_provider)
+        self._tracer = trace.get_tracer(service_name)
+
+    monkeypatch.setattr(OtelTracer, "__init__", patched_init)
     tracer = OtelTracer(service_name="test-service")
     return tracer
 

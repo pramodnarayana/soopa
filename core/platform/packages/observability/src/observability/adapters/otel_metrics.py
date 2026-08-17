@@ -26,14 +26,14 @@ class OtelMetrics(IMetrics):
         resource = Resource(attributes={SERVICE_NAME: service_name})
 
         if otlp_endpoint:
-            exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
+            exporter = OTLPMetricExporter(endpoint=otlp_endpoint)
             reader = PeriodicExportingMetricReader(exporter)
             provider = MeterProvider(resource=resource, metric_readers=[reader])
         else:
             provider = MeterProvider(resource=resource)
 
         metrics.set_meter_provider(provider)
-        self._meter = metrics.get_meter(service_name)
+        self._meter = provider.get_meter(service_name)
 
         # Cache for instruments
         self._counters: dict[str, Any] = {}
