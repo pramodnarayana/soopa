@@ -8,9 +8,9 @@ from fastapi import Depends, Request
 from edi.bootstrap.container import Container
 from edi.ports.as2_tester import AS2TesterPort
 from edi.ports.message_queue import MessageQueuePort
+from edi.ports.secret_store import SecretStorePort
 from edi.ports.sftp_tester import SftpTesterPort
 from edi.ports.tenant_repository import TenantRepositoryPort
-from edi.ports.vault import VaultPort
 from edi.services.as2_receiver_service import As2ReceiverService
 
 
@@ -27,8 +27,8 @@ def get_as2_tester(as2_tester: Any = Depends(Provide[Container.as2_tester])) -> 
 
 
 @inject
-def get_vault(vault_port: Any = Depends(Provide[Container.vault_port])) -> VaultPort:
-    return cast(VaultPort, vault_port)
+def get_secret_store(vault_port: Any = Depends(Provide[Container.vault_port])) -> SecretStorePort:
+    return cast(SecretStorePort, vault_port)
 
 
 @inject

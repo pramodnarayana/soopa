@@ -22,7 +22,7 @@ from pipeline.core.delivery import (
 from pipeline.core.transformation import InboundTransformService, OutboundTransformService
 from sqlalchemy import or_, update
 
-from worker.adapters.vault import WorkerVaultAdapter
+from worker.adapters.aws_secrets_manager import AwsSecretsManagerSecretStore
 from worker.core.security import ssrf_safe_context
 from worker.core.tenant_resolver import TenantResolver
 
@@ -235,7 +235,7 @@ async def process_delivery(
                 )
                 http_adapter = HttpxDeliveryAdapter(validator=ssrf_safe_context)
                 sftp_adapter = ParamikoSftpDeliveryAdapter()
-                vault_adapter = WorkerVaultAdapter()
+                vault_adapter = AwsSecretsManagerSecretStore()
                 as2_adapter = HttpxAS2DeliveryAdapter(validator=ssrf_safe_context)
 
                 strategies = {

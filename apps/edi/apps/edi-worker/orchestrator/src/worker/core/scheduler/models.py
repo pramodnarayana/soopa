@@ -14,8 +14,11 @@ class JobStatus(StrEnum):
 
 
 class JobName(StrEnum):
-    OUTBOX_SWEEPER = "outbox_sweeper"
+    EDI_ORCHESTRATOR_OUTBOX_SWEEPER = "edi_orchestrator_outbox_sweeper"
+    EDI_PROVISIONING_OUTBOX_SWEEPER = "edi_provisioning_outbox_sweeper"
     DATA_RETENTION_CLEANUP = "data_retention_cleanup"
+    UCP_OUTBOX_SWEEPER = "ucp_outbox_sweeper"
+    UCP_DATA_RETENTION_CLEANUP = "ucp_data_retention_cleanup"
 
 
 class AppNamespace(StrEnum):

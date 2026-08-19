@@ -30,6 +30,28 @@ class PartnerNotFoundError(DomainError):
         self.tenant_id = tenant_id
 
 
+class PartnerAlreadyExistsError(DomainError):
+    """Raised when an AS2 Trading Partner already exists (e.g. duplicate AS2 ID)."""
+
+    def __init__(self, as2_id: str, tenant_id: str):
+        super().__init__(
+            f"AS2 Partner with AS2 ID '{as2_id}' already exists for tenant '{tenant_id}'."
+        )
+        self.as2_id = as2_id
+        self.tenant_id = tenant_id
+
+
+class PartnerInUseError(DomainError):
+    """Raised when an AS2 Trading Partner cannot be deleted because it is in use."""
+
+    def __init__(self, partner_id: str, tenant_id: str):
+        super().__init__(
+            f"AS2 Partner '{partner_id}' for tenant '{tenant_id}' is in use and cannot be deleted."
+        )
+        self.partner_id = partner_id
+        self.tenant_id = tenant_id
+
+
 class InvalidCertificateActionError(DomainError):
     """Raised when an invalid certificate rotation action is provided."""
 

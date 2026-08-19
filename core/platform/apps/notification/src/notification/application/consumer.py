@@ -12,9 +12,19 @@ from .dispatch_use_case import DispatchNotificationUseCase
 logger = structlog.get_logger(__name__)
 
 
+from notification.adapters.inbound.jobs.outbox_sweeper_job import (
+    NotificationOutboxSweeperJobHandler,
+)
+
+
 class NotificationConsumerWorker:
-    def __init__(self, dispatch_use_case: DispatchNotificationUseCase) -> None:
+    def __init__(
+        self,
+        dispatch_use_case: DispatchNotificationUseCase,
+        sweeper_job_handler: NotificationOutboxSweeperJobHandler,
+    ) -> None:
         self.dispatch_use_case = dispatch_use_case
+        self.sweeper_job_handler = sweeper_job_handler
         self._task: asyncio.Task[Any] | None = None
         self._shutdown_event = asyncio.Event()
 
@@ -57,6 +67,11 @@ class NotificationConsumerWorker:
             return
         if not domain_event_type:
             logger.error("SQS message payload missing 'event_type' / domain_event_type")
+            return
+
+        if domain_event_type == "NOTIFICATION_OUTBOX_SWEEPER":
+            logger.info("Received sweeper job payload, triggering sweep.")
+            await self.sweeper_job_handler.execute()
             return
 
         logger.info(

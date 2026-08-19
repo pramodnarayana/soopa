@@ -7,7 +7,7 @@ from domain.status import MessageStatus
 from pipeline.core.delivery.base import BaseDeliveryStrategy
 from pipeline.ports.http import HttpDeliveryPort
 from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.vault import VaultPort
+from pipeline.ports.secret_store import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -17,7 +17,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         self,
         repository: RepositoryPort,
         http_delivery: HttpDeliveryPort,
-        vault: VaultPort | None = None,
+        vault: SecretStorePort | None = None,
     ) -> None:
         super().__init__(repository, vault)
         self.http_delivery = http_delivery
@@ -53,11 +53,11 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
 
             auth_token = None
             if partner.get("auth_header_vault_ref"):
-                if not self.vault:
+                if not self.secret_store:
                     raise ValueError(
                         "Vault is not configured but webhook partner requires an auth token."
                     )
-                auth_token = await self.vault.get_secret(partner["auth_header_vault_ref"])
+                auth_token = await self.secret_store.get_secret(partner["auth_header_vault_ref"])
 
             # Pass idempotency_key down to the http_delivery if it supports it, or add it to headers manually
             status_code, response_text = await self.http_delivery.deliver(

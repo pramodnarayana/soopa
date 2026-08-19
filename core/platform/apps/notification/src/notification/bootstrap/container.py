@@ -17,6 +17,10 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from notification.adapters.inbound.jobs.outbox_sweeper_job import (
+    NotificationOutboxSweeperJobHandler,
+)
+from notification.adapters.inbound.notification_outbox_relay import NotificationOutboxRelay
 from notification.adapters.inbound.postgres_listener import PostgresNotificationListener
 from notification.adapters.outbound.channels import (
     EmailDeliveryStrategy,
@@ -43,8 +47,9 @@ from notification.adapters.outbound.postgres_user_preference_repository import (
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from notification.application.consumer import NotificationConsumerWorker
 from notification.application.dispatch_use_case import DispatchNotificationUseCase
-from notification.application.outbox_sweeper import NotificationOutboxSweeper
+from notification.application.outbox_processor import NotificationOutboxProcessor
 from notification.application.stream_manager import NotificationStreamManager
+from notification.application.sweep_outbox_use_case import SweepNotificationOutboxUseCase
 from notification.application.update_user_preference_use_case import (
     UpdateUserPreferenceUseCase,
 )
@@ -205,14 +210,30 @@ class Container(containers.DeclarativeContainer):
     # Use Singleton so repeated resolutions reuse the same lifespan-owned instances.
     # -----------------------------------------------------------------------
 
-    consumer_worker = providers.Singleton(
-        NotificationConsumerWorker,
-        dispatch_use_case=dispatch_use_case,
+    outbox_processor = providers.Singleton(
+        NotificationOutboxProcessor,
+        repository=outbox_repository,
+        dispatcher=delivery_dispatcher,
+    )
+
+    outbox_listener = providers.Singleton(
+        NotificationOutboxRelay,
+        processor=outbox_processor,
+        database_url=config.database_url,
+    )
+
+    sweep_outbox_use_case = providers.Factory(
+        SweepNotificationOutboxUseCase,
+        repository=outbox_repository,
     )
 
     sweeper_worker = providers.Singleton(
-        NotificationOutboxSweeper,
-        repository=outbox_repository,
-        dispatcher=delivery_dispatcher,
-        poll_interval_seconds=config.poll_interval,
+        NotificationOutboxSweeperJobHandler,
+        use_case=sweep_outbox_use_case,
+    )
+
+    consumer_worker = providers.Singleton(
+        NotificationConsumerWorker,
+        dispatch_use_case=dispatch_use_case,
+        sweeper_job_handler=sweeper_worker,
     )

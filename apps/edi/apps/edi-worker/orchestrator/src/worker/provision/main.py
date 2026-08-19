@@ -3,19 +3,23 @@ import asyncio
 import structlog
 from config.settings import get_settings
 from database.connection import DatabaseRouter
+from domain.events import MessageQueueName
 from dotenv import load_dotenv
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from worker.adapters.listen_notify_outbox_adapter import ListenNotifyOutboxAdapter
-from worker.adapters.sqs_outbox import SqsOutboxAdapter
+from worker.adapters.edi_control_plane_outbox_relay import EdiControlPlaneOutboxRelay
+from worker.adapters.edi_control_plane_sns_outbox_publisher import EdiControlPlaneSnsOutboxPublisher
+from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
+from worker.adapters.postgres_outbox_relay_repository import PostgresOutboxRelayRepository
 from worker.core.service import ProvisioningWorkerService
+from worker.provision.edi_control_plane_outbox_processor_use_case import (
+    EdiControlPlaneOutboxProcessorUseCase,
+)
 
 load_dotenv()
 
 logger = structlog.get_logger(__name__)
-
-PROVISIONING_QUEUE_NAME = "edi-tenant-sync.fifo"
 
 
 async def run_worker(service: ProvisioningWorkerService, name: str) -> None:
@@ -51,42 +55,55 @@ async def main() -> None:
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
-    # 1. Internal DB Listener (Postgres LISTEN/NOTIFY)
-    logger.info("initializing_internal_postgres_listener")
-    internal_outbox = ListenNotifyOutboxAdapter(db_url=settings.database.global_url)
-    internal_service = ProvisioningWorkerService(
-        tenant_adapter, internal_outbox, replication_adapter
-    )
-
-    # 2. AWS SQS Consumer
-    logger.info("initializing_aws_sqs_consumer")
-    aws_outbox = SqsOutboxAdapter(queue_name=PROVISIONING_QUEUE_NAME)
-    aws_service = ProvisioningWorkerService(tenant_adapter, aws_outbox, replication_adapter)
-
     logger.info("starting_unified_provisioning_worker")
 
-    internal_task = asyncio.create_task(run_worker(internal_service, "InternalListener"))
-    aws_task = asyncio.create_task(run_worker(aws_service, "AwsListener"))
+    # 1. AWS SQS Consumer (Data Plane Replication)
+    logger.info("initializing_sqs_consumer")
+    sqs_outbox = EdiSqsConsumer(
+        queue_name=f"{MessageQueueName.PROVISIONING_QUEUE.value}.fifo",
+        endpoint_url=settings.aws.endpoint_url,
+        region=settings.aws.default_region,
+    )
+    replication_service = ProvisioningWorkerService(tenant_adapter, sqs_outbox, replication_adapter)
+    replication_task = asyncio.create_task(
+        run_worker(replication_service, "EdiDataPlaneReplicationWorker")
+    )
 
-    from worker.provision.outbox_sweeper import run_sweeper
+    # Instantiate Adapters for Outbox Relay
+    outbox_relay_repository = PostgresOutboxRelayRepository(db_router=db_router)
+    outbox_relay_publisher = EdiControlPlaneSnsOutboxPublisher(
+        topic_arn=settings.aws.sns_topic_arn,
+        endpoint_url=settings.aws.endpoint_url,
+        region=settings.aws.default_region,
+    )
 
-    sweeper_task = asyncio.create_task(run_sweeper(settings.database.global_url, internal_outbox))
+    # 2. Outbox Processor & Postgres Listener (Control Plane)
+    logger.info("initializing_outbox_processor_and_listener")
+    outbox_processor = EdiControlPlaneOutboxProcessorUseCase(
+        repository=outbox_relay_repository,
+        publisher=outbox_relay_publisher,
+    )
+    outbox_listener = EdiControlPlaneOutboxRelay(
+        processor=outbox_processor,
+        database_url=settings.database.global_url,
+    )
 
     try:
-        await asyncio.gather(internal_task, aws_task, sweeper_task)
+        async with outbox_relay_publisher:
+            outbox_listener.start()
+            await replication_task
     finally:
         logger.info("shutting_down_gracefully")
-        internal_task.cancel()
-        aws_task.cancel()
-        sweeper_task.cancel()
+        replication_task.cancel()
+        await outbox_listener.stop()
         import contextlib
 
         with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.gather(internal_task, aws_task, sweeper_task, return_exceptions=True)
+            await asyncio.gather(replication_task, return_exceptions=True)
 
         # Close adapter resources
-        await internal_outbox.close()
-        await aws_outbox.close()
+        await sqs_outbox.close()
+        await outbox_relay_repository.close()
 
 
 if __name__ == "__main__":

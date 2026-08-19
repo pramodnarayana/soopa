@@ -4,8 +4,8 @@ from domain.status import MessageStatus
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
 from pipeline.ports.repository import RepositoryPort
+from pipeline.ports.secret_store import SecretStorePort
 from pipeline.ports.sftp import SftpDeliveryPort
-from pipeline.ports.vault import VaultPort
 
 logger = structlog.get_logger(__name__)
 
@@ -15,7 +15,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         self,
         repository: RepositoryPort,
         sftp_delivery: SftpDeliveryPort,
-        vault: VaultPort | None = None,
+        vault: SecretStorePort | None = None,
     ) -> None:
         super().__init__(repository, vault)
         self.sftp_delivery = sftp_delivery
@@ -46,8 +46,8 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             password: str | None = partner.get("password")
             client_key: str | None = None
 
-            if not password and partner.get("credentials_vault_ref") and self.vault:
-                vault_secret = await self.vault.get_secret(partner["credentials_vault_ref"])
+            if not password and partner.get("credentials_vault_ref") and self.secret_store:
+                vault_secret = await self.secret_store.get_secret(partner["credentials_vault_ref"])
                 client_key = vault_secret
                 password = ""
 

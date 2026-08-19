@@ -63,6 +63,7 @@ class CreateAS2TradingPartnerCmd:
     is_local: bool = False
     url: str | None = None
     public_cert_pem: str | None = None
+    private_key_pem: str | None = None
     public_cert_vault_ref: str | None = None
     private_key_vault_ref: str | None = None
 

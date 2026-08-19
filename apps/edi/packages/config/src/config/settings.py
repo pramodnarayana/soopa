@@ -45,6 +45,7 @@ class AwsSettings(BaseSettings):
     default_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
     access_key_id: str | None = Field(default=None)
     secret_access_key: str | None = Field(default=None)
+    sns_topic_arn: str = Field(default="")
 
     @property
     def resolved_region(self) -> str:
@@ -113,6 +114,16 @@ class PublicSettings(BaseSettings):
     )
 
 
+from config.constants import SECRETS_MOUNT_PATH
+
+
+class SecretsSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="SECRETS_", env_file=".env", extra="ignore")
+
+    mount_path: str = Field(default=SECRETS_MOUNT_PATH)
+    sync_interval_seconds: int = Field(default=300)
+
+
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -133,6 +144,7 @@ class AppSettings(BaseSettings):
     otel: OtelSettings = Field(default_factory=OtelSettings)
     identity: IdentitySettings = Field(default_factory=IdentitySettings)
     public: PublicSettings = Field(default_factory=PublicSettings)
+    secrets: SecretsSettings = Field(default_factory=SecretsSettings)
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":

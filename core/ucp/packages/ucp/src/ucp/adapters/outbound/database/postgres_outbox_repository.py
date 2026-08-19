@@ -9,16 +9,31 @@ class PostgresOutboxRepository:
         self.session_factory = session_factory
 
     async def sweep_stuck_events(self, lock_lease_ms: int) -> int:
+        import asyncio
+
+        total_swept = 0
         async with self.session_factory() as session:
-            query = text("""
-                UPDATE ucp.outbox
-                SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
-                WHERE status = 'PROCESSING'
-                  AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
-            """)
-            result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
-            await session.commit()
-            return int(result.rowcount)  # type: ignore
+            while True:
+                query = text("""
+                    WITH cte AS (
+                        SELECT id FROM ucp.outbox
+                        WHERE status = 'PROCESSING'
+                          AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
+                        LIMIT 5000
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE ucp.outbox
+                    SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
+                    WHERE id IN (SELECT id FROM cte)
+                """)
+                result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
+                swept = int(result.rowcount)  # type: ignore[attr-defined]
+                total_swept += swept
+                await session.commit()
+                if swept < 5000:
+                    break
+                await asyncio.sleep(0.1)
+        return total_swept
 
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int

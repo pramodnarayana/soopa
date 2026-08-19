@@ -16,19 +16,19 @@ from edi.core.services import SFTPPartnerService
 from edi.dependencies.auth import get_current_tenant_id
 from edi.dependencies.database import get_control_plane_uow
 from edi.dependencies.headers import get_idempotency_key
-from edi.dependencies.services import get_sftp_tester, get_vault
+from edi.dependencies.services import get_secret_store, get_sftp_tester
 from edi.domain.models import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
+from edi.ports.secret_store import SecretStorePort
 from edi.ports.sftp_tester import SftpTesterPort
-from edi.ports.vault import VaultPort
 
 router = APIRouter(tags=["Partners — SFTP"])
 
 
-async def _get_client_key_from_vault(vault_ref: str, vault_port: VaultPort) -> str:
-    vault_secret = vault_port.retrieve_private_key(vault_ref)
+async def _get_client_key_from_vault(vault_ref: str, secret_store_port: SecretStorePort) -> str:
+    vault_secret = await secret_store_port.retrieve_private_key(vault_ref)
     return vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
 
 
@@ -37,7 +37,7 @@ async def test_sftp_connection(
     request: TestSFTPConnectionRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
-    vault_port: VaultPort = Depends(get_vault),
+    vault_port: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Tests an SFTP connection without saving a partner."""
     if not request.password and not request.credentials_vault_ref:
@@ -75,7 +75,7 @@ async def test_existing_sftp_connection(
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
-    vault_port: VaultPort = Depends(get_vault),
+    vault_port: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Tests an SFTP connection for an existing partner, pulling missing credentials from the DB."""
     from database.encryption import db_encryption

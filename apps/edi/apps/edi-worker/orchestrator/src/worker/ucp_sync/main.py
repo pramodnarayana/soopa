@@ -6,8 +6,8 @@ from config.settings import get_settings
 from database.connection import DatabaseRouter
 
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from worker.adapters.sqs_outbox import SqsOutboxAdapter
-from worker.adapters.sqs_ucp_listener import SqsUcpListenerAdapter
+from worker.adapters.edi_config_sync_sqs_consumer import EdiConfigSyncSqsConsumer
+from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
 from worker.core.ucp_sync_service import UcpSyncWorkerService
 
 logger = structlog.get_logger(__name__)
@@ -34,11 +34,11 @@ async def main() -> None:
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
 
     # Existing adapter for pushing to internal sync queue
-    sync_outbox_adapter = SqsOutboxAdapter(queue_name="edi-tenant-sync.fifo")
+    sync_outbox_adapter = EdiSqsConsumer(queue_name="edi-tenant-sync.fifo")
 
     # New adapter for polling UCP events
-    ucp_listener_adapter = SqsUcpListenerAdapter(
-        endpoint_url=endpoint_url, queue_name="ucp.events.fifo"
+    ucp_listener_adapter = EdiConfigSyncSqsConsumer(
+        endpoint_url=endpoint_url, queue_name="edi-config-sync.fifo"
     )
 
     # 2. Instantiate Service (Core Business Logic) with strict Dependency Injection
@@ -48,8 +48,25 @@ async def main() -> None:
         sync_outbox_port=sync_outbox_adapter,
     )
 
-    # 3. Run
-    await run_worker(service)
+    # 3. Register UCP Job Handlers
+    # (Removed: UCP Outbox Sweeper and Data Retention are now strictly handled by ucp-worker)
+
+    # 4. Run tasks
+    sync_task = asyncio.create_task(run_worker(service))
+
+    try:
+        await asyncio.gather(sync_task)
+    finally:
+        logger.info("Shutting down UCP sync worker tasks gracefully...")
+        sync_task.cancel()
+
+        import contextlib
+
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(sync_task, return_exceptions=True)
+
+        if db_router:
+            await db_router.close_all()
 
 
 if __name__ == "__main__":

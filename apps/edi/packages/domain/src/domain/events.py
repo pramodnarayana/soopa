@@ -64,12 +64,12 @@ class ProvisioningEvent(BaseModel):
 
 
 class MessageQueueName(StrEnum):
-    TRANSFORM_ORCHESTRATION_QUEUE = "TransformOrchestrationQueue"
-    DELIVER_QUEUE = "DeliverQueue"
-    PROVISIONING_QUEUE = "ProvisioningQueue"
-    TRANSFORM_COMPUTE_QUEUE = "TransformComputeQueue"
-    CDC_DLQ_QUEUE = "CDC-DLQ"
-    PRIORITY_NOTIFICATIONS_QUEUE = "PriorityNotificationsQueue"
+    TRANSFORM_ORCHESTRATION_QUEUE = "edi-transform-orchestration"
+    DELIVER_QUEUE = "edi-deliver"
+    PROVISIONING_QUEUE = "edi-config-sync"
+    TRANSFORM_COMPUTE_QUEUE = "edi-transform-compute"
+    CDC_DLQ_QUEUE = "edi-cdc-dlq"
+    PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {

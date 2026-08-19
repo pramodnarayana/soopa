@@ -106,7 +106,7 @@ class SchedulerWorker:
                 )
 
         except Exception as e:
-            logger.exception("Job %s (%s) execution failed", job.name, job.id)
+            logger.exception("job_execution_failed", job_name=job.name, job_id=job.id)
 
             if job.retry_count < job.max_retries:
                 backoff_seconds = 60 * (2**job.retry_count)

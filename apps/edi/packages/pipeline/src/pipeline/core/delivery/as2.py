@@ -8,7 +8,7 @@ from pipeline.core.as2_orchestrator import AS2MessageOrchestrator
 from pipeline.core.delivery.base import BaseDeliveryStrategy
 from pipeline.ports.as2 import AS2DeliveryPort
 from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.vault import VaultPort
+from pipeline.ports.secret_store import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -18,7 +18,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         self,
         repository: RepositoryPort,
         as2_delivery: AS2DeliveryPort,
-        vault: VaultPort | None = None,
+        vault: SecretStorePort | None = None,
     ) -> None:
         super().__init__(repository, vault)
         self.as2_delivery = as2_delivery
