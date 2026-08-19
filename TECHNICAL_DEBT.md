@@ -147,3 +147,22 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 **Impact**: High
 **Description**: The recent Hexagonal Architecture refactoring of Webhooks correctly extracted the logic into Use Cases, Ports, and Adapters. However, the entire Webhook feature was incorrectly implemented inside the EDI application module (`apps/edi/packages/edi/src/edi/...`). Webhooks are a core platform capability that belong in the UCP (User Control Plane) boundary.
 **Status**: Resolved. Webhook Use Cases, Router, and Domain Models have been extracted to UCP, and EDI now correctly subscribes to `webhook.created` via the global outbox.
+
+## [RESOLVED] [Architecture] Dual-Architecture Naming Conventions (Domain Services vs Clean Architecture Use Cases)
+
+- **Date Added**: 2026-08-17
+- **Status**: ✅ RESOLVED
+- **Description**: The codebase currently mixes Domain-Driven Design (DDD) "Application Services" (grouping multiple commands into a single `Service` class, e.g., `AS2PartnerService`) with Clean Architecture "Use Cases" (standalone single-responsibility classes, e.g., `ProcessInboundEdiUseCase`).
+- **Action Item**: The enterprise standard is now strictly Single-Responsibility **Clean Architecture Use Cases** (`_use_case.py`). The legacy `_service.py` God Class pattern is officially deprecated. Migrated `as2_partner_service.py` into isolated use cases as a proof-of-concept template.
+
+## [Architecture] Missing Scheduler Engine for Background Jobs
+
+- **Date Added**: 2026-08-19
+- **Description**: The `ucp-worker` is currently polling an SQS queue (`ucp-jobs.fifo`) for scheduled background tasks (like `ucp_outbox_sweeper` and `ucp_data_retention_cleanup`). However, the infrastructure for this queue is missing in Pulumi, and there is no centralized Scheduler Engine pushing cron-trigger messages to it. As a result, critical cleanup jobs are currently never executing, which will eventually lead to unbounded database growth.
+- **Action Item**: Implement a centralized Scheduler Module (or AWS EventBridge rules via Pulumi) to push cron-based triggers to the `ucp-jobs.fifo` queue, and ensure the queue infrastructure is correctly provisioned.
+
+## [Architecture] Architectural Drift in Bounded Context File Taxonomy
+
+- **Date Added**: 2026-08-19
+- **Description**: Different bounded contexts (UCP vs EDI) have drifted in their internal folder/file naming taxonomies for identical architectural concepts. For example, database event models are located at `core/ucp/.../ucp_models/events.py` in UCP, but at `apps/edi/.../database/models/control_plane.py` in EDI. This violates Modular Monolith structural consistency rules.
+- **Action Item**: Standardize the internal file/folder taxonomy across all bounded contexts (e.g., standardizing on `[BoundedContext]/database/models/events.py`) and implement `pytest-archon` rules to automatically enforce these structural conventions in CI.

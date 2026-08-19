@@ -271,11 +271,12 @@ async def test_main_execution_loop() -> None:
     with (
         patch("worker.data.main.asyncio.create_task") as mock_create_task,
         patch("worker.data.main.asyncio.gather", new_callable=AsyncMock) as mock_gather,
-        patch("worker.data.main.DatabaseRouter"),
+        patch("worker.data.main.DatabaseRouter") as mock_db_router_cls,
         patch("worker.data.main.TenantResolver"),
         patch("worker.data.main.SqsPublisherAdapter"),
         patch("worker.data.main.poll_sqs_queue", new_callable=AsyncMock),
     ):
+        mock_db_router_cls.return_value.close_all = AsyncMock()
         await main()
 
         assert mock_create_task.call_count >= 3

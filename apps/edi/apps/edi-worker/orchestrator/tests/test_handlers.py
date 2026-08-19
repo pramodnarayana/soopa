@@ -211,7 +211,7 @@ async def test_process_pipeline_event_outbound(
 @pytest.mark.asyncio
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
-@patch("worker.data.handlers.WorkerVaultAdapter")
+@patch("worker.data.handlers.AwsSecretsManagerSecretStore")
 async def test_process_delivery_success(
     mock_vault: MagicMock, mock_webhook: MagicMock, mock_repo: MagicMock
 ) -> None:
@@ -264,7 +264,7 @@ async def test_process_delivery_success(
 @pytest.mark.asyncio
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
-@patch("worker.data.handlers.WorkerVaultAdapter")
+@patch("worker.data.handlers.AwsSecretsManagerSecretStore")
 async def test_process_delivery_skip(
     mock_vault: MagicMock, mock_webhook: MagicMock, mock_repo: MagicMock
 ) -> None:
@@ -305,7 +305,7 @@ async def test_process_delivery_skip(
 @pytest.mark.asyncio
 @patch("worker.data.handlers.SqlAlchemyRepositoryAdapter")
 @patch("worker.data.handlers.WebhookDeliveryStrategy")
-@patch("worker.data.handlers.WorkerVaultAdapter")
+@patch("worker.data.handlers.AwsSecretsManagerSecretStore")
 async def test_process_delivery_stale_update(
     mock_vault: MagicMock,
     mock_webhook: MagicMock,

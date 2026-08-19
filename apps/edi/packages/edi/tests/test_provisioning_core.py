@@ -4,7 +4,6 @@ import pytest
 from api_fakes import FakeGlobalStore
 
 from edi.core.services import (
-    AS2PartnerService,
     AS2PartnershipService,
     InboundRouteService,
     OutboundRouteService,
@@ -15,7 +14,6 @@ from edi.domain.models import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
-    UpdateAS2TradingPartnerCmd,
 )
 
 
@@ -43,11 +41,6 @@ def mock_uow(global_repo):
 
 
 @pytest.fixture
-def as2_partner_service(mock_uow):
-    return AS2PartnerService(uow=mock_uow)
-
-
-@pytest.fixture
 def as2_partnership_service(mock_uow):
     return AS2PartnershipService(uow=mock_uow)
 
@@ -55,40 +48,6 @@ def as2_partnership_service(mock_uow):
 @pytest.fixture
 def sftp_partner_service(mock_uow):
     return SFTPPartnerService(uow=mock_uow)
-
-
-@pytest.mark.asyncio
-async def test_create_as2_partner(as2_partner_service: AS2PartnerService, global_repo):
-    cmd = CreateAS2TradingPartnerCmd(name="Test Partner", as2_id="TEST_AS2")
-    partner = await as2_partner_service.create_as2_partner(tenant_id="1", cmd=cmd)
-
-    assert partner.type == "AS2"
-    assert partner.tenant_id == "1"
-    assert partner.status == "PROVISIONING"
-
-    assert len(global_repo.partners) == 1
-    assert len(global_repo.outbox_events) == 1
-    from domain.events import EdiEventType
-
-    assert global_repo.outbox_events[0]["event_type"] == EdiEventType.edi_as2_partner_created
-    assert global_repo.outbox_events[0]["tenant_id"] == "1"
-
-
-@pytest.mark.asyncio
-async def test_update_and_delete_as2_partner(as2_partner_service: AS2PartnerService, global_repo):
-    cmd = CreateAS2TradingPartnerCmd(name="Test Partner", as2_id="TEST_AS2")
-    partner = await as2_partner_service.create_as2_partner(tenant_id="1", cmd=cmd)
-
-    # Update
-    update_cmd = UpdateAS2TradingPartnerCmd(name="Updated Partner", as2_id="NEW_AS2")
-    updated = await as2_partner_service.update_as2_partner(
-        tenant_id="1", partner_id=partner.partner_id, cmd=update_cmd
-    )
-    assert updated.name == "Updated Partner"
-
-    # Delete
-    await as2_partner_service.delete_as2_partner(tenant_id="1", partner_id=partner.partner_id)
-    assert len(global_repo.partners) == 0
 
 
 @pytest.mark.asyncio

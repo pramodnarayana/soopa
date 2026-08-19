@@ -43,9 +43,9 @@ def client(mock_uow):
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }
-    from edi.dependencies.services import get_vault
+    from edi.dependencies.services import get_secret_store
 
-    app.dependency_overrides[get_vault] = lambda: AsyncMock()
+    app.dependency_overrides[get_secret_store] = lambda: AsyncMock()
 
     with TestClient(app) as client:
         yield client

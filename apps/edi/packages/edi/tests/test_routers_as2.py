@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
 from edi.dependencies.database import get_control_plane_uow, get_data_plane_uow, get_global_session
-from edi.dependencies.services import get_vault
+from edi.dependencies.services import get_secret_store
 from edi.module import create_edi_app
 
 app = create_edi_app()
@@ -21,7 +21,7 @@ def mock_uow():
 
 @pytest.fixture
 def mock_vault():
-    vault = Mock()
+    vault = AsyncMock()
     vault.retrieve_private_key.return_value = b"test_private_key"
     vault.store_private_key.return_value = "vault_ref"
     return vault
@@ -37,7 +37,7 @@ def client(mock_uow, mock_vault):
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }
-    app.dependency_overrides[get_vault] = lambda: mock_vault
+    app.dependency_overrides[get_secret_store] = lambda: mock_vault
 
     with TestClient(app) as client:
         yield client

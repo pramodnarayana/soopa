@@ -14,6 +14,8 @@
 - **Infra & Business Decoupling**: Infrastructure code (AWS, SQS, DB connections) must never leak into business/domain logic.
 - **No Leakage**: Data transfer objects (DTOs), API models, and ORM models must not leak across their respective boundaries. Map them appropriately.
 - **DRY (Don't Repeat Yourself)**: Avoid code duplication. Extract shared logic into reusable, well-named functions/modules.
+- **Chunked Database Mutations**: NEVER use unbounded `DELETE` or `UPDATE` queries that could lock massive datasets. Background jobs (like sweeping or data retention) MUST use a chunked iteration (e.g. a `while True` loop with a small `LIMIT`), commit on each iteration, and yield execution (`await asyncio.sleep(0.1)`) to allow PostgreSQL to run autovacuum and serve live API traffic.
+- **Strict API/Worker Decoupling**: NEVER run asynchronous background loops, Queue Pollers (SQS), or Outbox Relays inside the web API container (e.g., FastAPI `lifespan.py`). The web API container must be 100% pure and only serve HTTP requests. All background polling and async processing must be physically isolated into a dedicated worker container.
 
 # Package Manager
 - ALWAYS use `pnpm` for frontend/Node.js package management instead of `npm`. Do not use `npm install`.
@@ -52,3 +54,4 @@ The following paradigms define the entire system structure. Any new design or mo
     - **Frontend**: Mixing UI component libraries (e.g., Radix UI vs Base UI), state management paradigms, or API clients (Axios vs native fetch).
     - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.
     - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.
+    - **Strict File Taxonomy Consistency**: Different Bounded Contexts must not drift in their internal folder/file naming taxonomies for identical architectural concepts. If one context uses `database/models/events.py`, another context must use `database/models/events.py` for its events, rather than arbitrary structures. Call out any file path taxonomy drift across domains as a CRITICAL violation.

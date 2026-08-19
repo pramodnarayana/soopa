@@ -225,7 +225,7 @@ async def delete_certificate_secret(
                 status_code=400, detail="Cannot delete a private key that is currently in use."
             )
 
-    await secret_store.delete_secret(vault_ref)
+        await secret_store.delete_secret(vault_ref)
 
 
 @router.post(

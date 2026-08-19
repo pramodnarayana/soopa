@@ -77,36 +77,39 @@ class UcpOutboxRelay:
                 self._connection = None
             logger.exception("ucp_outbox_listener_connection_failed")
 
+    async def _process_loop_iteration(self) -> None:
+        if self._connection and self._connection.is_closed():
+            logger.warning("asyncpg_connection_lost", action="reconnecting")
+            self._connection = None
+
+        if not self._connection:
+            await self._setup_listener()
+            if not self._connection:
+                await asyncio.sleep(5.0)
+                return
+
+        # Clear event before processing to capture notifications during drain
+        if self.is_running:
+            self._notify_event.clear()
+
+        # Process pending until empty
+        more_events = True
+        while more_events and self.is_running:
+            more_events = await self.processor.process_pending()
+
+        if self.is_running:
+            with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
+                await asyncio.wait_for(
+                    self._notify_event.wait(), timeout=self.fallback_poll_interval
+                )
+
     async def _run_loop(self) -> None:
         await self._setup_listener()
 
         async def _listen() -> None:
             while self.is_running:
                 try:
-                    if self._connection and self._connection.is_closed():
-                        logger.warning("asyncpg_connection_lost", action="reconnecting")
-                        self._connection = None
-
-                    if not self._connection:
-                        await self._setup_listener()
-                        if not self._connection:
-                            await asyncio.sleep(5.0)
-                            continue
-
-                    # Clear event before processing to capture notifications during drain
-                    if self.is_running:
-                        self._notify_event.clear()
-
-                    # Process pending until empty
-                    more_events = True
-                    while more_events and self.is_running:
-                        more_events = await self.processor.process_pending()
-
-                    if self.is_running:
-                        with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
-                            await asyncio.wait_for(
-                                self._notify_event.wait(), timeout=self.fallback_poll_interval
-                            )
+                    await self._process_loop_iteration()
                 except asyncio.CancelledError:
                     raise
                 except Exception:

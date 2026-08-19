@@ -1,6 +1,66 @@
-version: '3.9'
 include:
-  - core/infra/docker-compose.yml
-  - core/ucp/docker-compose.yml
+  - infra/docker-compose.yml
+  - infra/observability/docker-compose.yml
   - apps/edi/docker-compose.yml
-  - core/infra/observability/docker-compose.yml
+
+# Single image built once, reused by all runtime containers.
+# Follows the Shopify-style single-image deployment strategy.
+x-monolith-base: &monolith-base
+  image: platform:local
+  env_file: .env
+  depends_on:
+    postgres_global:
+      condition: service_healthy
+    localstack:
+      condition: service_healthy
+    edi_postgres_shard:
+      condition: service_healthy
+
+services:
+  # -------------------------------------------------------------------------
+  # 0. Build Stage — builds the single image used by all services below
+  # -------------------------------------------------------------------------
+  platform-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: platform:local
+    command: ["echo", "Image built successfully"]
+    profiles:
+      - build
+
+  # -------------------------------------------------------------------------
+  # 1. Ingress Tier (Synchronous Web Servers)
+  # -------------------------------------------------------------------------
+  unified-api:
+    <<: *monolith-base
+    command: ["uvicorn", "unified_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+
+  edi-as2-server:
+    <<: *monolith-base
+    command: ["uvicorn", "as2_server.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+
+  # -------------------------------------------------------------------------
+  # 2. Worker Tier (Asynchronous Event Processing)
+  # -------------------------------------------------------------------------
+  edi-orchestrator:
+    <<: *monolith-base
+    command: ["python", "-m", "worker.main"]
+
+  # -------------------------------------------------------------------------
+  # 3. Replication & Reliability Tier (Background Daemons)
+  # -------------------------------------------------------------------------
+  notification-sweeper:
+    <<: *monolith-base
+    command: ["python", "-m", "notification.workers.sweeper"]
+
+  # -------------------------------------------------------------------------
+  # 4. Scheduler Tier (Cron)
+  # -------------------------------------------------------------------------
+  scheduler-engine:
+    <<: *monolith-base
+    command: ["python", "-m", "scheduler_engine.main"]

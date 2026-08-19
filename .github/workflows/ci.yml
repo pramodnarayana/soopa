@@ -1,35 +1,28 @@
-name: Platform CI
+name: Monolith CI
 
 on:
   push:
     branches: [ "main", "development" ]
-    paths:
-      - 'core/platform/**'
-      - '.github/workflows/platform-ci.yml'
-      - 'pnpm-lock.yaml'
-      - 'uv.lock'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
   pull_request:
-    paths:
-      - 'core/platform/**'
-      - '.github/workflows/platform-ci.yml'
-      - 'pnpm-lock.yaml'
-      - 'uv.lock'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
+    branches: [ "main", "development" ]
 
 jobs:
   build-lint-test:
-    name: Build, Lint, and Test
+    name: Build, Lint, and Test Monolith
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
+    permissions:
+      contents: read
     env:
       DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
+      SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
       POSTGRES_PASSWORD: zitadel_password
       ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
 
     steps:
       - name: Checkout code
@@ -56,7 +49,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
-          python-version: '3.12'
+          python-version: '3.13' # Updated to match Dockerfile
 
       - name: Install Node dependencies
         run: pnpm install
@@ -65,33 +58,38 @@ jobs:
         run: uv sync --all-packages
 
       - name: Typecheck (Node)
-        run: pnpm turbo typecheck --filter="./core/platform/**"
+        run: pnpm turbo typecheck
 
       - name: Typecheck Tests (Node)
-        run: pnpm turbo typecheck:tests --filter="./core/platform/**"
+        run: pnpm turbo typecheck:tests
 
       - name: Lint (Node)
-        run: pnpm turbo lint --filter="./core/platform/**"
+        run: pnpm turbo lint
 
-      - name: Start Database
+      - name: Start Database & Infrastructure
         env:
           ZITADEL_PLATFORM_ADMIN_ID: test_admin_id
           ZITADEL_PLATFORM_ORG_ID: test_org_id
         run: |
-          docker compose up -d postgres_global --wait
-          pnpm db:migrate:platform
+          docker compose up -d postgres_global edi_postgres_shard localstack --wait
+          pnpm db:migrate
           pnpm db:seed
+          uv run --directory apps/edi/packages/database python -m database.run_migrations
 
       - name: Test (Node)
-        run: CI=true pnpm turbo test --filter="./core/platform/**"
+        run: CI=true pnpm turbo test
 
       - name: Test (Python)
         run: |
-          for d in core/platform/packages/*/python core/platform/apps/*; do
+          # Test all python packages
+          for d in core/ucp/packages/*/python core/ucp/apps/* core/platform/packages/*/python core/platform/apps/* apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
             if [ -f "$d/pyproject.toml" ]; then
               (cd "$d" && uv run pytest || [ $? -eq 5 ])
             fi
           done
 
-      - name: Build (Node)
-        run: pnpm turbo build --filter="./core/platform/**"
+      - name: Build Frontend/Node
+        run: pnpm turbo build
+
+      - name: Build Monolith Docker Image
+        run: docker build -t soopa-monolith:latest .

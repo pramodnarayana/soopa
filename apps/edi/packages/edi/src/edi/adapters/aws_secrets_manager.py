@@ -101,7 +101,7 @@ class AwsSecretsManagerAdapter:
                 _ = SecretCategory(category_str)
             except ValueError:
                 # Reject unknown categories before constructing path
-                logger.error("unknown_secret_category_rejected", category=category_str)
+                logger.exception("unknown_secret_category_rejected", category=category_str)
                 raise ValueError(f"Unknown secret category: {category_str}")
 
             local_path = os.path.join(settings.secrets.mount_path, category_str, f"{ref_id}.pem")

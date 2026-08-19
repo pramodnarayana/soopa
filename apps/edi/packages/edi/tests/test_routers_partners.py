@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
@@ -43,23 +45,23 @@ def client(fake_uow):
 
     app.dependency_overrides[get_sftp_tester] = FakeSftpTester
 
-    from edi.dependencies.services import get_vault
+    from edi.dependencies.services import get_secret_store
 
     class FakeVault:
-        def store_private_key(self, private_key_pem: bytes, alias_prefix: str = "as2_key") -> str:
-            return "fake_ref"
+        async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
+            return "vault_ref_123"
 
-        def retrieve_private_key(self, vault_ref: str) -> bytes:
+        async def retrieve_private_key(self, vault_ref: str) -> bytes:
             if vault_ref == "vault-error-ref":
                 from edi.core.exceptions import VaultError
 
                 raise VaultError("Vault error")
             return b"fake_key"
 
-        def delete_secret(self, vault_ref: str) -> None:
+        async def delete_secret(self, vault_ref: str) -> None:
             pass
 
-    app.dependency_overrides[get_vault] = lambda: FakeVault()
+    app.dependency_overrides[get_secret_store] = lambda: FakeVault()
 
     with TestClient(app) as test_client:
         yield test_client

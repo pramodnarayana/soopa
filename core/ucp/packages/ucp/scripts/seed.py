@@ -173,6 +173,46 @@ async def main() -> None:
         )
         logger.info("Successfully seeded platform apps.")
 
+        logger.info("Seeding platform core system jobs...")
+
+        existing_job_id = await conn.fetchval(
+            "SELECT id FROM scheduling.scheduled_jobs WHERE name = $1 AND app_namespace = $2",
+            "NOTIFICATION_OUTBOX_SWEEPER",
+            "NOTIFICATION",
+        )
+
+        if existing_job_id:
+            await conn.execute(
+                """
+                UPDATE scheduling.scheduled_jobs
+                SET target_queue = $1, cron_expression = $2, timezone = $3, max_retries = $4, updated_at = NOW()
+                WHERE id = $5
+                """,
+                "edi-priority-notifications",
+                "* * * * *",
+                "UTC",
+                3,
+                existing_job_id,
+            )
+        else:
+            job_id = f"job_{os.urandom(12).hex()}"
+            await conn.execute(
+                """
+                INSERT INTO scheduling.scheduled_jobs
+                    (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, payload, status, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, 'PENDING', NOW(), NOW())
+                """,
+                job_id,
+                "NOTIFICATION_OUTBOX_SWEEPER",
+                "edi-priority-notifications",
+                "NOTIFICATION",
+                "* * * * *",
+                "UTC",
+                3,
+            )
+
+        logger.info("Successfully seeded platform core system jobs.")
+
         logger.info("Seeding database shards...")
         await conn.execute(
             """

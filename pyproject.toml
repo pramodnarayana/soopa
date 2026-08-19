@@ -21,6 +21,7 @@ members = [
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",
+    "core/ucp/apps/ucp-worker",
     "apps/edi/packages/edi",
     "apps/edi/apps/edi-as2-server",
     "apps/edi/apps/edi-worker/*",

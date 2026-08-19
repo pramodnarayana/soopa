@@ -20,9 +20,7 @@ class EdiDataPlaneOutboxSweeperJobHandler(JobHandlerPort):
         Sweeps the data-plane (tenant shard) outbox for PENDING pipeline events
         and forwards each one to the appropriate SQS queue using concurrent batching.
         """
-        logger.info(
-            "[EdiDataPlaneOutboxSweeperJobHandler] Triggering sweep for job", job_id=job.id
-        )
+        logger.info("[EdiDataPlaneOutboxSweeperJobHandler] Triggering sweep for job", job_id=job.id)
 
         await self.use_case.execute()
 

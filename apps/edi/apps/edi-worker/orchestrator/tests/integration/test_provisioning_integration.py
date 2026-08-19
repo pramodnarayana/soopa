@@ -20,7 +20,7 @@ from ucp_models.subscriptions import App
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from worker.adapters.sqs_outbox import SqsOutboxAdapter
+from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
 from worker.adapters.sqs_publisher import SqsPublisherAdapter
 from worker.core.errors import PermanentProvisioningError
 from worker.core.service import ProvisioningWorkerService
@@ -44,7 +44,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
     queue_name = "test-edi-tenant-sync-{uuid.uuid4()}.fifo"
-    outbox_adapter = SqsOutboxAdapter(queue_name=queue_name)
+    outbox_adapter = EdiSqsConsumer(queue_name=queue_name)
     outbox_adapter.endpoint_url = sqs_endpoint
 
     message_publisher = SqsPublisherAdapter(
