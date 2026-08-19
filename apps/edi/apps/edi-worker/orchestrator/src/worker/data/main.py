@@ -20,7 +20,7 @@ logger = structlog.get_logger(__name__)
 
 async def main() -> None:
     settings = get_settings()
-    aws_endpoint = os.getenv("AWS_ENDPOINT_URL")
+    aws_endpoint = settings.aws.endpoint_url
     s3_bucket = "soopaedi-dev"
 
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
@@ -31,7 +31,7 @@ async def main() -> None:
         trace_id = payload.get("trace_id")
         tenant_id = body.get("tenant_id")
         if not trace_id or not tenant_id:
-            logger.error("missing_trace_id_or_tenant_id", raw_message=body)
+            logger.error("missing_trace_id_or_tenant_id", trace_id=trace_id, tenant_id=tenant_id)
             return
         await process_pipeline_event(
             trace_id=trace_id,
@@ -58,7 +58,7 @@ async def main() -> None:
         trace_id = payload.get("trace_id")
         tenant_id = body.get("tenant_id")
         if not trace_id or not tenant_id:
-            logger.error("missing_trace_id_or_tenant_id", raw_message=body)
+            logger.error("missing_trace_id_or_tenant_id", trace_id=trace_id, tenant_id=tenant_id)
             return
         await process_delivery(
             trace_id=trace_id,
@@ -158,17 +158,19 @@ async def main() -> None:
         EdiControlPlaneOutboxSweeperJobHandler(provisioning_sweeper_use_case),
     )
     registry.register(
-        "EDI_CONTROL_PLANE_OUTBOX_CLEANUP",
+        JobName.EDI_CONTROL_PLANE_OUTBOX_CLEANUP.value,
         EdiControlPlaneOutboxCleanupJobHandler(edi_cp_outbox_cleanup_uc),
     )
     registry.register(
-        "EDI_DATA_PLANE_OUTBOX_CLEANUP",
+        JobName.EDI_DATA_PLANE_OUTBOX_CLEANUP.value,
         EdiDataPlaneOutboxCleanupJobHandler(edi_dp_outbox_cleanup_uc),
     )
     registry.register(
-        "EDI_IDEMPOTENCY_CLEANUP", EdiIdempotencyCleanupJobHandler(edi_idemp_cleanup_uc)
+        JobName.EDI_IDEMPOTENCY_CLEANUP.value, EdiIdempotencyCleanupJobHandler(edi_idemp_cleanup_uc)
     )
-    registry.register("EDI_AUDIT_LOG_CLEANUP", EdiAuditLogCleanupJobHandler(edi_audit_cleanup_uc))
+    registry.register(
+        JobName.EDI_AUDIT_LOG_CLEANUP.value, EdiAuditLogCleanupJobHandler(edi_audit_cleanup_uc)
+    )
 
     import functools
 

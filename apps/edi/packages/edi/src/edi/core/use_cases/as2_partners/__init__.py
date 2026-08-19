@@ -8,5 +8,4 @@ __all__ = [
     "DeleteAS2PartnerUseCase",
     "RotateAS2CertificatesUseCase",
     "UpdateAS2PartnerUseCase",
-    "check_and_reserve_idempotency",
 ]

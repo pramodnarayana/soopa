@@ -37,6 +37,7 @@ class AwsSecretsManagerAdapter:
 
         self._cache: dict[str, tuple[bytes, float]] = {}
         self._cache_ttl_seconds = int(os.getenv("SECRETS_CACHE_TTL", "3600"))
+        self._cache_max_size = int(os.getenv("SECRETS_CACHE_MAX_SIZE", "1000"))
 
     async def store_private_key(
         self, private_key_pem: bytes, category: SecretCategory | None = None
@@ -67,7 +68,7 @@ class AwsSecretsManagerAdapter:
 
         return await asyncio.to_thread(_execute)
 
-    async def retrieve_secret(self, vault_ref: str, field: str | None = None) -> bytes:
+    async def retrieve_secret(self, vault_ref: str) -> bytes:
         """
         Retrieves any secret (private key, certificate, or credential).
         Enterprise Hybrid Strategy:
@@ -82,6 +83,9 @@ class AwsSecretsManagerAdapter:
             cached_value, expiry = self._cache[vault_ref]
             if now < expiry:
                 return cached_value
+            else:
+                # Evict expired entry
+                del self._cache[vault_ref]
 
         def _execute() -> bytes:
             settings = get_settings()
@@ -96,10 +100,23 @@ class AwsSecretsManagerAdapter:
                 # Validate that the category matches our architectural constants
                 _ = SecretCategory(category_str)
             except ValueError:
-                # Log a warning if we encounter an unknown category pattern
-                logger.warning("unknown_secret_category", category=category_str)
+                # Reject unknown categories before constructing path
+                logger.error("unknown_secret_category_rejected", category=category_str)
+                raise ValueError(f"Unknown secret category: {category_str}")
 
             local_path = os.path.join(settings.secrets.mount_path, category_str, f"{ref_id}.pem")
+
+            # Verify resolved path is within mount directory (path traversal protection)
+            resolved_path = os.path.realpath(local_path)
+            mount_path = os.path.realpath(settings.secrets.mount_path)
+            if not resolved_path.startswith(mount_path + os.sep) and resolved_path != mount_path:
+                logger.error(
+                    "path_traversal_attempt_blocked",
+                    vault_ref=vault_ref,
+                    resolved_path=resolved_path,
+                    mount_path=mount_path,
+                )
+                raise ValueError("Invalid vault_ref: path traversal detected")
 
             # 2. Local Sidecar Disk
             if os.path.exists(local_path):
@@ -121,6 +138,21 @@ class AwsSecretsManagerAdapter:
                 raise
 
         secret_bytes = await asyncio.to_thread(_execute)
+
+        # Enforce cache size limit by evicting oldest/expired entries
+        if len(self._cache) >= self._cache_max_size:
+            # Evict expired entries first
+            expired_keys = [k for k, (_, exp) in self._cache.items() if now >= exp]
+            for k in expired_keys:
+                del self._cache[k]
+
+            # If still over limit, evict oldest entries
+            if len(self._cache) >= self._cache_max_size:
+                sorted_entries = sorted(self._cache.items(), key=lambda x: x[1][1])
+                num_to_evict = len(self._cache) - self._cache_max_size + 1
+                for k, _ in sorted_entries[:num_to_evict]:
+                    del self._cache[k]
+
         self._cache[vault_ref] = (secret_bytes, now + self._cache_ttl_seconds)
         return secret_bytes
 
@@ -142,5 +174,6 @@ class AwsSecretsManagerAdapter:
                 self.client.delete_secret(SecretId=vault_ref, ForceDeleteWithoutRecovery=True)
             except Exception as e:
                 logger.exception("failed_to_delete_secret", error=str(e))
+                raise
 
         await asyncio.to_thread(_execute)

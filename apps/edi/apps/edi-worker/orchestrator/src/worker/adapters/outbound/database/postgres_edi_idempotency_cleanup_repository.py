@@ -4,7 +4,7 @@ import datetime
 import structlog
 from database.connection import DatabaseRouter
 from database.models.data_plane import ProcessedEvent
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, tuple_
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
@@ -38,8 +38,6 @@ class SqlAlchemyEdiIdempotencyCleanupRepository(IEdiIdempotencyCleanupRepository
                     async with AsyncSession(engine, expire_on_commit=False) as session:
                         processed_deleted = 0
                         while True:
-                            from sqlalchemy import tuple_
-
                             stmt_processed = delete(ProcessedEvent).where(
                                 tuple_(
                                     ProcessedEvent.tenant_id, ProcessedEvent.idempotency_key
@@ -49,9 +47,9 @@ class SqlAlchemyEdiIdempotencyCleanupRepository(IEdiIdempotencyCleanupRepository
                                     .limit(5000)
                                 )
                             )
-                            res_processed: CursorResult[tuple[()]] = await session.execute(
+                            res_processed: CursorResult[tuple[()]] = await session.execute(  # type: ignore[assignment]
                                 stmt_processed
-                            )  # type: ignore[assignment]
+                            )
                             deleted = res_processed.rowcount
                             processed_deleted += deleted
                             await session.commit()
@@ -67,4 +65,10 @@ class SqlAlchemyEdiIdempotencyCleanupRepository(IEdiIdempotencyCleanupRepository
                     logger.exception("sweep_shard_idempotency_failed", shard_name=shard_name)
                     raise
 
-        await asyncio.gather(*[_bounded_cleanup(shard.name, shard.dsn) for shard in shards])
+        results = await asyncio.gather(
+            *[_bounded_cleanup(shard.name, shard.dsn) for shard in shards], return_exceptions=True
+        )
+        exceptions = [r for r in results if isinstance(r, Exception)]
+        if exceptions:
+            logger.error("shard_cleanup_had_failures", failure_count=len(exceptions))
+            raise exceptions[0]

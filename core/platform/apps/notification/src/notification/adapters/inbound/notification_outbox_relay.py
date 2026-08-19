@@ -58,10 +58,12 @@ class NotificationOutboxRelay:
                 logger.info("Connected and listening on notification_outbox_channel")
 
                 while self.is_running:
-                    # Initial drain of any existing messages
+                    # Clear event before processing to capture any notifications during drain
+                    self._notify_event.clear()
+
+                    # Drain of any existing messages
                     await self.processor.process_pending()
 
-                    self._notify_event.clear()
                     import contextlib
 
                     with contextlib.suppress(TimeoutError, asyncio.TimeoutError):

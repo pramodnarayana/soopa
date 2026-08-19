@@ -55,7 +55,25 @@ class AwsSecretsManagerSecretStore(SecretStorePort):
         return await asyncio.to_thread(_fetch)
 
     async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
-        raise NotImplementedError()
+        """
+        Stores a private key in AWS Secrets Manager and returns the secret reference.
+        """
+
+        def _store() -> str:
+            import uuid
+
+            secret_name = f"private-key-{uuid.uuid4()}"
+            try:
+                self.client.create_secret(
+                    Name=secret_name, SecretString=private_key_pem.decode("utf-8")
+                )
+                logger.info("stored_private_key", secret_name=secret_name)
+                return secret_name
+            except ClientError as e:
+                logger.exception("failed_to_store_private_key", error=str(e))
+                raise ValueError(f"Failed to store private key: {e}") from e
+
+        return await asyncio.to_thread(_store)
 
     async def retrieve_secret(self, vault_ref: str) -> bytes:
         val = await self.get_secret(vault_ref)
@@ -65,4 +83,16 @@ class AwsSecretsManagerSecretStore(SecretStorePort):
         return await self.retrieve_secret(vault_ref)
 
     async def delete_secret(self, vault_ref: str) -> None:
-        raise NotImplementedError()
+        """
+        Deletes a secret from AWS Secrets Manager by vault_ref.
+        """
+
+        def _delete() -> None:
+            try:
+                self.client.delete_secret(SecretId=vault_ref, ForceDeleteWithoutRecovery=True)
+                logger.info("deleted_secret", vault_ref=vault_ref)
+            except ClientError as e:
+                logger.exception("failed_to_delete_secret", error=str(e), vault_ref=vault_ref)
+                raise ValueError(f"Failed to delete secret at {vault_ref}: {e}") from e
+
+        await asyncio.to_thread(_delete)

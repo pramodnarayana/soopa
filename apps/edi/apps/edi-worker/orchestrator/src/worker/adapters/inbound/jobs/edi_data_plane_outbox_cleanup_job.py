@@ -1,12 +1,12 @@
 import datetime
 
 import structlog
-from ucp_worker.core.scheduler.handler import JobHandlerPort
-from ucp_worker.core.scheduler.models import Job
 
 from worker.application.edi_data_plane_outbox_cleanup_use_case import (
     EdiDataPlaneOutboxCleanupUseCase,
 )
+from worker.core.scheduler.handler import JobHandlerPort
+from worker.core.scheduler.models import Job
 
 logger = structlog.get_logger(__name__)
 

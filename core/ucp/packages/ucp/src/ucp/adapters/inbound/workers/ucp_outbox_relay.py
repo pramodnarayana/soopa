@@ -82,27 +82,36 @@ class UcpOutboxRelay:
 
         async def _listen() -> None:
             while self.is_running:
-                if self._connection and self._connection.is_closed():
-                    logger.warning("asyncpg_connection_lost", action="reconnecting")
-                    self._connection = None
+                try:
+                    if self._connection and self._connection.is_closed():
+                        logger.warning("asyncpg_connection_lost", action="reconnecting")
+                        self._connection = None
 
-                if not self._connection:
-                    await self._setup_listener()
                     if not self._connection:
-                        await asyncio.sleep(5.0)
-                        continue
+                        await self._setup_listener()
+                        if not self._connection:
+                            await asyncio.sleep(5.0)
+                            continue
 
-                # Process pending until empty
-                more_events = True
-                while more_events and self.is_running:
-                    more_events = await self.processor.process_pending()
+                    # Clear event before processing to capture notifications during drain
+                    if self.is_running:
+                        self._notify_event.clear()
 
-                if self.is_running:
-                    self._notify_event.clear()
-                    with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
-                        await asyncio.wait_for(
-                            self._notify_event.wait(), timeout=self.fallback_poll_interval
-                        )
+                    # Process pending until empty
+                    more_events = True
+                    while more_events and self.is_running:
+                        more_events = await self.processor.process_pending()
+
+                    if self.is_running:
+                        with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
+                            await asyncio.wait_for(
+                                self._notify_event.wait(), timeout=self.fallback_poll_interval
+                            )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("ucp_outbox_relay_error")
+                    await asyncio.sleep(5.0)
 
         with contextlib.suppress(asyncio.CancelledError):
             await _listen()

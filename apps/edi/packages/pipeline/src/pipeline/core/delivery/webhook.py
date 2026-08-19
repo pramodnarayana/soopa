@@ -55,7 +55,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             if partner.get("auth_header_vault_ref"):
                 if not self.secret_store:
                     raise ValueError(
-                        "Vault is not configured but webhook partner requires an auth token."
+                        "Secret store is not configured but webhook partner requires an auth token."
                     )
                 auth_token = await self.secret_store.get_secret(partner["auth_header_vault_ref"])
 

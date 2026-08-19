@@ -34,9 +34,8 @@ class CreateAS2PartnerUseCase:
 
         if private_key_vault_ref:
             pass  # Pre-stored vault ref
-        elif getattr(cmd, "private_key_pem", None):
+        elif cmd.private_key_pem:
             auto_generated = True
-            assert cmd.private_key_pem is not None
             private_key_vault_ref = await self.secret_store.store_private_key(
                 private_key_pem=cmd.private_key_pem.encode(),
                 category=SecretCategory.AS2_KEY,

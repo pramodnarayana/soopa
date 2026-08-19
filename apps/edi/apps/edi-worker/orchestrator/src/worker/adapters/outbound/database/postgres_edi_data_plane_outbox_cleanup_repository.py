@@ -64,4 +64,10 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(IEdiDataPlaneOutboxCleanupRe
                     logger.exception("sweep_shard_outbox_failed", shard_name=shard_name)
                     raise
 
-        await asyncio.gather(*[_bounded_cleanup(shard.name, shard.dsn) for shard in shards])
+        results = await asyncio.gather(
+            *[_bounded_cleanup(shard.name, shard.dsn) for shard in shards], return_exceptions=True
+        )
+        exceptions = [r for r in results if isinstance(r, Exception)]
+        if exceptions:
+            logger.error("shard_cleanup_had_failures", failure_count=len(exceptions))
+            raise exceptions[0]

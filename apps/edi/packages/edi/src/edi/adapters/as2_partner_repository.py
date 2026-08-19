@@ -6,10 +6,23 @@ from database.models.control_plane import AS2Partner
 from domain.models import AS2PartnerDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from edi.core.exceptions import PartnerAlreadyExistsError, PartnerInUseError
 from edi.domain.models import CreateAS2TradingPartnerCmd, UpdateAS2TradingPartnerCmd
 from edi.ports.as2_partner_repository import AS2TradingPartnerRepositoryPort
+
+
+def _constraint_name(e: IntegrityError) -> str:
+    """Extract constraint name from IntegrityError."""
+    constraint_name = ""
+    if hasattr(e, "orig") and e.orig is not None:
+        diag = getattr(e.orig, "diag", None)
+        if diag is not None:
+            constraint_name = str(getattr(diag, "constraint_name", e.orig))
+        else:
+            constraint_name = str(e.orig)
+    return constraint_name
 
 
 class SqlAlchemyAS2TradingPartnerRepository(
@@ -34,18 +47,9 @@ class SqlAlchemyAS2TradingPartnerRepository(
         self.session.add(record)
 
         try:
-            from sqlalchemy.exc import IntegrityError
-
             await self.session.flush()
         except IntegrityError as e:
-            constraint_name = ""
-            if hasattr(e, "orig") and e.orig is not None:
-                diag = getattr(e.orig, "diag", None)
-                if diag is not None:
-                    constraint_name = str(getattr(diag, "constraint_name", e.orig))
-                else:
-                    constraint_name = str(e.orig)
-            if "uq_tenant_as2_id" in constraint_name:
+            if "uq_tenant_as2_id" in _constraint_name(e):
                 raise PartnerAlreadyExistsError(as2_id=cmd.as2_id, tenant_id=tenant_id) from e
             raise
 
@@ -64,18 +68,9 @@ class SqlAlchemyAS2TradingPartnerRepository(
                     setattr(partner, field.name, value)
 
             try:
-                from sqlalchemy.exc import IntegrityError
-
                 await self.session.flush()
             except IntegrityError as e:
-                constraint_name = ""
-                if hasattr(e, "orig") and e.orig is not None:
-                    diag = getattr(e.orig, "diag", None)
-                    if diag is not None:
-                        constraint_name = str(getattr(diag, "constraint_name", e.orig))
-                    else:
-                        constraint_name = str(e.orig)
-                if "uq_tenant_as2_id" in constraint_name:
+                if "uq_tenant_as2_id" in _constraint_name(e):
                     raise PartnerAlreadyExistsError(
                         as2_id=cmd.as2_id or partner.as2_id, tenant_id=tenant_id
                     ) from e

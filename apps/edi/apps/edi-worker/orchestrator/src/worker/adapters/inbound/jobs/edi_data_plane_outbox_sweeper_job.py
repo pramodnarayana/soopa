@@ -21,7 +21,7 @@ class EdiDataPlaneOutboxSweeperJobHandler(JobHandlerPort):
         and forwards each one to the appropriate SQS queue using concurrent batching.
         """
         logger.info(
-            "[EdiDataPlaneOutboxSweeperJobHandler] Triggering sweep for job {job.id}", job_id=job.id
+            "[EdiDataPlaneOutboxSweeperJobHandler] Triggering sweep for job", job_id=job.id
         )
 
         await self.use_case.execute()

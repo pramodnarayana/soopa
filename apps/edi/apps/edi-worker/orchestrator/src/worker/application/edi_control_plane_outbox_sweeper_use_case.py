@@ -15,7 +15,7 @@ class EdiControlPlaneOutboxSweeperUseCase:
         that might have been missed by the real-time Postgres NOTIFY listener.
         It relies on the OutboxRelay to actually publish the events.
         """
-        logger.info("[EdiControlPlaneOutboxSweeperUseCase] Executing sweep")
+        logger.info("control_plane_outbox_sweep_started")
         try:
             count = await self.repository.sweep_stuck_events(lock_lease_ms=30000)
 
@@ -26,7 +26,7 @@ class EdiControlPlaneOutboxSweeperUseCase:
                     target="edi.outbox",
                 )
             else:
-                logger.debug("No stuck EDI provisioning events found.")
+                logger.debug("no_stuck_events_found")
         except Exception:
-            logger.exception("sweeper_run_error")
+            logger.exception("control_plane_outbox_sweep_failed")
             raise

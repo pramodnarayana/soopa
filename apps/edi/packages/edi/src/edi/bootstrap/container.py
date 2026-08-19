@@ -54,5 +54,5 @@ class Container(containers.DeclarativeContainer):
     # FastAPI's request.app.state.db_router, so we'll inject dependencies dynamically
     as2_receiver_service = providers.Factory(
         As2ReceiverService,
-        vault=vault_port,
+        secret_store=vault_port,
     )
