@@ -4,7 +4,6 @@ import structlog
 
 from ...domain.models import Channel
 from ...ports.notification_delivery_strategy_port import DeliveryStrategyPort
-from .channels import EmailDeliveryStrategy, InAppDeliveryStrategy, SlackDeliveryStrategy
 
 logger = structlog.get_logger(__name__)
 
@@ -12,9 +11,9 @@ logger = structlog.get_logger(__name__)
 class NotificationDeliveryDispatcher:
     def __init__(
         self,
-        email_strategy: EmailDeliveryStrategy,
-        in_app_strategy: InAppDeliveryStrategy,
-        slack_strategy: SlackDeliveryStrategy,
+        email_strategy: DeliveryStrategyPort,
+        in_app_strategy: DeliveryStrategyPort,
+        slack_strategy: DeliveryStrategyPort,
     ):
         self.strategies: dict[Channel, DeliveryStrategyPort] = {
             Channel.EMAIL: email_strategy,

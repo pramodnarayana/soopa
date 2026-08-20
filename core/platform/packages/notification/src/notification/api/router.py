@@ -39,15 +39,11 @@ async def readiness_check(
 ) -> dict[str, str]:
     """
     Readiness check - verifies critical dependencies are available before serving traffic.
-    Checks DB connectivity, Postgres listener, and SQS consumer health.
+    Checks DB connectivity.
     """
     try:
         async with session_factory() as session:
             await session.execute(text("SELECT 1"))
-
-        # TODO: Add checks for Postgres listener and SQS consumer health
-        # These would require access to the listener and consumer instances
-        # which may need to be registered in the container
 
         return {"status": "ready", "service": "notification"}
     except Exception:

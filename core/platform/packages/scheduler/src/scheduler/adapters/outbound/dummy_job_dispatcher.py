@@ -1,7 +1,7 @@
 import structlog
 
-from ...domain.models import ScheduledJob
-from ...ports.job_dispatcher import JobDispatcherPort
+from scheduler.domain.models import ScheduledJob
+from scheduler.ports.job_dispatcher_port import JobDispatcherPort
 
 logger = structlog.get_logger(__name__)
 

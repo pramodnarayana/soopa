@@ -98,5 +98,5 @@ class SqlAlchemyNotificationRouteRepository:
             id=row.id,
             tenant_id=row.tenant_id,
             event_type=row.event_type,
-            channels=[Channel(c) for c in row.channels],
+            channels=tuple(Channel(c) for c in row.channels),
         )

@@ -45,6 +45,12 @@ async def test_outbox_sweeper_integration(db_session_factory):
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
     dispatcher = FakeDispatcher()
 
+    from platform_orm.models.identity import Tenant
+
+    async with db_session_factory() as session, session.begin():
+        tenant = Tenant(id="t1", name="Test Tenant", slug="t1")
+        session.add(tenant)
+
     # 1. Insert a pending message into the outbox
     message = NotificationOutboxEvent(
         id="msg-123",

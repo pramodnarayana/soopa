@@ -166,3 +166,31 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Date Added**: 2026-08-19
 - **Description**: Different bounded contexts (UCP vs EDI) have drifted in their internal folder/file naming taxonomies for identical architectural concepts. For example, database event models are located at `core/ucp/.../ucp_models/events.py` in UCP, but at `apps/edi/.../database/models/control_plane.py` in EDI. This violates Modular Monolith structural consistency rules.
 - **Action Item**: Standardize the internal file/folder taxonomy across all bounded contexts (e.g., standardizing on `[BoundedContext]/database/models/events.py`) and implement `pytest-archon` rules to automatically enforce these structural conventions in CI.
+
+## [Observability] Standardization of Observability Across Contexts
+
+- **Date Added**: 2026-08-20
+- **Description**: While `structlog` has been introduced and legacy `logging` usages have been refactored or tracked in some modules (like UCP, EDI, and Identity), we lack a consistent, standardized approach to context injection and structured logging payloads across newer contexts like Notification and Scheduler. The data structure of our JSON logs must be uniform for effective aggregation and alerting.
+- **Action Item**: Audit and standardize the observability implementation across UCP, EDI, Identity, Notification, and Scheduler. Ensure consistent context injection (e.g., `tenant_id`, `event_id`, `job_id`) and payload schemas across all modules using `structlog`.
+
+## [Architecture] Final Enterprise-Grade SSE/Real-time Notifications
+
+- **Date Added**: 2026-08-20
+- **Description**: The In-App notification system currently uses basic Server-Sent Events (SSE) bounded to single container memory channels (Python `asyncio.Queue`). This won't scale in a distributed, horizontally scaled environment where users might connect to a different API node than the one processing the notification event.
+- **Action Item**: Refactor the SSE streaming implementation to use a true distributed Pub/Sub backplane (e.g., Redis Pub/Sub, AWS IoT Core, or Postgres LISTEN/NOTIFY with a dedicated real-time microservice) to support scale-out real-time notifications.
+
+
+## [Architecture] API Router Taxonomy Drift
+
+- **Date Added**: 2026-08-20
+- **Description**: The system currently has three different taxonomies for placing FastAPI HTTP routers. `ucp` places them in `adapters/inbound/http/routers/`, `edi` places them in `routers/` at the root of the domain, and `notification` places them in `api/` at the root. While all are technically valid hexagonal layers, this fragmentation violates the "Strict File Taxonomy Consistency" rule and makes cross-context development confusing.
+- **Action Item**: Decide on a single, unified enterprise standard for the HTTP API folder taxonomy (e.g., standardizing everything to `adapters/inbound/http/routers/` or `api/`) and refactor all bounded contexts to strictly adhere to that single pattern.
+
+## [Observability Architecture] Full Implementation of Layer 1 to Layer 3 Observability
+
+- **Date Added**: 2026-08-20
+- **Description**: The system currently relies on manual `trace_id` injection (Business Correlation IDs) for customer support tracking, and lacks a fully automated, layered technical observability strategy for infrastructure and distributed tracing.
+- **Action Item**: Implement the complete 3-layer enterprise observability model:
+  - **Layer 1 (Container Orchestration Probes):** Ensure all background workers (SQS/Postgres listeners) run isolated HTTP liveness/readiness ports (e.g., `9090`) to allow orchestrators like ECS/Kubernetes to auto-heal frozen containers.
+  - **Layer 2 (Infrastructure Metrics & Scaling):** Ensure all queues and databases emit metrics to CloudWatch/Datadog to drive Horizontal Pod Autoscaling (HPA) or Target Tracking rules.
+  - **Layer 3 (APM & Distributed Tracing):** Activate full OpenTelemetry auto-instrumentation (`opentelemetry-instrumentation-fastapi`, `-sqlalchemy`, `-boto3`) to silently intercept database timings and inject OTel context into SQS headers. Ensure the manual business `trace_id` is bridged by tagging the OTel spans (`span.set_attribute("business.trace_id", manual_id)`), allowing seamless pivot from customer support tickets to technical flame graphs.

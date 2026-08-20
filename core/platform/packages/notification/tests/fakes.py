@@ -94,11 +94,3 @@ class FakeRouteRepo(NotificationRouteRepositoryPort):
 
     async def get_channels(self, tenant_id: str, event_type: str) -> list[Channel]:
         return self.routes.get((tenant_id, event_type), [])
-
-
-class FakeStreamManager:
-    def __init__(self):
-        self.broadcasts = []
-
-    async def broadcast(self, tenant_id: str, user_id: str, message: dict) -> None:
-        self.broadcasts.append((tenant_id, user_id, message))

@@ -49,7 +49,9 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                                 NotificationOutbox.updated_at < threshold,
                             )
                             .limit(500)
-                        )
+                        ),
+                        NotificationOutbox.status == "PROCESSING",
+                        NotificationOutbox.updated_at < threshold,
                     )
                     .values(status="PENDING", owner_token=None)
                 )

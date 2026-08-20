@@ -5,22 +5,29 @@ from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ...domain.models import ScheduledJob
+from scheduler.domain.models import ScheduledJob
+from scheduler.ports.job_repository_port import JobRepositoryPort
 
 
-class SqlAlchemyJobRepository:
+class PostgresJobRepository(JobRepositoryPort):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self.session_factory = session_factory
 
     async def sweep_stuck_jobs(self, lock_lease_ms: int) -> int:
         async with self.session_factory() as session:
             query = text("""
-                UPDATE scheduling.job
+                WITH stuck_jobs AS (
+                    SELECT id FROM scheduling.job
+                    WHERE status = 'RUNNING' AND lease_expires_at <= NOW()
+                    LIMIT 100
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE scheduling.job j
                 SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
-                WHERE status = 'RUNNING'
-                  AND lease_expires_at <= NOW()
+                FROM stuck_jobs
+                WHERE j.id = stuck_jobs.id
             """)
-            result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
+            result = await session.execute(query)
             await session.commit()
             return cast(CursorResult[Any], result).rowcount
 
@@ -62,6 +69,7 @@ class SqlAlchemyJobRepository:
                         payload=mapping.get("payload", {}),
                         status=mapping["status"],
                         cron_expression=mapping.get("cron_expression"),
+                        interval_seconds=mapping.get("interval_seconds"),
                         retry_count=mapping.get("retry_count", 0),
                         max_retries=mapping.get("max_retries", 3),
                         next_run_at=mapping.get("next_run_at"),

@@ -1,5 +1,5 @@
 {
-  "name": "@soopa/scheduler-engine",
+  "name": "@soopa/scheduler",
   "private": true,
   "scripts": {
     "lint": "uv run ruff check .",

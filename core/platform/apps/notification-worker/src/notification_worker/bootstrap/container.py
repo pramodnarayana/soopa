@@ -7,7 +7,6 @@ from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job i
     NotificationOutboxSweeperJob,
 )
 from notification_worker.adapters.inbound.notification_outbox_relay import NotificationOutboxRelay
-from notification_worker.adapters.inbound.postgres_listener import PostgresNotificationListener
 
 logger = structlog.get_logger(__name__)
 
@@ -36,12 +35,6 @@ class WorkerContainer(containers.DeclarativeContainer):
     cleanup_worker = providers.Singleton(
         NotificationOutboxSweeperJob,
         use_case=notification_package.sweep_outbox_use_case,
-    )
-
-    postgres_listener = providers.Singleton(
-        PostgresNotificationListener,
-        database_url=config.database_url,
-        stream_manager=notification_package.stream_manager,
     )
 
     consumer_worker = providers.Singleton(

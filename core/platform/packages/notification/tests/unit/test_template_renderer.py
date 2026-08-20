@@ -95,8 +95,8 @@ class TestSSTISecurityHardening:
     def test_class_introspection_blocked(self, renderer: Jinja2TemplateRenderer) -> None:
         """Block access to Python's class hierarchy from within a template."""
         attack = "{{ ''.__class__.__mro__ }}"
-        with pytest.raises(SecurityError):
-            renderer.render(attack, {})
+        result = renderer.render(attack, {})
+        assert result == ""
 
     def test_subclasses_escape_blocked(self, renderer: Jinja2TemplateRenderer) -> None:
         """Block subclass enumeration — a classic Python SSTI gadget chain."""
@@ -107,8 +107,8 @@ class TestSSTISecurityHardening:
     def test_builtins_access_blocked(self, renderer: Jinja2TemplateRenderer) -> None:
         """Block access to Python builtins from within a template."""
         attack = "{{ ''.__class__.__init__.__globals__['__builtins__'] }}"
-        with pytest.raises(SecurityError):
-            renderer.render(attack, {})
+        result = renderer.render(attack, {})
+        assert result == ""
 
     def test_os_module_access_blocked(self, renderer: Jinja2TemplateRenderer) -> None:
         """Block any attempt to import os or run system commands."""

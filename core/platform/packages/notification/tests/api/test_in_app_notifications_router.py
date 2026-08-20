@@ -114,12 +114,7 @@ async def test_in_app_notifications_router_integration(db_session_factory):
 
     repo_instance = SqlAlchemyNotificationQueryRepository(db_session_factory)
 
-    from tests.fakes import FakeStreamManager
-
-    fake_stream = FakeStreamManager()
-
     container.query_repository.override(providers.Object(repo_instance))
-    container.stream_manager.override(providers.Object(fake_stream))
     container.wire(modules=["notification.api.in_app_notifications_router"])
 
     try:
@@ -186,5 +181,4 @@ async def test_in_app_notifications_router_integration(db_session_factory):
     finally:
         # Clean up container overrides and unwire
         container.query_repository.reset_override()
-        container.stream_manager.reset_override()
         container.unwire()

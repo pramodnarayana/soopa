@@ -2,10 +2,12 @@ import os
 from typing import Any
 
 from dependency_injector import containers, providers
+from scheduler.adapters.outbound.dummy_job_dispatcher import DummyJobDispatcher
+from scheduler.adapters.outbound.postgres_job_repository import PostgresJobRepository
+from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecuteJobsUseCase
+from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
 
-from scheduler_engine.adapters.outbound.dummy_job_dispatcher import DummyJobDispatcher
-from scheduler_engine.adapters.outbound.postgres_job_repository import SqlAlchemyJobRepository
-from scheduler_engine.worker import SchedulerWorker
+from scheduler_worker.adapters.inbound.workers.scheduler_poller import SchedulerPoller
 
 
 def _validate_positive_int(value: int, name: str) -> int:
@@ -22,7 +24,7 @@ class Container(containers.DeclarativeContainer):
     session_factory: providers.Dependency[Any] = providers.Dependency()
 
     job_repository = providers.Factory(
-        SqlAlchemyJobRepository,
+        PostgresJobRepository,
         session_factory=session_factory,
     )
 
@@ -30,10 +32,21 @@ class Container(containers.DeclarativeContainer):
         DummyJobDispatcher,
     )
 
-    worker = providers.Factory(
-        SchedulerWorker,
+    sweep_use_case = providers.Factory(
+        SweepStuckJobsUseCase,
+        repository=job_repository,
+    )
+
+    claim_use_case = providers.Factory(
+        ClaimAndExecuteJobsUseCase,
         repository=job_repository,
         dispatcher=job_dispatcher,
+    )
+
+    worker = providers.Factory(
+        SchedulerPoller,
+        sweep_use_case=sweep_use_case,
+        claim_use_case=claim_use_case,
         poll_interval_seconds=providers.Callable(
             _validate_positive_int,
             providers.Callable(

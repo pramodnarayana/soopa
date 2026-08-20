@@ -11,7 +11,6 @@ if __name__ == "__main__":
         "tenant authentication and context resolution.\n\n"
         "To run the API, start the unified_api application instead.\n"
         "To run the background workers, execute:\n"
-        "  python -m notification.workers.sweeper\n"
-        "  python -m notification.workers.consumer"
+        "  python -m notification_worker.main"
     )
     sys.exit(1)

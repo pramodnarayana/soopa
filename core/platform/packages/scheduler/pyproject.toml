@@ -1,5 +1,5 @@
 [project]
-name = "scheduler-engine"
+name = "scheduler"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -28,4 +28,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/scheduler_engine"]
+packages = ["src/scheduler"]

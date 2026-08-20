@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -13,7 +14,7 @@ class Channel(StrEnum):
 class NotificationEvent:
     tenant_id: str
     event_type: str
-    data: dict[str, Any] = field(default_factory=dict)
+    data: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class NotificationPreference:
     id: str
     tenant_id: str
     event_type: str
-    channels: list[Channel]
+    channels: tuple[Channel, ...]
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class NotificationOutboxEvent:
     tenant_id: str
     event_type: str
     idempotency_key: str
-    payload: dict[str, Any]
+    payload: Mapping[str, Any]
     id: str | None = None
 
 

@@ -22,6 +22,7 @@ from notification.adapters.outbound.channels import (
     InAppDeliveryStrategy,
     SlackDeliveryStrategy,
 )
+from notification.adapters.outbound.channels.dummy_email_provider import DummyEmailProvider
 from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.postgres_in_app_persistence import (
     SqlAlchemyInAppPersistence,
@@ -50,7 +51,6 @@ from notification.application.notification_outbox_processor_use_case import (
 from notification.application.notification_outbox_sweeper_use_case import (
     NotificationOutboxSweeperUseCase,
 )
-from notification.application.stream_manager import NotificationStreamManager
 from notification.application.update_user_preference_use_case import (
     UpdateUserPreferenceUseCase,
 )
@@ -116,10 +116,6 @@ class Container(containers.DeclarativeContainer):
         NotificationEngineSettings,
     )
 
-    stream_manager = providers.Singleton(
-        NotificationStreamManager,
-    )
-
     # -----------------------------------------------------------------------
     # Repositories — Factory: new instance per request.
     #
@@ -162,8 +158,13 @@ class Container(containers.DeclarativeContainer):
     # Delivery Strategies — pure delivery adapters; rendering is upstream.
     # -----------------------------------------------------------------------
 
+    email_provider = providers.Factory(
+        DummyEmailProvider,
+    )
+
     email_strategy = providers.Factory(
         EmailDeliveryStrategy,
+        email_provider=email_provider,
     )
 
     in_app_strategy = providers.Factory(

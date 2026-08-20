@@ -48,13 +48,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("slug"),
         schema="identity",
     )
-    op.create_index(
-        op.f("ix_identity_tenants_deleted_at"),
-        "tenants",
-        ["deleted_at"],
-        unique=False,
-        schema="identity",
-    )
+    op.create_index()
     op.create_table(
         "users",
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -70,13 +64,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("idp_user_id"),
         schema="identity",
     )
-    op.create_index(
-        op.f("ix_identity_users_deleted_at"),
-        "users",
-        ["deleted_at"],
-        unique=False,
-        schema="identity",
-    )
+    op.create_index()
     op.create_index(
         "uq_users_email_lower",
         "users",
@@ -150,8 +138,8 @@ def upgrade() -> None:
         sa.Column("timezone", sa.String(length=50), nullable=True),
         sa.Column("target_queue", sa.String(length=255), nullable=True),
         sa.Column("app_namespace", sa.String(length=255), nullable=True),
-        sa.Column("retry_count", sa.Integer(), nullable=False),
-        sa.Column("max_retries", sa.Integer(), nullable=False),
+        sa.Column("retry_count", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("max_retries", sa.Integer(), server_default="3", nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("owner_token", sa.String(length=255), nullable=True),
@@ -233,13 +221,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         schema="ucp",
     )
-    op.create_index(
-        op.f("ix_ucp_webhooks_deleted_at"),
-        "webhooks",
-        ["deleted_at"],
-        unique=False,
-        schema="ucp",
-    )
+    op.create_index()
     op.create_index(
         op.f("ix_ucp_webhooks_tenant_id"), "webhooks", ["tenant_id"], unique=False, schema="ucp"
     )
@@ -260,13 +242,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("key_hash"),
         schema="identity",
     )
-    op.create_index(
-        op.f("ix_identity_api_keys_deleted_at"),
-        "api_keys",
-        ["deleted_at"],
-        unique=False,
-        schema="identity",
-    )
+    op.create_index()
     op.create_index(
         op.f("ix_identity_api_keys_tenant_id"),
         "api_keys",
@@ -293,13 +269,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("client_id"),
         schema="identity",
     )
-    op.create_index(
-        op.f("ix_identity_api_tokens_deleted_at"),
-        "api_tokens",
-        ["deleted_at"],
-        unique=False,
-        schema="identity",
-    )
+    op.create_index()
     op.create_index(
         op.f("ix_identity_api_tokens_tenant_id"),
         "api_tokens",
@@ -322,13 +292,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         schema="identity",
     )
-    op.create_index(
-        op.f("ix_identity_roles_deleted_at"),
-        "roles",
-        ["deleted_at"],
-        unique=False,
-        schema="identity",
-    )
+    op.create_index()
     op.create_index(
         op.f("ix_identity_roles_tenant_id"), "roles", ["tenant_id"], unique=False, schema="identity"
     )
@@ -440,6 +404,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("tenant_id", "app_id"),
         schema="ucp",
     )
+    op.create_index(
+        "idx_app_subs_tenant_status",
+        "app_subscriptions",
+        ["tenant_id", "status"],
+        unique=False,
+        schema="ucp",
+    )
     op.create_table(
         "shard_registry",
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
@@ -516,6 +487,7 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION IF EXISTS notifications_notification_outbox_notify();")
     op.drop_table("user_roles", schema="identity")
     op.drop_table("shard_registry", schema="ucp")
+    op.drop_index("idx_app_subs_tenant_status", table_name="app_subscriptions", schema="ucp")
     op.drop_table("app_subscriptions", schema="ucp")
     op.drop_table("user_notification_preferences", schema="notifications")
     op.drop_table("notification_templates", schema="notifications")

@@ -13,5 +13,5 @@ class GetUserPreferencesUseCase:
         self.repository = repository
 
     async def execute(self, tenant_id: str, user_id: str) -> list[UserNotificationPreference]:
-        logger.info("Fetching notification preferences", tenant_id=tenant_id, user_id=user_id)
+        logger.info("Fetching notification preferences", tenant_id=tenant_id)
         return await self.repository.get_user_preferences(tenant_id, user_id)

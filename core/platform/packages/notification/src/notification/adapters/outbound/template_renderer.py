@@ -1,12 +1,12 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from functools import lru_cache
 from typing import Any
 
-from jinja2 import Template, Undefined
+from jinja2 import ChainableUndefined, Template
 from jinja2.sandbox import SandboxedEnvironment
 
 
-class _SilentUndefined(Undefined):
+class _SilentUndefined(ChainableUndefined):
     """Renders undefined variables as empty string instead of raising an error.
 
     This ensures a missing template variable never crashes the delivery
@@ -44,6 +44,6 @@ class Jinja2TemplateRenderer:
         """Compile a template string into a Jinja2 Template object."""
         return self._env.from_string(template_str)
 
-    def render(self, template_str: str, data: dict[str, Any]) -> str:
+    def render(self, template_str: str, data: Mapping[str, Any]) -> str:
         template = self._compile_template(template_str)
         return template.render(**data)

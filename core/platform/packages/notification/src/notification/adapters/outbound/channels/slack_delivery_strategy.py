@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 import structlog
@@ -9,7 +10,7 @@ class SlackIntegrationPort(Protocol):
     """Port for Slack integration."""
 
     async def send_message(
-        self, tenant_id: str, content: str, subject: str | None, data: dict[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
     ) -> None: ...
 
 
@@ -22,14 +23,13 @@ class SlackDeliveryStrategy:
         self.slack_integration = slack_integration
 
     async def deliver(
-        self, tenant_id: str, content: str, subject: str | None, data: dict[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
     ) -> None:
         if self.slack_integration is None:
             raise DeliveryError("Slack integration not configured")
 
         logger.info(
-            "[SLACK] Delivering to tenant {tenant_id}. Body: {content}",
+            "slack_message_delivering",
             tenant_id=tenant_id,
-            content=content,
         )
         await self.slack_integration.send_message(tenant_id, content, subject, data)

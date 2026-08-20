@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any
 
 import structlog
@@ -17,14 +18,13 @@ class InAppDeliveryStrategy:
         self.persistence = persistence
 
     async def deliver(
-        self, tenant_id: str, content: str, subject: str | None, data: dict[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
     ) -> None:
         if self.persistence is None:
             raise DeliveryError("In-app persistence not configured")
 
         logger.info(
-            "[IN_APP] Delivering to tenant {tenant_id}. Body: {content}",
+            "in_app_notification_delivering",
             tenant_id=tenant_id,
-            content=content,
         )
-        await self.persistence.save_notification(tenant_id, content, subject, data)
+        await self.persistence.save_notification(tenant_id, content, subject, dict(data))

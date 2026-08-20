@@ -13,6 +13,7 @@ class ScheduledJob(BaseModel):
     payload: dict[str, Any]
     status: str
     cron_expression: str | None
+    interval_seconds: int | None
     retry_count: int
     max_retries: int
     next_run_at: datetime | None

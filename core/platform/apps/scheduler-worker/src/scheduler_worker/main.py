@@ -30,7 +30,7 @@ async def main() -> None:
     engine = create_async_engine(database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-    from scheduler_engine.bootstrap.container import Container
+    from scheduler_worker.bootstrap.container import Container
 
     container = Container(session_factory=session_factory)
     worker = container.worker()

@@ -26,18 +26,18 @@ async def test_execute_upserts_and_returns(
     channel = "EMAIL"
     is_enabled = False
 
-    expected_pref = UserNotificationPreference(
+    initial_pref = UserNotificationPreference(
         id="notif_pref_test",
         tenant_id=tenant_id,
         user_id=user_id,
         event_type=event_type,
         channel=Channel(channel),
-        is_enabled=is_enabled,
+        is_enabled=True,  # Initially true
     )
-    fake_repo.prefs[(tenant_id, user_id, event_type, Channel.EMAIL.value)] = expected_pref
+    fake_repo.prefs[(tenant_id, user_id, event_type, Channel.EMAIL.value)] = initial_pref
 
     # Act
-    result = await use_case.execute(tenant_id, user_id, event_type, channel, is_enabled)
+    result = await use_case.execute(tenant_id, user_id, event_type, channel, False)
 
     # Assert
     saved_pref = fake_repo.prefs[(tenant_id, user_id, event_type, Channel.EMAIL.value)]
@@ -47,4 +47,4 @@ async def test_execute_upserts_and_returns(
     assert saved_pref.channel == Channel.EMAIL
     assert saved_pref.is_enabled == is_enabled
 
-    assert result == expected_pref
+    assert not result.is_enabled
