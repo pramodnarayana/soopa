@@ -144,7 +144,7 @@ async def test_outbound_transform_missing_route_raises() -> None:
 
     use_case = make_use_case(uow=uow)
 
-    with pytest.raises(ValueError, match="Outbound route/header configuration not found"):
+    with pytest.raises(ValueError, match="Unsuccessful route/header lookup for trace_id="):
         await use_case.execute(trace_id)
 
 

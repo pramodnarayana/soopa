@@ -30,10 +30,20 @@ class EdiDataPlaneEventsSqsConsumer:
 
     async def handle(self, body: dict[str, Any]) -> None:
         """Entry point invoked by the SQS poll loop for each received message."""
-        payload = body.get("payload", {})
+        payload = body.get("payload")
+        event_type = body.get("event_type")
+
+        # Validate envelope structure before accessing fields
+        if not isinstance(payload, dict) or not event_type or not isinstance(event_type, str):
+            logger.error(
+                "data_plane_events_sqs_consumer.missing_required_fields",
+                payload=payload,
+                event_type=event_type,
+            )
+            return
+
         trace_id = payload.get("trace_id")
         tenant_id = body.get("tenant_id")
-        event_type = body.get("event_type", "UNKNOWN")
         idempotency_key = body.get("idempotency_key")
 
         if not trace_id or not tenant_id:

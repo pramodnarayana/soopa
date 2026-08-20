@@ -42,7 +42,7 @@ class OutboundTransformUseCase:
 
         if not trading_partner_id:
             raise ValueError(
-                f"Outbound route/header configuration not found for trace_id={trace_id}"
+                f"Missing payload/routing metadata (trading_partner_id) for trace_id={trace_id}"
             )
 
         route_config = await self.uow.repository.get_outbound_edi_header_by_route_or_partner(
@@ -54,7 +54,7 @@ class OutboundTransformUseCase:
 
         if not route_config or not outbound_route:
             raise ValueError(
-                f"Outbound route/header configuration not found for trace_id={trace_id}"
+                f"Unsuccessful route/header lookup for trace_id={trace_id}"
             )
 
         return trading_partner_id, route_config, outbound_route
@@ -63,7 +63,7 @@ class OutboundTransformUseCase:
         self, trace_id: str, standard: str, transaction_type: str, route_config: dict[str, Any]
     ) -> None:
         logger.info(
-            "Offloading heavy JSON-to-EDI formatting to compute queue for trace_id={trace_id}",
+            "outbound_transform.offloaded_to_compute_queue",
             trace_id=trace_id,
         )
         compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
@@ -93,7 +93,7 @@ class OutboundTransformUseCase:
     async def execute(self, trace_id: str) -> None:
         """Transforms an outbound JSON payload to X12 EDI."""
         logger.info(
-            "Starting outbound transformation pipeline for trace_id={trace_id}", trace_id=trace_id
+            "outbound_transform.started", trace_id=trace_id
         )
 
         async with self.uow:
@@ -174,5 +174,5 @@ class OutboundTransformUseCase:
             await self.uow.commit()
 
         logger.info(
-            "Successfully transformed JSON to EDI for trace_id={trace_id}", trace_id=trace_id
+            "outbound_transform.completed", trace_id=trace_id
         )

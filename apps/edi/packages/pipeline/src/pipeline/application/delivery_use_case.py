@@ -41,10 +41,11 @@ class DeliveryUseCase:
                 owner_token = await uow.outbox.claim_delivery_outbox_event(key_str)
                 if not owner_token:
                     logger.info(
-                        "Skipping delivery for idempotency_key={idempotency_key} (already processed or currently leased)",
+                        "delivery.skipped_already_claimed",
                         idempotency_key=idempotency_key,
                     )
                     return
+                await uow.commit()
 
         # Phase 2: Execute delivery in new transaction scope
         async with self._uow_factory() as uow, uow:
@@ -64,5 +65,5 @@ class DeliveryUseCase:
                         await uow.commit()
                     except Exception:
                         logger.exception("Failed to mark outbox as FAILED")
-                logger.exception("Delivery failed for trace_id={trace_id}", trace_id=trace_id)
+                logger.exception("delivery.failed", trace_id=trace_id)
                 raise

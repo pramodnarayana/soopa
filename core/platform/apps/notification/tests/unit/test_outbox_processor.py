@@ -13,8 +13,10 @@ class FakeOutboxRepo:
         self.swept = 0
         self.completed = []
         self.failed = []
+        self.sweep_calls = []
 
     async def sweep_stuck_messages(self, lock_lease_ms: int) -> int:
+        self.sweep_calls.append(lock_lease_ms)
         return self.swept
 
     async def claim_next_messages(
@@ -120,5 +122,7 @@ async def test_sweep_stuck_messages():
     await sweeper.execute()
 
     # The repo.sweep_stuck_messages was called and it should have returned 5.
-    # No direct state assertions needed beyond the mock returning successfully without raising.
+    # Verify it was called with the expected lease value
+    assert len(repo.sweep_calls) == 1
+    assert repo.sweep_calls[0] == 30000  # Default lease in SweepNotificationOutboxUseCase
     assert repo.swept == 5

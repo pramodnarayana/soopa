@@ -89,6 +89,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             def __init__(self, d):
                 self.__dict__.update(d)
 
+            def __getattr__(self, name):
+                # Return None for attributes not in the seeded dict
+                return None
+
         return DummyEdiJson(raw)
 
     async def get_outbound_edi_header_by_route_or_partner(
@@ -433,11 +437,12 @@ class FakeDataPlaneOutboxRepository:
     async def append_event(
         self, event_type: str, payload: dict[str, Any], idempotency_key: str | None = None
     ) -> None:
-        key = idempotency_key or ""
-        for existing in self.events:
-            if existing["idempotency_key"] == key:
-                return
-        self.events.append({"idempotency_key": key, "event_type": event_type, "payload": payload})
+        # Only deduplicate when idempotency_key is explicitly provided (not None)
+        if idempotency_key is not None:
+            for existing in self.events:
+                if existing["idempotency_key"] == idempotency_key:
+                    return
+        self.events.append({"idempotency_key": idempotency_key, "event_type": event_type, "payload": payload})
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
         if key_str in self.processed or key_str in self.leased:

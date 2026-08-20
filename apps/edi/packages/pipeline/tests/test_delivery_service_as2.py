@@ -13,7 +13,6 @@ from fakes import (
     FakeHttpDeliveryAdapter,
     FakeSftpDeliveryAdapter,
     InMemoryRepositoryAdapter,
-    InMemoryStorageAdapter,
 )
 
 from pipeline.adapters.null_as2 import NullAS2DeliveryAdapter
@@ -119,7 +118,6 @@ async def test_deliver_as2_plain_no_crypto() -> None:
     as-is and the AS2 HTTP headers are correctly set.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
-    InMemoryStorageAdapter()
     uow = FakeDataPlaneUnitOfWork()
     as2_adapter = FakeAS2DeliveryAdapter()
 

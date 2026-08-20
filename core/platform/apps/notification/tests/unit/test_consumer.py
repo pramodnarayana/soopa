@@ -16,8 +16,11 @@ class FakeDispatchUseCase:
 
 
 class FakeSweeperJobHandler:
+    def __init__(self):
+        self.executed = False
+
     async def execute(self) -> None:
-        pass
+        self.executed = True
 
 
 @pytest.mark.asyncio
@@ -57,6 +60,24 @@ async def test_consumer_process_message_missing_payload():
     use_case = FakeDispatchUseCase()
     worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
     await worker._process_message({"event": {}})
+    assert len(use_case.events) == 0
+
+
+@pytest.mark.asyncio
+async def test_consumer_process_sweeper_job():
+    use_case = FakeDispatchUseCase()
+    sweeper_handler = FakeSweeperJobHandler()
+    worker = NotificationConsumerWorker(use_case, sweeper_handler)  # type: ignore
+
+    body = {
+        "event_type": "NOTIFICATION_OUTBOX_SWEEPER",
+    }
+
+    await worker._process_message(body)
+
+    # Sweeper should have been called
+    assert sweeper_handler.executed
+    # Dispatch use case should NOT be called
     assert len(use_case.events) == 0
 
 

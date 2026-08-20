@@ -66,6 +66,52 @@ async def test_sweeper_executes_sweep_shard_for_all_shards(
     use_case._sweep_shard.assert_any_call("shard_2", "dsn2")
 
 
+async def test_sweeper_partial_shard_failure_returns_successful_count(
+    mock_db_router: MagicMock, mock_publisher: MagicMock
+) -> None:
+    """Test that when one shard fails and another succeeds, execute returns only the successful count."""
+    # Mock global session returning shards
+    mock_global_session = AsyncMock()
+
+    class FakeShard:
+        def __init__(self, name: str, dsn: str):
+            self.name = name
+            self.dsn = dsn
+
+    mock_res = MagicMock()
+    mock_res.scalars().all.return_value = [
+        FakeShard("shard_success", "dsn_success"),
+        FakeShard("shard_fail", "dsn_fail"),
+    ]
+    mock_global_session.execute.return_value = mock_res
+
+    async def global_session_gen(*args, **kwargs) -> AsyncGenerator[AsyncMock, None]:
+        yield mock_global_session
+
+    mock_db_router.get_global_session.side_effect = global_session_gen
+
+    use_case = EdiDataPlaneOutboxSweeperUseCase(
+        db_router=mock_db_router, message_publisher=mock_publisher
+    )
+
+    # Mock _sweep_shard to raise for one shard and succeed for the other
+    async def mock_sweep_shard(shard_name: str, dsn: str) -> int:
+        if shard_name == "shard_fail":
+            raise RuntimeError("Shard sweep failed")
+        return 7
+
+    use_case._sweep_shard = AsyncMock(side_effect=mock_sweep_shard)  # type: ignore
+
+    total = await use_case.execute()
+
+    # Should return only the successful count
+    assert total == 7
+    # Should have attempted both shards
+    assert use_case._sweep_shard.call_count == 2
+    use_case._sweep_shard.assert_any_call("shard_success", "dsn_success")
+    use_case._sweep_shard.assert_any_call("shard_fail", "dsn_fail")
+
+
 @patch("worker.application.edi_data_plane_outbox_sweeper_use_case.AsyncSession")
 async def test_sweeper_shard_processing_with_events(
     mock_session_cls: MagicMock, mock_db_router: MagicMock, mock_publisher: MagicMock
@@ -99,7 +145,21 @@ async def test_sweeper_shard_processing_with_events(
     processed = await use_case._sweep_shard("shard_1", "dsn1")
 
     assert processed == 3
+
+    # Verify the statement was called and inspect its structure
     mock_session.execute.assert_called_once()
+    executed_stmt = mock_session.execute.call_args[0][0]
+
+    # Compile the statement to inspect its SQL structure
+    from sqlalchemy.dialects import postgresql
+
+    compiled = executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    sql_text = str(compiled)
+
+    # Verify critical predicates are present in the query
+    assert "created_at <" in sql_text, "Missing created_at < five_mins_ago predicate"
+    assert "FOR UPDATE SKIP LOCKED" in sql_text, "Missing with_for_update(skip_locked=True) clause"
+
     use_case.processor.process_batch.assert_called_once_with(fake_events)
     mock_session.commit.assert_called_once()
 

@@ -20,6 +20,8 @@ class EdiDataPlaneOutboxProcessorUseCase:
     batches of stale/pending outbox events as a fallback mechanism.
     """
 
+    MAX_RETRY_ATTEMPTS = 3
+
     def __init__(self, message_publisher: EdiDataPlaneOutboxPublisherPort) -> None:
         self.message_publisher = message_publisher
 
@@ -40,10 +42,16 @@ class EdiDataPlaneOutboxProcessorUseCase:
             queue_name = PIPELINE_EVENT_ROUTING_MAP.get(event.event_type)
             if not queue_name:
                 logger.warning(
-                    "[EdiDataPlaneOutboxProcessorUseCase] Unknown event_type={event.event_type!r} "
-                    "for event id={event.id}. Marking FAILED."
+                    "data_plane_outbox.unknown_event_type",
+                    event_id=event.id,
+                    event_type=event.event_type,
                 )
-                event.status = "FAILED"
+                event.attempts = (event.attempts or 0) + 1
+                event.error_reason = f"Unknown event_type: {event.event_type}"
+                if event.attempts >= self.MAX_RETRY_ATTEMPTS:
+                    event.status = "FAILED"
+                else:
+                    event.status = "PENDING"
                 continue
             batches_by_queue.setdefault(queue_name, []).append(event)
 
@@ -71,10 +79,17 @@ class EdiDataPlaneOutboxProcessorUseCase:
                     event.status = "PROCESSED"
                     processed_count += 1
                 else:
+                    event.attempts = (event.attempts or 0) + 1
+                    event.error_reason = f"Failed to forward to {queue_name}"
+                    if event.attempts >= self.MAX_RETRY_ATTEMPTS:
+                        event.status = "FAILED"
+                    else:
+                        event.status = "PENDING"
                     logger.error(
-                        "[EdiDataPlaneOutboxProcessorUseCase] Failed to forward event id={event.id} to {queue_name}",
+                        "data_plane_outbox.forward_failed",
                         event_id=event.id,
                         queue_name=queue_name,
+                        attempts=event.attempts,
                     )
 
         return processed_count

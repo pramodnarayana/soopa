@@ -103,8 +103,14 @@ class AwsSecretsManagerAdapter:
 
                 # Parse vault_ref (e.g. edi/as2_key/1234)
                 parts = vault_ref.split("/")
-                category_str = parts[1] if len(parts) >= 3 else ""
-                ref_id = parts[2] if len(parts) >= 3 else vault_ref
+
+                # Require exactly 3 parts before processing
+                if len(parts) != 3:
+                    logger.error("invalid_secret_reference", vault_ref=vault_ref, parts_count=len(parts))
+                    raise ValueError(f"Invalid secret reference format: {vault_ref} (expected 3 parts)")
+
+                category_str = parts[1]
+                ref_id = parts[2]
 
                 try:
                     # Validate that the category matches our architectural constants
@@ -192,8 +198,14 @@ class AwsSecretsManagerAdapter:
 
                 # Parse vault_ref
                 parts = vault_ref.split("/")
-                category_str = parts[1] if len(parts) >= 3 else ""
-                ref_id = parts[2] if len(parts) >= 3 else vault_ref
+
+                # Require exactly 3 parts before processing
+                if len(parts) != 3:
+                    logger.error("invalid_secret_reference_for_deletion", vault_ref=vault_ref, parts_count=len(parts))
+                    raise ValueError(f"Invalid secret reference format: {vault_ref} (expected 3 parts)")
+
+                category_str = parts[1]
+                ref_id = parts[2]
 
                 try:
                     _ = SecretCategory(category_str)

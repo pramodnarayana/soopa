@@ -166,7 +166,7 @@ async def test_delivery_service_no_route_raises() -> None:
     }
 
     use_case = make_use_case(uow=uow)
-    with pytest.raises((ValueError, RuntimeError)):
+    with pytest.raises(ValueError, match="No route found for"):
         await use_case.execute(trace_id)
 
 

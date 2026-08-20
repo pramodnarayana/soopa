@@ -30,7 +30,7 @@ class PipelineLifecycleUseCase:
         trace_id = payload["trace_id"]
         direction = payload.get("direction", MessageDirection.INBOUND)
         logger.info(
-            "PipelineLifecycle: handling TRANSFORM_COMPLETED for trace_id={trace_id}",
+            "pipeline_lifecycle.transform_completed",
             trace_id=trace_id,
         )
 
@@ -84,7 +84,7 @@ class PipelineLifecycleUseCase:
             await self.uow.commit()
 
         logger.info(
-            "PipelineLifecycle: Triggered DELIVER_EVENT for trace_id={trace_id}", trace_id=trace_id
+            "pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id
         )
 
     async def handle_delivery_completed(self, payload: dict[str, Any]) -> None:
@@ -94,8 +94,18 @@ class PipelineLifecycleUseCase:
         trace_id = payload["trace_id"]
         direction = payload.get("direction", MessageDirection.INBOUND)
         status = payload.get("status")
+
+        # Validate status field is present before proceeding
+        if not status:
+            logger.error(
+                "pipeline_lifecycle.missing_status",
+                trace_id=trace_id,
+                payload=payload,
+            )
+            raise ValueError(f"Missing status field in DELIVERY_COMPLETED payload for trace_id={trace_id}")
+
         logger.info(
-            "PipelineLifecycle: handling DELIVERY_COMPLETED ({status}) for trace_id={trace_id}",
+            "pipeline_lifecycle.delivery_completed",
             status=status,
             trace_id=trace_id,
         )

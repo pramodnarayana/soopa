@@ -54,18 +54,23 @@ def sync_secrets() -> None:  # noqa: C901
 
                 # Format is usually edi/{category}/{id}
                 parts = secret_name.split("/")
-                if len(parts) >= 3:
-                    category_str = parts[1]
-                    ref_id = parts[2]
-                    from config.constants import SecretCategory
 
-                    try:
-                        # Validate that the category matches our architectural constants
-                        validated_category = SecretCategory(category_str)
-                    except ValueError:
-                        # Log a warning if we encounter an unknown category pattern
-                        logger.warning("unknown_secret_category", category=category_str)
-                        continue
+                # Require exactly 3 parts before processing
+                if len(parts) != 3:
+                    logger.warning("invalid_secret_name_format", secret_name=secret_name, parts_count=len(parts))
+                    continue
+
+                category_str = parts[1]
+                ref_id = parts[2]
+                from config.constants import SecretCategory
+
+                try:
+                    # Validate that the category matches our architectural constants
+                    validated_category = SecretCategory(category_str)
+                except ValueError:
+                    # Log a warning if we encounter an unknown category pattern
+                    logger.warning("unknown_secret_category", category=category_str)
+                    continue
 
                     file_path = os.path.join(
                         SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
