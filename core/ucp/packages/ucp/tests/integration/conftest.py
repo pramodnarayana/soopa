@@ -118,6 +118,31 @@ def localstack_container(request) -> "Any":
     attrs = sqs_client.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
     queue_arn = attrs["Attributes"]["QueueArn"]
 
+    import json
+
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": queue_arn,
+                "Condition": {"ArnEquals": {"aws:SourceArn": tenant_topic["TopicArn"]}},
+            },
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": queue_arn,
+                "Condition": {"ArnEquals": {"aws:SourceArn": user_topic["TopicArn"]}},
+            },
+        ],
+    }
+    sqs_client.set_queue_attributes(
+        QueueUrl=queue["QueueUrl"], Attributes={"Policy": json.dumps(policy)}
+    )
+
     # 3. Subscribe Queue to Topics
     sns_client.subscribe(TopicArn=tenant_topic["TopicArn"], Protocol="sqs", Endpoint=queue_arn)
     sns_client.subscribe(TopicArn=user_topic["TopicArn"], Protocol="sqs", Endpoint=queue_arn)

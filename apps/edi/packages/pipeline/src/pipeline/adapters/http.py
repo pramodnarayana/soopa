@@ -6,7 +6,7 @@ import httpx
 from pipeline.ports.http import HttpDeliveryPort
 
 
-class HttpxDeliveryAdapter(HttpDeliveryPort):
+class HttpxDeliveryClient(HttpDeliveryPort):
     """
     Concrete implementation of HttpDeliveryPort using HTTPX.
     """

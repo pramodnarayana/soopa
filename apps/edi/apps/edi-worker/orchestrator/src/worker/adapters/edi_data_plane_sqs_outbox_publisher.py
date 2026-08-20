@@ -8,12 +8,15 @@ import aioboto3
 import structlog
 
 from worker.adapters.aws_types import SQSClientProtocol
-from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
+from worker.ports.edi_data_plane_outbox_publisher_port import (
+    EdiDataPlaneOutboxPublisherPort,
+    PublishMessageEnvelope,
+)
 
 logger = structlog.get_logger(__name__)
 
 
-class SqsPublisherAdapter(MessagePublisherPort):
+class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
     def __init__(self, endpoint_url: str | None = None, region: str = "us-east-1"):
         self.endpoint_url = endpoint_url
         self.region = region
@@ -22,7 +25,7 @@ class SqsPublisherAdapter(MessagePublisherPort):
         self._sqs_client: SQSClientProtocol | None = None
 
     @asynccontextmanager
-    async def connect(self) -> AsyncIterator["MessagePublisherPort"]:
+    async def connect(self) -> AsyncIterator["EdiDataPlaneOutboxPublisherPort"]:
         async with self.session.client(
             "sqs", endpoint_url=self.endpoint_url, region_name=self.region
         ) as sqs:

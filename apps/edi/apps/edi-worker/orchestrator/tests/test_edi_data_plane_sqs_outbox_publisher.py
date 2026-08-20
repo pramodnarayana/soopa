@@ -2,8 +2,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from worker.adapters.sqs_publisher import SqsPublisherAdapter
-from worker.ports.message_publisher import PublishMessageEnvelope
+from worker.adapters.edi_data_plane_sqs_outbox_publisher import (
+    EdiDataPlaneSqsOutboxPublisherAdapter,
+)
+from worker.ports.edi_data_plane_outbox_publisher_port import PublishMessageEnvelope
 
 pytestmark = pytest.mark.asyncio
 
@@ -25,7 +27,7 @@ async def test_sqs_publisher_publish_batch() -> None:
     }
 
     with patch("aioboto3.Session", return_value=mock_session):
-        adapter = SqsPublisherAdapter(region="us-east-1", endpoint_url=None)
+        adapter = EdiDataPlaneSqsOutboxPublisherAdapter(region="us-east-1", endpoint_url=None)
 
         async with adapter.connect():
             # Publish messages
@@ -46,7 +48,7 @@ async def test_sqs_publisher_publish_batch() -> None:
 
 
 async def test_sqs_publisher_not_connected() -> None:
-    adapter = SqsPublisherAdapter(region="us-east-1", endpoint_url=None)
+    adapter = EdiDataPlaneSqsOutboxPublisherAdapter(region="us-east-1", endpoint_url=None)
     with pytest.raises(RuntimeError, match="must be called within the connect"):
         await adapter.publish_batch(
             "test-queue", [PublishMessageEnvelope(message_id="1", event_type="test", event={})]
@@ -64,7 +66,7 @@ async def test_sqs_publisher_get_queue_url_error() -> None:
     mock_client.get_queue_url.side_effect = Exception("SQS Error")
 
     with patch("aioboto3.Session", return_value=mock_session):
-        adapter = SqsPublisherAdapter(region="us-east-1", endpoint_url=None)
+        adapter = EdiDataPlaneSqsOutboxPublisherAdapter(region="us-east-1", endpoint_url=None)
 
         async with adapter.connect():
             success_ids = await adapter.publish_batch(
@@ -84,7 +86,7 @@ async def test_sqs_publisher_publish() -> None:
     mock_client.get_queue_url.return_value = {"QueueUrl": "http://sqs/test"}
 
     with patch("aioboto3.Session", return_value=mock_session):
-        adapter = SqsPublisherAdapter(region="us-east-1", endpoint_url=None)
+        adapter = EdiDataPlaneSqsOutboxPublisherAdapter(region="us-east-1", endpoint_url=None)
         await adapter.publish("test-queue", {"event": "A"})
 
         # Verify get_queue_url and send_message were called

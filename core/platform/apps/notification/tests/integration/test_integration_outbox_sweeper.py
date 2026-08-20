@@ -7,7 +7,7 @@ from sqlalchemy import select
 from notification.adapters.outbound.postgres_outbox_repository import (
     PostgresOutboxRepository,
 )
-from notification.application.outbox_sweeper import NotificationOutboxSweeper
+from notification.application.outbox_processor import NotificationOutboxProcessor
 from notification.domain.models import Channel, NotificationOutboxEvent
 
 
@@ -59,12 +59,12 @@ async def test_outbox_sweeper_integration(db_session_factory):
     )
     await repo.save(message)
 
-    sweeper = NotificationOutboxSweeper(
-        repository=repo, dispatcher=dispatcher, worker_id="test_worker_1", poll_interval_seconds=0
+    processor = NotificationOutboxProcessor(
+        repository=repo, dispatcher=dispatcher, worker_id="test_worker_1"
     )
 
     # 2. Run a single poll cycle
-    await sweeper.poll()
+    await processor.process_pending()
 
     # 3. Verify it was dispatched
     assert len(dispatcher.dispatches) == 1

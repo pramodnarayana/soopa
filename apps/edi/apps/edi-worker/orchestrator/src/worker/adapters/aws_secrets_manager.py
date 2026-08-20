@@ -62,7 +62,10 @@ class AwsSecretsManagerSecretStore(SecretStorePort):
         def _store() -> str:
             import uuid
 
-            secret_name = f"private-key-{uuid.uuid4()}"
+            from config.constants import SecretCategory
+
+            resolved_category = category if category is not None else SecretCategory.AS2_KEY
+            secret_name = f"edi/{resolved_category.value}/{uuid.uuid4()}"
             try:
                 self.client.create_secret(
                     Name=secret_name, SecretString=private_key_pem.decode("utf-8")

@@ -13,9 +13,9 @@ class PublishMessageEnvelope:
     partition_key: str | None = None
 
 
-class MessagePublisherPort(abc.ABC):
+class EdiDataPlaneOutboxPublisherPort(abc.ABC):
     @abc.abstractmethod
-    def connect(self) -> AbstractAsyncContextManager["MessagePublisherPort"]:
+    def connect(self) -> AbstractAsyncContextManager["EdiDataPlaneOutboxPublisherPort"]:
         """
         Context manager to establish and share the underlying connection pool.
         Must be entered before calling publish_batch.

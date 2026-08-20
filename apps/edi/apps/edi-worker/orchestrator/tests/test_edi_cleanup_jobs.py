@@ -1,12 +1,19 @@
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from worker.adapters.inbound.jobs.edi_cleanup_jobs import (
+from worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
+)
+from worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_job import (
     EdiControlPlaneOutboxCleanupJobHandler,
+)
+from worker.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
     EdiDataPlaneOutboxCleanupJobHandler,
+)
+from worker.adapters.inbound.jobs.edi_idempotency_cleanup_job import (
     EdiIdempotencyCleanupJobHandler,
 )
 from worker.core.scheduler.models import Job
@@ -22,7 +29,7 @@ from worker.core.scheduler.models import Job
         (EdiAuditLogCleanupJobHandler, "edi_audit_log_cleanup"),
     ],
 )
-async def test_edi_cleanup_execute(handler_class, job_name) -> None:
+async def test_edi_cleanup_execute(handler_class: Any, job_name: str) -> None:
     mock_use_case = MagicMock()
     mock_use_case.execute = AsyncMock()
 
@@ -45,7 +52,7 @@ async def test_edi_cleanup_execute(handler_class, job_name) -> None:
         (EdiAuditLogCleanupJobHandler, "edi_audit_log_cleanup"),
     ],
 )
-async def test_edi_cleanup_execute_exception_propagates(handler_class, job_name) -> None:
+async def test_edi_cleanup_execute_exception_propagates(handler_class: Any, job_name: str) -> None:
     mock_use_case = MagicMock()
     mock_use_case.execute = AsyncMock(side_effect=Exception("DB Down"))
 

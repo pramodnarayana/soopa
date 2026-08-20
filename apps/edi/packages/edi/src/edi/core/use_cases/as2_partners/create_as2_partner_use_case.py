@@ -54,6 +54,10 @@ class CreateAS2PartnerUseCase:
     async def _check_idempotency(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str
     ) -> PartnerEntity | None:
+        private_key_digest = None
+        if cmd.private_key_pem:
+            private_key_digest = hashlib.sha256(cmd.private_key_pem.encode()).hexdigest()
+
         fingerprint_data = {
             "tenant_id": tenant_id,
             "name": cmd.name,
@@ -62,6 +66,8 @@ class CreateAS2PartnerUseCase:
             "url": cmd.url,
             "public_cert_pem": cmd.public_cert_pem,
             "public_cert_vault_ref": cmd.public_cert_vault_ref,
+            "private_key_vault_ref": cmd.private_key_vault_ref,
+            "private_key_digest": private_key_digest,
         }
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_data, sort_keys=True).encode()

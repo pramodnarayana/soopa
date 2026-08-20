@@ -96,7 +96,7 @@ def get_ssh_client(
         raise
 
 
-class ParamikoSftpDeliveryAdapter(SftpDeliveryPort):
+class ParamikoSftpClient(SftpDeliveryPort):
     """
     Concrete implementation of SftpDeliveryPort using paramiko.
     """

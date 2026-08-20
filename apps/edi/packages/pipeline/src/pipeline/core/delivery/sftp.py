@@ -3,9 +3,9 @@ from domain.models import EdiMessageDomainModel
 from domain.status import MessageStatus
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
-from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.secret_store import SecretStorePort
 from pipeline.ports.sftp import SftpDeliveryPort
+from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -13,11 +13,11 @@ logger = structlog.get_logger(__name__)
 class SftpDeliveryStrategy(BaseDeliveryStrategy):
     def __init__(
         self,
-        repository: RepositoryPort,
+        uow: DataPlaneUnitOfWork,
         sftp_delivery: SftpDeliveryPort,
         vault: SecretStorePort | None = None,
     ) -> None:
-        super().__init__(repository, vault)
+        super().__init__(uow, vault)
         self.sftp_delivery = sftp_delivery
 
     async def deliver(
@@ -27,7 +27,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         edi_msg: EdiMessageDomainModel,
         idempotency_key: str | None = None,
     ) -> None:
-        if not await self.repository.claim_edi_message(trace_id):
+        if not await self.uow.repository.claim_edi_message(trace_id):
             logger.warning(
                 "Could not claim trace_id={trace_id} (already claimed or terminal).",
                 trace_id=trace_id,
@@ -35,7 +35,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             return
 
         try:
-            partner = await self.repository.get_sftp_partner(partner_id)
+            partner = await self.uow.repository.get_sftp_partner(partner_id)
             if not partner:
                 raise ValueError(f"SFTP partner {partner_id} not found.")
             if not edi_msg.edi_data:
@@ -62,7 +62,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
                 filename=filename,
                 payload=raw_payload,
             )
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
             await self._emit_delivery_completed(
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
@@ -72,6 +72,6 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
                 partnerhost=partner["host"],
             )
         except Exception:
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception("SFTP delivery failed for trace_id={trace_id}", trace_id=trace_id)

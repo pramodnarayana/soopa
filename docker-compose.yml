@@ -6,6 +6,9 @@ include:
 # Single image built once, reused by all runtime containers.
 # Follows the Shopify-style single-image deployment strategy.
 x-monolith-base: &monolith-base
+  build:
+    context: .
+    dockerfile: Dockerfile
   image: platform:local
   env_file: .env
   depends_on:
@@ -17,17 +20,6 @@ x-monolith-base: &monolith-base
       condition: service_healthy
 
 services:
-  # -------------------------------------------------------------------------
-  # 0. Build Stage — builds the single image used by all services below
-  # -------------------------------------------------------------------------
-  platform-builder:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: platform:local
-    command: ["echo", "Image built successfully"]
-    profiles:
-      - build
 
   # -------------------------------------------------------------------------
   # 1. Ingress Tier (Synchronous Web Servers)

@@ -94,15 +94,15 @@ class WorkerContainer:
             JobName.UCP_OUTBOX_SWEEPER.value, UcpOutboxSweeperJobHandler(sweeper_use_case)
         )
         self.registry.register(
-            "UCP_OUTBOX_CLEANUP",
+            JobName.UCP_OUTBOX_CLEANUP.value,
             UcpOutboxCleanupJobHandler(outbox_cleanup_use_case),
         )
         self.registry.register(
-            "UCP_IDEMPOTENCY_CLEANUP",
+            JobName.UCP_IDEMPOTENCY_CLEANUP.value,
             UcpIdempotencyCleanupJobHandler(idemp_cleanup_use_case),
         )
         self.registry.register(
-            "UCP_AUDIT_LOG_CLEANUP",
+            JobName.UCP_AUDIT_LOG_CLEANUP.value,
             UcpAuditLogCleanupJobHandler(audit_cleanup_use_case),
         )
 

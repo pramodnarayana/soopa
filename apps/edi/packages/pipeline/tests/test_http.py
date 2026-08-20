@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.adapters.http import HttpxDeliveryAdapter
+from pipeline.adapters.http import HttpxDeliveryClient
 
 pytestmark = pytest.mark.asyncio
 
@@ -17,7 +17,7 @@ async def test_httpx_delivery_adapter(mock_client_cls: MagicMock) -> None:
     mock_response.text = '{"success": true}'
     mock_client.post.return_value = mock_response
 
-    adapter = HttpxDeliveryAdapter()
+    adapter = HttpxDeliveryClient()
     status, response_body = await adapter.deliver(
         "https://example.com/webhook", b'{"data": "test"}'
     )
@@ -35,7 +35,7 @@ def test_httpx_delivery_adapter_validator() -> None:
     def fail_validator(url: str) -> bool:
         return False
 
-    adapter = HttpxDeliveryAdapter(timeout_secs=5, validator=fail_validator)
+    adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator)
 
     with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
         import asyncio

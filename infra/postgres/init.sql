@@ -3,6 +3,7 @@
 -- Must be defined before any CREATE POLICY statement that references them.
 -- ---------------------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS app;
+GRANT USAGE ON SCHEMA app TO public;
 
 -- Returns the tenant_id stored in the current session local variable.
 -- Set this before any query that should be tenant-scoped:

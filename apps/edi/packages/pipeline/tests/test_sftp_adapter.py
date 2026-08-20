@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pipeline.adapters.sftp import ParamikoSftpDeliveryAdapter
+from pipeline.adapters.sftp import ParamikoSftpClient
 
 
 @pytest.mark.asyncio
@@ -19,7 +19,7 @@ async def test_paramiko_sftp_delivery_adapter(mock_rsa_key, mock_ssh_client_clas
     mock_sftp = MagicMock()
     mock_client.open_sftp.return_value = mock_sftp
 
-    adapter = ParamikoSftpDeliveryAdapter()
+    adapter = ParamikoSftpClient()
 
     await adapter.deliver(
         host="sftp.example.com",

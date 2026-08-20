@@ -38,6 +38,14 @@ class AwsSecretsManagerAdapter:
         self._cache: dict[str, tuple[bytes, float]] = {}
         self._cache_ttl_seconds = int(os.getenv("SECRETS_CACHE_TTL", "3600"))
         self._cache_max_size = int(os.getenv("SECRETS_CACHE_MAX_SIZE", "1000"))
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._locks_lock = asyncio.Lock()
+
+    async def _get_lock(self, vault_ref: str) -> asyncio.Lock:
+        async with self._locks_lock:
+            if vault_ref not in self._locks:
+                self._locks[vault_ref] = asyncio.Lock()
+            return self._locks[vault_ref]
 
     async def store_private_key(
         self, private_key_pem: bytes, category: SecretCategory | None = None
@@ -76,85 +84,92 @@ class AwsSecretsManagerAdapter:
         2. Local Sidecar Disk (Warm path, <1ms latency)
         3. AWS Secrets Manager (Cold path fallback, ~100ms latency)
         """
-        now = time.time()
+        lock = await self._get_lock(vault_ref)
+        async with lock:
+            now = time.time()
 
-        # 1. In-Memory Cache
-        if vault_ref in self._cache:
-            cached_value, expiry = self._cache[vault_ref]
-            if now < expiry:
-                return cached_value
-            else:
-                # Evict expired entry
-                del self._cache[vault_ref]
+            # 1. In-Memory Cache
+            if vault_ref in self._cache:
+                cached_value, expiry = self._cache[vault_ref]
+                if now < expiry:
+                    return cached_value
+                else:
+                    # Evict expired entry
+                    del self._cache[vault_ref]
 
-        def _execute() -> bytes:
-            settings = get_settings()
-            from config.constants import SecretCategory
+            def _execute() -> bytes:
+                settings = get_settings()
+                from config.constants import SecretCategory
 
-            # Parse vault_ref (e.g. edi/as2_key/1234)
-            parts = vault_ref.split("/")
-            category_str = parts[1] if len(parts) >= 3 else ""
-            ref_id = parts[2] if len(parts) >= 3 else vault_ref
+                # Parse vault_ref (e.g. edi/as2_key/1234)
+                parts = vault_ref.split("/")
+                category_str = parts[1] if len(parts) >= 3 else ""
+                ref_id = parts[2] if len(parts) >= 3 else vault_ref
 
-            try:
-                # Validate that the category matches our architectural constants
-                _ = SecretCategory(category_str)
-            except ValueError:
-                # Reject unknown categories before constructing path
-                logger.exception("unknown_secret_category_rejected", category=category_str)
-                raise ValueError(f"Unknown secret category: {category_str}")
-
-            local_path = os.path.join(settings.secrets.mount_path, category_str, f"{ref_id}.pem")
-
-            # Verify resolved path is within mount directory (path traversal protection)
-            resolved_path = os.path.realpath(local_path)
-            mount_path = os.path.realpath(settings.secrets.mount_path)
-            if not resolved_path.startswith(mount_path + os.sep) and resolved_path != mount_path:
-                logger.error(
-                    "path_traversal_attempt_blocked",
-                    vault_ref=vault_ref,
-                    resolved_path=resolved_path,
-                    mount_path=mount_path,
-                )
-                raise ValueError("Invalid vault_ref: path traversal detected")
-
-            # 2. Local Sidecar Disk
-            if os.path.exists(local_path):
                 try:
-                    with open(local_path, "rb") as lf:
-                        return lf.read()
-                except OSError as e:
-                    logger.warning("failed_to_read_local_secret", path=local_path, error=str(e))
+                    # Validate that the category matches our architectural constants
+                    _ = SecretCategory(category_str)
+                except ValueError:
+                    # Reject unknown categories before constructing path
+                    logger.exception("unknown_secret_category_rejected", category=category_str)
+                    raise ValueError(f"Unknown secret category: {category_str}")
 
-            # 3. AWS Secrets Manager Fallback
-            try:
-                response = self.client.get_secret_value(SecretId=vault_ref)
-                secret_string: str = str(response.get("SecretString", ""))
-                if not secret_string:
-                    raise ValueError("SecretString is empty")
-                return secret_string.encode("utf-8")
-            except Exception as e:
-                logger.exception("failed_to_retrieve_secret_from_aws", error=str(e))
-                raise
+                local_path = os.path.join(
+                    settings.secrets.mount_path, category_str, f"{ref_id}.pem"
+                )
 
-        secret_bytes = await asyncio.to_thread(_execute)
+                # Verify resolved path is within mount directory (path traversal protection)
+                resolved_path = os.path.realpath(local_path)
+                mount_path = os.path.realpath(settings.secrets.mount_path)
+                if (
+                    not resolved_path.startswith(mount_path + os.sep)
+                    and resolved_path != mount_path
+                ):
+                    logger.error(
+                        "path_traversal_attempt_blocked",
+                        vault_ref=vault_ref,
+                        resolved_path=resolved_path,
+                        mount_path=mount_path,
+                    )
+                    raise ValueError("Invalid vault_ref: path traversal detected")
 
-        # Enforce cache size limit by evicting oldest/expired entries
-        if len(self._cache) >= self._cache_max_size:
-            # Evict expired entries first
-            expired_keys = [k for k, (_, exp) in self._cache.items() if now >= exp]
-            for k in expired_keys:
-                del self._cache[k]
+                # 2. Local Sidecar Disk
+                if os.path.exists(local_path):
+                    try:
+                        with open(local_path, "rb") as lf:
+                            return lf.read()
+                    except OSError as e:
+                        logger.warning("failed_to_read_local_secret", path=local_path, error=str(e))
 
-            # If still over limit, evict oldest entries
+                # 3. AWS Secrets Manager Fallback
+                try:
+                    response = self.client.get_secret_value(SecretId=vault_ref)
+                    secret_string: str = str(response.get("SecretString", ""))
+                    if not secret_string:
+                        raise ValueError("SecretString is empty")
+                    return secret_string.encode("utf-8")
+                except Exception as e:
+                    logger.exception("failed_to_retrieve_secret_from_aws", error=str(e))
+                    raise
+
+            secret_bytes = await asyncio.to_thread(_execute)
+
+            # Enforce cache size limit by evicting oldest/expired entries
             if len(self._cache) >= self._cache_max_size:
-                sorted_entries = sorted(self._cache.items(), key=lambda x: x[1][1])
-                num_to_evict = len(self._cache) - self._cache_max_size + 1
-                for k, _ in sorted_entries[:num_to_evict]:
+                # Evict expired entries first
+                expired_keys = [k for k, (_, exp) in self._cache.items() if now >= exp]
+                for k in expired_keys:
                     del self._cache[k]
 
-        self._cache[vault_ref] = (secret_bytes, now + self._cache_ttl_seconds)
-        return secret_bytes
+                # If still over limit, evict oldest entries
+                if len(self._cache) >= self._cache_max_size:
+                    sorted_entries = sorted(self._cache.items(), key=lambda x: x[1][1])
+                    num_to_evict = len(self._cache) - self._cache_max_size + 1
+                    for k, _ in sorted_entries[:num_to_evict]:
+                        del self._cache[k]
+
+            self._cache[vault_ref] = (secret_bytes, now + self._cache_ttl_seconds)
+            return secret_bytes
 
     async def retrieve_private_key(self, vault_ref: str) -> bytes:
         """
@@ -167,13 +182,40 @@ class AwsSecretsManagerAdapter:
         """
         Deletes a secret from AWS Secrets Manager immediately.
         """
-        self._cache.pop(vault_ref, None)
+        lock = await self._get_lock(vault_ref)
+        async with lock:
+            self._cache.pop(vault_ref, None)
 
-        def _execute() -> None:
-            try:
-                self.client.delete_secret(SecretId=vault_ref, ForceDeleteWithoutRecovery=True)
-            except Exception as e:
-                logger.exception("failed_to_delete_secret", error=str(e))
-                raise
+            def _execute() -> None:
+                settings = get_settings()
+                from config.constants import SecretCategory
 
-        await asyncio.to_thread(_execute)
+                # Parse vault_ref
+                parts = vault_ref.split("/")
+                category_str = parts[1] if len(parts) >= 3 else ""
+                ref_id = parts[2] if len(parts) >= 3 else vault_ref
+
+                try:
+                    _ = SecretCategory(category_str)
+                    local_path = os.path.join(
+                        settings.secrets.mount_path, category_str, f"{ref_id}.pem"
+                    )
+                    resolved_path = os.path.realpath(local_path)
+                    mount_path = os.path.realpath(settings.secrets.mount_path)
+
+                    if (
+                        resolved_path.startswith(mount_path + os.sep) or resolved_path == mount_path
+                    ) and os.path.exists(resolved_path):
+                        os.remove(resolved_path)
+                except OSError as e:
+                    logger.warning(
+                        "failed_to_delete_local_secret", vault_ref=vault_ref, error=str(e)
+                    )
+
+                try:
+                    self.client.delete_secret(SecretId=vault_ref, ForceDeleteWithoutRecovery=True)
+                except Exception as e:
+                    logger.exception("failed_to_delete_secret", error=str(e))
+                    raise
+
+            await asyncio.to_thread(_execute)

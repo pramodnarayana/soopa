@@ -20,8 +20,10 @@ from ucp_models.subscriptions import App
 
 from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
+from worker.adapters.edi_data_plane_sqs_outbox_publisher import (
+    EdiDataPlaneSqsOutboxPublisherAdapter,
+)
 from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
-from worker.adapters.sqs_publisher import SqsPublisherAdapter
 from worker.core.errors import PermanentProvisioningError
 from worker.core.service import ProvisioningWorkerService
 
@@ -47,7 +49,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     outbox_adapter = EdiSqsConsumer(queue_name=queue_name)
     outbox_adapter.endpoint_url = sqs_endpoint
 
-    message_publisher = SqsPublisherAdapter(
+    message_publisher = EdiDataPlaneSqsOutboxPublisherAdapter(
         endpoint_url=sqs_endpoint,
         region="us-east-1",
     )

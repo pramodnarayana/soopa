@@ -7,8 +7,8 @@ from domain.status import MessageStatus
 from pipeline.core.as2_orchestrator import AS2MessageOrchestrator
 from pipeline.core.delivery.base import BaseDeliveryStrategy
 from pipeline.ports.as2 import AS2DeliveryPort
-from pipeline.ports.repository import RepositoryPort
 from pipeline.ports.secret_store import SecretStorePort
+from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -16,11 +16,11 @@ logger = structlog.get_logger(__name__)
 class As2DeliveryStrategy(BaseDeliveryStrategy):
     def __init__(
         self,
-        repository: RepositoryPort,
+        uow: DataPlaneUnitOfWork,
         as2_delivery: AS2DeliveryPort,
         vault: SecretStorePort | None = None,
     ) -> None:
-        super().__init__(repository, vault)
+        super().__init__(uow, vault)
         self.as2_delivery = as2_delivery
         self._as2_orchestrator = AS2MessageOrchestrator(vault=vault)
 
@@ -34,7 +34,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         response_body: bytes,
     ) -> None:
         if not (200 <= status_code < 300):
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
             logger.error(
                 "AS2 Delivery failed for trace_id={trace_id}. "
@@ -71,7 +71,9 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                             )
 
             if is_success:
-                await self.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
+                await self.uow.repository.update_edi_message_status(
+                    trace_id, MessageStatus.DELIVERED
+                )
                 await self._emit_delivery_completed(trace_id, direction, MessageStatus.DELIVERED)
                 logger.info(
                     "Delivered trace_id={trace_id} (HTTP {status_code}). MIC={as2_msg.mic}",
@@ -80,14 +82,14 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                     as2_msg_mic=as2_msg.mic,
                 )
             else:
-                await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+                await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
                 await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
                 logger.error(
                     "Sync MDN indicates failure for trace_id={trace_id}. "
                     "Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
                 )
         except Exception:
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
             logger.exception(
                 "AS2 MDN parsing or processing failed for trace_id={trace_id}", trace_id=trace_id
@@ -100,7 +102,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         edi_msg: EdiMessageDomainModel,
         idempotency_key: str | None = None,
     ) -> None:
-        if not await self.repository.claim_edi_message(trace_id):
+        if not await self.uow.repository.claim_edi_message(trace_id):
             logger.warning(
                 "Could not claim trace_id={trace_id} (already claimed or terminal).",
                 trace_id=trace_id,
@@ -108,7 +110,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             return
 
         try:
-            remote_partner = await self.repository.get_as2_partner(partner_id)
+            remote_partner = await self.uow.repository.get_as2_partner(partner_id)
             if not remote_partner:
                 raise ValueError("AS2 partner {partner_id} not found.")
 
@@ -118,7 +120,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
 
             local_partner_id: str | None = remote_partner.get("local_partner_id")
             local_partner = (
-                await self.repository.get_local_as2_partner(local_partner_id)
+                await self.uow.repository.get_local_as2_partner(local_partner_id)
                 if local_partner_id
                 else None
             )
@@ -134,7 +136,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 idempotency_key=idempotency_key,
             )
         except Exception as e:
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
                 "AS2 Delivery Adapter is misconfigured or failed to build for trace_id={trace_id}",
@@ -151,7 +153,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 headers=as2_msg.headers,
             )
         except RuntimeError as e:
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
                 "AS2 Delivery Adapter is misconfigured for trace_id={trace_id}", trace_id=trace_id
@@ -160,7 +162,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 "AS2 Delivery Adapter is misconfigured for trace_id={trace_id}"
             ) from e
         except Exception as e:
-            await self.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
                 "AS2 HTTP transmission failed for trace_id={trace_id}", trace_id=trace_id

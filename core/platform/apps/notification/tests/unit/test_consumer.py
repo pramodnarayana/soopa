@@ -15,10 +15,16 @@ class FakeDispatchUseCase:
         self.events.append(event)
 
 
+class FakeSweeperJobHandler:
+    async def execute(self) -> None:
+        pass
+
+
 @pytest.mark.asyncio
 async def test_consumer_process_message_valid():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case)  # type: ignore
+    sweeper_handler = FakeSweeperJobHandler()
+    worker = NotificationConsumerWorker(use_case, sweeper_handler)  # type: ignore
 
     body = {
         "event_type": "notification.triggered",
@@ -41,7 +47,7 @@ async def test_consumer_process_message_valid():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_event():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case)  # type: ignore
+    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
     await worker._process_message({})
     assert len(use_case.events) == 0
 
@@ -49,7 +55,7 @@ async def test_consumer_process_message_missing_event():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_payload():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case)  # type: ignore
+    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
     await worker._process_message({"event": {}})
     assert len(use_case.events) == 0
 
@@ -57,7 +63,7 @@ async def test_consumer_process_message_missing_payload():
 @pytest.mark.asyncio
 async def test_consumer_lifecycle():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case)  # type: ignore
+    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
 
     with patch(
         "notification.application.consumer.poll_sqs_queue", new_callable=AsyncMock

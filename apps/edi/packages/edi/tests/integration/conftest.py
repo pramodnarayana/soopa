@@ -119,8 +119,12 @@ async def override_get_tenant_session(db_engine):
 
 
 class FakeVault:
+    async def get_secret(self, vault_ref: str) -> str:
+        return "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+
     async def retrieve_secret(self, vault_ref: str) -> bytes:
-        return b"-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+        val = await self.get_secret(vault_ref)
+        return val.encode("utf-8")
 
     async def retrieve_private_key(self, vault_ref: str) -> bytes:
         return await self.retrieve_secret(vault_ref)

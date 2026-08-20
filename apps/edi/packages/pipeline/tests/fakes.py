@@ -69,12 +69,52 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     def __init__(self) -> None:
         self.edi_messages: dict[str, dict[str, Any]] = {}
         self.api_gateway: dict[str, dict[str, Any]] = {}
+        self.edi_json: dict[str, dict[str, Any]] = {}
+        self.outbound_routes: dict[str, dict[str, Any]] = {}
+        self.outbound_edi_headers: dict[str, dict[str, Any]] = {}
         self.outbox: list[dict[str, Any]] = []
         self.routes: list[dict[str, Any]] = []
         self.webhooks: dict[str, dict[str, Any]] = {}
         self.sftp_partners: dict[str, dict[str, Any]] = {}
         self.as2_partners: dict[str, dict[str, Any]] = {}
         self.local_as2_partners: dict[str, dict[str, Any]] = {}
+
+    async def get_edi_json(self, trace_id: str) -> Any | None:
+        raw = self.edi_json.get(trace_id)
+        if not raw:
+            return None
+
+        # Return an object-like view for the tests
+        class DummyEdiJson:
+            def __init__(self, d):
+                self.__dict__.update(d)
+
+        return DummyEdiJson(raw)
+
+    async def get_outbound_edi_header_by_route_or_partner(
+        self, trading_partner_id: str, tenant_id: str | None = None
+    ) -> dict[str, Any] | None:
+        return self.outbound_edi_headers.get(trading_partner_id)
+
+    async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
+        if trace_id in self.edi_json:
+            self.edi_json[trace_id].update(kwargs)
+
+    async def update_edi_json_status(self, trace_id: str, status: MessageStatus) -> None:
+        if trace_id in self.edi_json:
+            self.edi_json[trace_id]["status"] = status
+
+    async def update_edi_message_metadata(
+        self, trace_id: str, gs_sender_id: str, gs_receiver_id: str, transaction_type: str
+    ) -> None:
+        if trace_id in self.edi_messages:
+            self.edi_messages[trace_id]["gs_sender_id"] = gs_sender_id
+            self.edi_messages[trace_id]["gs_receiver_id"] = gs_receiver_id
+            self.edi_messages[trace_id]["transaction_type"] = transaction_type
+
+    async def save_edi_message(self, **kwargs: Any) -> None:
+        trace_id = kwargs.get("trace_id", "")
+        self.edi_messages[trace_id] = kwargs
 
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         raw = self.edi_messages.get(trace_id)
@@ -371,3 +411,84 @@ class NullVault:
 
     async def get_secret(self, ref: str) -> str:
         raise AssertionError(f"NullVault.get_secret called unexpectedly with ref='{ref}'")
+
+
+# ---------------------------------------------------------------------------
+# Unit of Work Fakes — for testing Application Use Cases
+# ---------------------------------------------------------------------------
+
+
+class FakeDataPlaneOutboxRepository:
+    """
+    In-memory implementation of DataPlaneOutboxRepositoryPort.
+    Provides full leasing semantics so tests can assert on outbox side-effects.
+    """
+
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+        self.leased: dict[str, str] = {}  # key_str -> owner_token
+        self.processed: set[str] = set()
+        self.failed: set[str] = set()
+
+    async def append_event(
+        self, event_type: str, payload: dict[str, Any], idempotency_key: str | None = None
+    ) -> None:
+        key = idempotency_key or ""
+        for existing in self.events:
+            if existing["idempotency_key"] == key:
+                return
+        self.events.append({"idempotency_key": key, "event_type": event_type, "payload": payload})
+
+    async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
+        if key_str in self.processed or key_str in self.leased:
+            return None
+        import uuid
+
+        owner_token = str(uuid.uuid4())
+        self.leased[key_str] = owner_token
+        return owner_token
+
+    async def mark_delivery_success(self, key_str: str, owner_token: str) -> None:
+        if self.leased.get(key_str) == owner_token:
+            del self.leased[key_str]
+            self.processed.add(key_str)
+
+    async def mark_delivery_failure(self, key_str: str, owner_token: str) -> None:
+        if self.leased.get(key_str) == owner_token:
+            del self.leased[key_str]
+            self.failed.add(key_str)
+
+
+class FakeDataPlaneUnitOfWork:
+    """
+    In-memory Unit of Work satisfying the DataPlaneUnitOfWork protocol.
+    Wires FakeDataPlaneOutboxRepository and InMemoryRepositoryAdapter together.
+    """
+
+    def __init__(
+        self,
+        repository: InMemoryRepositoryAdapter | None = None,
+        outbox: FakeDataPlaneOutboxRepository | None = None,
+    ) -> None:
+        self.repository = repository or InMemoryRepositoryAdapter()
+        self.outbox = outbox or FakeDataPlaneOutboxRepository()
+        self.committed = False
+        self.rolled_back = False
+
+    async def __aenter__(self) -> "FakeDataPlaneUnitOfWork":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: Any | None,
+    ) -> None:
+        if exc_type is not None:
+            await self.rollback()
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True

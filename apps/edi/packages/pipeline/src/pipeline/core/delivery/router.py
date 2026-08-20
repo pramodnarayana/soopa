@@ -1,7 +1,7 @@
 import structlog
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
-from pipeline.ports.repository import RepositoryPort
+from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -13,10 +13,10 @@ class DeliveryRouter:
 
     def __init__(
         self,
-        repository: RepositoryPort,
+        uow: DataPlaneUnitOfWork,
         strategies: dict[str, BaseDeliveryStrategy],
     ) -> None:
-        self.repository = repository
+        self.uow = uow
         self.strategies = strategies
 
     async def deliver(self, trace_id: str, idempotency_key: str | None = None) -> None:
@@ -26,7 +26,7 @@ class DeliveryRouter:
         """
         logger.info("Starting delivery pipeline for trace_id={trace_id}", trace_id=trace_id)
 
-        edi_msg = await self.repository.get_edi_message(trace_id)
+        edi_msg = await self.uow.repository.get_edi_message(trace_id)
         if not edi_msg:
             raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
@@ -38,14 +38,14 @@ class DeliveryRouter:
                     f"EDI Message {trace_id} is missing trading_partner_id for OUTBOUND routing."
                 )
 
-            route = await self.repository.get_outbound_route_by_trading_partner_id(
+            route = await self.uow.repository.get_outbound_route_by_trading_partner_id(
                 trading_partner_id=edi_msg.trading_partner_id,
                 tenant_id=edi_msg.tenant_id,
             )
             if not route:
                 logger.error(
-                    "Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found",
-                    edi_msg_trading_partner_id=edi_msg.trading_partner_id,
+                    "Configured outbound route for trading_partner_id={trading_partner_id} not found",
+                    trading_partner_id=edi_msg.trading_partner_id,
                 )
                 raise ValueError(
                     f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
@@ -60,7 +60,7 @@ class DeliveryRouter:
                     f"EDI Message {trace_id} is missing sender/receiver IDs for routing."
                 )
 
-            route = await self.repository.get_route(
+            route = await self.uow.repository.get_route(
                 direction, sender_id, receiver_id, transaction_type
             )
             if not route:

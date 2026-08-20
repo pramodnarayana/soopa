@@ -16,6 +16,9 @@ class JobStatus(StrEnum):
 class JobName(StrEnum):
     UCP_OUTBOX_SWEEPER = "ucp_outbox_sweeper"
     UCP_DATA_RETENTION_CLEANUP = "ucp_data_retention_cleanup"
+    UCP_OUTBOX_CLEANUP = "UCP_OUTBOX_CLEANUP"
+    UCP_IDEMPOTENCY_CLEANUP = "UCP_IDEMPOTENCY_CLEANUP"
+    UCP_AUDIT_LOG_CLEANUP = "UCP_AUDIT_LOG_CLEANUP"
 
 
 class AppNamespace(StrEnum):

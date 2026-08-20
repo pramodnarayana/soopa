@@ -64,19 +64,19 @@ class ProvisioningEvent(BaseModel):
 
 
 class MessageQueueName(StrEnum):
-    TRANSFORM_ORCHESTRATION_QUEUE = "edi-transform-orchestration"
+    TRANSFORM_QUEUE = "edi-transform"
+    LIFECYCLE_QUEUE = "edi-lifecycle"
     DELIVER_QUEUE = "edi-deliver"
     PROVISIONING_QUEUE = "edi-config-sync"
-    TRANSFORM_COMPUTE_QUEUE = "edi-transform-compute"
     CDC_DLQ_QUEUE = "edi-cdc-dlq"
     PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {
-    PipelineEventType.TRANSFORM_EVENT: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
-    PipelineEventType.COMPUTE_TRANSFORM_EVENT: MessageQueueName.TRANSFORM_COMPUTE_QUEUE,
-    PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
+    PipelineEventType.TRANSFORM_EVENT: MessageQueueName.TRANSFORM_QUEUE,
+    PipelineEventType.COMPUTE_TRANSFORM_EVENT: MessageQueueName.TRANSFORM_QUEUE,
+    PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.LIFECYCLE_QUEUE,
     PipelineEventType.DELIVER_EVENT: MessageQueueName.DELIVER_QUEUE,
-    PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.TRANSFORM_ORCHESTRATION_QUEUE,
+    PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.LIFECYCLE_QUEUE,
     NotificationEventType.NOTIFICATION_TRIGGERED: MessageQueueName.PRIORITY_NOTIFICATIONS_QUEUE,
 }

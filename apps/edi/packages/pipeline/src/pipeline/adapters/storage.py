@@ -3,7 +3,7 @@ import aioboto3
 from pipeline.ports.storage import StoragePort
 
 
-class S3StorageAdapter(StoragePort):
+class S3StorageClient(StoragePort):
     """
     Concrete implementation of StoragePort using AWS S3 (via aioboto3).
     """

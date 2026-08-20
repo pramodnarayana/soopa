@@ -197,15 +197,15 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
 
         from database.models.data_plane import EdiMessage
         from domain.events import PipelineEventType
-        from pipeline.adapters.http import HttpxDeliveryAdapter
+        from pipeline.adapters.http import HttpxDeliveryClient
         from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
-        from pipeline.adapters.storage import S3StorageAdapter
+        from pipeline.adapters.storage import S3StorageClient
         from pipeline.adapters.transformer import BotsTransformerAdapter
         from pipeline.core.deliver import DeliveryService
         from pipeline.core.translate import TranslationService
 
         # 1. Manually run Translate
-        repo = SqlAlchemyRepositoryAdapter(session, MagicMock(), S3StorageAdapter("test", None))
+        repo = SqlAlchemyRepositoryAdapter(session, MagicMock(), S3StorageClient("test", None))
         translate_svc = TranslationService(BotsTransformerAdapter("http://localhost:5000"), repo)
 
         # Get trace_id from DB
@@ -255,7 +255,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         # 2. Manually run Deliver
         deliver_svc = DeliveryService(
             repository=repo,
-            http_delivery=HttpxDeliveryAdapter(
+            http_delivery=HttpxDeliveryClient(
                 validator=lambda _x: True
             ),  # disable SSRF for 127.0.0.1
             sftp_delivery=MagicMock(),

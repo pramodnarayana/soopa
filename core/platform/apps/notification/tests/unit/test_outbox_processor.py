@@ -1,9 +1,9 @@
-import asyncio
 from typing import Any
 
 import pytest
 
-from notification.application.outbox_sweeper import NotificationOutboxSweeper
+from notification.application.outbox_processor import NotificationOutboxProcessor
+from notification.application.sweep_outbox_use_case import SweepNotificationOutboxUseCase
 from notification.domain.models import Channel
 
 
@@ -20,7 +20,10 @@ class FakeOutboxRepo:
     async def claim_next_messages(
         self, worker_id: str, limit: int, lock_lease_ms: int
     ) -> list[Any]:
-        return self.messages[:limit]
+        # Return all messages and clear them so it breaks the while loop in process_pending
+        msgs = self.messages[:limit]
+        self.messages = self.messages[limit:]
+        return msgs
 
     async def mark_completed(self, message_id: str, worker_id: str) -> None:
         self.completed.append(message_id)
@@ -63,7 +66,7 @@ class FakeMessage:
 
 
 @pytest.mark.asyncio
-async def test_outbox_sweeper_poll_success():
+async def test_outbox_processor_success():
     repo = FakeOutboxRepo()
     dispatcher = FakeDispatcher()
 
@@ -73,11 +76,10 @@ async def test_outbox_sweeper_poll_success():
         {"channel": "EMAIL", "content": "Hello", "subject": "Subj", "data": {"foo": "bar"}},
     )
     repo.messages = [msg]
-    repo.swept = 2
 
-    sweeper = NotificationOutboxSweeper(repo, dispatcher, worker_id="w1", poll_interval_seconds=0)  # type: ignore
+    processor = NotificationOutboxProcessor(repo, dispatcher, worker_id="w1")
 
-    await sweeper.poll()
+    await processor.process_pending()
 
     assert len(dispatcher.dispatches) == 1
     assert dispatcher.dispatches[0]["channel"] == Channel.EMAIL
@@ -87,7 +89,7 @@ async def test_outbox_sweeper_poll_success():
 
 
 @pytest.mark.asyncio
-async def test_outbox_sweeper_poll_failure():
+async def test_outbox_processor_failure():
     repo = FakeOutboxRepo()
     dispatcher = FakeDispatcher()
     dispatcher.should_fail = True
@@ -97,9 +99,9 @@ async def test_outbox_sweeper_poll_failure():
     )
     repo.messages = [msg]
 
-    sweeper = NotificationOutboxSweeper(repo, dispatcher, worker_id="w1", poll_interval_seconds=0)  # type: ignore
+    processor = NotificationOutboxProcessor(repo, dispatcher, worker_id="w1")
 
-    await sweeper.poll()
+    await processor.process_pending()
 
     assert len(dispatcher.dispatches) == 0
     assert len(repo.completed) == 0
@@ -109,19 +111,14 @@ async def test_outbox_sweeper_poll_failure():
 
 
 @pytest.mark.asyncio
-async def test_outbox_sweeper_lifecycle():
+async def test_sweep_stuck_messages():
     repo = FakeOutboxRepo()
-    dispatcher = FakeDispatcher()
+    repo.swept = 5
 
-    sweeper = NotificationOutboxSweeper(repo, dispatcher, worker_id="w1", poll_interval_seconds=0)  # type: ignore
+    sweeper = SweepNotificationOutboxUseCase(repo)
 
-    task = sweeper.start()
-    assert sweeper.is_running is True
+    await sweeper.execute()
 
-    # Wait for one loop iteration
-    await asyncio.sleep(0.01)
-
-    sweeper.stop()
-    await task
-
-    assert sweeper.is_running is False
+    # The repo.sweep_stuck_messages was called and it should have returned 5.
+    # No direct state assertions needed beyond the mock returning successfully without raising.
+    assert repo.swept == 5

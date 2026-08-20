@@ -28,10 +28,10 @@ COPY pyproject.toml uv.lock ./
 COPY apps ./apps
 COPY core ./core
 
-# --relocatable: rewrites venv shebangs to use relative paths so the .venv
-# directory is portable and works correctly when copied to /app in the runtime stage.
-RUN uv sync --no-dev --frozen --all-packages --relocatable
-
+# Create a relocatable virtual environment separately, as uv sync no longer supports the flag directly.
+# --no-editable prevents workspace packages from referencing /build paths so they work in /app.
+RUN uv venv --relocatable .venv
+RUN uv sync --no-dev --frozen --all-packages --no-editable
 # --- Stage 2: Production Runtime ---
 FROM python:3.13-slim AS runtime
 

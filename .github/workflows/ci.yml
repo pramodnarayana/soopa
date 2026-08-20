@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-lint-test:
-    name: Build, Lint, and Test Monolith
+    name: Build, Lint, and Test
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +16,8 @@ jobs:
     permissions:
       contents: read
     env:
+      ENVIRONMENT: test
+      AWS_ENDPOINT_URL: http://localhost:4566
       DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
       SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
       POSTGRES_PASSWORD: zitadel_password
@@ -84,7 +86,12 @@ jobs:
           # Test all python packages
           for d in core/ucp/packages/*/python core/ucp/apps/* core/platform/packages/*/python core/platform/apps/* apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
             if [ -f "$d/pyproject.toml" ]; then
-              (cd "$d" && uv run pytest || [ $? -eq 5 ])
+              (cd "$d" && uv run pytest) || {
+                code=$?
+                if [ $code -ne 5 ]; then
+                  exit $code
+                fi
+              }
             fi
           done
 

@@ -32,13 +32,15 @@ def get_client() -> Any:
         )
 
 
-def sync_secrets() -> None:
+def sync_secrets() -> None:  # noqa: C901
     client = get_client()
     try:
         # Fetch all secrets starting with 'edi/'
         # In a real environment with thousands, we'd use pagination
         paginator = client.get_paginator("list_secrets")
         page_iterator = paginator.paginate(Filters=[{"Key": "name", "Values": ["edi/"]}])
+
+        active_files: set[str] = set()
 
         for page in page_iterator:
             for secret in page.get("SecretList", []):
@@ -59,12 +61,15 @@ def sync_secrets() -> None:
 
                     try:
                         # Validate that the category matches our architectural constants
-                        _ = SecretCategory(category_str)
+                        validated_category = SecretCategory(category_str)
                     except ValueError:
                         # Log a warning if we encounter an unknown category pattern
                         logger.warning("unknown_secret_category", category=category_str)
+                        continue
 
-                    file_path = os.path.join(SECRETS_MOUNT_PATH, category_str, f"{ref_id}.pem")
+                    file_path = os.path.join(
+                        SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
+                    )
                     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
                     # Write file atomically
@@ -72,6 +77,25 @@ def sync_secrets() -> None:
                     with open(tmp_path, "w") as f:
                         f.write(secret_string)
                     os.rename(tmp_path, file_path)
+
+                    active_files.add(os.path.realpath(file_path))
+
+        # Reconciliation: remove local files that are no longer in Secrets Manager
+        mount_path = os.path.realpath(SECRETS_MOUNT_PATH)
+        for root, _, files in os.walk(mount_path):
+            for filename in files:
+                if filename.endswith(".pem"):
+                    local_file = os.path.realpath(os.path.join(root, filename))
+                    if local_file not in active_files:
+                        try:
+                            os.remove(local_file)
+                            logger.info("removed_revoked_secret_file", path=local_file)
+                        except OSError as e:
+                            logger.warning(
+                                "failed_to_remove_revoked_secret_file",
+                                path=local_file,
+                                error=str(e),
+                            )
 
         logger.info("secrets_sync_completed", mount_path=SECRETS_MOUNT_PATH)
     except Exception as e:

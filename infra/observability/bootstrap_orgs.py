@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = structlog.get_logger()
 
 # Load environment variables from the root .env file
-load_dotenv(os.path.join(os.path.dirname(__file__), "../../../.env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 
 OPENOBSERVE_URL = os.environ.get("OPENOBSERVE_URL", "http://localhost:5080")
 OPENOBSERVE_USER = os.environ.get("OPENOBSERVE_USER")

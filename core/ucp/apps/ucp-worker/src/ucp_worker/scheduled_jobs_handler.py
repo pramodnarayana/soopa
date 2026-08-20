@@ -18,7 +18,12 @@ async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
     job_payload = message.get("payload", {})
 
     if not job_id or not job_name:
-        logger.error("missing_job_identifier", raw_message=message)
+        logger.error(
+            "missing_job_identifier",
+            available_keys=list(message.keys()),
+            payload_size=len(str(job_payload)),
+            correlation_id=message.get("correlation_id"),
+        )
         return
 
     logger.info("processing_scheduled_job", job_name=job_name, job_id=job_id)

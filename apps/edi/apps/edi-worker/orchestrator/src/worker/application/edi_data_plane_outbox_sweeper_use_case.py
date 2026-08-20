@@ -9,7 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
-from worker.ports.message_publisher import MessagePublisherPort, PublishMessageEnvelope
+from worker.application.edi_data_plane_outbox_processor_use_case import (
+    EdiDataPlaneOutboxProcessorUseCase,
+)
+from worker.ports.edi_data_plane_outbox_publisher_port import EdiDataPlaneOutboxPublisherPort
 
 logger = structlog.get_logger(__name__)
 
@@ -18,9 +21,12 @@ _CONCURRENCY_LIMIT = 5
 
 
 class EdiDataPlaneOutboxSweeperUseCase:
-    def __init__(self, db_router: DatabaseRouter, message_publisher: MessagePublisherPort) -> None:
+    def __init__(
+        self, db_router: DatabaseRouter, message_publisher: EdiDataPlaneOutboxPublisherPort
+    ) -> None:
         self.db_router = db_router
         self.message_publisher = message_publisher
+        self.processor = EdiDataPlaneOutboxProcessorUseCase(message_publisher)
 
     async def execute(self) -> int:
         """
@@ -86,48 +92,8 @@ class EdiDataPlaneOutboxSweeperUseCase:
                 )
                 return 0
 
-            # Group events by target queue to utilize SQS send_message_batch
-            batches_by_queue: dict[str, list[DataPlaneOutbox]] = {}
-            for event in events:
-                queue_name = PIPELINE_EVENT_ROUTING_MAP.get(event.event_type)
-                if not queue_name:
-                    logger.warning(
-                        "[EdiDataPlaneOutboxSweeperUseCase] Unknown event_type={event.event_type!r} "
-                        "for event id={event.id}. Marking FAILED."
-                    )
-                    event.status = "FAILED"
-                    continue
-                batches_by_queue.setdefault(queue_name, []).append(event)
-
-            for queue_name, queue_events in batches_by_queue.items():
-                messages = []
-                for event in queue_events:
-                    messages.append(
-                        PublishMessageEnvelope(
-                            message_id=str(event.id),
-                            event_type=event.event_type,
-                            event={
-                                "payload": event.payload,
-                                "tenant_id": event.tenant_id,
-                            },
-                            idempotency_key=str(event.idempotency_key)
-                            if event.idempotency_key
-                            else None,
-                        )
-                    )
-
-                successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
-
-                for event in queue_events:
-                    if str(event.id) in successful_ids:
-                        event.status = "PROCESSED"
-                        processed += 1
-                    else:
-                        logger.error(
-                            "[EdiDataPlaneOutboxSweeperUseCase] Failed to forward event id={event.id} to {queue_name}",
-                            event_id=event.id,
-                            queue_name=queue_name,
-                        )
+            # Delegate to the processor to handle batch grouping, publishing, and marking in-memory status
+            processed = await self.processor.process_batch(events)
 
             await session.commit()
 
