@@ -13,7 +13,7 @@ from pipeline.ports.as2 import AS2DeliveryPort
 logger = structlog.get_logger(__name__)
 
 
-class HttpxAS2DeliveryAdapter(AS2DeliveryPort):
+class HttpxAS2DeliveryClient(AS2DeliveryPort):
     """
     Concrete implementation of AS2DeliveryPort using HTTPX.
 

@@ -22,7 +22,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi import cdc_relay
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import edi_lifespan
 from edi.core.exceptions import OrchestrationError, VaultError
@@ -111,7 +110,6 @@ def create_edi_app() -> FastAPI:
             content={"detail": str(exc)},
         )
 
-    app.include_router(cdc_relay.router)
     app.include_router(trading_partners.router)
     app.include_router(platform.router)
     app.include_router(platform_admin.router)

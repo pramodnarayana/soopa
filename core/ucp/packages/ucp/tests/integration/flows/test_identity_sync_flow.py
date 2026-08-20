@@ -7,18 +7,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
-from ucp.adapters.inbound.workers.outbox_relay import ControlPlaneOutboxRelay
-from ucp.adapters.inbound.workers.sqs_event_dispatcher import SqsEventDispatcherWorker
+from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
+from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.messaging.sns_outbox_publisher import SnsOutboxPublisher
+from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
 from ucp.application.services.identity_sync_service import IdentitySyncService
+from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.ports.identity_provider import IdentityProviderPort
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.identity_provider import IdentityProviderPortPort
+from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 
 pytestmark = pytest.mark.integration
 
@@ -36,14 +37,14 @@ async def test_identity_sync_flow(
     postgres_container,
 ) -> None:
     # 1. Setup Mocks and Infrastructure Ports
-    mock_idp = create_autospec(IdentityProviderPort, instance=True)
+    mock_idp = create_autospec(IdentityProviderPortPort, instance=True)
     mock_idp.sync_tenant = AsyncMock()
 
-    mock_user_idp = create_autospec(IUserIdentityProvider, instance=True)
+    mock_user_idp = create_autospec(IUserIdentityProviderPort, instance=True)
 
     # Outbox Setup
     outbox_repo = PostgresOutboxRepository(lambda: db_session)  # type: ignore
-    sns_publisher = SnsOutboxPublisher(
+    sns_publisher = UcpSnsOutboxPublisher(
         topic_arn=localstack_container["sns_topic_arn"],
         endpoint_url=localstack_container["endpoint_url"],
     )
@@ -52,9 +53,13 @@ async def test_identity_sync_flow(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
 
-    relay = ControlPlaneOutboxRelay(
+    outbox_processor = UcpOutboxProcessorUseCase(
         repository=outbox_repo,
         publisher=sns_publisher,
+    )
+
+    relay = UcpOutboxRelay(
+        processor=outbox_processor,
         database_url=db_url,
     )
 
@@ -63,7 +68,7 @@ async def test_identity_sync_flow(
         queue_url=localstack_container["sqs_queue_url"],
         endpoint_url=localstack_container["endpoint_url"],
     )
-    dispatcher = SqsEventDispatcherWorker(event_listener)
+    dispatcher = UcpEventsSqsConsumer(event_listener)
 
     # Identity Sync Service (Pure Domain Handler)
     identity_service = IdentitySyncService(
@@ -106,7 +111,7 @@ async def test_identity_sync_flow(
     # The relay internally runs a listener, but we can also just call `poll`
     # directly for the integration test since we just pushed it to 'pending'.
     # But let's actually run the relay poll
-    await relay.poll()  # Fetch pending and publish
+    await relay.processor.process_pending()  # Fetch pending and publish
 
     # Wait for SQS to receive from SNS
     await asyncio.sleep(1)

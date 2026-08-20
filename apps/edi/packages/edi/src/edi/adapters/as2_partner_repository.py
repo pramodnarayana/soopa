@@ -6,9 +6,23 @@ from database.models.control_plane import AS2Partner
 from domain.models import AS2PartnerDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
+from sqlalchemy.exc import IntegrityError
 
+from edi.core.exceptions import PartnerAlreadyExistsError, PartnerInUseError
 from edi.domain.models import CreateAS2TradingPartnerCmd, UpdateAS2TradingPartnerCmd
 from edi.ports.as2_partner_repository import AS2TradingPartnerRepositoryPort
+
+
+def _constraint_name(e: IntegrityError) -> str:
+    """Extract constraint name from IntegrityError."""
+    constraint_name = ""
+    if hasattr(e, "orig") and e.orig is not None:
+        diag = getattr(e.orig, "diag", None)
+        if diag is not None:
+            constraint_name = str(getattr(diag, "constraint_name", e.orig))
+        else:
+            constraint_name = str(e.orig)
+    return constraint_name
 
 
 class SqlAlchemyAS2TradingPartnerRepository(
@@ -31,7 +45,14 @@ class SqlAlchemyAS2TradingPartnerRepository(
             active=False,
         )
         self.session.add(record)
-        await self.session.flush()
+
+        try:
+            await self.session.flush()
+        except IntegrityError as e:
+            if "uq_tenant_as2_id" in _constraint_name(e):
+                raise PartnerAlreadyExistsError(as2_id=cmd.as2_id, tenant_id=tenant_id) from e
+            raise
+
         return record.id
 
     async def update_as2_identity(
@@ -45,7 +66,15 @@ class SqlAlchemyAS2TradingPartnerRepository(
                 value = getattr(cmd, field.name)
                 if value is not None:
                     setattr(partner, field.name, value)
-        await self.session.flush()
+
+            try:
+                await self.session.flush()
+            except IntegrityError as e:
+                if "uq_tenant_as2_id" in _constraint_name(e):
+                    raise PartnerAlreadyExistsError(
+                        as2_id=cmd.as2_id or partner.as2_id, tenant_id=tenant_id
+                    ) from e
+                raise
 
     async def rotate_as2_certificates(
         self,
@@ -127,7 +156,13 @@ class SqlAlchemyAS2TradingPartnerRepository(
         else:
             conds.append(AS2Partner.tenant_id == tid_str)
         await self.session.execute(delete(AS2Partner).where(*conds))
-        await self.session.flush()
+
+        try:
+            from sqlalchemy.exc import IntegrityError
+
+            await self.session.flush()
+        except IntegrityError as e:
+            raise PartnerInUseError(partner_id=partner_id, tenant_id=tenant_id) from e
 
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         if not ids:

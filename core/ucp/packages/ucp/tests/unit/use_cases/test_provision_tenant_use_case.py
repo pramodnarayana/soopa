@@ -9,7 +9,7 @@ from ucp.application.use_cases.provision_tenant_use_case import (
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 
@@ -49,9 +49,9 @@ def mock_org_provider() -> IOrganizationProvider:
 
 
 @pytest.fixture
-def mock_user_identity_provider() -> IUserIdentityProvider:
-    """Strict mock that enforces the IUserIdentityProvider port interface."""
-    return create_autospec(IUserIdentityProvider, instance=True)
+def mock_user_identity_provider() -> IUserIdentityProviderPort:
+    """Strict mock that enforces the IUserIdentityProviderPort port interface."""
+    return create_autospec(IUserIdentityProviderPort, instance=True)
 
 
 @pytest.fixture

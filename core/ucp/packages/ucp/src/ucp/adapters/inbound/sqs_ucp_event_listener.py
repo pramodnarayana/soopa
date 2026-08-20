@@ -26,7 +26,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
         if not queue_url:
             logger.error(
                 "sqs_listener_missing_queue_url",
-                message="SQS Listener started without a Queue URL! Please set SQS_UCP_EVENTS_QUEUE_URL in your .env",
+                message="SQS Listener started without a Queue URL! Please set SQS_UCP_IDENTITY_SYNC_QUEUE_URL in your .env",
             )
             raise ValueError("SQS Queue URL must be provided to SqsUcpEventListener")
 
@@ -132,7 +132,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
                     yield None
             except Exception as e:
                 # Log the error but DO NOT raise. If we raise, it crashes the entire
-                # polling loop in SqsEventDispatcherWorker, forcing it to sleep for 5 seconds.
+                # polling loop in UcpEventsSqsConsumer, forcing it to sleep for 5 seconds.
                 # By swallowing it here, we ensure the message is NOT deleted (so SQS will retry it later),
                 # but the worker can immediately continue polling the next message.
                 event_type = (

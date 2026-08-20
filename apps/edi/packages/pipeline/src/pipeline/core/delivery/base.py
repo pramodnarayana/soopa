@@ -4,8 +4,8 @@ import structlog
 from domain.events import PipelineEventType
 from domain.models import EdiMessageDomainModel
 
-from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.vault import VaultPort
+from pipeline.ports.secret_store import SecretStorePort
+from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -13,13 +13,13 @@ logger = structlog.get_logger(__name__)
 class BaseDeliveryStrategy:
     """Base class for delivery strategies."""
 
-    def __init__(self, repository: RepositoryPort, vault: VaultPort | None = None) -> None:
-        self.repository = repository
-        self.vault = vault
+    def __init__(self, uow: DataPlaneUnitOfWork, vault: SecretStorePort | None = None) -> None:
+        self.uow = uow
+        self.secret_store = vault
 
     async def _emit_delivery_completed(self, trace_id: str, direction: str, status: str) -> None:
         event_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:DELIVERY_COMPLETED:{status}"))
-        await self.repository.publish_outbox_event(
+        await self.uow.outbox.append_event(
             idempotency_key=event_key,
             event_type=PipelineEventType.DELIVERY_COMPLETED,
             payload={

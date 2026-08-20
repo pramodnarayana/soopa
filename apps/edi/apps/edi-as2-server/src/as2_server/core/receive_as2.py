@@ -45,7 +45,7 @@ class ReceiveAS2UseCase:
         self.partner_repo = partner_repo
         self.message_repo = message_repo
         self.storage = storage
-        self.vault = vault
+        self.secret_store = vault
         self.db_router = db_router
         self.global_session = global_session
         self.tracer = ObservabilityProvider.tracer()
@@ -179,8 +179,8 @@ class ReceiveAS2UseCase:
     ) -> tuple[bytes, Disposition]:
         with self.tracer.start_span("as2.decrypt") as span:
             try:
-                private_key_pem = self.vault.get_host_private_key()
-                host_cert_pem = self.vault.get_host_certificate()
+                private_key_pem = self.secret_store.get_host_private_key()
+                host_cert_pem = self.secret_store.get_host_certificate()
                 if not private_key_pem or not host_cert_pem:
                     raise ValueError("Host keys missing")
 

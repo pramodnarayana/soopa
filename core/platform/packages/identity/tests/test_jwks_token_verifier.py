@@ -1,88 +1,122 @@
+import json
+import threading
 import time
-from unittest.mock import MagicMock, patch
+from collections.abc import Generator
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
-from identity.adapters.outbound.zitadel.jwks_token_verifier import (
-    ZitadelTokenVerifier,
-    ZitadelTokenVerifierOptions,
+from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
+    ZitadelTokenVerifierPort,
+    ZitadelTokenVerifierPortOptions,
 )
-from identity.ports.token_verifier import TokenValidationError
+from identity.ports.token_verifier_port import TokenValidationError
+
+# Generate global test keys once for the module
+private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+public_key = private_key.public_key()
+jwk_str = jwt.algorithms.RSAAlgorithm.to_jwk(public_key)
+jwk = json.loads(jwk_str)
+jwk["kid"] = "test-kid"
+
+private_pem = private_key.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.TraditionalOpenSSL,
+    encryption_algorithm=serialization.NoEncryption(),
+)
+
+jwks_payload = json.dumps({"keys": [jwk]}).encode()
+
+
+class JWKSRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        if self.path.endswith("/oauth/v2/keys"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(jwks_payload)
+        elif self.path.endswith("/oidc/v1/userinfo"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {"urn:zitadel:iam:org:project:roles": {"admin": {"tenant-abc": "domain.com"}}}
+                ).encode()
+            )
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+@pytest.fixture(scope="module")
+def jwks_server() -> Generator[str, None, None]:
+    server = HTTPServer(("127.0.0.1", 0), JWKSRequestHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
+    thread.start()
+    yield f"http://127.0.0.1:{port}"
+    server.shutdown()
+    server.server_close()
+    thread.join()
 
 
 @pytest.fixture
-def options() -> ZitadelTokenVerifierOptions:
-    return ZitadelTokenVerifierOptions(
-        issuer="https://auth.example.com",
+def options(jwks_server: str) -> ZitadelTokenVerifierPortOptions:
+    return ZitadelTokenVerifierPortOptions(
+        issuer=jwks_server,
         audience="my-api",
     )
 
 
 @pytest.fixture
-def verifier(options: ZitadelTokenVerifierOptions) -> ZitadelTokenVerifier:
-    return ZitadelTokenVerifier(options)
+def verifier(options: ZitadelTokenVerifierPortOptions) -> ZitadelTokenVerifierPort:
+    return ZitadelTokenVerifierPort(options)
 
 
 @pytest.mark.asyncio
-@patch("identity.adapters.outbound.zitadel.jwks_token_verifier.jwt.decode")
 async def test_verify_valid_token(
-    mock_jwt_decode: MagicMock,
-    options: ZitadelTokenVerifierOptions,
+    verifier: ZitadelTokenVerifierPort, options: ZitadelTokenVerifierPortOptions
 ) -> None:
-    # We patch PyJWKClient on the module level before instantiating
-    with patch(
-        "identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient"
-    ) as mock_jwk_client_cls:
-        mock_jwk_client = mock_jwk_client_cls.return_value
-        mock_signing_key = MagicMock()
-        mock_signing_key.key = "test-key"
-        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+    # Sign a real JWT with our private key
+    payload = {
+        "sub": "user-123",
+        "iss": options.issuer,
+        "aud": "my-api",
+        "exp": int(time.time()) + 3600,
+        "tenant_id": "tenant-abc",
+    }
 
-        verifier = ZitadelTokenVerifier(options)
+    token = jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": "test-kid"})
 
-        mock_jwt_decode.return_value = {
-            "sub": "user-123",
-            "iss": "https://auth.example.com",
-            "aud": "my-api",
-            "exp": int(time.time()) + 3600,
-            "tenant_id": "tenant-abc",
-            "urn:zitadel:iam:org:project:roles": {"admin": {"tenant-abc": "domain.com"}},
-        }
+    claims = await verifier.verify(token)
 
-        claims = await verifier.verify("fake.jwt.token")
-
-        assert claims.sub == "user-123"
-        assert claims.tenant_id == "tenant-abc"
-        mock_jwt_decode.assert_called_once_with(
-            "fake.jwt.token",
-            "test-key",
-            algorithms=["RS256"],
-            audience="my-api",
-            issuer="https://auth.example.com",
-        )
-        mock_jwk_client.get_signing_key_from_jwt.assert_called_once_with("fake.jwt.token")
+    assert claims.sub == "user-123"
+    assert claims.tenant_id == "tenant-abc"
+    assert "admin" in claims.roles
 
 
 @pytest.mark.asyncio
-@patch("identity.adapters.outbound.zitadel.jwks_token_verifier.jwt.decode")
 async def test_verify_expired_token(
-    mock_jwt_decode: MagicMock,
-    options: ZitadelTokenVerifierOptions,
+    verifier: ZitadelTokenVerifierPort, options: ZitadelTokenVerifierPortOptions
 ) -> None:
-    with patch(
-        "identity.adapters.outbound.zitadel.jwks_token_verifier.PyJWKClient"
-    ) as mock_jwk_client_cls:
-        import jwt
+    # Sign an expired token
+    payload = {
+        "sub": "user-123",
+        "iss": options.issuer,
+        "aud": "my-api",
+        "exp": int(time.time()) - 3600,
+        "tenant_id": "tenant-abc",
+    }
+    token = jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": "test-kid"})
 
-        mock_jwk_client = mock_jwk_client_cls.return_value
-        mock_signing_key = MagicMock()
-        mock_signing_key.key = "test-key"
-        mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
-
-        verifier = ZitadelTokenVerifier(options)
-
-        # jwt.decode raises an exception when token is expired (simulated here)
-        mock_jwt_decode.side_effect = jwt.ExpiredSignatureError("Signature has expired")
-
-        with pytest.raises(TokenValidationError, match="Signature has expired"):
-            await verifier.verify("fake.expired.token")
+    with pytest.raises(TokenValidationError, match="Signature has expired"):
+        await verifier.verify(token)

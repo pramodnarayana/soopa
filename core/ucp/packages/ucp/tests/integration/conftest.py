@@ -67,25 +67,90 @@ def postgres_container(request) -> "Any":
 
 @pytest.fixture(scope="session")
 def localstack_container(request) -> "Any":
-    setup_script = str(Path(__file__).resolve().parents[5] / "infra" / "localstack" / "localstack-setup.sh")
     localstack = DockerContainer("localstack/localstack:3.4.0")
     localstack.with_exposed_ports(4566)
     localstack.with_env("SERVICES", "sns,sqs")
-    localstack.with_volume_mapping(setup_script, "/etc/localstack/init/ready.d/init.sh", "ro")
 
     localstack.start()
     request.addfinalizer(localstack.stop)
 
-    wait_for_logs(localstack, r"LocalStack resources initialized successfully\.")
+    wait_for_logs(localstack, r"Ready\.")
 
     endpoint_url = (
         f"http://{localstack.get_container_host_ip()}:{localstack.get_exposed_port(4566)}"
     )
 
+    import os
+
+    import boto3
+
+    sns_client = boto3.client(
+        "sns",
+        endpoint_url=endpoint_url,
+        region_name="us-east-1",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
+    )
+    sqs_client = boto3.client(
+        "sqs",
+        endpoint_url=endpoint_url,
+        region_name="us-east-1",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
+    )
+
+    # 1. Create SNS Topics
+    tenant_topic = sns_client.create_topic(
+        Name="ucp-tenant-events.fifo",
+        Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
+    )
+    user_topic = sns_client.create_topic(
+        Name="ucp-user-events.fifo",
+        Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
+    )
+
+    # 2. Create SQS Queue
+    queue = sqs_client.create_queue(
+        QueueName="ucp-identity-sync.fifo",
+        Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
+    )
+
+    attrs = sqs_client.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
+    queue_arn = attrs["Attributes"]["QueueArn"]
+
+    import json
+
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": queue_arn,
+                "Condition": {"ArnEquals": {"aws:SourceArn": tenant_topic["TopicArn"]}},
+            },
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": queue_arn,
+                "Condition": {"ArnEquals": {"aws:SourceArn": user_topic["TopicArn"]}},
+            },
+        ],
+    }
+    sqs_client.set_queue_attributes(
+        QueueUrl=queue["QueueUrl"], Attributes={"Policy": json.dumps(policy)}
+    )
+
+    # 3. Subscribe Queue to Topics
+    sns_client.subscribe(TopicArn=tenant_topic["TopicArn"], Protocol="sqs", Endpoint=queue_arn)
+    sns_client.subscribe(TopicArn=user_topic["TopicArn"], Protocol="sqs", Endpoint=queue_arn)
+
     return {
         "endpoint_url": endpoint_url,
-        "sns_topic_arn": "arn:aws:sns:us-east-1:000000000000:ucp-tenant-events.fifo",
-        "sqs_queue_url": f"{endpoint_url}/000000000000/ucp-events.fifo",
+        "sns_topic_arn": tenant_topic["TopicArn"],
+        "sqs_queue_url": queue["QueueUrl"],
     }
 
 

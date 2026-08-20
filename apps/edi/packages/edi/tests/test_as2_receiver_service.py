@@ -12,7 +12,7 @@ def mock_uow():
 
 @pytest.fixture
 def mock_vault():
-    return MagicMock()
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def mock_dp_factory():
 @pytest.fixture
 def service(mock_uow, mock_vault, mock_dp_factory):
     svc = As2ReceiverService(
-        control_plane_uow=mock_uow, dp_factory=mock_dp_factory, vault=mock_vault
+        control_plane_uow=mock_uow, dp_factory=mock_dp_factory, secret_store=mock_vault
     )
     return svc
 
@@ -104,9 +104,11 @@ async def test_private_methods_coverage(service):
     # Test _retrieve_keys
     local_partner = MagicMock(private_key_vault_ref="loc_priv", public_cert_vault_ref="loc_pub")
     remote_partner = MagicMock(public_cert_vault_ref="rem_pub")
-    service.vault.retrieve_secret.return_value = b"secret_val"
+    service.secret_store.retrieve_secret.return_value = b"secret_val"
 
-    local_priv, local_cert, remote_cert = service._retrieve_keys(local_partner, remote_partner)
+    local_priv, local_cert, remote_cert = await service._retrieve_keys(
+        local_partner, remote_partner
+    )
     assert local_priv == b"secret_val"
     assert local_cert == b"secret_val"
     assert remote_cert == b"secret_val"

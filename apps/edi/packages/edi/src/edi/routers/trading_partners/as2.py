@@ -14,8 +14,8 @@ from edi.core.exceptions import OrchestrationError
 from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
 from edi.dependencies.database import get_control_plane_uow
 from edi.dependencies.headers import get_idempotency_key
-from edi.dependencies.services import get_vault
-from edi.ports.vault import VaultPort
+from edi.dependencies.services import get_secret_store
+from edi.ports.secret_store import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -36,7 +36,7 @@ async def export_as2_certificates(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     profile: dict[str, Any] = Depends(get_current_user_profile),
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Exports current and previous certificates for an AS2 partner."""
     async with uow:
@@ -57,8 +57,8 @@ async def export_as2_certificates(
 
             if partner.private_key_vault_ref:
                 try:
-                    response.private_key_pem = vault.retrieve_private_key(
-                        partner.private_key_vault_ref
+                    response.private_key_pem = (
+                        await secret_store.retrieve_private_key(partner.private_key_vault_ref)
                     ).decode("utf-8")
                 except OrchestrationError as e:
                     logger.exception("Failed to retrieve private key from vault")
@@ -68,8 +68,8 @@ async def export_as2_certificates(
 
             if partner.prev_private_key_vault_ref:
                 try:
-                    response.prev_private_key_pem = vault.retrieve_private_key(
-                        partner.prev_private_key_vault_ref
+                    response.prev_private_key_pem = (
+                        await secret_store.retrieve_private_key(partner.prev_private_key_vault_ref)
                     ).decode("utf-8")
                 except OrchestrationError as e:
                     logger.exception("Failed to retrieve prev private key from vault")
@@ -92,7 +92,7 @@ async def rotate_as2_certificates(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
     profile: dict[str, Any] = Depends(get_current_user_profile),
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Rotates certificates for an AS2 partner."""
     async with uow:
@@ -112,5 +112,5 @@ async def rotate_as2_certificates(
             uow=uow,
             idempotency_key=idempotency_key,
             profile=profile,
-            vault=vault,
+            secret_store=secret_store,
         )

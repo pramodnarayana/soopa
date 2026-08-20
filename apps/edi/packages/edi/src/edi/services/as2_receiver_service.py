@@ -11,9 +11,9 @@ from as2_core.parser import parse_as2_request
 from domain.events import PipelineEventType
 from security.smime import decrypt_payload, verify_signature
 
+from edi.ports.secret_store import SecretStorePort
 from edi.ports.uow import ControlPlaneUnitOfWorkPort
 from edi.ports.uow_factory import DataPlaneUnitOfWorkFactoryPort
-from edi.ports.vault import VaultPort
 
 logger = structlog.get_logger(__name__)
 
@@ -28,11 +28,11 @@ class As2ReceiverService:
         self,
         control_plane_uow: ControlPlaneUnitOfWorkPort,
         dp_factory: DataPlaneUnitOfWorkFactoryPort,
-        vault: VaultPort,
+        secret_store: SecretStorePort,
     ):
         self.control_plane_uow = control_plane_uow
         self.dp_factory = dp_factory
-        self.vault = vault
+        self.secret_store = secret_store
 
     async def process_inbound_message(
         self, headers: dict[str, str], body_bytes: bytes
@@ -62,7 +62,9 @@ class As2ReceiverService:
         )
 
         # 3. Retrieve Keys
-        local_priv_key, local_cert, remote_cert = self._retrieve_keys(local_partner, remote_partner)
+        local_priv_key, local_cert, remote_cert = await self._retrieve_keys(
+            local_partner, remote_partner
+        )
 
         # 4. Cryptographic Pipeline (Unbox)
         final_payload, mic = self._unbox_payload(
@@ -85,7 +87,7 @@ class As2ReceiverService:
             k.lower() == "disposition-notification-options" for k in as2_msg.headers
         )
         if requires_signed:
-            local_priv, local_cert, _ = self._retrieve_keys(
+            local_priv, local_cert, _ = await self._retrieve_keys(
                 local_partner=local_partner, remote_partner=remote_partner
             )
             if local_priv and local_cert:
@@ -132,7 +134,7 @@ class As2ReceiverService:
                 raise ValueError("Partnership not configured")
             return match
 
-    def _retrieve_keys(  # type: ignore
+    async def _retrieve_keys(  # type: ignore
         self, local_partner, remote_partner
     ) -> tuple[bytes | None, bytes | None, bytes | None]:
         local_priv_key = None
@@ -140,14 +142,20 @@ class As2ReceiverService:
         remote_cert = None
 
         if local_partner.private_key_vault_ref:
-            local_priv_key = self.vault.retrieve_secret(local_partner.private_key_vault_ref)
+            local_priv_key = await self.secret_store.retrieve_secret(
+                local_partner.private_key_vault_ref
+            )
         if local_partner.public_cert_vault_ref:
-            local_cert = self.vault.retrieve_secret(local_partner.public_cert_vault_ref)
+            local_cert = await self.secret_store.retrieve_secret(
+                local_partner.public_cert_vault_ref
+            )
         elif local_partner.public_cert_pem:
             local_cert = local_partner.public_cert_pem.encode()
 
         if remote_partner.public_cert_vault_ref:
-            remote_cert = self.vault.retrieve_secret(remote_partner.public_cert_vault_ref)
+            remote_cert = await self.secret_store.retrieve_secret(
+                remote_partner.public_cert_vault_ref
+            )
         elif remote_partner.public_cert_pem:
             remote_cert = remote_partner.public_cert_pem.encode()
 

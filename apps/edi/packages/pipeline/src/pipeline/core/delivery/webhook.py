@@ -6,8 +6,8 @@ from domain.status import MessageStatus
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
 from pipeline.ports.http import HttpDeliveryPort
-from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.vault import VaultPort
+from pipeline.ports.secret_store import SecretStorePort
+from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -15,11 +15,11 @@ logger = structlog.get_logger(__name__)
 class WebhookDeliveryStrategy(BaseDeliveryStrategy):
     def __init__(
         self,
-        repository: RepositoryPort,
+        uow: DataPlaneUnitOfWork,
         http_delivery: HttpDeliveryPort,
-        vault: VaultPort | None = None,
+        vault: SecretStorePort | None = None,
     ) -> None:
-        super().__init__(repository, vault)
+        super().__init__(uow, vault)
         self.http_delivery = http_delivery
 
     async def deliver(
@@ -29,18 +29,18 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         edi_msg: EdiMessageDomainModel,
         idempotency_key: str | None = None,
     ) -> None:
-        if not await self.repository.claim_api_payload(trace_id):
+        if not await self.uow.repository.claim_api_payload(trace_id):
             logger.warning(
                 "Could not claim trace_id={trace_id} (already claimed or terminal).",
                 trace_id=trace_id,
             )
             return
 
-        api_payload = await self.repository.get_api_payload(trace_id)
+        api_payload = await self.uow.repository.get_api_payload(trace_id)
         if not api_payload:
             raise ValueError(f"No API Payload found for webhook delivery of trace_id={trace_id}")
 
-        partner = await self.repository.get_webhook(partner_id)
+        partner = await self.uow.repository.get_webhook(partner_id)
         if not partner:
             raise ValueError(f"Webhook partner {partner_id} not found.")
 
@@ -53,11 +53,11 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
 
             auth_token = None
             if partner.get("auth_header_vault_ref"):
-                if not self.vault:
+                if not self.secret_store:
                     raise ValueError(
-                        "Vault is not configured but webhook partner requires an auth token."
+                        "Secret store is not configured but webhook partner requires an auth token."
                     )
-                auth_token = await self.vault.get_secret(partner["auth_header_vault_ref"])
+                auth_token = await self.secret_store.get_secret(partner["auth_header_vault_ref"])
 
             # Pass idempotency_key down to the http_delivery if it supports it, or add it to headers manually
             status_code, response_text = await self.http_delivery.deliver(
@@ -67,7 +67,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 idempotency_key=idempotency_key,
             )
         except Exception as e:
-            await self.repository.update_api_payload_status(
+            await self.uow.repository.update_api_payload_status(
                 trace_id, MessageStatus.FAILED, webhook_url=partner.get("url"), response=str(e)
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
@@ -75,7 +75,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             return
 
         if 200 <= status_code < 300:
-            await self.repository.update_api_payload_status(
+            await self.uow.repository.update_api_payload_status(
                 trace_id,
                 MessageStatus.DELIVERED,
                 webhook_url=partner.get("url"),
@@ -91,7 +91,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 partnerurl=partner["url"],
             )
         else:
-            await self.repository.update_api_payload_status(
+            await self.uow.repository.update_api_payload_status(
                 trace_id,
                 MessageStatus.FAILED,
                 webhook_url=partner.get("url"),

@@ -46,7 +46,7 @@ class InfrastructureError(Exception):
     """Base exception for infrastructure and adapter errors."""
 
 
-class IdentityProviderError(InfrastructureError):
+class IdentityProviderPortError(InfrastructureError):
     """Raised when the external Identity Provider fails."""
 
     def __init__(self, message: str, original_error: str = None, status_code: int = None):  # type: ignore

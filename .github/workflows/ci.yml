@@ -1,0 +1,102 @@
+name: Monolith CI
+
+on:
+  push:
+    branches: [ "main", "development" ]
+  pull_request:
+    branches: [ "main", "development" ]
+
+jobs:
+  build-lint-test:
+    name: Build, Lint, and Test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    env:
+      ENVIRONMENT: test
+      AWS_ENDPOINT_URL: http://localhost:4566
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
+      SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
+      POSTGRES_PASSWORD: zitadel_password
+      ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
+        with:
+          version: "0.5.21"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Setup Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.13' # Updated to match Dockerfile
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Install Python dependencies
+        run: uv sync --all-packages
+
+      - name: Typecheck (Node)
+        run: pnpm turbo typecheck
+
+      - name: Typecheck Tests (Node)
+        run: pnpm turbo typecheck:tests
+
+      - name: Lint (Node)
+        run: pnpm turbo lint
+
+      - name: Start Database & Infrastructure
+        env:
+          ZITADEL_PLATFORM_ADMIN_ID: test_admin_id
+          ZITADEL_PLATFORM_ORG_ID: test_org_id
+        run: |
+          docker compose up -d postgres_global edi_postgres_shard localstack --wait
+          pnpm db:migrate
+          pnpm db:seed
+          uv run --directory apps/edi/packages/database python -m database.run_migrations
+
+      - name: Test (Node)
+        run: CI=true pnpm turbo test
+
+      - name: Test (Python)
+        run: |
+          # Test all python packages
+          for d in core/ucp/packages/*/python core/ucp/apps/* core/platform/packages/*/python core/platform/apps/* apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
+            if [ -f "$d/pyproject.toml" ]; then
+              (cd "$d" && uv run pytest) || {
+                code=$?
+                if [ $code -ne 5 ]; then
+                  exit $code
+                fi
+              }
+            fi
+          done
+
+      - name: Build Frontend/Node
+        run: pnpm turbo build
+
+      - name: Build Monolith Docker Image
+        run: docker build -t soopa-monolith:latest .

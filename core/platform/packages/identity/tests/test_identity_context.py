@@ -48,7 +48,9 @@ def test_is_platform_admin_with_valid_role() -> None:
         aud="test",
         exp=1000,
         tenant_id="tenant-1",
-        roles={"platform-admin": {PLATFORM_TENANT_ID: "domain.com"}},
+        authorized_tenants={PLATFORM_TENANT_ID},
+        roles=["platform-admin"],
+        tenant_roles={PLATFORM_TENANT_ID: ["platform-admin"]},
     )
     context = identity_context_from_claims(claims)
     assert context.is_platform_admin is True
@@ -63,7 +65,9 @@ def test_is_platform_admin_with_non_admin_role() -> None:
         aud="test",
         exp=1000,
         tenant_id="tenant-1",
-        roles={"viewer": {PLATFORM_TENANT_ID: "domain.com"}},
+        authorized_tenants={PLATFORM_TENANT_ID},
+        roles=["viewer"],
+        tenant_roles={PLATFORM_TENANT_ID: ["viewer"]},
     )
     context = identity_context_from_claims(claims)
     assert context.is_platform_admin is False
@@ -76,7 +80,9 @@ def test_is_platform_admin_with_admin_role_wrong_tenant() -> None:
         aud="test",
         exp=1000,
         tenant_id="tenant-1",
-        roles={"admin": {"other_tenant": "domain.com"}},
+        authorized_tenants={"other_tenant"},
+        roles=["admin"],
+        tenant_roles={"other_tenant": ["admin"]},
     )
     context = identity_context_from_claims(claims)
     assert context.is_platform_admin is False

@@ -16,7 +16,10 @@ from collections.abc import Sequence
 import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
-from identity.application.authenticate import AuthenticationError, TenantNotProvisionedError
+from identity.application.authenticate_use_case import (
+    AuthenticationError,
+    TenantNotProvisionedError,
+)
 from identity.domain.authentication_strategy import IAuthenticationStrategy
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp

@@ -3,7 +3,6 @@ from typing import Any
 from config.settings import get_settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy.exc import IntegrityError
 
 from edi.adapters.http.dtos import (
     AS2TradingPartnerResponse,
@@ -14,19 +13,29 @@ from edi.adapters.http.dtos import (
     UpdateAS2TradingPartnerRequest,
 )
 from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
-from edi.core.exceptions import IdempotencyConflictError, OrchestrationError
-from edi.core.services import AS2PartnerService
+from edi.core.exceptions import (
+    IdempotencyConflictError,
+    OrchestrationError,
+    PartnerAlreadyExistsError,
+    PartnerInUseError,
+)
+from edi.core.use_cases.as2_partners import (
+    CreateAS2PartnerUseCase,
+    DeleteAS2PartnerUseCase,
+    RotateAS2CertificatesUseCase,
+    UpdateAS2PartnerUseCase,
+)
 from edi.dependencies.auth import get_platform_user_profile
 from edi.dependencies.database import get_control_plane_uow
 from edi.dependencies.headers import get_idempotency_key
-from edi.dependencies.services import get_vault
+from edi.dependencies.services import get_secret_store
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.models import (
     CreateAS2TradingPartnerCmd,
     RotateAS2CertificateCmd,
     UpdateAS2TradingPartnerCmd,
 )
-from edi.ports.vault import VaultPort
+from edi.ports.secret_store import SecretStorePort
 
 router = APIRouter(tags=["Platform Partners - AS2"])
 
@@ -38,7 +47,7 @@ router = APIRouter(tags=["Platform Partners - AS2"])
 )
 async def generate_certificate(
     request: GenerateCertRequest,
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """
     Generates a new self-signed AS2 certificate and stores the private key in Vault.
@@ -46,11 +55,11 @@ async def generate_certificate(
     """
     private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=request.as2_id)
 
-    # Sanitize alias by allowing only alphanumeric and underscore
-    safe_alias = "".join(c if c.isalnum() or c == "_" else "_" for c in request.as2_id).lower()
-    private_key_vault_ref = vault.store_private_key(
+    from config.constants import SecretCategory
+
+    private_key_vault_ref = await secret_store.store_private_key(
         private_key_pem=private_key_bytes,
-        alias_prefix=safe_alias,
+        category=SecretCategory.AS2_KEY,
     )
 
     return GenerateCertResponse(
@@ -73,7 +82,7 @@ async def _rotate_as2_certificates(
     uow: ControlPlaneUnitOfWork,
     idempotency_key: str | None,
     profile: dict[str, Any],
-    vault: VaultPort,
+    secret_store: SecretStorePort,
 ) -> AS2TradingPartnerResponse:
     """Shared coroutine for certificate rotation workflow."""
     partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
@@ -93,12 +102,12 @@ async def _rotate_as2_certificates(
     )
 
     try:
-        svc = AS2PartnerService(uow=uow)
-        updated_partner = await svc.rotate_certificates(
+        use_case = RotateAS2CertificatesUseCase(uow=uow)
+        updated_partner = await use_case.execute(
             tenant_id=tenant_id,
             partner_id=partner_id,
             cmd=cmd,
-            vault=vault,
+            secret_store=secret_store,
             idempotency_key=idempotency_key,
         )
         await uow.commit()
@@ -128,7 +137,7 @@ async def rotate_platform_as2_certificates(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
     profile: dict[str, Any] = Depends(get_platform_user_profile),
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Rotates certificates for a Platform AS2 partner."""
     async with uow:
@@ -139,7 +148,7 @@ async def rotate_platform_as2_certificates(
             uow=uow,
             idempotency_key=idempotency_key,
             profile=profile,
-            vault=vault,
+            secret_store=secret_store,
         )
 
 
@@ -152,7 +161,7 @@ async def export_platform_as2_certificates(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
     profile: dict[str, Any] = Depends(get_platform_user_profile),
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Exports current and previous certificates for a Platform AS2 partner."""
     async with uow:
@@ -175,8 +184,8 @@ async def export_platform_as2_certificates(
 
             if partner.private_key_vault_ref:
                 try:
-                    response.private_key_pem = vault.retrieve_private_key(
-                        partner.private_key_vault_ref
+                    response.private_key_pem = (
+                        await secret_store.retrieve_private_key(partner.private_key_vault_ref)
                     ).decode("utf-8")
                 except OrchestrationError as e:
                     logger.exception("Failed to retrieve private key from vault")
@@ -186,8 +195,8 @@ async def export_platform_as2_certificates(
 
             if partner.prev_private_key_vault_ref:
                 try:
-                    response.prev_private_key_pem = vault.retrieve_private_key(
-                        partner.prev_private_key_vault_ref
+                    response.prev_private_key_pem = (
+                        await secret_store.retrieve_private_key(partner.prev_private_key_vault_ref)
                     ).decode("utf-8")
                 except OrchestrationError as e:
                     logger.exception("Failed to retrieve prev private key from vault")
@@ -205,7 +214,7 @@ async def export_platform_as2_certificates(
 )
 async def delete_certificate_secret(
     vault_ref: str,
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
@@ -216,7 +225,7 @@ async def delete_certificate_secret(
                 status_code=400, detail="Cannot delete a private key that is currently in use."
             )
 
-    vault.delete_secret(vault_ref)
+        await secret_store.delete_secret(vault_ref)
 
 
 @router.post(
@@ -228,7 +237,7 @@ async def create_platform_as2_partner(
     request: CreateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    vault: VaultPort = Depends(get_vault),
+    secret_store: SecretStorePort = Depends(get_secret_store),
     _: Any = Depends(get_platform_user_profile),
 ) -> Any:
     """
@@ -236,141 +245,62 @@ async def create_platform_as2_partner(
     If is_local is True, automatically generates a self-signed cert and stores private key in Vault.
     """
     logger.info(
-        "[create_as2_partner] START name=%r as2_id=%r is_local=%r has_idempotency_key=%r",
-        request.name,
-        request.as2_id,
-        request.is_local,
-        bool(idempotency_key),
+        "create_platform_as2_partner_request_received",
+        name=request.name,
+        as2_id=request.as2_id,
+        is_local=request.is_local,
+        has_idempotency_key=bool(idempotency_key),
     )
-    public_cert_pem = request.public_cert_pem
-    private_key_vault_ref = request.private_key_vault_ref
-    auto_generated = False
-    commit_success = False
+
+    url = str(request.url) if request.url else None
+    if request.is_local and not url:
+        settings = get_settings()
+        url = f"{settings.public.base_url}/api/v1/as2/receive"
+
+    cmd = CreateAS2TradingPartnerCmd(
+        name=request.name,
+        as2_id=request.as2_id,
+        is_local=request.is_local,
+        url=url,
+        public_cert_pem=request.public_cert_pem,
+        public_cert_vault_ref=request.public_cert_vault_ref,
+        private_key_vault_ref=request.private_key_vault_ref,
+    )
 
     try:
-        async with uow:
-            svc = AS2PartnerService(uow=uow)
-            if idempotency_key:
-                fingerprint_data = {
-                    "tenant_id": str(PLATFORM_TENANT_ID),
-                    "name": request.name,
-                    "as2_id": request.as2_id,
-                    "is_local": request.is_local,
-                    "url": str(request.url) if request.url else None,
-                    "public_cert_pem": request.public_cert_pem,
-                    "public_cert_vault_ref": request.public_cert_vault_ref,
-                }
-                existing_partner = await svc.check_and_reserve_idempotency(
-                    tenant_id=PLATFORM_TENANT_ID,
-                    request_data=fingerprint_data,
-                    idempotency_key=idempotency_key,
-                )
-                if existing_partner:
-                    p = await uow.as2_partners.get_as2_partner(
-                        PLATFORM_TENANT_ID, existing_partner.partner_id
-                    )
-                    if p:
-                        return AS2TradingPartnerResponse(
-                            id=str(p.id),
-                            name=p.name,
-                            as2_id=p.as2_id,
-                            is_local=p.is_local,
-                            url=p.url,
-                            active=p.active,
-                        )
+        use_case = CreateAS2PartnerUseCase(uow=uow, secret_store=secret_store)
+        entity = await use_case.execute(
+            tenant_id=PLATFORM_TENANT_ID,
+            cmd=cmd,
+            idempotency_key=idempotency_key,
+        )
+        await uow.commit()
 
-            if request.is_local:
-                if private_key_vault_ref:
-                    pass  # Pre-stored vault ref
-                elif request.private_key_pem:
-                    auto_generated = True
-                    # Sanitize alias by allowing only alphanumeric and underscore
-                    safe_alias = "".join(
-                        c if c.isalnum() or c == "_" else "_" for c in request.name
-                    ).lower()
-                    private_key_vault_ref = vault.store_private_key(
-                        private_key_pem=request.private_key_pem.encode(),
-                        alias_prefix=safe_alias,
-                    )
-                else:
-                    auto_generated = True
-                    private_key_bytes, public_cert_bytes = generate_self_signed_cert(
-                        common_name=request.as2_id
-                    )
-                    # Sanitize alias by allowing only alphanumeric and underscore
-                    safe_alias = "".join(
-                        c if c.isalnum() or c == "_" else "_" for c in request.name
-                    ).lower()
-                    private_key_vault_ref = vault.store_private_key(
-                        private_key_pem=private_key_bytes,
-                        alias_prefix=safe_alias,
-                    )
-                    public_cert_pem = public_cert_bytes.decode("utf-8")
+        # Re-fetch from DB to get the actual ID (or we can just return entity if it has the ID)
+        p = await uow.as2_partners.get_as2_partner(
+            tenant_id=PLATFORM_TENANT_ID, partner_id=entity.partner_id
+        )
+        if not p:
+            raise HTTPException(status_code=500, detail="Partner creation failed")
 
-            url = str(request.url) if request.url else None
-            if request.is_local and not url:
-                settings = get_settings()
-                url = f"{settings.public.base_url}/api/v1/as2/receive"
-
-            cmd = CreateAS2TradingPartnerCmd(
-                name=request.name,
-                as2_id=request.as2_id,
-                is_local=request.is_local,
-                url=url,
-                public_cert_pem=public_cert_pem,
-                public_cert_vault_ref=request.public_cert_vault_ref,
-                private_key_vault_ref=private_key_vault_ref,
-            )
-
-            entity = await svc.create_as2_partner(
-                tenant_id=PLATFORM_TENANT_ID,
-                cmd=cmd,
-                idempotency_key=idempotency_key,
-            )
-            await uow.commit()
-            commit_success = True
-
-            p = await uow.as2_partners.get_as2_partner(
-                tenant_id=PLATFORM_TENANT_ID, partner_id=entity.partner_id
-            )
-            if not p:
-                raise HTTPException(status_code=500, detail="Partner creation failed")
-
-            return AS2TradingPartnerResponse(
-                id=str(p.id),
-                name=p.name,
-                as2_id=p.as2_id,
-                is_local=p.is_local,
-                url=p.url,
-                active=p.active,
-            )
+        return AS2TradingPartnerResponse(
+            id=str(p.id),
+            name=p.name,
+            as2_id=p.as2_id,
+            is_local=p.is_local,
+            url=p.url,
+            active=p.active,
+        )
     except IdempotencyConflictError as e:
-        if auto_generated and private_key_vault_ref and not commit_success:
-            vault.delete_secret(private_key_vault_ref)
         raise HTTPException(status_code=409, detail=str(e)) from e
+    except PartnerAlreadyExistsError as e:
+        raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
     except ValueError as e:
-        if auto_generated and private_key_vault_ref and not commit_success:
-            vault.delete_secret(private_key_vault_ref)
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except IntegrityError as e:
-        if auto_generated and private_key_vault_ref and not commit_success:
-            vault.delete_secret(private_key_vault_ref)
-        constraint_name = ""
-        if hasattr(e, "orig") and e.orig is not None:
-            diag = getattr(e.orig, "diag", None)
-            if diag is not None:
-                constraint_name = str(getattr(diag, "constraint_name", e.orig))
-            else:
-                constraint_name = str(e.orig)
-        if "uq_tenant_as2_id" in constraint_name:
-            raise HTTPException(
-                status_code=400, detail="AS2 ID already exists for this tenant."
-            ) from e
-        raise HTTPException(status_code=500, detail="Database integrity error") from e
     except OrchestrationError as e:
-        if auto_generated and private_key_vault_ref and not commit_success:
-            vault.delete_secret(private_key_vault_ref)
-        raise OrchestrationError("Failed to orchestrate AS2 partner creation") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to orchestrate AS2 partner creation"
+        ) from e
 
 
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])
@@ -404,7 +334,7 @@ async def update_platform_as2_partner(
 ) -> Any:
     """Updates a global AS2 partner."""
     async with uow:
-        svc = AS2PartnerService(uow=uow)
+        use_case = UpdateAS2PartnerUseCase(uow=uow)
         cmd = UpdateAS2TradingPartnerCmd(
             name=request.name,
             as2_id=request.as2_id,
@@ -413,7 +343,7 @@ async def update_platform_as2_partner(
             active=request.active,
         )
         try:
-            await svc.update_as2_partner(
+            await use_case.execute(
                 tenant_id=PLATFORM_TENANT_ID,
                 partner_id=partner_id,
                 cmd=cmd,
@@ -436,6 +366,10 @@ async def update_platform_as2_partner(
             )
         except HTTPException:
             raise
+        except PartnerAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=400, detail="AS2 ID already exists for this tenant."
+            ) from e
         except OrchestrationError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -448,17 +382,17 @@ async def delete_platform_as2_partner(
 ) -> None:
     """Deletes an AS2 partner."""
     async with uow:
-        svc = AS2PartnerService(uow=uow)
+        use_case = DeleteAS2PartnerUseCase(uow=uow)
         try:
-            await svc.delete_as2_partner(
+            await use_case.execute(
                 tenant_id=PLATFORM_TENANT_ID,
                 partner_id=partner_id,
                 idempotency_key=idempotency_key,
             )
             await uow.commit()
+        except PartnerInUseError as e:
+            raise HTTPException(
+                status_code=400, detail="Partner is in use and cannot be deleted."
+            ) from e
         except OrchestrationError as e:
-            if "IntegrityError" in str(type(e)):
-                raise HTTPException(
-                    status_code=400, detail="Partner is in use and cannot be deleted."
-                ) from e
             raise HTTPException(status_code=500, detail=str(e)) from e

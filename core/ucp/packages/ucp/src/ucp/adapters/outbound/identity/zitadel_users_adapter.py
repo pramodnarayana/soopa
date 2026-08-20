@@ -3,17 +3,17 @@ from typing import Literal
 import structlog
 
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp.core.exceptions import IdentityProviderError
+from ucp.core.exceptions import IdentityProviderPortError
 from ucp.domain.dtos.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
     ZitadelUser,
 )
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
+class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProviderPort):
     def _mask_email(self, email: str) -> str:
         parts = email.split("@")
         if len(parts) != 2:
@@ -94,11 +94,11 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
             (g for g in parsed_grant_data.result if g.granted_org_id == org_id), None
         )
         if not project_grant:
-            raise IdentityProviderError(f"No UCP project grant found for org {org_id}")
+            raise IdentityProviderPortError(f"No UCP project grant found for org {org_id}")
 
         grant_id = project_grant.grant_id or project_grant.id
         if not grant_id:
-            raise IdentityProviderError("Grant ID missing in Zitadel response")
+            raise IdentityProviderPortError("Grant ID missing in Zitadel response")
 
         return grant_id
 
@@ -205,7 +205,7 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
                 err = profile_res.text
                 if "Profile not changed" not in err:
                     logger.error("Failed to update user profile: {err}", err=err)
-                    raise IdentityProviderError(
+                    raise IdentityProviderPortError(
                         message=f"Failed to update user profile: {err}", original_error=err
                     )
         except Exception:
@@ -262,6 +262,6 @@ class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProvider):
                 )
                 return
 
-            raise IdentityProviderError(
+            raise IdentityProviderPortError(
                 message=f"Failed to {action} user: {response_body}", original_error=response_body
             )

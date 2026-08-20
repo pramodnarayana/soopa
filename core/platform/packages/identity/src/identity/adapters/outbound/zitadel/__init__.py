@@ -1,6 +1,6 @@
-from identity.adapters.outbound.zitadel.jwks_token_verifier import (
-    ZitadelTokenVerifier,
-    ZitadelTokenVerifierOptions,
+from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
+    ZitadelTokenVerifierPort,
+    ZitadelTokenVerifierPortOptions,
 )
 
-__all__ = ["ZitadelTokenVerifier", "ZitadelTokenVerifierOptions"]
+__all__ = ["ZitadelTokenVerifierPort", "ZitadelTokenVerifierPortOptions"]

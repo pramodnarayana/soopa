@@ -1,3 +1,5 @@
+from typing import Any
+
 from edi.dependencies.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -5,7 +7,7 @@ from edi.dependencies.auth import (
     require_platform_admin,
 )
 from edi.dependencies.database import get_control_plane_uow
-from edi.dependencies.services import get_as2_tester, get_vault
+from edi.dependencies.services import get_as2_tester, get_secret_store
 
 """
 Tests for the AS2 Partnership connection test endpoint.
@@ -47,16 +49,16 @@ class FakeAS2Tester:
 
 
 class FakeVault:
-    def retrieve_secret(self, vault_ref: str) -> bytes:
+    async def retrieve_secret(self, vault_ref: str) -> bytes:
         return b"-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
 
-    def retrieve_private_key(self, vault_ref: str) -> bytes:
-        return self.retrieve_secret(vault_ref)
+    async def retrieve_private_key(self, vault_ref: str) -> bytes:
+        return await self.retrieve_secret(vault_ref)
 
-    def store_private_key(self, private_key_pem: bytes, alias_prefix: str = "as2_key") -> str:
-        return "fake_ref"
+    async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
+        return "vault_ref_123"
 
-    def delete_secret(self, vault_ref: str) -> None:
+    async def delete_secret(self, vault_ref: str) -> None:
         pass
 
 
@@ -99,7 +101,7 @@ def client_factory(fake_uow: FakeControlPlaneUnitOfWork) -> Callable[..., TestCl
             "tenant_id": "1",
             "permissions": ["*"],
         }
-        app.dependency_overrides[get_vault] = lambda: FakeVault()
+        app.dependency_overrides[get_secret_store] = lambda: FakeVault()
         app.dependency_overrides[get_as2_tester] = lambda: fake_tester
 
         ctx = TestClient(app)

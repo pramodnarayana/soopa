@@ -30,7 +30,7 @@ def test_raises_for_missing_permissions() -> None:
 
 
 def test_requires_permission_decorator_success() -> None:
-    from identity.decorators.requires_permission import requires_permission
+    from identity.adapters.inbound.http.requires_permission import requires_permission
 
     identity = IdentityContext(
         subject="user-1",
@@ -48,7 +48,7 @@ def test_requires_permission_decorator_success() -> None:
 
 
 def test_requires_permission_decorator_failure() -> None:
-    from identity.decorators.requires_permission import requires_permission
+    from identity.adapters.inbound.http.requires_permission import requires_permission
 
     identity = IdentityContext(
         subject="user-1",
@@ -66,7 +66,7 @@ def test_requires_permission_decorator_failure() -> None:
 
 
 def test_requires_permission_decorator_missing_identity() -> None:
-    from identity.decorators.requires_permission import requires_permission
+    from identity.adapters.inbound.http.requires_permission import requires_permission
 
     @requires_permission("edi:transactions:read")
     def my_handler() -> str:

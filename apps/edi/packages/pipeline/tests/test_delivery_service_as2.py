@@ -1,28 +1,22 @@
 """
-Unit tests for the Outbound AS2 delivery path in DeliveryService.
+Unit tests for the Outbound AS2 delivery path via DeliveryUseCase.
 
 All test doubles imported from fakes.py (DRY).
-NullAS2DeliveryAdapter is used to test the "AS2 not enabled" path —
-replacing the previous `as2_delivery=None` anti-pattern.
+NullAS2DeliveryAdapter is used to test the "AS2 not enabled" path.
 """
 
 import pytest
 from domain.events import PipelineEventType
 from fakes import (
     FakeAS2DeliveryAdapter,
+    FakeDataPlaneUnitOfWork,
     FakeHttpDeliveryAdapter,
     FakeSftpDeliveryAdapter,
     InMemoryRepositoryAdapter,
-    InMemoryStorageAdapter,
 )
 
 from pipeline.adapters.null_as2 import NullAS2DeliveryAdapter
-from pipeline.core.delivery import (
-    As2DeliveryStrategy,
-    DeliveryRouter,
-    SftpDeliveryStrategy,
-    WebhookDeliveryStrategy,
-)
+from pipeline.application.delivery_use_case import DeliveryUseCase
 
 pytestmark = pytest.mark.asyncio
 
@@ -50,22 +44,36 @@ _LOCAL_PARTNER = {
 }
 
 
-def make_service(
-    repo: InMemoryRepositoryAdapter | None = None,
+def make_use_case(
+    uow: FakeDataPlaneUnitOfWork | None = None,
     as2: FakeAS2DeliveryAdapter | NullAS2DeliveryAdapter | None = None,
-) -> DeliveryRouter:
-    r = repo or InMemoryRepositoryAdapter()
+) -> DeliveryUseCase:
+    u = uow or FakeDataPlaneUnitOfWork()
     a = as2 or FakeAS2DeliveryAdapter()
-    h = FakeHttpDeliveryAdapter()
-    s = FakeSftpDeliveryAdapter()
-    strategies = {
-        "webhook_id": WebhookDeliveryStrategy(r, h, None),
-        "sftp_partner_id": SftpDeliveryStrategy(r, s, None),
-        "as2_partner_id": As2DeliveryStrategy(r, a, None),
-    }
-    return DeliveryRouter(
-        repository=r,
-        strategies=strategies,
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def uow_factory():
+        yield u
+
+    def router_factory(u_ref):
+        from pipeline.core.delivery.as2 import As2DeliveryStrategy
+        from pipeline.core.delivery.router import DeliveryRouter
+        from pipeline.core.delivery.sftp import SftpDeliveryStrategy
+        from pipeline.core.delivery.webhook import WebhookDeliveryStrategy
+
+        return DeliveryRouter(
+            u_ref,
+            {
+                "webhook_id": WebhookDeliveryStrategy(u_ref, FakeHttpDeliveryAdapter(), None),
+                "sftp_partner_id": SftpDeliveryStrategy(u_ref, FakeSftpDeliveryAdapter(), None),
+                "as2_partner_id": As2DeliveryStrategy(u_ref, a, None),
+            },
+        )
+
+    return DeliveryUseCase(
+        uow_factory=uow_factory,
+        router_factory=router_factory,
     )
 
 
@@ -110,21 +118,19 @@ async def test_deliver_as2_plain_no_crypto() -> None:
     as-is and the AS2 HTTP headers are correctly set.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
-    storage = InMemoryStorageAdapter()
-    repo = InMemoryRepositoryAdapter()
+    uow = FakeDataPlaneUnitOfWork()
     as2_adapter = FakeAS2DeliveryAdapter()
 
     trace_id = "trace-as2-plain"
-    edi_s3_uri = f"s3://bucket/edi/{trace_id}/raw.edi"
     raw_edi = (
         b"ISA*00*          *00*          *ZZ*SENDER         "
         b"*ZZ*RECEIVER       *210101*1200*^*00501*000000001*0*P*>~"
     )
-    storage.store[edi_s3_uri] = raw_edi
-    _seed_as2_route(repo, trace_id, raw_edi.decode("utf-8"))
+    _seed_as2_route(uow.repository, trace_id, raw_edi.decode("utf-8"))
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
+    use_case = make_use_case(uow=uow, as2=as2_adapter)
+    await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 1
@@ -139,21 +145,17 @@ async def test_deliver_as2_plain_no_crypto() -> None:
     assert "Message-ID" in headers
     assert "Disposition-Notification-To" in headers
 
-    assert repo.edi_messages[trace_id]["status"] == "DELIVERED"
+    assert uow.repository.edi_messages[trace_id]["status"] == "DELIVERED"
 
 
 async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     """Non-2xx response from the trading partner must result in FAILED status."""
     # ── Arrange ────────────────────────────────────────────────────────────────
-    storage = InMemoryStorageAdapter()
-    repo = InMemoryRepositoryAdapter()
+    uow = FakeDataPlaneUnitOfWork()
     as2_adapter = FakeAS2DeliveryAdapter(status_code=503)
 
     trace_id = "trace-as2-fail"
-    edi_s3_uri = f"s3://bucket/edi/{trace_id}/raw.edi"
-    storage.store[edi_s3_uri] = b"FAKE*EDI~"
-
-    repo.edi_messages[trace_id] = {
+    uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
         "direction": "OUTBOUND",
         "sender_id": "S1",
@@ -163,7 +165,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
         "edi_data": "FAKE*EDI~",
         "status": "PENDING_DELIVERY",
     }
-    repo.routes.append(
+    uow.repository.routes.append(
         {
             "route_id": "r-fail",
             "direction": "OUTBOUND",
@@ -174,15 +176,16 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
         }
     )
     remote = {**_REMOTE_PARTNER, "remote_url": "https://fail.example.com/as2"}
-    repo.as2_partners["p-fail"] = remote
-    repo.local_as2_partners[_REMOTE_PARTNER["local_partner_id"]] = _LOCAL_PARTNER
+    uow.repository.as2_partners["p-fail"] = remote
+    uow.repository.local_as2_partners[_REMOTE_PARTNER["local_partner_id"]] = _LOCAL_PARTNER
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
+    use_case = make_use_case(uow=uow, as2=as2_adapter)
+    await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert len(repo.outbox) == 1
-    outbox_event = repo.outbox[0]
+    assert len(uow.outbox.events) == 1
+    outbox_event = uow.outbox.events[0]
     assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
     assert outbox_event["payload"]["status"] == "FAILED"
     assert len(as2_adapter.delivered) == 1
@@ -195,24 +198,16 @@ async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
     which is caught internally and the message is marked as FAILED.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
-    storage = InMemoryStorageAdapter()
-    repo = InMemoryRepositoryAdapter()
-
-    trace_id = "trace-as2-null"
-    edi_s3_uri = f"s3://bucket/edi/{trace_id}/raw.edi"
-    storage.store[edi_s3_uri] = b"EDI~"
-    _seed_as2_route(repo, trace_id, "EDI~", partner_id="p-null")
+    uow = FakeDataPlaneUnitOfWork()
+    _seed_as2_route(uow.repository, "trace-as2-null", "EDI~", partner_id="p-null")
 
     # ── Act / Assert ───────────────────────────────────────────────────────────
-    service = make_service(repo=repo, as2=NullAS2DeliveryAdapter())
-    # It should catch the RuntimeError and mark the message as FAILED, but bubble up the error
-    import pytest
-
+    use_case = make_use_case(uow=uow, as2=NullAS2DeliveryAdapter())
     with pytest.raises(RuntimeError):
-        await service.deliver(trace_id)
+        await use_case.execute("trace-as2-null")
 
-    assert len(repo.outbox) == 1
-    outbox_event = repo.outbox[0]
+    assert len(uow.outbox.events) == 1
+    outbox_event = uow.outbox.events[0]
     assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
     assert outbox_event["payload"]["status"] == "FAILED"
 
@@ -223,16 +218,11 @@ async def test_deliver_as2_idempotent_claim() -> None:
     The AS2 adapter must not be called.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
-    storage = InMemoryStorageAdapter()
-    repo = InMemoryRepositoryAdapter()
+    uow = FakeDataPlaneUnitOfWork()
     as2_adapter = FakeAS2DeliveryAdapter()
 
     trace_id = "trace-as2-idem"
-    edi_s3_uri = f"s3://bucket/edi/{trace_id}/raw.edi"
-    storage.store[edi_s3_uri] = b"EDI~"
-
-    # Already PROCESSING — claim_edi_message returns False
-    repo.edi_messages[trace_id] = {
+    uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
         "direction": "OUTBOUND",
         "sender_id": "A",
@@ -240,9 +230,9 @@ async def test_deliver_as2_idempotent_claim() -> None:
         "trading_partner_id": "p-idem",
         "transaction_type": "810",
         "edi_data": "EDI~",
-        "status": "PROCESSING",
+        "status": "PROCESSING",  # Already claimed — claim will return False
     }
-    repo.routes.append(
+    uow.repository.routes.append(
         {
             "route_id": "r-idem",
             "direction": "OUTBOUND",
@@ -252,15 +242,19 @@ async def test_deliver_as2_idempotent_claim() -> None:
             "as2_partner_id": "p-idem",
         }
     )
-    repo.as2_partners["p-idem"] = {**_REMOTE_PARTNER, "remote_url": "https://idem.example.com/as2"}
-    repo.local_as2_partners[_REMOTE_PARTNER["local_partner_id"]] = _LOCAL_PARTNER
+    uow.repository.as2_partners["p-idem"] = {
+        **_REMOTE_PARTNER,
+        "remote_url": "https://idem.example.com/as2",
+    }
+    uow.repository.local_as2_partners[_REMOTE_PARTNER["local_partner_id"]] = _LOCAL_PARTNER
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
+    use_case = make_use_case(uow=uow, as2=as2_adapter)
+    await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 0
-    assert len(repo.outbox) == 0
+    assert len(uow.outbox.events) == 0
 
 
 async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
@@ -270,15 +264,11 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     not crash the worker process.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
-    storage = InMemoryStorageAdapter()
-    repo = InMemoryRepositoryAdapter()
+    uow = FakeDataPlaneUnitOfWork()
     as2_adapter = FakeAS2DeliveryAdapter()
 
     trace_id = "trace-as2-nolocal"
-    edi_s3_uri = f"s3://bucket/edi/{trace_id}/raw.edi"
-    storage.store[edi_s3_uri] = b"EDI~"
-
-    repo.edi_messages[trace_id] = {
+    uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
         "direction": "OUTBOUND",
         "sender_id": "X",
@@ -288,7 +278,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
         "edi_data": "EDI~",
         "status": "PENDING_DELIVERY",
     }
-    repo.routes.append(
+    uow.repository.routes.append(
         {
             "route_id": "r-nolocal",
             "direction": "OUTBOUND",
@@ -299,18 +289,20 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
         }
     )
     # local_partner_id points to a partner that does NOT exist in local_as2_partners
-    repo.as2_partners["p-nolocal"] = {**_REMOTE_PARTNER, "local_partner_id": "missing-local"}
+    uow.repository.as2_partners["p-nolocal"] = {
+        **_REMOTE_PARTNER,
+        "local_partner_id": "missing-local",
+    }
     # Do NOT seed local_as2_partners["missing-local"]
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    import pytest
-
+    use_case = make_use_case(uow=uow, as2=as2_adapter)
     with pytest.raises(RuntimeError):
-        await make_service(repo=repo, as2=as2_adapter).deliver(trace_id)
+        await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert len(repo.outbox) == 1
-    outbox_event = repo.outbox[0]
+    assert len(uow.outbox.events) == 1
+    outbox_event = uow.outbox.events[0]
     assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
     assert outbox_event["payload"]["status"] == "FAILED"
     assert len(as2_adapter.delivered) == 0

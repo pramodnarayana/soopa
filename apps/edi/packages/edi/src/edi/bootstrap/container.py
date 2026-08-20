@@ -2,6 +2,7 @@ import os
 
 from dependency_injector import containers, providers
 
+from edi.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 from edi.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
 from edi.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
 from edi.adapters.sqs_queue import SQSMessageQueueAdapter
@@ -11,7 +12,6 @@ from edi.adapters.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork,
 )
 from edi.adapters.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
-from edi.adapters.vault import vault
 from edi.services.as2_receiver_service import As2ReceiverService
 
 
@@ -31,7 +31,7 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     sftp_tester = providers.Singleton(ParamikoSftpTesterAdapter)
     as2_tester = providers.Singleton(HttpxAS2TesterAdapter)
-    vault_port = providers.Object(vault)
+    vault_port = providers.Singleton(AwsSecretsManagerAdapter)
 
     message_queue = providers.Singleton(
         SQSMessageQueueAdapter,
@@ -54,5 +54,5 @@ class Container(containers.DeclarativeContainer):
     # FastAPI's request.app.state.db_router, so we'll inject dependencies dynamically
     as2_receiver_service = providers.Factory(
         As2ReceiverService,
-        vault=vault_port,
+        secret_store=vault_port,
     )

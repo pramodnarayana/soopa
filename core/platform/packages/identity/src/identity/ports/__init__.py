@@ -1,4 +1,4 @@
-from identity.ports.identity_provider import IdentityProvider, UserProfile
-from identity.ports.token_verifier import TokenVerifier
+from identity.ports.identity_provider_port import IdentityProviderPort, UserProfile
+from identity.ports.token_verifier_port import TokenVerifierPort
 
-__all__ = ["IdentityProvider", "TokenVerifier", "UserProfile"]
+__all__ = ["IdentityProviderPort", "TokenVerifierPort", "UserProfile"]

@@ -147,3 +147,50 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 **Impact**: High
 **Description**: The recent Hexagonal Architecture refactoring of Webhooks correctly extracted the logic into Use Cases, Ports, and Adapters. However, the entire Webhook feature was incorrectly implemented inside the EDI application module (`apps/edi/packages/edi/src/edi/...`). Webhooks are a core platform capability that belong in the UCP (User Control Plane) boundary.
 **Status**: Resolved. Webhook Use Cases, Router, and Domain Models have been extracted to UCP, and EDI now correctly subscribes to `webhook.created` via the global outbox.
+
+## [RESOLVED] [Architecture] Dual-Architecture Naming Conventions (Domain Services vs Clean Architecture Use Cases)
+
+- **Date Added**: 2026-08-17
+- **Status**: ✅ RESOLVED
+- **Description**: The codebase currently mixes Domain-Driven Design (DDD) "Application Services" (grouping multiple commands into a single `Service` class, e.g., `AS2PartnerService`) with Clean Architecture "Use Cases" (standalone single-responsibility classes, e.g., `ProcessInboundEdiUseCase`).
+- **Action Item**: The enterprise standard is now strictly Single-Responsibility **Clean Architecture Use Cases** (`_use_case.py`). The legacy `_service.py` God Class pattern is officially deprecated. Migrated `as2_partner_service.py` into isolated use cases as a proof-of-concept template.
+
+## [Architecture] Missing Scheduler Engine for Background Jobs
+
+- **Date Added**: 2026-08-19
+- **Description**: The `ucp-worker` is currently polling an SQS queue (`ucp-jobs.fifo`) for scheduled background tasks (like `ucp_outbox_sweeper` and `ucp_data_retention_cleanup`). However, the infrastructure for this queue is missing in Pulumi, and there is no centralized Scheduler Engine pushing cron-trigger messages to it. As a result, critical cleanup jobs are currently never executing, which will eventually lead to unbounded database growth.
+- **Action Item**: Implement a centralized Scheduler Module (or AWS EventBridge rules via Pulumi) to push cron-based triggers to the `ucp-jobs.fifo` queue, and ensure the queue infrastructure is correctly provisioned.
+
+## [Architecture] Architectural Drift in Bounded Context File Taxonomy
+
+- **Date Added**: 2026-08-19
+- **Description**: Different bounded contexts (UCP vs EDI) have drifted in their internal folder/file naming taxonomies for identical architectural concepts. For example, database event models are located at `core/ucp/.../ucp_models/events.py` in UCP, but at `apps/edi/.../database/models/control_plane.py` in EDI. This violates Modular Monolith structural consistency rules.
+- **Action Item**: Standardize the internal file/folder taxonomy across all bounded contexts (e.g., standardizing on `[BoundedContext]/database/models/events.py`) and implement `pytest-archon` rules to automatically enforce these structural conventions in CI.
+
+## [Observability] Standardization of Observability Across Contexts
+
+- **Date Added**: 2026-08-20
+- **Description**: While `structlog` has been introduced and legacy `logging` usages have been refactored or tracked in some modules (like UCP, EDI, and Identity), we lack a consistent, standardized approach to context injection and structured logging payloads across newer contexts like Notification and Scheduler. The data structure of our JSON logs must be uniform for effective aggregation and alerting.
+- **Action Item**: Audit and standardize the observability implementation across UCP, EDI, Identity, Notification, and Scheduler. Ensure consistent context injection (e.g., `tenant_id`, `event_id`, `job_id`) and payload schemas across all modules using `structlog`.
+
+## [Architecture] Final Enterprise-Grade SSE/Real-time Notifications
+
+- **Date Added**: 2026-08-20
+- **Description**: The In-App notification system currently uses basic Server-Sent Events (SSE) bounded to single container memory channels (Python `asyncio.Queue`). This won't scale in a distributed, horizontally scaled environment where users might connect to a different API node than the one processing the notification event.
+- **Action Item**: Refactor the SSE streaming implementation to use a true distributed Pub/Sub backplane (e.g., Redis Pub/Sub, AWS IoT Core, or Postgres LISTEN/NOTIFY with a dedicated real-time microservice) to support scale-out real-time notifications.
+
+
+## [Architecture] API Router Taxonomy Drift
+
+- **Date Added**: 2026-08-20
+- **Description**: The system currently has three different taxonomies for placing FastAPI HTTP routers. `ucp` places them in `adapters/inbound/http/routers/`, `edi` places them in `routers/` at the root of the domain, and `notification` places them in `api/` at the root. While all are technically valid hexagonal layers, this fragmentation violates the "Strict File Taxonomy Consistency" rule and makes cross-context development confusing.
+- **Action Item**: Decide on a single, unified enterprise standard for the HTTP API folder taxonomy (e.g., standardizing everything to `adapters/inbound/http/routers/` or `api/`) and refactor all bounded contexts to strictly adhere to that single pattern.
+
+## [Observability Architecture] Full Implementation of Layer 1 to Layer 3 Observability
+
+- **Date Added**: 2026-08-20
+- **Description**: The system currently relies on manual `trace_id` injection (Business Correlation IDs) for customer support tracking, and lacks a fully automated, layered technical observability strategy for infrastructure and distributed tracing.
+- **Action Item**: Implement the complete 3-layer enterprise observability model:
+  - **Layer 1 (Container Orchestration Probes):** Ensure all background workers (SQS/Postgres listeners) run isolated HTTP liveness/readiness ports (e.g., `9090`) to allow orchestrators like ECS/Kubernetes to auto-heal frozen containers.
+  - **Layer 2 (Infrastructure Metrics & Scaling):** Ensure all queues and databases emit metrics to CloudWatch/Datadog to drive Horizontal Pod Autoscaling (HPA) or Target Tracking rules.
+  - **Layer 3 (APM & Distributed Tracing):** Activate full OpenTelemetry auto-instrumentation (`opentelemetry-instrumentation-fastapi`, `-sqlalchemy`, `-boto3`) to silently intercept database timings and inject OTel context into SQS headers. Ensure the manual business `trace_id` is bridged by tagging the OTel spans (`span.set_attribute("business.trace_id", manual_id)`), allowing seamless pivot from customer support tickets to technical flame graphs.

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.adapters.storage import S3StorageAdapter
+from pipeline.adapters.storage import S3StorageClient
 
 pytestmark = pytest.mark.asyncio
 
@@ -19,7 +19,7 @@ async def test_s3_storage_adapter_download(mock_session_cls: MagicMock) -> None:
     mock_body.read.return_value = b"test payload"
     mock_client.get_object.return_value = {"Body": mock_body}
 
-    adapter = S3StorageAdapter(bucket_name="test-bucket", endpoint_url="http://localhost:4566")
+    adapter = S3StorageClient(bucket_name="test-bucket", endpoint_url="http://localhost:4566")
 
     # Act
     result = await adapter.download("s3://test-bucket/path/to/file.txt")
@@ -39,7 +39,7 @@ async def test_s3_storage_adapter_upload(mock_session_cls: MagicMock) -> None:
     mock_client = AsyncMock()
     mock_session.client.return_value.__aenter__.return_value = mock_client
 
-    adapter = S3StorageAdapter(bucket_name="test-bucket")
+    adapter = S3StorageClient(bucket_name="test-bucket")
 
     # Act
     uri = await adapter.upload(b"test data", key_prefix="/api_gateway/123", file_name="out.json")

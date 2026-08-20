@@ -1,0 +1,28 @@
+version: '3.9'
+
+services:
+  postgres_global:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ucp_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ucp_global
+    ports:
+      - "127.0.0.1:5432:5432"
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_global_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ucp_admin -d ucp_global"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_global_data:
+
+secrets:
+  postgres_password:
+    file: ./postgres_password.txt

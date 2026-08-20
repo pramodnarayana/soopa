@@ -6,6 +6,7 @@ os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
 import asyncio
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -118,26 +119,32 @@ async def override_get_tenant_session(db_engine):
 
 
 class FakeVault:
-    def retrieve_secret(self, vault_ref: str) -> bytes:
-        return b"-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+    async def get_secret(self, vault_ref: str) -> str:
+        return "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
 
-    def retrieve_private_key(self, vault_ref: str) -> bytes:
-        return self.retrieve_secret(vault_ref)
+    async def retrieve_secret(self, vault_ref: str) -> bytes:
+        val = await self.get_secret(vault_ref)
+        return val.encode("utf-8")
 
-    def store_private_key(self, private_key_pem: bytes, alias_prefix: str = "as2_key") -> str:
-        return "fake_ref"
+    async def retrieve_private_key(self, vault_ref: str) -> bytes:
+        return await self.retrieve_secret(vault_ref)
 
-    def delete_secret(self, vault_ref: str) -> None:
+    async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
+        return "vault_ref_123"
+
+    async def delete_secret(self, vault_ref: str) -> None:
         pass
 
 
 @pytest.fixture(scope="function")
-def override_get_vault():
+def override_get_secret_store():
     return FakeVault()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(override_get_global_session, override_get_tenant_session, override_get_vault):
+async def client(
+    override_get_global_session, override_get_tenant_session, override_get_secret_store
+):
     from httpx import ASGITransport, AsyncClient
 
     from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
@@ -152,7 +159,7 @@ async def client(override_get_global_session, override_get_tenant_session, overr
         get_global_session,
         get_tenant_session,
     )
-    from edi.dependencies.services import get_vault
+    from edi.dependencies.services import get_secret_store
     from edi.module import create_edi_app
 
     app = create_edi_app()
@@ -160,7 +167,7 @@ async def client(override_get_global_session, override_get_tenant_session, overr
     old_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_global_session] = override_get_global_session
     app.dependency_overrides[get_tenant_session] = override_get_tenant_session
-    app.dependency_overrides[get_vault] = lambda: override_get_vault
+    app.dependency_overrides[get_secret_store] = lambda: override_get_secret_store
     app.dependency_overrides[get_current_tenant_id] = lambda: "1"
     app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[get_current_user_profile] = lambda: {
@@ -195,7 +202,7 @@ async def client(override_get_global_session, override_get_tenant_session, overr
 
 @pytest_asyncio.fixture(scope="function")
 async def platform_client(
-    override_get_global_session, override_get_tenant_session, override_get_vault
+    override_get_global_session, override_get_tenant_session, override_get_secret_store
 ):
     from httpx import ASGITransport, AsyncClient
 
@@ -208,7 +215,7 @@ async def platform_client(
         get_global_session,
         get_tenant_session,
     )
-    from edi.dependencies.services import get_vault
+    from edi.dependencies.services import get_secret_store
     from edi.module import create_edi_app
 
     app = create_edi_app()
@@ -216,7 +223,7 @@ async def platform_client(
     old_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_global_session] = override_get_global_session
     app.dependency_overrides[get_tenant_session] = override_get_tenant_session
-    app.dependency_overrides[get_vault] = lambda: override_get_vault
+    app.dependency_overrides[get_secret_store] = lambda: override_get_secret_store
     app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
     from edi.dependencies.auth import get_platform_user_profile

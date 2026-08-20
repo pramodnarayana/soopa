@@ -3,8 +3,8 @@ import typing
 
 import structlog
 
-from ...ports.identity_provider import IdentityProviderPort
-from ...ports.outbound.user_identity_provider import IUserIdentityProvider
+from ...ports.identity_provider import IdentityProviderPortPort
+from ...ports.outbound.user_identity_provider import IUserIdentityProviderPort
 from ...ports.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -22,8 +22,8 @@ class IdentitySyncService:
 
     def __init__(
         self,
-        identity_provider: IdentityProviderPort,
-        user_identity_provider: IUserIdentityProvider,
+        identity_provider: IdentityProviderPortPort,
+        user_identity_provider: IUserIdentityProviderPort,
         uow_factory: "typing.Callable[[], contextlib.AbstractAsyncContextManager[UcpUnitOfWorkPort]] | None" = None,
     ):
         self.identity_provider = identity_provider

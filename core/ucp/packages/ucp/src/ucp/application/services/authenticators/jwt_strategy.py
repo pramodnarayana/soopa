@@ -2,10 +2,13 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
 import structlog
-from identity.application.authenticate import TenantNotProvisionedError, authenticate_bearer_token
+from identity.application.authenticate_use_case import (
+    TenantNotProvisionedError,
+    authenticate_bearer_token,
+)
 from identity.domain.authentication_strategy import IAuthenticationStrategy
 from identity.domain.identity_context import IdentityContext
-from identity.ports.token_verifier import TokenVerifier
+from identity.ports.token_verifier_port import TokenVerifierPort
 
 from ucp.domain.models.authorization import Capability
 from ucp.ports.outbound.role_repository import IRoleRepository
@@ -25,7 +28,7 @@ class JwtStrategy(IAuthenticationStrategy):
         tenant_repo_factory: Callable[[], AbstractAsyncContextManager[ITenantRepository]],
         user_repo_factory: Callable[[], AbstractAsyncContextManager[IUserRepository]],
         role_repo_factory: Callable[[], AbstractAsyncContextManager[IRoleRepository]],
-        token_verifier: TokenVerifier,
+        token_verifier: TokenVerifierPort,
     ):
         self.tenant_repo_factory = tenant_repo_factory
         self.user_repo_factory = user_repo_factory

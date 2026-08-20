@@ -5,7 +5,7 @@ from database.session import get_global_session
 from fastapi.testclient import TestClient
 
 from edi.core.exceptions import OrchestrationError
-from edi.dependencies.services import get_as2_receiver_service, get_vault
+from edi.dependencies.services import get_as2_receiver_service, get_secret_store
 from edi.module import create_edi_app
 
 app = create_edi_app()
@@ -14,7 +14,7 @@ app = create_edi_app()
 @pytest.fixture
 def client():
     app.dependency_overrides[get_global_session] = lambda: AsyncMock()
-    app.dependency_overrides[get_vault] = lambda: AsyncMock()
+    app.dependency_overrides[get_secret_store] = lambda: AsyncMock()
     app.state.db_router = AsyncMock()
     yield TestClient(app)
     app.dependency_overrides.clear()

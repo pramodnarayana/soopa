@@ -60,14 +60,42 @@ async def seed_database() -> None:
 
         SYSTEM_JOB_REGISTRY: list[JobDefinition] = [
             JobDefinition(
-                name=JobName.OUTBOX_SWEEPER,
+                name=JobName.EDI_ORCHESTRATOR_OUTBOX_SWEEPER,
                 target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
                 app_namespace=AppNamespace.EDI.value,
                 default_cron_expression="* * * * *",
                 default_timezone=Timezone.UTC.value,
             ),
             JobDefinition(
-                name=JobName.DATA_RETENTION_CLEANUP,
+                name=JobName.EDI_PROVISIONING_OUTBOX_SWEEPER,
+                target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
+                app_namespace=AppNamespace.EDI.value,
+                default_cron_expression="* * * * *",
+                default_timezone=Timezone.UTC.value,
+            ),
+            JobDefinition(
+                name=JobName.EDI_CONTROL_PLANE_OUTBOX_CLEANUP,
+                target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
+                app_namespace=AppNamespace.EDI.value,
+                default_cron_expression="0 2 * * *",
+                default_timezone=Timezone.UTC.value,
+            ),
+            JobDefinition(
+                name=JobName.EDI_DATA_PLANE_OUTBOX_CLEANUP,
+                target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
+                app_namespace=AppNamespace.EDI.value,
+                default_cron_expression="0 2 * * *",
+                default_timezone=Timezone.UTC.value,
+            ),
+            JobDefinition(
+                name=JobName.EDI_IDEMPOTENCY_CLEANUP,
+                target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
+                app_namespace=AppNamespace.EDI.value,
+                default_cron_expression="0 2 * * *",
+                default_timezone=Timezone.UTC.value,
+            ),
+            JobDefinition(
+                name=JobName.EDI_AUDIT_LOG_CLEANUP,
                 target_queue=TargetQueue.EDI_ORCHESTRATOR_JOBS.value,
                 app_namespace=AppNamespace.EDI.value,
                 default_cron_expression="0 2 * * *",

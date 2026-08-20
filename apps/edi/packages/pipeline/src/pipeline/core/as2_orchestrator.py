@@ -19,7 +19,7 @@ import structlog
 from as2_core import OutboundAS2Message, build_outbound_message
 from security import encrypt_payload, sign_payload
 
-from pipeline.ports.vault import VaultPort
+from pipeline.ports.secret_store import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +27,7 @@ logger = structlog.get_logger(__name__)
 async def _resolve_pem(
     vault_ref: str | None,
     inline_pem: str | None,
-    vault: VaultPort | None,
+    vault: SecretStorePort | None,
 ) -> bytes | None:
     """
     Resolves a PEM value from the Vault (preferred) or from a stored inline string.
@@ -52,8 +52,8 @@ class AS2MessageOrchestrator:
     keeping this class free of direct cryptographic logic.
     """
 
-    def __init__(self, vault: VaultPort | None = None) -> None:
-        self.vault = vault
+    def __init__(self, vault: SecretStorePort | None = None) -> None:
+        self.secret_store = vault
 
     async def build(
         self,
@@ -89,17 +89,17 @@ class AS2MessageOrchestrator:
         local_private_key_pem = await _resolve_pem(
             local_partner.get("private_key_vault_ref"),
             None,  # private keys must come from Vault, never stored inline
-            self.vault,
+            self.secret_store,
         )
         local_cert_pem = await _resolve_pem(
             local_partner.get("public_cert_vault_ref"),
             local_partner.get("public_cert_pem"),
-            self.vault,
+            self.secret_store,
         )
         remote_cert_pem = await _resolve_pem(
             remote_partner.get("public_cert_vault_ref"),
             remote_partner.get("public_cert_pem"),
-            self.vault,
+            self.secret_store,
         )
 
         # ── Build sign / encrypt callables via functools.partial ──────────────

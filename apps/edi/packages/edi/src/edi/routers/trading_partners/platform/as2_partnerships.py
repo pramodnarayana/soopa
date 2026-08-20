@@ -16,7 +16,7 @@ from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as Control
 from edi.core.exceptions import OrchestrationError
 from edi.core.services import AS2PartnershipService
 from edi.dependencies.database import get_control_plane_uow
-from edi.dependencies.services import get_as2_tester, get_vault
+from edi.dependencies.services import get_as2_tester, get_secret_store
 from edi.domain.models import (
     CreateAS2PartnershipCmd,
     EncryptionAlgorithm,
@@ -25,7 +25,7 @@ from edi.domain.models import (
     UpdateAS2PartnershipCmd,
 )
 from edi.ports.as2_tester import AS2TesterPort
-from edi.ports.vault import VaultPort
+from edi.ports.secret_store import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -42,7 +42,7 @@ async def test_as2_partnership_connection(
     request: TestAS2ConnectionRequest | None = None,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     as2_tester: AS2TesterPort = Depends(get_as2_tester),
-    vault_port: VaultPort = Depends(get_vault),
+    vault_port: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """
     Tests an AS2 connection for a configured partnership.
@@ -84,13 +84,15 @@ async def test_as2_partnership_connection(
 
     try:
         if local_partner.private_key_vault_ref:
-            local_private_key_pem = vault_port.retrieve_secret(local_partner.private_key_vault_ref)
+            local_private_key_pem = await vault_port.retrieve_secret(
+                local_partner.private_key_vault_ref
+            )
         if local_partner.public_cert_vault_ref:
-            local_cert_pem = vault_port.retrieve_secret(local_partner.public_cert_vault_ref)
+            local_cert_pem = await vault_port.retrieve_secret(local_partner.public_cert_vault_ref)
         elif local_partner.public_cert_pem:
             local_cert_pem = local_partner.public_cert_pem.encode()
         if remote_partner.public_cert_vault_ref:
-            remote_cert_pem = vault_port.retrieve_secret(remote_partner.public_cert_vault_ref)
+            remote_cert_pem = await vault_port.retrieve_secret(remote_partner.public_cert_vault_ref)
         elif remote_partner.public_cert_pem:
             remote_cert_pem = remote_partner.public_cert_pem.encode()
     except OrchestrationError as e:
