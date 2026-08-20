@@ -1,5 +1,9 @@
+import structlog
+
 from identity.domain.identity_context import IdentityContext, identity_context_from_claims
-from identity.ports.token_verifier import TokenValidationError, TokenVerifier
+from identity.ports.token_verifier_port import TokenValidationError, TokenVerifierPort
+
+logger = structlog.get_logger(__name__)
 
 
 class AuthenticationError(Exception):
@@ -18,16 +22,19 @@ class TenantNotProvisionedError(Exception):
 
 async def authenticate_bearer_token(
     authorization_header: str | None,
-    token_verifier: TokenVerifier,
+    token_verifier: TokenVerifierPort,
 ) -> IdentityContext:
     if authorization_header is None:
+        logger.warning("authentication_failed", reason="missing_header")
         raise AuthenticationError("Missing bearer token.")
 
     parts = authorization_header.split(maxsplit=1)
     if not parts or parts[0].lower() != "bearer":
+        logger.warning("authentication_failed", reason="missing_bearer_prefix")
         raise AuthenticationError("Missing bearer token.")
 
     if len(parts) == 1 or not parts[1].strip():
+        logger.warning("authentication_failed", reason="empty_token")
         raise AuthenticationError("Empty bearer token.")
 
     token = parts[1].strip()
@@ -35,5 +42,7 @@ async def authenticate_bearer_token(
     try:
         claims = await token_verifier.verify(token)
     except TokenValidationError as e:
-        raise AuthenticationError("Invalid token format or signature") from e
+        logger.warning("authentication_failed", reason="invalid_token", error=str(e))
+        raise AuthenticationError(f"Authentication failed: {str(e)}") from e
+
     return identity_context_from_claims(claims)

@@ -83,9 +83,7 @@ class PipelineLifecycleUseCase:
             )
             await self.uow.commit()
 
-        logger.info(
-            "pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id
-        )
+        logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
     async def handle_delivery_completed(self, payload: dict[str, Any]) -> None:
         """
@@ -102,7 +100,9 @@ class PipelineLifecycleUseCase:
                 trace_id=trace_id,
                 payload=payload,
             )
-            raise ValueError(f"Missing status field in DELIVERY_COMPLETED payload for trace_id={trace_id}")
+            raise ValueError(
+                f"Missing status field in DELIVERY_COMPLETED payload for trace_id={trace_id}"
+            )
 
         logger.info(
             "pipeline_lifecycle.delivery_completed",

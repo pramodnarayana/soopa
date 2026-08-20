@@ -2,15 +2,15 @@
 Infrastructure factories for the UCP API.
 
 Single responsibility: own the SQLAlchemy engine + session factory and the
-ZitadelTokenVerifier singleton. All other wiring happens in main.py.
+ZitadelTokenVerifierPort singleton. All other wiring happens in main.py.
 """
 
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 
-from identity.adapters.outbound.zitadel.jwks_token_verifier import (
-    ZitadelTokenVerifier,
-    ZitadelTokenVerifierOptions,
+from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
+    ZitadelTokenVerifierPort,
+    ZitadelTokenVerifierPortOptions,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -44,18 +44,18 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @lru_cache(maxsize=1)
-def get_token_verifier() -> ZitadelTokenVerifier:
+def get_token_verifier() -> ZitadelTokenVerifierPort:
     """
-    Returns a process-level singleton ZitadelTokenVerifier.
+    Returns a process-level singleton ZitadelTokenVerifierPort.
 
     Using @lru_cache ensures exactly ONE instance is created per process,
     so there is a single shared JWKS key cache regardless of how many
     guards import this function.
     """
     settings = get_settings()
-    options = ZitadelTokenVerifierOptions(
+    options = ZitadelTokenVerifierPortOptions(
         issuer=settings.zitadel_issuer,
         audience=settings.zitadel_ucp_project_id,
         platform_org_id=settings.zitadel_platform_org_id,
     )
-    return ZitadelTokenVerifier(options)
+    return ZitadelTokenVerifierPort(options)

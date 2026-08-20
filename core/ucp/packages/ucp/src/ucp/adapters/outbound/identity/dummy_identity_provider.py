@@ -1,11 +1,11 @@
 import structlog
 
-from ucp.ports.identity_provider import IdentityProviderPort
+from ucp.ports.identity_provider import IdentityProviderPortPort
 
 logger = structlog.get_logger(__name__)
 
 
-class DummyIdentityProvider(IdentityProviderPort):
+class DummyIdentityProviderPort(IdentityProviderPortPort):
     """
     A stub Identity Provider that simulates syncing without actual external calls.
     Used for local development or when Zitadel is not configured.

@@ -199,8 +199,8 @@ async def main() -> None:
             await conn.execute(
                 """
                 INSERT INTO scheduling.scheduled_jobs
-                    (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, payload, status, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, 'PENDING', NOW(), NOW())
+                    (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, retry_count, payload, status, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, 'PENDING', NOW(), NOW())
                 """,
                 job_id,
                 "NOTIFICATION_OUTBOX_SWEEPER",
@@ -209,6 +209,7 @@ async def main() -> None:
                 "* * * * *",
                 "UTC",
                 3,
+                0,
             )
 
         logger.info("Successfully seeded platform core system jobs.")

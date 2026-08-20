@@ -2,14 +2,14 @@ import structlog
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.core.container import _async_session_maker
-from ucp.core.exceptions import IdentityProviderError
-from ucp.ports.identity_provider import IdentityProviderPort
+from ucp.core.exceptions import IdentityProviderPortError
+from ucp.ports.identity_provider import IdentityProviderPortPort
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelIdentityProvider(IdentityProviderPort):
+class ZitadelIdentityProviderPort(IdentityProviderPortPort):
     def __init__(self, org_provider: IOrganizationProvider):
         self.org_provider = org_provider
 
@@ -28,7 +28,7 @@ class ZitadelIdentityProvider(IdentityProviderPort):
 
                 try:
                     org_id, _ = await self.org_provider.create_organization(tenant.name)
-                except IdentityProviderError as e:
+                except IdentityProviderPortError as e:
                     if e.status_code == 409:
                         logger.warning(
                             "organization_already_exists_in_idp",

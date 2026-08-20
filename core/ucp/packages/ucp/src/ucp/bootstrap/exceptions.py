@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from ucp.core.exceptions import (
     IdempotencyConflictError,
-    IdentityProviderError,
+    IdentityProviderPortError,
     ResourceNotFoundError,
 )
 
@@ -59,11 +59,11 @@ def setup_exception_handlers(app: FastAPI) -> None:
             content={"detail": str(exc), "type": "idempotency_conflict"},
         )
 
-    @app.exception_handler(IdentityProviderError)
+    @app.exception_handler(IdentityProviderPortError)
     async def identity_provider_exception_handler(
-        request: Request, exc: IdentityProviderError
+        request: Request, exc: IdentityProviderPortError
     ) -> JSONResponse:
-        logger.error("IdentityProviderError at %s: %s", request.url.path, exc)
+        logger.error("IdentityProviderPortError at %s: %s", request.url.path, exc)
         return JSONResponse(
             status_code=500,
             content={"detail": "An internal identity provider error occurred."},

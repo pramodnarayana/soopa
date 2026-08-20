@@ -28,8 +28,8 @@ class ScheduledJob(SchedulingBase):
     timezone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     target_queue: Mapped[str | None] = mapped_column(String(255), nullable=True)
     app_namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3, server_default="3", nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -19,8 +19,8 @@ from ucp.adapters.outbound.database.postgres_ucp_outbox_cleanup_repository impor
     SqlAlchemyUcpOutboxCleanupRepository,
 )
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProvider
-from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProvider
+from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProviderPort
+from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProviderPort
 from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
 from ucp.application.handlers.tenant_deleted_handler import TenantDeletedEventHandler
 from ucp.application.services.identity_sync_service import IdentitySyncService
@@ -32,8 +32,8 @@ from ucp.application.ucp_outbox_cleanup_use_case import UcpOutboxCleanupUseCase
 from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 from ucp.bootstrap.container import Container as CoreContainer
 from ucp.core.config import get_settings
-from ucp.ports.identity_provider import IdentityProviderPort
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.identity_provider import IdentityProviderPortPort
+from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 from ucp.ports.uow import UcpUnitOfWorkPort
 
 from ucp_worker.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
@@ -199,14 +199,14 @@ class WorkerContainer:
 
     def _wire_events_consumer(self) -> None:
         core_container = CoreContainer()
-        idp: IdentityProviderPort
-        idp_users: IUserIdentityProvider
+        idp: IdentityProviderPortPort
+        idp_users: IUserIdentityProviderPort
 
         if os.environ.get("APP_ENV", "production") in ("local", "test"):
-            idp = DummyIdentityProvider()
-            idp_users = DummyIdentityProvider()  # type: ignore
+            idp = DummyIdentityProviderPort()
+            idp_users = DummyIdentityProviderPort()  # type: ignore
         else:
-            idp = ZitadelIdentityProvider(org_provider=core_container.org_provider())
+            idp = ZitadelIdentityProviderPort(org_provider=core_container.org_provider())
             idp_users = core_container.user_provider()
 
         @asynccontextmanager

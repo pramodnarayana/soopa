@@ -442,7 +442,9 @@ class FakeDataPlaneOutboxRepository:
             for existing in self.events:
                 if existing["idempotency_key"] == idempotency_key:
                     return
-        self.events.append({"idempotency_key": idempotency_key, "event_type": event_type, "payload": payload})
+        self.events.append(
+            {"idempotency_key": idempotency_key, "event_type": event_type, "payload": payload}
+        )
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
         if key_str in self.processed or key_str in self.leased:

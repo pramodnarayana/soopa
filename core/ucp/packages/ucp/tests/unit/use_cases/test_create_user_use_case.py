@@ -9,7 +9,7 @@ from ucp.application.use_cases.create_user_use_case import (
 from ucp.core.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProvider
+from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 from ucp.ports.outbound.user_repository import IUserRepository
 from ucp.ports.uow import UcpUnitOfWorkPort
 
@@ -25,8 +25,8 @@ def mock_user_repo() -> IUserRepository:
 
 
 @pytest.fixture
-def mock_idp() -> IUserIdentityProvider:
-    mock = create_autospec(IUserIdentityProvider, instance=True)
+def mock_idp() -> IUserIdentityProviderPort:
+    mock = create_autospec(IUserIdentityProviderPort, instance=True)
     mock.create_user = AsyncMock(return_value="idp-user-123")
     return mock
 

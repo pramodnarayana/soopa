@@ -106,8 +106,12 @@ class AwsSecretsManagerAdapter:
 
                 # Require exactly 3 parts before processing
                 if len(parts) != 3:
-                    logger.error("invalid_secret_reference", vault_ref=vault_ref, parts_count=len(parts))
-                    raise ValueError(f"Invalid secret reference format: {vault_ref} (expected 3 parts)")
+                    logger.error(
+                        "invalid_secret_reference", vault_ref=vault_ref, parts_count=len(parts)
+                    )
+                    raise ValueError(
+                        f"Invalid secret reference format: {vault_ref} (expected 3 parts)"
+                    )
 
                 category_str = parts[1]
                 ref_id = parts[2]
@@ -201,8 +205,14 @@ class AwsSecretsManagerAdapter:
 
                 # Require exactly 3 parts before processing
                 if len(parts) != 3:
-                    logger.error("invalid_secret_reference_for_deletion", vault_ref=vault_ref, parts_count=len(parts))
-                    raise ValueError(f"Invalid secret reference format: {vault_ref} (expected 3 parts)")
+                    logger.error(
+                        "invalid_secret_reference_for_deletion",
+                        vault_ref=vault_ref,
+                        parts_count=len(parts),
+                    )
+                    raise ValueError(
+                        f"Invalid secret reference format: {vault_ref} (expected 3 parts)"
+                    )
 
                 category_str = parts[1]
                 ref_id = parts[2]

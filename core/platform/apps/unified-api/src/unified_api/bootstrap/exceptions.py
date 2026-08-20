@@ -13,7 +13,7 @@ Architecture note:
     that Starlette dispatches to the EDI sub-app, because inner-scope handlers
     are invoked first. These Shell-level handlers act as a backstop for
     exceptions that propagate out of any mounted sub-app.
-  - UCP exceptions (e.g. IdentityProviderError) are only registered here since
+  - UCP exceptions (e.g. IdentityProviderPortError) are only registered here since
     UCP routers are inlined on the Shell, not a sub-app.
 """
 
@@ -22,7 +22,7 @@ from edi.core.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from ucp.core.exceptions import IdentityProviderError, ResourceNotFoundError
+from ucp.core.exceptions import IdentityProviderPortError, ResourceNotFoundError
 
 logger = structlog.get_logger(__name__)
 
@@ -32,7 +32,7 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
     Registers all exception handlers on the Shell (Host) application.
 
     Covers:
-      - UCP domain exceptions (IdentityProviderError)
+      - UCP domain exceptions (IdentityProviderPortError)
       - EDI domain exceptions (OrchestrationError, VaultError) — backstop only
       - Framework validation exceptions (RequestValidationError)
     """
@@ -50,9 +50,9 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
             content={"detail": str(exc)},
         )
 
-    @app.exception_handler(IdentityProviderError)
+    @app.exception_handler(IdentityProviderPortError)
     async def identity_provider_exception_handler(
-        request: Request, exc: IdentityProviderError
+        request: Request, exc: IdentityProviderPortError
     ) -> JSONResponse:
         sanitized_path = (
             request.url.path.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")

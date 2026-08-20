@@ -57,7 +57,11 @@ def sync_secrets() -> None:  # noqa: C901
 
                 # Require exactly 3 parts before processing
                 if len(parts) != 3:
-                    logger.warning("invalid_secret_name_format", secret_name=secret_name, parts_count=len(parts))
+                    logger.warning(
+                        "invalid_secret_name_format",
+                        secret_name=secret_name,
+                        parts_count=len(parts),
+                    )
                     continue
 
                 category_str = parts[1]

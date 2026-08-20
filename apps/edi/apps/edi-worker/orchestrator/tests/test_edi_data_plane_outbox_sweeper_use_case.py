@@ -153,7 +153,9 @@ async def test_sweeper_shard_processing_with_events(
     # Compile the statement to inspect its SQL structure
     from sqlalchemy.dialects import postgresql
 
-    compiled = executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    compiled = executed_stmt.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    )
     sql_text = str(compiled)
 
     # Verify critical predicates are present in the query

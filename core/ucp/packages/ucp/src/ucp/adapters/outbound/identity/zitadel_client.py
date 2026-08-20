@@ -4,7 +4,7 @@ import httpx
 import structlog
 
 from ucp.core.config import get_settings
-from ucp.core.exceptions import IdentityProviderError
+from ucp.core.exceptions import IdentityProviderPortError
 
 logger = structlog.get_logger(__name__)
 
@@ -61,7 +61,7 @@ class ZitadelClient:
             action_context=action_context,
             error_text=error_text,
         )
-        raise IdentityProviderError(
+        raise IdentityProviderPortError(
             message=f"Failed to {action_context}",
             original_error=error_text,
             status_code=response.status_code,

@@ -53,9 +53,7 @@ class OutboundTransformUseCase:
         )
 
         if not route_config or not outbound_route:
-            raise ValueError(
-                f"Unsuccessful route/header lookup for trace_id={trace_id}"
-            )
+            raise ValueError(f"Unsuccessful route/header lookup for trace_id={trace_id}")
 
         return trading_partner_id, route_config, outbound_route
 
@@ -92,9 +90,7 @@ class OutboundTransformUseCase:
 
     async def execute(self, trace_id: str) -> None:
         """Transforms an outbound JSON payload to X12 EDI."""
-        logger.info(
-            "outbound_transform.started", trace_id=trace_id
-        )
+        logger.info("outbound_transform.started", trace_id=trace_id)
 
         async with self.uow:
             edi_json = await self.uow.repository.get_edi_json(trace_id)
@@ -173,6 +169,4 @@ class OutboundTransformUseCase:
 
             await self.uow.commit()
 
-        logger.info(
-            "outbound_transform.completed", trace_id=trace_id
-        )
+        logger.info("outbound_transform.completed", trace_id=trace_id)

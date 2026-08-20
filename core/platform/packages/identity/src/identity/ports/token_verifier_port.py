@@ -7,6 +7,6 @@ class TokenValidationError(Exception):
     """Raised when a token is mathematically invalid (e.g. expired or invalid signature)."""
 
 
-class TokenVerifier(Protocol):
+class TokenVerifierPort(Protocol):
     async def verify(self, token: str) -> TokenClaims:
         raise NotImplementedError

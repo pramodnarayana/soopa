@@ -1,7 +1,7 @@
 from typing import Protocol
 
 
-class IdentityProviderPort(Protocol):
+class IdentityProviderPortPort(Protocol):
     """
     Port for the external Identity Provider (e.g. Zitadel, Auth0).
     """

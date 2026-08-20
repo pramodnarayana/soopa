@@ -10,21 +10,21 @@ import structlog
 from jwt import PyJWKClient
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
-from identity.ports.token_verifier import TokenValidationError, TokenVerifier
+from identity.ports.token_verifier_port import TokenValidationError, TokenVerifierPort
 
 logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
-class ZitadelTokenVerifierOptions:
+class ZitadelTokenVerifierPortOptions:
     issuer: str
     audience: str | list[str]
     jwks_url: str | None = None
     platform_org_id: str | None = None
 
 
-class ZitadelTokenVerifier(TokenVerifier):
-    def __init__(self, options: ZitadelTokenVerifierOptions) -> None:
+class ZitadelTokenVerifierPort(TokenVerifierPort):
+    def __init__(self, options: ZitadelTokenVerifierPortOptions) -> None:
         self._options = options
         self._jwks_url = options.jwks_url or f"{options.issuer}/oauth/v2/keys"
         self._jwks_client = PyJWKClient(self._jwks_url)
@@ -67,6 +67,52 @@ class ZitadelTokenVerifier(TokenVerifier):
             for _role, orgs in roles_dict.items():
                 if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
                     orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
+
+        # Adapter translation: Map raw Zitadel payload to pure Domain TokenClaims
+        authorized_tenants = set()
+        tenant_roles: dict[str, list[str]] = {}
+        roles: list[str] = []
+
+        tenant_id = payload.get("tenant_id") or payload.get("urn:zitadel:iam:org:id")
+        if tenant_id:
+            authorized_tenants.add(str(tenant_id))
+
+        idp_org_id = payload.get("urn:zitadel:iam:org:id")
+        if idp_org_id:
+            authorized_tenants.add(str(idp_org_id))
+
+        project_roles_found = False
+        for key, value in payload.items():
+            if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
+                project_roles_found = True
+                if isinstance(value, dict):
+                    for role, orgs in value.items():
+                        if isinstance(orgs, dict):
+                            for org_id in orgs:
+                                authorized_tenants.add(str(org_id))
+                                if org_id not in tenant_roles:
+                                    tenant_roles[str(org_id)] = []
+                                tenant_roles[str(org_id)].append(str(role))
+                                roles.append(str(role))
+
+        if not project_roles_found:
+            generic_roles = payload.get("roles")
+            if isinstance(generic_roles, dict):
+                for role, orgs in generic_roles.items():
+                    if isinstance(orgs, dict):
+                        for org_id in orgs:
+                            authorized_tenants.add(str(org_id))
+                            if org_id not in tenant_roles:
+                                tenant_roles[str(org_id)] = []
+                            tenant_roles[str(org_id)].append(str(role))
+                            roles.append(str(role))
+            elif isinstance(generic_roles, list):
+                roles = [str(r) for r in generic_roles]
+
+        payload["tenant_id"] = str(tenant_id) if tenant_id else None
+        payload["authorized_tenants"] = list(authorized_tenants)
+        payload["tenant_roles"] = tenant_roles
+        payload["roles"] = roles
 
         try:
             return TokenClaims.model_validate(payload)

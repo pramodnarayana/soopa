@@ -11,5 +11,5 @@ class UserProfile(BaseModel):
     display_name: str | None = None
 
 
-class IdentityProvider(Protocol):
+class IdentityProviderPort(Protocol):
     async def get_user_profile(self, identity: IdentityContext) -> UserProfile: ...
