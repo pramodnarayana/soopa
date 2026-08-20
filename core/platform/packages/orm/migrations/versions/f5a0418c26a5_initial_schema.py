@@ -48,7 +48,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("slug"),
         schema="identity",
     )
-    op.create_index()
     op.create_table(
         "users",
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -64,7 +63,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("idp_user_id"),
         schema="identity",
     )
-    op.create_index()
     op.create_index(
         "uq_users_email_lower",
         "users",
@@ -221,7 +219,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         schema="ucp",
     )
-    op.create_index()
     op.create_index(
         op.f("ix_ucp_webhooks_tenant_id"), "webhooks", ["tenant_id"], unique=False, schema="ucp"
     )
@@ -242,7 +239,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("key_hash"),
         schema="identity",
     )
-    op.create_index()
     op.create_index(
         op.f("ix_identity_api_keys_tenant_id"),
         "api_keys",
@@ -269,7 +265,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("client_id"),
         schema="identity",
     )
-    op.create_index()
     op.create_index(
         op.f("ix_identity_api_tokens_tenant_id"),
         "api_tokens",
@@ -292,7 +287,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         schema="identity",
     )
-    op.create_index()
     op.create_index(
         op.f("ix_identity_roles_tenant_id"), "roles", ["tenant_id"], unique=False, schema="identity"
     )
