@@ -6,6 +6,6 @@
     "format": "uv run ruff format . && uv run ruff check --fix .",
     "typecheck": "uv run mypy src/ucp_worker",
     "test": "uv run pytest",
-    "deadcode": "uv run vulture --exclude .venv . --min-confidence 80 && uv run deptry ."
+    "deadcode:deptry": "uv run deptry ."
   }
 }

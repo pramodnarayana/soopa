@@ -12,7 +12,7 @@
     "generate:py": "mkdir -p python/src/platform_schemas && uv run --with datamodel-code-generator datamodel-codegen --input events --output python/src/platform_schemas --input-file-type jsonschema"
   },
   "devDependencies": {
-    "json-schema-to-typescript": "^15.0.3",
-    "typescript": "~6.0.2"
+    "json-schema-to-typescript": "^15.0.4",
+    "typescript": "~6.0.3"
   }
 }

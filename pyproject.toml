@@ -56,6 +56,9 @@ dev = [
     "testcontainers[postgres]>=4.15.0",
     "pytest-archon>=0.0.6",
     "tach>=0.14.0",
+    "vulture>=2.16",
+    "deptry>=0.25.1",
+    "pip-audit>=2.10.1",
 ]
 
 [tool.mypy]
@@ -208,3 +211,9 @@ extraPaths = [
     "apps/edi/apps/edi-as2-server/src",
     "apps/edi/packages/edi/src",
 ]
+
+[tool.vulture]
+exclude = ["venv", ".venv", "migrations", "tests", "*bots_core*", "*grammar*", "legacy_libs", ".git", "node_modules"]
+paths = ["apps", "core"]
+ignore_names = ["cls", "kwargs", "args", "QueueName", "MaxNumberOfMessages", "QueueUrl", "WaitTimeSeconds", "ReceiptHandle", "MessageBody", "MessageGroupId", "MessageDeduplicationId", "Entries", "connection", "routedict", "ta_fromfile", "dialect", "memo"]
+min_confidence = 80

@@ -76,18 +76,20 @@ def sync_secrets() -> None:  # noqa: C901
                     logger.warning("unknown_secret_category", category=category_str)
                     continue
 
-                    file_path = os.path.join(
-                        SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
-                    )
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                file_path = os.path.join(
+                    SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
+                )
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-                    # Write file atomically
-                    tmp_path = file_path + ".tmp"
-                    with open(tmp_path, "w") as f:
-                        f.write(secret_string)
-                    os.rename(tmp_path, file_path)
+                # Write file atomically
+                tmp_path = file_path + ".tmp"
+                with open(tmp_path, "w") as f:
+                    f.write(secret_string)
+                os.rename(tmp_path, file_path)
 
-                    active_files.add(os.path.realpath(file_path))
+                logger.info("secret_updated", secret_id=ref_id, category=category_str)
+
+                active_files.add(os.path.realpath(file_path))
 
         # Reconciliation: remove local files that are no longer in Secrets Manager
         mount_path = os.path.realpath(SECRETS_MOUNT_PATH)
