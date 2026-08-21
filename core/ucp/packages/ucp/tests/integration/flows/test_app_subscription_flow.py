@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
@@ -64,12 +65,12 @@ async def test_app_subscription_flow(
     )
     dispatcher = UcpEventsSqsConsumer(event_listener)
 
-    # Fake session factory for the provisioner
-    class FakeSessionFactory:
-        def __call__(self):
-            return db_session
+    # Fake uow factory for the provisioner
+    @asynccontextmanager
+    async def fake_uow_factory():
+        yield SqlAlchemyUcpUnitOfWork(session=db_session)
 
-    provisioner = InfrastructureProvisioner(session_factory=FakeSessionFactory())  # type: ignore
+    provisioner = InfrastructureProvisioner(uow_factory=fake_uow_factory)
 
     dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
 
@@ -89,6 +90,7 @@ async def test_app_subscription_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Stark Industries",
+        creator_id="usr_mock",
     )
 
     tenant = await use_case.execute(command)

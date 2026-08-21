@@ -36,7 +36,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
 
     # 2. Act: Call the endpoint
     response = await client.post(
-        f"/api/v1/ucp/tenants/{tenant.id}/users",
+        f"/api/v1/tenants/{tenant.id}/users",
         json=payload,
     )
 

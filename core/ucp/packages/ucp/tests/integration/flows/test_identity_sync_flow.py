@@ -84,6 +84,7 @@ async def test_identity_sync_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Acme Corp",
+        creator_id="usr_mock",
     )
 
     tenant = await use_case.execute(command)
