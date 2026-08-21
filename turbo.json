@@ -28,12 +28,18 @@
     "lint": {
       "outputs": []
     },
+    "format": {
+      "outputs": []
+    },
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": []
     },
     "typecheck:tests": {
       "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "deadcode:deptry": {
       "outputs": []
     }
   }

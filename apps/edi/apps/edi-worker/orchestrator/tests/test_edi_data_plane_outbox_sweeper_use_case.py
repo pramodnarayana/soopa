@@ -46,7 +46,9 @@ async def test_sweeper_executes_sweep_shard_for_all_shards(
     ]
     mock_global_session.execute.return_value = mock_res
 
-    async def global_session_gen(*args, **kwargs) -> AsyncGenerator[AsyncMock, None]:
+    async def global_session_gen(
+        *args: object, **kwargs: object
+    ) -> AsyncGenerator[AsyncMock, None]:
         yield mock_global_session
 
     mock_db_router.get_global_session.side_effect = global_session_gen
@@ -56,7 +58,7 @@ async def test_sweeper_executes_sweep_shard_for_all_shards(
     )
 
     # Mock the internal _sweep_shard to avoid hitting DB
-    use_case._sweep_shard = AsyncMock(side_effect=[5, 10])  # type: ignore
+    use_case._sweep_shard = AsyncMock(side_effect=[5, 10])  # type: ignore[method-assign]
 
     total = await use_case.execute()
 
@@ -85,7 +87,9 @@ async def test_sweeper_partial_shard_failure_returns_successful_count(
     ]
     mock_global_session.execute.return_value = mock_res
 
-    async def global_session_gen(*args, **kwargs) -> AsyncGenerator[AsyncMock, None]:
+    async def global_session_gen(
+        *args: object, **kwargs: object
+    ) -> AsyncGenerator[AsyncMock, None]:
         yield mock_global_session
 
     mock_db_router.get_global_session.side_effect = global_session_gen
@@ -100,7 +104,7 @@ async def test_sweeper_partial_shard_failure_returns_successful_count(
             raise RuntimeError("Shard sweep failed")
         return 7
 
-    use_case._sweep_shard = AsyncMock(side_effect=mock_sweep_shard)  # type: ignore
+    use_case._sweep_shard = AsyncMock(side_effect=mock_sweep_shard)  # type: ignore[method-assign]
 
     total = await use_case.execute()
 
@@ -130,7 +134,7 @@ async def test_sweeper_shard_processing_with_events(
     )
 
     # Mock the processor
-    use_case.processor.process_batch = AsyncMock(return_value=3)
+    use_case.processor.process_batch = AsyncMock(return_value=3)  # type: ignore[method-assign]
 
     # Fake events
     fake_events = [
@@ -154,7 +158,8 @@ async def test_sweeper_shard_processing_with_events(
     from sqlalchemy.dialects import postgresql
 
     compiled = executed_stmt.compile(
-        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        dialect=postgresql.dialect(),  # type: ignore[no-untyped-call]
+        compile_kwargs={"literal_binds": True},
     )
     sql_text = str(compiled)
 
@@ -183,7 +188,7 @@ async def test_sweeper_shard_processing_no_events(
         db_router=mock_db_router, message_publisher=mock_publisher
     )
 
-    use_case.processor.process_batch = AsyncMock()
+    use_case.processor.process_batch = AsyncMock()  # type: ignore[method-assign]
 
     # Fake empty events
     mock_res = MagicMock()

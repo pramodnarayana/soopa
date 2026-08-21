@@ -1,5 +1,7 @@
 import asyncio
 import os
+from contextlib import suppress
+from typing import Any
 
 import boto3  # type: ignore
 import structlog
@@ -10,9 +12,6 @@ logger = structlog.get_logger(__name__)
 settings = get_settings()
 SECRETS_MOUNT_PATH = settings.secrets.mount_path
 POLL_INTERVAL_SECONDS = settings.secrets.sync_interval_seconds
-
-
-from typing import Any
 
 
 def get_client() -> Any:
@@ -76,18 +75,27 @@ def sync_secrets() -> None:  # noqa: C901
                     logger.warning("unknown_secret_category", category=category_str)
                     continue
 
-                    file_path = os.path.join(
-                        SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
-                    )
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                file_path = os.path.join(
+                    SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
+                )
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-                    # Write file atomically
-                    tmp_path = file_path + ".tmp"
+                # Write file atomically
+                tmp_path = file_path + ".tmp"
+                rename_succeeded = False
+                try:
                     with open(tmp_path, "w") as f:
                         f.write(secret_string)
                     os.rename(tmp_path, file_path)
+                    rename_succeeded = True
+                finally:
+                    if not rename_succeeded:
+                        with suppress(OSError):
+                            os.remove(tmp_path)
 
-                    active_files.add(os.path.realpath(file_path))
+                logger.info("secret_updated", secret_id=ref_id, category=category_str)
+
+                active_files.add(os.path.realpath(file_path))
 
         # Reconciliation: remove local files that are no longer in Secrets Manager
         mount_path = os.path.realpath(SECRETS_MOUNT_PATH)

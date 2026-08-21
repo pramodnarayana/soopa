@@ -4,8 +4,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install pnpm and pm2 globally
-RUN corepack enable pnpm
-RUN npm install -g pm2
+RUN corepack enable pnpm && npm install -g pm2@7.0.3
 
 # Copy monorepo config files
 COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml tsconfig.base.json ./
@@ -17,10 +16,7 @@ COPY packages ./packages
 COPY server ./server
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Build everything
-RUN pnpm build
+RUN pnpm install --frozen-lockfile && pnpm build
 
 # Expose ports for both engines
 EXPOSE 3001
@@ -30,5 +26,5 @@ EXPOSE 3002
 COPY ecosystem.config.cjs ./
 
 # By default, use pm2 to run the engines specified in the config
-USER node
+USER 1000
 CMD ["pm2-runtime", "start", "ecosystem.config.cjs"]

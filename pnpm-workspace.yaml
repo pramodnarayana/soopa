@@ -3,5 +3,6 @@ packages:
   - 'core/*/packages/*'
   - 'core/*/packages/*/node'
   - 'apps/*/apps/*'
+  - 'apps/*/apps/*/*'
   - 'apps/*/packages/*'
   - 'core/packages/*'

@@ -42,8 +42,6 @@ strict = true
 module = [
     "aioboto3",
     "aioboto3.*",
-    "botocore",
-    "botocore.*",
     "hvac",
     "hvac.*",
     "asyncpg",
