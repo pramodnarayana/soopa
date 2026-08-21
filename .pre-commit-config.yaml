@@ -77,7 +77,7 @@ repos:
         pass_filenames: false
       - id: pip-audit
         name: pip-audit
-        entry: uv run pip-audit
+        entry: uv run --all-packages pip-audit
         language: system
         pass_filenames: false
       - id: pnpm-audit

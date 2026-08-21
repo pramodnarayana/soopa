@@ -4,7 +4,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install pnpm and pm2 globally
-RUN corepack enable pnpm && npm install -g pm2@5.4.0
+RUN corepack enable pnpm && npm install -g pm2@7.0.3
 
 # Copy monorepo config files
 COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml tsconfig.base.json ./

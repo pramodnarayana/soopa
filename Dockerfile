@@ -6,7 +6,7 @@
 # =============================================================================
 
 # --- Stage 1: Builder ---
-FROM python:3.13-slim AS builder
+FROM python:3.13-slim-bookworm AS builder
 
 # /build is the conventional builder WORKDIR — separate from /app (runtime).
 # We use --relocatable so the .venv can be safely copied to any path
@@ -14,15 +14,14 @@ FROM python:3.13-slim AS builder
 WORKDIR /build
 
 # Install build dependencies for C extensions (like pykcs11)
-# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    swig \
-    pkg-config \
+    build-essential=12.9 \
+    swig=4.1.0-0.2 \
+    pkg-config=1.8.1-1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency resolution
-RUN pip install --no-cache-dir uv==0.5.30
+RUN pip install --no-cache-dir uv==0.11.15
 
 # Copy the entire workspace (uv requires the full tree for workspace resolution)
 COPY pyproject.toml uv.lock ./
@@ -33,7 +32,7 @@ COPY core ./core
 # --no-editable prevents workspace packages from referencing /build paths so they work in /app.
 RUN uv venv --relocatable .venv && uv sync --no-dev --frozen --all-packages --no-editable
 # --- Stage 2: Production Runtime ---
-FROM python:3.13-slim AS runtime
+FROM python:3.13-slim-bookworm AS runtime
 
 # Security: run as non-root
 RUN useradd --create-home --shell /bin/bash --uid 1000 soopa
