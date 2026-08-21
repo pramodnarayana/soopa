@@ -24,10 +24,11 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     idp_id = "385223051081416707"
 
     repo = TenantRepository(db_session)
+    unique_suffix = uuid.uuid4().hex[:8]
     tenant = Tenant(
         id=canonical_id,
-        name="Test Trucking",
-        slug="test-trucking",
+        name=f"Test Trucking {unique_suffix}",
+        slug=f"test-trucking-{unique_suffix}",
         idp_tenant_id=idp_id,
         status="active",
         created_at=datetime.datetime.now(datetime.UTC),
@@ -69,7 +70,11 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
 
         # 3. Hit the endpoint using the IdP ID
         response = await client.get(
-            f"/api/v1/tenants/{idp_id}", headers={"Authorization": "Bearer mock"}
+            f"/api/v1/tenants/{idp_id}",
+            headers={
+                "Authorization": "Bearer mock",
+                "x-tenant-id": idp_id,
+            },
         )
 
         # It SHOULD be 200 OK!
