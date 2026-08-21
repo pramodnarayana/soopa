@@ -34,7 +34,10 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
         from ucp.domain.models.tenant import Tenant
 
         tenant = Tenant.create(
-            id=tenant_id, name="Test Tenant", slug="test-tenant-slug", idp_tenant_id=None
+            id=tenant_id,
+            name="Test Tenant",
+            slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
+            idp_tenant_id=None,
         )  # Override generated ID for test consistency
         await uow.tenant_repo.save(tenant)
 

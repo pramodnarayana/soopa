@@ -38,6 +38,7 @@ MOCK_PLATFORM_ADMIN = IdentityContext(
     subject="usr_mock_admin",
     tenant_id=PLATFORM_TENANT_ID,
     authorized_tenants={PLATFORM_TENANT_ID},
+    tenant_roles={PLATFORM_TENANT_ID: ["admin"]},
     claims={},
 )
 

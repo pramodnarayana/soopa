@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from httpx import AsyncClient
 from platform_orm.models.identity import Tenant as OrmTenant
@@ -19,18 +21,18 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     """
     # 1. Arrange: Create a Tenant to associate the user with
     tenant = OrmTenant(
-        id="tenant_test_123",
-        name="Test Tenant",
-        slug="test-tenant",
-        idp_tenant_id="mock_org_id",
+        id=f"ten_{uuid.uuid4().hex[:12]}",
+        name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+        slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
+        idp_tenant_id=f"mock_org_{uuid.uuid4().hex[:8]}",
     )
     db_session.add(tenant)
     await db_session.commit()
 
     payload = {
-        "email": "integration@test.com",
-        "first_name": "Integration",
-        "last_name": "Test",
+        "email": f"integration_{uuid.uuid4().hex[:8]}@test.com",
+        "firstName": "Integration",
+        "lastName": "Test",
         "role": "TenantAdmin",
     }
 
@@ -54,7 +56,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     )
     user_record = result.fetchone()
     assert user_record is not None
-    assert user_record.email == "integration@test.com"
+    assert user_record.email.startswith("integration_")
     assert user_record.name == "Integration Test"
 
     # Check outbox event was emitted (UserCreatedEvent)
