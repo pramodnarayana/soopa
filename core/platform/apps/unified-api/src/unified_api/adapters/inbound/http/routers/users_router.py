@@ -24,8 +24,8 @@ from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.authorization import Capability
-from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
+from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 from unified_api.adapters.inbound.http.dtos.user_dtos import (
     CreateUserRequest,
@@ -48,8 +48,8 @@ async def get_users(  # type: ignore
     tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
     user_repo_factory=Depends(Provide[Container.user_repo.provider]),
 ):
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
-    user_repo: IUserRepository = user_repo_factory(session=session)
+    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
+    user_repo: UserRepositoryPort = user_repo_factory(session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     tenant = await tenant_repo.find_by_id(canonical_tenant_id)
     if not tenant:

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 router = APIRouter(prefix="/apps", tags=["Apps"])
 

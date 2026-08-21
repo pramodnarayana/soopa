@@ -1,7 +1,7 @@
 from typing import Protocol
 
 
-class IOrganizationProvider(Protocol):
+class OrganizationProviderPort(Protocol):
     async def create_organization(self, name: str) -> tuple[str, bool]:
         """Creates an organization and returns (org_id, grant_succeeded)"""
         ...

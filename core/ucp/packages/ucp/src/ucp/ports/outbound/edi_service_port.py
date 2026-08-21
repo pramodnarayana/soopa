@@ -1,7 +1,7 @@
 import abc
 
 
-class IEdiService(abc.ABC):
+class EdiServicePort(abc.ABC):
     """
     Outbound Port for the UCP domain to synchronously communicate with the EDI domain.
     In a Modular Monolith, this is implemented by an Inbound Adapter in the EDI domain,

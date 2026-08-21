@@ -7,7 +7,7 @@ must NOT be imported from the Application or Domain layers.
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
-from ucp.ports.outbound.tenant_query_service import TenantReadModel
+from ucp.ports.outbound.tenant_query_service_port import TenantReadModel
 
 
 class ProvisionTenantRequest(BaseModel):

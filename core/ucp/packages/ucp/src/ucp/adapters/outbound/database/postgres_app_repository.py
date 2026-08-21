@@ -3,12 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App as DbApp
 
 from ucp.domain.models.app import App
-from ucp.ports.outbound.app_repository import IAppRepository
+from ucp.ports.outbound.app_repository_port import AppRepositoryPort
 
 
-class PostgresAppRepository(IAppRepository):
+class PostgresAppRepository(AppRepositoryPort):
     """
-    PostgreSQL adapter for the IAppRepository port.
+    PostgreSQL adapter for the AppRepositoryPort port.
     Fetches available platform applications from the database.
     """
 

@@ -11,7 +11,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
-from ..ports.metrics_port import MetricsPort
+from observability.ports.outbound.metrics_port import MetricsPort
 
 
 class OtelMetrics(MetricsPort):

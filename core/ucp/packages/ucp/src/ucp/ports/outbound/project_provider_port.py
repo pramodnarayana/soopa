@@ -3,7 +3,7 @@ from typing import Protocol
 from ucp.domain.dtos.zitadel_dtos import ZitadelRole, ZitadelUser
 
 
-class IProjectProvider(Protocol):
+class ProjectProviderPort(Protocol):
     async def create_project_grant(
         self, org_id: str, project_id: str, role_keys: list[str]
     ) -> None:

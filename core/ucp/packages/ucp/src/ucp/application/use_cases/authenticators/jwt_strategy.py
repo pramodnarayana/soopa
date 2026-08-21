@@ -11,9 +11,9 @@ from identity.domain.identity_context import IdentityContext
 from identity.ports.token_verifier_port import TokenVerifierPort
 
 from ucp.domain.models.authorization import Capability
-from ucp.ports.outbound.role_repository import IRoleRepository
-from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
+from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
@@ -25,9 +25,9 @@ class JwtStrategy(IAuthenticationStrategy):
 
     def __init__(
         self,
-        tenant_repo_factory: Callable[[], AbstractAsyncContextManager[ITenantRepository]],
-        user_repo_factory: Callable[[], AbstractAsyncContextManager[IUserRepository]],
-        role_repo_factory: Callable[[], AbstractAsyncContextManager[IRoleRepository]],
+        tenant_repo_factory: Callable[[], AbstractAsyncContextManager[TenantRepositoryPort]],
+        user_repo_factory: Callable[[], AbstractAsyncContextManager[UserRepositoryPort]],
+        role_repo_factory: Callable[[], AbstractAsyncContextManager[RoleRepositoryPort]],
         token_verifier: TokenVerifierPort,
     ):
         self.tenant_repo_factory = tenant_repo_factory

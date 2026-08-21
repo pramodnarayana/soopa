@@ -6,7 +6,7 @@ import structlog
 from ucp.domain.exceptions import DuplicateEntityError, SlugExhaustedException
 from ucp.domain.models.tenant import Tenant
 from ucp.domain.services.slug_service import generate_slug
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

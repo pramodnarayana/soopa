@@ -14,7 +14,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import StatusCode
 
-from ..ports.tracer_port import SpanPort, TracerPort
+from observability.ports.outbound.tracer_port import SpanPort, TracerPort
 
 
 class OtelSpan(SpanPort):

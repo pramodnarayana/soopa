@@ -8,17 +8,17 @@ from ucp.application.use_cases.roles.create_role_use_case import (
 )
 from ucp.domain.exceptions import InvalidCapabilityError
 from ucp.domain.models.authorization import Capability
-from ucp.ports.outbound.role_repository import IRoleRepository
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
 @pytest.fixture
-def mock_role_repo() -> IRoleRepository:
-    return create_autospec(IRoleRepository, instance=True)
+def mock_role_repo() -> RoleRepositoryPort:
+    return create_autospec(RoleRepositoryPort, instance=True)
 
 
 @pytest.fixture
-def mock_uow(mock_role_repo: IRoleRepository) -> UcpUnitOfWorkPort:
+def mock_uow(mock_role_repo: RoleRepositoryPort) -> UcpUnitOfWorkPort:
     uow = create_autospec(UcpUnitOfWorkPort, instance=True)
     uow.role_repo = mock_role_repo
     # Make UoW work as an async context manager

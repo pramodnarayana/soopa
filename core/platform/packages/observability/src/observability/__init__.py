@@ -10,13 +10,13 @@ Adapters are implementation details. Services should never import them directly.
 
 # Ports — the contracts business logic depends on
 # Adapters — exposed for convenience at the composition root (e.g. main.py lifespan)
-from .adapters.noop import NoOpLogger, NoOpMetrics, NoOpTracer
-from .adapters.otel_metrics import OtelMetrics
-from .adapters.otel_tracer import OtelTracer
-from .adapters.structlog_logger import StructlogLogger
-from .ports.logger_port import LoggerPort
-from .ports.metrics_port import MetricsPort
-from .ports.tracer_port import SpanPort, TracerPort
+from .adapters.outbound.noop import NoOpLogger, NoOpMetrics, NoOpTracer
+from .adapters.outbound.otel_metrics import OtelMetrics
+from .adapters.outbound.otel_tracer import OtelTracer
+from .adapters.outbound.structlog_logger import StructlogLogger
+from .ports.outbound.logger_port import LoggerPort
+from .ports.outbound.metrics_port import MetricsPort
+from .ports.outbound.tracer_port import SpanPort, TracerPort
 
 # Provider — the single composition root
 from .provider import ObservabilityProvider

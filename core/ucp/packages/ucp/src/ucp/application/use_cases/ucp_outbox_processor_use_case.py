@@ -4,8 +4,8 @@ import uuid
 import structlog
 
 from ucp.domain.models.outbox_event import OutboxEvent
-from ucp.ports.outbound.outbox_publisher import OutboxPublisherPort
-from ucp.ports.outbound.outbox_repository import OutboxRepositoryPort
+from ucp.ports.outbound.outbox_publisher_port import OutboxPublisherPort
+from ucp.ports.outbound.outbox_repository_port import OutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

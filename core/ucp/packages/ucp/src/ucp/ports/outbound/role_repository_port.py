@@ -3,7 +3,7 @@ import abc
 from ucp.domain.models.authorization import Role
 
 
-class IRoleRepository(abc.ABC):
+class RoleRepositoryPort(abc.ABC):
     """
     Outbound port for managing Tenant Roles and resolving User Capabilities.
     """

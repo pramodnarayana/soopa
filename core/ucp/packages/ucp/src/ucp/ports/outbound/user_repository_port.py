@@ -3,7 +3,7 @@ from typing import Protocol
 from ucp.domain.models.user import User
 
 
-class IUserRepository(Protocol):
+class UserRepositoryPort(Protocol):
     async def find_users_by_tenant(self, tenant_id: str) -> list[User]:
         """Finds all users associated with a specific tenant"""
         ...

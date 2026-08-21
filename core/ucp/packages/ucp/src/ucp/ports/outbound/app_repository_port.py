@@ -3,7 +3,7 @@ from typing import Protocol
 from ucp.domain.models.app import App
 
 
-class IAppRepository(Protocol):
+class AppRepositoryPort(Protocol):
     """
     Outbound port for retrieving App metadata (e.g., from ucp.apps).
     """

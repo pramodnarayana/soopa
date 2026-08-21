@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class IUcpAuditLogCleanupRepositoryPort(ABC):
+class UcpAuditLogCleanupRepositoryPort(ABC):
     @abstractmethod
     async def cleanup_system_audit_logs(self, retention_days: int) -> int:
         pass

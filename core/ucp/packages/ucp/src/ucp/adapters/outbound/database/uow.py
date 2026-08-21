@@ -12,7 +12,7 @@ from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.adapters.outbound.database.user_repository import UserRepository
 from ucp.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
 from ucp.domain.exceptions import DuplicateEntityError
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
 class SqlAlchemyUcpUnitOfWork(UcpUnitOfWorkPort):

@@ -3,7 +3,7 @@ from typing import Protocol
 from ucp.domain.models.tenant import Tenant
 
 
-class ITenantRepository(Protocol):
+class TenantRepositoryPort(Protocol):
     async def save(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         """Saves a tenant and its domain events to the database within a transaction"""
         ...

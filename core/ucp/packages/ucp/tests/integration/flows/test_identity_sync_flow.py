@@ -18,8 +18,8 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantUseCase,
 )
 from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
-from ucp.ports.outbound.identity_provider import IdentityProviderPortPort
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
+from ucp.ports.outbound.identity_provider_port import IdentityProviderPort
+from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 pytestmark = pytest.mark.integration
 
@@ -37,10 +37,10 @@ async def test_identity_sync_flow(
     postgres_container,
 ) -> None:
     # 1. Setup Mocks and Infrastructure Ports
-    mock_idp = create_autospec(IdentityProviderPortPort, instance=True)
+    mock_idp = create_autospec(IdentityProviderPort, instance=True)
     mock_idp.sync_tenant = AsyncMock()
 
-    mock_user_idp = create_autospec(IUserIdentityProviderPort, instance=True)
+    mock_user_idp = create_autospec(UserIdentityProviderPort, instance=True)
 
     # Outbox Setup
     outbox_repo = PostgresOutboxRepository(lambda: db_session)  # type: ignore

@@ -15,7 +15,7 @@ re-querying the database.
 
 Architecture note:
   This is a pure Inbound Adapter. It translates HTTP concepts (path params,
-  JWT headers) into domain intent using the ITenantRepository port. It must
+  JWT headers) into domain intent using the TenantRepositoryPort port. It must
   NOT be imported or used from the Application or Domain layers.
 """
 
@@ -28,7 +28,7 @@ from identity.domain.identity_context import IdentityContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
-from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
@@ -63,7 +63,7 @@ async def require_tenant_member(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
 
     # Platform Admins bypass all tenant-level ACL checks.
     # But we still need to normalize the tenant_id if it's an IdP Org ID.

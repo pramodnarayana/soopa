@@ -32,9 +32,9 @@ from ucp.application.use_cases.ucp_outbox_cleanup_use_case import UcpOutboxClean
 from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 from ucp.bootstrap.config import get_settings
 from ucp.bootstrap.container import Container as CoreContainer
-from ucp.ports.outbound.identity_provider import IdentityProviderPortPort
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
+from ucp.ports.outbound.identity_provider_port import IdentityProviderPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 from ucp_worker.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
 from ucp_worker.adapters.inbound.jobs.ucp_idempotency_cleanup_job import (
@@ -199,8 +199,8 @@ class WorkerContainer:
 
     def _wire_events_consumer(self) -> None:
         core_container = CoreContainer()
-        idp: IdentityProviderPortPort
-        idp_users: IUserIdentityProviderPort
+        idp: IdentityProviderPort
+        idp_users: UserIdentityProviderPort
 
         if os.environ.get("APP_ENV", "production") in ("local", "test"):
             idp = DummyIdentityProviderPort()

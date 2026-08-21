@@ -6,23 +6,23 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.ports.outbound.organization_provider import IOrganizationProvider
-from ucp.ports.outbound.role_repository import IRoleRepository
-from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
+from ucp.ports.outbound.organization_provider_port import OrganizationProviderPort
+from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 
 @pytest.fixture
-def mock_tenant_repo() -> ITenantRepository:
-    """Strict mock that enforces the ITenantRepository port interface."""
-    return create_autospec(ITenantRepository, instance=True)
+def mock_tenant_repo() -> TenantRepositoryPort:
+    """Strict mock that enforces the TenantRepositoryPort port interface."""
+    return create_autospec(TenantRepositoryPort, instance=True)
 
 
 @pytest.fixture
-def mock_role_repo() -> IRoleRepository:
-    """Strict mock that enforces the IRoleRepository port interface."""
-    mock = create_autospec(IRoleRepository, instance=True)
+def mock_role_repo() -> RoleRepositoryPort:
+    """Strict mock that enforces the RoleRepositoryPort port interface."""
+    mock = create_autospec(RoleRepositoryPort, instance=True)
 
     # Mock the global role return
     from ucp.domain.models.authorization import Role
@@ -41,31 +41,31 @@ def mock_role_repo() -> IRoleRepository:
 
 
 @pytest.fixture
-def mock_org_provider() -> IOrganizationProvider:
-    """Strict mock that enforces the IOrganizationProvider port interface."""
-    mock = create_autospec(IOrganizationProvider, instance=True)
+def mock_org_provider() -> OrganizationProviderPort:
+    """Strict mock that enforces the OrganizationProviderPort port interface."""
+    mock = create_autospec(OrganizationProviderPort, instance=True)
     mock.create_organization = AsyncMock(return_value=("zitadel-org-123", "org-name"))
     return mock
 
 
 @pytest.fixture
-def mock_user_identity_provider() -> IUserIdentityProviderPort:
-    """Strict mock that enforces the IUserIdentityProviderPort port interface."""
-    return create_autospec(IUserIdentityProviderPort, instance=True)
+def mock_user_identity_provider() -> UserIdentityProviderPort:
+    """Strict mock that enforces the UserIdentityProviderPort port interface."""
+    return create_autospec(UserIdentityProviderPort, instance=True)
 
 
 @pytest.fixture
 def mock_uow(
-    mock_tenant_repo: ITenantRepository, mock_role_repo: IRoleRepository
+    mock_tenant_repo: TenantRepositoryPort, mock_role_repo: RoleRepositoryPort
 ) -> UcpUnitOfWorkPort:
     uow = create_autospec(UcpUnitOfWorkPort, instance=True)
     uow.tenant_repo = mock_tenant_repo
     uow.role_repo = mock_role_repo
 
     # Mock user_repo
-    from ucp.ports.outbound.user_repository import IUserRepository
+    from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
-    mock_user_repo = create_autospec(IUserRepository, instance=True)
+    mock_user_repo = create_autospec(UserRepositoryPort, instance=True)
     from ucp.domain.models.user import User
 
     async def mock_find_by_id(user_id: str) -> User | None:
@@ -100,8 +100,8 @@ def provision_use_case(
 @pytest.mark.asyncio
 async def test_provision_tenant_success(
     provision_use_case: ProvisionTenantUseCase,
-    mock_tenant_repo: ITenantRepository,
-    mock_role_repo: IRoleRepository,
+    mock_tenant_repo: TenantRepositoryPort,
+    mock_role_repo: RoleRepositoryPort,
     mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     # Arrange

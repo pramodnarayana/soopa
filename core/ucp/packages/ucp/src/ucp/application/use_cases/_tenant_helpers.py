@@ -1,6 +1,6 @@
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
 async def resolve_tenant_or_raise(uow: UcpUnitOfWorkPort, tenant_id: str) -> Tenant:

@@ -13,12 +13,12 @@ from ucp_models.events import ControlPlaneOutbox
 
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 from ucp.domain.models.authorization import Role as DomainRole
-from ucp.ports.outbound.role_repository import IRoleRepository
+from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
-class PostgresRoleRepository(IRoleRepository):
+class PostgresRoleRepository(RoleRepositoryPort):
     """
     PostgreSQL adapter for the Role Repository.
     """

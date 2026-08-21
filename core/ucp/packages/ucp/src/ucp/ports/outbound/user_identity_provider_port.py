@@ -1,7 +1,7 @@
 from typing import Literal, Protocol
 
 
-class IUserIdentityProviderPort(Protocol):
+class UserIdentityProviderPort(Protocol):
     async def create_user(
         self,
         org_id: str,

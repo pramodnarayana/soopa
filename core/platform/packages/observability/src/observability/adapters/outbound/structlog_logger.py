@@ -15,7 +15,7 @@ from opentelemetry._logs import LogRecord
 from opentelemetry._logs import get_logger as get_otel_logger
 from opentelemetry._logs.severity import SeverityNumber
 
-from ..ports.logger_port import LoggerPort
+from observability.ports.outbound.logger_port import LoggerPort
 
 
 def _inject_trace_context(

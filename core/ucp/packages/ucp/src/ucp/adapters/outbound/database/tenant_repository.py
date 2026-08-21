@@ -17,10 +17,10 @@ from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
 from ucp.domain.models.tenant import Tenant, TenantSubscription
-from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
 
-class TenantRepository(ITenantRepository):
+class TenantRepository(TenantRepositoryPort):
     def __init__(self, session: AsyncSession):
         self.session = session
 

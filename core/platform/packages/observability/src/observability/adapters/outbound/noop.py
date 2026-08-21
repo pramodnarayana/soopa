@@ -8,9 +8,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
-from ..ports.logger_port import LoggerPort
-from ..ports.metrics_port import MetricsPort
-from ..ports.tracer_port import SpanPort, TracerPort
+from observability.ports.outbound.logger_port import LoggerPort
+from observability.ports.outbound.metrics_port import MetricsPort
+from observability.ports.outbound.tracer_port import SpanPort, TracerPort
 
 # --- No-Op Tracer ---
 

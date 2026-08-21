@@ -8,10 +8,10 @@ At startup, call ObservabilityProvider.configure(...) once.
 Everywhere else, call ObservabilityProvider.tracer(), .metrics(), .logger(name).
 """
 
-from .adapters.noop import NoOpLogger, NoOpMetrics, NoOpTracer
-from .ports.logger_port import LoggerPort
-from .ports.metrics_port import MetricsPort
-from .ports.tracer_port import TracerPort
+from .adapters.outbound.noop import NoOpLogger, NoOpMetrics, NoOpTracer
+from .ports.outbound.logger_port import LoggerPort
+from .ports.outbound.metrics_port import MetricsPort
+from .ports.outbound.tracer_port import TracerPort
 
 
 class ObservabilityProvider:
@@ -40,9 +40,9 @@ class ObservabilityProvider:
         Call once in the FastAPI lifespan startup handler.
 
         Example (production):
-            from observability.adapters.otel_tracer import OtelTracer
-            from observability.adapters.otel_metrics import OtelMetrics
-            from observability.adapters.structlog_logger import StructlogLogger
+            from observability.adapters.outbound.otel_tracer import OtelTracer
+            from observability.adapters.outbound.otel_metrics import OtelMetrics
+            from observability.adapters.outbound.structlog_logger import StructlogLogger
 
             ObservabilityProvider.configure(
                 tracer=OtelTracer(service_name="as2-server", otlp_endpoint="..."),

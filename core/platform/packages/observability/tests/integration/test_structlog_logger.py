@@ -6,7 +6,7 @@ from opentelemetry.sdk._logs.export import InMemoryLogExporter, SimpleLogRecordP
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 
-from observability.adapters.structlog_logger import StructlogLogger
+from observability.adapters.outbound.structlog_logger import StructlogLogger
 
 # Global setup for log and trace providers to avoid overriding warnings
 _memory_log_exporter = InMemoryLogExporter()

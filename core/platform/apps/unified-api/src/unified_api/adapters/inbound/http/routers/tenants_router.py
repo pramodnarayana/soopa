@@ -36,9 +36,9 @@ from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.authorization import Capability
 from ucp.domain.models.tenant import Tenant
-from ucp.ports.outbound.project_provider import IProjectProvider
-from ucp.ports.outbound.tenant_query_service import ITenantQueryService
-from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.project_provider_port import ProjectProviderPort
+from ucp.ports.outbound.tenant_query_service_port import TenantQueryServicePort
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
 from unified_api.adapters.inbound.http.dtos.tenant_dtos import (
     ProvisionTenantRequest,
@@ -72,7 +72,7 @@ async def find_all(  # type: ignore
     session: AsyncSession = Depends(get_db_session),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    query_service: ITenantQueryService = query_service_factory(session=session)
+    query_service: TenantQueryServicePort = query_service_factory(session=session)
     paginated = await query_service.get_all_tenants(page=page, limit=limit)
     return PaginatedTenantsResponse(
         items=[TenantResponse.from_read_model(t) for t in paginated.items],
@@ -86,14 +86,14 @@ async def find_all(  # type: ignore
 @inject
 async def get_roles(  # type: ignore
     request: Request,
-    project_provider: IProjectProvider = Depends(Provide[Container.project_provider]),
+    project_provider: ProjectProviderPort = Depends(Provide[Container.project_provider]),
 ):
     roles = await project_provider.get_roles()
     tenant_group = get_settings().zitadel_tenant_role_group
     return [role for role in roles if role.group == tenant_group]
 
 
-async def resolve_tenant(id: str, tenant_repo: ITenantRepository) -> "Tenant":
+async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> "Tenant":
     tenant = await tenant_repo.find_by_id(id)
     if not tenant:
         tenant = await tenant_repo.find_by_idp_tenant_id(id)
@@ -112,7 +112,7 @@ async def find_one(  # type: ignore
     session: AsyncSession = Depends(get_db_session),
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
-    query_service: ITenantQueryService = query_service_factory(session=session)
+    query_service: TenantQueryServicePort = query_service_factory(session=session)
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     if not tenant_rm:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -134,7 +134,7 @@ async def provision(  # type: ignore
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
     use_case: ProvisionTenantUseCase = use_case_factory(uow__session=session)
-    query_service: ITenantQueryService = query_service_factory(session=session)
+    query_service: TenantQueryServicePort = query_service_factory(session=session)
 
     # We enforce PLATFORM_ADMIN capability, so request.state.identity is guaranteed to be present
     identity: IdentityContext = request.state.identity
@@ -170,7 +170,7 @@ async def update_name(  # type: ignore
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
     use_case: UpdateTenantNameUseCase = use_case_factory(uow__session=session)
-    query_service: ITenantQueryService = query_service_factory(session=session)
+    query_service: TenantQueryServicePort = query_service_factory(session=session)
 
     command = UpdateTenantNameCommand(tenant_id=tenant_id, name=dto.name)
     await use_case.execute(command, idempotency_key)
@@ -196,7 +196,7 @@ async def update_status(  # type: ignore
     query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
 ):
     use_case: ToggleTenantStatusUseCase = use_case_factory(uow__session=session)
-    query_service: ITenantQueryService = query_service_factory(session=session)
+    query_service: TenantQueryServicePort = query_service_factory(session=session)
 
     command = ToggleTenantStatusCommand(
         tenant_id=tenant_id, status=cast(Literal["active", "inactive"], dto.status)
@@ -222,7 +222,7 @@ async def remove(  # type: ignore
     tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
     use_case_factory=Depends(Provide[Container.delete_tenant_use_case.provider]),
 ):
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
     use_case: DeleteTenantUseCase = use_case_factory(
         uow__session=session,
     )
@@ -257,7 +257,7 @@ async def get_subscriptions(
     session: AsyncSession = Depends(get_db_session),
     tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
 ) -> list[SubscriptionResponse]:
-    tenant_repo: ITenantRepository = tenant_repo_factory(session=session)
+    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
     tenant = await resolve_tenant(id, tenant_repo)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")

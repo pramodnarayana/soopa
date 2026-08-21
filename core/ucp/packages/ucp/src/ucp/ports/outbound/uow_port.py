@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Self
 
-from ucp.ports.outbound.api_token_repository import ApiTokenRepositoryPort
-from ucp.ports.outbound.app_repository import IAppRepository
-from ucp.ports.outbound.idempotency_repository import IdempotencyRepositoryPort
-from ucp.ports.outbound.role_repository import IRoleRepository
-from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_repository import IUserRepository
-from ucp.ports.outbound.webhook_repository import WebhookRepositoryPort
+from ucp.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
+from ucp.ports.outbound.app_repository_port import AppRepositoryPort
+from ucp.ports.outbound.idempotency_repository_port import IdempotencyRepositoryPort
+from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
+from ucp.ports.outbound.user_repository_port import UserRepositoryPort
+from ucp.ports.outbound.webhook_repository_port import WebhookRepositoryPort
 
 
 class UcpUnitOfWorkPort(ABC):
@@ -16,11 +16,11 @@ class UcpUnitOfWorkPort(ABC):
     Encapsulates all database repositories and manages the transactional boundary.
     """
 
-    tenant_repo: ITenantRepository
-    user_repo: IUserRepository
+    tenant_repo: TenantRepositoryPort
+    user_repo: UserRepositoryPort
     api_token_repo: ApiTokenRepositoryPort
-    app_repo: IAppRepository
-    role_repo: IRoleRepository
+    app_repo: AppRepositoryPort
+    role_repo: RoleRepositoryPort
     webhook_repo: WebhookRepositoryPort
     idempotency_repo: IdempotencyRepositoryPort
 

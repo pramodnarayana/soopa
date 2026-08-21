@@ -1,4 +1,4 @@
-from ucp.ports.outbound.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
 class DeleteApiTokenUseCase:

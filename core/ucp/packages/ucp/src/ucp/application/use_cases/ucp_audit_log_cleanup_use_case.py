@@ -1,7 +1,7 @@
 import structlog
 
 from ucp.ports.outbound.ucp_audit_log_cleanup_repository_port import (
-    IUcpAuditLogCleanupRepositoryPort,
+    UcpAuditLogCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 class UcpAuditLogCleanupUseCase:
     """Application UseCase to clean up old system audit logs."""
 
-    def __init__(self, repository: IUcpAuditLogCleanupRepositoryPort, retention_days: int = 90):
+    def __init__(self, repository: UcpAuditLogCleanupRepositoryPort, retention_days: int = 90):
         self.repository = repository
         self.retention_days = retention_days
 

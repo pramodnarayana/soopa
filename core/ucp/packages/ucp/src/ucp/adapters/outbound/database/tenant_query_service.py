@@ -7,16 +7,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App, AppSubscription
 
-from ucp.ports.outbound.tenant_query_service import (
-    ITenantQueryService,
+from ucp.ports.outbound.tenant_query_service_port import (
     PaginatedTenants,
+    TenantQueryServicePort,
     TenantReadModel,
 )
 
 logger = structlog.get_logger(__name__)
 
 
-class DatabaseTenantQueryService(ITenantQueryService):
+class DatabaseTenantQueryService(TenantQueryServicePort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 

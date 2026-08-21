@@ -1,7 +1,7 @@
 import structlog
 
 from ucp.ports.outbound.ucp_idempotency_cleanup_repository_port import (
-    IUcpIdempotencyCleanupRepositoryPort,
+    UcpIdempotencyCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 class UcpIdempotencyCleanupUseCase:
     """Application UseCase to clean up old idempotency results."""
 
-    def __init__(self, repository: IUcpIdempotencyCleanupRepositoryPort, retention_days: int = 7):
+    def __init__(self, repository: UcpIdempotencyCleanupRepositoryPort, retention_days: int = 7):
         self.repository = repository
         self.retention_days = retention_days
 

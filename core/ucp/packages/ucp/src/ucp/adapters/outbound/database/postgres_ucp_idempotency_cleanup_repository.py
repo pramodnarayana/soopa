@@ -7,11 +7,11 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp.ports.outbound.ucp_idempotency_cleanup_repository_port import (
-    IUcpIdempotencyCleanupRepositoryPort,
+    UcpIdempotencyCleanupRepositoryPort,
 )
 
 
-class SqlAlchemyUcpIdempotencyCleanupRepository(IUcpIdempotencyCleanupRepositoryPort):
+class SqlAlchemyUcpIdempotencyCleanupRepository(UcpIdempotencyCleanupRepositoryPort):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 

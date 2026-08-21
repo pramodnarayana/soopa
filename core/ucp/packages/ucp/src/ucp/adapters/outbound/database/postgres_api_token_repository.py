@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.domain.models.api_token import ApiTokenDomainModel
-from ucp.ports.outbound.api_token_repository import ApiTokenRepositoryPort
+from ucp.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 
 
 class PostgresApiTokenRepository(ApiTokenRepositoryPort):

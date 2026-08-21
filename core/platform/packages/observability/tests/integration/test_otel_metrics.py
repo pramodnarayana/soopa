@@ -1,7 +1,7 @@
 import pytest
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
-from observability.adapters.otel_metrics import OtelMetrics
+from observability.adapters.outbound.otel_metrics import OtelMetrics
 
 
 @pytest.fixture

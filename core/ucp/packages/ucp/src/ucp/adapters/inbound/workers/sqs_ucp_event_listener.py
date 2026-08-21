@@ -7,7 +7,7 @@ import aioboto3
 import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
-from ucp.ports.outbound.ucp_event_listener import UcpEventListenerPort, UcpEventMessage
+from ucp.ports.outbound.ucp_event_listener_port import UcpEventListenerPort, UcpEventMessage
 
 logger = structlog.get_logger(__name__)
 

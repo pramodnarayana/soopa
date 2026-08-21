@@ -2,8 +2,8 @@ import structlog
 from pydantic import BaseModel, Field
 
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp.ports.outbound.organization_provider import IOrganizationProvider
-from ucp.ports.outbound.project_provider import IProjectProvider
+from ucp.ports.outbound.organization_provider_port import OrganizationProviderPort
+from ucp.ports.outbound.project_provider_port import ProjectProviderPort
 
 logger = structlog.get_logger(__name__)
 
@@ -14,8 +14,8 @@ class CreateOrgResponse(BaseModel):
     org_id: str | None = Field(None, alias="orgId")
 
 
-class ZitadelOrganizationsAdapter(ZitadelClient, IOrganizationProvider):
-    def __init__(self, project_provider: IProjectProvider) -> None:
+class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
+    def __init__(self, project_provider: ProjectProviderPort) -> None:
         super().__init__()
         self.project_provider = project_provider
 

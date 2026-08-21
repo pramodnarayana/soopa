@@ -12,7 +12,7 @@ Architectural invariants:
      (UCP and EDI) simultaneously.
   3. Domain modules (ucp, edi) must never import from each other directly.
      Cross-domain communication flows exclusively through the Port/Adapter
-     contract defined in ucp.ports.outbound.edi_service.IEdiService.
+     contract defined in ucp.ports.outbound.edi_service_port.EdiServicePort.
 """
 
 import collections.abc
@@ -31,7 +31,7 @@ from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
 from ucp.bootstrap.container import _async_session_maker
 from ucp.bootstrap.dependencies import get_token_verifier
-from ucp.ports.outbound.edi_service import IEdiService
+from ucp.ports.outbound.edi_service_port import EdiServicePort
 
 from unified_api.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
 from unified_api.adapters.inbound.http.routers import (
@@ -173,15 +173,15 @@ app.state.ucp_container = ucp_container
 # ---------------------------------------------------------------------------
 # Cross-Domain Contract Wiring (Ports & Adapters)
 #
-# UCP declares the outbound Port (IEdiService).
+# UCP declares the outbound Port (EdiServicePort).
 # EDI provides the inbound Adapter (UcpAdapter).
 # The Shell is the composition root — the ONLY layer that resolves this binding.
 # ---------------------------------------------------------------------------
-def get_edi_service() -> IEdiService:
+def get_edi_service() -> EdiServicePort:
     return UcpAdapter()
 
 
-app.dependency_overrides[IEdiService] = get_edi_service
+app.dependency_overrides[EdiServicePort] = get_edi_service
 
 # ---------------------------------------------------------------------------
 # EDI Domain — sub-application mounted at root

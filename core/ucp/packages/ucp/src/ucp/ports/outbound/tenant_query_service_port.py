@@ -23,7 +23,7 @@ class PaginatedTenants:
     limit: int
 
 
-class ITenantQueryService(Protocol):
+class TenantQueryServicePort(Protocol):
     """
     CQRS Read Service Port for Tenants.
     This service bypasses the Domain Model entirely to perform optimized read operations.

@@ -5,7 +5,7 @@ import structlog
 from fastapi import HTTPException, status
 from identity.domain.identity_context import M2M_API_KEY_PREFIX, IdentityContext
 
-from ucp.ports.outbound.api_token_repository import ApiTokenRepositoryPort
+from ucp.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
