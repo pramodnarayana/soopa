@@ -7,14 +7,14 @@ from database.models.control_plane import ControlPlaneOutbox
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 
-from worker.ports.edi_control_plane_outbox_cleanup_repository_port import (
-    IEdiControlPlaneOutboxCleanupRepositoryPort,
+from worker.ports.outbound.edi_control_plane_outbox_cleanup_repository_port import (
+    EdiControlPlaneOutboxCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(IEdiControlPlaneOutboxCleanupRepositoryPort):
+class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(EdiControlPlaneOutboxCleanupRepositoryPort):
     def __init__(self, db_router: DatabaseRouter) -> None:
         self.db_router = db_router
 

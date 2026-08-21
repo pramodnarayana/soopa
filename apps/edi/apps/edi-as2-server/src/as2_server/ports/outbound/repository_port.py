@@ -11,11 +11,11 @@ class PartnerEntity:
         self.active = active
 
 
-class ITradingPartnerRepository(Protocol):
+class TradingPartnerRepositoryPort(Protocol):
     async def find_by_as2_id(self, tenant_id: str, as2_id: str) -> PartnerEntity | None: ...
 
 
-class IEdiMessageRepository(Protocol):
+class EdiMessageRepositoryPort(Protocol):
     async def save_message(
         self,
         tenant_id: str,
@@ -30,7 +30,7 @@ class IEdiMessageRepository(Protocol):
     ) -> None: ...
 
 
-class IAS2TenantRepository(Protocol):
+class AS2TenantRepositoryPort(Protocol):
     async def resolve_tenant_id(self, as2_to: str) -> str | None:
         """Resolves the tenant ID by looking at the global trading partners."""
         ...

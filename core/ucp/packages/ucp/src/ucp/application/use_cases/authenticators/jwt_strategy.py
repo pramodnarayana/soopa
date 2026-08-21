@@ -6,9 +6,9 @@ from identity.application.authenticate_use_case import (
     TenantNotProvisionedError,
     authenticate_bearer_token,
 )
-from identity.domain.authentication_strategy import IAuthenticationStrategy
+from identity.domain.authentication_strategy import AuthenticationStrategyPort
 from identity.domain.identity_context import IdentityContext
-from identity.ports.token_verifier_port import TokenVerifierPort
+from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 
 from ucp.domain.models.authorization import Capability
 from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
@@ -18,7 +18,7 @@ from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 logger = structlog.get_logger(__name__)
 
 
-class JwtStrategy(IAuthenticationStrategy):
+class JwtStrategy(AuthenticationStrategyPort):
     """
     Authentication strategy for standard Identity Provider (IdP) JWT tokens.
     """

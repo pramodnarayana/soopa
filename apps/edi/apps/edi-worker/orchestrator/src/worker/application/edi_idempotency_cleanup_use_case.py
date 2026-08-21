@@ -1,7 +1,7 @@
 import structlog
 
-from worker.ports.edi_idempotency_cleanup_repository_port import (
-    IEdiIdempotencyCleanupRepositoryPort,
+from worker.ports.outbound.edi_idempotency_cleanup_repository_port import (
+    EdiIdempotencyCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 class EdiIdempotencyCleanupUseCase:
     """Application UseCase to clean up old EDI Data Plane idempotency results (ProcessedEvents)."""
 
-    def __init__(self, repository: IEdiIdempotencyCleanupRepositoryPort, retention_days: int = 14):
+    def __init__(self, repository: EdiIdempotencyCleanupRepositoryPort, retention_days: int = 14):
         self.repository = repository
         self.retention_days = retention_days
 

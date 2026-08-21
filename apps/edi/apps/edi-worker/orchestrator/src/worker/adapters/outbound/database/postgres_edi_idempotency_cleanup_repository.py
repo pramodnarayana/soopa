@@ -9,14 +9,14 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
-from worker.ports.edi_idempotency_cleanup_repository_port import (
-    IEdiIdempotencyCleanupRepositoryPort,
+from worker.ports.outbound.edi_idempotency_cleanup_repository_port import (
+    EdiIdempotencyCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyEdiIdempotencyCleanupRepository(IEdiIdempotencyCleanupRepositoryPort):
+class SqlAlchemyEdiIdempotencyCleanupRepository(EdiIdempotencyCleanupRepositoryPort):
     def __init__(self, db_router: DatabaseRouter) -> None:
         self.db_router = db_router
 

@@ -14,7 +14,7 @@ from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
     ZitadelTokenVerifierPort,
     ZitadelTokenVerifierPortOptions,
 )
-from identity.ports.token_verifier_port import TokenValidationError
+from identity.ports.outbound.token_verifier_port import TokenValidationError
 
 # Generate global test keys once for the module
 private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

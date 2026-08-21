@@ -7,7 +7,7 @@ from database.repository import TradingPartnerRepository as DbTradingPartnerRepo
 from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..ports.repository import PartnerEntity
+from ..ports.outbound.repository_port import PartnerEntity
 
 
 class AS2TenantRepositoryAdapter:

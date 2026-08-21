@@ -20,7 +20,7 @@ from identity.application.authenticate_use_case import (
     AuthenticationError,
     TenantNotProvisionedError,
 )
-from identity.domain.authentication_strategy import IAuthenticationStrategy
+from identity.domain.authentication_strategy import AuthenticationStrategyPort
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
@@ -47,7 +47,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        strategies: Sequence[IAuthenticationStrategy],
+        strategies: Sequence[AuthenticationStrategyPort],
         public_paths: frozenset[str],
     ) -> None:
         super().__init__(app)

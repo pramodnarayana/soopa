@@ -10,7 +10,7 @@ import structlog
 from jwt import PyJWKClient
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
-from identity.ports.token_verifier_port import TokenValidationError, TokenVerifierPort
+from identity.ports.outbound.token_verifier_port import TokenValidationError, TokenVerifierPort
 
 logger = structlog.get_logger(__name__)
 

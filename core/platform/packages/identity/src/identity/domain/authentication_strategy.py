@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from identity.domain.identity_context import IdentityContext
 
 
-class IAuthenticationStrategy(ABC):
+class AuthenticationStrategyPort(ABC):
     """
     Interface for handling token authentication strategies in the perimeter middleware.
     Follows the Strategy Pattern (Open/Closed Principle) to allow supporting multiple
