@@ -58,12 +58,12 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
         capabilities={Capability.TENANT_ADMIN.value},
     )
 
-    # We override the authenticate_bearer_token function that the middleware calls
-    from unittest.mock import patch
+    # We override the JwtStrategy that the middleware uses to return a fake identity
+    from unittest.mock import AsyncMock, patch
 
     with patch(
-        "unified_api.adapters.inbound.http.middleware.authentication.authenticate_bearer_token",
-        autospec=True,
+        "ucp.application.use_cases.authenticators.jwt_strategy.JwtStrategy.authenticate",
+        new_callable=AsyncMock,
     ) as mock_auth:
         mock_auth.return_value = raw_identity
 
