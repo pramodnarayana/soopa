@@ -27,6 +27,7 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     tenant = Tenant(
         id=canonical_id,
         name="Test Trucking",
+        slug="test-trucking",
         idp_tenant_id=idp_id,
         status="active",
         created_at=datetime.datetime.now(datetime.UTC),
