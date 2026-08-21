@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 logger = structlog.get_logger(__name__)
 
 
-from pipeline.ports.secret_store import SecretStorePort
+from pipeline.ports.outbound.secret_store_port import SecretStorePort
 
 
 class AwsSecretsManagerSecretStore(SecretStorePort):

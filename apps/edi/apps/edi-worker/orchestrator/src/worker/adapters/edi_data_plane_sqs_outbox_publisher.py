@@ -8,7 +8,7 @@ import aioboto3
 import structlog
 
 from worker.adapters.aws_types import SQSClientProtocol
-from worker.ports.edi_data_plane_outbox_publisher_port import (
+from worker.ports.outbound.edi_data_plane_outbox_publisher_port import (
     EdiDataPlaneOutboxPublisherPort,
     PublishMessageEnvelope,
 )

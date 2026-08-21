@@ -5,7 +5,7 @@ import pytest
 from worker.adapters.edi_data_plane_sqs_outbox_publisher import (
     EdiDataPlaneSqsOutboxPublisherAdapter,
 )
-from worker.ports.edi_data_plane_outbox_publisher_port import PublishMessageEnvelope
+from worker.ports.outbound.edi_data_plane_outbox_publisher_port import PublishMessageEnvelope
 
 pytestmark = pytest.mark.asyncio
 

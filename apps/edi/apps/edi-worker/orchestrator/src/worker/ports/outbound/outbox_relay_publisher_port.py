@@ -1,6 +1,6 @@
 from typing import Any, Protocol, Self
 
-from worker.ports.outbox_relay_repository import RelayOutboxEvent
+from worker.ports.outbound.outbox_relay_repository_port import RelayOutboxEvent
 
 
 class OutboxRelayPublisherPort(Protocol):

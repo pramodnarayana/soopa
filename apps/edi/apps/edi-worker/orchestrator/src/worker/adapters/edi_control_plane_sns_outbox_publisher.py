@@ -4,8 +4,8 @@ from typing import Any, Self
 import aioboto3
 import structlog
 
-from worker.ports.outbox_relay_publisher import OutboxRelayPublisherPort
-from worker.ports.outbox_relay_repository import RelayOutboxEvent
+from worker.ports.outbound.outbox_relay_publisher_port import OutboxRelayPublisherPort
+from worker.ports.outbound.outbox_relay_repository_port import RelayOutboxEvent
 
 logger = structlog.get_logger(__name__)
 

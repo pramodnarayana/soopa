@@ -5,7 +5,7 @@ from edi.adapters.outbound.database.routing_resolver_repository import (
     SqlAlchemyRoutingResolverRepository,
 )
 from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork,
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 from edi.application.use_cases.routing_resolver import RoutingResolutionService
 from edi.application.use_cases.transaction_service import TransactionService
@@ -57,7 +57,7 @@ class BulkReplayRequest(BaseModel):
 @router.get("", response_model=TransactionListResponse)
 async def list_transactions(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     partner_id: str | None = Query(None, description="Filter by sender or receiver ID"),
@@ -103,7 +103,7 @@ async def get_transaction_thread(
     key: str = Query(..., description="Business metadata key (e.g. shipment_id)"),
     value: str = Query(..., description="Business metadata value (e.g. 12345)"),
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> TransactionThreadResponse:
     """
     Get a chronological thread of documents sharing a specific business metadata key/value.
@@ -132,7 +132,7 @@ async def get_transaction_thread(
 async def get_transaction(
     trace_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     global_session: AsyncSession = Depends(get_global_session),
 ) -> TransactionDetailResponse:
     """
@@ -160,7 +160,7 @@ async def replay_transaction(
     trace_id: str,
     request: ReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> dict[str, Any]:
     """
     Trigger an asynchronous replay of a transaction at the specified tier.
@@ -182,7 +182,7 @@ from fastapi import APIRouter, Depends, Header
 async def bulk_replay_transactions(
     request: BulkReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     """

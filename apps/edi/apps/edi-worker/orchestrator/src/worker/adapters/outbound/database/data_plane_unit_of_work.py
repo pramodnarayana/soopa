@@ -4,9 +4,9 @@ from typing import Self
 import structlog
 from config.settings import AppSettings
 from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
-from pipeline.ports.outbox_repository import DataPlaneOutboxRepositoryPort
-from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.storage import StoragePort
+from pipeline.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
+from pipeline.ports.outbound.edi_message_port import RepositoryPort
+from pipeline.ports.outbound.storage_port import StoragePort
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from worker.adapters.outbound.database.postgres_data_plane_outbox_repository import (
@@ -24,7 +24,7 @@ class SqlAlchemyDataPlaneUnitOfWork:
     DataPlaneOutboxRepositoryPort (SqlAlchemyDataPlaneOutboxRepository) together
     behind a single async context manager to ensure atomic transaction boundaries.
 
-    This satisfies the `pipeline.ports.unit_of_work.DataPlaneUnitOfWork` Protocol.
+    This satisfies the `pipeline.ports.outbound.data_plane_unit_of_work_port.DataPlaneUnitOfWorkPort` Protocol.
     """
 
     repository: RepositoryPort

@@ -3,9 +3,9 @@ from domain.models import EdiMessageDomainModel
 from domain.status import MessageStatus
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
-from pipeline.ports.secret_store import SecretStorePort
-from pipeline.ports.sftp import SftpDeliveryPort
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from pipeline.ports.outbound.secret_store_port import SecretStorePort
+from pipeline.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
 logger = structlog.get_logger(__name__)
 
@@ -13,7 +13,7 @@ logger = structlog.get_logger(__name__)
 class SftpDeliveryStrategy(BaseDeliveryStrategy):
     def __init__(
         self,
-        uow: DataPlaneUnitOfWork,
+        uow: DataPlaneUnitOfWorkPort,
         sftp_delivery: SftpDeliveryPort,
         vault: SecretStorePort | None = None,
     ) -> None:

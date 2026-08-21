@@ -12,9 +12,9 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
-from worker.ports.outbox import OutboxPort
-from worker.ports.replication import ReplicationPort
-from worker.ports.tenant import TenantPort
+from worker.ports.outbound.outbox_port import OutboxPort
+from worker.ports.outbound.replication_port import ReplicationPort
+from worker.ports.outbound.tenant_port import TenantPort
 
 logger = structlog.get_logger(__name__)
 

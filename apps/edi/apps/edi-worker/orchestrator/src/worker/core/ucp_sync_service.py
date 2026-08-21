@@ -4,9 +4,9 @@ from typing import Any
 import structlog
 
 from worker.adapters.acl.registry import UcpEventNames, translate_external_event
-from worker.ports.outbox import OutboxPort
-from worker.ports.tenant import TenantPort
-from worker.ports.ucp_event_listener import UcpEventListenerPort
+from worker.ports.outbound.outbox_port import OutboxPort
+from worker.ports.outbound.tenant_port import TenantPort
+from worker.ports.outbound.ucp_event_listener_port import UcpEventListenerPort
 
 logger = structlog.get_logger(__name__)
 

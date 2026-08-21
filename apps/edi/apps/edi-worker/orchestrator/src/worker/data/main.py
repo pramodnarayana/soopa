@@ -20,7 +20,7 @@ from pipeline.core.delivery.as2 import As2DeliveryStrategy
 from pipeline.core.delivery.router import DeliveryRouter
 from pipeline.core.delivery.sftp import SftpDeliveryStrategy
 from pipeline.core.delivery.webhook import WebhookDeliveryStrategy
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 from worker.adapters.aws_secrets_manager import AwsSecretsManagerSecretStore
 from worker.adapters.edi_data_plane_sqs_outbox_publisher import (
@@ -67,7 +67,7 @@ async def main() -> None:
     sftp_delivery = ParamikoSftpClient()
     as2_delivery = HttpxAS2DeliveryClient(validator=validate_target_url)
 
-    def router_factory(uow: DataPlaneUnitOfWork) -> DeliveryRouter:
+    def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouter:
         strategies = {
             "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
             "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault),

@@ -1,7 +1,7 @@
 import structlog
 
 from pipeline.core.delivery.base import BaseDeliveryStrategy
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -13,7 +13,7 @@ class DeliveryRouter:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWork,
+        uow: DataPlaneUnitOfWorkPort,
         strategies: dict[str, BaseDeliveryStrategy],
     ) -> None:
         self.uow = uow

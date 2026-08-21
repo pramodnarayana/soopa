@@ -159,7 +159,7 @@ async def client(
     from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
     from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork,
+        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
     )
     from edi.module import create_edi_app
 
@@ -188,7 +188,7 @@ async def client(
         await gs_gen.__anext__()
         ts = await ts_gen.__anext__()
         try:
-            yield DataPlaneUnitOfWork(tenant_session=ts)
+            yield DataPlaneUnitOfWorkPort(tenant_session=ts)
         finally:
             await gs_gen.aclose()
             await ts_gen.aclose()

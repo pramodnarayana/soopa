@@ -1,13 +1,13 @@
 from types import TracebackType
 from typing import Protocol, TypeVar
 
-from .outbox_repository import DataPlaneOutboxRepositoryPort
-from .repository import RepositoryPort
+from .data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
+from .edi_message_port import RepositoryPort
 
-U = TypeVar("U", bound="DataPlaneUnitOfWork")
+U = TypeVar("U", bound="DataPlaneUnitOfWorkPort")
 
 
-class DataPlaneUnitOfWork(Protocol):
+class DataPlaneUnitOfWorkPort(Protocol):
     """
     Unit of Work interface for the EDI Data Plane.
     Provides coordinated access to repositories within a single transaction scope.

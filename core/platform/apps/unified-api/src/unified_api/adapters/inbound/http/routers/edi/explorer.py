@@ -1,7 +1,7 @@
 from typing import Any, Literal
 
 from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork,
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, field_validator
@@ -112,7 +112,7 @@ def _serialize_edi_json(j: Any) -> dict[str, Any]:
 async def explore_edi_messages(
     req: ExplorerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Any:
@@ -131,7 +131,7 @@ async def explore_edi_messages(
 async def explore_edi_json(
     req: ExplorerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Any:

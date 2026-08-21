@@ -1,6 +1,6 @@
 import aioboto3
 
-from pipeline.ports.storage import StoragePort
+from pipeline.ports.outbound.storage_port import StoragePort
 
 
 class S3StorageClient(StoragePort):

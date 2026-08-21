@@ -218,13 +218,13 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         except Exception as e:  # noqa: BLE001
             # If bots is not running, we mock it for the test
             if "Connection" in str(e):
-                from pipeline.ports.transformer import TransformerPort
+                from pipeline.ports.outbound.transformer_port import TransformerPort
 
                 class MockTransformer(TransformerPort):
                     async def translate_edi_to_json(
                         self, payload: bytes, standard: str, transaction_type: str
                     ):
-                        from pipeline.ports.transformer import TranslatedTransaction
+                        from pipeline.ports.outbound.transformer_port import TranslatedTransaction
 
                         return [
                             TranslatedTransaction(

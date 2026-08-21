@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 from config.settings import AppSettings
 from database.connection import DatabaseRouter
 from pipeline.adapters.storage import S3StorageClient
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 from worker.adapters.outbound.database.data_plane_unit_of_work import (
     SqlAlchemyDataPlaneUnitOfWork,
@@ -34,15 +34,15 @@ class TenantUowProvider:
 
     async def get_uow_factory(
         self, tenant_id: str
-    ) -> Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWork]]:
+    ) -> Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]:
         """
         Resolves the tenant's database shard and returns a parameterless async
-        context manager closure that yields a DataPlaneUnitOfWork.
+        context manager closure that yields a DataPlaneUnitOfWorkPort.
         """
         shard_name, shard_dsn = await self._resolver.resolve(tenant_id)
 
         @contextlib.asynccontextmanager
-        async def uow_factory() -> AsyncGenerator[DataPlaneUnitOfWork, None]:
+        async def uow_factory() -> AsyncGenerator[DataPlaneUnitOfWorkPort, None]:
             async with contextlib.aclosing(
                 self._db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
             ) as session_gen:

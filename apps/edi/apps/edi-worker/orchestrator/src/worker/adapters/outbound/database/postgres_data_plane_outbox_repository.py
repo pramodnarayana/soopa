@@ -6,7 +6,7 @@ from typing import Any
 import structlog
 from database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from database.models.data_plane import DataPlaneOutbox, ProcessedEvent
-from pipeline.ports.outbox_repository import DataPlaneOutboxRepositoryPort
+from pipeline.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 from sqlalchemy import CursorResult, or_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession

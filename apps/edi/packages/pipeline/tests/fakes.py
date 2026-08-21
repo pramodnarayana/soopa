@@ -3,9 +3,9 @@ from typing import Any
 from domain.models import EdiMessageDomainModel
 from domain.status import MessageStatus
 
-from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.storage import StoragePort
-from pipeline.ports.transformer import TransformedTransaction, TransformerPort
+from pipeline.ports.outbound.edi_message_port import RepositoryPort
+from pipeline.ports.outbound.storage_port import StoragePort
+from pipeline.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
 
 class InMemoryStorageAdapter(StoragePort):
@@ -468,7 +468,7 @@ class FakeDataPlaneOutboxRepository:
 
 class FakeDataPlaneUnitOfWork:
     """
-    In-memory Unit of Work satisfying the DataPlaneUnitOfWork protocol.
+    In-memory Unit of Work satisfying the DataPlaneUnitOfWorkPort protocol.
     Wires FakeDataPlaneOutboxRepository and InMemoryRepositoryAdapter together.
     """
 

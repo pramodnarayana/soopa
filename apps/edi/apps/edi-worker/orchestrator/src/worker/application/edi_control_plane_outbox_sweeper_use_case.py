@@ -1,6 +1,6 @@
 import structlog
 
-from worker.ports.outbox_relay_repository import OutboxRelayRepositoryPort
+from worker.ports.outbound.outbox_relay_repository_port import OutboxRelayRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

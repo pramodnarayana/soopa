@@ -1,7 +1,7 @@
 from typing import Any
 
 from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork,
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 from edi.application.use_cases.api_receiver_service import ApiReceiverService
 from fastapi import APIRouter, Depends, status
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/edi_json", tags=["EDI JSON"])
 async def submit_outbound_message(
     request: OutboundMessageRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: DataPlaneUnitOfWork = Depends(get_data_plane_uow),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> Any:
     """
     Submits a JSON payload to be translated and transmitted via AS2.

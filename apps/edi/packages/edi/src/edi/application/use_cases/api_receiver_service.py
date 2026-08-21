@@ -5,7 +5,7 @@ import structlog
 from pipeline.core.metadata_extractor import MetadataExtractorService
 
 from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork,
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -17,7 +17,7 @@ class ApiReceiverService:
     Strictly follows Single Responsibility Principle and encapsulates business logic.
     """
 
-    def __init__(self, uow: DataPlaneUnitOfWork):
+    def __init__(self, uow: DataPlaneUnitOfWorkPort):
         self.uow = uow
         self.extractor = MetadataExtractorService()
 

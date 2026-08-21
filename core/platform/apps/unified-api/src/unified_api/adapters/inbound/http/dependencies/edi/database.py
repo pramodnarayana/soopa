@@ -6,7 +6,7 @@ from database.base_repository import GlobalSession
 from database.session import get_global_session
 from dependency_injector.wiring import Provide, inject
 from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork,
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 from edi.bootstrap.container import Container
 from edi.exceptions import TenantNotSubscribedException
@@ -83,5 +83,5 @@ async def get_control_plane_uow(
 async def get_data_plane_uow(
     tenant_session: AsyncSession = Depends(get_tenant_session),
     dp_uow_factory: Any = Depends(Provide[Container.dp_uow.provider]),
-) -> DataPlaneUnitOfWork:
-    return cast(DataPlaneUnitOfWork, dp_uow_factory(tenant_session=tenant_session))
+) -> DataPlaneUnitOfWorkPort:
+    return cast(DataPlaneUnitOfWorkPort, dp_uow_factory(tenant_session=tenant_session))

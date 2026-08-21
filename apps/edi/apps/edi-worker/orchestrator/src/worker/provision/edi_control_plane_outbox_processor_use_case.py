@@ -3,8 +3,11 @@ import uuid
 
 import structlog
 
-from worker.ports.outbox_relay_publisher import OutboxRelayPublisherPort
-from worker.ports.outbox_relay_repository import OutboxRelayRepositoryPort, RelayOutboxEvent
+from worker.ports.outbound.outbox_relay_publisher_port import OutboxRelayPublisherPort
+from worker.ports.outbound.outbox_relay_repository_port import (
+    OutboxRelayRepositoryPort,
+    RelayOutboxEvent,
+)
 
 logger = structlog.get_logger(__name__)
 

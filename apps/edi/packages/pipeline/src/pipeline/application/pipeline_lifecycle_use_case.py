@@ -6,7 +6,7 @@ from domain.direction import MessageDirection
 from domain.events import PipelineEventType
 from domain.status import MessageStatus
 
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -20,7 +20,7 @@ class PipelineLifecycleUseCase:
     to ensure strict SRP in the workers.
     """
 
-    def __init__(self, uow: DataPlaneUnitOfWork) -> None:
+    def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
 
     async def handle_transform_completed(self, payload: dict[str, Any]) -> None:
