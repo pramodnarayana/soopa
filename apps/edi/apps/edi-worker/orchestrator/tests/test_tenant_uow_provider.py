@@ -20,7 +20,7 @@ async def test_tenant_uow_provider_success() -> None:
     mock_session = AsyncMock()
 
     # Mock get_tenant_session to return an async generator that yields our mock session
-    async def mock_session_gen(*args, **kwargs) -> AsyncGenerator[AsyncMock, None]:
+    async def mock_session_gen(*args: object, **kwargs: object) -> AsyncGenerator[AsyncMock, None]:
         yield mock_session
 
     mock_db_router.get_tenant_session.side_effect = mock_session_gen
