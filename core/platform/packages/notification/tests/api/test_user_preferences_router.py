@@ -12,8 +12,10 @@ async def test_user_preferences_router():
 
     from dependency_injector import providers
     from fastapi import FastAPI
+    from unified_api.adapters.inbound.http.routers.notification_user_preferences_router import (
+        router,
+    )
 
-    from notification.api.user_preferences_router import router
     from notification.bootstrap.container import Container
 
     app = FastAPI()
@@ -59,7 +61,9 @@ async def test_user_preferences_router():
     container.update_user_preference_use_case.override(providers.Object(real_update_use_case))
     container.get_user_preferences_use_case.override(providers.Object(real_get_use_case))
     container.user_preference_repository.override(providers.Object(fake_repo))
-    container.wire(modules=["notification.api.user_preferences_router"])
+    container.wire(
+        modules=["unified_api.adapters.inbound.http.routers.notification_user_preferences_router"]
+    )
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

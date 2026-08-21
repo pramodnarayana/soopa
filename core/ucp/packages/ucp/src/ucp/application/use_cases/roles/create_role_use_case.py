@@ -3,9 +3,9 @@ import uuid
 import structlog
 from pydantic import BaseModel
 
-from ucp.core.exceptions import InvalidCapabilityError
+from ucp.domain.exceptions import InvalidCapabilityError
 from ucp.domain.models.authorization import Capability, Role
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

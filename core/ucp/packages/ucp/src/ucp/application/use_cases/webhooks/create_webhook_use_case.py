@@ -1,7 +1,7 @@
 import structlog
 
 from ucp.domain.models.webhook import WebhookDomainModel
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

@@ -6,12 +6,12 @@ from ucp.application.use_cases.create_user_use_case import (
     CreateUserCommand,
     CreateUserUseCase,
 )
-from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 from ucp.ports.outbound.user_repository import IUserRepository
-from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture

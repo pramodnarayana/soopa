@@ -1,9 +1,9 @@
 """Adapters package — concrete implementations of observability ports."""
 
 from .noop import NoOpLogger, NoOpMetrics, NoOpTracer
-from .otel import OtelTracer
 from .otel_metrics import OtelMetrics
-from .structlog_adapter import StructlogLogger
+from .otel_tracer import OtelTracer
+from .structlog_logger import StructlogLogger
 
 __all__ = [
     "NoOpLogger",

@@ -1,6 +1,6 @@
 import structlog
 
-from ucp.ports.identity_provider import IdentityProviderPortPort
+from ucp.ports.outbound.identity_provider import IdentityProviderPortPort
 
 logger = structlog.get_logger(__name__)
 

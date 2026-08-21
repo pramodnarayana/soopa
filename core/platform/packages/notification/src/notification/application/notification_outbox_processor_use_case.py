@@ -5,8 +5,10 @@ from typing import Any
 import structlog
 
 from notification.domain.models import Channel
-from notification.ports.notification_delivery_dispatcher_port import DeliveryDispatcherPort
-from notification.ports.notification_outbox_repository_port import NotificationOutboxRepositoryPort
+from notification.ports.outbound.notification_delivery_dispatcher_port import DeliveryDispatcherPort
+from notification.ports.outbound.notification_outbox_repository_port import (
+    NotificationOutboxRepositoryPort,
+)
 
 logger = structlog.get_logger(__name__)
 

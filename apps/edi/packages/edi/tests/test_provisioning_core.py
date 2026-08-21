@@ -3,7 +3,7 @@ import uuid
 import pytest
 from api_fakes import FakeGlobalStore
 
-from edi.core.services import (
+from edi.application.use_cases import (
     AS2PartnershipService,
     InboundRouteService,
     OutboundRouteService,

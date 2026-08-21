@@ -10,12 +10,14 @@ from fastapi.testclient import TestClient
 os.environ["ZITADEL_API_TOKEN"] = "test-token"  # noqa: S105
 os.environ["ZITADEL_UCP_PROJECT_ID"] = "test-project"
 os.environ["ZITADEL_PLATFORM_ORG_ID"] = "test-org"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
 
 from dependency_injector import providers
 from identity.domain.identity_context import IdentityContext
-from ucp.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from ucp.bootstrap.container import Container
+
+from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 
 
 class MockTenant:
@@ -47,7 +49,7 @@ def container() -> Iterator[Container]:
     """Configure and provide a test container with proper cleanup."""
     test_container = Container()
     test_container.tenant_repo.override(providers.Factory(MockTenantRepo))
-    test_container.wire(modules=["ucp.adapters.inbound.http.guards.tenant_auth_guard"])
+    test_container.wire(modules=["unified_api.adapters.inbound.http.guards.tenant_auth_guard"])
     yield test_container
     test_container.unwire()
     test_container.tenant_repo.reset_override()

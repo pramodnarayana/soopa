@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from notification.domain.models import NotificationEvent
 
-from notification_worker.adapters.inbound.consumer import NotificationConsumerWorker
+from notification_worker.adapters.inbound.workers.consumer import NotificationConsumerWorker
 
 
 class FakeDispatchUseCase:
@@ -87,7 +87,8 @@ async def test_consumer_lifecycle():
     worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
 
     with patch(
-        "notification_worker.adapters.inbound.consumer.poll_sqs_queue", new_callable=AsyncMock
+        "notification_worker.adapters.inbound.workers.consumer.poll_sqs_queue",
+        new_callable=AsyncMock,
     ) as mock_poll:
         # Prevent it from actually looping forever by making it sleep briefly then we stop it
         async def mock_poller(*args, **kwargs):

@@ -6,10 +6,10 @@ from ucp.application.use_cases.roles.create_role_use_case import (
     CreateRoleRequest,
     CreateRoleUseCase,
 )
-from ucp.core.exceptions import InvalidCapabilityError
+from ucp.domain.exceptions import InvalidCapabilityError
 from ucp.domain.models.authorization import Capability
 from ucp.ports.outbound.role_repository import IRoleRepository
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture

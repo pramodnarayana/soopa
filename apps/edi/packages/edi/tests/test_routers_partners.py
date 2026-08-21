@@ -4,9 +4,15 @@ import pytest
 from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+    get_current_tenant_id,
+    require_platform_admin,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.database import (
+    get_control_plane_uow,
+    get_data_plane_uow,
+)
 
-from edi.dependencies.auth import get_current_tenant_id, require_platform_admin
-from edi.dependencies.database import get_control_plane_uow, get_data_plane_uow
 from edi.module import create_edi_app
 
 app = create_edi_app()
@@ -19,7 +25,10 @@ def fake_uow():
 
 @pytest.fixture
 def client(fake_uow):
-    from edi.dependencies.auth import get_current_user_profile, get_raw_jwt
+    from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+        get_current_user_profile,
+        get_raw_jwt,
+    )
 
     app.dependency_overrides[get_control_plane_uow] = lambda: fake_uow
     app.dependency_overrides[get_data_plane_uow] = lambda: fake_uow
@@ -30,7 +39,7 @@ def client(fake_uow):
         "permissions": ["certificates:export_private"]
     }
 
-    from edi.dependencies.services import get_sftp_tester
+    from unified_api.adapters.inbound.http.dependencies.edi.services import get_sftp_tester
 
     class FakeSftpTester:
         async def test_connection(
@@ -45,7 +54,7 @@ def client(fake_uow):
 
     app.dependency_overrides[get_sftp_tester] = FakeSftpTester
 
-    from edi.dependencies.services import get_secret_store
+    from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
     class FakeVault:
         async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
@@ -53,7 +62,7 @@ def client(fake_uow):
 
         async def retrieve_private_key(self, vault_ref: str) -> bytes:
             if vault_ref == "vault-error-ref":
-                from edi.core.exceptions import VaultError
+                from edi.domain.exceptions import VaultError
 
                 raise VaultError("Vault error")
             return b"fake_key"
@@ -312,7 +321,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     resp = client.delete(f"/api/v1/tenants/1/edi/trading-partners/sftp/{random_id}")
     assert resp.status_code == 400
 
-    from edi.core.exceptions import OrchestrationError
+    from edi.domain.exceptions import OrchestrationError
 
     fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(
         side_effect=OrchestrationError("DB Error")
@@ -374,7 +383,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     from sqlalchemy.exc import IntegrityError
 
     with patch(
-        "edi.core.services.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
+        "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
         side_effect=ValueError("Bad value"),
     ):
         resp = client.post(
@@ -383,7 +392,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         )
         assert resp.status_code == 400
     with patch(
-        "edi.core.services.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
+        "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
         side_effect=IntegrityError("x", "y", "z"),
     ):
         resp = client.post(
@@ -393,7 +402,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.status_code == 400
 
     with patch(
-        "edi.core.services.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
+        "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
         side_effect=ValueError("Bad value"),
     ):
         resp = client.put(
@@ -402,7 +411,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         )
         assert resp.status_code == 400
     with patch(
-        "edi.core.services.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
+        "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
         side_effect=IntegrityError("x", "y", "z"),
     ):
         resp = client.put(

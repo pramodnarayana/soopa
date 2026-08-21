@@ -6,7 +6,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ucp.ports.ucp_audit_log_cleanup_repository_port import IUcpAuditLogCleanupRepositoryPort
+from ucp.ports.outbound.ucp_audit_log_cleanup_repository_port import (
+    IUcpAuditLogCleanupRepositoryPort,
+)
 
 
 class SqlAlchemyUcpAuditLogCleanupRepository(IUcpAuditLogCleanupRepositoryPort):

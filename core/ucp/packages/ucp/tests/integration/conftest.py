@@ -23,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
+from unified_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
 from unified_api.main import app  # type: ignore
 
-from ucp.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
-from ucp.core.container import (
+from ucp.bootstrap.dependencies import (
     get_db_session,
 )
 

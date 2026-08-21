@@ -18,11 +18,11 @@ Architecture note:
 """
 
 import structlog
-from edi.core.exceptions import OrchestrationError, VaultError
+from edi.domain.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from ucp.core.exceptions import IdentityProviderPortError, ResourceNotFoundError
+from ucp.domain.exceptions import IdentityProviderPortError, ResourceNotFoundError
 
 logger = structlog.get_logger(__name__)
 

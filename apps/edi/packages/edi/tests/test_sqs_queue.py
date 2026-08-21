@@ -2,12 +2,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from edi.adapters.sqs_queue import SQSMessageQueueAdapter
+from edi.adapters.outbound.messaging.sqs_queue import SQSMessageQueueAdapter
 
 pytestmark = pytest.mark.asyncio
 
 
-@patch("edi.adapters.sqs_queue.aioboto3.Session")
+@patch("edi.adapters.outbound.messaging.sqs_queue.aioboto3.Session")
 async def test_sqs_queue_adapter_send(mock_session_cls: MagicMock) -> None:
     # Setup mock aioboto3 session and client
     mock_session = MagicMock()

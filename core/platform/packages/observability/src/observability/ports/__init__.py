@@ -1,7 +1,7 @@
 """Ports package — pure Python ABCs, zero external dependencies."""
 
-from .logger import ILogger
-from .metrics import IMetrics
-from .tracer import ISpan, ITracer
+from .logger_port import LoggerPort
+from .metrics_port import MetricsPort
+from .tracer_port import SpanPort, TracerPort
 
-__all__ = ["ILogger", "IMetrics", "ISpan", "ITracer"]
+__all__ = ["LoggerPort", "MetricsPort", "SpanPort", "TracerPort"]

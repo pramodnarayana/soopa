@@ -176,7 +176,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         )
 
         with patch(
-            "edi.services.as2_receive_service.vault.get_secret", new_callable=AsyncMock
+            "edi.application.use_cases.as2_receive_service.vault.get_secret", new_callable=AsyncMock
         ) as mock_get_secret:
             mock_get_secret.return_value = local_priv.decode("utf-8")
 

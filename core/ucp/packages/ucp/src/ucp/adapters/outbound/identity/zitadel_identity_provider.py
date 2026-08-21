@@ -1,9 +1,9 @@
 import structlog
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.core.container import _async_session_maker
-from ucp.core.exceptions import IdentityProviderPortError
-from ucp.ports.identity_provider import IdentityProviderPortPort
+from ucp.bootstrap.container import _async_session_maker
+from ucp.domain.exceptions import IdentityProviderPortError
+from ucp.ports.outbound.identity_provider import IdentityProviderPortPort
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 
 logger = structlog.get_logger(__name__)

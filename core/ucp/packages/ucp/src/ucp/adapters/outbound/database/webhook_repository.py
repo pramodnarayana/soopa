@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 
 from ucp.domain.models.webhook import WebhookDomainModel
-from ucp.ports.webhook_repository import WebhookRepositoryPort
+from ucp.ports.outbound.webhook_repository import WebhookRepositoryPort
 
 
 class SqlAlchemyWebhookRepository(WebhookRepositoryPort):

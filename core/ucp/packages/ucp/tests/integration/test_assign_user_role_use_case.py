@@ -8,7 +8,7 @@ from ucp.application.use_cases.roles.assign_user_role_use_case import (
     AssignUserRoleRequest,
     AssignUserRoleUseCase,
 )
-from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.authorization import Role
 from ucp.domain.models.user import User
 

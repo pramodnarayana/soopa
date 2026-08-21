@@ -5,14 +5,13 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
+from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
 from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
 from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
-from ucp.application.services.infrastructure_provisioner import InfrastructureProvisioner
-from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
@@ -21,6 +20,7 @@ from ucp.application.use_cases.subscribe_app_use_case import (
     SubscribeAppCommand,
     SubscribeAppUseCase,
 )
+from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 
 pytestmark = pytest.mark.integration
 

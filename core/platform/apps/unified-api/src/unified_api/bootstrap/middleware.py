@@ -17,7 +17,7 @@ Architecture note:
     ``request.state.identity`` for both domains.
 """
 
-from ucp.adapters.inbound.http.middleware.authentication import AuthenticationMiddleware
-from ucp.adapters.inbound.http.middleware.tenant_context import TenantContextMiddleware
+from unified_api.adapters.inbound.http.middleware.authentication import AuthenticationMiddleware
+from unified_api.adapters.inbound.http.middleware.tenant_context import TenantContextMiddleware
 
 __all__ = ["AuthenticationMiddleware", "TenantContextMiddleware"]

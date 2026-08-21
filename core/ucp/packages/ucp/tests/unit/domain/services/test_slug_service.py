@@ -6,7 +6,7 @@ No mocks are needed — pure function, zero external dependencies.
 
 import pytest
 
-from ucp.core.exceptions import InvalidTenantNameError
+from ucp.domain.exceptions import InvalidTenantNameError
 from ucp.domain.services.slug_service import generate_slug, generate_unique_slug
 
 

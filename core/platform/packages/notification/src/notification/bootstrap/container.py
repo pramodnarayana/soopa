@@ -23,25 +23,25 @@ from notification.adapters.outbound.channels import (
     SlackDeliveryStrategy,
 )
 from notification.adapters.outbound.channels.dummy_email_provider import DummyEmailProvider
-from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
-from notification.adapters.outbound.postgres_in_app_persistence import (
+from notification.adapters.outbound.database.postgres_in_app_persistence import (
     SqlAlchemyInAppPersistence,
 )
-from notification.adapters.outbound.postgres_notification_query_repository import (
+from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
 )
-from notification.adapters.outbound.postgres_outbox_repository import (
+from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
 )
-from notification.adapters.outbound.postgres_route_repository import (
+from notification.adapters.outbound.database.postgres_route_repository import (
     SqlAlchemyNotificationRouteRepository,
 )
-from notification.adapters.outbound.postgres_template_repository import (
+from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
 )
-from notification.adapters.outbound.postgres_user_preference_repository import (
+from notification.adapters.outbound.database.postgres_user_preference_repository import (
     SqlAlchemyUserNotificationPreferenceRepository,
 )
+from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from notification.application.dispatch_use_case import DispatchNotificationUseCase
 from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase

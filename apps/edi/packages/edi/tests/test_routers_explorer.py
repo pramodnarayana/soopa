@@ -2,9 +2,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+    get_current_tenant_id,
+    get_current_user_profile,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.database import (
+    get_data_plane_uow,
+    get_global_session,
+)
 
-from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile
-from edi.dependencies.database import get_data_plane_uow, get_global_session
 from edi.module import create_edi_app
 
 app = create_edi_app()

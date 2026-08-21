@@ -4,14 +4,18 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-
-from edi.dependencies.auth import (
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
     get_raw_jwt,
     require_platform_admin,
 )
-from edi.dependencies.database import get_control_plane_uow, get_data_plane_uow, get_global_session
+from unified_api.adapters.inbound.http.dependencies.edi.database import (
+    get_control_plane_uow,
+    get_data_plane_uow,
+    get_global_session,
+)
+
 from edi.module import create_edi_app
 
 app = create_edi_app()
@@ -43,7 +47,7 @@ def client(mock_uow):
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }
-    from edi.dependencies.services import get_secret_store
+    from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
     app.dependency_overrides[get_secret_store] = lambda: AsyncMock()
 
@@ -106,8 +110,7 @@ def test_create_as2_partner_unauthorized():
 def test_create_as2_partner_forbidden(client):
     # Test authenticated but without platform admin
     from fastapi import HTTPException
-
-    from edi.dependencies.auth import get_platform_user_profile
+    from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile
 
     def mock_forbidden():
         raise HTTPException(status_code=403, detail="Forbidden")

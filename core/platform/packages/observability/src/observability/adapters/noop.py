@@ -8,14 +8,14 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
-from ..ports.logger import ILogger
-from ..ports.metrics import IMetrics
-from ..ports.tracer import ISpan, ITracer
+from ..ports.logger_port import LoggerPort
+from ..ports.metrics_port import MetricsPort
+from ..ports.tracer_port import SpanPort, TracerPort
 
 # --- No-Op Tracer ---
 
 
-class NoOpSpan(ISpan):
+class NoOpSpan(SpanPort):
     def set_attribute(self, key: str, value: Any) -> None:
         pass
 
@@ -26,16 +26,16 @@ class NoOpSpan(ISpan):
         pass
 
 
-class NoOpTracer(ITracer):
+class NoOpTracer(TracerPort):
     @contextmanager
-    def start_span(self, name: str) -> Generator[ISpan, None, None]:
+    def start_span(self, name: str) -> Generator[SpanPort, None, None]:
         yield NoOpSpan()
 
 
 # --- No-Op Metrics ---
 
 
-class NoOpMetrics(IMetrics):
+class NoOpMetrics(MetricsPort):
     def increment(
         self, name: str, value: float = 1.0, labels: dict[str, str] | None = None
     ) -> None:
@@ -48,7 +48,7 @@ class NoOpMetrics(IMetrics):
 # --- No-Op Logger ---
 
 
-class NoOpLogger(ILogger):
+class NoOpLogger(LoggerPort):
     def debug(self, event: str, **kwargs: Any) -> None:
         pass
 

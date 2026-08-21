@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from database.models.data_plane import EdiMessage
 
-from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
-from edi.core.exceptions import TransactionNotFoundError
-from edi.core.services.transaction_service import TransactionService
+from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+from edi.application.use_cases.transaction_service import TransactionService
+from edi.domain.exceptions import TransactionNotFoundError
 
 
 @pytest.fixture

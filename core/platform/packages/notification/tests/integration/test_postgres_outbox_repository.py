@@ -1,7 +1,7 @@
 import pytest
 from platform_orm.models.identity import Tenant
 
-from notification.adapters.outbound.postgres_outbox_repository import (
+from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
 )
 from notification.domain.models import NotificationOutboxEvent

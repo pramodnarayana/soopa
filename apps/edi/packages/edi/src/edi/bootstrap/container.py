@@ -2,17 +2,17 @@ import os
 
 from dependency_injector import containers, providers
 
-from edi.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
-from edi.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
-from edi.adapters.paramiko_sftp_tester import ParamikoSftpTesterAdapter
-from edi.adapters.sqs_queue import SQSMessageQueueAdapter
-from edi.adapters.tenant_repository import SqlAlchemyTenantRepository
-from edi.adapters.uow_adapter import (
+from edi.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
+from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork,
     SqlAlchemyDataPlaneUnitOfWork,
 )
-from edi.adapters.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
-from edi.services.as2_receiver_service import As2ReceiverService
+from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
+from edi.adapters.outbound.httpx_as2_tester import HttpxAS2TesterAdapter
+from edi.adapters.outbound.messaging.sqs_queue import SQSMessageQueueAdapter
+from edi.adapters.outbound.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
+from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
+from edi.application.use_cases.as2_receiver_service import As2ReceiverService
 
 
 class Container(containers.DeclarativeContainer):
@@ -22,7 +22,7 @@ class Container(containers.DeclarativeContainer):
 
     wiring_config = containers.WiringConfiguration(
         packages=[
-            "edi.dependencies",
+            "unified_api.adapters.inbound.http.dependencies.edi",
         ]
     )
 

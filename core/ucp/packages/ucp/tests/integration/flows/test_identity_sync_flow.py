@@ -6,19 +6,19 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
+from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
 from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
 from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
-from ucp.application.services.identity_sync_service import IdentitySyncService
-from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.application.use_cases.identity_sync_service import IdentitySyncService
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.ports.identity_provider import IdentityProviderPortPort
+from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.ports.outbound.identity_provider import IdentityProviderPortPort
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 
 pytestmark = pytest.mark.integration

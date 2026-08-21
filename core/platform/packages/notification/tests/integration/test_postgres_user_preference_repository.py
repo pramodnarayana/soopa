@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import text
 
-from notification.adapters.outbound.postgres_user_preference_repository import (
+from notification.adapters.outbound.database.postgres_user_preference_repository import (
     SqlAlchemyUserNotificationPreferenceRepository,
 )
 from notification.domain.models import Channel, UserNotificationPreference

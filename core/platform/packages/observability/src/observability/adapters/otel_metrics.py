@@ -1,6 +1,6 @@
 """
-OpenTelemetry Metrics Adapter — implements IMetrics using the OTel SDK.
-Swap this out by registering a different IMetrics implementation in provider.py.
+OpenTelemetry Metrics Adapter — implements MetricsPort using the OTel SDK.
+Swap this out by registering a different MetricsPort implementation in provider.py.
 """
 
 from typing import Any
@@ -11,12 +11,12 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
-from ..ports.metrics import IMetrics
+from ..ports.metrics_port import MetricsPort
 
 
-class OtelMetrics(IMetrics):
+class OtelMetrics(MetricsPort):
     """
-    OpenTelemetry implementation of IMetrics.
+    OpenTelemetry implementation of MetricsPort.
     Counters and histograms are created on first use and cached.
     """
 

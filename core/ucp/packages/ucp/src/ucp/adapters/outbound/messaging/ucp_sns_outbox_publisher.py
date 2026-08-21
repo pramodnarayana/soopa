@@ -5,7 +5,7 @@ import aioboto3
 import structlog
 
 from ucp.domain.models.outbox_event import OutboxEvent
-from ucp.ports.outbox_publisher import OutboxPublisherPort
+from ucp.ports.outbound.outbox_publisher import OutboxPublisherPort
 
 logger = structlog.get_logger(__name__)
 

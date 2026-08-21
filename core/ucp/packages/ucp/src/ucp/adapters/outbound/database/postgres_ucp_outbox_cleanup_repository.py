@@ -6,7 +6,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp_models.events import ControlPlaneOutbox
 
-from ucp.ports.ucp_outbox_cleanup_repository_port import IUcpOutboxCleanupRepositoryPort
+from ucp.ports.outbound.ucp_outbox_cleanup_repository_port import IUcpOutboxCleanupRepositoryPort
 
 
 class SqlAlchemyUcpOutboxCleanupRepository(IUcpOutboxCleanupRepositoryPort):

@@ -3,11 +3,11 @@ from typing import Literal
 import structlog
 
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp.core.exceptions import IdentityProviderPortError
 from ucp.domain.dtos.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
     ZitadelUser,
 )
+from ucp.domain.exceptions import IdentityProviderPortError
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)

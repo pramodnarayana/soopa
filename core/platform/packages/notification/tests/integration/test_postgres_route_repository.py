@@ -1,7 +1,7 @@
 import pytest
 from platform_orm.models.notifications import NotificationRouteConfiguration
 
-from notification.adapters.outbound.postgres_route_repository import (
+from notification.adapters.outbound.database.postgres_route_repository import (
     SqlAlchemyNotificationRouteRepository,
 )
 from notification.domain.models import Channel

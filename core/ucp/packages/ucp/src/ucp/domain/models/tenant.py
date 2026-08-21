@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from ucp.core.exceptions import AppSubscriptionError, TenantRenameError
 from ucp.domain.events.tenant_events import (
     AppSubscribedEvent,
     AppUnsubscribedEvent,
@@ -11,6 +10,7 @@ from ucp.domain.events.tenant_events import (
     TenantProvisionedEvent,
     TenantStatusToggledEvent,
 )
+from ucp.domain.exceptions import AppSubscriptionError, TenantRenameError
 from ucp.domain.models.aggregate_root import AggregateRoot
 
 

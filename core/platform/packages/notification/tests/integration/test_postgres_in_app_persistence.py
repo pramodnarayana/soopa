@@ -2,7 +2,7 @@ import pytest
 from platform_orm.models.notifications import InAppNotification
 from sqlalchemy import select
 
-from notification.adapters.outbound.postgres_in_app_persistence import (
+from notification.adapters.outbound.database.postgres_in_app_persistence import (
     SqlAlchemyInAppPersistence,
 )
 

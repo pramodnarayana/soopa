@@ -2,11 +2,13 @@ import structlog
 from dependency_injector import containers, providers
 from notification.bootstrap.container import Container as NotificationContainer
 
-from notification_worker.adapters.inbound.consumer import NotificationConsumerWorker
 from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job import (
     NotificationOutboxSweeperJob,
 )
-from notification_worker.adapters.inbound.notification_outbox_relay import NotificationOutboxRelay
+from notification_worker.adapters.inbound.workers.consumer import NotificationConsumerWorker
+from notification_worker.adapters.inbound.workers.notification_outbox_relay import (
+    NotificationOutboxRelay,
+)
 
 logger = structlog.get_logger(__name__)
 

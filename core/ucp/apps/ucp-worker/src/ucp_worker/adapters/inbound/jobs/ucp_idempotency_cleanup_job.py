@@ -1,7 +1,7 @@
 import datetime
 
 import structlog
-from ucp.application.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
+from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
 
 from ucp_worker.core.scheduler.handler import JobHandlerPort
 from ucp_worker.core.scheduler.models import Job

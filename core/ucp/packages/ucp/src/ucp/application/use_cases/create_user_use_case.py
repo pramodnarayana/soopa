@@ -3,10 +3,10 @@ from dataclasses import dataclass
 
 import structlog
 
-from ucp.core.exceptions import ResourceNotFoundError, StateConflictError
 from ucp.domain.events.user_events import UserCreatedEvent
+from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
 from ucp.domain.models.user import User
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

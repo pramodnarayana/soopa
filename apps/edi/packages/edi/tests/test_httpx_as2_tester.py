@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from edi.adapters.httpx_as2_tester import HttpxAS2TesterAdapter
+from edi.adapters.outbound.httpx_as2_tester import HttpxAS2TesterAdapter
 
 
 @pytest.fixture
@@ -14,9 +14,9 @@ def adapter():
 @pytest.mark.asyncio
 async def test_test_connection_success(adapter):
     with (
-        patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build,
+        patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build,
         patch("httpx.AsyncClient") as mock_client_cls,
-        patch("edi.adapters.httpx_as2_tester.parse_mdn") as mock_parse,
+        patch("edi.adapters.outbound.httpx_as2_tester.parse_mdn") as mock_parse,
     ):
         mock_msg = MagicMock()
         mock_msg.body = b"mock_body"
@@ -59,7 +59,7 @@ async def test_test_connection_success(adapter):
 
 @pytest.mark.asyncio
 async def test_test_connection_build_fail(adapter):
-    with patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build:
+    with patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build:
         mock_build.side_effect = ValueError("build error")
 
         success, reason, _payload, _mdn = await adapter.test_connection(
@@ -80,7 +80,7 @@ async def test_test_connection_build_fail(adapter):
 @pytest.mark.asyncio
 async def test_test_connection_http_fail(adapter):
     with (
-        patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build,
+        patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build,
         patch("httpx.AsyncClient") as mock_client_cls,
     ):
         mock_build.return_value = MagicMock(body=b"", headers={})
@@ -109,7 +109,7 @@ async def test_test_connection_http_fail(adapter):
 @pytest.mark.asyncio
 async def test_test_connection_http_500(adapter):
     with (
-        patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build,
+        patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build,
         patch("httpx.AsyncClient") as mock_client_cls,
     ):
         mock_build.return_value = MagicMock(body=b"", headers={})
@@ -139,9 +139,9 @@ async def test_test_connection_http_500(adapter):
 @pytest.mark.asyncio
 async def test_test_connection_parse_fail(adapter):
     with (
-        patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build,
+        patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build,
         patch("httpx.AsyncClient") as mock_client_cls,
-        patch("edi.adapters.httpx_as2_tester.parse_mdn") as mock_parse,
+        patch("edi.adapters.outbound.httpx_as2_tester.parse_mdn") as mock_parse,
     ):
         mock_build.return_value = MagicMock(body=b"", headers={})
 
@@ -172,7 +172,7 @@ async def test_test_connection_parse_fail(adapter):
 @pytest.mark.asyncio
 async def test_test_connection_timeout(adapter):
     with (
-        patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build,
+        patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build,
         patch("httpx.AsyncClient") as mock_client_cls,
     ):
         mock_build.return_value = MagicMock(body=b"", headers={})
@@ -201,7 +201,7 @@ async def test_test_connection_timeout(adapter):
 @pytest.mark.asyncio
 async def test_test_connection_generic_exception(adapter):
     with (
-        patch("edi.adapters.httpx_as2_tester.build_outbound_message") as mock_build,
+        patch("edi.adapters.outbound.httpx_as2_tester.build_outbound_message") as mock_build,
         patch("httpx.AsyncClient") as mock_client_cls,
     ):
         mock_build.return_value = MagicMock(body=b"", headers={})

@@ -5,7 +5,7 @@ This module has zero external dependencies and is fully testable in isolation.
 
 import re
 
-from ucp.core.exceptions import InvalidTenantNameError
+from ucp.domain.exceptions import InvalidTenantNameError
 
 
 def generate_slug(name: str) -> str:

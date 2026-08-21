@@ -9,8 +9,8 @@ from ucp.application.use_cases.provision_tenant_use_case import (
 from ucp.ports.outbound.organization_provider import IOrganizationProvider
 from ucp.ports.outbound.role_repository import IRoleRepository
 from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
-from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture

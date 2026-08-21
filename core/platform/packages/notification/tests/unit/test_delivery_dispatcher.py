@@ -4,7 +4,7 @@ import pytest
 
 from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.domain.models import Channel
-from notification.ports.notification_delivery_strategy_port import DeliveryStrategyPort
+from notification.ports.outbound.notification_delivery_strategy_port import DeliveryStrategyPort
 
 
 class FakeDeliveryStrategy(DeliveryStrategyPort):

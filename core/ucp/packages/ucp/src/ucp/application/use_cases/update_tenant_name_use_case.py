@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 import structlog
 
-from ucp.core.exceptions import ResourceNotFoundError
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.domain.exceptions import ResourceNotFoundError
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

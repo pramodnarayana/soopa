@@ -3,8 +3,8 @@ from typing import Any
 import httpx
 import structlog
 
-from ucp.core.config import get_settings
-from ucp.core.exceptions import IdentityProviderPortError
+from ucp.bootstrap.config import get_settings
+from ucp.domain.exceptions import IdentityProviderPortError
 
 logger = structlog.get_logger(__name__)
 

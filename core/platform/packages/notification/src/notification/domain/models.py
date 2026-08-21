@@ -54,3 +54,7 @@ class UserNotificationPreference:
     event_type: str
     channel: Channel
     is_enabled: bool
+
+
+# Platform-level sentinel tenant ID used for global default notification templates.
+PLATFORM_TENANT_ID = "ten_000"

@@ -1,5 +1,5 @@
 from ucp.domain.models.api_token import ApiTokenDomainModel
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 
 
 class ListApiTokensUseCase:

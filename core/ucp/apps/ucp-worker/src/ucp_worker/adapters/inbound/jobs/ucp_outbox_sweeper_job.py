@@ -1,7 +1,7 @@
 import datetime
 
 import structlog
-from ucp.application.sweep_outbox_use_case import SweepControlPlaneOutboxUseCase
+from ucp.application.use_cases.sweep_outbox_use_case import SweepControlPlaneOutboxUseCase
 
 from ucp_worker.core.scheduler.handler import JobHandlerPort
 from ucp_worker.core.scheduler.models import Job

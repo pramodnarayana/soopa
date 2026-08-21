@@ -4,7 +4,7 @@ import pytest
 from platform_orm.models.identity import Role, Tenant, User, UserRole
 from platform_orm.models.notifications import InAppNotification
 
-from notification.adapters.outbound.postgres_notification_query_repository import (
+from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
 )
 

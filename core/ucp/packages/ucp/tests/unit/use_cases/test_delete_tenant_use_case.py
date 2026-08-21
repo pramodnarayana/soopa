@@ -3,12 +3,12 @@ from unittest.mock import AsyncMock, create_autospec
 import pytest
 
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
-from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.domain.models.user import User
 from ucp.ports.outbound.tenant_repository import ITenantRepository
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 from ucp.ports.outbound.user_repository import IUserRepository
-from ucp.ports.uow import UcpUnitOfWorkPort
 
 
 @pytest.fixture

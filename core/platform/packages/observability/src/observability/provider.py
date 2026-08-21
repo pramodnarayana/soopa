@@ -2,16 +2,16 @@
 ObservabilityProvider — The composition root for all observability adapters.
 
 This is the ONLY place in the codebase that knows which concrete adapter is being used.
-All services receive the ITracer, IMetrics, and ILogger ports and never import adapters directly.
+All services receive the TracerPort, MetricsPort, and LoggerPort ports and never import adapters directly.
 
 At startup, call ObservabilityProvider.configure(...) once.
 Everywhere else, call ObservabilityProvider.tracer(), .metrics(), .logger(name).
 """
 
 from .adapters.noop import NoOpLogger, NoOpMetrics, NoOpTracer
-from .ports.logger import ILogger
-from .ports.metrics import IMetrics
-from .ports.tracer import ITracer
+from .ports.logger_port import LoggerPort
+from .ports.metrics_port import MetricsPort
+from .ports.tracer_port import TracerPort
 
 
 class ObservabilityProvider:
@@ -24,25 +24,25 @@ class ObservabilityProvider:
     To activate real telemetry, call configure() at application startup.
     """
 
-    _tracer: ITracer = NoOpTracer()
-    _metrics: IMetrics = NoOpMetrics()
-    _default_logger: ILogger = NoOpLogger()
+    _tracer: TracerPort = NoOpTracer()
+    _metrics: MetricsPort = NoOpMetrics()
+    _default_logger: LoggerPort = NoOpLogger()
 
     @classmethod
     def configure(
         cls,
-        tracer: ITracer,
-        metrics: IMetrics,
-        logger: ILogger,
+        tracer: TracerPort,
+        metrics: MetricsPort,
+        logger: LoggerPort,
     ) -> None:
         """
         Registers concrete adapter implementations.
         Call once in the FastAPI lifespan startup handler.
 
         Example (production):
-            from observability.adapters.otel import OtelTracer
+            from observability.adapters.otel_tracer import OtelTracer
             from observability.adapters.otel_metrics import OtelMetrics
-            from observability.adapters.structlog_adapter import StructlogLogger
+            from observability.adapters.structlog_logger import StructlogLogger
 
             ObservabilityProvider.configure(
                 tracer=OtelTracer(service_name="as2-server", otlp_endpoint="..."),
@@ -67,14 +67,14 @@ class ObservabilityProvider:
         cls._default_logger = logger
 
     @classmethod
-    def tracer(cls) -> ITracer:
+    def tracer(cls) -> TracerPort:
         return cls._tracer
 
     @classmethod
-    def metrics(cls) -> IMetrics:
+    def metrics(cls) -> MetricsPort:
         return cls._metrics
 
     @classmethod
-    def logger(cls, name: str = "") -> ILogger:
+    def logger(cls, name: str = "") -> LoggerPort:
         """Returns a logger bound with the module name."""
         return cls._default_logger.bind(logger=name) if name else cls._default_logger

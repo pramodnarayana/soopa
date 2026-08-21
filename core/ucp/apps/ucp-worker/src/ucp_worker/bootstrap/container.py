@@ -5,7 +5,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
+from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
 from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
 from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
@@ -22,19 +22,19 @@ from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProviderPort
 from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProviderPort
 from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
-from ucp.application.handlers.tenant_deleted_handler import TenantDeletedEventHandler
-from ucp.application.services.identity_sync_service import IdentitySyncService
-from ucp.application.services.infrastructure_provisioner import InfrastructureProvisioner
-from ucp.application.sweep_outbox_use_case import SweepControlPlaneOutboxUseCase
-from ucp.application.ucp_audit_log_cleanup_use_case import UcpAuditLogCleanupUseCase
-from ucp.application.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
-from ucp.application.ucp_outbox_cleanup_use_case import UcpOutboxCleanupUseCase
-from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.application.use_cases.identity_sync_service import IdentitySyncService
+from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
+from ucp.application.use_cases.sweep_outbox_use_case import SweepControlPlaneOutboxUseCase
+from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDeletedEventHandler
+from ucp.application.use_cases.ucp_audit_log_cleanup_use_case import UcpAuditLogCleanupUseCase
+from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
+from ucp.application.use_cases.ucp_outbox_cleanup_use_case import UcpOutboxCleanupUseCase
+from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.bootstrap.config import get_settings
 from ucp.bootstrap.container import Container as CoreContainer
-from ucp.core.config import get_settings
-from ucp.ports.identity_provider import IdentityProviderPortPort
+from ucp.ports.outbound.identity_provider import IdentityProviderPortPort
+from ucp.ports.outbound.uow import UcpUnitOfWorkPort
 from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
-from ucp.ports.uow import UcpUnitOfWorkPort
 
 from ucp_worker.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
 from ucp_worker.adapters.inbound.jobs.ucp_idempotency_cleanup_job import (

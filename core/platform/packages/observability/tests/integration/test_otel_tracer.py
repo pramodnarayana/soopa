@@ -2,7 +2,7 @@ import pytest
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from observability.adapters.otel import OtelTracer
+from observability.adapters.otel_tracer import OtelTracer
 
 # Global setup for memory exporter
 _memory_exporter = InMemorySpanExporter()

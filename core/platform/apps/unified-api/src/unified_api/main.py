@@ -22,8 +22,19 @@ from edi.adapters.inbound.ucp_adapter import UcpAdapter
 from edi.module import create_edi_app
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from ucp.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
-from ucp.adapters.inbound.http.routers import (
+from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
+from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
+from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.user_repository import UserRepository
+from ucp.application.use_cases.authenticators.api_key_strategy import ApiKeyStrategy
+from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
+from ucp.bootstrap.container import Container as UcpContainer
+from ucp.bootstrap.container import _async_session_maker
+from ucp.bootstrap.dependencies import get_token_verifier
+from ucp.ports.outbound.edi_service import IEdiService
+
+from unified_api.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
+from unified_api.adapters.inbound.http.routers import (
     apps_router,
     auth_router,
     tenants_router,
@@ -31,16 +42,6 @@ from ucp.adapters.inbound.http.routers import (
     users_router,
     webhooks_router,
 )
-from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
-from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
-from ucp.adapters.outbound.database.user_repository import UserRepository
-from ucp.application.services.authenticators.api_key_strategy import ApiKeyStrategy
-from ucp.application.services.authenticators.jwt_strategy import JwtStrategy
-from ucp.bootstrap.container import Container as UcpContainer
-from ucp.core.container import _async_session_maker, get_token_verifier
-from ucp.ports.outbound.edi_service import IEdiService
-
 from unified_api.bootstrap.exceptions import setup_shell_exception_handlers
 from unified_api.bootstrap.lifespan import shell_lifespan
 from unified_api.bootstrap.middleware import AuthenticationMiddleware, TenantContextMiddleware
@@ -141,14 +142,17 @@ setup_shell_exception_handlers(app)
 # UCP dependency injection (real adapters → router placeholders) is wired here
 # on the Shell app instance, since that is the app that owns the UCP routes.
 # ---------------------------------------------------------------------------
-from notification.api.in_app_notifications_router import (
+from unified_api.adapters.inbound.http.routers.in_app_notifications_router import (
     router as in_app_notifications_router,
 )
-from notification.api.preferences_router import (
+from unified_api.adapters.inbound.http.routers.notification_preferences_router import (
     router as notification_preferences_router,
 )
-from notification.api.templates_router import (
+from unified_api.adapters.inbound.http.routers.notification_templates_router import (
     router as notification_templates_router,
+)
+from unified_api.adapters.inbound.http.routers.notification_user_preferences_router import (
+    router as notification_user_preferences_router,
 )
 
 app.include_router(auth_router.router, prefix="/api/v1")
@@ -160,6 +164,7 @@ app.include_router(webhooks_router.router)
 app.include_router(in_app_notifications_router)
 app.include_router(notification_preferences_router)
 app.include_router(notification_templates_router)
+app.include_router(notification_user_preferences_router)
 
 ucp_container = UcpContainer()
 app.state.ucp_container = ucp_container

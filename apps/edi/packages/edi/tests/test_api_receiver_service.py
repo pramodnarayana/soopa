@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from edi.services.api_receiver_service import ApiReceiverService
+from edi.application.use_cases.api_receiver_service import ApiReceiverService
 
 
 @pytest.mark.asyncio
