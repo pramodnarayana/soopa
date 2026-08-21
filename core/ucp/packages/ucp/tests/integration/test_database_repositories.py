@@ -24,8 +24,8 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
 
         new_tenant = Tenant(
             id=tenant_id,
-            name="Test Tenant",
-            slug="test-tenant",
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
             idp_tenant_id="idp_test_123",
             status="active",
             created_at=datetime.now(UTC),
@@ -39,11 +39,11 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
         found_tenant = await repo.find_by_id(tenant_id)
         assert found_tenant is not None
         assert found_tenant.id == tenant_id
-        assert found_tenant.name == "Test Tenant"
+        assert found_tenant.name.startswith("Test Tenant")
         # Subscriptions are verified here too
         # Wait, the subscription test-app might not exist in the App table, which might violate FK constraints!
 
         # Test deletion
-        await repo.delete(tenant_id)
+        await repo.delete(found_tenant)
         deleted_tenant = await repo.find_by_id(tenant_id)
         assert deleted_tenant is None

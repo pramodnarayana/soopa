@@ -27,6 +27,17 @@ async def test_create_user_endpoint_resolves_di_and_persists(
         idp_tenant_id=f"mock_org_{uuid.uuid4().hex[:8]}",
     )
     db_session.add(tenant)
+    # Seed the Global PBAC Role required by the CreateUserUseCase
+    from platform_orm.models.identity import Role as OrmRole
+
+    global_role = OrmRole(
+        id=f"rol_{uuid.uuid4().hex[:12]}",
+        name="TenantAdmin",
+        tenant_id=None,
+        description="Global Tenant Admin Role",
+        capabilities=["users:write", "users:read"],
+    )
+    db_session.add(global_role)
     await db_session.commit()
 
     payload = {
@@ -52,7 +63,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
 
     # Check User was saved
     result = await db_session.execute(
-        text("SELECT email, name FROM ucp.users WHERE id = :user_id"), {"user_id": user_id}
+        text("SELECT email, name FROM identity.users WHERE id = :user_id"), {"user_id": user_id}
     )
     user_record = result.fetchone()
     assert user_record is not None
@@ -61,8 +72,8 @@ async def test_create_user_endpoint_resolves_di_and_persists(
 
     # Check outbox event was emitted (UserCreatedEvent)
     outbox_result = await db_session.execute(
-        text("SELECT event_type FROM platform.outbox_messages WHERE aggregate_id = :user_id"),
+        text("SELECT event_type FROM ucp.outbox WHERE payload->>'user_id' = :user_id"),
         {"user_id": user_id},
     )
     events = [row.event_type for row in outbox_result.fetchall()]
-    assert "UserCreatedEvent" in events
+    assert "UserInvited" in events
