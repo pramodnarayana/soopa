@@ -2,9 +2,11 @@ from typing import Any
 
 import structlog
 from dotenv import load_dotenv
-
-from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile
-from edi.dependencies.database import get_tenant_session
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+    get_current_tenant_id,
+    get_current_user_profile,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.database import get_tenant_session
 
 load_dotenv()
 
@@ -21,11 +23,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from edi.bootstrap.container import Container
-from edi.bootstrap.lifespan import edi_lifespan
-from edi.core.exceptions import OrchestrationError, VaultError
-from edi.routers import (
+from unified_api.adapters.inbound.http.routers.edi import (
     edi_headers,
     edi_json,
     edi_tools,
@@ -34,11 +32,15 @@ from edi.routers import (
     trading_partners,
     transactions,
 )
-from edi.routers import (
+from unified_api.adapters.inbound.http.routers.edi import (
     platform as platform_admin,
 )
-from edi.routers.tenant import dashboard
-from edi.routers.trading_partners import as2_receive, platform
+from unified_api.adapters.inbound.http.routers.edi.tenant import dashboard
+from unified_api.adapters.inbound.http.routers.edi.trading_partners import as2_receive, platform
+
+from edi.bootstrap.container import Container
+from edi.bootstrap.lifespan import edi_lifespan
+from edi.domain.exceptions import OrchestrationError, VaultError
 
 logger = structlog.get_logger(__name__)
 

@@ -5,7 +5,10 @@ import structlog
 from database.connection import DatabaseRouter
 from sqlalchemy import text
 
-from worker.ports.outbox_relay_repository import OutboxRelayRepositoryPort, RelayOutboxEvent
+from worker.ports.outbound.outbox_relay_repository_port import (
+    OutboxRelayRepositoryPort,
+    RelayOutboxEvent,
+)
 
 logger = structlog.get_logger(__name__)
 

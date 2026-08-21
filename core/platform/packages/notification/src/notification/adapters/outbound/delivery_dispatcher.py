@@ -3,7 +3,7 @@ from typing import Any
 import structlog
 
 from ...domain.models import Channel
-from ...ports.notification_delivery_strategy_port import DeliveryStrategyPort
+from ...ports.outbound.notification_delivery_strategy_port import DeliveryStrategyPort
 
 logger = structlog.get_logger(__name__)
 

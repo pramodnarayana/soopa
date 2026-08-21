@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.core.exceptions import IdempotencyConflictError
-from ucp.ports.idempotency_repository import IdempotencyRepositoryPort
+from ucp.domain.exceptions import IdempotencyConflictError
+from ucp.ports.outbound.idempotency_repository_port import IdempotencyRepositoryPort
 
 
 class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):

@@ -9,7 +9,7 @@ without any conditional logic at the injection site.
 
 import structlog
 
-from pipeline.ports.as2 import AS2DeliveryPort
+from pipeline.ports.outbound.as2_delivery_port import AS2DeliveryPort
 
 logger = structlog.get_logger(__name__)
 

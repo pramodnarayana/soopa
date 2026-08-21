@@ -5,7 +5,7 @@ from typing import Any
 
 import structlog
 
-from ucp.ports.ucp_event_listener import UcpEventListenerPort, UcpEventMessage
+from ucp.ports.outbound.ucp_event_listener_port import UcpEventListenerPort, UcpEventMessage
 
 logger = structlog.get_logger(__name__)
 

@@ -1,6 +1,6 @@
 import structlog
 
-from ..ports.notification_outbox_repository_port import NotificationOutboxRepositoryPort
+from ..ports.outbound.notification_outbox_repository_port import NotificationOutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

@@ -1,7 +1,7 @@
 import pytest
 from api_fakes import FakeTenantRepository
 
-from edi.core.authorization import AuthorizationService
+from edi.domain.authorization import AuthorizationService
 
 
 @pytest.fixture

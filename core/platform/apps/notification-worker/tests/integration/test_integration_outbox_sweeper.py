@@ -1,7 +1,7 @@
 from typing import Any
 
 import pytest
-from notification.adapters.outbound.postgres_outbox_repository import (
+from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
 )
 from notification.application.notification_outbox_processor_use_case import (

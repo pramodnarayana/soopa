@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from notification_worker.adapters.inbound.sqs_poller import poll_sqs_queue
+from notification_worker.adapters.inbound.workers.sqs_poller import poll_sqs_queue
 
 
 @pytest.mark.asyncio
@@ -20,7 +20,7 @@ async def test_poll_sqs_queue_success():
     stop_event = asyncio.Event()
 
     with patch(
-        "notification_worker.adapters.inbound.sqs_poller.aioboto3.Session"
+        "notification_worker.adapters.inbound.workers.sqs_poller.aioboto3.Session"
     ) as mock_session_class:
         mock_session = mock_session_class.return_value
 
@@ -67,7 +67,7 @@ async def test_poll_sqs_queue_invalid_json():
         pass
 
     with patch(
-        "notification_worker.adapters.inbound.sqs_poller.aioboto3.Session"
+        "notification_worker.adapters.inbound.workers.sqs_poller.aioboto3.Session"
     ) as mock_session_class:
         mock_session = mock_session_class.return_value
         mock_client = AsyncMock()

@@ -2,7 +2,7 @@ from typing import Any
 
 from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
-from pipeline.ports.transformer import TransformedTransaction, TransformerPort
+from pipeline.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
 
 class BotsTransformerAdapter(TransformerPort):

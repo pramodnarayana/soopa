@@ -2,7 +2,7 @@ import pytest
 from platform_orm.models.identity import Tenant
 from platform_orm.models.notifications import NotificationTemplate
 
-from notification.adapters.outbound.postgres_template_repository import (
+from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
 )
 from notification.domain.models import Channel

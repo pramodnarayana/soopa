@@ -6,7 +6,7 @@ import paramiko
 import patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
 import structlog
 
-from pipeline.ports.sftp import SftpDeliveryPort
+from pipeline.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
 logger = structlog.get_logger(__name__)
 

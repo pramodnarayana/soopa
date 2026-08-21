@@ -1,7 +1,7 @@
 import structlog
 
 from identity.domain.identity_context import IdentityContext, identity_context_from_claims
-from identity.ports.token_verifier_port import TokenValidationError, TokenVerifierPort
+from identity.ports.outbound.token_verifier_port import TokenValidationError, TokenVerifierPort
 
 logger = structlog.get_logger(__name__)
 

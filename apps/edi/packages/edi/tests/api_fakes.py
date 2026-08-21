@@ -18,7 +18,7 @@ from edi.domain.models import (
     UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
-from edi.ports.repository import (
+from edi.ports.outbound.repository import (
     TenantRepositoryPort,
 )
 
@@ -34,7 +34,7 @@ class FakeGlobalStore:
     async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
         for p in self.partners:
             if p["tenant_id"] == tenant_id and p["cmd"].as2_id == cmd.as2_id:
-                from edi.core.exceptions import PartnerAlreadyExistsError
+                from edi.domain.exceptions import PartnerAlreadyExistsError
 
                 raise PartnerAlreadyExistsError(as2_id=cmd.as2_id, tenant_id=tenant_id)
         p_id = str(uuid.uuid4())

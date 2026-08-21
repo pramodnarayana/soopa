@@ -1,0 +1,131 @@
+"""
+Global Authentication Middleware.
+
+Validates the Bearer token exactly ONCE at the perimeter for every inbound
+request. The resolved ``IdentityContext`` is attached to ``request.state.identity``
+and ``request.scope['identity']`` so all downstream guards and domain auth
+dependencies can simply read from it.
+
+Architecture note:
+  This is the outermost shell of the Hexagonal Architecture: the HTTP edge.
+  It uses the Strategy Pattern to evaluate different token types dynamically.
+"""
+
+from collections.abc import Sequence
+
+import structlog
+from fastapi import Request, Response
+from fastapi.responses import JSONResponse
+from identity.application.authenticate_use_case import (
+    AuthenticationError,
+    TenantNotProvisionedError,
+)
+from identity.domain.authentication_strategy import AuthenticationStrategyPort
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import ASGIApp
+
+logger = structlog.get_logger(__name__)
+
+# Paths that are fully public — no token required.
+_PUBLIC_PATHS: frozenset[str] = frozenset(
+    {
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/docs/oauth2-redirect",
+        "/health",
+    }
+)
+
+
+class AuthenticationMiddleware(BaseHTTPMiddleware):
+    """
+    ASGI middleware: validates the auth token once per request and populates
+    ``request.state.identity`` and ``request.scope['identity']``.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        strategies: Sequence[AuthenticationStrategyPort],
+        public_paths: frozenset[str],
+    ) -> None:
+        super().__init__(app)
+        self.strategies = strategies
+        self.public_paths = public_paths
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        logger.debug(
+            "auth_middleware_intercepted_request",
+            path=request.url.path,
+        )
+
+        if request.url.path in self.public_paths:
+            return await call_next(request)
+
+        authorization = request.headers.get("Authorization")
+        token = ""
+
+        if authorization:
+            token = authorization.strip()
+            while token.lower().startswith("bearer "):
+                token = token[7:].strip()
+        # Note: Query parameter token authentication removed for security.
+        # SSE clients must use Authorization header or cookie-based authentication.
+
+        if token:
+            logger.debug(
+                "auth_middleware_token_found",
+                token_prefix=token[:15],
+            )
+
+            # Chain of Responsibility / Strategy Execution
+            strategy_found = False
+            for strategy in self.strategies:
+                logger.debug(
+                    "auth_middleware_evaluating_strategy",
+                    strategy=type(strategy).__name__,
+                )
+                if strategy.can_handle(token):
+                    logger.debug(
+                        "auth_middleware_strategy_claimed_token",
+                        strategy=type(strategy).__name__,
+                    )
+                    strategy_found = True
+                    try:
+                        identity = await strategy.authenticate(token)
+                        request.state.identity = identity
+                        request.scope["identity"] = identity
+                        break
+                    except AuthenticationError:
+                        # Don't reject here — let route-specific guards raise 401/403.
+                        logger.debug(
+                            "Bearer token present but failed validation at middleware layer "
+                            "for path=%s — downstream guards will enforce.",
+                            request.url.path,
+                        )
+                        request.state.identity = None
+                        request.scope["identity"] = None
+                        break
+                    except TenantNotProvisionedError as e:
+                        logger.warning(
+                            "auth_middleware_tenant_not_provisioned",
+                            tenant_id=e.tenant_id,
+                        )
+                        return JSONResponse(status_code=403, content={"detail": str(e)})
+
+            if not strategy_found:
+                logger.warning("auth_middleware_no_strategy_found")
+                request.state.identity = None
+                request.scope["identity"] = None
+        else:
+            logger.debug("auth_middleware_no_authorization_header")
+            request.state.identity = None
+            request.scope["identity"] = None
+
+        logger.debug(
+            "auth_middleware_proceeding",
+            path=request.url.path,
+            has_identity=hasattr(request.state, "identity") and request.state.identity is not None,
+        )
+        return await call_next(request)

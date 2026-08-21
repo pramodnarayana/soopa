@@ -4,8 +4,8 @@ import structlog
 from domain.events import PipelineEventType
 from domain.models import EdiMessageDomainModel
 
-from pipeline.ports.secret_store import SecretStorePort
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from pipeline.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -13,7 +13,7 @@ logger = structlog.get_logger(__name__)
 class BaseDeliveryStrategy:
     """Base class for delivery strategies."""
 
-    def __init__(self, uow: DataPlaneUnitOfWork, vault: SecretStorePort | None = None) -> None:
+    def __init__(self, uow: DataPlaneUnitOfWorkPort, vault: SecretStorePort | None = None) -> None:
         self.uow = uow
         self.secret_store = vault
 

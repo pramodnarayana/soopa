@@ -3,29 +3,29 @@ from unittest.mock import AsyncMock, create_autospec
 import pytest
 
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
-from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.domain.models.user import User
-from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_repository import IUserRepository
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 
 @pytest.fixture
-def mock_tenant_repo() -> ITenantRepository:
-    """Strict mock that enforces the ITenantRepository port interface."""
-    return create_autospec(ITenantRepository, instance=True)
+def mock_tenant_repo() -> TenantRepositoryPort:
+    """Strict mock that enforces the TenantRepositoryPort port interface."""
+    return create_autospec(TenantRepositoryPort, instance=True)
 
 
 @pytest.fixture
-def mock_user_repo() -> IUserRepository:
-    """Strict mock that enforces the IUserRepository port interface."""
-    return create_autospec(IUserRepository, instance=True)
+def mock_user_repo() -> UserRepositoryPort:
+    """Strict mock that enforces the UserRepositoryPort port interface."""
+    return create_autospec(UserRepositoryPort, instance=True)
 
 
 @pytest.fixture
 def mock_uow(
-    mock_tenant_repo: ITenantRepository, mock_user_repo: IUserRepository
+    mock_tenant_repo: TenantRepositoryPort, mock_user_repo: UserRepositoryPort
 ) -> UcpUnitOfWorkPort:
     uow = create_autospec(UcpUnitOfWorkPort, instance=True)
     uow.tenant_repo = mock_tenant_repo
@@ -46,7 +46,7 @@ def delete_use_case(
 @pytest.mark.asyncio
 async def test_delete_tenant_not_found(
     delete_use_case: DeleteTenantUseCase,
-    mock_tenant_repo: ITenantRepository,
+    mock_tenant_repo: TenantRepositoryPort,
 ) -> None:
     mock_tenant_repo.find_by_id = AsyncMock(return_value=None)
 
@@ -57,8 +57,8 @@ async def test_delete_tenant_not_found(
 @pytest.mark.asyncio
 async def test_delete_tenant_success(
     delete_use_case: DeleteTenantUseCase,
-    mock_tenant_repo: ITenantRepository,
-    mock_user_repo: IUserRepository,
+    mock_tenant_repo: TenantRepositoryPort,
+    mock_user_repo: UserRepositoryPort,
     mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     tenant = Tenant.create(

@@ -2,8 +2,8 @@ import os
 from typing import Any
 
 from dependency_injector import containers, providers
-from scheduler.adapters.outbound.dummy_job_dispatcher import DummyJobDispatcher
-from scheduler.adapters.outbound.postgres_job_repository import PostgresJobRepository
+from scheduler.adapters.outbound.database.postgres_job_repository import PostgresJobRepository
+from scheduler.adapters.outbound.messaging.dummy_job_dispatcher import DummyJobDispatcher
 from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecuteJobsUseCase
 from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
 

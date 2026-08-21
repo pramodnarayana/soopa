@@ -3,17 +3,17 @@ from typing import Literal
 import structlog
 
 from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp.core.exceptions import IdentityProviderPortError
 from ucp.domain.dtos.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
     ZitadelUser,
 )
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
+from ucp.domain.exceptions import IdentityProviderPortError
+from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelUsersAdapter(ZitadelClient, IUserIdentityProviderPort):
+class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
     def _mask_email(self, email: str) -> str:
         parts = email.split("@")
         if len(parts) != 2:

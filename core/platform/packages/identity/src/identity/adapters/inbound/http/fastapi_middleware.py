@@ -7,7 +7,7 @@ from identity.application.authenticate_use_case import (
     authenticate_bearer_token,
 )
 from identity.domain.identity_context import IdentityContext
-from identity.ports.token_verifier_port import TokenVerifierPort
+from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 
 
 def identity_dependency(

@@ -1,7 +1,7 @@
 import structlog
 
 from ..domain.models import UserNotificationPreference
-from ..ports.user_notification_preference_repository_port import (
+from ..ports.outbound.user_notification_preference_repository_port import (
     UserNotificationPreferenceRepositoryPort,
 )
 

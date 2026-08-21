@@ -6,10 +6,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ucp.ports.ucp_audit_log_cleanup_repository_port import IUcpAuditLogCleanupRepositoryPort
+from ucp.ports.outbound.ucp_audit_log_cleanup_repository_port import (
+    UcpAuditLogCleanupRepositoryPort,
+)
 
 
-class SqlAlchemyUcpAuditLogCleanupRepository(IUcpAuditLogCleanupRepositoryPort):
+class SqlAlchemyUcpAuditLogCleanupRepository(UcpAuditLogCleanupRepositoryPort):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 

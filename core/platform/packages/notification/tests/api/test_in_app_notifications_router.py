@@ -78,8 +78,8 @@ async def test_in_app_notifications_router_integration(db_session_factory):
         session.add(other_user_notification)
 
     from fastapi import FastAPI
+    from unified_api.adapters.inbound.http.routers.in_app_notifications_router import router
 
-    from notification.api.in_app_notifications_router import router
     from notification.bootstrap.container import Container
 
     app = FastAPI()
@@ -108,14 +108,16 @@ async def test_in_app_notifications_router_integration(db_session_factory):
     # Initialize container and override query repository
     container = Container()
 
-    from notification.adapters.outbound.postgres_notification_query_repository import (
+    from notification.adapters.outbound.database.postgres_notification_query_repository import (
         SqlAlchemyNotificationQueryRepository,
     )
 
     repo_instance = SqlAlchemyNotificationQueryRepository(db_session_factory)
 
     container.query_repository.override(providers.Object(repo_instance))
-    container.wire(modules=["notification.api.in_app_notifications_router"])
+    container.wire(
+        modules=["unified_api.adapters.inbound.http.routers.in_app_notifications_router"]
+    )
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

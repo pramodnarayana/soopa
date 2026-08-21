@@ -4,7 +4,7 @@ import structlog
 from database.models.data_plane import DataPlaneOutbox
 from domain.events import PIPELINE_EVENT_ROUTING_MAP
 
-from worker.ports.edi_data_plane_outbox_publisher_port import (
+from worker.ports.outbound.edi_data_plane_outbox_publisher_port import (
     EdiDataPlaneOutboxPublisherPort,
     PublishMessageEnvelope,
 )

@@ -2,15 +2,14 @@ import hashlib
 
 import structlog
 
-from ..adapters.outbound.postgres_template_repository import PLATFORM_TENANT_ID
-from ..domain.models import NotificationEvent, NotificationOutboxEvent
+from ..domain.models import PLATFORM_TENANT_ID, NotificationEvent, NotificationOutboxEvent
 
 # (
-from ..ports.notification_outbox_repository_port import NotificationOutboxRepositoryPort
-from ..ports.notification_route_repository_port import NotificationRouteRepositoryPort
-from ..ports.template_renderer_port import TemplateRendererPort
-from ..ports.template_repository_port import TemplateRepositoryPort
-from ..ports.user_notification_preference_repository_port import (
+from ..ports.outbound.notification_outbox_repository_port import NotificationOutboxRepositoryPort
+from ..ports.outbound.notification_route_repository_port import NotificationRouteRepositoryPort
+from ..ports.outbound.template_renderer_port import TemplateRendererPort
+from ..ports.outbound.template_repository_port import TemplateRepositoryPort
+from ..ports.outbound.user_notification_preference_repository_port import (
     UserNotificationPreferenceRepositoryPort,
 )
 

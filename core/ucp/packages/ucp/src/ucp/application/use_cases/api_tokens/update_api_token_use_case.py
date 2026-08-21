@@ -1,6 +1,6 @@
-from ucp.application.models.api_token_models import UpdateApiTokenCommand
 from ucp.domain.models.api_token import ApiTokenDomainModel
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.domain.models.api_token_models import UpdateApiTokenCommand
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
 class UpdateApiTokenUseCase:

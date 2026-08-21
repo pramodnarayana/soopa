@@ -26,8 +26,8 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pipeline.ports.repository import RepositoryPort
-from pipeline.ports.storage import StoragePort
+from pipeline.ports.outbound.edi_message_port import RepositoryPort
+from pipeline.ports.outbound.storage_port import StoragePort
 
 
 class SqlAlchemyRepositoryAdapter(RepositoryPort):

@@ -2,7 +2,7 @@ import asyncio
 
 import structlog
 
-from scheduler.ports.job_repository_port import JobRepositoryPort
+from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

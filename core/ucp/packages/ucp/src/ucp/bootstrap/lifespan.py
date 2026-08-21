@@ -32,7 +32,7 @@ async def shutdown() -> None:
     """
     Called by the Shell lifespan on application shutdown.
     """
-    from ucp.core.container import _engine
+    from ucp.bootstrap.container import _engine
 
     logger.info("ucp_api_shutdown")
     await _engine.dispose()

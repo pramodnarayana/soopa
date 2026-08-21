@@ -2,7 +2,7 @@ import structlog
 from pydantic import BaseModel
 
 from ucp.application.use_cases._tenant_helpers import resolve_tenant_or_raise
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

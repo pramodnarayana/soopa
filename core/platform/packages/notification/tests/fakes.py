@@ -4,11 +4,15 @@ from notification.domain.models import (
     Template,
     UserNotificationPreference,
 )
-from notification.ports.notification_outbox_repository_port import NotificationOutboxRepositoryPort
-from notification.ports.notification_route_repository_port import NotificationRouteRepositoryPort
-from notification.ports.template_renderer_port import TemplateRendererPort
-from notification.ports.template_repository_port import TemplateRepositoryPort
-from notification.ports.user_notification_preference_repository_port import (
+from notification.ports.outbound.notification_outbox_repository_port import (
+    NotificationOutboxRepositoryPort,
+)
+from notification.ports.outbound.notification_route_repository_port import (
+    NotificationRouteRepositoryPort,
+)
+from notification.ports.outbound.template_renderer_port import TemplateRendererPort
+from notification.ports.outbound.template_repository_port import TemplateRepositoryPort
+from notification.ports.outbound.user_notification_preference_repository_port import (
     UserNotificationPreferenceRepositoryPort,
 )
 

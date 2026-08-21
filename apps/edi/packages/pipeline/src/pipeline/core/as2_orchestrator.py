@@ -19,7 +19,7 @@ import structlog
 from as2_core import OutboundAS2Message, build_outbound_message
 from security import encrypt_payload, sign_payload
 
-from pipeline.ports.secret_store import SecretStorePort
+from pipeline.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 

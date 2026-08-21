@@ -24,9 +24,11 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     idp_id = "385223051081416707"
 
     repo = TenantRepository(db_session)
+    unique_suffix = uuid.uuid4().hex[:8]
     tenant = Tenant(
         id=canonical_id,
-        name="Test Trucking",
+        name=f"Test Trucking {unique_suffix}",
+        slug=f"test-trucking-{unique_suffix}",
         idp_tenant_id=idp_id,
         status="active",
         created_at=datetime.datetime.now(datetime.UTC),
@@ -38,10 +40,11 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
 
     # 2. Override the token verifier in the app to return a fake identity
     from identity.domain.identity_context import IdentityContext
-    from ucp.main import app  # type: ignore
 
     # Remove the generic guard overrides so the REAL auth logic executes!
-    from ucp.adapters.inbound.http.guards import tenant_auth_guard
+    from unified_api.adapters.inbound.http.guards import tenant_auth_guard
+    from unified_api.main import app  # type: ignore
+
     from ucp.domain.models.authorization import Capability
 
     if tenant_auth_guard.require_tenant_member in app.dependency_overrides:
@@ -56,18 +59,22 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
         capabilities={Capability.TENANT_ADMIN.value},
     )
 
-    # We override the authenticate_bearer_token function that the middleware calls
-    from unittest.mock import patch
+    # We override the JwtStrategy that the middleware uses to return a fake identity
+    from unittest.mock import AsyncMock, patch
 
     with patch(
-        "ucp.adapters.inbound.http.middleware.authentication.authenticate_bearer_token",
-        autospec=True,
+        "ucp.application.use_cases.authenticators.jwt_strategy.JwtStrategy.authenticate",
+        new_callable=AsyncMock,
     ) as mock_auth:
         mock_auth.return_value = raw_identity
 
         # 3. Hit the endpoint using the IdP ID
         response = await client.get(
-            f"/api/v1/tenants/{idp_id}", headers={"Authorization": "Bearer mock"}
+            f"/api/v1/tenants/{idp_id}",
+            headers={
+                "Authorization": "Bearer mock",
+                "x-tenant-id": idp_id,
+            },
         )
 
         # It SHOULD be 200 OK!

@@ -7,8 +7,8 @@ from domain.direction import MessageDirection
 from domain.events import PipelineEventType
 from domain.status import MessageStatus
 
-from pipeline.ports.transformer import TransformerPort
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from pipeline.ports.outbound.transformer_port import TransformerPort
 
 logger = structlog.get_logger(__name__)
 
@@ -20,7 +20,7 @@ class OutboundTransformUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWork,
+        uow: DataPlaneUnitOfWorkPort,
         transformer: TransformerPort,
         settings: AppSettings,
     ) -> None:

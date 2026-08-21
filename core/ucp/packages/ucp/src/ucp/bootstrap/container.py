@@ -1,4 +1,5 @@
 from dependency_injector import containers, providers
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
@@ -33,7 +34,19 @@ from ucp.application.use_cases.webhooks import (
     ListWebhooksUseCase,
     UpdateWebhookUseCase,
 )
-from ucp.core.container import _async_session_maker
+from ucp.bootstrap.config import get_settings
+
+_settings = get_settings()
+_engine = create_async_engine(
+    _settings.database_url,
+    echo=False,
+    pool_pre_ping=True,
+)
+_async_session_maker = async_sessionmaker(
+    _engine,
+    expire_on_commit=False,
+    class_=AsyncSession,
+)
 
 
 class Container(containers.DeclarativeContainer):
@@ -43,8 +56,8 @@ class Container(containers.DeclarativeContainer):
 
     wiring_config = containers.WiringConfiguration(
         packages=[
-            "ucp.adapters.inbound.http.routers",
-            "ucp.adapters.inbound.http.guards",
+            "unified_api.adapters.inbound.http.routers",
+            "unified_api.adapters.inbound.http.guards",
         ]
     )
 

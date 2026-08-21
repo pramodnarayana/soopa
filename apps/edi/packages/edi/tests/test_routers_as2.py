@@ -3,10 +3,18 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+    get_current_tenant_id,
+    get_current_user_profile,
+    get_raw_jwt,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.database import (
+    get_control_plane_uow,
+    get_data_plane_uow,
+    get_global_session,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
-from edi.dependencies.auth import get_current_tenant_id, get_current_user_profile, get_raw_jwt
-from edi.dependencies.database import get_control_plane_uow, get_data_plane_uow, get_global_session
-from edi.dependencies.services import get_secret_store
 from edi.module import create_edi_app
 
 app = create_edi_app()

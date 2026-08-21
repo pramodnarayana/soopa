@@ -3,7 +3,7 @@ import os
 import structlog
 
 from ..domain.models import Channel, UserNotificationPreference
-from ..ports.user_notification_preference_repository_port import (
+from ..ports.outbound.user_notification_preference_repository_port import (
     UserNotificationPreferenceRepositoryPort,
 )
 

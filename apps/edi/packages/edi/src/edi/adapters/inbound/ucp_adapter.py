@@ -1,10 +1,10 @@
-from ucp.ports.outbound.edi_service import IEdiService
+from ucp.ports.outbound.edi_service_port import EdiServicePort
 
 
-class UcpAdapter(IEdiService):
+class UcpAdapter(EdiServicePort):
     """
     Inbound adapter for the EDI domain.
-    This class implements the contract defined by the UCP domain's IEdiService port.
+    This class implements the contract defined by the UCP domain's EdiServicePort port.
     It translates UCP requests into internal EDI application service calls.
     """
 

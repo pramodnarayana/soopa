@@ -84,7 +84,7 @@ jobs:
       - name: Test (Python)
         run: |
           # Test all python packages
-          for d in core/ucp/packages/*/python core/ucp/apps/* core/platform/packages/*/python core/platform/apps/* apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
+          for d in core/ucp/packages/* core/ucp/apps/* core/platform/packages/* core/platform/apps/* apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
             if [ -f "$d/pyproject.toml" ]; then
               (cd "$d" && uv run pytest) || {
                 code=$?

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from edi.services.as2_receiver_service import As2ReceiverService
+from edi.application.use_cases.as2_receiver_service import As2ReceiverService
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ async def test_process_inbound_message_bad_request(service):
     headers = {"AS2-From": "me", "AS2-To": "you"}
     body_bytes = b"bad body"
 
-    with patch("edi.services.as2_receiver_service.parse_as2_request") as mock_parse:
+    with patch("edi.application.use_cases.as2_receiver_service.parse_as2_request") as mock_parse:
         mock_parse.side_effect = ValueError("Missing headers")
 
         with pytest.raises(ValueError, match="Bad Request: Missing headers"):
@@ -47,7 +47,7 @@ async def test_process_inbound_message_partnership_not_found(service):
     headers = {"AS2-From": "unknown", "AS2-To": "unknown2"}
     body_bytes = b"valid body"
 
-    with patch("edi.services.as2_receiver_service.parse_as2_request") as mock_parse:
+    with patch("edi.application.use_cases.as2_receiver_service.parse_as2_request") as mock_parse:
         mock_msg = MagicMock()
         mock_msg.as2_from = "unknown"
         mock_msg.as2_to = "unknown2"
@@ -64,7 +64,7 @@ async def test_process_inbound_message_success(service):
     headers = {"AS2-From": "p1", "AS2-To": "p2", "Message-ID": "123"}
     body_bytes = b"valid body"
 
-    with patch("edi.services.as2_receiver_service.parse_as2_request") as mock_parse:
+    with patch("edi.application.use_cases.as2_receiver_service.parse_as2_request") as mock_parse:
         mock_msg = MagicMock()
         mock_msg.as2_from = "p1"
         mock_msg.as2_to = "p2"
@@ -136,7 +136,7 @@ async def test_private_methods_coverage(service):
 @pytest.mark.asyncio
 async def test_crypto_pipeline_coverage(service):
     # Mock verify_signature for the whole test since it is an external dependency we shouldn't test deeply here
-    with patch("edi.services.as2_receiver_service.verify_signature") as mock_verify:
+    with patch("edi.application.use_cases.as2_receiver_service.verify_signature") as mock_verify:
         mock_verify.return_value = (True, b"verified payload")
 
         # Test _verify_and_calculate_mic (unsigned payload)
@@ -154,7 +154,7 @@ async def test_crypto_pipeline_coverage(service):
         assert payload == b"verified payload"
 
     # Test _decrypt_entity (fallback)
-    with patch("edi.services.as2_receiver_service.decrypt_payload") as mock_decrypt:
+    with patch("edi.application.use_cases.as2_receiver_service.decrypt_payload") as mock_decrypt:
         # First call fails, second call (fallback) succeeds
         mock_decrypt.side_effect = [Exception("fail"), b"decrypted"]
         res = service._decrypt_entity(b"content", {"content-type": "app/pkcs7"}, b"priv", b"cert")

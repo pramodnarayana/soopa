@@ -1,0 +1,30 @@
+from types import TracebackType
+from typing import Protocol, TypeVar
+
+from .data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
+from .edi_message_port import RepositoryPort
+
+U = TypeVar("U", bound="DataPlaneUnitOfWorkPort")
+
+
+class DataPlaneUnitOfWorkPort(Protocol):
+    """
+    Unit of Work interface for the EDI Data Plane.
+    Provides coordinated access to repositories within a single transaction scope.
+    """
+
+    repository: RepositoryPort
+    outbox: DataPlaneOutboxRepositoryPort
+
+    async def __aenter__(self: U) -> U: ...
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None: ...
+
+    async def commit(self) -> None: ...
+
+    async def rollback(self) -> None: ...

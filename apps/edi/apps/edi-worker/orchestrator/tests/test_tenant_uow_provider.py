@@ -12,7 +12,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_tenant_uow_provider_success() -> None:
-    """Test that TenantUowProvider resolves tenant and yields a DataPlaneUnitOfWork."""
+    """Test that TenantUowProvider resolves tenant and yields a DataPlaneUnitOfWorkPort."""
     mock_resolver = AsyncMock()
     mock_resolver.resolve.return_value = ("shard_2", "postgresql+asyncpg://fake")
 

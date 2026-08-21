@@ -1,6 +1,8 @@
 import structlog
 
-from worker.ports.edi_audit_log_cleanup_repository_port import IEdiAuditLogCleanupRepositoryPort
+from worker.ports.outbound.edi_audit_log_cleanup_repository_port import (
+    EdiAuditLogCleanupRepositoryPort,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -8,7 +10,7 @@ logger = structlog.get_logger(__name__)
 class EdiAuditLogCleanupUseCase:
     """Application UseCase to clean up old EDI Data Plane audit logs."""
 
-    def __init__(self, repository: IEdiAuditLogCleanupRepositoryPort, retention_days: int = 90):
+    def __init__(self, repository: EdiAuditLogCleanupRepositoryPort, retention_days: int = 90):
         self.repository = repository
         self.retention_days = retention_days
 

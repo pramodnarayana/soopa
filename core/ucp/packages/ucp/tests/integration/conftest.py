@@ -23,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
+from unified_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
 from unified_api.main import app  # type: ignore
 
-from ucp.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
-from ucp.core.container import (
+from ucp.bootstrap.dependencies import (
     get_db_session,
 )
 
@@ -35,18 +35,27 @@ from ucp.core.container import (
 # We inject this directly so we never need a real Zitadel instance during tests.
 # ---------------------------------------------------------------------------
 MOCK_PLATFORM_ADMIN = IdentityContext(
-    subject="test-user-sub",
+    subject="usr_mock_admin",
     tenant_id=PLATFORM_TENANT_ID,
     authorized_tenants={PLATFORM_TENANT_ID},
+    tenant_roles={PLATFORM_TENANT_ID: ["admin"]},
     claims={},
 )
 
+from fastapi import Request
 
-async def _mock_platform_admin_guard() -> IdentityContext:
+
+async def _mock_platform_admin_guard(request: Request) -> IdentityContext:
+    request.state.identity = MOCK_PLATFORM_ADMIN
+    request.state.ucp_tenant_id = PLATFORM_TENANT_ID
     return MOCK_PLATFORM_ADMIN
 
 
-async def _mock_tenant_member_guard() -> IdentityContext:
+async def _mock_tenant_member_guard(request: Request) -> IdentityContext:
+    request.state.identity = MOCK_PLATFORM_ADMIN
+    # Try to grab tenant_id from path params if it exists, otherwise use platform
+    tenant_id = request.path_params.get("tenant_id", PLATFORM_TENANT_ID)
+    request.state.ucp_tenant_id = tenant_id
     return MOCK_PLATFORM_ADMIN
 
 
@@ -209,7 +218,7 @@ async def db_session(db_engine) -> "Any":  # type: ignore
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session) -> "Any":  # type: ignore
+async def client(db_session, monkeypatch) -> "Any":  # type: ignore
     async def override_get_db_session() -> "Any":
         yield db_session
 
@@ -221,6 +230,15 @@ async def client(db_session) -> "Any":  # type: ignore
         _mock_platform_admin_guard
     )
     app.dependency_overrides[tenant_auth_guard.require_tenant_member] = _mock_tenant_member_guard
+
+    # Also patch RequireCapability since it reads directly from request.state.identity
+    from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
+
+    def mock_require_capability(self, request: Request) -> IdentityContext:
+        request.state.identity = MOCK_PLATFORM_ADMIN
+        return MOCK_PLATFORM_ADMIN
+
+    monkeypatch.setattr(RequireCapability, "__call__", mock_require_capability)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

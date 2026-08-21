@@ -6,7 +6,9 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
-from notification.ports.in_app_notification_persistence_port import InAppNotificationPersistencePort
+from notification.ports.outbound.in_app_notification_persistence_port import (
+    InAppNotificationPersistencePort,
+)
 
 
 class DeliveryError(Exception):

@@ -1,16 +1,16 @@
 import structlog
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.core.container import _async_session_maker
-from ucp.core.exceptions import IdentityProviderPortError
-from ucp.ports.identity_provider import IdentityProviderPortPort
-from ucp.ports.outbound.organization_provider import IOrganizationProvider
+from ucp.bootstrap.container import _async_session_maker
+from ucp.domain.exceptions import IdentityProviderPortError
+from ucp.ports.outbound.identity_provider_port import IdentityProviderPort
+from ucp.ports.outbound.organization_provider_port import OrganizationProviderPort
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelIdentityProviderPort(IdentityProviderPortPort):
-    def __init__(self, org_provider: IOrganizationProvider):
+class ZitadelIdentityProviderPort(IdentityProviderPort):
+    def __init__(self, org_provider: OrganizationProviderPort):
         self.org_provider = org_provider
 
     async def sync_tenant(self, tenant_id: str) -> None:

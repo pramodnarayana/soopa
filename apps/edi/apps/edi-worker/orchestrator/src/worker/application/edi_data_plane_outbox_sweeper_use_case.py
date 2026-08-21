@@ -12,7 +12,9 @@ from ucp_models.infrastructure import DatabaseShard
 from worker.application.edi_data_plane_outbox_processor_use_case import (
     EdiDataPlaneOutboxProcessorUseCase,
 )
-from worker.ports.edi_data_plane_outbox_publisher_port import EdiDataPlaneOutboxPublisherPort
+from worker.ports.outbound.edi_data_plane_outbox_publisher_port import (
+    EdiDataPlaneOutboxPublisherPort,
+)
 
 logger = structlog.get_logger(__name__)
 

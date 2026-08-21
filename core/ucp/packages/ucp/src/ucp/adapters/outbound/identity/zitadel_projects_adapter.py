@@ -8,12 +8,12 @@ from ucp.domain.dtos.zitadel_dtos import (
     ZitadelRolesResponse,
     ZitadelUser,
 )
-from ucp.ports.outbound.project_provider import IProjectProvider
+from ucp.ports.outbound.project_provider_port import ProjectProviderPort
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelProjectsAdapter(ZitadelClient, IProjectProvider):
+class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
     async def create_project_grant(
         self, org_id: str, project_id: str, role_keys: list[str]
     ) -> None:

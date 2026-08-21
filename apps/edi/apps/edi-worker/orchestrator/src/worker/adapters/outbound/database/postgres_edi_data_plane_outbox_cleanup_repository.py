@@ -9,14 +9,14 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
-from worker.ports.edi_data_plane_outbox_cleanup_repository_port import (
-    IEdiDataPlaneOutboxCleanupRepositoryPort,
+from worker.ports.outbound.edi_data_plane_outbox_cleanup_repository_port import (
+    EdiDataPlaneOutboxCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(IEdiDataPlaneOutboxCleanupRepositoryPort):
+class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(EdiDataPlaneOutboxCleanupRepositoryPort):
     def __init__(self, db_router: DatabaseRouter) -> None:
         self.db_router = db_router
 

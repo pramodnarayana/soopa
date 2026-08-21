@@ -27,9 +27,10 @@ CI=true pnpm turbo test
 echo "[pre-commit] Running Python tests..."
 export DATABASE_URL="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
 export SHARD_1_URL="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-for d in core/*/packages/*/python apps/*/packages/*/python apps/*/apps/* core/*/apps/* apps/edi/apps/edi-worker/*; do
+export TESTCONTAINERS_RYUK_DISABLED=true
+for d in core/*/packages/* apps/*/packages/* apps/*/apps/* core/*/apps/* apps/edi/apps/edi-worker/*; do
   if [ -f "$d/pyproject.toml" ]; then
-    (cd "$d" && uv run pytest -m "not integration" || [ $? -eq 5 ]) || exit 1
+    (cd "$d" && uv run pytest || [ $? -eq 5 ]) || exit 1
   fi
 done
 

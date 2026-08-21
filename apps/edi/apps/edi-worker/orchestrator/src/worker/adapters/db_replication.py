@@ -29,8 +29,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped
 from worker.adapters.replication_registry import REPLICATION_GRAPH
 from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
 from worker.core.replication_graph import EntitySpec, topological_layers
-from worker.ports.replication import ReplicationPort
-from worker.ports.tenant import TenantPort
+from worker.ports.outbound.replication_port import ReplicationPort
+from worker.ports.outbound.tenant_port import TenantPort
 
 logger = structlog.get_logger(__name__)
 

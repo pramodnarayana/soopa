@@ -6,45 +6,45 @@ from ucp.application.use_cases.create_user_use_case import (
     CreateUserCommand,
     CreateUserUseCase,
 )
-from ucp.core.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
-from ucp.ports.outbound.tenant_repository import ITenantRepository
-from ucp.ports.outbound.user_identity_provider import IUserIdentityProviderPort
-from ucp.ports.outbound.user_repository import IUserRepository
-from ucp.ports.uow import UcpUnitOfWorkPort
+from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
+from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
+from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 
 @pytest.fixture
-def mock_tenant_repo() -> ITenantRepository:
-    return create_autospec(ITenantRepository, instance=True)
+def mock_tenant_repo() -> TenantRepositoryPort:
+    return create_autospec(TenantRepositoryPort, instance=True)
 
 
 @pytest.fixture
-def mock_user_repo() -> IUserRepository:
-    return create_autospec(IUserRepository, instance=True)
+def mock_user_repo() -> UserRepositoryPort:
+    return create_autospec(UserRepositoryPort, instance=True)
 
 
 @pytest.fixture
-def mock_idp() -> IUserIdentityProviderPort:
-    mock = create_autospec(IUserIdentityProviderPort, instance=True)
+def mock_idp() -> UserIdentityProviderPort:
+    mock = create_autospec(UserIdentityProviderPort, instance=True)
     mock.create_user = AsyncMock(return_value="idp-user-123")
     return mock
 
 
 from ucp.domain.models.authorization import Role
-from ucp.ports.outbound.role_repository import IRoleRepository
+from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
 
 
 @pytest.fixture
-def mock_role_repo() -> IRoleRepository:
-    return create_autospec(IRoleRepository, instance=True)
+def mock_role_repo() -> RoleRepositoryPort:
+    return create_autospec(RoleRepositoryPort, instance=True)
 
 
 @pytest.fixture
 def mock_uow(
-    mock_tenant_repo: ITenantRepository,
-    mock_user_repo: IUserRepository,
-    mock_role_repo: IRoleRepository,
+    mock_tenant_repo: TenantRepositoryPort,
+    mock_user_repo: UserRepositoryPort,
+    mock_role_repo: RoleRepositoryPort,
 ) -> UcpUnitOfWorkPort:
     uow = create_autospec(UcpUnitOfWorkPort, instance=True)
     uow.tenant_repo = mock_tenant_repo
@@ -66,9 +66,9 @@ def use_case(
 @pytest.mark.asyncio
 async def test_invite_user_success(
     use_case: CreateUserUseCase,
-    mock_tenant_repo: ITenantRepository,
-    mock_user_repo: IUserRepository,
-    mock_role_repo: IRoleRepository,
+    mock_tenant_repo: TenantRepositoryPort,
+    mock_user_repo: UserRepositoryPort,
+    mock_role_repo: RoleRepositoryPort,
     mock_uow: UcpUnitOfWorkPort,
 ) -> None:
     # Arrange
@@ -107,7 +107,7 @@ async def test_invite_user_success(
 @pytest.mark.asyncio
 async def test_invite_user_tenant_not_found(
     use_case: CreateUserUseCase,
-    mock_tenant_repo: ITenantRepository,
+    mock_tenant_repo: TenantRepositoryPort,
 ) -> None:
     # Arrange
     mock_tenant_repo.find_by_id = AsyncMock(return_value=None)

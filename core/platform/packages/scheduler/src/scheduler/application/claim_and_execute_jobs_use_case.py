@@ -5,8 +5,8 @@ import structlog
 from croniter import croniter
 
 from scheduler.domain.models import ScheduledJob
-from scheduler.ports.job_dispatcher_port import JobDispatcherPort
-from scheduler.ports.job_repository_port import JobRepositoryPort
+from scheduler.ports.outbound.job_dispatcher_port import JobDispatcherPort
+from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

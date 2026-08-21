@@ -6,7 +6,7 @@ import asyncpg
 import structlog
 from sqlalchemy.engine import make_url
 
-from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 
 logger = structlog.get_logger(__name__)
 

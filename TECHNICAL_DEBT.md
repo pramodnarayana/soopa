@@ -180,11 +180,71 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 - **Action Item**: Refactor the SSE streaming implementation to use a true distributed Pub/Sub backplane (e.g., Redis Pub/Sub, AWS IoT Core, or Postgres LISTEN/NOTIFY with a dedicated real-time microservice) to support scale-out real-time notifications.
 
 
-## [Architecture] API Router Taxonomy Drift
+## [Architecture] Complete Backend Folder Taxonomy Drift
 
 - **Date Added**: 2026-08-20
-- **Description**: The system currently has three different taxonomies for placing FastAPI HTTP routers. `ucp` places them in `adapters/inbound/http/routers/`, `edi` places them in `routers/` at the root of the domain, and `notification` places them in `api/` at the root. While all are technically valid hexagonal layers, this fragmentation violates the "Strict File Taxonomy Consistency" rule and makes cross-context development confusing.
-- **Action Item**: Decide on a single, unified enterprise standard for the HTTP API folder taxonomy (e.g., standardizing everything to `adapters/inbound/http/routers/` or `api/`) and refactor all bounded contexts to strictly adhere to that single pattern.
+- **Updated**: 2026-08-21
+- **Description**: Taxonomy drift is not limited to HTTP routers — it spans every architectural layer across all bounded contexts. A full audit reveals the following inconsistencies:
+
+### Layer 1 — Inbound Adapters (HTTP Routers)
+| Context | Router Location |
+|---------|----------------|
+| `ucp` | `adapters/inbound/http/routers/*.py` ✅ |
+| `identity` | `adapters/inbound/http/` (no `routers/` subdirectory) |
+| `notification` | `api/*.py` (flat, no `adapters/` wrapper) |
+| `edi` (package) | `routers/**/*.py` (root-level, no `adapters/` at all) |
+| `edi-as2-server` | `routers/*.py` (root-level) |
+
+### Layer 2 — Inbound Adapters (Async Workers / SQS Consumers)
+| Context | Worker Location |
+|---------|----------------|
+| `ucp` | `adapters/inbound/workers/*.py` ✅ |
+| `scheduler-worker` | `adapters/inbound/workers/*.py` ✅ |
+| `notification-worker` | `adapters/inbound/jobs/*.py` (uses `jobs/` not `workers/`) |
+| `ucp-worker` | `adapters/inbound/jobs/*.py` (uses `jobs/` not `workers/`) |
+| `edi-worker` | Mix: `adapters/inbound/workers/`, `adapters/inbound/jobs/`, and root `adapters/*.py` (flat, no subdirectory) |
+
+### Layer 3 — Outbound Adapters (Repositories)
+| Context | Repository Location |
+|---------|-------------------|
+| `ucp` | `adapters/outbound/database/*.py` ✅ |
+| `notification` | `adapters/outbound/*.py` (no `database/` subdirectory) |
+| `scheduler` | `adapters/outbound/*.py` (no `database/` subdirectory) |
+| `identity` | `adapters/outbound/*.py` (no `database/` subdirectory) |
+| `edi-worker` | `adapters/outbound/database/*.py` ✅ but also flat `adapters/*.py` for legacy items |
+
+### Layer 4 — Application Layer (Use Cases)
+| Context | Use Case Location |
+|---------|-----------------|
+| `ucp` | `application/use_cases/**/*.py` (grouped by entity) |
+| `notification` | `application/*.py` (flat, no `use_cases/` subdirectory) |
+| `scheduler` | `application/*.py` (flat) |
+| `identity` | `application/*.py` (flat) |
+| `edi-worker` | `application/*.py` (flat) |
+
+### Layer 5 — Ports
+| Context | Port Location |
+|---------|--------------|
+| `ucp` | `ports/outbound/*.py` (namespaced by direction) |
+| `notification` | `ports/*.py` (flat) ✅ acceptable |
+| `scheduler` | `ports/*.py` (flat) |
+| `edi-worker` | `ports/*.py` (flat) |
+| `edi-as2-server` | `ports/*.py` (flat) |
+
+### Layer 6 — Domain Models
+| Context | Domain Location |
+|---------|----------------|
+| `ucp` | `domain/models/*.py`, `domain/events/*.py`, `domain/dtos/*.py` (structured) ✅ |
+| `notification` | `domain/*.py` (flat) |
+| `scheduler` | `domain/*.py` (flat) |
+| `identity` | `domain/*.py` (flat) |
+| `edi-worker` | `core/*.py` (uses `core/` instead of `domain/`) ❌ |
+| `edi-as2-server` | `core/*.py` (uses `core/` instead of `domain/`) ❌ |
+
+### Root Cause
+The taxonomy drifted organically as different engineers built different bounded contexts at different times, each making local decisions without a monorepo-wide standard. No canonical reference architecture was ever codified and enforced.
+
+- **Action Item**: Define a single canonical folder taxonomy for every hexagonal layer as the enterprise standard. The `ucp` bounded context (with full `adapters/inbound/http/routers/`, `adapters/outbound/database/`, `application/use_cases/`, `domain/models/`, `ports/`) is the closest to the target state and should be adopted as the **reference pattern**. Refactor all other bounded contexts (`notification`, `scheduler`, `identity`, `edi`, `edi-worker`, `edi-as2-server`) to strictly conform to this pattern. Enforce via a Tach architecture rule or a structural test in each package.
 
 ## [Observability Architecture] Full Implementation of Layer 1 to Layer 3 Observability
 

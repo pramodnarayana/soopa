@@ -1,5 +1,5 @@
 from identity.domain.identity_context import TokenClaims
-from identity.ports.token_verifier_port import TokenValidationError, TokenVerifierPort
+from identity.ports.outbound.token_verifier_port import TokenValidationError, TokenVerifierPort
 
 
 class FakeTokenVerifier(TokenVerifierPort):

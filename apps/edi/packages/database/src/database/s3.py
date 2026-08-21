@@ -1,6 +1,6 @@
 """
 Hexagonal Port and Adapter for S3 Payload Storage.
-Business logic (FastAPI) depends only on the IPayloadStorage interface.
+Business logic (FastAPI) depends only on the PayloadStoragePort interface.
 """
 
 from abc import ABC, abstractmethod
@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import aioboto3
 
 
-class IPayloadStorage(ABC):
+class PayloadStoragePort(ABC):
     """
     Port for storing massive AS2 payloads externally.
     """
@@ -28,9 +28,9 @@ class IPayloadStorage(ABC):
         ...
 
 
-class Aioboto3PayloadStorage(IPayloadStorage):
+class Aioboto3PayloadStorage(PayloadStoragePort):
     """
-    Adapter implementing IPayloadStorage using aioboto3 (async AWS SDK).
+    Adapter implementing PayloadStoragePort using aioboto3 (async AWS SDK).
     """
 
     def __init__(

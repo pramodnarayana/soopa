@@ -1,13 +1,16 @@
 from typing import Any
 
-from edi.dependencies.auth import (
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
     get_platform_user_profile,
     require_platform_admin,
 )
-from edi.dependencies.database import get_control_plane_uow
-from edi.dependencies.services import get_as2_tester, get_secret_store
+from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
+from unified_api.adapters.inbound.http.dependencies.edi.services import (
+    get_as2_tester,
+    get_secret_store,
+)
 
 """
 Tests for the AS2 Partnership connection test endpoint.

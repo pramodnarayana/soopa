@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from pipeline.ports.http import HttpDeliveryPort
+from pipeline.ports.outbound.http_delivery_port import HttpDeliveryPort
 
 
 class HttpxDeliveryClient(HttpDeliveryPort):

@@ -1,7 +1,7 @@
 import structlog
 
-from worker.ports.edi_data_plane_outbox_cleanup_repository_port import (
-    IEdiDataPlaneOutboxCleanupRepositoryPort,
+from worker.ports.outbound.edi_data_plane_outbox_cleanup_repository_port import (
+    EdiDataPlaneOutboxCleanupRepositoryPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -11,7 +11,7 @@ class EdiDataPlaneOutboxCleanupUseCase:
     """Application UseCase to clean up old PROCESSED EDI Data Plane outbox events."""
 
     def __init__(
-        self, repository: IEdiDataPlaneOutboxCleanupRepositoryPort, retention_days: int = 3
+        self, repository: EdiDataPlaneOutboxCleanupRepositoryPort, retention_days: int = 3
     ):
         self.repository = repository
         self.retention_days = retention_days

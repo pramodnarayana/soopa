@@ -1,18 +1,18 @@
 import asyncio
+from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.inbound.sqs_ucp_event_listener import SqsUcpEventListener
+from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
 from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
 from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
-from ucp.application.services.infrastructure_provisioner import InfrastructureProvisioner
-from ucp.application.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
+from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
@@ -21,6 +21,7 @@ from ucp.application.use_cases.subscribe_app_use_case import (
     SubscribeAppCommand,
     SubscribeAppUseCase,
 )
+from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 
 pytestmark = pytest.mark.integration
 
@@ -64,12 +65,12 @@ async def test_app_subscription_flow(
     )
     dispatcher = UcpEventsSqsConsumer(event_listener)
 
-    # Fake session factory for the provisioner
-    class FakeSessionFactory:
-        def __call__(self):
-            return db_session
+    # Fake uow factory for the provisioner
+    @asynccontextmanager
+    async def fake_uow_factory():
+        yield SqlAlchemyUcpUnitOfWork(session=db_session)
 
-    provisioner = InfrastructureProvisioner(session_factory=FakeSessionFactory())  # type: ignore
+    provisioner = InfrastructureProvisioner(uow_factory=fake_uow_factory)
 
     dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
 
@@ -89,6 +90,7 @@ async def test_app_subscription_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Stark Industries",
+        creator_id="usr_mock",
     )
 
     tenant = await use_case.execute(command)

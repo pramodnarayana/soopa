@@ -2,8 +2,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from edi.adapters.uow_adapter import SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork
-from edi.adapters.uow_adapter import SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWork
+from edi.adapters.outbound.database.uow_adapter import (
+    SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
+)
+from edi.adapters.outbound.database.uow_adapter import (
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
+)
 
 
 @pytest.mark.asyncio
@@ -32,7 +36,7 @@ async def test_control_plane_uow_rollback():
 @pytest.mark.asyncio
 async def test_data_plane_uow():
     mock_tenant_session = AsyncMock()
-    uow = DataPlaneUnitOfWork(tenant_session=mock_tenant_session)
+    uow = DataPlaneUnitOfWorkPort(tenant_session=mock_tenant_session)
     async with uow:
         assert uow.tenant_session == mock_tenant_session
         assert uow.transactions is not None
@@ -43,7 +47,7 @@ async def test_data_plane_uow():
 @pytest.mark.asyncio
 async def test_data_plane_uow_rollback():
     mock_tenant_session = AsyncMock()
-    uow = DataPlaneUnitOfWork(tenant_session=mock_tenant_session)
+    uow = DataPlaneUnitOfWorkPort(tenant_session=mock_tenant_session)
     try:
         async with uow:
             raise ValueError("Test error")

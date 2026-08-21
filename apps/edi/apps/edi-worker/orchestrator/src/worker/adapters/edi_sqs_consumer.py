@@ -35,7 +35,7 @@ import structlog
 
 from worker.adapters.acl.registry import translate_external_event
 from worker.core.errors import PermanentProvisioningError
-from worker.ports.outbox import OutboxEvent, OutboxPort
+from worker.ports.outbound.outbox_port import OutboxEvent, OutboxPort
 
 logger = structlog.get_logger(__name__)
 

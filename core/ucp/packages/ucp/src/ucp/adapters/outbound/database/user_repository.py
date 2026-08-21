@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
 
 from ucp.domain.models.user import User
-from ucp.ports.outbound.user_repository import IUserRepository
+from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 
-class UserRepository(IUserRepository):
+class UserRepository(UserRepositoryPort):
     def __init__(self, session: AsyncSession):
         self.session = session
 

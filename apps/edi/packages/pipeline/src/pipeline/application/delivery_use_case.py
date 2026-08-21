@@ -4,7 +4,7 @@ from collections.abc import Callable
 import structlog
 
 from pipeline.core.delivery.router import DeliveryRouter
-from pipeline.ports.unit_of_work import DataPlaneUnitOfWork
+from pipeline.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -19,8 +19,8 @@ class DeliveryUseCase:
 
     def __init__(
         self,
-        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWork]],
-        router_factory: Callable[[DataPlaneUnitOfWork], DeliveryRouter],
+        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
+        router_factory: Callable[[DataPlaneUnitOfWorkPort], DeliveryRouter],
     ) -> None:
         self._uow_factory = uow_factory
         self._router_factory = router_factory

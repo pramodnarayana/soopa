@@ -13,31 +13,31 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
 from security import decrypt_payload, verify_signature
 
-from ..ports.repository import (
-    IAS2TenantRepository,
-    IEdiMessageRepository,
-    ITradingPartnerRepository,
+from ..ports.outbound.repository_port import (
+    AS2TenantRepositoryPort,
+    EdiMessageRepositoryPort,
+    TradingPartnerRepositoryPort,
 )
-from ..ports.storage import IPayloadStorage
-from ..ports.vault import IVaultService
+from ..ports.outbound.storage_port import PayloadStoragePort
+from ..ports.outbound.vault_port import VaultServicePort
 
 
 @dataclass(frozen=True)
 class _RouteResult:
     failed: bool
     tenant_id: str | None = None
-    message_repo: IEdiMessageRepository | None = None
+    message_repo: EdiMessageRepositoryPort | None = None
     session: Any = None
 
 
 class ReceiveAS2UseCase:
     def __init__(
         self,
-        tenant_repo: IAS2TenantRepository,
-        partner_repo: ITradingPartnerRepository,
-        message_repo: IEdiMessageRepository,
-        storage: IPayloadStorage,
-        vault: IVaultService,
+        tenant_repo: AS2TenantRepositoryPort,
+        partner_repo: TradingPartnerRepositoryPort,
+        message_repo: EdiMessageRepositoryPort,
+        storage: PayloadStoragePort,
+        vault: VaultServicePort,
         db_router: Any = None,
         global_session: Any = None,
     ) -> None:
@@ -85,7 +85,7 @@ class ReceiveAS2UseCase:
         self,
         as2_msg: AS2Message,
         async_exit_stack: Any,
-        message_repo: IEdiMessageRepository,
+        message_repo: EdiMessageRepositoryPort,
     ) -> AS2MDN:
         start_time = time.perf_counter()
 
