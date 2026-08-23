@@ -3,37 +3,13 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, Protocol
-
-
-class SQSClientProtocol(Protocol):
-    async def get_queue_url(self, QueueName: str) -> dict[str, Any]: ...
-
-    async def receive_message(
-        self, QueueUrl: str, MaxNumberOfMessages: int, WaitTimeSeconds: int
-    ) -> dict[str, Any]: ...
-
-    async def delete_message(self, QueueUrl: str, ReceiptHandle: str) -> dict[str, Any]: ...
-
-    async def send_message(
-        self, QueueUrl: str, MessageBody: str, MessageGroupId: str, MessageDeduplicationId: str
-    ) -> dict[str, Any]: ...
-
-
-class SQSClientContextProtocol(Protocol):
-    async def __aenter__(self) -> SQSClientProtocol: ...
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None: ...
-
+from typing import Any
 
 import aioboto3
 import structlog
 
 from worker.adapters.acl.registry import translate_external_event
+from worker.adapters.aws_types import SQSClientContextProtocol, SQSClientProtocol
 from worker.core.errors import PermanentProvisioningError
 from worker.ports.outbound.outbox_port import OutboxEvent, OutboxPort
 
@@ -129,6 +105,67 @@ class EdiSqsConsumer(OutboxPort):
             ):
                 yield event
 
+    async def _parse_and_translate_body(
+        self,
+        sqs: SQSClientProtocol,
+        queue_url: str,
+        receipt_handle: str,
+        message_id: str,
+        body_str: str,
+    ) -> dict[str, Any] | None:
+        try:
+            raw_body = json.loads(body_str)
+            if not isinstance(raw_body, dict):
+                raise TypeError("JSON body is not a mapping")
+
+            # Handle SNS Envelope
+            if "Type" in raw_body and raw_body["Type"] == "Notification" and "Message" in raw_body:
+                body = json.loads(raw_body["Message"])
+                if not isinstance(body, dict):
+                    raise TypeError("SNS nested Message is not a mapping")
+            else:
+                body = raw_body
+
+            # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
+            external_event_type = body.get("eventType")
+            if external_event_type:
+                try:
+                    translated_body = translate_external_event(external_event_type, body)
+                    if translated_body is None:
+                        # Unregistered event type - leave message for retry/DLQ
+                        logger.warning(
+                            "unregistered_external_event_type",
+                            external_event_type=external_event_type,
+                            message_id=message_id,
+                            action="leave_for_dlq",
+                        )
+                        return None
+                    body = translated_body
+                except ValueError:
+                    # Permanent validation error - malformed message
+                    logger.exception(
+                        "permanent_validation_error",
+                        external_event_type=external_event_type,
+                        message_id=message_id,
+                        body=body,
+                        action="delete_message",
+                    )
+                    await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                    return None
+            return body
+        except json.JSONDecodeError:
+            logger.exception(
+                "sqs_message_json_decode_failed",
+                message_id=message_id,
+                payload=body_str,
+            )
+            await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+            return None
+        except TypeError as e:
+            logger.exception("sqs_message_type_error", error=str(e), message_id=message_id)
+            await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+            return None
+
     @asynccontextmanager
     async def _process_with_client(
         self, sqs: SQSClientProtocol
@@ -155,49 +192,10 @@ class EdiSqsConsumer(OutboxPort):
         message_id = msg["MessageId"]
         body_str = msg.get("Body", "{}")
 
-        try:
-            raw_body = json.loads(body_str)
-            # Handle SNS Envelope
-            if "Type" in raw_body and raw_body["Type"] == "Notification" and "Message" in raw_body:
-                body = json.loads(raw_body["Message"])
-            else:
-                body = raw_body
-
-            # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
-            external_event_type = body.get("eventType")
-            if external_event_type:
-                try:
-                    translated_body = translate_external_event(external_event_type, body)
-                    if translated_body is None:
-                        # Unregistered event type - leave message for retry/DLQ
-                        logger.warning(
-                            "unregistered_external_event_type",
-                            external_event_type=external_event_type,
-                            message_id=message_id,
-                            action="leave_for_dlq",
-                        )
-                        yield None
-                        return
-                    body = translated_body
-                except ValueError:
-                    # Permanent validation error - malformed message
-                    logger.exception(
-                        "permanent_validation_error",
-                        external_event_type=external_event_type,
-                        message_id=message_id,
-                        body=body,
-                        action="delete_message",
-                    )
-                    await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
-                    yield None
-                    return
-        except json.JSONDecodeError:
-            logger.exception(
-                "sqs_message_json_decode_failed",
-                message_id=message_id,
-                payload=body_str,
-            )
-            await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+        body = await self._parse_and_translate_body(
+            sqs, queue_url, receipt_handle, message_id, body_str
+        )
+        if body is None:
             yield None
             return
 

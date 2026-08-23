@@ -1,9 +1,8 @@
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
-
-from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Direction(StrEnum):
@@ -43,9 +42,8 @@ class RecordStatus(StrEnum):
     ERROR = "ERROR"
 
 
-class EdiRecordBase(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class EdiRecordBase:
     id: str
     tenant_id: str
     trace_id: str
@@ -54,14 +52,16 @@ class EdiRecordBase(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_validator("*", mode="before")
-    @classmethod
-    def coerce_to_str(cls, v: Any) -> Any:
-        if isinstance(v, UUID):
-            return str(v)
-        return v
+    def __post_init__(self) -> None:
+        if isinstance(self.id, UUID):
+            self.id = str(self.id)
+        if isinstance(self.tenant_id, UUID):
+            self.tenant_id = str(self.tenant_id)
+        if isinstance(self.trace_id, UUID):
+            self.trace_id = str(self.trace_id)
 
 
+@dataclass(kw_only=True)
 class EdiJsonDomainModel(EdiRecordBase):
     trading_partner_id: str | None = None
     transaction_type: str | None = None
@@ -75,6 +75,7 @@ class EdiJsonDomainModel(EdiRecordBase):
     storage_uri: str | None = None
 
 
+@dataclass(kw_only=True)
 class EdiMessageDomainModel(EdiRecordBase):
     format_standard: str | None = None
     transaction_type: str | None = None
@@ -85,10 +86,11 @@ class EdiMessageDomainModel(EdiRecordBase):
     gs_receiver_id: str | None = None
     inbound_route_id: str | None = None
     trading_partner_id: str | None = None
-    edi_data: str | None = None  # Populated from DB or S3
+    edi_data: str | None = None
     storage_uri: str | None = None
 
 
+@dataclass(kw_only=True)
 class ApiGatewayReceiptDomainModel(EdiRecordBase):
     transaction_type: str | None = None
     webhook_url: str | None = None
@@ -100,26 +102,27 @@ class ApiGatewayReceiptDomainModel(EdiRecordBase):
     headers: dict[str, Any] | None = None
 
 
-class WebhookDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class WebhookDomainModel:
     id: str
     tenant_id: str
     name: str
     url: str
-    auth_header_vault_ref: str | None = None
     active: bool
     created_at: datetime
     updated_at: datetime
+    auth_header_vault_ref: str | None = None
 
 
-class AS2PartnerDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class AS2PartnerDomainModel:
     id: str
-    tenant_id: str | None = None
     as2_id: str
     name: str
+    is_local: bool
+    created_at: datetime
+    updated_at: datetime
+    tenant_id: str | None = None
     public_cert_pem: str | None = None
     public_cert_vault_ref: str | None = None
     private_key_vault_ref: str | None = None
@@ -128,58 +131,55 @@ class AS2PartnerDomainModel(BaseModel):
     prev_private_key_vault_ref: str | None = None
     url: str | None = None
     active: bool = False
-    is_local: bool
-    created_at: datetime
-    updated_at: datetime
 
 
-class AS2PartnershipDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class AS2PartnershipDomainModel:
     id: str
-    tenant_id: str | None = None
     name: str
     local_partner_id: str
     remote_partner_id: str
-    credentials_vault_ref: str | None = None
     mdn_type: str
-    mdn_url: str | None = None
     encryption_algorithm: str
     signature_algorithm: str
-    advanced_flags: dict[str, Any] | None = None
-    active: bool = False
     created_at: datetime
     updated_at: datetime
+    tenant_id: str | None = None
+    credentials_vault_ref: str | None = None
+    mdn_url: str | None = None
+    advanced_flags: dict[str, Any] | None = None
+    active: bool = False
 
 
-class SFTPPartnerDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class SFTPPartnerDomainModel:
     id: str
     tenant_id: str
     name: str
     host: str
     port: int
     username: str
+    active: bool
+    created_at: datetime
+    updated_at: datetime
     host_key: str | None = None
     inbound_remote_path: str | None = None
     outbound_remote_path: str | None = None
     password_encrypted: str | None = None
     credentials_vault_ref: str | None = None
-    active: bool
-    created_at: datetime
-    updated_at: datetime
 
 
-class InboundRouteDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class InboundRouteDomainModel:
     id: str
     tenant_id: str
     name: str
-    trading_partner_id: str | None = None
     isa_sender_id: str
     isa_receiver_id: str
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+    trading_partner_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     transaction_type: str | None = None
@@ -187,41 +187,36 @@ class InboundRouteDomainModel(BaseModel):
     webhook_id: str | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
-    active: bool
-    created_at: datetime
-    updated_at: datetime
 
 
-class OutboundRouteDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class OutboundRouteDomainModel:
     id: str
     tenant_id: str
     trading_partner_id: str
     name: str
-    protocol: str | None = None
-    as2_partner_id: str | None = None
-    sftp_partner_id: str | None = None
     active: bool
     created_at: datetime
     updated_at: datetime
+    protocol: str | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
 
 
-class OutboundEdiHeaderDomainModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+@dataclass(kw_only=True)
+class OutboundEdiHeaderDomainModel:
     id: str
     tenant_id: str
     name: str
     trading_partner_id: str
     isa_sender_id: str
-    isa_sender_qualifier: str | None = None
     isa_receiver_id: str
+    created_at: datetime
+    updated_at: datetime
+    isa_sender_qualifier: str | None = None
     isa_receiver_qualifier: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     transaction_type: str | None = None
     default_standard: str | None = None
     default_version: str | None = None
-    created_at: datetime
-    updated_at: datetime

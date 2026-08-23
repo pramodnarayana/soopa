@@ -82,7 +82,12 @@ class EdiControlPlaneOutboxRelay:
     async def _run_loop(self) -> None:
         await self._setup_listener()
 
+        base_delay = 1.0
+        max_delay = 60.0
+        current_delay = base_delay
+
         async def _listen() -> None:
+            nonlocal current_delay
             while self.is_running:
                 if self._connection and self._connection.is_closed():
                     logger.warning("asyncpg_connection_lost", action="reconnecting")
@@ -91,13 +96,27 @@ class EdiControlPlaneOutboxRelay:
                 if not self._connection:
                     await self._setup_listener()
                     if not self._connection:
-                        await asyncio.sleep(5.0)
+                        logger.warning("edi_outbox_listener_reconnect_failed", delay=current_delay)
+                        await asyncio.sleep(current_delay)
+                        current_delay = min(current_delay * 2, max_delay)
                         continue
+                    else:
+                        # Reset backoff on successful connection
+                        current_delay = base_delay
 
                 # Process pending until empty
                 more_events = True
                 while more_events and self.is_running:
-                    more_events = await self.processor.process_pending()
+                    try:
+                        more_events = await self.processor.process_pending()
+                        current_delay = base_delay
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        logger.exception("edi_outbox_processor_failed", error=str(e))
+                        await asyncio.sleep(current_delay)
+                        current_delay = min(current_delay * 2, max_delay)
+                        more_events = False
 
                 if self.is_running:
                     self._notify_event.clear()

@@ -1,14 +1,14 @@
 import uuid
-import structlog
 
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
+import structlog
+from edi.ports.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.transformer_port import TransformerPort
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
-from edi.ports.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
-from edi.ports.transformer_port import TransformerPort
+from edi.domain.direction import MessageDirection
+from edi.domain.events import PipelineEventType
+from edi.domain.status import MessageStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -38,7 +38,7 @@ class ComputeTransformUseCase:
 
             if not edi_msg.edi_data:
                 raise ValueError(f"No EDI data found for trace_id={trace_id}")
-            
+
             raw_payload = edi_msg.edi_data.encode("utf-8")
 
             # 1. Transform
@@ -81,14 +81,17 @@ class ComputeTransformUseCase:
                     gs_sender_global = gs_sender
                     gs_receiver_global = gs_receiver
 
-                json_dict = txn.payload
-                json_dict["transaction_type"] = txn_type
+                import copy
+
+                json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
+                if isinstance(json_dict, dict):
+                    json_dict["transaction_type"] = txn_type
                 business_metadata = extractor.extract(txn_type, json_dict)
 
                 await self.uow.repository.save_edi_json(
                     trace_id=trace_id,
                     direction=MessageDirection.INBOUND.value,
-                    partnership_id=None,
+                    partnership_id=partnership_id_str,
                     transaction_type=txn_type,
                     standard=standard,
                     sender_id=edi_msg.sender_id,

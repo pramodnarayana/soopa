@@ -2,11 +2,11 @@ import uuid
 from typing import Any
 
 import structlog
+
 from edi.config.settings import AppSettings
 from edi.domain.direction import MessageDirection
 from edi.domain.events import PipelineEventType
 from edi.domain.status import MessageStatus
-
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.transformer_port import TransformerPort
 
@@ -67,10 +67,10 @@ class DispatchOutboundTransformUseCase:
         compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
         await self.uow.outbox.append_event(
             idempotency_key=compute_key,
-            event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT,
+            event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
             payload={
                 "trace_id": trace_id,
-                "direction": MessageDirection.OUTBOUND,
+                "direction": MessageDirection.OUTBOUND.value,
                 "standard": standard,
                 "transaction_type": transaction_type,
                 "route_config": route_config,
@@ -135,11 +135,11 @@ class DispatchOutboundTransformUseCase:
 
             await self.uow.repository.save_edi_message(
                 trace_id=trace_id,
-                direction=MessageDirection.OUTBOUND,
+                direction=MessageDirection.OUTBOUND.value,
                 edi_data=edi_str,
                 format_standard=standard,
                 transaction_type=transaction_type,
-                status=MessageStatus.PENDING_DELIVERY,
+                status=MessageStatus.PENDING_DELIVERY.value,
                 connection_type=connection_type,
                 sender_id=route_config.get("isa_sender_id"),
                 receiver_id=route_config.get("isa_receiver_id"),
@@ -154,10 +154,10 @@ class DispatchOutboundTransformUseCase:
             )
             await self.uow.outbox.append_event(
                 idempotency_key=transform_completed_key,
-                event_type=PipelineEventType.TRANSFORM_COMPLETED,
+                event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
                 payload={
                     "trace_id": trace_id,
-                    "direction": MessageDirection.OUTBOUND,
+                    "direction": MessageDirection.OUTBOUND.value,
                     "trading_partner_id": trading_partner_id,
                     "standard": standard,
                     "isa_sender_id": route_config.get("isa_sender_id"),

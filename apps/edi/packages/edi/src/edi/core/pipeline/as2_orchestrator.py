@@ -16,9 +16,9 @@ import functools
 from typing import Any
 
 import structlog
+
 from edi.adapters.inbound.as2 import OutboundAS2Message, build_outbound_message
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
-
 from edi.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
@@ -81,6 +81,11 @@ class AS2MessageOrchestrator:
                 "Local AS2 partner config is missing. "
                 "The AS2Partnership must have a valid local_partner_id."
             )
+
+        if "as2_id" not in local_partner or not local_partner.get("as2_id"):
+            raise ValueError("Missing 'as2_id' in local AS2 partner configuration.")
+        if "as2_id" not in remote_partner or not remote_partner.get("as2_id"):
+            raise ValueError("Missing 'as2_id' in remote AS2 partner configuration.")
 
         local_as2_id: str = local_partner["as2_id"]
         remote_as2_id: str = remote_partner["as2_id"]

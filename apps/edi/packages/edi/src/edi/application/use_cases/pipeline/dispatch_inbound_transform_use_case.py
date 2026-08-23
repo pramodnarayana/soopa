@@ -1,13 +1,10 @@
 import uuid
 
 import structlog
+
 from edi.config.settings import AppSettings
 from edi.domain.direction import MessageDirection
 from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
-
-from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.core.pipeline.models import EdiWebhookPayload
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.transformer_port import TransformerPort
 
@@ -40,15 +37,14 @@ class DispatchInboundTransformUseCase:
 
             if not edi_msg.edi_data:
                 raise ValueError(f"No EDI data found for trace_id={trace_id}")
-            raw_payload = edi_msg.edi_data.encode("utf-8")
+            standard = edi_msg.format_standard or "X12"
+            transaction_type = edi_msg.transaction_type or "UNKNOWN"
 
             # 2. Dispatch to Compute Worker
-            compute_key = str(
-                uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT")
-            )
+            compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
             await self.uow.outbox.append_event(
                 idempotency_key=compute_key,
-                event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT,
+                event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
                 payload={
                     "trace_id": trace_id,
                     "direction": MessageDirection.INBOUND.value,
@@ -58,5 +54,5 @@ class DispatchInboundTransformUseCase:
                 },
             )
             await self.uow.commit()
-            
+
         logger.info("inbound_transform.dispatched_to_compute", trace_id=trace_id)
