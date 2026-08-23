@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from database.base_repository import GlobalSession
+from edi.adapters.outbound.database.base_repository import GlobalSession
 from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App

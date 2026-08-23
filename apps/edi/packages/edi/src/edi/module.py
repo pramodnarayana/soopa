@@ -16,7 +16,7 @@ load_dotenv()
 # Do not configure root loggers or StreamHandlers here.
 # ---------------------------------------------------------------------------
 
-from config.settings import get_settings
+from edi.config.settings import get_settings
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request

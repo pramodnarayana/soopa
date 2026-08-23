@@ -2,7 +2,7 @@ import asyncio
 import io
 
 import paramiko
-import patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
+import edi.core.patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
 import structlog
 
 from edi.ports.outbound.sftp_tester import SftpTesterPort

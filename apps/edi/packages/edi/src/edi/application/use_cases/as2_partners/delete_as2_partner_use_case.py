@@ -1,5 +1,5 @@
 import structlog
-from domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.events import EdiEventType, ProvisioningEvent
 
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 

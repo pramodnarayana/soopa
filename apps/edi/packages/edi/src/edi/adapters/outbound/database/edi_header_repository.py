@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import OutboundEdiHeader
-from domain.models import OutboundEdiHeaderDomainModel
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
+from edi.domain.models import OutboundEdiHeaderDomainModel
 from sqlalchemy import select, update
 
 from edi.domain.models import CreateOutboundEdiHeaderCmd, UpdateOutboundEdiHeaderCmd

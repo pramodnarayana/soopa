@@ -1,8 +1,8 @@
 from collections.abc import Sequence
 
 import structlog
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import OutboundEdiHeaderDomainModel
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import OutboundEdiHeaderDomainModel
 
 from edi.domain.models import (
     CreateOutboundEdiHeaderCmd,

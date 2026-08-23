@@ -2,9 +2,9 @@ import hashlib
 import json
 
 import structlog
-from config.constants import SecretCategory
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import ConnectionType, PartnerStatus
+from edi.config.constants import SecretCategory
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import ConnectionType, PartnerStatus
 
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.exceptions import IdempotencyConflictError

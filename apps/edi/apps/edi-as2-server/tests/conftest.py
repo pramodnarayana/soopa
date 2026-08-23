@@ -266,7 +266,7 @@ async def as2_client(
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
 
-        from database.session import get_global_session, get_session
+        from edi.adapters.outbound.database.session import get_global_session, get_session
 
         from as2_server.main import app
 

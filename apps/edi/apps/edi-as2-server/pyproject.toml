@@ -13,10 +13,8 @@ dependencies = [
     "gunicorn>=22.0.0",
     "prometheus-client>=0.20.0",
     "python-dotenv>=1.0.0",
-    "as2-core",
-    "security",
-    "database",
-    "config",
+    "edi",
+    "identity",
     "observability",
     "sqlalchemy>=2.0.0",
     "orchestrator-worker",
@@ -24,10 +22,8 @@ dependencies = [
 
 [tool.uv.sources]
 ucp_models = { workspace = true }
-as2-core = { workspace = true }
-security = { workspace = true }
-database = { workspace = true }
-config = { workspace = true }
+edi = { workspace = true }
+identity = { workspace = true }
 observability = { workspace = true }
 orchestrator-worker = { workspace = true }
 
@@ -61,21 +57,10 @@ extraPaths = [
     "../../../../core/platform/packages/identity/src",
     "../../../../core/platform/packages/observability/python/src",
     "../../../../core/platform/packages/schemas/python/src",
-    "../../packages/database/src",
-    "../../packages/pipeline/src",
-    "../../packages/grammar/src",
-    "../../packages/config/src",
-    "../../packages/security/src",
-    "../../packages/patches/src",
-    "../../packages/transformer/src",
-    "../../packages/as2_core/src",
-    "../../packages/bots_core/src",
-    "../../packages/domain/src",
-    "../edi-worker/compute/src",
-    "../edi-worker/ucp-sync/src",
-    "../edi-worker/orchestrator/src",
+    "../../packages/edi/src",
+    "../edi-compute-worker/src",
+    "../edi-orchestrator-worker/src",
     "src",
-    "../edi-api/src",
 ]
 
 [tool.ruff]

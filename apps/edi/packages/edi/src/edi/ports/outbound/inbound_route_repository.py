@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from domain.models import InboundRouteDomainModel
+from edi.domain.models import InboundRouteDomainModel
 
 from edi.domain.models import CreateInboundRouteCmd, UpdateInboundRouteCmd
 

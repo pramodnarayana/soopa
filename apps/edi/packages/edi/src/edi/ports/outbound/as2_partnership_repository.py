@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
+from edi.domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 
 from edi.domain.models import (
     CreateAS2PartnershipCmd,

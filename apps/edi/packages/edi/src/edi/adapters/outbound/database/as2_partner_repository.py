@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 from typing import Any
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import AS2Partner
-from domain.models import AS2PartnerDomainModel
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import AS2Partner
+from edi.domain.models import AS2PartnerDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError

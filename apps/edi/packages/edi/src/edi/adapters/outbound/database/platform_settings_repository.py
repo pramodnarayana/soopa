@@ -1,6 +1,6 @@
 from typing import Any
 
-from database.models.platform_settings import PlatformSettings
+from edi.adapters.outbound.database.models.platform_settings import PlatformSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

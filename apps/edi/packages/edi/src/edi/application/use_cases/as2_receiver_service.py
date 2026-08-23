@@ -5,11 +5,11 @@ from email import policy
 from typing import Any
 
 import structlog
-from as2_core.mdn import build_mdn, calculate_mic
-from as2_core.message import AS2Message
-from as2_core.parser import parse_as2_request
-from domain.events import PipelineEventType
-from security.smime import decrypt_payload, verify_signature
+from edi.adapters.inbound.as2.mdn import build_mdn, calculate_mic
+from edi.adapters.inbound.as2.message import AS2Message
+from edi.adapters.inbound.as2.parser import parse_as2_request
+from edi.domain.events import PipelineEventType
+from edi.adapters.outbound.security.smime import decrypt_payload, verify_signature
 
 from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
@@ -93,7 +93,7 @@ class As2ReceiverService:
             if local_priv and local_cert:
                 import functools
 
-                from security.smime import sign_payload
+                from edi.adapters.outbound.security.smime import sign_payload
 
                 sign_fn = functools.partial(
                     sign_payload,

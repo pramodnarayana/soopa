@@ -1,6 +1,6 @@
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import AS2Partner, AS2Partnership
-from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, AS2Partnership
+from edi.domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 
@@ -21,7 +21,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
-        from database.repository import PartnershipRepository
+        from edi.adapters.outbound.database.repository import PartnershipRepository
 
         repo = PartnershipRepository(self.session)
         return await repo.get_partnership_by_as2_ids(as2_from, as2_to)

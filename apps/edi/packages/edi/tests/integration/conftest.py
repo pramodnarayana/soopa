@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from database.models.data_plane import TenantBase
+from edi.adapters.outbound.database.models.data_plane import TenantBase
 
 # Assuming Alembic is used for migrations. We can run it programmatically.
 # Or we can just use BaseModel.metadata.create_all(bind=engine) for tests.

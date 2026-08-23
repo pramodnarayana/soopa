@@ -2,9 +2,9 @@ import asyncio
 import contextlib
 
 import structlog
-from config.settings import get_settings
-from database.connection import DatabaseRouter
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.connection import DatabaseRouter
+from edi.config.settings import get_settings
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from platform_orm.models.identity import Tenant
 from sqlalchemy.future import select

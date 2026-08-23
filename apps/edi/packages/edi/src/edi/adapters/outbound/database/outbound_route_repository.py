@@ -1,12 +1,12 @@
 from datetime import UTC, datetime
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import (
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     OutboundRoute,
     SFTPPartner,
 )
-from domain.models import OutboundRouteDomainModel
+from edi.domain.models import OutboundRouteDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import select, update
 

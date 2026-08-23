@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from config.constants import SecretCategory
+from edi.config.constants import SecretCategory
 
 
 class SecretStorePort(Protocol):

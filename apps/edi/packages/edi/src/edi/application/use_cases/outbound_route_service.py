@@ -1,6 +1,6 @@
 import structlog
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import ConnectionType, Direction, OutboundRouteDomainModel
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import ConnectionType, Direction, OutboundRouteDomainModel
 
 from edi.domain.models import (
     CreateOutboundRouteCmd,

@@ -1,6 +1,6 @@
 from typing import Any
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from platform_orm.models.identity import (
     Tenant,
 )

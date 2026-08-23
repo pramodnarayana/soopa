@@ -1,12 +1,12 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.encryption import db_encryption
-from database.models.control_plane import (
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.encryption import db_encryption
+from edi.adapters.outbound.database.models.control_plane import (
     SFTPPartner,
 )
-from domain.models import SFTPPartnerDomainModel
+from edi.domain.models import SFTPPartnerDomainModel
 from sqlalchemy import select, update
 
 from edi.domain.models import (

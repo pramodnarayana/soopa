@@ -5,8 +5,8 @@ Production-ready FastAPI application for the EDI AS2 Server.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from config.settings import get_settings
-from database.s3 import Aioboto3PayloadStorage
+from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
+from edi.config.settings import get_settings
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.s3_storage = s3_storage
 
     logger = ObservabilityProvider.logger(__name__)
-    from database.connection import DatabaseRouter
+    from edi.adapters.outbound.database.connection import DatabaseRouter
 
     try:
         # Initialize the global DatabaseRouter and mount it to app state

@@ -6,16 +6,16 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 import structlog
-from as2_core import build_outbound_message
+from edi.adapters.inbound.as2 import build_outbound_message
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from database.models.control_plane import (
+from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
 )
-from database.models.data_plane import (
+from edi.adapters.outbound.database.models.data_plane import (
     InboundRoute,
     Webhook,
 )
@@ -146,8 +146,8 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         await global_session.commit()
 
         # Replicate to Data Plane since this runs outside standard provisioning sync
-        from database.models.data_plane import InboundRoute as TenantInboundRoute
-        from database.models.data_plane import Webhook as TenantWebhook
+        from edi.adapters.outbound.database.models.data_plane import InboundRoute as TenantInboundRoute
+        from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
 
         t_webhook = TenantWebhook(
             id=webhook.id,
@@ -195,14 +195,14 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         # To avoid running full worker pipeline in a unit test, we will instantiate the services directly
         from unittest.mock import MagicMock
 
-        from database.models.data_plane import EdiMessage
-        from domain.events import PipelineEventType
-        from pipeline.adapters.http import HttpxDeliveryClient
-        from pipeline.adapters.repository import SqlAlchemyRepositoryAdapter
-        from pipeline.adapters.storage import S3StorageClient
-        from pipeline.adapters.transformer import BotsTransformerAdapter
-        from pipeline.core.deliver import DeliveryService
-        from pipeline.core.translate import TranslationService
+        from edi.adapters.outbound.database.models.data_plane import EdiMessage
+        from edi.domain.events import PipelineEventType
+        from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
+        from edi.adapters.outbound.pipeline.repository import SqlAlchemyRepositoryAdapter
+        from edi.adapters.outbound.pipeline.storage import S3StorageClient
+        from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+        from edi.core.pipeline.deliver import DeliveryService
+        from edi.core.pipeline.translate import TranslationService
 
         # 1. Manually run Translate
         repo = SqlAlchemyRepositoryAdapter(session, MagicMock(), S3StorageClient("test", None))
@@ -218,13 +218,13 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         except Exception as e:  # noqa: BLE001
             # If bots is not running, we mock it for the test
             if "Connection" in str(e):
-                from pipeline.ports.outbound.transformer_port import TransformerPort
+                from edi.ports.outbound.transformer_port import TransformerPort
 
                 class MockTransformer(TransformerPort):
                     async def translate_edi_to_json(
                         self, payload: bytes, standard: str, transaction_type: str
                     ):
-                        from pipeline.ports.outbound.transformer_port import TranslatedTransaction
+                        from edi.ports.outbound.transformer_port import TranslatedTransaction
 
                         return [
                             TranslatedTransaction(

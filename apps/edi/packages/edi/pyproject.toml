@@ -15,14 +15,8 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "sqlalchemy[asyncio]>=2.0.0",
     "aioboto3>=12.0.0",
-    "database",
     "identity",
-    "config",
     "observability",
-    "security",
-    "patches",
-    "pipeline",
-    "domain",
     "hvac>=2.4.0",
     "cryptography>=41.0.0",
     "httpx>=0.24.1",
@@ -30,24 +24,13 @@ dependencies = [
     "structlog>=24.1.0",
     "python-dotenv>=1.0.0",
     "anyio>=3.7.1",
-    "as2-core",
-    "transformer",
     "ucp",
     "dependency-injector>=4.41.0"
 ]
 
 [tool.uv.sources]
-database = { workspace = true }
 identity = { workspace = true }
-config = { workspace = true }
 observability = { workspace = true }
-security = { workspace = true }
-patches = { workspace = true }
-pipeline = { workspace = true }
-domain = { workspace = true }
-as2-core = { workspace = true }
-transformer = { workspace = true }
-bots_core = { workspace = true }
 ucp = { workspace = true }
 
 
@@ -89,22 +72,16 @@ extraPaths = [
     "../../../../core/platform/packages/identity/src",
     "../../../../core/platform/packages/observability/python/src",
     "../../../../core/platform/packages/schemas/python/src",
-    "../../packages/database/src",
-    "../../packages/pipeline/src",
-    "../../packages/grammar/src",
-    "../../packages/config/src",
-    "../../packages/security/src",
-    "../../packages/patches/src",
-    "../../packages/transformer/src",
-    "../../packages/as2_core/src",
-    "../../packages/bots_core/src",
-    "../../packages/domain/src",
-    "../edi-worker/compute/src",
-    "../edi-worker/ucp-sync/src",
-    "../edi-worker/orchestrator/src",
-    "../edi-as2-server/src",
+    "../../apps/edi-compute-worker/src",
+    "../../apps/edi-orchestrator-worker/src",
+    "../../apps/edi-as2-server/src",
     "src",
 ]
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"
+
+[tool.mypy]
+exclude = [
+    "src/edi/core/bots_engine"
+]

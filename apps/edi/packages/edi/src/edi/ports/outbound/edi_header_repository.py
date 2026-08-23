@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from domain.models import OutboundEdiHeaderDomainModel
+from edi.domain.models import OutboundEdiHeaderDomainModel
 
 from edi.domain.models import (
     CreateOutboundEdiHeaderCmd,

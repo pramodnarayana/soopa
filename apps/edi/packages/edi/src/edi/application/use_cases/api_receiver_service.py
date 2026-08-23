@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 import structlog
-from pipeline.core.metadata_extractor import MetadataExtractorService
+from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
@@ -105,7 +105,7 @@ class ApiReceiverService:
             )
 
             # 5. Drop Outbox event for Worker to transform
-            from domain.events import PipelineEventType
+            from edi.domain.events import PipelineEventType
 
             await self.uow.data_plane_outbox.publish_outbox_event(
                 tenant_id=tenant_id,

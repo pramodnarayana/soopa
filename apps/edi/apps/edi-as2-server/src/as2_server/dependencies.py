@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from database.session import get_global_session, get_session
+from edi.adapters.outbound.database.session import get_global_session, get_session
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 

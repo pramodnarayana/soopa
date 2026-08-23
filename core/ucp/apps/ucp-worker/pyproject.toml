@@ -7,16 +7,18 @@ requires-python = ">=3.11"
 dependencies = [
     "ucp",
     "ucp_models",
+    "platform-orm",
+    "observability",
     "aioboto3>=13.1.1",
     "sqlalchemy>=2.0.29",
     "asyncpg>=0.29.0",
-    "config",
 ]
 
 [tool.uv.sources]
 ucp = { workspace = true }
 ucp_models = { workspace = true }
-config = { workspace = true }
+platform-orm = { workspace = true }
+observability = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

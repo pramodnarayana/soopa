@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from domain.models import AS2PartnerDomainModel
+from edi.domain.models import AS2PartnerDomainModel
 
 from edi.domain.models import (
     CreateAS2TradingPartnerCmd,
