@@ -95,6 +95,7 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     "aioboto3.*",
-    "endesive.*"
+    "endesive.*",
+    "unified_api.*"
 ]
 ignore_missing_imports = true

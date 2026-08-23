@@ -12,6 +12,9 @@ dependencies = [
     "jsonpath-ng>=1.8.0",
 ]
 
+[tool.uv]
+override-dependencies = ["pykcs11"]
+
 [tool.uv.workspace]
 members = [
     "core/platform/packages/*/python",
@@ -34,6 +37,9 @@ members = [
     "apps/edi/apps/edi-secrets-sidecar",
 ]
 exclude = ["apps/edi/packages/ui"]
+
+[tool.uv.sources]
+pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -60,6 +66,7 @@ dev = [
     "vulture>=2.16",
     "deptry>=0.25.1",
     "pip-audit>=2.10.1",
+    "types-paramiko>=3.3.0",
 ]
 
 [tool.mypy]

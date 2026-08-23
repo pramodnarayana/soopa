@@ -2,8 +2,6 @@
 Bots EDI Translator __about__.py
 """
 
-from importlib import metadata
-
 __all__ = [
     "__author__",
     "__email__",
@@ -17,8 +15,8 @@ __all__ = [
 
 __title__ = "bots-core"
 
-__version__ = metadata.version(__title__)
-__version_info__ = __version__.split(".")
+__version__ = "0.1.0"
+__version_info__ = ["0", "1", "0"]
 
 __summary__ = """Bots EDI Translator"""
 
