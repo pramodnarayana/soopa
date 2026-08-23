@@ -2,10 +2,10 @@ import contextlib
 from collections.abc import AsyncGenerator, Callable
 
 from edi.adapters.outbound.database.connection import DatabaseRouter
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork,
 )
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
 from edi.config.settings import AppSettings
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -46,9 +46,7 @@ class TenantUowProvider:
                 self._db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
             ) as session_gen:
                 async for session in session_gen:
-                    yield SqlAlchemyDataPlaneUnitOfWork(
-                        tenant_session=session
-                    )
+                    yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session)
                     break
 
         return uow_factory

@@ -1,9 +1,11 @@
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
 
 from identity.adapters.inbound.http.fastapi_middleware import (
+    _HeadersProtocol,
     attach_identity_to_request,
     identity_dependency,
     require_identity,
@@ -17,14 +19,18 @@ class FakeHeaders:
     def __init__(self, headers: dict[str, str]) -> None:
         self._headers = headers
 
-    def get(self, key: str) -> str | None:
+    def get(self, key: str) -> str | None:  # noqa: D102
         return self._headers.get(key)
+
+
+# Verify FakeHeaders satisfies the protocol at import time
+_: _HeadersProtocol = FakeHeaders({})
 
 
 class FakeRequest:
     def __init__(self, headers: dict[str, str] | None = None) -> None:
-        self.headers = FakeHeaders(headers or {})
-        self.state = SimpleNamespace()
+        self.headers: _HeadersProtocol = FakeHeaders(headers or {})
+        self.state: Any = SimpleNamespace()
 
 
 @pytest.fixture
@@ -78,7 +84,7 @@ def test_require_identity(fake_verifier: FakeTokenVerifier) -> None:
 async def test_attach_identity_to_request(fake_verifier: FakeTokenVerifier) -> None:
     fake_request = FakeRequest(headers={"authorization": "Bearer valid"})
 
-    await attach_identity_to_request(fake_request, fake_verifier)  # type: ignore
+    await attach_identity_to_request(fake_request, fake_verifier)
 
     assert hasattr(fake_request.state, "identity")
     assert isinstance(fake_request.state.identity, IdentityContext)
@@ -92,6 +98,6 @@ async def test_attach_identity_to_request_raises_auth_error(
     fake_request = FakeRequest(headers={"authorization": "Bearer invalid"})
 
     with pytest.raises(AuthenticationError):
-        await attach_identity_to_request(fake_request, fake_verifier)  # type: ignore
+        await attach_identity_to_request(fake_request, fake_verifier)
 
     assert not hasattr(fake_request.state, "identity")

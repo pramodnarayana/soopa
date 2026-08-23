@@ -32,6 +32,7 @@ class User(AggregateRoot):
         self.created_at = created_at
         self.updated_at = updated_at
         self.deleted_at: datetime | None = None
+        self.role: str | None = None
 
     @classmethod
     def create(

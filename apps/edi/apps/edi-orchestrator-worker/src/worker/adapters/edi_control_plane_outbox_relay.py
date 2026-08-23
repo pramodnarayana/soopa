@@ -100,7 +100,7 @@ class EdiControlPlaneOutboxRelay:
                         await asyncio.sleep(current_delay)
                         current_delay = min(current_delay * 2, max_delay)
                         continue
-                        
+
                     # Reset backoff on successful connection
                     current_delay = base_delay
 

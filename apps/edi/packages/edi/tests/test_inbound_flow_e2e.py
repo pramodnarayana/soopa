@@ -6,11 +6,13 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 import structlog
-from edi.adapters.inbound.as2 import build_outbound_message
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from sqlalchemy import select
+
+from edi.adapters.inbound.as2 import build_outbound_message
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
@@ -19,7 +21,6 @@ from edi.adapters.outbound.database.models.data_plane import (
     InboundRoute,
     Webhook,
 )
-from sqlalchemy import select
 
 logger = structlog.get_logger(__name__)
 
@@ -146,7 +147,9 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         await global_session.commit()
 
         # Replicate to Data Plane since this runs outside standard provisioning sync
-        from edi.adapters.outbound.database.models.data_plane import InboundRoute as TenantInboundRoute
+        from edi.adapters.outbound.database.models.data_plane import (
+            InboundRoute as TenantInboundRoute,
+        )
         from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
 
         t_webhook = TenantWebhook(
@@ -193,20 +196,26 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         assert "application/edi-consent" in response.headers.get("content-type", "")
 
         # To avoid running full worker pipeline in a unit test, we will instantiate the services directly
+        from typing import Any
         from unittest.mock import MagicMock
 
         from edi.adapters.outbound.database.models.data_plane import EdiMessage
-        from edi.domain.events import PipelineEventType
-        from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
-        from edi.adapters.outbound.pipeline.repository import SqlAlchemyRepositoryAdapter
         from edi.adapters.outbound.pipeline.storage import S3StorageClient
         from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-        from edi.core.pipeline.deliver import DeliveryService
-        from edi.core.pipeline.translate import TranslationService
+        from edi.application.use_cases.pipeline.compute_transform_use_case import (
+            ComputeTransformUseCase,
+        )
+        from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
+        from edi.config.settings import AppSettings
 
-        # 1. Manually run Translate
-        repo = SqlAlchemyRepositoryAdapter(session, MagicMock(), S3StorageClient("test", None))
-        translate_svc = TranslationService(BotsTransformerAdapter("http://localhost:5000"), repo)
+        # 1. Manually run ComputeTransformUseCase
+        settings = AppSettings()
+        from edi.adapters.outbound.database.data_plane_unit_of_work import (
+            SqlAlchemyDataPlaneUnitOfWork,
+        )
+
+        uow = SqlAlchemyDataPlaneUnitOfWork(session, settings, S3StorageClient("test", None))
+        translate_svc = ComputeTransformUseCase(uow, BotsTransformerAdapter())
 
         # Get trace_id from DB
         res = await session.execute(select(EdiMessage).where(EdiMessage.sender_id == "SENDER"))
@@ -214,20 +223,20 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         trace_id = str(edi_msg.trace_id)
 
         try:
-            await translate_svc.translate(trace_id, event_type=PipelineEventType.TRANSFORM_EVENT)
+            await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
         except Exception as e:  # noqa: BLE001
             # If bots is not running, we mock it for the test
             if "Connection" in str(e):
                 from edi.ports.outbound.transformer_port import TransformerPort
 
                 class MockTransformer(TransformerPort):
-                    async def translate_edi_to_json(
+                    async def transform_edi_to_json(
                         self, payload: bytes, standard: str, transaction_type: str
                     ):
-                        from edi.ports.outbound.transformer_port import TranslatedTransaction
+                        from edi.ports.outbound.transformer_port import TransformedTransaction
 
                         return [
-                            TranslatedTransaction(
+                            TransformedTransaction(
                                 transaction_type=transaction_type,
                                 isa_sender_id="MOCK_ISA_SENDER",
                                 isa_receiver_id="MOCK_ISA_RECEIVER",
@@ -238,30 +247,30 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
                             )
                         ]
 
-                    async def translate_json_to_edi(
+                    async def transform_json_to_edi(
                         self,
-                        payload: dict,
+                        payload: dict[str, Any] | list[Any],
                         standard: str,
                         transaction_type: str,
-                        _route_config: dict,
+                        route_config: dict,
                     ) -> bytes:
                         return b""
 
                 translate_svc.transformer = MockTransformer()
-                await translate_svc.translate(
-                    trace_id, event_type=PipelineEventType.TRANSFORM_EVENT
-                )
+                await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
 
         # 2. Manually run Deliver
-        deliver_svc = DeliveryService(
-            repository=repo,
-            http_delivery=HttpxDeliveryClient(
-                validator=lambda _x: True
-            ),  # disable SSRF for 127.0.0.1
-            sftp_delivery=MagicMock(),
-            as2_delivery=MagicMock(),
+        import contextlib
+
+        @contextlib.asynccontextmanager
+        async def mock_uow_factory():
+            yield uow
+
+        deliver_svc = DeliveryUseCase(
+            uow_factory=mock_uow_factory,
+            router_factory=lambda _uow: MagicMock(),
         )
-        await deliver_svc.deliver(trace_id)
+        await deliver_svc.execute(trace_id)
 
         assert len(received_webhook_payloads) == 1
         assert received_webhook_payloads[0]["fake"] == "json"

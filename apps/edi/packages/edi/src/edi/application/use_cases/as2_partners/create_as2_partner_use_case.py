@@ -1,14 +1,19 @@
 import hashlib
 import json
+from datetime import datetime
 
 import structlog
-from edi.config.constants import SecretCategory
-from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import ConnectionType, PartnerStatus
 
+from edi.application.dto import (
+    CreateAS2TradingPartnerCmd,
+)
+from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
+from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
-from edi.domain.models import CreateAS2TradingPartnerCmd, PartnerEntity
+from edi.domain.models import (
+    AS2PartnerDomainModel,
+)
 from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
@@ -53,7 +58,7 @@ class CreateAS2PartnerUseCase:
 
     async def _check_idempotency(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str
-    ) -> PartnerEntity | None:
+    ) -> AS2PartnerDomainModel | None:
         private_key_digest = None
         if cmd.private_key_pem:
             private_key_digest = hashlib.sha256(cmd.private_key_pem.encode()).hexdigest()
@@ -96,21 +101,28 @@ class CreateAS2PartnerUseCase:
                     if existing_partner:
                         logger.info(
                             "provisioning_as2_partner_idempotent_hit",
-                            partner_id=existing_partner_id,
+                            id=existing_partner_id,
                             tenant_id=tenant_id,
+                            as2_id="",
+                            is_local=False,
+                            created_at=datetime.utcnow(),
+                            updated_at=datetime.utcnow(),
                         )
-                        return PartnerEntity(
-                            partner_id=existing_partner_id,
+                        return AS2PartnerDomainModel(
+                            id=existing_partner_id,
                             tenant_id=tenant_id,
                             name=existing_partner.name,
-                            type=ConnectionType.AS2,
-                            status=PartnerStatus.PROVISIONING,
+                            as2_id=existing_partner.as2_id,
+                            is_local=existing_partner.is_local,
+                            created_at=existing_partner.created_at,
+                            updated_at=existing_partner.updated_at,
+                            active=False,
                         )
         return None
 
     async def execute(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str | None = None
-    ) -> PartnerEntity:
+    ) -> AS2PartnerDomainModel:
         logger.info(
             "provisioning_as2_partner_started",
             cmd_name=cmd.name,
@@ -162,16 +174,19 @@ class CreateAS2PartnerUseCase:
 
             logger.info(
                 "provisioning_as2_partner_completed",
-                partner_id=partner_id,
+                id=partner_id,
                 tenant_id=tenant_id,
             )
 
-            return PartnerEntity(
-                partner_id=partner_id,
+            return AS2PartnerDomainModel(
+                id=partner_id,
                 tenant_id=tenant_id,
                 name=cmd.name,
-                type=ConnectionType.AS2,
-                status=PartnerStatus.PROVISIONING,
+                as2_id=cmd.as2_id,
+                is_local=cmd.is_local,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                active=False,
             )
 
         except Exception as e:

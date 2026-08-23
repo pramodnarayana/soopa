@@ -25,11 +25,11 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from edi.module import create_edi_app
+from tests.api_fakes import FakeControlPlaneUnitOfWork
 
 app = create_edi_app()
 
@@ -75,8 +75,13 @@ def fake_uow() -> FakeControlPlaneUnitOfWork:
     return FakeControlPlaneUnitOfWork()
 
 
+from collections.abc import Generator
+
+
 @pytest.fixture
-def client_factory(fake_uow: FakeControlPlaneUnitOfWork) -> Callable[..., TestClient]:
+def client_factory(
+    fake_uow: FakeControlPlaneUnitOfWork,
+) -> Generator[Callable[..., TestClient], None, None]:
     """
     Factory fixture that creates a TestClient with all dependency overrides
     registered BEFORE the TestClient context is entered. This ensures no

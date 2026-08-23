@@ -1,13 +1,15 @@
 import uuid
 from typing import Any
 
-from edi.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository, TenantSqlAlchemyRepository
+from edi.adapters.outbound.database.base_repository import (
+    GlobalSqlAlchemyRepository,
+    TenantSqlAlchemyRepository,
+)
 
 # Shared prefix constants for Data Plane IDs
 from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.domain.events import ProvisioningEvent
-
 from edi.ports.outbound.outbox_repository import (
     ControlPlaneOutboxRepositoryPort,
     DataPlaneOutboxRepositoryPort,

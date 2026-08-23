@@ -1,8 +1,13 @@
 from typing import Any
 
-from config.settings import get_settings
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
+)
+from edi.application.dto import (
+    UNSET,
+    CreateAS2TradingPartnerCmd,
+    RotateAS2CertificateCmd,
+    UpdateAS2TradingPartnerCmd,
 )
 from edi.application.use_cases.as2_partners import (
     CreateAS2PartnerUseCase,
@@ -10,17 +15,13 @@ from edi.application.use_cases.as2_partners import (
     RotateAS2CertificatesUseCase,
     UpdateAS2PartnerUseCase,
 )
+from edi.config.settings import get_settings
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.exceptions import (
     IdempotencyConflictError,
     OrchestrationError,
     PartnerAlreadyExistsError,
     PartnerInUseError,
-)
-from edi.domain.models import (
-    CreateAS2TradingPartnerCmd,
-    RotateAS2CertificateCmd,
-    UpdateAS2TradingPartnerCmd,
 )
 from edi.ports.outbound.secret_store import SecretStorePort
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -57,7 +58,7 @@ async def generate_certificate(
     """
     private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=request.as2_id)
 
-    from config.constants import SecretCategory
+    from edi.config.constants import SecretCategory
 
     private_key_vault_ref = await secret_store.store_private_key(
         private_key_pem=private_key_bytes,
@@ -120,12 +121,12 @@ async def _rotate_as2_certificates(
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
     return AS2TradingPartnerResponse(
-        id=str(updated_partner.partner_id),
+        id=str(updated_partner.id),
         name=updated_partner.name,
         as2_id=partner.as2_id,
         is_local=partner.is_local,
         url=partner.url,
-        active=updated_partner.status == "ACTIVE",
+        active=updated_partner.active,
     )
 
 
@@ -248,9 +249,9 @@ async def create_platform_as2_partner(
     """
     logger.info(
         "create_platform_as2_partner_request_received",
-        name=request.name,
-        as2_id=request.as2_id,
-        is_local=request.is_local,
+        name=request.name if request.name is not None else UNSET,
+        as2_id=request.as2_id if request.as2_id is not None else UNSET,
+        is_local=request.is_local if request.is_local is not None else UNSET,
         has_idempotency_key=bool(idempotency_key),
     )
 
@@ -260,9 +261,9 @@ async def create_platform_as2_partner(
         url = f"{settings.public.base_url}/api/v1/as2/receive"
 
     cmd = CreateAS2TradingPartnerCmd(
-        name=request.name,
-        as2_id=request.as2_id,
-        is_local=request.is_local,
+        name=request.name if request.name is not None else UNSET,
+        as2_id=request.as2_id if request.as2_id is not None else UNSET,
+        is_local=request.is_local if request.is_local is not None else UNSET,
         url=url,
         public_cert_pem=request.public_cert_pem,
         public_cert_vault_ref=request.public_cert_vault_ref,
@@ -280,7 +281,7 @@ async def create_platform_as2_partner(
 
         # Re-fetch from DB to get the actual ID (or we can just return entity if it has the ID)
         p = await uow.as2_partners.get_as2_partner(
-            tenant_id=PLATFORM_TENANT_ID, partner_id=entity.partner_id
+            tenant_id=PLATFORM_TENANT_ID, partner_id=entity.id
         )
         if not p:
             raise HTTPException(status_code=500, detail="Partner creation failed")
@@ -338,11 +339,11 @@ async def update_platform_as2_partner(
     async with uow:
         use_case = UpdateAS2PartnerUseCase(uow=uow)
         cmd = UpdateAS2TradingPartnerCmd(
-            name=request.name,
-            as2_id=request.as2_id,
-            is_local=request.is_local,
+            name=request.name if request.name is not None else UNSET,
+            as2_id=request.as2_id if request.as2_id is not None else UNSET,
+            is_local=request.is_local if request.is_local is not None else UNSET,
             url=str(request.url) if request.url else None,
-            active=request.active,
+            active=request.active if request.active is not None else UNSET,
         )
         try:
             await use_case.execute(

@@ -80,8 +80,21 @@ extraPaths = [
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"
+exclude = [
+    "src/edi/core/grammar"
+]
 
 [tool.mypy]
 exclude = [
-    "src/edi/core/bots_engine"
+    "src/edi/core/grammar",
+    "src/edi/core/bots",
+    "tests/bots_core",
+    "tests/grammar"
 ]
+
+[[tool.mypy.overrides]]
+module = [
+    "aioboto3.*",
+    "endesive.*"
+]
+ignore_missing_imports = true

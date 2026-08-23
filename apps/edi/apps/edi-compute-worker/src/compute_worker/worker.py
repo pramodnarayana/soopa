@@ -44,7 +44,7 @@ class SQSComputeWorker:
                     # Receive messages from SQS
                     response = await sqs.receive_message(
                         QueueUrl=self.queue_url,
-                        MaxNumberOfMessages=10,
+                        MaxNumberOfMessages=1,
                         WaitTimeSeconds=20,
                     )
 
@@ -100,9 +100,7 @@ class SQSComputeWorker:
             use_case = await self.use_case_factory(tenant_id)
 
             await use_case.execute(
-                trace_id=trace_id,
-                standard=standard,
-                transaction_type=transaction_type
+                trace_id=trace_id, standard=standard, transaction_type=transaction_type
             )
 
             logger.info("edi_transformed_successfully", trace_id=trace_id)
@@ -115,6 +113,15 @@ class SQSComputeWorker:
                 )
                 logger.debug("sqs_message_deleted", trace_id=trace_id)
 
+        except ValueError as e:
+            logger.warning("edi_message_validation_failed", error=str(e))
+            # Message is permanently invalid, delete it to prevent poison pill loop
+            receipt_handle = sqs_message.get("ReceiptHandle")
+            if receipt_handle:
+                await sqs_client.delete_message(
+                    QueueUrl=self.queue_url, ReceiptHandle=str(receipt_handle)
+                )
+                logger.debug("invalid_sqs_message_deleted")
         except Exception:
             logger.exception("edi_message_processing_failed")
 

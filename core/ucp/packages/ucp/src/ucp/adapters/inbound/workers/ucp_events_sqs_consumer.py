@@ -49,7 +49,7 @@ class UcpEventsSqsConsumer:
     async def _run_loop(self) -> None:
         try:
             if hasattr(self.event_listener, "__aenter__"):
-                async with self.event_listener:  # type: ignore
+                async with self.event_listener:
                     await self._poll_continuous()
             else:
                 await self._poll_continuous()

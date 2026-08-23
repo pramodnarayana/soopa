@@ -5,7 +5,7 @@ from typing import Any
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
-from edi.domain.models import (
+from edi.application.dto import (
     UNSET,
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
@@ -30,6 +30,32 @@ class FakeGlobalStore:
         self.sftp_partners = []
         self.webhooks = []
         self.outbox_events = []
+        self.inbound_routes = []
+        self.outbound_routes = []
+
+    async def get_inbound_routes(self, tenant_id: str) -> list:
+        return [r for r in self.inbound_routes if r.get("tenant_id") == tenant_id]
+
+    async def get_inbound_route(self, tenant_id: str, route_id: str) -> Any:
+        for r in self.inbound_routes:
+            if r["id"] == route_id and r["tenant_id"] == tenant_id:
+                return r
+        return None
+
+    async def get_inbound_route_by_id(self, tenant_id: str, route_id: str) -> Any:
+        for r in self.inbound_routes:
+            if r.id == route_id:
+                return r
+        return None
+
+    async def get_outbound_routes(self, tenant_id: str) -> list:
+        return [r for r in self.outbound_routes if r.get("tenant_id") == tenant_id]
+
+    async def get_outbound_route(self, tenant_id: str, route_id: str) -> Any:
+        for r in self.outbound_routes:
+            if r["id"] == route_id and r["tenant_id"] == tenant_id:
+                return r
+        return None
 
     async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
         for p in self.partners:
@@ -343,6 +369,14 @@ class FakeRoute:
         self.gs_receiver_id = getattr(cmd, "gs_receiver_id", "R1")
         self.transaction_type = getattr(cmd, "transaction_type", "*")
         self.trading_partner_id = getattr(cmd, "trading_partner_id", None)
+        self.created_at = None
+        self.updated_at = None
+        self.direction = "INBOUND" if isinstance(cmd, CreateInboundRouteCmd) else "OUTBOUND"
+        self.default_standard = "x12"
+        self.default_version = "004010"
+
+    def __getitem__(self, key):
+        return getattr(self, key)
 
 
 class FakeTenantStore:

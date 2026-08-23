@@ -1,12 +1,13 @@
 import structlog
-from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import ConnectionType, Direction, OutboundRouteDomainModel
 
-from edi.domain.models import (
+from edi.application.dto import (
     CreateOutboundRouteCmd,
-    OutboundRouteListEntity,
-    RouteEntity,
     UpdateOutboundRouteCmd,
+)
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import (
+    ConnectionType,
+    OutboundRouteDomainModel,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
@@ -24,7 +25,7 @@ class OutboundRouteService:
 
     async def create_outbound_route(
         self, tenant_id: str, cmd: CreateOutboundRouteCmd, idempotency_key: str | None = None
-    ) -> RouteEntity:
+    ) -> OutboundRouteDomainModel:
         logger.info(
             "Creating Outbound Route for partner {cmd.trading_partner_id} in tenant {tenant_id}",
             cmd_trading_partner_id=cmd.trading_partner_id,
@@ -41,7 +42,21 @@ class OutboundRouteService:
             ),
             idempotency_key=idempotency_key,
         )
-        return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.OUTBOUND)
+
+        route_obj = await self.uow.outbound_routes.get_outbound_route(tenant_id, str(route_id))
+        if not route_obj:
+            raise ValueError("Outbound route not found after creation")
+        return OutboundRouteDomainModel(
+            id=route_obj.id,
+            tenant_id=tenant_id,
+            trading_partner_id=route_obj.trading_partner_id,
+            name=route_obj.name,
+            active=route_obj.active,
+            created_at=route_obj.created_at,
+            updated_at=route_obj.updated_at,
+            as2_partner_id=str(route_obj.as2_partner_id) if route_obj.as2_partner_id else None,
+            sftp_partner_id=str(route_obj.sftp_partner_id) if route_obj.sftp_partner_id else None,
+        )
 
     async def update_outbound_route(
         self,
@@ -77,7 +92,7 @@ class OutboundRouteService:
             )
         return res
 
-    async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteListEntity]:
+    async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteDomainModel]:
         outbound = await self.uow.outbound_routes.list_outbound_routes(tenant_id)
 
         as2_ids: set[str] = set()
@@ -100,7 +115,7 @@ class OutboundRouteService:
             else {}
         )
 
-        results: list[OutboundRouteListEntity] = []
+        results: list[OutboundRouteDomainModel] = []
 
         def _resolve_destination(r: OutboundRouteDomainModel) -> tuple[ConnectionType | str, str]:
             if r.as2_partner_id:
@@ -112,23 +127,21 @@ class OutboundRouteService:
             return "UNKNOWN", "Unknown"
 
         for out_r in outbound:
-            dest_type, dest_name = _resolve_destination(out_r)
+            _dest_type, _dest_name = _resolve_destination(out_r)
 
             results.append(
-                OutboundRouteListEntity(
-                    route_id=out_r.id,
-                    name=out_r.name,
-                    direction=Direction.OUTBOUND,
+                OutboundRouteDomainModel(
+                    id=out_r.id,
+                    tenant_id=tenant_id,
                     trading_partner_id=out_r.trading_partner_id,
-                    transaction_type="*",
-                    isa_sender_id=None,
-                    isa_receiver_id=None,
-                    destination_type=dest_type,
-                    destination_name=dest_name,
-                    webhook_id=None,
-                    as2_partner_id=out_r.as2_partner_id,
-                    sftp_partner_id=out_r.sftp_partner_id,
+                    name=out_r.name,
                     active=out_r.active,
+                    created_at=out_r.created_at,
+                    updated_at=out_r.updated_at,
+                    as2_partner_id=str(out_r.as2_partner_id) if out_r.as2_partner_id else None,
+                    sftp_partner_id=str(out_r.sftp_partner_id) if out_r.sftp_partner_id else None,
+                    direction="OUTBOUND",
+                    destination_name=_dest_name,
                 )
             )
 

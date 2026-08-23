@@ -43,7 +43,7 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
 
     # Remove the generic guard overrides so the REAL auth logic executes!
     from unified_api.adapters.inbound.http.guards import tenant_auth_guard
-    from unified_api.main import app  # type: ignore
+    from unified_api.main import app
 
     from ucp.domain.models.authorization import Capability
 

@@ -1,9 +1,13 @@
 import structlog
-from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import ConnectionType, PartnerStatus
 
+from edi.application.dto import (
+    UpdateAS2TradingPartnerCmd,
+)
+from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import PartnerNotFoundError
-from edi.domain.models import PartnerEntity, UpdateAS2TradingPartnerCmd
+from edi.domain.models import (
+    AS2PartnerDomainModel,
+)
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -23,10 +27,10 @@ class UpdateAS2PartnerUseCase:
         partner_id: str,
         cmd: UpdateAS2TradingPartnerCmd,
         idempotency_key: str | None = None,
-    ) -> PartnerEntity:
+    ) -> AS2PartnerDomainModel:
         logger.info(
             "update_as2_partner_started",
-            partner_id=partner_id,
+            id=partner_id,
             tenant_id=tenant_id,
         )
         await self.uow.as2_partners.update_as2_identity(tenant_id, partner_id, cmd)
@@ -46,14 +50,8 @@ class UpdateAS2PartnerUseCase:
 
         logger.info(
             "update_as2_partner_completed",
-            partner_id=partner_id,
+            id=partner_id,
             tenant_id=tenant_id,
         )
 
-        return PartnerEntity(
-            partner_id=partner_id,
-            tenant_id=tenant_id,
-            name=cmd.name or updated_partner.name,
-            type=ConnectionType.AS2,
-            status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
-        )
+        return updated_partner

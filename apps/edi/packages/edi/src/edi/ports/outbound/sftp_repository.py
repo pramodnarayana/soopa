@@ -1,11 +1,12 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from edi.domain.models import SFTPPartnerDomainModel
-
-from edi.domain.models import (
+from edi.application.dto import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
+)
+from edi.domain.models import (
+    SFTPPartnerDomainModel,
 )
 
 

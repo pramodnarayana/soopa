@@ -2,11 +2,11 @@ import uuid
 from typing import Any
 
 import structlog
-from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
+from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 
 logger = structlog.get_logger(__name__)
 

@@ -48,7 +48,7 @@ services:
       args:
         - APP_MODULE=apps/edi/apps/edi-compute-worker
     command: >
-      bash -c "cd apps/edi/apps/edi-compute-worker && pnpm start:dev"
+      bash -c "cd apps/edi/apps/edi-compute-worker && uv run python -m compute_worker.main"
 
   cdcproxy:
     image: nginx:alpine

@@ -4,9 +4,10 @@ import sys
 import time
 import uuid
 
-import boto3  # type: ignore
+import boto3  # type: ignore[import-untyped]
 import structlog
-from botocore.exceptions import ClientError  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+
 from edi.config.constants import SecretCategory
 from edi.config.settings import get_settings
 

@@ -2,12 +2,12 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from sqlalchemy import or_, select
+
 from edi.adapters.outbound.database.base_repository import TenantSession, TenantSqlAlchemyRepository
 from edi.adapters.outbound.database.constants import EDI_JSON_ID_PREFIX, EDI_MESSAGE_ID_PREFIX
 from edi.adapters.outbound.database.models.data_plane import EdiMessage
-from sqlalchemy import or_, select
-
-from edi.domain.models import (
+from edi.application.dto import (
     ApiGatewayDTO,
     EdiJsonDTO,
     EdiMessageDTO,
@@ -407,8 +407,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return result.scalars().all()
 
     async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
-        from edi.adapters.outbound.database.models.data_plane import EdiMessage
         from sqlalchemy import select
+
+        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
 

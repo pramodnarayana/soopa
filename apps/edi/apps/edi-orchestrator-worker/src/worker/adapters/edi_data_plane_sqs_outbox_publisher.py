@@ -51,7 +51,11 @@ class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
                 entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
                 dedup_id = msg.idempotency_key or msg.message_id
                 if not dedup_id:
-                    logger.error("invalid_fifo_message_skipped", reason="missing_dedup_id", message_id=msg.message_id)
+                    logger.error(
+                        "invalid_fifo_message_skipped",
+                        reason="missing_dedup_id",
+                        message_id=msg.message_id,
+                    )
                     continue
                 entry["MessageDeduplicationId"] = dedup_id
             entries.append(entry)

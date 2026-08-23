@@ -1,8 +1,8 @@
 from typing import Annotated, Any, cast
 
-from database.base_repository import GlobalSession
-from database.session import get_global_session
 from dependency_injector.wiring import Provide, inject
+from edi.adapters.outbound.database.base_repository import GlobalSession
+from edi.adapters.outbound.database.session import get_global_session
 from edi.application.use_cases.as2_receiver_service import As2ReceiverService
 from edi.bootstrap.container import Container
 from edi.ports.outbound.as2_tester import AS2TesterPort

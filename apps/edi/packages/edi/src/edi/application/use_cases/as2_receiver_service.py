@@ -5,12 +5,13 @@ from email import policy
 from typing import Any
 
 import structlog
+
 from edi.adapters.inbound.as2.mdn import build_mdn, calculate_mic
 from edi.adapters.inbound.as2.message import AS2Message
 from edi.adapters.inbound.as2.parser import parse_as2_request
-from edi.domain.events import PipelineEventType
 from edi.adapters.outbound.security.smime import decrypt_payload, verify_signature
-
+from edi.domain.events import PipelineEventType
+from edi.domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
@@ -120,7 +121,9 @@ class As2ReceiverService:
             logger.warning("Failed to parse AS2 request: {e}", e=e)
             raise ValueError(f"Bad Request: {e}") from e
 
-    async def _lookup_partnership(self, as2_from: str, as2_to: str):  # type: ignore
+    async def _lookup_partnership(
+        self, as2_from: str, as2_to: str
+    ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel]:
         async with self.control_plane_uow:
             match = await self.control_plane_uow.as2_partnerships.get_partnership_by_as2_ids(
                 as2_from=as2_from, as2_to=as2_to
@@ -134,8 +137,8 @@ class As2ReceiverService:
                 raise ValueError("Partnership not configured")
             return match
 
-    async def _retrieve_keys(  # type: ignore
-        self, local_partner, remote_partner
+    async def _retrieve_keys(
+        self, local_partner: AS2PartnerDomainModel, remote_partner: AS2PartnerDomainModel
     ) -> tuple[bytes | None, bytes | None, bytes | None]:
         local_priv_key = None
         local_cert = None
@@ -229,7 +232,7 @@ class As2ReceiverService:
             decrypted = decrypt_payload(
                 current_entity,
                 private_key_pem=priv_key,
-                public_cert_pem=cert,  # type: ignore
+                public_cert_pem=cert or b"",
             )
             if decrypted:
                 return decrypted
@@ -243,7 +246,7 @@ class As2ReceiverService:
             decrypted = decrypt_payload(
                 smime_headers + current_entity,
                 private_key_pem=priv_key,
-                public_cert_pem=cert,  # type: ignore
+                public_cert_pem=cert or b"",
             )
             if decrypted:
                 return decrypted
@@ -303,15 +306,18 @@ class As2ReceiverService:
 
             raise ValueError(f"Signature verification failed: {e}") from e
 
-    def _extract_pure_edi(self, final_payload_bytes: bytes | str | Any) -> bytes:
+    def _extract_pure_edi(self, final_payload_bytes: bytes | Any) -> bytes:
         if not isinstance(final_payload_bytes, bytes):
-            final_payload_bytes = final_payload_bytes.as_bytes()  # type: ignore
+            if hasattr(final_payload_bytes, "as_bytes"):
+                final_payload_bytes = final_payload_bytes.as_bytes()
+            elif isinstance(final_payload_bytes, str):
+                final_payload_bytes = final_payload_bytes.encode("utf-8")
 
         parsed_msg = email.message_from_bytes(final_payload_bytes, policy=policy.HTTP)
         if "content-type" in parsed_msg:
-            decoded_payload = parsed_msg.get_payload(decode=True)
-            if decoded_payload is not None:
-                return decoded_payload  # type: ignore
+            decoded_payload = parsed_msg.get_payload(decode=True)  # type: ignore
+            if decoded_payload is not None and isinstance(decoded_payload, bytes):
+                return decoded_payload
             return parsed_msg.as_bytes()
         return final_payload_bytes
 
@@ -342,8 +348,8 @@ class As2ReceiverService:
 
         return isa_sender, isa_receiver, transaction_type
 
-    async def _save_transaction(  # type: ignore
-        self, partnership, as2_msg: AS2Message, pure_edi_bytes: bytes
+    async def _save_transaction(
+        self, partnership: AS2PartnershipDomainModel, as2_msg: AS2Message, pure_edi_bytes: bytes
     ) -> str:
 
         # 1. Payload-Based Routing (ISA Extraction)

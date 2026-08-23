@@ -1,9 +1,9 @@
 from typing import Any
 
-from edi.adapters.outbound.database.models.platform_settings import PlatformSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from edi.adapters.outbound.database.models.platform_settings import PlatformSettings
 from edi.ports.outbound.platform_settings_repository import PlatformSettingsRepositoryPort
 
 

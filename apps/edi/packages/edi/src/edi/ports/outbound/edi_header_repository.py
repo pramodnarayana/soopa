@@ -1,11 +1,12 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from edi.domain.models import OutboundEdiHeaderDomainModel
-
-from edi.domain.models import (
+from edi.application.dto import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
+)
+from edi.domain.models import (
+    OutboundEdiHeaderDomainModel,
 )
 
 

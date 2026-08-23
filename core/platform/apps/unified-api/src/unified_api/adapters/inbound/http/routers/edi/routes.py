@@ -3,14 +3,14 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.use_cases import InboundRouteService, OutboundRouteService
-from edi.domain.models import (
+from edi.application.dto import (
     UNSET,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     UpdateInboundRouteCmd,
     UpdateOutboundRouteCmd,
 )
+from edi.application.use_cases import InboundRouteService, OutboundRouteService
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import TypeAdapter
 
@@ -64,7 +64,6 @@ async def create_inbound_route(
         service = InboundRouteService(uow=uow)
 
         cmd = CreateInboundRouteCmd(
-            name=request.name,
             trading_partner_id=request.trading_partner_id,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,
@@ -72,17 +71,15 @@ async def create_inbound_route(
             gs_receiver_id=request.gs_receiver_id,
             transaction_type=request.transaction_type,
             processing_mode=request.processing_mode,
-            webhook_id=str(request.webhook_id) if request.webhook_id else None,
-            as2_partner_id=request.as2_partner_id,
-            sftp_partner_id=request.sftp_partner_id,
+            webhook_id=request.webhook_id,
+            as2_partner_id=request.as2_partner_id if request.as2_partner_id else None,
+            sftp_partner_id=request.sftp_partner_id if request.sftp_partner_id else None,
         )
 
         entity = await service.create_inbound_route(tenant_id, cmd, idempotency_key=idempotency_key)
         await uow.commit()
 
-        return RouteResponse(
-            route_id=entity.route_id, tenant_id=entity.tenant_id, direction=entity.direction
-        )
+        return RouteResponse(route_id=entity.id, tenant_id=entity.tenant_id, direction="INBOUND")
 
 
 @router.post("/outbound", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
@@ -99,10 +96,14 @@ async def create_outbound_route(
         service = OutboundRouteService(uow=uow)
 
         cmd = CreateOutboundRouteCmd(
+            isa_sender_id=request.isa_sender_id if hasattr(request, "isa_sender_id") else "",
+            isa_receiver_id=request.isa_receiver_id if hasattr(request, "isa_receiver_id") else "",
+            transaction_type=request.transaction_type
+            if hasattr(request, "transaction_type")
+            else "",
             trading_partner_id=request.trading_partner_id,
-            name=request.name,
-            as2_partner_id=request.as2_partner_id,
-            sftp_partner_id=request.sftp_partner_id,
+            as2_partner_id=request.as2_partner_id if request.as2_partner_id else None,
+            sftp_partner_id=request.sftp_partner_id if request.sftp_partner_id else None,
         )
 
         entity = await service.create_outbound_route(
@@ -110,9 +111,7 @@ async def create_outbound_route(
         )
         await uow.commit()
 
-        return RouteResponse(
-            route_id=entity.route_id, tenant_id=entity.tenant_id, direction=entity.direction
-        )
+        return RouteResponse(route_id=entity.id, tenant_id=entity.tenant_id, direction="OUTBOUND")
 
 
 @router.patch("/inbound/{route_id}", status_code=status.HTTP_200_OK)

@@ -1,4 +1,5 @@
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Any
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
@@ -40,14 +41,18 @@ router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["Users"])
 
 @router.get("", dependencies=[Depends(RequireCapability(Capability.USERS_READ))])
 @inject
-async def get_users(  # type: ignore
+async def get_users(
     request: Request,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
-    user_repo_factory=Depends(Provide[Container.user_repo.provider]),
-):
+    tenant_repo_factory: Callable[..., TenantRepositoryPort] = Depends(
+        Provide[Container.tenant_repo.provider]
+    ),
+    user_repo_factory: Callable[..., UserRepositoryPort] = Depends(
+        Provide[Container.user_repo.provider]
+    ),
+) -> dict[str, list[dict[str, Any]]]:
     tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
     user_repo: UserRepositoryPort = user_repo_factory(session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
@@ -81,14 +86,16 @@ async def get_users(  # type: ignore
 
 @router.post("", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
 @inject
-async def create_user(  # type: ignore
+async def create_user(
     request: Request,
     dto: CreateUserRequest,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.create_user_use_case.provider]),
-):
+    use_case_factory: Callable[..., CreateUserUseCase] = Depends(
+        Provide[Container.create_user_use_case.provider]
+    ),
+) -> dict[str, str]:
     use_case: CreateUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = CreateUserCommand(
@@ -110,15 +117,17 @@ async def create_user(  # type: ignore
 
 @router.patch("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
 @inject
-async def update_user(  # type: ignore
+async def update_user(
     request: Request,
     dto: UpdateUserRequest,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     user_id: str = Path(...),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.update_user_use_case.provider]),
-):
+    use_case_factory: Callable[..., UpdateUserUseCase] = Depends(
+        Provide[Container.update_user_use_case.provider]
+    ),
+) -> dict[str, bool]:
     use_case: UpdateUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = UpdateUserCommand(
@@ -142,21 +151,23 @@ async def update_user(  # type: ignore
     "/{user_id}/status", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))]
 )
 @inject
-async def toggle_status(  # type: ignore
+async def toggle_status(
     request: Request,
     dto: ToggleUserStatusRequest,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     user_id: str = Path(...),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.toggle_user_status_use_case.provider]),
-):
+    use_case_factory: Callable[..., ToggleUserStatusUseCase] = Depends(
+        Provide[Container.toggle_user_status_use_case.provider]
+    ),
+) -> dict[str, bool]:
     use_case: ToggleUserStatusUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = ToggleUserStatusCommand(
         tenant_id=canonical_tenant_id,
         user_id=user_id,
-        action=dto.action,  # type: ignore
+        action=dto.action,
     )
 
     try:
@@ -170,14 +181,16 @@ async def toggle_status(  # type: ignore
 
 @router.delete("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
 @inject
-async def delete_user(  # type: ignore
+async def delete_user(
     request: Request,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     tenant_id: str = Path(...),
     user_id: str = Path(...),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.delete_user_use_case.provider]),
-):
+    use_case_factory: Callable[..., DeleteUserUseCase] = Depends(
+        Provide[Container.delete_user_use_case.provider]
+    ),
+) -> dict[str, bool]:
     use_case: DeleteUserUseCase = use_case_factory(uow__session=session)
     canonical_tenant_id = request.state.ucp_tenant_id
     command = DeleteUserCommand(

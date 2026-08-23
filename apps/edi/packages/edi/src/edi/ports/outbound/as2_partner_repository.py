@@ -1,11 +1,12 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from edi.domain.models import AS2PartnerDomainModel
-
-from edi.domain.models import (
+from edi.application.dto import (
     CreateAS2TradingPartnerCmd,
     UpdateAS2TradingPartnerCmd,
+)
+from edi.domain.models import (
+    AS2PartnerDomainModel,
 )
 
 

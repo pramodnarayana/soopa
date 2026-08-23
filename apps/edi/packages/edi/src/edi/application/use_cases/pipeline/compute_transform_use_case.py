@@ -2,14 +2,14 @@ import copy
 import uuid
 
 import structlog
-from edi.ports.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
-from edi.ports.transformer_port import TransformerPort
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
 from edi.domain.direction import MessageDirection
 from edi.domain.events import PipelineEventType
 from edi.domain.status import MessageStatus
+from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.transformer_port import TransformerPort
 
 logger = structlog.get_logger(__name__)
 

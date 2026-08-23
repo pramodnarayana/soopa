@@ -4,15 +4,15 @@ import structlog
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.use_cases import AS2PartnershipService
-from edi.domain.exceptions import OrchestrationError
-from edi.domain.models import (
+from edi.application.dto import (
     CreateAS2PartnershipCmd,
     EncryptionAlgorithm,
     MDNType,
     SignatureAlgorithm,
     UpdateAS2PartnershipCmd,
 )
+from edi.application.use_cases import AS2PartnershipService
+from edi.domain.exceptions import OrchestrationError
 from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.secret_store import SecretStorePort
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -167,13 +167,13 @@ async def create_platform_as2_partnership(
             entity = await svc.create_as2_partnership(tenant_id=PLATFORM_TENANT_ID, cmd=cmd)
             await uow.commit()
             p = await uow.as2_partnerships.get_as2_partnership(
-                tenant_id=PLATFORM_TENANT_ID, partnership_id=entity.partner_id
+                tenant_id=PLATFORM_TENANT_ID, partnership_id=entity.id
             )
             if not p:
                 raise HTTPException(status_code=404, detail="Partnership not found")
 
             return AS2PartnershipResponse(
-                id=str(entity.partner_id),
+                id=str(entity.id),
                 tenant_id=PLATFORM_TENANT_ID,
                 name=p.name,
                 local_partner_id=str(p.local_partner_id),
@@ -203,7 +203,7 @@ async def update_platform_as2_partnership(
 ) -> Any:
     try:
         async with uow:
-            from edi.domain.models import UNSET
+            from edi.application.dto import UNSET
 
             def get_val(field: str) -> Any:
                 return getattr(request, field) if field in request.model_fields_set else UNSET
@@ -214,8 +214,6 @@ async def update_platform_as2_partnership(
 
             cmd = UpdateAS2PartnershipCmd(
                 name=get_val("name"),
-                local_partner_id=get_val("local_partner_id"),
-                remote_partner_id=get_val("remote_partner_id"),
                 credentials_vault_ref=get_val("credentials_vault_ref"),
                 mdn_type=get_val("mdn_type"),
                 mdn_url=mdn_url_val,

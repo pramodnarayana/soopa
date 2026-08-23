@@ -43,7 +43,7 @@ async def test_identity_sync_flow(
     mock_user_idp = create_autospec(UserIdentityProviderPort, instance=True)
 
     # Outbox Setup
-    outbox_repo = PostgresOutboxRepository(lambda: db_session)  # type: ignore
+    outbox_repo = PostgresOutboxRepository(lambda: db_session)
     sns_publisher = UcpSnsOutboxPublisher(
         topic_arn=localstack_container["sns_topic_arn"],
         endpoint_url=localstack_container["endpoint_url"],

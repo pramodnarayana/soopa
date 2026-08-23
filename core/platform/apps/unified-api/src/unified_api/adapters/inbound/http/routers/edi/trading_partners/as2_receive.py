@@ -35,7 +35,7 @@ async def receive_as2_message(
     except ValueError as e:
         logger.warning("Business logic rejection: {e}", e=e)
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
-            from as2_core import build_mdn
+            from edi.adapters.inbound.as2.mdn import build_mdn
 
             error_msg = str(e).lower()
             if "decrypt" in error_msg:
@@ -63,7 +63,7 @@ async def receive_as2_message(
         logger.exception("Internal server error")
 
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
-            from as2_core import build_mdn
+            from edi.adapters.inbound.as2.mdn import build_mdn
 
             mdn = build_mdn(
                 as2_to=as2_to_hdr,

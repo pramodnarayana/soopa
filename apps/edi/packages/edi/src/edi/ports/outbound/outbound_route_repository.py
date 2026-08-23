@@ -1,8 +1,7 @@
 from typing import Protocol
 
+from edi.application.dto import CreateOutboundRouteCmd, UpdateOutboundRouteCmd
 from edi.domain.models import OutboundRouteDomainModel
-
-from edi.domain.models import CreateOutboundRouteCmd, UpdateOutboundRouteCmd
 
 
 class OutboundRouteRepositoryPort(Protocol):

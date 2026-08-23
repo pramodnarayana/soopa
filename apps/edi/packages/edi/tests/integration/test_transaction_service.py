@@ -2,8 +2,8 @@ import uuid
 from unittest.mock import MagicMock
 
 import pytest
-from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
+from edi.adapters.outbound.database.models.data_plane import EdiMessage
 from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.transaction_service import TransactionService
 from edi.domain.exceptions import TransactionNotFoundError
@@ -62,8 +62,9 @@ async def test_replay_transaction_success(uow, db_session):
 
     # Assert Outbox Event was created
     async with uow:
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
         from sqlalchemy import func, select
+
+        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
         res = await db_session.execute(
             select(func.count())
@@ -124,8 +125,9 @@ async def test_bulk_replay_transaction_success(uow, db_session):
 
     # Assert Outbox Events were created
     async with uow:
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
         from sqlalchemy import func, select
+
+        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
         res = await db_session.execute(
             select(func.count())

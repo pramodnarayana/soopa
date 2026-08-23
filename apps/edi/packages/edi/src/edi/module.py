@@ -16,7 +16,6 @@ load_dotenv()
 # Do not configure root loggers or StreamHandlers here.
 # ---------------------------------------------------------------------------
 
-from edi.config.settings import get_settings
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
@@ -40,6 +39,7 @@ from unified_api.adapters.inbound.http.routers.edi.trading_partners import as2_r
 
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import edi_lifespan
+from edi.config.settings import get_settings
 from edi.domain.exceptions import OrchestrationError, VaultError
 
 logger = structlog.get_logger(__name__)

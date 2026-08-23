@@ -167,6 +167,7 @@ class SFTPPartnerDomainModel:
     outbound_remote_path: str | None = None
     password_encrypted: str | None = None
     credentials_vault_ref: str | None = None
+    deleted_at: datetime | None = None
 
 
 @dataclass(kw_only=True)
@@ -187,6 +188,8 @@ class InboundRouteDomainModel:
     webhook_id: str | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
+    direction: str = "INBOUND"
+    destination_name: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -201,6 +204,8 @@ class OutboundRouteDomainModel:
     protocol: str | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
+    direction: str = "OUTBOUND"
+    destination_name: str | None = None
 
 
 @dataclass(kw_only=True)

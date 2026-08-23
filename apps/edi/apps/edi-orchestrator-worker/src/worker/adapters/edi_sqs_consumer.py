@@ -152,7 +152,9 @@ class EdiSqsConsumer(OutboxPort):
                     )
                     await sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                     return None
-            return body
+            from typing import cast
+
+            return cast(dict[str, Any], body)
         except json.JSONDecodeError:
             logger.exception(
                 "sqs_message_json_decode_failed",

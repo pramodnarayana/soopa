@@ -1,5 +1,4 @@
 import pytest
-from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import (
@@ -8,6 +7,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
 )
 
 from edi.module import create_edi_app
+from tests.api_fakes import FakeControlPlaneUnitOfWork
 
 app = create_edi_app()
 

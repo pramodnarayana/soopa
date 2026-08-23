@@ -1,7 +1,6 @@
 from typing import Any
 
 import pytest
-from api_fakes import FakeControlPlaneUnitOfWork
 from fastapi.testclient import TestClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
@@ -14,6 +13,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
 )
 
 from edi.module import create_edi_app
+from tests.api_fakes import FakeControlPlaneUnitOfWork
 
 app = create_edi_app()
 
@@ -255,7 +255,10 @@ def test_create_tenant_sftp_partner(client, fake_uow):
     # Coverage for test existing partner endpoint
     from unittest.mock import patch
 
-    with patch("database.encryption.db_encryption.decrypt", return_value="secretpassword"):
+    with patch(
+        "edi.adapters.outbound.database.encryption.db_encryption.decrypt",
+        return_value="secretpassword",
+    ):
         client.post(
             f"/api/v1/tenants/1/edi/trading-partners/{p_id}/sftp/test",
             json={
@@ -346,7 +349,8 @@ def test_existing_sftp_connection_failures(client, fake_uow):
 
     # Test decrypt error
     with patch(
-        "database.encryption.db_encryption.decrypt", side_effect=ValueError("Decrypt error")
+        "edi.adapters.outbound.database.encryption.db_encryption.decrypt",
+        side_effect=ValueError("Decrypt error"),
     ):
         resp = client.post(
             f"/api/v1/tenants/1/edi/trading-partners/{p_id}/sftp/test",

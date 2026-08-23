@@ -31,6 +31,7 @@ members = [
     "core/platform/packages/notification",
     "core/platform/apps/notification-worker",
     "core/platform/apps/unified-api",
+    "apps/edi/apps/edi-secrets-sidecar",
 ]
 exclude = ["apps/edi/packages/ui"]
 
@@ -131,11 +132,11 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 
 "apps/edi/apps/edi-as2-server/tests/conftest.py" = ["S603", "S607"]
-"apps/edi/packages/edi/src/edi/core/bots_engine/domain/exceptions.py" = ["S112"]
 # Legacy BOTS engine formatting ignores
-"apps/edi/packages/edi/src/edi/core/bots_engine/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405", "BLE", "TRY", "C901"]
-"apps/edi/packages/edi/src/edi/core/bots_engine/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405", "BLE", "TRY", "S314", "C901"]
-"apps/edi/packages/edi/src/edi/core/bots_engine/facade.py" = ["BLE", "TRY", "C901"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/parsers/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/utils/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/facade.py" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
 "apps/edi/packages/edi/src/edi/core/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]

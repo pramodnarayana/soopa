@@ -1,12 +1,13 @@
 import structlog
-from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import ConnectionType, Direction, InboundRouteDomainModel
 
-from edi.domain.models import (
+from edi.application.dto import (
     CreateInboundRouteCmd,
-    InboundRouteListEntity,
-    RouteEntity,
     UpdateInboundRouteCmd,
+)
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import (
+    ConnectionType,
+    InboundRouteDomainModel,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
@@ -24,7 +25,7 @@ class InboundRouteService:
 
     async def create_inbound_route(
         self, tenant_id: str, cmd: CreateInboundRouteCmd, idempotency_key: str | None = None
-    ) -> RouteEntity:
+    ) -> InboundRouteDomainModel:
         logger.info(
             "Creating Inbound Route for sender {cmd.isa_sender_id} in tenant {tenant_id}",
             cmd_isa_sender_id=cmd.isa_sender_id,
@@ -39,7 +40,27 @@ class InboundRouteService:
             ),
             idempotency_key=idempotency_key,
         )
-        return RouteEntity(route_id=route_id, tenant_id=tenant_id, direction=Direction.INBOUND)
+
+        route_obj = await self.uow.inbound_routes.get_inbound_route_by_id(tenant_id, str(route_id))
+        if not route_obj:
+            raise ValueError("Inbound route not found after creation")
+        return InboundRouteDomainModel(
+            id=route_obj.id,
+            tenant_id=tenant_id,
+            name=route_obj.name,
+            isa_sender_id=route_obj.isa_sender_id,
+            isa_receiver_id=route_obj.isa_receiver_id,
+            active=route_obj.active,
+            created_at=route_obj.created_at,
+            updated_at=route_obj.updated_at,
+            trading_partner_id=route_obj.trading_partner_id,
+            gs_sender_id=route_obj.gs_sender_id,
+            gs_receiver_id=route_obj.gs_receiver_id,
+            transaction_type=route_obj.transaction_type,
+            webhook_id=str(route_obj.webhook_id) if route_obj.webhook_id else None,
+            as2_partner_id=str(route_obj.as2_partner_id) if route_obj.as2_partner_id else None,
+            sftp_partner_id=str(route_obj.sftp_partner_id) if route_obj.sftp_partner_id else None,
+        )
 
     async def update_inbound_route(
         self,
@@ -75,7 +96,7 @@ class InboundRouteService:
             )
         return res
 
-    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteListEntity]:
+    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
         inbound = await self.uow.inbound_routes.list_inbound_routes(tenant_id)
 
         as2_ids: set[str] = set()
@@ -102,7 +123,7 @@ class InboundRouteService:
         )
         webhook_names: dict[str, str] = {}
 
-        results: list[InboundRouteListEntity] = []
+        results: list[InboundRouteDomainModel] = []
 
         def _resolve_destination(r: InboundRouteDomainModel) -> tuple[ConnectionType | str, str]:
             if r.as2_partner_id:
@@ -118,25 +139,27 @@ class InboundRouteService:
             return "UNKNOWN", "Unknown"
 
         for r in inbound:
-            dest_type, dest_name = _resolve_destination(r)
+            _dest_type, _dest_name = _resolve_destination(r)
 
             results.append(
-                InboundRouteListEntity(
-                    route_id=r.id,
+                InboundRouteDomainModel(
+                    id=r.id,
+                    tenant_id=tenant_id,
                     name=r.name,
-                    direction=Direction.INBOUND,
-                    trading_partner_id=r.trading_partner_id,
                     isa_sender_id=r.isa_sender_id,
                     isa_receiver_id=r.isa_receiver_id,
+                    active=r.active,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                    trading_partner_id=r.trading_partner_id,
                     gs_sender_id=r.gs_sender_id,
                     gs_receiver_id=r.gs_receiver_id,
                     transaction_type=r.transaction_type,
-                    destination_type=dest_type,
-                    destination_name=dest_name,
                     webhook_id=str(r.webhook_id) if r.webhook_id else None,
-                    as2_partner_id=r.as2_partner_id,
-                    sftp_partner_id=r.sftp_partner_id,
-                    active=r.active,
+                    as2_partner_id=str(r.as2_partner_id) if r.as2_partner_id else None,
+                    sftp_partner_id=str(r.sftp_partner_id) if r.sftp_partner_id else None,
+                    direction="INBOUND",
+                    destination_name=_dest_name,
                 )
             )
 
