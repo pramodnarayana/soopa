@@ -53,10 +53,10 @@ class UpdateAS2TradingPartnerCmd:
     name: str | UnsetType = UNSET
     as2_id: str | UnsetType = UNSET
     is_local: bool | UnsetType = UNSET
-    url: str | None | UnsetType = UNSET
-    public_cert_pem: str | None | UnsetType = UNSET
-    public_cert_vault_ref: str | None | UnsetType = UNSET
-    private_key_vault_ref: str | None | UnsetType = UNSET
+    url: str | UnsetType | None = UNSET
+    public_cert_pem: str | UnsetType | None = UNSET
+    public_cert_vault_ref: str | UnsetType | None = UNSET
+    private_key_vault_ref: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -87,14 +87,14 @@ class CreateAS2PartnershipCmd:
 @dataclass(frozen=True)
 class UpdateAS2PartnershipCmd:
     name: str | UnsetType = UNSET
-    local_url: str | None | UnsetType = UNSET
-    remote_url: str | None | UnsetType = UNSET
-    credentials_vault_ref: str | None | UnsetType = UNSET
+    local_url: str | UnsetType | None = UNSET
+    remote_url: str | UnsetType | None = UNSET
+    credentials_vault_ref: str | UnsetType | None = UNSET
     mdn_type: str | UnsetType = UNSET
-    mdn_url: str | None | UnsetType = UNSET
+    mdn_url: str | UnsetType | None = UNSET
     encryption_algorithm: str | UnsetType = UNSET
     signature_algorithm: str | UnsetType = UNSET
-    advanced_flags: dict[str, Any] | None | UnsetType = UNSET
+    advanced_flags: dict[str, Any] | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -115,11 +115,11 @@ class UpdateSFTPPartnerCmd:
     name: str | UnsetType = UNSET
     host: str | UnsetType = UNSET
     username: str | UnsetType = UNSET
-    password: str | None | UnsetType = UNSET
+    password: str | UnsetType | None = UNSET
     credentials_vault_ref: str | UnsetType = UNSET
     port: int | UnsetType = UNSET
-    inbound_remote_path: str | None | UnsetType = UNSET
-    outbound_remote_path: str | None | UnsetType = UNSET
+    inbound_remote_path: str | UnsetType | None = UNSET
+    outbound_remote_path: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
 
 
@@ -155,11 +155,11 @@ class UpdateInboundRouteCmd:
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET
-    webhook_id: str | None | UnsetType = UNSET
-    as2_partner_id: str | None | UnsetType = UNSET
-    sftp_partner_id: str | None | UnsetType = UNSET
+    webhook_id: str | UnsetType | None = UNSET
+    as2_partner_id: str | UnsetType | None = UNSET
+    sftp_partner_id: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
-    name: str | None | UnsetType = UNSET
+    name: str | UnsetType | None = UNSET
     trading_partner_id: str | UnsetType = UNSET
     gs_sender_id: str | UnsetType = UNSET
     gs_receiver_id: str | UnsetType = UNSET
@@ -183,12 +183,12 @@ class UpdateOutboundRouteCmd:
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
     transaction_type: str | UnsetType = UNSET
-    as2_partner_id: str | None | UnsetType = UNSET
-    sftp_partner_id: str | None | UnsetType = UNSET
+    as2_partner_id: str | UnsetType | None = UNSET
+    sftp_partner_id: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
-    name: str | None | UnsetType = UNSET
-    protocol: str | None | UnsetType = UNSET
-    trading_partner_id: str | None | UnsetType = UNSET
+    name: str | UnsetType | None = UNSET
+    protocol: str | UnsetType | None = UNSET
+    trading_partner_id: str | UnsetType | None = UNSET
 
 
 # ---------------------------------------------------------------------------
@@ -216,14 +216,14 @@ class UpdateOutboundEdiHeaderCmd:
     trading_partner_id: str | UnsetType = UNSET
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
-    name: str | None | UnsetType = UNSET
-    isa_sender_qualifier: str | None | UnsetType = UNSET
-    isa_receiver_qualifier: str | None | UnsetType = UNSET
-    gs_sender_id: str | None | UnsetType = UNSET
-    gs_receiver_id: str | None | UnsetType = UNSET
-    transaction_type: str | None | UnsetType = UNSET
-    default_standard: str | None | UnsetType = UNSET
-    default_version: str | None | UnsetType = UNSET
+    name: str | UnsetType | None = UNSET
+    isa_sender_qualifier: str | UnsetType | None = UNSET
+    isa_receiver_qualifier: str | UnsetType | None = UNSET
+    gs_sender_id: str | UnsetType | None = UNSET
+    gs_receiver_id: str | UnsetType | None = UNSET
+    transaction_type: str | UnsetType | None = UNSET
+    default_standard: str | UnsetType | None = UNSET
+    default_version: str | UnsetType | None = UNSET
 
 
 @dataclass(kw_only=True)
