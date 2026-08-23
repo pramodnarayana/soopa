@@ -273,3 +273,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The core EDI processing engine (`apps/edi/packages/edi/src/edi/core/bots`) is a vendored legacy codebase that heavily utilizes `noqa` directives and is explicitly excluded from strict typechecking (`mypy`) to prevent CI failures. While this allowed us to stabilize the modern architecture around it, the engine itself remains a black box of untyped Python, making future maintenance and bug-fixing hazardous.
 - **Action Item**: Incrementally remove `noqa` directives and fix underlying linting violations. Introduce strict type hints across the entire BOTS engine domain models, parsers, and grammar files. Once fully typed, remove the `src/edi/core/bots` and `src/edi/core/grammar` exclusions from the `[tool.mypy]` config to enforce enterprise-grade strict typing across the entire pipeline.
+
+## [Architecture Cleanup] Replace Legacy `endesive` S/MIME Implementation with `cryptography`
+
+- **Date Added**: 2026-08-24
+- **Status**: TO DO
+- **Description**: The AS2 module currently uses `endesive` for S/MIME signature verification and encryption/decryption of EDI data (`src/edi/adapters/outbound/security/smime.py`). While `endesive` provides high-level wrappers for S/MIME, it pulls in heavy, unwanted C-extension dependencies like `PyKCS11` (for HSMs) which caused Docker/CI build failures and required us to inject a dummy package to bypass. The team previously attempted to use the native `cryptography` library directly but faced challenges with standardizing the complex ASN.1 PKCS#7/CMS structures and MIME multipart construction for EDI payloads.
+- **Action Item**: Research and implement a pure `cryptography`-based solution for S/MIME AS2 signing/encryption that doesn't rely on `endesive`. Once the native `cryptography` implementation is proven to cleanly handle AS2 EDI payloads, deprecate `endesive`, remove the `dummy-pykcs11` build override, and clean up the dependencies.
