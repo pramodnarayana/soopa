@@ -2,8 +2,8 @@ import contextlib
 from typing import Any
 
 import structlog
-from domain.models import ConnectionType, Direction
 
+from edi.domain.models import ConnectionType, Direction
 from edi.ports.outbound.routing_resolver_repository import RoutingResolverRepositoryPort
 
 logger = structlog.get_logger(__name__)

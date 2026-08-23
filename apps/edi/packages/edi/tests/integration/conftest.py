@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from database.models.data_plane import TenantBase
 
 # Assuming Alembic is used for migrations. We can run it programmatically.
 # Or we can just use BaseModel.metadata.create_all(bind=engine) for tests.
@@ -18,6 +17,8 @@ from platform_orm.models.core import GlobalRegistry
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
+
+from edi.adapters.outbound.database.models.data_plane import TenantBase
 
 
 @pytest.fixture(scope="session")

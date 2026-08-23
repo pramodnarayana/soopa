@@ -254,3 +254,29 @@ The taxonomy drifted organically as different engineers built different bounded 
   - **Layer 1 (Container Orchestration Probes):** Ensure all background workers (SQS/Postgres listeners) run isolated HTTP liveness/readiness ports (e.g., `9090`) to allow orchestrators like ECS/Kubernetes to auto-heal frozen containers.
   - **Layer 2 (Infrastructure Metrics & Scaling):** Ensure all queues and databases emit metrics to CloudWatch/Datadog to drive Horizontal Pod Autoscaling (HPA) or Target Tracking rules.
   - **Layer 3 (APM & Distributed Tracing):** Activate full OpenTelemetry auto-instrumentation (`opentelemetry-instrumentation-fastapi`, `-sqlalchemy`, `-boto3`) to silently intercept database timings and inject OTel context into SQS headers. Ensure the manual business `trace_id` is bridged by tagging the OTel spans (`span.set_attribute("business.trace_id", manual_id)`), allowing seamless pivot from customer support tickets to technical flame graphs.
+
+## [Architecture Enforcement] Strict DTO / Command Object Boundary Standardization
+
+- **Date Added**: 2026-08-23
+- **Description**: The `edi` bounded context has established a strict, true enterprise-grade boundary using pure `@dataclass(frozen=True)` Command Objects (DTOs) in `application/dto.py`. However, other bounded contexts (like `identity`, `billing`, `ucp`) are currently suffering from dual-architectures, where web-specific frameworks (like FastAPI / Pydantic models) leak directly into core application logic. This violates Hexagonal Architecture and CQRS best practices.
+- **Action Item**: Standardize the DTO / Command Object pattern across all bounded contexts in the monorepo. Every module must define a pure `application/dto.py` boundary for mutations (Commands) and reads (Queries), completely decoupling the business logic from HTTP adapters and 3rd-party validation frameworks like Pydantic.
+
+## [Architecture Cleanup] Aggressive Cleanup of Legacy `bots` Engine Django Settings
+
+- **Date Added**: 2026-08-23
+- **Description**: The original `bots` EDI engine relied on a Django backend for configuration management (`botsinit`, `bots.ini`, and `settings.py`). In the modern architecture, the configuration is injected externally, and Django has been entirely removed from the data plane. Currently, `apps/edi/packages/edi/src/edi/core/bots/config/defaults/settings.py` is being kept alive by a `NullConfigProvider` / `LegacySettingsAdapter` stub to prevent `ImportError` cascades deep within the legacy X12/EDIFACT parsing logic.
+- **Action Item**: Identify all legacy modules importing `edi.core.bots.config.defaults.settings`. Refactor the parsing logic to accept injected configuration objects (or remove the dependency entirely if the settings are unused). Delete `settings.py` and the `LegacySettingsAdapter` entirely.
+
+## [Strict Typing/Linting] Complete Overhaul of Vendored BOTS Engine
+
+- **Date Added**: 2026-08-23
+- **Status**: TO DO
+- **Description**: The core EDI processing engine (`apps/edi/packages/edi/src/edi/core/bots`) is a vendored legacy codebase that heavily utilizes `noqa` directives and is explicitly excluded from strict typechecking (`mypy`) to prevent CI failures. While this allowed us to stabilize the modern architecture around it, the engine itself remains a black box of untyped Python, making future maintenance and bug-fixing hazardous.
+- **Action Item**: Incrementally remove `noqa` directives and fix underlying linting violations. Introduce strict type hints across the entire BOTS engine domain models, parsers, and grammar files. Once fully typed, remove the `src/edi/core/bots` and `src/edi/core/grammar` exclusions from the `[tool.mypy]` config to enforce enterprise-grade strict typing across the entire pipeline.
+
+## [Architecture Cleanup] Replace Legacy `endesive` S/MIME Implementation with `cryptography`
+
+- **Date Added**: 2026-08-24
+- **Status**: TO DO
+- **Description**: The AS2 module currently uses `endesive` for S/MIME signature verification and encryption/decryption of EDI data (`src/edi/adapters/outbound/security/smime.py`). While `endesive` provides high-level wrappers for S/MIME, it pulls in heavy, unwanted C-extension dependencies like `PyKCS11` (for HSMs) which caused Docker/CI build failures and required us to inject a dummy package to bypass. The team previously attempted to use the native `cryptography` library directly but faced challenges with standardizing the complex ASN.1 PKCS#7/CMS structures and MIME multipart construction for EDI payloads.
+- **Action Item**: Research and implement a pure `cryptography`-based solution for S/MIME AS2 signing/encryption that doesn't rely on `endesive`. Once the native `cryptography` implementation is proven to cleanly handle AS2 EDI payloads, deprecate `endesive`, remove the `dummy-pykcs11` build override, and clean up the dependencies.

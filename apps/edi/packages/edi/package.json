@@ -4,7 +4,7 @@
   "scripts": {
     "lint": "uv run ruff check .",
     "format": "uv run ruff format . && uv run ruff check --fix .",
-    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases .",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src tests",
     "test": "uv run pytest -m \"not integration\"",
     "deadcode:deptry": "uv run deptry ."
   }

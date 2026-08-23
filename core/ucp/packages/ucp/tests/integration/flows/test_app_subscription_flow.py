@@ -39,7 +39,7 @@ async def test_app_subscription_flow(
     postgres_container,
 ) -> None:
     # 1. Setup Ports
-    outbox_repo = PostgresOutboxRepository(lambda: db_session)  # type: ignore
+    outbox_repo = PostgresOutboxRepository(lambda: db_session)
     sns_publisher = UcpSnsOutboxPublisher(
         topic_arn=localstack_container["sns_topic_arn"],
         endpoint_url=localstack_container["endpoint_url"],

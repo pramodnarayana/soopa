@@ -3,15 +3,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from as2_core import (
+from edi.adapters.inbound.as2 import (
     AS2MDN,
     AS2Message,
     Disposition,
     generate_mdn,
 )
+from edi.adapters.outbound.security import decrypt_payload, verify_signature
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
-from security import decrypt_payload, verify_signature
 
 from ..ports.outbound.repository_port import (
     AS2TenantRepositoryPort,

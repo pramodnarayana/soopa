@@ -3,12 +3,12 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.use_cases.edi_header_service import EdiHeaderService
-from edi.domain.models import (
+from edi.application.dto import (
     UNSET,
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
 )
+from edi.application.use_cases.edi_header_service import EdiHeaderService
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 

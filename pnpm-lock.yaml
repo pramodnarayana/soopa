@@ -93,31 +93,11 @@ importers:
 
   apps/edi/apps/edi-as2-server: {}
 
-  apps/edi/apps/edi-worker/compute: {}
+  apps/edi/apps/edi-compute-worker: {}
 
-  apps/edi/apps/edi-worker/orchestrator: {}
-
-  apps/edi/packages/as2_core: {}
-
-  apps/edi/packages/bots_core: {}
-
-  apps/edi/packages/config: {}
-
-  apps/edi/packages/database: {}
-
-  apps/edi/packages/domain: {}
+  apps/edi/apps/edi-orchestrator-worker: {}
 
   apps/edi/packages/edi: {}
-
-  apps/edi/packages/grammar: {}
-
-  apps/edi/packages/patches: {}
-
-  apps/edi/packages/pipeline: {}
-
-  apps/edi/packages/security: {}
-
-  apps/edi/packages/transformer: {}
 
   apps/edi/packages/ui:
     dependencies:

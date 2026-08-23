@@ -4,6 +4,8 @@ These Pydantic models are the API contract — they live at the HTTP boundary an
 must NOT be imported from the Application or Domain layers.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -27,7 +29,7 @@ class UpdateUserRequest(BaseModel):
 class ToggleUserStatusRequest(BaseModel):
     """Request body for PATCH /tenants/{tenant_id}/users/{user_id}/status."""
 
-    action: str = Field(..., pattern="^(activate|deactivate)$")
+    action: Literal["activate", "deactivate"]
 
 
 class UserResponse(BaseModel):

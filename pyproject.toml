@@ -12,6 +12,9 @@ dependencies = [
     "jsonpath-ng>=1.8.0",
 ]
 
+[tool.uv]
+override-dependencies = ["pykcs11"]
+
 [tool.uv.workspace]
 members = [
     "core/platform/packages/*/python",
@@ -24,22 +27,26 @@ members = [
     "core/ucp/apps/ucp-worker",
     "apps/edi/packages/edi",
     "apps/edi/apps/edi-as2-server",
-    "apps/edi/apps/edi-worker/*",
-    "apps/edi/packages/*",
+    "apps/edi/apps/edi-orchestrator-worker",
+    "apps/edi/apps/edi-compute-worker",
     "core/platform/apps/scheduler-worker",
     "core/platform/packages/scheduler",
     "core/platform/packages/notification",
     "core/platform/apps/notification-worker",
     "core/platform/apps/unified-api",
+    "apps/edi/apps/edi-secrets-sidecar",
 ]
 exclude = ["apps/edi/packages/ui"]
+
+[tool.uv.sources]
+pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 norecursedirs = ["node_modules", "frontend"]
 
 
-addopts = "-v --tb=short --ignore=services/worker --ignore=apps/edi/packages/transformer/tests/test_worker.py --ignore=apps/edi/packages/transformer/scripts"
+addopts = "-v --tb=short --ignore=services/worker"
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
 ]
@@ -59,6 +66,7 @@ dev = [
     "vulture>=2.16",
     "deptry>=0.25.1",
     "pip-audit>=2.10.1",
+    "types-paramiko>=3.3.0",
 ]
 
 [tool.mypy]
@@ -80,18 +88,8 @@ mypy_path = [
     "core/ucp/packages/ucp/src",
     "core/ucp/packages/models/src",
     "apps/edi/packages/edi/src",
-    "apps/edi/packages/database/src",
-    "apps/edi/packages/pipeline/src",
-    "apps/edi/packages/grammar/src",
-    "apps/edi/packages/config/src",
-    "apps/edi/packages/security/src",
-    "apps/edi/packages/patches/src",
-    "apps/edi/packages/transformer/src",
-    "apps/edi/packages/as2_core/src",
-    "apps/edi/packages/bots_core/src",
-    "apps/edi/packages/domain/src",
-    "apps/edi/apps/edi-worker/compute/src",
-    "apps/edi/apps/edi-worker/orchestrator/src",
+    "apps/edi/apps/edi-compute-worker/src",
+    "apps/edi/apps/edi-orchestrator-worker/src",
     "apps/edi/apps/edi-as2-server/src",
 ]
 
@@ -141,12 +139,12 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
 
 "apps/edi/apps/edi-as2-server/tests/conftest.py" = ["S603", "S607"]
-"apps/edi/packages/bots_core/src/bots_core/domain/exceptions.py" = ["S112"]
 # Legacy BOTS engine formatting ignores
-"apps/edi/packages/bots_core/src/bots_core/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM102", "F841", "F821", "UP038", "F405", "BLE", "TRY", "C901"]
-"apps/edi/packages/bots_core/src/bots_core/utils/*" = ["UP031", "SIM113", "SIM102", "E402", "F821", "F841", "UP038", "F405", "BLE", "TRY", "S314", "C901"]
-"apps/edi/packages/bots_core/src/bots_core/facade.py" = ["BLE", "TRY", "C901"]
-"apps/edi/packages/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/parsers/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/utils/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/facade.py" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -178,8 +176,8 @@ omit = [
     # AS2 server main (ASGI lifespan wiring — integration only)
     "apps/edi/apps/edi-as2-server/src/as2_server/main.py",
     # Transformer worker entrypoint (subprocess runner, not business logic)
-    "apps/edi/apps/edi-worker/compute/src/compute_worker/worker.py",
-    "apps/edi/apps/edi-worker/compute/src/compute_worker/main.py",
+    "apps/edi/apps/edi-compute-worker/src/compute_worker/worker.py",
+    "apps/edi/apps/edi-compute-worker/src/compute_worker/main.py",
 ]
 
 [tool.coverage.report]
@@ -188,26 +186,15 @@ show_missing = true
 fail_under = 80
 
 [tool.pyright]
-ignore = ["apps/edi/packages/grammar", "**/migrations"]
+ignore = ["apps/edi/packages/edi/src/edi/core/grammar", "**/migrations"]
 venvPath = "."
 venv = ".venv"
 extraPaths = [
     "core/platform/packages/identity/src",
     "core/platform/packages/observability/src",
     "core/platform/packages/schemas/python/src",
-    "apps/edi/packages/database/src",
-    "apps/edi/packages/pipeline/src",
-    "apps/edi/packages/grammar/src",
-    "apps/edi/packages/config/src",
-    "apps/edi/packages/security/src",
-    "apps/edi/packages/patches/src",
-    "apps/edi/packages/transformer/src",
-    "apps/edi/packages/as2_core/src",
-    "apps/edi/packages/bots_core/src",
-    "apps/edi/packages/domain/src",
-    "apps/edi/apps/edi-worker/compute/src",
-    "apps/edi/apps/edi-worker/ucp-sync/src",
-    "apps/edi/apps/edi-worker/orchestrator/src",
+    "apps/edi/apps/edi-compute-worker/src",
+    "apps/edi/apps/edi-orchestrator-worker/src",
     "apps/edi/apps/edi-as2-server/src",
     "apps/edi/packages/edi/src",
 ]

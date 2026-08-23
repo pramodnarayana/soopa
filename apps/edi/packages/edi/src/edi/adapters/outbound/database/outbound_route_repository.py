@@ -1,20 +1,23 @@
 from datetime import UTC, datetime
+from uuid import UUID
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import (
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+from sqlalchemy import select, update
+
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     OutboundRoute,
     SFTPPartner,
 )
-from domain.models import OutboundRouteDomainModel
-from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import select, update
-
-from edi.domain.models import (
+from edi.application.dto import (
     UNSET,
     CreateOutboundRouteCmd,
     UnsetType,
     UpdateOutboundRouteCmd,
+)
+from edi.domain.models import (
+    OutboundRouteDomainModel,
 )
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 
@@ -33,7 +36,13 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         )
         res = await self.session.execute(stmt)
         record = res.scalar_one_or_none()
-        return OutboundRouteDomainModel.model_validate(record) if record else None
+        return (
+            OutboundRouteDomainModel(
+                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            )
+            if record
+            else None
+        )
 
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
@@ -46,12 +55,23 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             )
         )
         record = result.scalar_one_or_none()
-        return OutboundRouteDomainModel.model_validate(record) if record else None
+        return (
+            OutboundRouteDomainModel(
+                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            )
+            if record
+            else None
+        )
 
     async def _validate_outbound_destination(
-        self, tenant_id: str, as2_id: str | None, sftp_id: str | None
+        self,
+        tenant_id: str,
+        as2_id: str | UUID | UnsetType | None,
+        sftp_id: str | UUID | UnsetType | None,
     ) -> None:
-        destinations = [d for d in (as2_id, sftp_id) if d is not None]
+        destinations = [
+            d for d in (as2_id, sftp_id) if d is not None and not isinstance(d, UnsetType)
+        ]
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (as2 or sftp) must be provided")
 
@@ -117,9 +137,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             record_route.name = cmd.name
 
         if not isinstance(cmd.as2_partner_id, UnsetType):
-            record_route.as2_partner_id = cmd.as2_partner_id
+            record_route.as2_partner_id = str(cmd.as2_partner_id) if cmd.as2_partner_id else None
         if not isinstance(cmd.sftp_partner_id, UnsetType):
-            record_route.sftp_partner_id = cmd.sftp_partner_id
+            record_route.sftp_partner_id = str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None
         if not isinstance(cmd.active, UnsetType):
             record_route.active = cmd.active
 
@@ -149,4 +169,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                 OutboundRoute.tenant_id == tenant_id, OutboundRoute.deleted_at.is_(None)
             )
         )
-        return [OutboundRouteDomainModel.model_validate(r) for r in outbound_result.scalars().all()]
+        return [
+            OutboundRouteDomainModel(
+                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
+            )
+            for r in outbound_result.scalars().all()
+        ]

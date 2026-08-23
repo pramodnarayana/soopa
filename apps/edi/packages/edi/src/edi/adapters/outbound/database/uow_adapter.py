@@ -58,7 +58,7 @@ class SqlAlchemyControlPlaneUnitOfWork:
         self.global_session = global_session
         from typing import cast
 
-        from database.base_repository import GlobalSession
+        from edi.adapters.outbound.database.base_repository import GlobalSession
 
         gs = cast(GlobalSession, global_session)
 
@@ -111,7 +111,7 @@ class SqlAlchemyDataPlaneUnitOfWork:
         self.tenant_session = tenant_session
         from typing import cast
 
-        from database.base_repository import TenantSession
+        from edi.adapters.outbound.database.base_repository import TenantSession
 
         ts = cast(TenantSession, tenant_session)
 

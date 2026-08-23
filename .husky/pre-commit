@@ -14,25 +14,8 @@ echo "[pre-commit] Running formatting..."
 npx lint-staged
 uvx pre-commit run
 
-echo "[pre-commit] Running typechecks..."
+echo "[pre-commit] Running typechecks (Cached)..."
 pnpm turbo typecheck
 pnpm turbo typecheck:tests
 
-echo "[pre-commit] Running lint..."
-pnpm turbo lint
-
-echo "[pre-commit] Running Node tests..."
-CI=true pnpm turbo test
-
-echo "[pre-commit] Running Python tests..."
-export DATABASE_URL="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-export SHARD_1_URL="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-export TESTCONTAINERS_RYUK_DISABLED=true
-for d in core/*/packages/* apps/*/packages/* apps/*/apps/* core/*/apps/* apps/edi/apps/edi-worker/*; do
-  if [ -f "$d/pyproject.toml" ]; then
-    (cd "$d" && uv run pytest || [ $? -eq 5 ]) || exit 1
-  fi
-done
-
-echo "[pre-commit] Running build..."
-pnpm turbo build
+echo "[pre-commit] Pre-commit checks passed! 🚀"

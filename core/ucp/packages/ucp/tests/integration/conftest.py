@@ -24,7 +24,7 @@ from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 from unified_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
-from unified_api.main import app  # type: ignore
+from unified_api.main import app
 
 from ucp.bootstrap.dependencies import (
     get_db_session,
@@ -164,7 +164,7 @@ def localstack_container(request) -> "Any":
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_engine(postgres_container) -> "Any":  # type: ignore
+async def db_engine(postgres_container) -> "Any":
     db_url = postgres_container.get_connection_url().replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
@@ -210,7 +210,7 @@ async def db_engine(postgres_container) -> "Any":  # type: ignore
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(db_engine) -> "Any":  # type: ignore
+async def db_session(db_engine) -> "Any":
     SessionLocal = async_sessionmaker(bind=db_engine, expire_on_commit=False, class_=AsyncSession)
     session = SessionLocal()
     yield session
@@ -218,7 +218,7 @@ async def db_session(db_engine) -> "Any":  # type: ignore
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session, monkeypatch) -> "Any":  # type: ignore
+async def client(db_session, monkeypatch) -> "Any":
     async def override_get_db_session() -> "Any":
         yield db_session
 

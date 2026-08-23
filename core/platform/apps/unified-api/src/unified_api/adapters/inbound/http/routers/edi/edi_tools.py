@@ -2,11 +2,11 @@ import asyncio
 import json
 
 import structlog
+from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
+from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 from edi.domain.exceptions import OrchestrationError
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from transformer.domain.exceptions import TransformationError
-from transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 
 logger = structlog.get_logger(__name__)
 

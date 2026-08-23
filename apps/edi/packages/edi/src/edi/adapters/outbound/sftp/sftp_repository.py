@@ -1,17 +1,19 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.encryption import db_encryption
-from database.models.control_plane import (
-    SFTPPartner,
-)
-from domain.models import SFTPPartnerDomainModel
 from sqlalchemy import select, update
 
-from edi.domain.models import (
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.encryption import db_encryption
+from edi.adapters.outbound.database.models.control_plane import (
+    SFTPPartner,
+)
+from edi.application.dto import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
+)
+from edi.domain.models import (
+    SFTPPartnerDomainModel,
 )
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 
@@ -36,9 +38,9 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
             outbound_remote_path=cmd.outbound_remote_path
             if hasattr(cmd, "outbound_remote_path")
             else None,
-            password_encrypted=db_encryption.encrypt(cmd.password) if cmd.password else None,
+            password_encrypted=None,
             credentials_vault_ref=cmd.credentials_vault_ref,
-            host_key=cmd.host_key,
+            host_key=None,
             active=False,
         )
         self.session.add(record)
@@ -56,7 +58,17 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
             )
         )
         record = result.scalar_one_or_none()
-        return SFTPPartnerDomainModel.model_validate(record) if record else None
+        return (
+            SFTPPartnerDomainModel(
+                **{
+                    k: v
+                    for k, v in record.__dict__.items()
+                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                }
+            )
+            if record
+            else None
+        )
 
     async def list_sftp_partners(self, tenant_id: str) -> Sequence[SFTPPartnerDomainModel]:
         result = await self.session.execute(
@@ -64,7 +76,16 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
                 SFTPPartner.tenant_id == tenant_id, SFTPPartner.deleted_at.is_(None)
             )
         )
-        return [SFTPPartnerDomainModel.model_validate(r) for r in result.scalars().all()]
+        return [
+            SFTPPartnerDomainModel(
+                **{
+                    k: v
+                    for k, v in r.__dict__.items()
+                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                }
+            )
+            for r in result.scalars().all()
+        ]
 
     async def update_sftp_partner(
         self, tenant_id: str, partner_id: str, cmd: UpdateSFTPPartnerCmd
@@ -80,7 +101,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         if partner:
             import dataclasses
 
-            from edi.domain.models import UNSET
+            from edi.application.dto import UNSET
 
             update_data = {
                 f.name: getattr(cmd, f.name)

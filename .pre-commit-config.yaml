@@ -22,8 +22,8 @@ repos:
     rev: v2.2.6
     hooks:
       - id: codespell
-        args: [--ignore-words-list, "aer,contrl,datas"]
-        exclude: '^(apps/edi/packages/grammar/|apps/edi/packages/bots_core/|pnpm-lock\.yaml|.*\.json$)'
+        args: [--ignore-words-list, "aer,contrl,datas,gir,fpt,ptd,ded,lod,mis,ser,som"]
+        exclude: '^(apps/edi/packages/edi/src/edi/core/grammar/|apps/edi/packages/edi/src/edi/core/bots/|pnpm-lock\.yaml|.*\.json$)'
         additional_dependencies:
           - tomli
 
@@ -41,14 +41,14 @@ repos:
         entry: uv run ruff check --fix
         language: system
         types_or: [python, pyi]
-        exclude: ^libs/edi_grammar/
+        exclude: ^(libs/edi_grammar/|apps/edi/packages/edi/src/edi/core/grammar/)
         require_serial: true
       - id: ruff-format
         name: ruff-format
         entry: uv run ruff format
         language: system
         types_or: [python, pyi]
-        exclude: ^libs/edi_grammar/
+        exclude: ^(libs/edi_grammar/|apps/edi/packages/edi/src/edi/core/grammar/)
         require_serial: true
       - id: mypy
         name: mypy

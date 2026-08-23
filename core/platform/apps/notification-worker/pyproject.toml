@@ -6,14 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "notification",
-    "config",
     "aioboto3",
     "structlog",
 ]
 
 [tool.uv.sources]
 notification = { workspace = true }
-config = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -42,7 +40,6 @@ venvPath = "../../../.."
 venv = ".venv"
 extraPaths = [
     "../../packages/notification/src",
-    "../../../platform/packages/config/src",
     "src",
 ]
 

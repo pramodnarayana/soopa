@@ -63,7 +63,7 @@ class UserRepository(UserRepositoryPort):
                     updated_at=db_user.updated_at.replace(tzinfo=UTC),
                 )
                 # Enforce a canonical role (alphabetically first) when multiple exist
-                u.role = role  # type: ignore
+                u.role = role
                 users_by_id[db_user.id] = u
 
         return list(users_by_id.values())
@@ -156,7 +156,7 @@ class UserRepository(UserRepositoryPort):
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )
-        u.role = role  # type: ignore
+        u.role = role
         return u
 
     async def delete(self, user: User) -> None:

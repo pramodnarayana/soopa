@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Annotated, Any, Literal, cast
 
 import structlog
@@ -65,13 +66,15 @@ class PaginatedTenantsResponse(BaseModel):
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
-async def find_all(  # type: ignore
+async def find_all(
     request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     limit: int = Query(50, ge=1, le=1000, description="Items per page"),
     session: AsyncSession = Depends(get_db_session),
-    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
-):
+    query_service_factory: Callable[..., TenantQueryServicePort] = Depends(
+        Provide[Container.tenant_query_service.provider]
+    ),
+) -> PaginatedTenantsResponse:
     query_service: TenantQueryServicePort = query_service_factory(session=session)
     paginated = await query_service.get_all_tenants(page=page, limit=limit)
     return PaginatedTenantsResponse(
@@ -84,10 +87,10 @@ async def find_all(  # type: ignore
 
 @router.get("/roles", dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))])
 @inject
-async def get_roles(  # type: ignore
+async def get_roles(
     request: Request,
     project_provider: ProjectProviderPort = Depends(Provide[Container.project_provider]),
-):
+) -> list[Any]:
     roles = await project_provider.get_roles()
     tenant_group = get_settings().zitadel_tenant_role_group
     return [role for role in roles if role.group == tenant_group]
@@ -97,7 +100,9 @@ async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> "Tenant"
     tenant = await tenant_repo.find_by_id(id)
     if not tenant:
         tenant = await tenant_repo.find_by_idp_tenant_id(id)
-    return tenant  # type: ignore
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return tenant
 
 
 @router.get(
@@ -106,12 +111,14 @@ async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> "Tenant"
     dependencies=[Depends(RequireCapability(Capability.TENANT_SETTINGS_READ))],
 )
 @inject
-async def find_one(  # type: ignore
+async def find_one(
     tenant_id: str,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
-    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
-):
+    query_service_factory: Callable[..., TenantQueryServicePort] = Depends(
+        Provide[Container.tenant_query_service.provider]
+    ),
+) -> TenantResponse:
     query_service: TenantQueryServicePort = query_service_factory(session=session)
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     if not tenant_rm:
@@ -125,14 +132,18 @@ async def find_one(  # type: ignore
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
-async def provision(  # type: ignore
+async def provision(
     request: Request,
     dto: ProvisionTenantRequest,
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.provision_tenant_use_case.provider]),
-    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
-):
+    use_case_factory: Callable[..., ProvisionTenantUseCase] = Depends(
+        Provide[Container.provision_tenant_use_case.provider]
+    ),
+    query_service_factory: Callable[..., TenantQueryServicePort] = Depends(
+        Provide[Container.tenant_query_service.provider]
+    ),
+) -> TenantResponse:
     use_case: ProvisionTenantUseCase = use_case_factory(uow__session=session)
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
@@ -160,15 +171,19 @@ async def provision(  # type: ignore
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
-async def update_name(  # type: ignore
+async def update_name(
     request: Request,
     tenant_id: str,
     dto: UpdateTenantNameRequest,
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.update_tenant_name_use_case.provider]),
-    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
-):
+    use_case_factory: Callable[..., UpdateTenantNameUseCase] = Depends(
+        Provide[Container.update_tenant_name_use_case.provider]
+    ),
+    query_service_factory: Callable[..., TenantQueryServicePort] = Depends(
+        Provide[Container.tenant_query_service.provider]
+    ),
+) -> TenantResponse:
     use_case: UpdateTenantNameUseCase = use_case_factory(uow__session=session)
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
@@ -186,15 +201,19 @@ async def update_name(  # type: ignore
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
-async def update_status(  # type: ignore
+async def update_status(
     request: Request,
     tenant_id: str,
     dto: UpdateTenantStatusRequest,
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    use_case_factory=Depends(Provide[Container.toggle_tenant_status_use_case.provider]),
-    query_service_factory=Depends(Provide[Container.tenant_query_service.provider]),
-):
+    use_case_factory: Callable[..., ToggleTenantStatusUseCase] = Depends(
+        Provide[Container.toggle_tenant_status_use_case.provider]
+    ),
+    query_service_factory: Callable[..., TenantQueryServicePort] = Depends(
+        Provide[Container.tenant_query_service.provider]
+    ),
+) -> TenantResponse:
     use_case: ToggleTenantStatusUseCase = use_case_factory(uow__session=session)
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
@@ -214,14 +233,18 @@ async def update_status(  # type: ignore
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
-async def remove(  # type: ignore
+async def remove(
     request: Request,
     tenant_id: str,
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory=Depends(Provide[Container.tenant_repo.provider]),
-    use_case_factory=Depends(Provide[Container.delete_tenant_use_case.provider]),
-):
+    tenant_repo_factory: Callable[..., TenantRepositoryPort] = Depends(
+        Provide[Container.tenant_repo.provider]
+    ),
+    use_case_factory: Callable[..., DeleteTenantUseCase] = Depends(
+        Provide[Container.delete_tenant_use_case.provider]
+    ),
+) -> None:
     tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
     use_case: DeleteTenantUseCase = use_case_factory(
         uow__session=session,
@@ -231,7 +254,7 @@ async def remove(  # type: ignore
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     await use_case.execute(tenant.id, idempotency_key)
-    return {"success": True}
+    return None
 
 
 class SubscribeAppRequest(BaseModel):

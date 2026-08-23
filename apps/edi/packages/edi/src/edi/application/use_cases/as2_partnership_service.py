@@ -1,11 +1,12 @@
 import structlog
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import ConnectionType, PartnerStatus
 
-from edi.domain.models import (
+from edi.application.dto import (
     CreateAS2PartnershipCmd,
-    PartnerEntity,
     UpdateAS2PartnershipCmd,
+)
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import (
+    AS2PartnershipDomainModel,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
@@ -23,21 +24,23 @@ class AS2PartnershipService:
 
     async def create_as2_partnership(
         self, tenant_id: str, cmd: CreateAS2PartnershipCmd
-    ) -> PartnerEntity:
-        local_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, cmd.local_partner_id)
+    ) -> AS2PartnershipDomainModel:
+        local_partner = await self.uow.as2_partners.get_as2_partner(
+            tenant_id, str(cmd.local_partner_id)
+        )
         if not local_partner:
             raise ValueError(f"Local AS2 partner {cmd.local_partner_id} not found")
 
         remote_partner = await self.uow.as2_partners.get_as2_partner(
-            tenant_id, cmd.remote_partner_id
+            tenant_id, str(cmd.remote_partner_id)
         )
         if not remote_partner:
             raise ValueError(f"Remote AS2 partner {cmd.remote_partner_id} not found")
 
         logger.info(
             "Provisioning AS2 partnership {cmd.local_partner_id} -> {cmd.remote_partner_id}",
-            cmd_local_partner_id=cmd.local_partner_id,
-            cmd_remote_partner_id=cmd.remote_partner_id,
+            cmd_local_id=cmd.local_partner_id,
+            cmd_remote_id=cmd.remote_partner_id,
         )
         partner_id = await self.uow.as2_partnerships.create_as2_partnership(
             tenant_id=tenant_id, cmd=cmd
@@ -50,31 +53,26 @@ class AS2PartnershipService:
             )
         )
 
-        return PartnerEntity(
-            partner_id=partner_id,
+        from datetime import datetime
+
+        return AS2PartnershipDomainModel(
+            id=partner_id,
+            name="New Partnership",
+            local_partner_id=str(cmd.local_partner_id),
+            remote_partner_id=str(cmd.remote_partner_id),
+            mdn_type=cmd.mdn_type,
+            encryption_algorithm=cmd.encryption_algorithm,
+            signature_algorithm=cmd.signature_algorithm,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
             tenant_id=tenant_id,
-            name=cmd.name,
-            type=ConnectionType.AS2,
-            status=PartnerStatus.INACTIVE,
+            active=True,
         )
 
     async def update_as2_partnership(
         self, tenant_id: str, partnership_id: str, cmd: UpdateAS2PartnershipCmd
-    ) -> PartnerEntity:
-        check_ids: list[str] = []
-        if isinstance(cmd.local_partner_id, str):
-            check_ids.append(cmd.local_partner_id)
-        if isinstance(cmd.remote_partner_id, str):
-            check_ids.append(cmd.remote_partner_id)
-
-        if check_ids:
-            valid_partners = await self.uow.as2_partners.get_as2_partners_by_ids(
-                tenant_id, check_ids
-            )
-            if len(valid_partners) != len(check_ids):
-                raise ValueError(
-                    "Invalid local_partner_id or remote_partner_id referenced in update"
-                )
+    ) -> AS2PartnershipDomainModel:
+        # Local and remote partner IDs cannot be updated via UpdateAS2PartnershipCmd
 
         logger.info("Updating AS2 partnership {partnership_id}", partnership_id=partnership_id)
         await self.uow.as2_partnerships.update_as2_partnership(
@@ -91,13 +89,7 @@ class AS2PartnershipService:
         if not updated:
             raise ValueError(f"AS2 partnership {partnership_id} not found")
 
-        return PartnerEntity(
-            partner_id=partnership_id,
-            tenant_id=tenant_id,
-            name=updated.name,
-            type=ConnectionType.AS2,
-            status=PartnerStatus.ACTIVE if updated.active else PartnerStatus.INACTIVE,
-        )
+        return updated
 
     async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         logger.info(

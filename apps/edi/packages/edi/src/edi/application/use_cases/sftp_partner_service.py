@@ -1,12 +1,13 @@
 import structlog
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import ConnectionType, PartnerStatus
 
-from edi.domain.models import (
+from edi.application.dto import (
     UNSET,
     CreateSFTPPartnerCmd,
-    PartnerEntity,
     UpdateSFTPPartnerCmd,
+)
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import (
+    SFTPPartnerDomainModel,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
@@ -23,7 +24,7 @@ class SFTPPartnerService:
 
     async def create_sftp_partner(
         self, tenant_id: str, cmd: CreateSFTPPartnerCmd, idempotency_key: str | None = None
-    ) -> PartnerEntity:
+    ) -> SFTPPartnerDomainModel:
         logger.info(
             "Creating SFTP partner {cmd.name} for tenant {tenant_id}",
             cmd_name=cmd.name,
@@ -39,12 +40,18 @@ class SFTPPartnerService:
             idempotency_key=idempotency_key,
         )
 
-        return PartnerEntity(
-            partner_id=partner_id,
+        from datetime import datetime
+
+        return SFTPPartnerDomainModel(
+            id=partner_id,
             tenant_id=tenant_id,
             name=cmd.name,
-            type=ConnectionType.SFTP,
-            status=PartnerStatus.INACTIVE,
+            host=cmd.host,
+            port=cmd.port,
+            username=cmd.username,
+            active=False,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
         )
 
     async def update_sftp_partner(
@@ -53,7 +60,7 @@ class SFTPPartnerService:
         partner_id: str,
         cmd: UpdateSFTPPartnerCmd,
         idempotency_key: str | None = None,
-    ) -> PartnerEntity:
+    ) -> SFTPPartnerDomainModel:
         logger.info(
             "Updating SFTP partner {partner_id} for tenant {tenant_id}",
             partner_id=partner_id,
@@ -64,7 +71,9 @@ class SFTPPartnerService:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
         has_password = (
-            bool(cmd.password) if cmd.password is not UNSET else bool(existing.password_encrypted)
+            bool(getattr(cmd, "password", None))
+            if getattr(cmd, "password", None) is not UNSET
+            else bool(getattr(existing, "password_encrypted", None))
         )
         has_vault = (
             bool(cmd.credentials_vault_ref)
@@ -94,14 +103,20 @@ class SFTPPartnerService:
         if not updated_partner:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
-        return PartnerEntity(
-            partner_id=partner_id,
+        from datetime import datetime
+
+        return SFTPPartnerDomainModel(
+            id=partner_id,
             tenant_id=tenant_id,
             name=str(cmd.name)
             if (cmd.name is not UNSET and cmd.name)
             else str(updated_partner.name),
-            type=ConnectionType.SFTP,
-            status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
+            host=updated_partner.host,
+            port=updated_partner.port,
+            username=updated_partner.username,
+            active=updated_partner.active,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
         )
 
     async def delete_sftp_partner(

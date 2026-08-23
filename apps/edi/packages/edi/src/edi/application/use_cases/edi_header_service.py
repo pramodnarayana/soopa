@@ -1,12 +1,14 @@
 from collections.abc import Sequence
 
 import structlog
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import OutboundEdiHeaderDomainModel
 
-from edi.domain.models import (
+from edi.application.dto import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
+)
+from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models import (
+    OutboundEdiHeaderDomainModel,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 

@@ -4,11 +4,12 @@ import sys
 import time
 import uuid
 
-import boto3  # type: ignore
+import boto3  # type: ignore[import-untyped]
 import structlog
-from botocore.exceptions import ClientError  # type: ignore
-from config.constants import SecretCategory
-from config.settings import get_settings
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+
+from edi.config.constants import SecretCategory
+from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -99,7 +100,7 @@ class AwsSecretsManagerAdapter:
 
             def _execute() -> bytes:
                 settings = get_settings()
-                from config.constants import SecretCategory
+                from edi.config.constants import SecretCategory
 
                 # Parse vault_ref (e.g. edi/as2_key/1234)
                 parts = vault_ref.split("/")
@@ -198,7 +199,7 @@ class AwsSecretsManagerAdapter:
 
             def _execute() -> None:
                 settings = get_settings()
-                from config.constants import SecretCategory
+                from edi.config.constants import SecretCategory
 
                 # Parse vault_ref
                 parts = vault_ref.split("/")

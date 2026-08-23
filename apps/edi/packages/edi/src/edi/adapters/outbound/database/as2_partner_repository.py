@@ -1,15 +1,20 @@
 from collections.abc import Sequence
 from typing import Any
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import AS2Partner
-from domain.models import AS2PartnerDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import AS2Partner
+from edi.application.dto import (
+    CreateAS2TradingPartnerCmd,
+    UpdateAS2TradingPartnerCmd,
+)
 from edi.domain.exceptions import PartnerAlreadyExistsError, PartnerInUseError
-from edi.domain.models import CreateAS2TradingPartnerCmd, UpdateAS2TradingPartnerCmd
+from edi.domain.models import (
+    AS2PartnerDomainModel,
+)
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 
 
@@ -71,8 +76,15 @@ class SqlAlchemyAS2TradingPartnerRepository(
                 await self.session.flush()
             except IntegrityError as e:
                 if "uq_tenant_as2_id" in _constraint_name(e):
+                    from edi.application.dto import UnsetType
+
+                    as2_id_val = (
+                        cmd.as2_id
+                        if not isinstance(cmd.as2_id, UnsetType) and cmd.as2_id
+                        else partner.as2_id
+                    )
                     raise PartnerAlreadyExistsError(
-                        as2_id=cmd.as2_id or partner.as2_id, tenant_id=tenant_id
+                        as2_id=str(as2_id_val), tenant_id=tenant_id
                     ) from e
                 raise
 
@@ -111,7 +123,13 @@ class SqlAlchemyAS2TradingPartnerRepository(
             )
         )
         record = result.scalar_one_or_none()
-        return AS2PartnerDomainModel.model_validate(record) if record else None
+        return (
+            AS2PartnerDomainModel(
+                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            )
+            if record
+            else None
+        )
 
     async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
         stmt = select(AS2Partner).where(
@@ -144,7 +162,10 @@ class SqlAlchemyAS2TradingPartnerRepository(
         else:
             where_clause = AS2Partner.tenant_id == tid_str
         result = await self.session.execute(select(AS2Partner).where(where_clause))
-        return [AS2PartnerDomainModel.model_validate(r) for r in result.scalars().all()]
+        return [
+            AS2PartnerDomainModel(**{k: v for k, v in r.__dict__.items() if not k.startswith("_")})
+            for r in result.scalars().all()
+        ]
 
     async def delete_as2_identity(self, tenant_id: str, partner_id: str) -> None:
         tid_str = tenant_id

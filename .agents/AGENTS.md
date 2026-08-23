@@ -10,6 +10,8 @@
 - **Red-Green-Refactor Cycle**: Write failing tests first, make them pass, then refactor to clean up.
 - **Zero Mocks for Pure Logic**: Do not mock pure business logic. Domain models and core logic must be self-contained and testable without external mocks.
 - **Narrow Integration Tests**: Stop writing "forced" unit tests with excessive mocking just to hit coverage limits. Focus on writing Narrow Integration Tests that actually connect to databases/external systems via test harnesses to test real behavior.
+- **No Type Suppressions**: NEVER use `# type: ignore` comments to bypass static analysis or type checking (e.g., mypy). All type mismatches must be resolved structurally by aligning the underlying classes, DTOs, or function signatures.
+- **No `Any` as a Crutch**: NEVER use `typing.Any` to bypass structural typing or mypy failures. Always properly define Pydantic schemas, DTOs, Protocols, and explicit return types, even for legacy code.
 - **No Static Mutable Singletons**: Avoid global state. Use dependency injection to pass dependencies dynamically.
 - **Infra & Business Decoupling**: Infrastructure code (AWS, SQS, DB connections) must never leak into business/domain logic.
 - **No Leakage**: Data transfer objects (DTOs), API models, and ORM models must not leak across their respective boundaries. Map them appropriately.
@@ -55,3 +57,8 @@ The following paradigms define the entire system structure. Any new design or mo
     - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.
     - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.
     - **Strict File Taxonomy Consistency**: Different Bounded Contexts must not drift in their internal folder/file naming taxonomies for identical architectural concepts. If one context uses `database/models/events.py`, another context must use `database/models/events.py` for its events, rather than arbitrary structures. Call out any file path taxonomy drift across domains as a CRITICAL violation.
+
+# Strict Boundary DTOs / Command Objects
+- **Strict DTO Standard**: Every bounded context MUST define a pure `application/dto.py` file to hold its Request/Command/Query objects (as `@dataclass(frozen=True)`).
+- **No Infrastructure Leaks**: NEVER pass web-specific framework models (e.g., FastAPI/Pydantic `BaseModel`) or ORM models directly into the Application Layer (Use Cases/Services).
+- **Adapter Translation**: The HTTP or Event adapter must strictly translate incoming payloads into these pure Command/DTO objects before passing them to the Application Layer.

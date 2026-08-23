@@ -1,0 +1,52 @@
+import contextlib
+from collections.abc import AsyncGenerator, Callable
+
+from edi.adapters.outbound.database.connection import DatabaseRouter
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+from edi.adapters.outbound.database.uow_adapter import (
+    SqlAlchemyDataPlaneUnitOfWork,
+)
+from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.config.settings import AppSettings
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+
+
+class TenantUowProvider:
+    """
+    Dependency Injection factory that abstracts away the complex multi-tenant
+    database shard resolution. It provides a clean, scoped Unit of Work
+    factory without leaking database connection logic to Application Services.
+    """
+
+    def __init__(
+        self,
+        resolver: TenantResolver,
+        db_router: DatabaseRouter,
+        settings: AppSettings,
+        s3_bucket: str,
+        aws_endpoint: str | None,
+    ) -> None:
+        self._resolver = resolver
+        self._db_router = db_router
+        self._settings = settings
+        self._storage = S3StorageClient(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+
+    async def get_uow_factory(
+        self, tenant_id: str
+    ) -> Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]:
+        """
+        Resolves the tenant's database shard and returns a parameterless async
+        context manager closure that yields a DataPlaneUnitOfWorkPort.
+        """
+        shard_name, shard_dsn = await self._resolver.resolve(tenant_id)
+
+        @contextlib.asynccontextmanager
+        async def uow_factory() -> AsyncGenerator[DataPlaneUnitOfWorkPort, None]:
+            async with contextlib.aclosing(
+                self._db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
+            ) as session_gen:
+                async for session in session_gen:
+                    yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session)
+                    break
+
+        return uow_factory

@@ -1,12 +1,17 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import OutboundEdiHeader
-from domain.models import OutboundEdiHeaderDomainModel
 from sqlalchemy import select, update
 
-from edi.domain.models import CreateOutboundEdiHeaderCmd, UpdateOutboundEdiHeaderCmd
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
+from edi.application.dto import (
+    CreateOutboundEdiHeaderCmd,
+    UpdateOutboundEdiHeaderCmd,
+)
+from edi.domain.models import (
+    OutboundEdiHeaderDomainModel,
+)
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 
 
@@ -30,7 +35,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
     ) -> bool:
         import dataclasses
 
-        from edi.domain.models import UnsetType
+        from edi.application.dto import UnsetType
 
         tid_str = tenant_id
         values = {k: v for k, v in dataclasses.asdict(cmd).items() if not isinstance(v, UnsetType)}
@@ -74,7 +79,16 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
             OutboundEdiHeader.tenant_id == tid_str, OutboundEdiHeader.deleted_at.is_(None)
         )
         result = await self.session.execute(stmt)
-        return [OutboundEdiHeaderDomainModel.model_validate(r) for r in result.scalars().all()]
+        return [
+            OutboundEdiHeaderDomainModel(
+                **{
+                    k: v
+                    for k, v in r.__dict__.items()
+                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                }
+            )
+            for r in result.scalars().all()
+        ]
 
     async def get_outbound_edi_header_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
@@ -87,4 +101,14 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
-        return OutboundEdiHeaderDomainModel.model_validate(record) if record else None
+        return (
+            OutboundEdiHeaderDomainModel(
+                **{
+                    k: v
+                    for k, v in record.__dict__.items()
+                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                }
+            )
+            if record
+            else None
+        )

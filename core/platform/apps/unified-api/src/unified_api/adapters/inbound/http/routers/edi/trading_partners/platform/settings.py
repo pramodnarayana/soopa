@@ -1,6 +1,6 @@
 from typing import Any
 
-from config.settings import get_settings
+from edi.config.settings import get_settings
 from fastapi import APIRouter
 from pydantic import BaseModel
 

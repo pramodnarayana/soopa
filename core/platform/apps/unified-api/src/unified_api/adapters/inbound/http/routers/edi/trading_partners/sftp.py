@@ -3,12 +3,13 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.use_cases import SFTPPartnerService
-from edi.domain.exceptions import OrchestrationError, VaultError
-from edi.domain.models import (
+from edi.application.dto import (
+    UNSET,
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
+from edi.application.use_cases import SFTPPartnerService
+from edi.domain.exceptions import OrchestrationError, VaultError
 from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -63,7 +64,6 @@ async def test_sftp_connection(
         host=request.host,
         port=request.port,
         username=request.username,
-        password=request.password,
         client_key_string=client_key_string,
     )
     return TestConnectionResponse(success=success, reason=reason)
@@ -83,7 +83,7 @@ async def test_existing_sftp_connection(
     vault_port: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Tests an SFTP connection for an existing partner, pulling missing credentials from the DB."""
-    from database.encryption import db_encryption
+    from edi.adapters.outbound.database.encryption import db_encryption
 
     if not request.password and not request.credentials_vault_ref:
         async with uow:
@@ -118,7 +118,6 @@ async def test_existing_sftp_connection(
         host=request.host,
         port=request.port,
         username=request.username,
-        password=request.password,
         client_key_string=client_key_string,
     )
     return TestConnectionResponse(success=success, reason=reason)
@@ -143,15 +142,15 @@ async def create_sftp_partner(
         service = SFTPPartnerService(uow=uow)
 
         cmd = CreateSFTPPartnerCmd(
-            name=request.name,
+            name=request.name if request.name is not None else UNSET,
             host=request.host,
             port=request.port,
             username=request.username,
             inbound_remote_path=request.inbound_remote_path,
             outbound_remote_path=request.outbound_remote_path,
-            password=request.password,
-            credentials_vault_ref=request.credentials_vault_ref,
-            host_key=request.host_key,
+            credentials_vault_ref=str(request.credentials_vault_ref)
+            if request.credentials_vault_ref
+            else "",
         )
 
         try:
@@ -163,7 +162,7 @@ async def create_sftp_partner(
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
-            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.partner_id)
+            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.id)
             if not partner:
                 raise HTTPException(status_code=404, detail="Partner not found after creation")
 

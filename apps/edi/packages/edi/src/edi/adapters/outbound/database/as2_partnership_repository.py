@@ -1,10 +1,17 @@
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import AS2Partner, AS2Partnership
-from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 
-from edi.domain.models import CreateAS2PartnershipCmd, UnsetType, UpdateAS2PartnershipCmd
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, AS2Partnership
+from edi.application.dto import (
+    CreateAS2PartnershipCmd,
+    UnsetType,
+    UpdateAS2PartnershipCmd,
+)
+from edi.domain.models import (
+    AS2PartnerDomainModel,
+    AS2PartnershipDomainModel,
+)
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
 
 
@@ -16,12 +23,17 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         result = await self.session.execute(
             select(AS2Partnership).where(AS2Partnership.tenant_id == tenant_id)
         )
-        return [AS2PartnershipDomainModel.model_validate(r) for r in result.scalars().all()]
+        return [
+            AS2PartnershipDomainModel(
+                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
+            )
+            for r in result.scalars().all()
+        ]
 
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
-        from database.repository import PartnershipRepository
+        from edi.adapters.outbound.database.repository import PartnershipRepository
 
         repo = PartnershipRepository(self.session)
         return await repo.get_partnership_by_as2_ids(as2_from, as2_to)
@@ -73,34 +85,9 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         )
         partnership = result.scalar_one_or_none()
         if partnership:
-            if not isinstance(cmd.local_partner_id, UnsetType):
-                if cmd.local_partner_id is not None:
-                    r = await self.session.execute(
-                        select(AS2Partner.id).where(
-                            AS2Partner.id == cmd.local_partner_id,
-                            AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
-                        )
-                    )
-                    if not r.scalar_one_or_none():
-                        raise ValueError("Local AS2 partner not found")
-                partnership.local_partner_id = cmd.local_partner_id
-            if not isinstance(cmd.remote_partner_id, UnsetType):
-                if cmd.remote_partner_id is not None:
-                    r = await self.session.execute(
-                        select(AS2Partner.id).where(
-                            AS2Partner.id == cmd.remote_partner_id,
-                            AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
-                        )
-                    )
-                    if not r.scalar_one_or_none():
-                        raise ValueError("Remote AS2 partner not found")
-                partnership.remote_partner_id = cmd.remote_partner_id
             import dataclasses
 
             for field in dataclasses.fields(cmd):
-                # Skip partner IDs which have special logic
-                if field.name in ("local_partner_id", "remote_partner_id"):
-                    continue
                 value = getattr(cmd, field.name)
                 if not isinstance(value, UnsetType):
                     setattr(partnership, field.name, value)
@@ -125,7 +112,13 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
             )
         )
         record = result.scalar_one_or_none()
-        return AS2PartnershipDomainModel.model_validate(record) if record else None
+        return (
+            AS2PartnershipDomainModel(
+                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            )
+            if record
+            else None
+        )
 
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         if not ids:

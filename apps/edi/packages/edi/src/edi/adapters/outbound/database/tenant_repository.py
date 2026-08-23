@@ -1,11 +1,11 @@
 from typing import Any
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from platform_orm.models.identity import (
     Tenant,
 )
 from sqlalchemy import select
 
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 
 

@@ -2,9 +2,9 @@ import contextlib
 from collections.abc import AsyncGenerator
 from typing import Annotated, Any, cast
 
-from database.base_repository import GlobalSession
-from database.session import get_global_session
 from dependency_injector.wiring import Provide, inject
+from edi.adapters.outbound.database.base_repository import GlobalSession
+from edi.adapters.outbound.database.session import get_global_session
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )

@@ -2,12 +2,12 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from database.base_repository import TenantSession, TenantSqlAlchemyRepository
-from database.constants import EDI_JSON_ID_PREFIX, EDI_MESSAGE_ID_PREFIX
-from database.models.data_plane import EdiMessage
 from sqlalchemy import or_, select
 
-from edi.domain.models import (
+from edi.adapters.outbound.database.base_repository import TenantSession, TenantSqlAlchemyRepository
+from edi.adapters.outbound.database.constants import EDI_JSON_ID_PREFIX, EDI_MESSAGE_ID_PREFIX
+from edi.adapters.outbound.database.models.data_plane import EdiMessage
+from edi.application.dto import (
     ApiGatewayDTO,
     EdiJsonDTO,
     EdiMessageDTO,
@@ -33,8 +33,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
     ) -> str:
-        from database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
-        from database.models.data_plane import DataPlaneOutbox
+        from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
+        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
         tid_str = tenant_id if tenant_id is not None else None
         event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}"
@@ -51,7 +51,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return str(event_id)
 
     async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
-        from database.models.data_plane import EdiJson
+        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
@@ -63,8 +63,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return str(msg.id)
 
     async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
-        from database.constants import API_GATEWAY_ID_PREFIX
-        from database.models.data_plane import ApiGateway
+        from edi.adapters.outbound.database.constants import API_GATEWAY_ID_PREFIX
+        from edi.adapters.outbound.database.models.data_plane import ApiGateway
 
         tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
@@ -84,7 +84,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         transaction_type: str | None = None,
         direction: str | None = None,
     ) -> Sequence[Any]:
-        from database.models.data_plane import EdiMessage
+        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         limit = min(max(1, limit), 200)
         offset = max(0, offset)
@@ -261,7 +261,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def explorer_list_edi_messages(
         self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
     ) -> Sequence[Any]:
-        from database.models.data_plane import EdiMessage
+        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
@@ -273,7 +273,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def explorer_list_edi_json(
         self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
     ) -> Sequence[Any]:
-        from database.models.data_plane import EdiJson
+        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
@@ -284,7 +284,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def get_transaction(self, tenant_id: str, trace_id: str) -> TransactionDetailDTO | None:
 
-        from database.models.data_plane import ApiGateway, EdiJson, EdiMessage
+        from edi.adapters.outbound.database.models.data_plane import ApiGateway, EdiJson, EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
         msg_stmt = select(EdiMessage).where(
@@ -394,7 +394,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
 
     async def get_transaction_thread(self, tenant_id: str, key: str, value: str) -> Sequence[Any]:
-        from database.models.data_plane import EdiJson
+        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
         json_stmt = (
@@ -407,8 +407,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return result.scalars().all()
 
     async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
-        from database.models.data_plane import EdiMessage
         from sqlalchemy import select
+
+        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
 

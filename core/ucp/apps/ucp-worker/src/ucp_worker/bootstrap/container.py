@@ -204,7 +204,7 @@ class WorkerContainer:
 
         if os.environ.get("APP_ENV", "production") in ("local", "test"):
             idp = DummyIdentityProviderPort()
-            idp_users = DummyIdentityProviderPort()  # type: ignore
+            idp_users = DummyIdentityProviderPort()
         else:
             idp = ZitadelIdentityProviderPort(org_provider=core_container.org_provider())
             idp_users = core_container.user_provider()

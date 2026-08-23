@@ -1,0 +1,121 @@
+from contextlib import asynccontextmanager
+from typing import Any, cast
+
+import structlog
+from edi.adapters.outbound.database.connection import DatabaseRouter
+from sqlalchemy import text
+
+from worker.ports.outbound.outbox_relay_repository_port import (
+    OutboxRelayRepositoryPort,
+    RelayOutboxEvent,
+)
+
+logger = structlog.get_logger(__name__)
+
+
+class PostgresOutboxRelayRepository(OutboxRelayRepositoryPort):
+    def __init__(self, db_router: DatabaseRouter):
+        self.db_router = db_router
+
+    async def claim_next_events(
+        self, worker_id: str, limit: int, lock_lease_ms: int = 30000
+    ) -> list[RelayOutboxEvent]:
+        async with asynccontextmanager(self.db_router.get_global_session)() as session:
+            query = text("""
+                UPDATE edi.outbox
+                SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
+                WHERE id IN (
+                    SELECT id FROM edi.outbox
+                    WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
+                    ORDER BY created_at ASC
+                    LIMIT :limit
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING *;
+            """)
+            result = await session.execute(
+                query,
+                {
+                    "worker_id": worker_id,
+                    "lock_lease_ms": lock_lease_ms,
+                    "limit": limit,
+                },
+            )
+            await session.commit()
+
+            events = []
+            for row in result:
+                mapping = row._mapping
+                events.append(
+                    RelayOutboxEvent(
+                        id=str(mapping["id"]),
+                        tenant_id=str(mapping["tenant_id"]),
+                        event_type=str(mapping["event_type"]),
+                        payload=cast(dict[str, Any], mapping["payload"]),
+                        idempotency_key=mapping.get("idempotency_key"),
+                    )
+                )
+            return events
+
+    async def sweep_stuck_events(self, lock_lease_ms: int = 30000) -> int:
+        import asyncio
+
+        total_swept = 0
+        async with asynccontextmanager(self.db_router.get_global_session)() as session:
+            while True:
+                query = text("""
+                    WITH cte AS (
+                        SELECT id FROM edi.outbox
+                        WHERE status = 'PROCESSING'
+                          AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
+                        LIMIT 5000
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE edi.outbox
+                    SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
+                    WHERE id IN (SELECT id FROM cte)
+                """)
+                result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
+                swept = int(result.rowcount)  # type: ignore[attr-defined]
+                total_swept += swept
+                await session.commit()
+                if swept < 5000:
+                    break
+                await asyncio.sleep(0.1)
+        return total_swept
+
+    async def mark_completed(self, event_id: str, worker_id: str) -> None:
+        async with asynccontextmanager(self.db_router.get_global_session)() as session:
+            query = text("""
+                UPDATE edi.outbox
+                SET status = 'PROCESSED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
+                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
+            """)
+            await session.execute(
+                query,
+                {
+                    "event_id": event_id,
+                    "worker_id": worker_id,
+                },
+            )
+            await session.commit()
+
+    async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
+        async with asynccontextmanager(self.db_router.get_global_session)() as session:
+            query = text("""
+                UPDATE edi.outbox
+                SET status = 'FAILED', attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
+            """)
+            await session.execute(
+                query,
+                {
+                    "event_id": event_id,
+                    "worker_id": worker_id,
+                    "error_message": error_message,
+                },
+            )
+            await session.commit()
+
+    async def close(self) -> None:
+        pass

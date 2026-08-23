@@ -1,20 +1,23 @@
 from datetime import UTC, datetime
+from uuid import UUID
 
-from database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from database.models.control_plane import (
-    AS2Partner,
-    InboundRoute,
-    SFTPPartner,
-)
-from domain.models import InboundRouteDomainModel
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from platform_orm.models import Webhook
 from sqlalchemy import or_, select, update
 
-from edi.domain.models import (
+from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import (
+    AS2Partner,
+    InboundRoute,
+    SFTPPartner,
+)
+from edi.application.dto import (
     CreateInboundRouteCmd,
     UnsetType,
     UpdateInboundRouteCmd,
+)
+from edi.domain.models import (
+    InboundRouteDomainModel,
 )
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 
@@ -27,9 +30,17 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     # Routes (Now in Control Plane)
     # ------------------------------------------------------------------------
     async def _validate_inbound_destination(
-        self, tenant_id: str, webhook_id: str | None, as2_id: str | None, sftp_id: str | None
+        self,
+        tenant_id: str,
+        webhook_id: str | UUID | UnsetType | None,
+        as2_id: str | UUID | UnsetType | None,
+        sftp_id: str | UUID | UnsetType | None,
     ) -> None:
-        destinations = [d for d in (webhook_id, as2_id, sftp_id) if d is not None]
+        destinations = [
+            d
+            for d in (webhook_id, as2_id, sftp_id)
+            if d is not None and not isinstance(d, UnsetType)
+        ]
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (webhook, as2, or sftp) must be provided")
 
@@ -125,11 +136,11 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         if not isinstance(cmd.processing_mode, UnsetType):
             record.processing_mode = cmd.processing_mode
         if not isinstance(cmd.webhook_id, UnsetType):
-            record.webhook_id = cmd.webhook_id
+            record.webhook_id = str(cmd.webhook_id) if cmd.webhook_id else None
         if not isinstance(cmd.as2_partner_id, UnsetType):
-            record.as2_partner_id = cmd.as2_partner_id
+            record.as2_partner_id = str(cmd.as2_partner_id) if cmd.as2_partner_id else None
         if not isinstance(cmd.sftp_partner_id, UnsetType):
-            record.sftp_partner_id = cmd.sftp_partner_id
+            record.sftp_partner_id = str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None
         if not isinstance(cmd.active, UnsetType):
             record.active = cmd.active
 
@@ -168,7 +179,13 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
 
         result = await self.session.execute(stmt)
         record = result.scalars().first()
-        return InboundRouteDomainModel.model_validate(record) if record else None
+        return (
+            InboundRouteDomainModel(
+                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            )
+            if record
+            else None
+        )
 
     async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
         result = await self.session.execute(
@@ -176,7 +193,31 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 InboundRoute.tenant_id == tenant_id, InboundRoute.deleted_at.is_(None)
             )
         )
-        return [InboundRouteDomainModel.model_validate(r) for r in result.scalars().all()]
+        return [
+            InboundRouteDomainModel(
+                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
+            )
+            for r in result.scalars().all()
+        ]
+
+    async def get_inbound_route_by_id(
+        self, tenant_id: str, route_id: str
+    ) -> InboundRouteDomainModel | None:
+        result = await self.session.execute(
+            select(InboundRoute).where(
+                InboundRoute.id == route_id,
+                InboundRoute.tenant_id == tenant_id,
+                InboundRoute.deleted_at.is_(None),
+            )
+        )
+        record = result.scalars().first()
+        return (
+            InboundRouteDomainModel(
+                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            )
+            if record
+            else None
+        )
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         result = await self.session.execute(

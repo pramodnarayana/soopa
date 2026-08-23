@@ -1,18 +1,18 @@
 from typing import Any
 
 import structlog
-from config.constants import SecretCategory
-from domain.events import EdiEventType, ProvisioningEvent
-from domain.models import ConnectionType, PartnerStatus
 
+from edi.application.dto import RotateAS2CertificateCmd
+from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
+from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import (
     InvalidCertificateActionError,
     MissingCertificateError,
     OrchestrationError,
     PartnerNotFoundError,
 )
-from edi.domain.models import PartnerEntity, RotateAS2CertificateCmd
+from edi.domain.models import AS2PartnerDomainModel
 from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
@@ -71,10 +71,10 @@ class RotateAS2CertificatesUseCase:
         cmd: RotateAS2CertificateCmd,
         secret_store: SecretStorePort,
         idempotency_key: str | None = None,
-    ) -> PartnerEntity:
+    ) -> AS2PartnerDomainModel:
         logger.info(
             "rotate_as2_certificates_started",
-            partner_id=partner_id,
+            id=partner_id,
             tenant_id=tenant_id,
         )
 
@@ -84,7 +84,7 @@ class RotateAS2CertificatesUseCase:
 
         # Validate action
         if cmd.action not in ("generate", "upload"):
-            raise InvalidCertificateActionError(cmd.action)
+            raise InvalidCertificateActionError(str(cmd.action))
 
         public_cert_pem, private_key_vault_ref = await self._provision_certificates(
             partner, cmd, secret_store
@@ -111,7 +111,7 @@ class RotateAS2CertificatesUseCase:
         except Exception as e:
             logger.exception(
                 "certificate_rotation_failed",
-                partner_id=partner_id,
+                id=partner_id,
                 tenant_id=tenant_id,
                 reason=str(e),
             )
@@ -121,14 +121,8 @@ class RotateAS2CertificatesUseCase:
 
         logger.info(
             "rotate_as2_certificates_completed",
-            partner_id=partner_id,
+            id=partner_id,
             tenant_id=tenant_id,
         )
 
-        return PartnerEntity(
-            partner_id=partner_id,
-            tenant_id=tenant_id,
-            name=updated_partner.name,
-            type=ConnectionType.AS2,
-            status=PartnerStatus.ACTIVE if updated_partner.active else PartnerStatus.INACTIVE,
-        )
+        return updated_partner

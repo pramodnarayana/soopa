@@ -25,7 +25,7 @@ async def test_process_api_edi_json_success():
     mock_uow.data_plane_outbox.publish_outbox_event.assert_awaited_once()
 
     _args, kwargs = mock_uow.data_plane_outbox.publish_outbox_event.call_args
-    from domain.events import PipelineEventType
+    from edi.domain.events import PipelineEventType
 
     assert kwargs["event_type"] == PipelineEventType.TRANSFORM_EVENT
     assert kwargs["idempotency_key"] == trace_id

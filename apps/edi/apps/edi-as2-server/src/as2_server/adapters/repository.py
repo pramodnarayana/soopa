@@ -1,9 +1,11 @@
 import uuid
 
-from database.models.control_plane import AS2Partner, InboundRoute
-from database.models.control_plane import AS2Partner as GlobalTradingPartner
-from database.repository import EdiMessageRepository as DbEdiMessageRepository
-from database.repository import TradingPartnerRepository as DbTradingPartnerRepository
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
+from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalTradingPartner
+from edi.adapters.outbound.database.repository import EdiMessageRepository as DbEdiMessageRepository
+from edi.adapters.outbound.database.repository import (
+    TradingPartnerRepository as DbTradingPartnerRepository,
+)
 from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
 

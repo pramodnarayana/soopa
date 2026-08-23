@@ -1,13 +1,13 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from database.session import get_global_session
 from fastapi.testclient import TestClient
 from unified_api.adapters.inbound.http.dependencies.edi.services import (
     get_as2_receiver_service,
     get_secret_store,
 )
 
+from edi.adapters.outbound.database.session import get_global_session
 from edi.domain.exceptions import OrchestrationError
 from edi.module import create_edi_app
 

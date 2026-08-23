@@ -13,7 +13,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
     get_global_session,
 )
 
-from edi.domain.models import EdiJsonDTO, TransactionDetailDTO
+from edi.application.dto import EdiJsonDTO, TransactionDetailDTO
 from edi.module import create_edi_app
 
 app = create_edi_app()
@@ -84,7 +84,7 @@ def base_mock_uow():
 
     mock_repo = AsyncMock()
     mock_repo.list_transactions.return_value = [mock_msg]
-    from edi.domain.models import TransactionDetailDTO
+    from edi.application.dto import TransactionDetailDTO
 
     mock_repo.get_transaction.return_value = TransactionDetailDTO(
         edi_message=mock_msg,
@@ -212,7 +212,9 @@ def test_get_transaction_detail_fallback():
     mock_msg.created_at = None
 
     mock_json = EdiJsonDTO(
-        id=str(uuid.uuid4()),
+        id="file_2",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
         trace_id=str(uuid.uuid4()),
         status="RECEIVED",
         transaction_type="mock_type",
@@ -298,7 +300,12 @@ def test_get_transaction_webhook_fallback():
     mock_msg.trading_partner_id = None
 
     mock_json = EdiJsonDTO(
-        id=str(uuid.uuid4()), trace_id=str(uuid.uuid4()), status="RECEIVED", transaction_type="850"
+        id=str(uuid.uuid4()),
+        trace_id=str(uuid.uuid4()),
+        status="RECEIVED",
+        transaction_type="850",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
     )
 
     mock_repo.get_transaction.return_value = TransactionDetailDTO(

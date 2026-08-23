@@ -1,10 +1,12 @@
 from typing import Protocol
 
-from domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
-
-from edi.domain.models import (
+from edi.application.dto import (
     CreateAS2PartnershipCmd,
     UpdateAS2PartnershipCmd,
+)
+from edi.domain.models import (
+    AS2PartnerDomainModel,
+    AS2PartnershipDomainModel,
 )
 
 

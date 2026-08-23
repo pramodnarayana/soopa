@@ -25,6 +25,30 @@ services:
       timeout: 5s
       retries: 5
 
+  edi-orchestrator-worker:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        - APP_MODULE=apps/edi/apps/edi-orchestrator-worker
+    command: >
+      bash -c "cd apps/edi/apps/edi-orchestrator-worker && pnpm start:dev"
+    env_file:
+      - .env.edi
+    volumes:
+      - ../../:/app:cached
+      - ../../apps/edi/edi_sample_files:/app/edi_sample_files
+
+  edi-compute-worker:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        - APP_MODULE=apps/edi/apps/edi-compute-worker
+    command: >
+      bash -c "cd apps/edi/apps/edi-compute-worker && uv run python -m compute_worker.main"
 
   cdcproxy:
     image: nginx:alpine

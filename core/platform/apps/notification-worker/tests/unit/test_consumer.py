@@ -27,7 +27,7 @@ class FakeSweeperJobHandler:
 async def test_consumer_process_message_valid():
     use_case = FakeDispatchUseCase()
     sweeper_handler = FakeSweeperJobHandler()
-    worker = NotificationConsumerWorker(use_case, sweeper_handler)  # type: ignore
+    worker = NotificationConsumerWorker(use_case, sweeper_handler)
 
     body = {
         "event_type": "notification.triggered",
@@ -50,7 +50,7 @@ async def test_consumer_process_message_valid():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_event():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
+    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())
     await worker._process_message({})
     assert len(use_case.events) == 0
 
@@ -58,7 +58,7 @@ async def test_consumer_process_message_missing_event():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_payload():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
+    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())
     await worker._process_message({"event": {}})
     assert len(use_case.events) == 0
 
@@ -67,7 +67,7 @@ async def test_consumer_process_message_missing_payload():
 async def test_consumer_process_sweeper_job():
     use_case = FakeDispatchUseCase()
     sweeper_handler = FakeSweeperJobHandler()
-    worker = NotificationConsumerWorker(use_case, sweeper_handler)  # type: ignore
+    worker = NotificationConsumerWorker(use_case, sweeper_handler)
 
     body = {
         "event_type": "NOTIFICATION_OUTBOX_SWEEPER",
@@ -84,7 +84,7 @@ async def test_consumer_process_sweeper_job():
 @pytest.mark.asyncio
 async def test_consumer_lifecycle():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())  # type: ignore
+    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())
 
     with patch(
         "notification_worker.adapters.inbound.workers.consumer.poll_sqs_queue",
