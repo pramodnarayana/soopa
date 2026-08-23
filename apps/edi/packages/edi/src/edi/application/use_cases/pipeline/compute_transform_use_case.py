@@ -1,3 +1,4 @@
+import copy
 import uuid
 
 import structlog
@@ -80,8 +81,6 @@ class ComputeTransformUseCase:
                 if not gs_sender_global and gs_sender:
                     gs_sender_global = gs_sender
                     gs_receiver_global = gs_receiver
-
-                import copy
 
                 json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
                 if isinstance(json_dict, dict):

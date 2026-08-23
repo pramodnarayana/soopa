@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import signal
 
 import structlog
@@ -26,12 +27,12 @@ async def main() -> None:
     loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
 
     try:
-        await asyncio.gather(data_task, provision_task)
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(data_task, provision_task)
     finally:
         logger.info("Shutting down top-level worker tasks gracefully...")
         data_task.cancel()
         provision_task.cancel()
-        import contextlib
 
         with contextlib.suppress(asyncio.CancelledError):
             await asyncio.gather(data_task, provision_task, return_exceptions=True)

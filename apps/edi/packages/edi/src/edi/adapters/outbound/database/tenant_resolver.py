@@ -1,3 +1,5 @@
+import time
+
 from platform_orm.models.identity import Tenant
 from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
@@ -31,8 +33,6 @@ class TenantResolver:
                 del self._cache[k]
 
     async def resolve(self, tenant_id: str) -> tuple[str, str]:
-        import time
-
         now = time.monotonic()
         self._sweep(now)
 
