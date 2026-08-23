@@ -55,9 +55,9 @@ def run_migrations():
     # We assume the runner is executed from the repo root
 
     # Dynamically resolve paths relative to this script's location
-    # __file__ is run_migrations.py, so parent is src/database/
+    # __file__ is apps/edi/packages/edi/src/edi/adapters/outbound/database/run_migrations.py
     base_dir = Path(__file__).resolve().parent
-    package_root = base_dir.parent.parent  # Go up to apps/edi/packages/database/
+    package_root = base_dir.parents[4]  # Go up 5 levels to apps/edi/packages/edi/
 
     # 1. Run Global Migrations
     logger.info("--- Applying GLOBAL DB Migrations ---")
