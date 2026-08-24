@@ -1,4 +1,3 @@
-# type: ignore
 """Reading/lexing/parsing/splitting an edifile."""
 # pylint: disable=invalid-name, missing-class-docstring, missing-function-docstring, duplicate-code, too-many-lines
 # pylint: disable=too-many-branches, too-many-statements, attribute-defined-outside-init, consider-using-f-string
@@ -69,7 +68,7 @@ def parse_edi_file(**ta_info):
                 )
             )
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         txt = txtexc()
         txt = txt.partition(": ")[2]
         ediobject.errorlist.append(txt)
@@ -155,7 +154,7 @@ class Inmessage(message.Message):
     def handleconfirm(self, ta_fromfile, routedict, error):
         """end of edi file handling: writing of confirmations, etc."""
 
-    def _formatfield(self, value, field_definition, structure_record, node_instance):  # noqa: C901
+    def _formatfield(self, value, field_definition, structure_record, node_instance):
         """
         Format of a field is checked and converted if needed.
         Input: value (string), field definition.
@@ -303,8 +302,8 @@ class Inmessage(message.Message):
                 try:
                     # convert to float in order to check validity
                     valuedecimal = float(value)
-                    value = "%.*F" % (lendecimal, valuedecimal)  # noqa: UP031
-                except Exception:  # noqa: BLE001
+                    value = f"{valuedecimal:.{lendecimal}F}"
+                except Exception:
                     self.add2errorlist(
                         _(
                             '[F16]%(linpos)s: Record "%(record)s" numeric field "%(field)s"'
@@ -335,8 +334,8 @@ class Inmessage(message.Message):
                 try:
                     # convert to float in order to check validity
                     valuedecimal = float(value)
-                    value = "%.*F" % (lendecimal, valuedecimal)  # noqa: UP031
-                except Exception:  # noqa: BLE001
+                    value = f"{valuedecimal:.{lendecimal}F}"
+                except Exception:
                     self.add2errorlist(
                         _(
                             '[F15]%(linpos)s: Record "%(record)s" numeric field "%(field)s"'
@@ -367,8 +366,8 @@ class Inmessage(message.Message):
                     try:  # convert to float in order to check validity
                         valuedecimal = float(value)
                         valuedecimal = valuedecimal / 10**field_definition.decimals
-                        value = "%.*F" % (field_definition.decimals, valuedecimal)  # noqa: UP031
-                    except Exception:  # noqa: BLE001
+                        value = f"{valuedecimal:.{field_definition.decimals}F}"
+                    except Exception:
                         self.add2errorlist(
                             _(
                                 '[F13]%(linpos)s: Record "%(record)s" numeric field "%(field)s"'
@@ -389,7 +388,7 @@ class Inmessage(message.Message):
     def _parsefields(self, lex_record, record_definition) -> dict:
         """Parse fields from one fixed message-record and check length of the fixed record."""
 
-    def _parse(self, structure_level, inode):  # noqa: C901
+    def _parse(self, structure_level, inode):
         """
         This is the heart of the parsing of incoming messages (but not for xml, json)
         Read the lex_records one by one (self.iternext_lex_record, is an iterator)
@@ -594,7 +593,7 @@ class Inmessage(message.Message):
     def checkenvelope(self):
         pass
 
-    def nextmessage(self):  # noqa: C901
+    def nextmessage(self):
         """Passes each 'message' to the mapping script."""
         # node preprocessing via user exit indicated in syntax
         preprocess_nodes = self.ta_info["preprocess_nodes"]
@@ -611,7 +610,7 @@ class Inmessage(message.Message):
             self.root.processqueries({}, len(self.defmessage.nextmessage))
             for eachmessage in self.getloop_including_mpath(*self.defmessage.nextmessage):
                 # eachmessage is a list: [mpath,mpath, etc, node]
-                count += 1  # noqa: SIM113
+                count += 1
                 ta_info = self.ta_info.copy()
                 ta_info.update(eachmessage[-1].queries)
                 ta_info["message_number"] = count
@@ -631,7 +630,7 @@ class Inmessage(message.Message):
                 count = 0
                 for eachmessage in self.getloop_including_mpath(*self.defmessage.nextmessage2):
                     # eachmessage is a list: [mpath,mpath, etc, node]
-                    count += 1  # noqa: SIM113
+                    count += 1
                     ta_info = self.ta_info.copy()
                     ta_info.update(eachmessage[-1].queries)
                     ta_info["message_number"] = count
@@ -706,7 +705,7 @@ class Inmessage(message.Message):
                 # yield the messages
                 count = 0
                 for child in self.root.children:
-                    count += 1  # noqa: SIM113
+                    count += 1
                     ta_info = self.ta_info.copy()
                     ta_info.update(child.queries)
                     ta_info["total_number_of_messages"] = total_number_of_messages

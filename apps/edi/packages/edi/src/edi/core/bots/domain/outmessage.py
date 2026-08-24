@@ -1,4 +1,3 @@
-# type: ignore
 """
 Bots outmessage lib
 """
@@ -267,7 +266,7 @@ class Outmessage(message.Message):
                     # childnode was found and used; break to go to next child node
                     break
 
-    def _tree2recordfields(self, noderecord, structure_record):  # noqa: C901
+    def _tree2recordfields(self, noderecord, structure_record):
         """
         from noderecord->lex_record; use structure_record as guide.
         complex because is is used for: editypes that have compression rules (edifact),
@@ -461,7 +460,7 @@ class Outmessage(message.Message):
 
         self.lex_records.append(lex_record)
 
-    def _formatfield(self, value, field_definition, structure_record, node_instance):  # noqa: C901
+    def _formatfield(self, value, field_definition, structure_record, node_instance):
         """
         Input: value (normally a string, except for putraw() under JSON) and field definition.
         Some parameters of self.syntax are used, eg decimaal
@@ -770,7 +769,7 @@ class Outmessage(message.Message):
                 value = value.zfill(field_definition.min_length)
         return value
 
-    def record2string(self, lex_records):  # noqa: C901
+    def record2string(self, lex_records):
         """
         write lex_records to a file.
         using the right editype (edifact, x12, etc) and charset.

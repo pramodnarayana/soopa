@@ -21,19 +21,19 @@ def safe_unicode(value: Any) -> str:
                 try:
                     # decode strict
                     return value.decode(charset, "strict")
-                except Exception:  # noqa: BLE001, S112
-                    continue
+                except Exception:
+                    pass
             # should never get here?
             print("safe_unicode33")
             # decode as if it is utf-8, ignore errors.
             return value.decode("utf_8", "ignore")
         # print("safe_unicode11",type(value))
         return str(value)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print("safe_unicode22", exc)
         try:
             return str(repr(value))
-        except Exception:  # noqa: BLE001
+        except Exception:
             return "Error while displaying error"
 
 
@@ -67,7 +67,7 @@ class BotsError(Exception):
 
     def __init__(self, exc: Any, *args: Any, **kwargs: Any) -> None:
         self.exc = safe_unicode(exc)
-        if args:  # noqa: SIM108
+        if args:
             # expect args[0] to be a dict
             xxx = args[0] if isinstance(args[0], dict) else {}
         else:
@@ -80,7 +80,7 @@ class BotsError(Exception):
         try:
             # this is already unicode
             return self.exc % (self.xxx)
-        except Exception:  # noqa: BLE001
+        except Exception:
             print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX11")
             # errors in self.exc; non supported format codes. Don't think this happen...
             return self.exc

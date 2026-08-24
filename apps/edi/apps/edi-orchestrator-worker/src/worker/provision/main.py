@@ -12,7 +12,7 @@ from worker.adapters.edi_control_plane_outbox_relay import EdiControlPlaneOutbox
 from worker.adapters.edi_control_plane_sns_outbox_publisher import EdiControlPlaneSnsOutboxPublisher
 from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
 from worker.adapters.postgres_outbox_relay_repository import PostgresOutboxRelayRepository
-from worker.core.service import ProvisioningWorkerService
+from worker.domain.service import ProvisioningWorkerService
 from worker.provision.edi_control_plane_outbox_processor_use_case import (
     EdiControlPlaneOutboxProcessorUseCase,
 )

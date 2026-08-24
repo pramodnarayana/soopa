@@ -16,7 +16,7 @@ ERROR_IN_GRAMMAR = "BOTS_error_1$%3@7#!%+_)_+[{]}"
 from . import validator
 
 
-def grammarread(editype, grammarname, typeofgrammarfile) -> "Grammar":  # noqa: F821
+def grammarread(editype, grammarname, typeofgrammarfile) -> "Grammar":
     """
     reads/imports a grammar (dispatch function for class Grammar and subclasses).
     typeofgrammarfile indicates some differences in reading/syntax handling:
@@ -129,25 +129,13 @@ def init_restofgrammar(grammar_obj):
         # so need to indicate if recordsdef has already been checked and changed.
         # done by setting entry 'BOTS_1$@#%_error' in recorddefs;
         # if this entry is True: read, errors; False: read OK.
-        try:
-            do_recorddefs(grammar_obj)
-        except GrammarPartMissing:  # noqa: TRY203
-            # basic checks on recordsdef - it is not there, or not a dict, etc.
-            raise
-        except Exception:  # noqa: TRY203
-            raise
+        do_recorddefs(grammar_obj)
         # read structure
         # structure is checked and changed, so need to indicate if structure
         # has already been checked and changed.
         # done by setting entry 'BOTS_1$@#%_error' in structure[0];
         # if this entry is True: read, errors; False: read OK.
-        try:
-            do_structure(grammar_obj)
-        except GrammarPartMissing:  # noqa: TRY203
-            # basic checks on strucure - it is not there, or not a list, etc.
-            raise
-        except Exception:  # noqa: TRY203
-            raise
+        do_structure(grammar_obj)
         # link recordsdefs to structure
         # as structure can be re-used/imported from other grammars,
         # do this always when reading grammar.
@@ -155,7 +143,7 @@ def init_restofgrammar(grammar_obj):
     grammar_obj.class_specific_tests()
 
 
-def do_recorddefs(grammar_obj):  # noqa: C901
+def do_recorddefs(grammar_obj):
     """
     1. check the recorddefinitions for validity.
     2. adapt in field-records: normalise length lists, set bool ISFIELD, etc

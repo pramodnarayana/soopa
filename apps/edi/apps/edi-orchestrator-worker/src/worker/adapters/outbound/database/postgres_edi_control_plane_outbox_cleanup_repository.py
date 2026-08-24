@@ -5,7 +5,6 @@ import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from sqlalchemy import delete, select
-from sqlalchemy.engine import CursorResult
 
 from worker.ports.outbound.edi_control_plane_outbox_cleanup_repository_port import (
     EdiControlPlaneOutboxCleanupRepositoryPort,
@@ -33,7 +32,11 @@ class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(EdiControlPlaneOutboxClea
                         .limit(5000)
                     )
                 )
-                res: CursorResult[tuple[()]] = await session.execute(stmt)  # type: ignore[assignment]
+                from typing import Any, cast
+
+                from sqlalchemy import CursorResult
+
+                res = cast(CursorResult[Any], await session.execute(stmt))
                 deleted = res.rowcount
                 outbox_deleted += deleted
                 await session.commit()

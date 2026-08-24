@@ -1,4 +1,3 @@
-# type: ignore
 """
 parsers/edifact.py — EDIFACT reader and writer.
 
@@ -63,7 +62,7 @@ class edifact(var):
             # read as binary
             self.rawinput = botslib.readdata_bin(filename=self.ta_info["filename"])
 
-    def _sniff(self):  # noqa: C901
+    def _sniff(self):
         """
         Examine the beginning of an EDIFACT file for syntax parameters and charset.
         If the beginning of the file is not correct: raise error.
@@ -210,7 +209,7 @@ class edifact(var):
             + self.ta_info["record_sep"]
         )
 
-    def checkenvelope(self):  # noqa: C901
+    def checkenvelope(self):
         """Check envelopes (UNB-UNZ counters & references, UNH-UNT counters & references etc)."""
         # pylint: disable=too-many-locals
         for UNB in self.getloop({"BOTSID": "UNB"}):
@@ -236,7 +235,7 @@ class edifact(var):
                         )
                         % {"unzcount": unzcount, "messagecount": messagecount}
                     )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 self.add2errorlist(
                     _('[E03]: Count of messages in UNZ is invalid: "%(count)s".\n')
                     % {"count": unzcount}
@@ -263,7 +262,7 @@ class edifact(var):
                             )
                             % {"untcount": untcount, "segmentcount": segmentcount}
                         )
-                except Exception:  # noqa: BLE001
+                except Exception:
                     self.add2errorlist(
                         _('[E06]: Count of segments in UNT is invalid: "%(count)s".\n')
                         % {"count": untcount}
@@ -290,7 +289,7 @@ class edifact(var):
                             )
                             % {"unecount": unecount, "groupcount": groupcount}
                         )
-                except Exception:  # noqa: BLE001
+                except Exception:
                     self.add2errorlist(
                         _('[E09]: Groupcount in UNE is invalid: "%(count)s".\n')
                         % {"count": unecount}
@@ -317,7 +316,7 @@ class edifact(var):
                                 )
                                 % {"untcount": untcount, "segmentcount": segmentcount}
                             )
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         self.add2errorlist(
                             _('[E12]: Count of segments in UNT is invalid: "%(count)s".\n')
                             % {"count": untcount}

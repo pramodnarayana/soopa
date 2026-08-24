@@ -10,7 +10,13 @@ from edi.application.dto import (
     UpdateInboundRouteCmd,
     UpdateOutboundRouteCmd,
 )
-from edi.application.use_cases import InboundRouteService, OutboundRouteService
+from edi.application.use_cases import InboundRouteService
+from edi.application.use_cases.outbound_routes import (
+    CreateOutboundRouteUseCase,
+    DeleteOutboundRouteUseCase,
+    ListOutboundRoutesUseCase,
+    UpdateOutboundRouteUseCase,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import TypeAdapter
 
@@ -41,10 +47,10 @@ async def list_routes(
     """
     async with uow:
         inbound_service = InboundRouteService(uow=uow)
-        outbound_service = OutboundRouteService(uow=uow)
+        outbound_use_case = ListOutboundRoutesUseCase(uow=uow)
 
         inbound_routes = await inbound_service.list_inbound_routes(tenant_id)
-        outbound_routes = await outbound_service.list_outbound_routes(tenant_id)
+        outbound_routes = await outbound_use_case.execute(tenant_id)
 
         routes = inbound_routes + outbound_routes
         return _route_list_adapter.validate_python(routes)
@@ -93,7 +99,7 @@ async def create_outbound_route(
     Creates a new Outbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = OutboundRouteService(uow=uow)
+        use_case = CreateOutboundRouteUseCase(uow=uow)
 
         cmd = CreateOutboundRouteCmd(
             isa_sender_id=request.isa_sender_id if hasattr(request, "isa_sender_id") else "",
@@ -106,9 +112,7 @@ async def create_outbound_route(
             sftp_partner_id=request.sftp_partner_id if request.sftp_partner_id else None,
         )
 
-        entity = await service.create_outbound_route(
-            tenant_id, cmd, idempotency_key=idempotency_key
-        )
+        entity = await use_case.execute(tenant_id, cmd, idempotency_key=idempotency_key)
         await uow.commit()
 
         return RouteResponse(route_id=entity.id, tenant_id=entity.tenant_id, direction="OUTBOUND")
@@ -185,7 +189,7 @@ async def update_outbound_route(
     Updates an Outbound Route for the current Tenant.
     """
     async with uow:
-        service = OutboundRouteService(uow=uow)
+        use_case = UpdateOutboundRouteUseCase(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundRouteCmd(
@@ -196,9 +200,7 @@ async def update_outbound_route(
             active=dump.get("active", UNSET),
         )
 
-        success = await service.update_outbound_route(
-            tenant_id, route_id, cmd, idempotency_key=idempotency_key
-        )
+        success = await use_case.execute(tenant_id, route_id, cmd, idempotency_key=idempotency_key)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
         await uow.commit()
@@ -216,10 +218,8 @@ async def delete_outbound_route(
     Deletes an Outbound Route for the current Tenant.
     """
     async with uow:
-        service = OutboundRouteService(uow=uow)
-        success = await service.delete_outbound_route(
-            tenant_id, route_id, idempotency_key=idempotency_key
-        )
+        use_case = DeleteOutboundRouteUseCase(uow=uow)
+        success = await use_case.execute(tenant_id, route_id, idempotency_key=idempotency_key)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
         await uow.commit()

@@ -5,7 +5,6 @@ import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import ProcessedEvent
 from sqlalchemy import delete, select, tuple_
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
@@ -47,8 +46,12 @@ class SqlAlchemyEdiIdempotencyCleanupRepository(EdiIdempotencyCleanupRepositoryP
                                     .limit(5000)
                                 )
                             )
-                            res_processed: CursorResult[tuple[()]] = await session.execute(  # type: ignore[assignment]
-                                stmt_processed
+                            from typing import Any, cast
+
+                            from sqlalchemy import CursorResult
+
+                            res_processed = cast(
+                                CursorResult[Any], await session.execute(stmt_processed)
                             )
                             deleted = res_processed.rowcount
                             processed_deleted += deleted
@@ -70,5 +73,4 @@ class SqlAlchemyEdiIdempotencyCleanupRepository(EdiIdempotencyCleanupRepositoryP
         )
         exceptions = [r for r in results if isinstance(r, Exception)]
         if exceptions:
-            logger.error("shard_cleanup_had_failures", failure_count=len(exceptions))
-            raise exceptions[0]
+            raise ExceptionGroup("shard_cleanup_had_failures", exceptions)

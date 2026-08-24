@@ -6,7 +6,7 @@ from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
-from worker.core.constants import EDI_APP_SLUG
+from worker.domain.constants import EDI_APP_SLUG
 from worker.ports.outbound.tenant_port import TenantPort
 
 

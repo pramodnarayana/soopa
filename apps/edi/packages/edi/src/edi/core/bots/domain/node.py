@@ -1,4 +1,3 @@
-# type: ignore
 """
 Bots node lib
 """
@@ -47,7 +46,7 @@ class Node:
         """append child to node"""
         self.children.append(childnode)
 
-    def to_dict(self) -> dict:  # noqa: C901
+    def to_dict(self) -> dict:
         """Serialize the Node and its children into a pure Python dictionary."""
         result = {}
         seg_id = self.record.get("BOTSID") if self.record else None
@@ -105,7 +104,7 @@ class Node:
         return result
 
     @classmethod
-    def from_dict(  # noqa: C901
+    def from_dict(
         cls, data: dict, fallback_seg_id: str | None = None, is_array: bool = True
     ) -> "Node":
         """
@@ -401,7 +400,7 @@ class Node:
         # no child has given a valid return
         return 0
 
-    def get(self, *mpaths):  # noqa: C901
+    def get(self, *mpaths):
         """
         get value of a field in a record from a edi-message
         mpath is xpath-alike query to identify the record/field
@@ -606,7 +605,7 @@ class Node:
         except (TypeError, ValueError, decimal.InvalidOperation):
             return decimal.Decimal("0")
 
-    def put(self, *mpaths, **kwargs) -> bool:  # noqa: C901
+    def put(self, *mpaths, **kwargs) -> bool:
         """
         Check mpaths then put value
         """
@@ -652,7 +651,7 @@ class Node:
         logger.debug('"True" for put %(mpaths)s', {"mpaths": str(mpaths)})
         return True
 
-    def putraw(self, *mpaths, **kwargs) -> bool:  # noqa: C901
+    def putraw(self, *mpaths, **kwargs) -> bool:
         """sanity check of mpaths"""
         if not mpaths or not isinstance(mpaths, tuple):
             raise MappingFormatError(_("Must be dicts in tuple: put(%(mpath)s)"), {"mpath": mpaths})
@@ -673,11 +672,10 @@ class Node:
                     raise MappingFormatError(
                         _("Keys must be strings: put(%(mpath)s)"), {"mpath": mpaths}
                     )
-                if isinstance(value, list):  # noqa: SIM102
+                if isinstance(value, list) and not value:
                     # empty is not useful, drop it (like None)
-                    if not value:
-                        logger.debug("Empty list in put %(mpaths)s.", {"mpaths": str(mpaths)})
-                        return False
+                    logger.debug("Empty list in put %(mpaths)s.", {"mpaths": str(mpaths)})
+                    return False
             if "BOTSIDnr" not in part:
                 part["BOTSIDnr"] = "1"
 
@@ -765,7 +763,7 @@ class Node:
         return True
 
     # pylint: disable=line-too-long
-    def sort(self, *mpaths, **kwargs):  # noqa: C901
+    def sort(self, *mpaths, **kwargs):
         """
         Sort nodes. use in mappingscript. examples in usage:
           case 1 old: inn.sort({'BOTSID':'UNH'},{'BOTSID':'LIN','C212.7140':None})    -> sorts the LIN segments by article number.
@@ -872,10 +870,10 @@ class Node:
                         {"mpaths": mpaths},
                     )
 
-    def _mpath_grammar_check(self, mpaths):  # noqa: C901
+    def _mpath_grammar_check(self, mpaths):
         """check of mpaths with grammar."""
 
-        def _mpath_ok_with_grammar(structure, mpaths):  # noqa: C901
+        def _mpath_ok_with_grammar(structure, mpaths):
             """
             inner function, recursive.
             every part of mpaths should be in structure, at right level, have right fields.

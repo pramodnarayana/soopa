@@ -1,4 +1,3 @@
-# type: ignore
 """
 Bots message lib
 """
@@ -91,7 +90,7 @@ class Message:
                         print(f"        {veld[VALUE]}    (rep)")
                     else:
                         print(f"    {veld[VALUE]}    (???)")
-                counter += 1  # noqa: SIM113
+                counter += 1
 
     @staticmethod
     def mpathformat(mpath):
@@ -163,7 +162,7 @@ class Message:
         if False:
             self._logmessagecontent(node_instance)
 
-    def _checkifrecordsingrammar(self, node_instance, structure, grammarname):  # noqa: C901
+    def _checkifrecordsingrammar(self, node_instance, structure, grammarname):
         """check for every node if in grammar recursive"""
         # list of records not in the grammar; these records are deleted at end of function
         deletelist = []
@@ -271,7 +270,7 @@ class Message:
         for child in deletelist:
             node_instance.children.remove(child)
 
-    def _checkiffieldsingrammar(self, node_instance, record_definition):  # noqa: C901
+    def _checkiffieldsingrammar(self, node_instance, record_definition):
         """
         checks for every field in record if field exists in record_definition (from grammar).
         for inmessage of type (var,fixed,??) this is not needed
@@ -390,7 +389,7 @@ class Message:
                     )
             node_instance.children = sortednodelist
 
-    def _canonicalfields(self, node_instance, record_definition):  # noqa: C901
+    def _canonicalfields(self, node_instance, record_definition):
         """
         For all fields: check M/C, format.
         Fields are not sorted (a dict can not be sorted).

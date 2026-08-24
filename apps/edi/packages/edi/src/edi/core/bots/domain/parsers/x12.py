@@ -1,4 +1,3 @@
-# type: ignore
 """
 parsers/x12.py — X12 reader and writer.
 
@@ -50,13 +49,10 @@ class x12(var):
         version = inode.record.get("GS08", "")
         if not version:
             isa_version = self.ta_info.get("version", "")
-            if len(isa_version) == 5:  # noqa: SIM108
-                version = isa_version + "0"
-            else:
-                version = isa_version
+            version = isa_version + "0" if len(isa_version) == 5 else isa_version
         return messagetype + version
 
-    def _sniff(self):  # noqa: C901
+    def _sniff(self):
         """
         Examine a file for X12 syntax parameters and correctness of protocol.
         Parse ISA, get charset and version.
@@ -136,7 +132,7 @@ class x12(var):
             + self.ta_info["record_sep"]
         )
 
-    def checkenvelope(self):  # noqa: C901
+    def checkenvelope(self):
         """Check X12 envelopes and gather information to generate 997."""
         # pylint: disable=too-many-locals
         for nodeisa in self.getloop({"BOTSID": "ISA"}):
@@ -162,7 +158,7 @@ class x12(var):
                         )
                         % {"ieacount": ieacount, "groupcount": groupcount}
                     )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 self.add2errorlist(
                     _('[E15]: Count of messages in IEA is invalid: "%(count)s".\n')
                     % {"count": ieacount}
@@ -189,7 +185,7 @@ class x12(var):
                             )
                             % {"gecount": gecount, "messagecount": messagecount}
                         )
-                except Exception:  # noqa: BLE001
+                except Exception:
                     self.add2errorlist(
                         _('[E18]: Count of messages in GE is invalid: "%(count)s".\n')
                         % {"count": gecount}
@@ -217,7 +213,7 @@ class x12(var):
                                 )
                                 % {"secount": secount, "segmentcount": segmentcount}
                             )
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         self.add2errorlist(
                             _('[E21]: Count of segments in SE is invalid: "%(count)s".\n')
                             % {"count": secount}
@@ -235,7 +231,7 @@ class x12(var):
             if lex_record[0][VALUE] == "ISA":
                 count_fields = 0
                 for field in lex_record:
-                    count_fields += 1  # noqa: SIM113
+                    count_fields += 1
                     if count_fields == 7:
                         self.ta_info["frompartner"] = field[VALUE]
                     elif count_fields == 9:
@@ -269,8 +265,5 @@ class x12_writer(Outmessage):
         version = inode.record.get("GS08", "")
         if not version:
             isa_version = self.ta_info.get("version", "")
-            if len(isa_version) == 5:  # noqa: SIM108
-                version = isa_version + "0"
-            else:
-                version = isa_version
+            version = isa_version + "0" if len(isa_version) == 5 else isa_version
         return messagetype + version

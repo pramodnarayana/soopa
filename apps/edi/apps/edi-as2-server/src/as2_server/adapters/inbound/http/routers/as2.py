@@ -4,9 +4,9 @@ from edi.adapters.inbound.as2 import parse_as2_request
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from observability import ObservabilityProvider
 
-from ..adapters.http.multipart import render_mdn_report
-from ..core.receive_as2 import ReceiveAS2UseCase
-from ..dependencies import get_receive_as2_use_case
+from .....application.use_cases.receive_as2 import ReceiveAS2UseCase
+from .....dependencies import get_receive_as2_use_case
+from ..multipart import render_mdn_report
 
 router = APIRouter(tags=["as2"])
 

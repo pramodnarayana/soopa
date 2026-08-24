@@ -1,10 +1,10 @@
 import datetime
 
 import structlog
+from worker.domain.scheduler.handler import JobHandlerPort
+from worker.domain.scheduler.models import Job
 
-from worker.application.edi_audit_log_cleanup_use_case import EdiAuditLogCleanupUseCase
-from worker.core.scheduler.handler import JobHandlerPort
-from worker.core.scheduler.models import Job
+from worker.application.use_cases.edi_audit_log_cleanup_use_case import EdiAuditLogCleanupUseCase
 
 logger = structlog.get_logger(__name__)
 

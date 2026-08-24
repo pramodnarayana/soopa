@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Sequence
 from typing import Any
 
@@ -125,7 +126,10 @@ class SqlAlchemyAS2TradingPartnerRepository(
         record = result.scalar_one_or_none()
         return (
             AS2PartnerDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(AS2PartnerDomainModel)
+                }
             )
             if record
             else None
@@ -163,7 +167,9 @@ class SqlAlchemyAS2TradingPartnerRepository(
             where_clause = AS2Partner.tenant_id == tid_str
         result = await self.session.execute(select(AS2Partner).where(where_clause))
         return [
-            AS2PartnerDomainModel(**{k: v for k, v in r.__dict__.items() if not k.startswith("_")})
+            AS2PartnerDomainModel(
+                **{f.name: getattr(r, f.name) for f in dataclasses.fields(AS2PartnerDomainModel)}
+            )
             for r in result.scalars().all()
         ]
 

@@ -11,8 +11,11 @@ from edi.application.dto import (
 from edi.application.use_cases import (
     AS2PartnershipService,
     InboundRouteService,
-    OutboundRouteService,
     SFTPPartnerService,
+)
+from edi.application.use_cases.outbound_routes import (
+    CreateOutboundRouteUseCase,
+    ListOutboundRoutesUseCase,
 )
 from tests.api_fakes import FakeGlobalStore
 
@@ -111,10 +114,10 @@ async def test_list_routes(mock_uow, global_repo):
     global_repo.outbound_routes = [FakeRoute(str(uuid.uuid4()), as2_id, None, None)]
 
     inbound_service = InboundRouteService(uow=mock_uow)
-    outbound_service = OutboundRouteService(uow=mock_uow)
+    outbound_use_case = ListOutboundRoutesUseCase(uow=mock_uow)
 
     inbound_routes = await inbound_service.list_inbound_routes(1)
-    outbound_routes = await outbound_service.list_outbound_routes(1)
+    outbound_routes = await outbound_use_case.execute(1)
 
     assert len(inbound_routes) == 1
     assert len(outbound_routes) == 1
@@ -164,7 +167,7 @@ async def test_update_inbound_route(mock_uow, global_repo):
 
 @pytest.mark.asyncio
 async def test_create_outbound_route(mock_uow, global_repo):
-    service = OutboundRouteService(uow=mock_uow)
+    use_case = CreateOutboundRouteUseCase(uow=mock_uow)
     cmd = CreateOutboundRouteCmd(
         isa_sender_id="SENDER1",
         isa_receiver_id="RECEIVER1",
@@ -173,7 +176,7 @@ async def test_create_outbound_route(mock_uow, global_repo):
         name="Outbound Route",
         as2_partner_id=str(uuid.uuid4()),
     )
-    route = await service.create_outbound_route(tenant_id="1", cmd=cmd)
+    route = await use_case.execute(tenant_id="1", cmd=cmd)
 
     assert route.direction == "OUTBOUND"
     assert len(global_repo.outbound_routes) == 1

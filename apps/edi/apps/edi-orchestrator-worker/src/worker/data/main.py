@@ -16,6 +16,7 @@ from edi.adapters.outbound.pipeline.as2 import HttpxAS2DeliveryClient
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.sftp import ParamikoSftpClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
     DispatchInboundTransformUseCase,
@@ -26,7 +27,6 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
 from edi.config.settings import get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-from edi.core.pipeline.delivery.router import DeliveryRouter
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.events import MessageQueueName, PipelineEventType
@@ -41,9 +41,9 @@ from worker.adapters.inbound.workers.edi_data_plane_events_sqs_consumer import (
     EdiDataPlaneEventsSqsConsumer,
 )
 from worker.adapters.sqs_poller import poll_sqs_queue
-from worker.core.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
-from worker.core.scheduler.models import JobName
-from worker.core.security import validate_target_url
+from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
+from worker.domain.scheduler.models import JobName
+from worker.domain.security import validate_target_url
 
 load_dotenv()
 logger = structlog.get_logger(__name__)
@@ -75,13 +75,13 @@ async def main() -> None:
     sftp_delivery = ParamikoSftpClient()
     as2_delivery = HttpxAS2DeliveryClient(validator=validate_target_url)
 
-    def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouter:
+    def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
         strategies = {
             "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
             "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault),
             "as2_partner_id": As2DeliveryStrategy(uow, as2_delivery, vault),
         }
-        return DeliveryRouter(uow=uow, strategies=strategies)
+        return DeliveryRouterUseCase(uow=uow, strategies=strategies)
 
     registry = EdiDataPlaneRouteRegistry()
 
@@ -198,21 +198,25 @@ async def main() -> None:
         SqlAlchemyEdiIdempotencyCleanupRepository,
     )
     from worker.adapters.postgres_outbox_relay_repository import PostgresOutboxRelayRepository
-    from worker.application.edi_audit_log_cleanup_use_case import EdiAuditLogCleanupUseCase
-    from worker.application.edi_control_plane_outbox_cleanup_use_case import (
+    from worker.application.use_cases.edi_audit_log_cleanup_use_case import (
+        EdiAuditLogCleanupUseCase,
+    )
+    from worker.application.use_cases.edi_control_plane_outbox_cleanup_use_case import (
         EdiControlPlaneOutboxCleanupUseCase,
     )
-    from worker.application.edi_control_plane_outbox_sweeper_use_case import (
+    from worker.application.use_cases.edi_control_plane_outbox_sweeper_use_case import (
         EdiControlPlaneOutboxSweeperUseCase,
     )
-    from worker.application.edi_data_plane_outbox_cleanup_use_case import (
+    from worker.application.use_cases.edi_data_plane_outbox_cleanup_use_case import (
         EdiDataPlaneOutboxCleanupUseCase,
     )
-    from worker.application.edi_data_plane_outbox_sweeper_use_case import (
+    from worker.application.use_cases.edi_data_plane_outbox_sweeper_use_case import (
         EdiDataPlaneOutboxSweeperUseCase,
     )
-    from worker.application.edi_idempotency_cleanup_use_case import EdiIdempotencyCleanupUseCase
-    from worker.core.job_registry import JobHandlerRegistry
+    from worker.application.use_cases.edi_idempotency_cleanup_use_case import (
+        EdiIdempotencyCleanupUseCase,
+    )
+    from worker.domain.job_registry import JobHandlerRegistry
 
     message_publisher = EdiDataPlaneSqsOutboxPublisherAdapter(
         endpoint_url=settings.aws.endpoint_url,

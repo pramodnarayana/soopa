@@ -8,7 +8,7 @@ from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork,
 )
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
-from edi.adapters.outbound.httpx_as2_tester import HttpxAS2TesterAdapter
+from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.adapters.outbound.messaging.sqs_queue import SQSMessageQueueAdapter
 from edi.adapters.outbound.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter

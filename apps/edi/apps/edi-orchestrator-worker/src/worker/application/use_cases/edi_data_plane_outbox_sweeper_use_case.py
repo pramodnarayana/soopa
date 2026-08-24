@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
-from worker.application.edi_data_plane_outbox_processor_use_case import (
+from worker.application.use_cases.edi_data_plane_outbox_processor_use_case import (
     EdiDataPlaneOutboxProcessorUseCase,
 )
 from worker.ports.outbound.edi_data_plane_outbox_publisher_port import (

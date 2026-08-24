@@ -5,7 +5,6 @@ import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import AuditLog
 from sqlalchemy import delete, select
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
@@ -43,7 +42,11 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
                                     .limit(5000)
                                 )
                             )
-                            res_audit: CursorResult[tuple[()]] = await session.execute(stmt_audit)  # type: ignore[assignment]
+                            from typing import Any, cast
+
+                            from sqlalchemy import CursorResult
+
+                            res_audit = cast(CursorResult[Any], await session.execute(stmt_audit))
                             deleted = res_audit.rowcount
                             audit_deleted += deleted
                             await session.commit()
@@ -64,5 +67,4 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
         )
         exceptions = [r for r in results if isinstance(r, Exception)]
         if exceptions:
-            logger.error("shard_cleanup_had_failures", failure_count=len(exceptions))
-            raise exceptions[0]
+            raise ExceptionGroup("shard_cleanup_had_failures", exceptions)

@@ -1,7 +1,7 @@
-from edi.core.bots.domain.node import Node  # type: ignore[attr-defined]
+from edi.core.bots.domain.node import Node
 
 
-def generate_997_ast(in_node: Node, error_list: list[str] | None = None) -> Node:  # noqa: C901
+def generate_997_ast(in_node: Node, error_list: list[str] | None = None) -> Node:
     """
     Generate a stateless 997 Functional Acknowledgment AST from an incoming X12 AST.
 

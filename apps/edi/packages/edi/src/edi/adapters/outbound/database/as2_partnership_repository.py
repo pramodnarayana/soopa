@@ -1,3 +1,5 @@
+import dataclasses
+
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 
@@ -25,7 +27,10 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         )
         return [
             AS2PartnershipDomainModel(
-                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(r, f.name)
+                    for f in dataclasses.fields(AS2PartnershipDomainModel)
+                }
             )
             for r in result.scalars().all()
         ]
@@ -114,7 +119,10 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         record = result.scalar_one_or_none()
         return (
             AS2PartnershipDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(AS2PartnershipDomainModel)
+                }
             )
             if record
             else None

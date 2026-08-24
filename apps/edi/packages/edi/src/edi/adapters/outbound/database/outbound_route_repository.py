@@ -1,8 +1,10 @@
+import dataclasses
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import (
@@ -38,7 +40,10 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         record = res.scalar_one_or_none()
         return (
             OutboundRouteDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(OutboundRouteDomainModel)
+                }
             )
             if record
             else None
@@ -57,7 +62,10 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         record = result.scalar_one_or_none()
         return (
             OutboundRouteDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(OutboundRouteDomainModel)
+                }
             )
             if record
             else None
@@ -161,7 +169,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
         await self.session.flush()
-        return bool(getattr(result, "rowcount", 0) > 0)
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0
 
     async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteDomainModel]:
         outbound_result = await self.session.execute(
@@ -171,7 +179,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         )
         return [
             OutboundRouteDomainModel(
-                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
+                **{f.name: getattr(r, f.name) for f in dataclasses.fields(OutboundRouteDomainModel)}
             )
             for r in outbound_result.scalars().all()
         ]

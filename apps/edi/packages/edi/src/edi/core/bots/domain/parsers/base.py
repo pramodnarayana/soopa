@@ -1,4 +1,3 @@
-# type: ignore
 """
 parsers/base.py — Abstract variable-length EDI lexer.
 
@@ -28,7 +27,7 @@ logger = structlog.get_logger(__name__)
 class var(Inmessage):
     """Abstract class for EDI objects with records of variable length."""
 
-    def _lex(self):  # noqa: C901
+    def _lex(self):
         """
         Lex file with variable records to list of lex_records,
         fields and subfields (build self.lex_records).
@@ -210,7 +209,7 @@ class var(Inmessage):
                     {"leftover": leftover},
                 )
 
-    def _parsefields(self, lex_record, record_definition) -> dict:  # noqa: C901
+    def _parsefields(self, lex_record, record_definition) -> dict:
         """
         Identify the fields in inmessage-record using the record_definition from the grammar.
         Build a record (dictionary; field-IDs are unique within record) and return this.

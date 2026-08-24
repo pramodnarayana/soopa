@@ -6,7 +6,7 @@ from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkP
 logger = structlog.get_logger(__name__)
 
 
-class DeliveryRouter:
+class DeliveryRouterUseCase:
     """
     Orchestrates final-mile delivery by delegating to the appropriate strategy.
     """

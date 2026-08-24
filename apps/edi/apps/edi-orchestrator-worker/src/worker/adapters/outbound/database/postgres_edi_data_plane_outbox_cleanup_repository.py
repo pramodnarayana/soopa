@@ -5,7 +5,6 @@ import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from sqlalchemy import delete, select
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
@@ -48,7 +47,11 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(EdiDataPlaneOutboxCleanupRep
                                     .limit(5000)
                                 )
                             )
-                            res_outbox: CursorResult[tuple[()]] = await session.execute(stmt_outbox)  # type: ignore[assignment]
+                            from typing import Any, cast
+
+                            from sqlalchemy import CursorResult
+
+                            res_outbox = cast(CursorResult[Any], await session.execute(stmt_outbox))
                             deleted = res_outbox.rowcount
                             outbox_deleted += deleted
                             await session.commit()
@@ -69,5 +72,4 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(EdiDataPlaneOutboxCleanupRep
         )
         exceptions = [r for r in results if isinstance(r, Exception)]
         if exceptions:
-            logger.error("shard_cleanup_had_failures", failure_count=len(exceptions))
-            raise exceptions[0]
+            raise ExceptionGroup("shard_cleanup_had_failures", exceptions)

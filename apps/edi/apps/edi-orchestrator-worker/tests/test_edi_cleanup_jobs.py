@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from worker.domain.scheduler.models import Job
 
 from worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
@@ -16,7 +17,6 @@ from worker.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
 from worker.adapters.inbound.jobs.edi_idempotency_cleanup_job import (
     EdiIdempotencyCleanupJobHandler,
 )
-from worker.core.scheduler.models import Job
 
 
 @pytest.mark.asyncio

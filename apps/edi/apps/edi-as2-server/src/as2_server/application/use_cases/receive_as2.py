@@ -13,13 +13,13 @@ from edi.adapters.outbound.security import decrypt_payload, verify_signature
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
 
-from ..ports.outbound.repository_port import (
+from as2_server.ports.outbound.repository_port import (
     AS2TenantRepositoryPort,
     EdiMessageRepositoryPort,
     TradingPartnerRepositoryPort,
 )
-from ..ports.outbound.storage_port import PayloadStoragePort
-from ..ports.outbound.vault_port import VaultServicePort
+from as2_server.ports.outbound.storage_port import PayloadStoragePort
+from as2_server.ports.outbound.vault_port import VaultServicePort
 
 
 @dataclass(frozen=True)
@@ -155,7 +155,7 @@ class ReceiveAS2UseCase:
                 self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
                 self.logger.warning("as2_unknown_tenant", as2_to=as2_msg.as2_to)
                 return None
-            return tenant_id
+            return str(tenant_id)
         except ValueError as e:
             self.logger.warning("tenant_resolution_ambiguous", error=str(e), as2_to=as2_msg.as2_to)
             self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
@@ -290,7 +290,7 @@ class ReceiveAS2UseCase:
                     logger.exception("as2_isa_routing_failed_session_empty")
                     return _RouteResult(failed=True)
 
-                from ..adapters.repository import EdiMessageRepositoryAdapter
+                from ...adapters.outbound.repository import EdiMessageRepositoryAdapter
 
                 new_repo = EdiMessageRepositoryAdapter(tenant_session)
 

@@ -25,7 +25,7 @@ from edi.core.bots.utils.botslib import gettext as _
 ERROR_IN_GRAMMAR = "BOTS_error_1$%3@7#!%+_)_+[{]}"
 
 
-def checkfield(grammar_obj, field, recordid):  # noqa: C901
+def checkfield(grammar_obj, field, recordid):
     """'normalise' field: make list equal length"""
     # pylint: disable=too-many-branches, too-many-statements
     if not isinstance(field, list):
@@ -301,7 +301,7 @@ def checkfield(grammar_obj, field, recordid):  # noqa: C901
             )
 
 
-def checkstructure(grammar_obj, structure, mpath):  # noqa: C901
+def checkstructure(grammar_obj, structure, mpath):
     """
     Recursive
     1.   Check structure.
@@ -423,7 +423,7 @@ def checkbackcollision(grammar_obj, structure, collision=None):
             )
         if i.min_occ:
             headerissave = True
-            if i.min_occ == i.max_occ:  # noqa: SIM108
+            if i.min_occ == i.max_occ:
                 # so: fixed number of occurences;
                 # can not lead to collision as is always clear where in structure record is
                 # NOTE: this is mainly used for MIN=1, MAX=1

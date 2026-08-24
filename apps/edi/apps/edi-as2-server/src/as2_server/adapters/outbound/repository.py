@@ -9,7 +9,7 @@ from edi.adapters.outbound.database.repository import (
 from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..ports.outbound.repository_port import PartnerEntity
+from as2_server.ports.outbound.repository_port import PartnerEntity
 
 
 class AS2TenantRepositoryAdapter:

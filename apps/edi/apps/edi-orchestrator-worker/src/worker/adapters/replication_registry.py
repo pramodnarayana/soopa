@@ -3,7 +3,7 @@ Replication Registry — Infrastructure Wiring of the Dependency Graph.
 
 This module is the SINGLE SOURCE OF TRUTH for which entities are replicated
 and what their FK dependencies are. It wires concrete SQLAlchemy model classes
-into the EntitySpec declarative structure defined in worker.core.replication_graph.
+into the EntitySpec declarative structure defined in worker.domain.replication_graph.
 
 This is an infrastructure concern (it imports ORM models), deliberately
 separated from the pure domain types and algorithm in replication_graph.py.
@@ -36,7 +36,7 @@ from edi.adapters.outbound.database.models.data_plane import SFTPPartner as Tena
 from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
 from platform_orm.models import Webhook as GlobalWebhook
 
-from worker.core.replication_graph import EntityDependency, EntitySpec
+from worker.domain.replication_graph import EntityDependency, EntitySpec
 
 # ---------------------------------------------------------------------------
 # Replication Graph

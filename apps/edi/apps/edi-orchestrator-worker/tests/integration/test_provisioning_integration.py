@@ -24,8 +24,8 @@ from worker.adapters.edi_data_plane_sqs_outbox_publisher import (
     EdiDataPlaneSqsOutboxPublisherAdapter,
 )
 from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
-from worker.core.errors import PermanentProvisioningError
-from worker.core.service import ProvisioningWorkerService
+from worker.domain.errors import PermanentProvisioningError
+from worker.domain.service import ProvisioningWorkerService
 
 load_dotenv()
 
