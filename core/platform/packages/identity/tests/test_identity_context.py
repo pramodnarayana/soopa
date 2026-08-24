@@ -11,7 +11,7 @@ def test_identity_context_from_claims_creates_valid_context() -> None:
         organization_id="org-xyz",
         roles=["admin", "user"],
         permissions=["read:data", "write:data"],
-        extra_claim="some-value",
+        raw_claims={"extra_claim": "some-value", "iss": "https://auth.soopa.io"},
     )
 
     context = identity_context_from_claims(claims)

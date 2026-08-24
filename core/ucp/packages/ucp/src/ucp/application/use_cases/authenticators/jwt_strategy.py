@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from typing import Any
 
 import structlog
 from identity.application.authenticate_use_case import (
@@ -41,19 +42,26 @@ class JwtStrategy(AuthenticationStrategyPort):
         return True
 
     async def authenticate(self, token: str) -> IdentityContext:  # noqa: C901
+        from dataclasses import replace
+
         # Note: We let AuthenticationError propagate up so the caller handles it
         identity: IdentityContext = await authenticate_bearer_token(
             f"Bearer {token}", self.token_verifier
         )
 
+        updates: dict[str, Any] = {}
+        tenant_id = identity.tenant_id
+        subject = identity.subject
+
         # Map IdP tenant ID to Canonical UCP tenant ID exactly once at the perimeter.
         async with self.tenant_repo_factory() as repo:
             # 1. Map the primary tenant_id if present
-            if identity.tenant_id and not identity.tenant_id.startswith("ten_"):
-                resolved = await repo.find_by_idp_tenant_id(identity.tenant_id)
+            if tenant_id and not tenant_id.startswith("ten_"):
+                resolved = await repo.find_by_idp_tenant_id(tenant_id)
                 if resolved:
-                    identity.tenant_id = resolved.id
+                    tenant_id = resolved.id
                     identity.authorized_tenants.add(resolved.id)
+                    updates["tenant_id"] = tenant_id
 
             # 2. Map all authorized tenants that are IdP IDs
             mapped_tenants = set()
@@ -67,8 +75,9 @@ class JwtStrategy(AuthenticationStrategyPort):
                         )  # MUST keep original IdP ID so guard can match it if requested!
                         identity.tenant_mapping[tid] = resolved_t.id
                         # Default primary tenant if missing
-                        if not identity.tenant_id:
-                            identity.tenant_id = resolved_t.id
+                        if not tenant_id:
+                            tenant_id = resolved_t.id
+                            updates["tenant_id"] = tenant_id
                     else:
                         logger.error(
                             "CRITICAL: IdP Tenant ID '%s' found in token but NOT found in local database!",
@@ -78,14 +87,17 @@ class JwtStrategy(AuthenticationStrategyPort):
                 else:
                     mapped_tenants.add(tid)
 
-            identity.authorized_tenants = mapped_tenants
+            updates["authorized_tenants"] = mapped_tenants
 
         # Map IdP user ID to Canonical UCP user ID
-        if identity.subject and not identity.subject.startswith("usr_"):
+        if subject and not subject.startswith("usr_"):
             async with self.user_repo_factory() as user_repo:
-                resolved_u = await user_repo.find_by_idp_user_id(identity.subject)
+                resolved_u = await user_repo.find_by_idp_user_id(subject)
                 if resolved_u:
-                    identity.subject = resolved_u.id
+                    subject = resolved_u.id
+                    updates["subject"] = subject
+
+        identity = replace(identity, **updates)
 
         # Backwards compatibility: if Zitadel token claims they are "admin", grant legacy capabilities
         if identity.is_platform_admin:

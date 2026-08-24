@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
+from ucp.application.dto import AssignUserRoleRequest
 from ucp.application.use_cases.roles.assign_user_role_use_case import (
-    AssignUserRoleRequest,
     AssignUserRoleUseCase,
 )
 from ucp.domain.exceptions import ResourceNotFoundError

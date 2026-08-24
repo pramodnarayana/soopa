@@ -10,13 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
+from ucp.application.dto import SubscribeAppCommand, UnsubscribeAppCommand
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
 from ucp.application.use_cases.subscribe_app_use_case import (
-    SubscribeAppCommand,
     SubscribeAppUseCase,
 )
 from ucp.application.use_cases.toggle_tenant_status_use_case import (
@@ -24,7 +24,6 @@ from ucp.application.use_cases.toggle_tenant_status_use_case import (
     ToggleTenantStatusUseCase,
 )
 from ucp.application.use_cases.unsubscribe_app_use_case import (
-    UnsubscribeAppCommand,
     UnsubscribeAppUseCase,
 )
 from ucp.application.use_cases.update_tenant_name_use_case import (

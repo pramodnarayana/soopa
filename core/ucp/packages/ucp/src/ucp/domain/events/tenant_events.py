@@ -1,6 +1,9 @@
+from dataclasses import dataclass
+
 from ucp.domain.events.base import DomainEvent
 
 
+@dataclass(frozen=True)
 class TenantProvisionedEvent(DomainEvent):
     tenant_id: str
     tenant_name: str
@@ -14,6 +17,7 @@ class TenantProvisionedEvent(DomainEvent):
         return self.tenant_id
 
 
+@dataclass(frozen=True)
 class AppSubscribedEvent(DomainEvent):
     tenant_id: str
     app_id: str
@@ -26,6 +30,7 @@ class AppSubscribedEvent(DomainEvent):
         return self.tenant_id
 
 
+@dataclass(frozen=True)
 class AppUnsubscribedEvent(DomainEvent):
     tenant_id: str
     app_id: str
@@ -38,6 +43,7 @@ class AppUnsubscribedEvent(DomainEvent):
         return self.tenant_id
 
 
+@dataclass(frozen=True)
 class TenantNameUpdatedEvent(DomainEvent):
     org_id: str
     name: str
@@ -50,6 +56,7 @@ class TenantNameUpdatedEvent(DomainEvent):
         return self.org_id
 
 
+@dataclass(frozen=True)
 class TenantStatusToggledEvent(DomainEvent):
     org_id: str
     active: bool
@@ -62,6 +69,7 @@ class TenantStatusToggledEvent(DomainEvent):
         return self.org_id
 
 
+@dataclass(frozen=True)
 class TenantDeletedEvent(DomainEvent):
     org_id: str
 

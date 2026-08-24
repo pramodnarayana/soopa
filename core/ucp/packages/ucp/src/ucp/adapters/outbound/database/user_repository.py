@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Literal, cast
 
 import structlog
+from platform_orm.outbox_serializer import serialize_domain_event
 
 logger = structlog.get_logger(__name__)
 
@@ -194,14 +195,13 @@ class UserRepository(UserRepositoryPort):
         self._flush_events(user)
 
     def _flush_events(self, user: User, idempotency_key: str | None = None) -> None:
-        import json
         import os
 
         for index, event in enumerate(user.domain_events):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
-            payload_dict = json.loads(event.model_dump_json())
+            payload_dict = serialize_domain_event(event)
             tenant_id = event.get_routing_tenant_id()
             if tenant_id is None:
                 from identity.domain.identity_context import PLATFORM_TENANT_ID

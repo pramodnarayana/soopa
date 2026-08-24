@@ -62,3 +62,7 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Strict DTO Standard**: Every bounded context MUST define a pure `application/dto.py` file to hold its Request/Command/Query objects (as `@dataclass(frozen=True)`).
 - **No Infrastructure Leaks**: NEVER pass web-specific framework models (e.g., FastAPI/Pydantic `BaseModel`) or ORM models directly into the Application Layer (Use Cases/Services).
 - **Adapter Translation**: The HTTP or Event adapter must strictly translate incoming payloads into these pure Command/DTO objects before passing them to the Application Layer.
+
+# Domain Events & Outbox Serialization
+- **Pure Domain Events**: Domain events MUST be pure Python `@dataclass(frozen=True)`. NEVER use Pydantic `BaseModel` for domain events.
+- **Centralized Outbox Serialization**: NEVER write custom `json.loads(json.dumps(...))` logic or call `.model_dump()` inside Outbox Repositories. ALL repositories across the monorepo MUST serialize domain events by importing and using the central `platform_orm.outbox_serializer.serialize_domain_event()` utility.

@@ -13,7 +13,7 @@ import structlog
 
 from edi.adapters.inbound.as2 import build_outbound_message, parse_mdn
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
-from edi.adapters.outbound.security.network import validate_target_url
+from edi.adapters.outbound.security.network import ssrf_safe_context
 
 logger = structlog.get_logger(__name__)
 
@@ -57,9 +57,6 @@ class HttpxAS2TesterAdapter:
         signature_algorithm: str,
         custom_payload: str | None = None,
     ) -> tuple[bool, str | None, str | None, str | None]:
-        if not validate_target_url(remote_url):
-            return False, "SSRF validation failed for destination URL", None, None
-
         # Build sign/encrypt callables only if keys are available
         sign_fn = (
             functools.partial(
@@ -102,12 +99,15 @@ class HttpxAS2TesterAdapter:
             return False, f"Failed to build AS2 message: {e}", payload_str, None
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    remote_url,
-                    content=as2_msg.body,
-                    headers=as2_msg.headers,
-                )
+            with ssrf_safe_context(remote_url):
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        remote_url,
+                        content=as2_msg.body,
+                        headers=as2_msg.headers,
+                    )
+        except ValueError:
+            return False, "SSRF validation failed for destination URL", payload_str, None
         except httpx.ConnectError as e:
             return False, f"Connection refused: {e}", payload_str, None
         except httpx.TimeoutException:

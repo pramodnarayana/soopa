@@ -1,6 +1,9 @@
+from dataclasses import dataclass
+
 from ucp.domain.events.base import DomainEvent
 
 
+@dataclass(frozen=True)
 class UserUpdatedEvent(DomainEvent):
     idp_user_id: str
     tenant_id: str
@@ -16,6 +19,7 @@ class UserUpdatedEvent(DomainEvent):
         return self.tenant_id
 
 
+@dataclass(frozen=True)
 class UserStatusToggledEvent(DomainEvent):
     idp_user_id: str
     tenant_id: str
@@ -29,6 +33,7 @@ class UserStatusToggledEvent(DomainEvent):
         return self.tenant_id
 
 
+@dataclass(frozen=True)
 class UserDeletedEvent(DomainEvent):
     idp_user_id: str
 
@@ -40,6 +45,7 @@ class UserDeletedEvent(DomainEvent):
         return None  # Global event
 
 
+@dataclass(frozen=True)
 class UserMembershipRemovedEvent(DomainEvent):
     idp_user_id: str
     tenant_id: str
@@ -52,6 +58,7 @@ class UserMembershipRemovedEvent(DomainEvent):
         return self.tenant_id
 
 
+@dataclass(frozen=True)
 class UserCreatedEvent(DomainEvent):
     user_id: str
     tenant_id: str

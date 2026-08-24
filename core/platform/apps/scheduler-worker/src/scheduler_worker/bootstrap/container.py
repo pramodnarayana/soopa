@@ -8,7 +8,6 @@ from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecut
 from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
 
 from scheduler_worker.adapters.inbound.workers.scheduler_poller import SchedulerPoller
-from scheduler_worker.adapters.outbound.messaging.sqs_job_dispatcher import SqsJobDispatcher
 
 
 def _validate_positive_int(value: int, name: str) -> int:

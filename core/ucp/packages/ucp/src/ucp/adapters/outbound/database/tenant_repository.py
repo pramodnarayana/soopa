@@ -1,7 +1,7 @@
-import json
 import os
 
 import structlog
+from platform_orm.outbox_serializer import serialize_domain_event
 
 logger = structlog.get_logger(__name__)
 import typing
@@ -133,7 +133,7 @@ class TenantRepository(TenantRepositoryPort):
                 else getattr(event, "id", f"{event_name}_{tenant.id}_{index}")
             )
 
-            payload_dict = json.loads(event.model_dump_json())
+            payload_dict = serialize_domain_event(event)
             tenant_id = event.get_routing_tenant_id()
             if tenant_id is None:
                 logger.error(

@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 from typing import Any
 
 from ucp.domain.events.base import DomainEvent
 
 
+@dataclass(frozen=True)
 class WebhookCreatedEvent(DomainEvent):
     """
     Emitted when a new Webhook is created.
@@ -16,6 +18,9 @@ class WebhookCreatedEvent(DomainEvent):
     def event_name(self) -> str:
         return self.event_type
 
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "tenant_id": self.tenant_id,
@@ -24,6 +29,7 @@ class WebhookCreatedEvent(DomainEvent):
         }
 
 
+@dataclass(frozen=True)
 class WebhookUpdatedEvent(DomainEvent):
     """
     Emitted when a Webhook is updated.
@@ -37,6 +43,9 @@ class WebhookUpdatedEvent(DomainEvent):
     def event_name(self) -> str:
         return self.event_type
 
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "tenant_id": self.tenant_id,
@@ -45,6 +54,7 @@ class WebhookUpdatedEvent(DomainEvent):
         }
 
 
+@dataclass(frozen=True)
 class WebhookDeletedEvent(DomainEvent):
     """
     Emitted when a Webhook is deleted.
@@ -57,6 +67,9 @@ class WebhookDeletedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return self.event_type
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
 
     def to_dict(self) -> dict[str, Any]:
         return {

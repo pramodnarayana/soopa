@@ -1,6 +1,9 @@
+from dataclasses import dataclass
+
 from ucp.domain.events.base import DomainEvent
 
 
+@dataclass(frozen=True)
 class RoleCreatedEvent(DomainEvent):
     role_id: str
     name: str
@@ -14,6 +17,7 @@ class RoleCreatedEvent(DomainEvent):
         return None  # Global event
 
 
+@dataclass(frozen=True)
 class UserRoleAssignedEvent(DomainEvent):
     user_id: str
     role_id: str

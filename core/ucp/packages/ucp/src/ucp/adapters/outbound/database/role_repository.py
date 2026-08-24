@@ -1,4 +1,3 @@
-import json
 import os
 import uuid
 from typing import Any
@@ -6,6 +5,7 @@ from typing import Any
 import structlog
 from platform_orm.models import Role as OrmRole
 from platform_orm.models import UserRole
+from platform_orm.outbox_serializer import serialize_domain_event
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -211,7 +211,7 @@ class PostgresRoleRepository(RoleRepositoryPort):
             outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
-            payload_dict = json.loads(event.model_dump_json())
+            payload_dict = serialize_domain_event(event)
             tenant_id = event.get_routing_tenant_id()
             if tenant_id is None:
                 from identity.domain.identity_context import PLATFORM_TENANT_ID

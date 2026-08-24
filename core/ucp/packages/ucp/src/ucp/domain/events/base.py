@@ -1,11 +1,11 @@
 """Base class for all domain events in the UCP domain model."""
 
-from abc import ABC
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-from pydantic import BaseModel
 
-
-class DomainEvent(BaseModel, ABC):
+@dataclass(frozen=True)
+class DomainEvent(ABC):
     """
     Marker base class for all domain events.
 
@@ -13,13 +13,13 @@ class DomainEvent(BaseModel, ABC):
     to JSON for the Outbox pattern without any extra mapping step.
     """
 
-    model_config = {"frozen": True}
-
     @property
+    @abstractmethod
     def event_name(self) -> str:
         """Returns the canonical event name for messaging (e.g. 'tenant.provisioned')."""
         raise NotImplementedError
 
+    @abstractmethod
     def get_routing_tenant_id(self) -> str | None:
         """
         Returns the tenant ID associated with this event for Outbox routing.

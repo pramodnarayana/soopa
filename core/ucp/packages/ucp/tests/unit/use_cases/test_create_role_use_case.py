@@ -2,8 +2,8 @@ from unittest.mock import create_autospec
 
 import pytest
 
+from ucp.application.dto import CreateRoleRequest
 from ucp.application.use_cases.roles.create_role_use_case import (
-    CreateRoleRequest,
     CreateRoleUseCase,
 )
 from ucp.domain.exceptions import InvalidCapabilityError

@@ -11,6 +11,20 @@ def adapter():
     return HttpxAS2TesterAdapter()
 
 
+@pytest.fixture(autouse=True)
+def mock_ssrf():
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def mock_ssrf_context(url):
+        yield
+
+    with patch(
+        "edi.adapters.outbound.http.httpx_as2_tester_adapter.ssrf_safe_context", mock_ssrf_context
+    ):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_test_connection_success(adapter):
     with (

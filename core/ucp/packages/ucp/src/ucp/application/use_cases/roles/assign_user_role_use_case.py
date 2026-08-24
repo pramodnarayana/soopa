@@ -1,15 +1,10 @@
 import structlog
-from pydantic import BaseModel
 
+from ucp.application.dto import AssignUserRoleRequest
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
-
-
-class AssignUserRoleRequest(BaseModel):
-    user_id: str
-    role_id: str
 
 
 class AssignUserRoleUseCase:

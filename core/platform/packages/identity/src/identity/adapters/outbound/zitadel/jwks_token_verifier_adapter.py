@@ -115,7 +115,12 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         payload["roles"] = roles
 
         try:
-            return TokenClaims.model_validate(payload)
+            from dataclasses import fields
+
+            valid_keys = {f.name for f in fields(TokenClaims)}
+            filtered_payload = {k: v for k, v in payload.items() if k in valid_keys}
+            filtered_payload["raw_claims"] = dict(payload)
+            return TokenClaims(**filtered_payload)
         except Exception as e:
             logger.error("Token claims validation failed", exc_info=e)
             raise TokenValidationError(f"Invalid token claims: {e}") from e

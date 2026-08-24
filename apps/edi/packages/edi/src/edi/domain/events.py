@@ -1,7 +1,5 @@
 from enum import StrEnum
 
-from pydantic import BaseModel
-
 
 class UcpEventType(StrEnum):
     app_subscribed = "app.subscribed"
@@ -57,7 +55,11 @@ ALL_PROVISIONING_EVENT_TYPES = (
 )
 
 
-class ProvisioningEvent(BaseModel):
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ProvisioningEvent:
     tenant_id: str
     event_type: ProvisioningEventType
     resource_id: str | None = None

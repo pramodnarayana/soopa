@@ -97,12 +97,14 @@ class SqlAlchemyControlPlaneOutboxRepository(
         event: ProvisioningEvent,
         idempotency_key: str | None = None,
     ) -> str:
+        from platform_orm.outbox_serializer import serialize_domain_event
+
         event_id = await super().publish_outbox_event(
             tenant_id=event.tenant_id,
             event_type=str(
                 event.event_type.value if hasattr(event.event_type, "value") else event.event_type
             ),
-            payload=event.model_dump(mode="json"),
+            payload=serialize_domain_event(event),
             idempotency_key=idempotency_key,
         )
         return event_id

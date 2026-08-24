@@ -3,16 +3,16 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
 from scheduler.domain.models import ScheduledJob
 
-from scheduler_worker.adapters.outbound.messaging.sqs_job_dispatcher import SqsJobDispatcher
 from scheduler_worker.bootstrap.container import Container
 
 
 def test_container_wires_sqs_job_dispatcher() -> None:
     container = Container(session_factory=MagicMock())
 
-    assert isinstance(container.job_dispatcher(), SqsJobDispatcher)
+    assert isinstance(container.job_dispatcher(), SQSJobDispatcher)
 
 
 @pytest.mark.asyncio
@@ -25,7 +25,7 @@ async def test_dispatches_job_to_edi_orchestrator_queue(monkeypatch: pytest.Monk
     session = MagicMock()
     session.client.return_value = client_context
     monkeypatch.setattr(
-        "scheduler_worker.adapters.outbound.messaging.sqs_job_dispatcher.aioboto3.Session",
+        "scheduler.adapters.outbound.messaging.sqs_job_dispatcher.aioboto3.Session",
         lambda: session,
     )
 
@@ -42,7 +42,7 @@ async def test_dispatches_job_to_edi_orchestrator_queue(monkeypatch: pytest.Monk
         next_run_at=datetime.now(UTC),
     )
 
-    await SqsJobDispatcher(endpoint_url="http://localstack:4566").dispatch(job)
+    await SQSJobDispatcher(endpoint_url="http://localstack:4566").dispatch(job)
 
     session.client.assert_called_once_with(
         "sqs", region_name="us-east-1", endpoint_url="http://localstack:4566"
