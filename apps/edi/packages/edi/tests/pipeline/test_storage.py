@@ -20,13 +20,16 @@ def aws_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
 
+@pytest.mark.integration
 async def test_s3_storage_adapter_integration(aws_credentials: None) -> None:
     """
     Narrow Integration Test for S3StorageClient.
     Connects to the LocalStack S3 container, creates a bucket,
     uploads a file, downloads it, and asserts the content matches.
     """
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
+    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+    if not endpoint_url:
+        pytest.skip("AWS_ENDPOINT_URL is required for the LocalStack S3 integration test")
     bucket_name = "test-bucket-edi-pipeline"
 
     # Setup: Ensure bucket exists

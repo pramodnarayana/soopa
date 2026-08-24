@@ -3,11 +3,11 @@ from typing import Any
 
 from dependency_injector import containers, providers
 from scheduler.adapters.outbound.database.postgres_job_repository import PostgresJobRepository
-from scheduler.adapters.outbound.messaging.dummy_job_dispatcher import DummyJobDispatcher
 from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecuteJobsUseCase
 from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
 
 from scheduler_worker.adapters.inbound.workers.scheduler_poller import SchedulerPoller
+from scheduler_worker.adapters.outbound.messaging.sqs_job_dispatcher import SqsJobDispatcher
 
 
 def _validate_positive_int(value: int, name: str) -> int:
@@ -29,7 +29,9 @@ class Container(containers.DeclarativeContainer):
     )
 
     job_dispatcher = providers.Factory(
-        DummyJobDispatcher,
+        SqsJobDispatcher,
+        endpoint_url=providers.Callable(os.environ.get, "AWS_ENDPOINT_URL"),
+        region_name=providers.Callable(os.environ.get, "AWS_REGION", "us-east-1"),
     )
 
     sweep_use_case = providers.Factory(

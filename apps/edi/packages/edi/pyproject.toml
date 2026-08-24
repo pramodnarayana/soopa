@@ -62,7 +62,7 @@ DEP002 = [
 "src/edi/services/*.py" = ["C901"]
 "src/edi/routers/trading_partners/platform/*.py" = ["C901"]
 "src/edi/routers/**/*.py" = ["B008", "E402"]
-"src/edi/core/bots/**/*.py" = ["C901", "BLE001", "S314", "F821", "SIM108", "SIM113", "S110", "S112"]
+"src/edi/core/bots/**/*.py" = ["C901", "BLE001", "SIM108", "SIM113", "S110", "S112"]
 "src/edi/dependencies/**/*.py" = ["B008"]
 "tests/**/*.py" = ["E402"]
 
@@ -88,7 +88,10 @@ exclude = [
 [tool.mypy]
 exclude = [
     "src/edi/core/grammar",
-    "src/edi/core/bots",
+    # Dynamically composed legacy runtime; config and bundled grammars remain type-checked.
+    "src/edi/core/bots/domain",
+    "src/edi/core/bots/utils",
+    "src/edi/core/bots/facade.py",
     "tests/bots_core",
     "tests/grammar"
 ]

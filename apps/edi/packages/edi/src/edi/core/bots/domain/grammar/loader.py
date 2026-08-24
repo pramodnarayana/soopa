@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from edi.core.bots.config.botsconfig import (
     ID,
     ISFIELD,
@@ -10,6 +12,9 @@ from edi.core.bots.domain.models import (
     create_field_definition,
 )
 from edi.core.bots.utils.botslib import gettext as _
+
+if TYPE_CHECKING:
+    from edi.core.bots.domain.grammar.grammar import Grammar
 
 ERROR_IN_GRAMMAR = "BOTS_error_1$%3@7#!%+_)_+[{]}"
 

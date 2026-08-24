@@ -28,6 +28,16 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    @staticmethod
+    def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
+        return OutboundRouteDomainModel(
+            **{
+                field.name: getattr(record, field.name)
+                for field in dataclasses.fields(OutboundRouteDomainModel)
+                if hasattr(record, field.name)
+            }
+        )
+
     async def get_outbound_route(
         self, tenant_id: str, route_id: str
     ) -> OutboundRouteDomainModel | None:
@@ -38,16 +48,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         )
         res = await self.session.execute(stmt)
         record = res.scalar_one_or_none()
-        return (
-            OutboundRouteDomainModel(
-                **{
-                    f.name: getattr(record, f.name)
-                    for f in dataclasses.fields(OutboundRouteDomainModel)
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
@@ -60,16 +61,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             )
         )
         record = result.scalar_one_or_none()
-        return (
-            OutboundRouteDomainModel(
-                **{
-                    f.name: getattr(record, f.name)
-                    for f in dataclasses.fields(OutboundRouteDomainModel)
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def _validate_outbound_destination(
         self,
@@ -177,9 +169,4 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                 OutboundRoute.tenant_id == tenant_id, OutboundRoute.deleted_at.is_(None)
             )
         )
-        return [
-            OutboundRouteDomainModel(
-                **{f.name: getattr(r, f.name) for f in dataclasses.fields(OutboundRouteDomainModel)}
-            )
-            for r in outbound_result.scalars().all()
-        ]
+        return [self._to_domain_model(record) for record in outbound_result.scalars().all()]

@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -69,11 +70,22 @@ async def test_sweeper_fetches_and_processes_events(
     db_router: DatabaseRouter, test_session: AsyncSession
 ) -> None:
     # 1. Setup real DB records
+    created_at = datetime.now(UTC) - timedelta(minutes=6)
     await test_session.execute(
         insert(DataPlaneOutbox).values(
             [
-                {"id": 1, "event_type": "EDI_RECEIVED", "payload": {}},
-                {"id": 2, "event_type": "EDI_PROCESSED", "payload": {}},
+                {
+                    "id": 1,
+                    "event_type": "EDI_RECEIVED",
+                    "payload": {},
+                    "created_at": created_at,
+                },
+                {
+                    "id": 2,
+                    "event_type": "EDI_PROCESSED",
+                    "payload": {},
+                    "created_at": created_at,
+                },
             ]
         )
     )

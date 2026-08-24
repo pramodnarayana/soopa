@@ -72,7 +72,20 @@ dev = [
 [tool.mypy]
 strict = true
 warn_unused_ignores = false
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", ".*bots.*", ".*grammar.*", "services/worker", "^(.*/)?scripts/.*$"]
+exclude = [
+    "venv",
+    ".venv",
+    "migrations",
+    "tests",
+    ".*/tests/.*",
+    # Dynamically composed legacy Bots runtime; other Bots modules remain type-checked.
+    "^apps/edi/packages/edi/src/edi/core/bots/domain(/|$)",
+    "^apps/edi/packages/edi/src/edi/core/bots/utils(/|$)",
+    "^apps/edi/packages/edi/src/edi/core/bots/facade\\.py$",
+    ".*grammar.*",
+    "services/worker",
+    "^(.*/)?scripts/.*$",
+]
 plugins = ["pydantic.mypy"]
 explicit_package_bases = true
 namespace_packages = true
@@ -140,10 +153,10 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 
 "apps/edi/apps/edi-as2-server/tests/conftest.py" = ["S603", "S607"]
 # Legacy BOTS engine formatting ignores
-"apps/edi/packages/edi/src/edi/core/bots/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
-"apps/edi/packages/edi/src/edi/core/bots/domain/parsers/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
-"apps/edi/packages/edi/src/edi/core/bots/utils/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
-"apps/edi/packages/edi/src/edi/core/bots/facade.py" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/parsers/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/utils/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/facade.py" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
 "apps/edi/packages/edi/src/edi/core/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]
