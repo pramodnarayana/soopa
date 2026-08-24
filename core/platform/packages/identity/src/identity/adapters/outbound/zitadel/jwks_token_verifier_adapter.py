@@ -42,6 +42,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
                 audience=self._options.audience,
                 issuer=self._options.issuer,
             )
+            raw_claims = dict(payload)
         except jwt.PyJWTError as e:
             logger.error("JWT decode failed", exc_info=e)
             raise TokenValidationError(str(e)) from e
@@ -119,7 +120,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
 
             valid_keys = {f.name for f in fields(TokenClaims)}
             filtered_payload = {k: v for k, v in payload.items() if k in valid_keys}
-            filtered_payload["raw_claims"] = dict(payload)
+            filtered_payload["raw_claims"] = raw_claims
             return TokenClaims(**filtered_payload)
         except Exception as e:
             logger.error("Token claims validation failed", exc_info=e)

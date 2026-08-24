@@ -7,7 +7,10 @@ from ucp.domain.events.base import DomainEvent
 class RoleCreatedEvent(DomainEvent):
     role_id: str
     name: str
-    capabilities: list[str]
+    capabilities: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "capabilities", tuple(self.capabilities))
 
     @property
     def event_name(self) -> str:

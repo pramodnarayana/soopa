@@ -83,7 +83,7 @@ class Role(AggregateRoot):
             RoleCreatedEvent(
                 role_id=role.id,
                 name=role.name,
-                capabilities=role.capabilities,
+                capabilities=tuple(role.capabilities),
             )
         )
         return role

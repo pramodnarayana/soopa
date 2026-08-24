@@ -13,10 +13,10 @@ def adapter():
 
 @pytest.fixture(autouse=True)
 def mock_ssrf():
-    from contextlib import asynccontextmanager
+    from contextlib import contextmanager
 
-    @asynccontextmanager
-    async def mock_ssrf_context(url):
+    @contextmanager
+    def mock_ssrf_context(url):
         yield
 
     with patch(

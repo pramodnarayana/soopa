@@ -1,12 +1,12 @@
 import datetime
 
 import structlog
-from worker.domain.scheduler.handler import JobHandlerPort
-from worker.domain.scheduler.models import Job
 
 from worker.application.use_cases.edi_idempotency_cleanup_use_case import (
     EdiIdempotencyCleanupUseCase,
 )
+from worker.domain.scheduler.handler import JobHandlerPort
+from worker.domain.scheduler.models import Job
 
 logger = structlog.get_logger(__name__)
 

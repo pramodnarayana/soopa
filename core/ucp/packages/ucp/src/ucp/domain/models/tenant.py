@@ -69,7 +69,7 @@ class Tenant(AggregateRoot):
             TenantProvisionedEvent(
                 tenant_id=id,
                 tenant_name=name,
-                subscriptions=[s.app_id for s in tenant.subscriptions if s.status == "active"],
+                subscriptions=tuple(s.app_id for s in tenant.subscriptions if s.status == "active"),
             )
         )
         return tenant

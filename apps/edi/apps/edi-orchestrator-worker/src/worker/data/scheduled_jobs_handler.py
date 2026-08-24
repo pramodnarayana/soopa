@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 import structlog
+
 from worker.domain.scheduler.models import Job
 
 logger = structlog.get_logger(__name__)

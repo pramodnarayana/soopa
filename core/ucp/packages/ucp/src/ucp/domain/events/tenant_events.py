@@ -7,7 +7,10 @@ from ucp.domain.events.base import DomainEvent
 class TenantProvisionedEvent(DomainEvent):
     tenant_id: str
     tenant_name: str
-    subscriptions: list[str]
+    subscriptions: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "subscriptions", tuple(self.subscriptions))
 
     @property
     def event_name(self) -> str:
