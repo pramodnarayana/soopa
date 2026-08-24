@@ -27,9 +27,7 @@ async def test_s3_storage_adapter_integration(aws_credentials: None) -> None:
     Connects to the LocalStack S3 container, creates a bucket,
     uploads a file, downloads it, and asserts the content matches.
     """
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
-    if not endpoint_url:
-        pytest.skip("AWS_ENDPOINT_URL is required for the LocalStack S3 integration test")
+    endpoint_url = os.environ["AWS_ENDPOINT_URL"]
     bucket_name = "test-bucket-edi-pipeline"
 
     # Setup: Ensure bucket exists

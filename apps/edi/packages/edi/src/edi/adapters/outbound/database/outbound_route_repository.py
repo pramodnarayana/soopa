@@ -1,4 +1,3 @@
-import dataclasses
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -29,13 +28,18 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         GlobalSqlAlchemyRepository.__init__(self, session)
 
     @staticmethod
-    def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
+    def _to_domain_model(record: Any) -> OutboundRouteDomainModel:
         return OutboundRouteDomainModel(
-            **{
-                field.name: getattr(record, field.name)
-                for field in dataclasses.fields(OutboundRouteDomainModel)
-                if hasattr(record, field.name)
-            }
+            id=record.id,
+            tenant_id=record.tenant_id,
+            trading_partner_id=record.trading_partner_id,
+            name=record.name,
+            active=record.active,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            protocol=getattr(record, "protocol", None),
+            as2_partner_id=record.as2_partner_id,
+            sftp_partner_id=record.sftp_partner_id,
         )
 
     async def get_outbound_route(

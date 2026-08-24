@@ -387,6 +387,7 @@ class Inmessage(message.Message):
 
     def _parsefields(self, lex_record, record_definition) -> dict:
         """Parse fields from one fixed message-record and check length of the fixed record."""
+        raise NotImplementedError()
 
     def _parse(self, structure_level, inode):
         """

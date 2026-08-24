@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import structlog
+
 from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)

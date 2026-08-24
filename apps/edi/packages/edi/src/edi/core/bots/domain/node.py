@@ -3,6 +3,7 @@ Bots node lib
 """
 
 import decimal
+import typing
 
 import structlog
 
@@ -28,9 +29,11 @@ class Node:
     # no effect fo one-on-one translations.
     __slots__ = ("_queries", "children", "is_array", "linpos_info", "record", "structure")
 
-    def __init__(self, record: dict = None, linpos_info: tuple = None, is_array: bool = True):
+    def __init__(
+        self, record: dict | None = None, linpos_info: tuple | None = None, is_array: bool = True
+    ):
         self.record = record
-        self.children = []
+        self.children: list[Node] = []
         self._queries = None
         self.linpos_info = linpos_info
         self.structure = None
@@ -46,9 +49,9 @@ class Node:
         """append child to node"""
         self.children.append(childnode)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, typing.Any]:
         """Serialize the Node and its children into a pure Python dictionary."""
-        result = {}
+        result: dict[str, typing.Any] = {}
         seg_id = self.record.get("BOTSID") if self.record else None
 
         if self.record:
@@ -64,15 +67,17 @@ class Node:
                 return segment_data
 
             # Hierarchical node: wrap it in its segment_id key
-            result[seg_id] = segment_data
+            if seg_id is not None:
+                result[str(seg_id)] = segment_data
 
         result["_is_array"] = self.is_array
 
         if self.children:
-            grouped_children = {}
+            grouped_children: dict[str, list[dict]] = {}
             for child in self.children:
                 child_dict = child.to_dict()
-                child_seg_id = child.record.get("BOTSID") if child.record else "UNKNOWN"
+                child_seg_id_raw = child.record.get("BOTSID") if child.record else "UNKNOWN"
+                child_seg_id = str(child_seg_id_raw) if child_seg_id_raw else "UNKNOWN"
 
                 if child_seg_id in ("ISA", "UNB"):
                     key = f"interchange_{child_seg_id}"
@@ -724,7 +729,7 @@ class Node:
                         _("Keys must be strings: putloop(%(mpath)s)"), {"mpath": mpaths}
                     )
                 if value is None:
-                    return False
+                    raise ValueError("Cannot putloop None value")
                 part[key] = str(value).strip()
             part.setdefault("BOTSIDnr", "1")
         if self._sameoccurence(mpaths[0]):

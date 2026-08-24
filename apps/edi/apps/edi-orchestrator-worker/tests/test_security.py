@@ -1,16 +1,19 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from worker.domain.security import get_safe_ip, ssrf_safe_context, validate_target_url
+from edi.adapters.outbound.security.network import (
+    get_safe_ip,
+    ssrf_safe_context,
+    validate_target_url,
+)
 
 
 @pytest.fixture(autouse=True)
 def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
-    import worker.domain.security
+    import edi.adapters.outbound.security.network
 
-    monkeypatch.setattr(worker.domain.security, "IS_DEV", False)
+    monkeypatch.setattr(edi.adapters.outbound.security.network, "IS_DEV", False)
 
 
 def test_validate_target_url_invalid_scheme() -> None:
@@ -52,7 +55,7 @@ def test_get_safe_ip_private(mock_getaddrinfo: MagicMock) -> None:
     assert get_safe_ip("example.com") is None
 
 
-@patch("worker.domain.security._orig_getaddrinfo")
+@patch("edi.adapters.outbound.security.network._orig_getaddrinfo")
 def test_ssrf_safe_context_valid(mock_getaddrinfo: MagicMock) -> None:
     mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
     with ssrf_safe_context("http://example.com"):

@@ -8,7 +8,7 @@ from edi.config.settings import get_settings
 from worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from worker.adapters.edi_config_sync_sqs_consumer import EdiConfigSyncSqsConsumer
 from worker.adapters.edi_sqs_consumer import EdiSqsConsumer
-from worker.domain.ucp_sync_service import UcpSyncWorkerService
+from worker.application.use_cases.ucp_sync_service import UcpSyncWorkerService
 
 logger = structlog.get_logger(__name__)
 

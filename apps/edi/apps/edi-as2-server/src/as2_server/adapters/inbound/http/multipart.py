@@ -30,6 +30,6 @@ def render_mdn_report(mdn: AS2MDN, boundary: str = "----=_MDNBoundary") -> bytes
     if mdn.mic:
         report += f"Received-content-MIC: {mdn.mic}\r\n"
 
-    report += f"--{boundary}--\r\n"
+    report += f"\r\n--{boundary}--\r\n"
 
     return report.encode("utf-8")

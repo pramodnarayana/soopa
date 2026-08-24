@@ -13,6 +13,7 @@ import structlog
 
 from edi.adapters.inbound.as2 import build_outbound_message, parse_mdn
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
+from edi.adapters.outbound.security.network import validate_target_url
 
 logger = structlog.get_logger(__name__)
 
@@ -56,6 +57,9 @@ class HttpxAS2TesterAdapter:
         signature_algorithm: str,
         custom_payload: str | None = None,
     ) -> tuple[bool, str | None, str | None, str | None]:
+        if not validate_target_url(remote_url):
+            return False, "SSRF validation failed for destination URL", None, None
+
         # Build sign/encrypt callables only if keys are available
         sign_fn = (
             functools.partial(

@@ -290,6 +290,7 @@ class var(Inmessage):
                 # preceded by sub-field separator
                 try:
                     tsubindex += 1
+                    assert list_of_subfields_in_record_definition is not None
                     sub_field_in_record_definition = list_of_subfields_in_record_definition[
                         tsubindex
                     ]

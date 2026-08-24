@@ -25,7 +25,7 @@ class EdiDataPlaneOutboxProcessorUseCase:
     def __init__(self, message_publisher: EdiDataPlaneOutboxPublisherPort) -> None:
         self.message_publisher = message_publisher
 
-    async def process_batch(self, events: Sequence[DataPlaneOutbox]) -> int:
+    async def process_batch(self, events: Sequence[DataPlaneOutbox]) -> int:  # noqa: C901
         """
         Takes a list of PENDING Data Plane Outbox events, groups them by
         target queue, publishes them via the PublisherPort, and updates
@@ -72,7 +72,15 @@ class EdiDataPlaneOutboxProcessorUseCase:
                     )
                 )
 
-            successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
+            try:
+                successful_ids = await self.message_publisher.publish_batch(queue_name, messages)
+            except Exception as e:
+                logger.exception(
+                    "data_plane_outbox.publish_batch_failed",
+                    queue_name=queue_name,
+                    error=str(e),
+                )
+                successful_ids = []
 
             for event in queue_events:
                 if str(event.id) in successful_ids:

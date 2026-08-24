@@ -16,6 +16,7 @@ from edi.adapters.outbound.pipeline.as2 import HttpxAS2DeliveryClient
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.sftp import ParamikoSftpClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.adapters.outbound.security.network import validate_target_url
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
@@ -43,7 +44,6 @@ from worker.adapters.inbound.workers.edi_data_plane_events_sqs_consumer import (
 from worker.adapters.sqs_poller import poll_sqs_queue
 from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
 from worker.domain.scheduler.models import JobName
-from worker.domain.security import validate_target_url
 
 load_dotenv()
 logger = structlog.get_logger(__name__)
