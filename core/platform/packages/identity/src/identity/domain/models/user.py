@@ -1,13 +1,14 @@
 from datetime import UTC, datetime
 from typing import Literal
 
-from ucp.domain.events import (
+from identity.domain.aggregate_root import AggregateRoot
+from identity.domain.events import (
     UserDeletedEvent,
     UserMembershipRemovedEvent,
+    UserRoleAssignedEvent,
     UserStatusToggledEvent,
     UserUpdatedEvent,
 )
-from ucp.domain.models.aggregate_root import AggregateRoot
 
 
 class User(AggregateRoot):
@@ -127,8 +128,6 @@ class User(AggregateRoot):
             )
 
     def assign_role(self, role_id: str, role_name: str, tenant_id: str | None) -> None:
-        from ucp.domain.events import UserRoleAssignedEvent
-
         self.add_domain_event(
             UserRoleAssignedEvent(
                 user_id=self.id,

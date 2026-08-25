@@ -17,6 +17,7 @@ class PostgresIdentityOutboxCleanupRepository(OutboxCleanupRepositoryPort):
 
     async def cleanup_outbox(self, retention_days: int) -> int:
         cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        batch_size = 5000
         outbox_deleted = 0
         async with self.session_factory() as session:
             while True:
@@ -27,14 +28,14 @@ class PostgresIdentityOutboxCleanupRepository(OutboxCleanupRepositoryPort):
                             IdentityOutbox.status == "COMPLETED",
                             IdentityOutbox.created_at < cutoff_date,
                         )
-                        .limit(5000)
+                        .limit(batch_size)
                     )
                 )
                 res_outbox: CursorResult[tuple[()]] = await session.execute(stmt_outbox)  # type: ignore[assignment]
                 deleted = res_outbox.rowcount
                 outbox_deleted += deleted
                 await session.commit()
-                if deleted < 5000:
+                if deleted < batch_size:
                     break
                 await asyncio.sleep(0.1)
         return outbox_deleted

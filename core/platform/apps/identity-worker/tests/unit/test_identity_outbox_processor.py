@@ -87,7 +87,7 @@ async def test_process_pending_failure_handling(test_event):
 
     assert has_more is False
     assert len(publisher.published) == 0
-    assert test_event.id in repo.failed
+    assert test_event.id not in repo.failed
     assert test_event.id not in repo.completed
 
 

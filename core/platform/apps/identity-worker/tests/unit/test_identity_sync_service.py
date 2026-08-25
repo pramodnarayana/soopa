@@ -27,6 +27,7 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
         self.users = {}
         self.user_roles = {}
         self.user_status = {}
+        self.fail_role_assignment = False
 
     async def create_user(
         self,
@@ -46,6 +47,8 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
         return user_id
 
     async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+        if self.fail_role_assignment:
+            raise RuntimeError("role assignment failed")
         self.user_roles[user_id] = role
 
     async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
@@ -172,6 +175,73 @@ async def test_handle_user_created_unprovisioned_tenant(fakes, db_session_factor
             last_name="Doe",
             role="admin"
         )
+
+
+async def test_handle_user_created_missing_local_user_has_no_external_side_effects(
+    fakes, db_session_factory, setup_db
+):
+    idp, user_idp = fakes
+    service = IdentitySyncService(idp, user_idp, db_session_factory)
+
+    await service.handle_user_created(
+        user_id=str(uuid.uuid4()),
+        tenant_id=setup_db["tenant_id"],
+        email="missing@test.com",
+        first_name="Missing",
+        last_name="User",
+        role="admin",
+    )
+
+    assert user_idp.users == {}
+    assert user_idp.user_roles == {}
+
+
+async def test_handle_user_created_reconciles_existing_idp_user(
+    fakes, db_session_factory, setup_db
+):
+    idp, user_idp = fakes
+    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    existing_idp_user_id = "idp_existing"
+
+    async with db_session_factory() as session:
+        user = await session.get(DbUser, setup_db["user_id"])
+        user.idp_user_id = existing_idp_user_id
+        await session.commit()
+
+    await service.handle_user_created(
+        user_id=setup_db["user_id"],
+        tenant_id=setup_db["tenant_id"],
+        email="john@test.com",
+        first_name="John",
+        last_name="Doe",
+        role="admin",
+    )
+
+    assert user_idp.users == {}
+    assert user_idp.user_roles[existing_idp_user_id] == "admin"
+
+
+async def test_handle_user_created_compensates_failed_role_assignment(
+    fakes, db_session_factory, setup_db
+):
+    idp, user_idp = fakes
+    user_idp.fail_role_assignment = True
+    service = IdentitySyncService(idp, user_idp, db_session_factory)
+
+    with pytest.raises(RuntimeError, match="role assignment failed"):
+        await service.handle_user_created(
+            user_id=setup_db["user_id"],
+            tenant_id=setup_db["tenant_id"],
+            email="john@test.com",
+            first_name="John",
+            last_name="Doe",
+            role="admin",
+        )
+
+    assert user_idp.users == {}
+    async with db_session_factory() as session:
+        user = await session.get(DbUser, setup_db["user_id"])
+        assert user.idp_user_id is None
 
 
 async def test_handle_user_updated(fakes, db_session_factory, setup_db):

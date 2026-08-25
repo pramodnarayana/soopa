@@ -63,43 +63,6 @@ def upgrade() -> None:
         schema="identity",
     )
     op.create_table(
-        "outbox",
-        sa.Column("id", sa.String(length=128), nullable=False),
-        sa.Column("tenant_id", sa.String(length=128), nullable=True),
-        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
-        sa.Column("event_type", sa.String(length=100), nullable=False),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
-        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("error_reason", sa.String(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("owner_token", sa.String(length=128), nullable=True),
-        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("idempotency_key"),
-        schema="identity",
-    )
-    op.create_index(
-        "ix_identity_outbox_pending",
-        "outbox",
-        ["status", "created_at"],
-        unique=False,
-        schema="identity",
-        postgresql_where=sa.text("status = 'PENDING'"),
-    )
-    op.create_table(
         "notification_outbox",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
@@ -561,13 +524,6 @@ def downgrade() -> None:
     op.drop_table("notification_outbox", schema="notifications")
     op.drop_index("uq_users_email_lower", table_name="users", schema="identity")
     op.drop_table("users", schema="identity")
-    op.drop_index(
-        "ix_identity_outbox_pending",
-        table_name="outbox",
-        schema="identity",
-        postgresql_where=sa.text("status = 'PENDING'"),
-    )
-    op.drop_table("outbox", schema="identity")
     op.drop_table("tenants", schema="identity")
 
     # ### end Alembic commands ###

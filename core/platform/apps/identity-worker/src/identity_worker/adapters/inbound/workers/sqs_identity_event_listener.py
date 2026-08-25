@@ -127,11 +127,9 @@ class SqsIdentityEventListener(IdentityEventListenerPort):
                     message_id=message_id,
                     payload_length=len(body_str),
                 )
-                await sqs_client.delete_message(
-                    QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
-                )
-                if not yielded:
-                    yield None
+                if yielded:
+                    raise
+                yield None
             except Exception as e:
                 event_type = (
                     event_data.get("event_type", "unknown")
@@ -144,8 +142,9 @@ class SqsIdentityEventListener(IdentityEventListenerPort):
                     error=str(e),
                     event_type=event_type,
                 )
-                if not yielded:
-                    yield None
+                if yielded:
+                    raise
+                yield None
 
         except ClientError:
             logger.exception("sqs_client_error")

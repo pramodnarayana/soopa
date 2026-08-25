@@ -1,9 +1,10 @@
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 import structlog
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from identity_worker.adapters.inbound.workers.identity_events_sqs_consumer import (
@@ -45,16 +46,54 @@ from identity_worker.ports.outbound.user_identity_provider_port import UserIdent
 logger = structlog.get_logger(__name__)
 
 
+class TenantProvisionedPayload(BaseModel):
+    tenant_id: str
+
+
+class UserCreatedPayload(BaseModel):
+    user_id: str
+    tenant_id: str
+    email: str
+    first_name: str
+    last_name: str
+    role: str
+
+
+class UserUpdatedPayload(BaseModel):
+    idp_user_id: str
+    tenant_id: str
+    first_name: str
+    last_name: str
+    role: str
+
+
+class UserRoleAssignedPayload(BaseModel):
+    idp_user_id: str
+    tenant_id: str
+    role_name: str
+
+
+class UserStatusToggledPayload(BaseModel):
+    idp_user_id: str
+    tenant_id: str
+    action: Literal["activate", "deactivate"]
+
+
+class UserDeletedPayload(BaseModel):
+    idp_user_id: str
+
+
 class WorkerContainer:
     """Dependency Injection container for the Identity Worker."""
 
     def __init__(self) -> None:
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url:
+            raise ValueError("DATABASE_URL environment variable is required")
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        self.database_url = database_url
         self.settings = get_settings()
-        self.database_url = os.environ.get("DATABASE_URL", "")
-        if self.database_url.startswith("postgresql://"):
-            self.database_url = self.database_url.replace(
-                "postgresql://", "postgresql+asyncpg://", 1
-            )
 
         self._engine = create_async_engine(self.database_url, pool_pre_ping=True)
         self.session_factory = async_sessionmaker(
@@ -89,56 +128,49 @@ class WorkerContainer:
         identity_service: IdentitySyncService,
     ) -> None:
         async def identity_tenant_provisioned_handler(event: Any) -> None:
-            await identity_service.handle_tenant_provisioned(event.tenant_id)
+            payload = TenantProvisionedPayload.model_validate(event.payload)
+            await identity_service.handle_tenant_provisioned(payload.tenant_id)
 
         async def identity_user_created_handler(event: Any) -> None:
-            payload = event.payload
+            payload = UserCreatedPayload.model_validate(event.payload)
             await identity_service.handle_user_created(
-                user_id=payload["user_id"],
-                tenant_id=payload["tenant_id"],
-                email=payload["email"],
-                first_name=payload["first_name"],
-                last_name=payload["last_name"],
-                role=payload["role"],
+                user_id=payload.user_id,
+                tenant_id=payload.tenant_id,
+                email=payload.email,
+                first_name=payload.first_name,
+                last_name=payload.last_name,
+                role=payload.role,
             )
 
         async def identity_user_updated_handler(event: Any) -> None:
-            payload = event.payload
+            payload = UserUpdatedPayload.model_validate(event.payload)
             await identity_service.handle_user_updated(
-                idp_user_id=payload["idp_user_id"],
-                tenant_id=payload["tenant_id"],
-                first_name=payload["first_name"],
-                last_name=payload["last_name"],
-                role=payload["role"],
+                idp_user_id=payload.idp_user_id,
+                tenant_id=payload.tenant_id,
+                first_name=payload.first_name,
+                last_name=payload.last_name,
+                role=payload.role,
             )
 
         async def identity_user_role_assigned_handler(event: Any) -> None:
-            payload = event.payload
-            idp_user_id = payload.get("idp_user_id")
-            tenant_id = payload.get("tenant_id")
-            role_name = payload.get("role_name")
-            if idp_user_id and tenant_id and role_name:
-                await identity_service.handle_user_role_assigned(
-                    idp_user_id=idp_user_id,
-                    tenant_id=tenant_id,
-                    role=role_name,
-                )
-            else:
-                logger.warning(
-                    "identity_user_role_assigned_missing_data", event_id=getattr(event, "id", None)
-                )
+            payload = UserRoleAssignedPayload.model_validate(event.payload)
+            await identity_service.handle_user_role_assigned(
+                idp_user_id=payload.idp_user_id,
+                tenant_id=payload.tenant_id,
+                role=payload.role_name,
+            )
 
         async def identity_user_status_toggled_handler(event: Any) -> None:
-            payload = event.payload
+            payload = UserStatusToggledPayload.model_validate(event.payload)
             await identity_service.handle_user_status_toggled(
-                idp_user_id=payload["idp_user_id"],
-                tenant_id=payload["tenant_id"],
-                action=payload["action"],
+                idp_user_id=payload.idp_user_id,
+                tenant_id=payload.tenant_id,
+                action=payload.action,
             )
 
         async def identity_user_deleted_handler(event: Any) -> None:
-            payload = event.payload
-            await identity_service.handle_user_deleted(idp_user_id=payload["idp_user_id"])
+            payload = UserDeletedPayload.model_validate(event.payload)
+            await identity_service.handle_user_deleted(idp_user_id=payload.idp_user_id)
 
         consumer.subscribe("tenant.provisioned", identity_tenant_provisioned_handler)
         consumer.subscribe("UserInvited", identity_user_created_handler)
@@ -148,6 +180,11 @@ class WorkerContainer:
         consumer.subscribe("UserDeleted", identity_user_deleted_handler)
 
     def _wire_events_consumer(self) -> None:
+        @asynccontextmanager
+        async def session_factory() -> AsyncGenerator[AsyncSession, None]:
+            async with self.session_factory() as session:
+                yield session
+
         if self.settings.app_env in ("local", "test"):
             idp: IdentityProviderPort = DummyIdentityProviderPort()
             idp_users: UserIdentityProviderPort = DummyIdentityProviderPort()
@@ -155,20 +192,11 @@ class WorkerContainer:
             project_provider = ZitadelProjectsAdapter()
             org_provider = ZitadelOrganizationsAdapter(project_provider=project_provider)
 
-            @asynccontextmanager
-            async def session_factory() -> AsyncGenerator[AsyncSession, None]:
-                async with self.session_factory() as session:
-                    yield session
             idp = ZitadelIdentityProviderPort(org_provider=org_provider, session_factory=session_factory)
             idp_users = ZitadelUsersAdapter()
 
-        @asynccontextmanager
-        async def session_factory_outer() -> AsyncGenerator[AsyncSession, None]:
-            async with self.session_factory() as session:
-                yield session
-
         identity_service = IdentitySyncService(
-            identity_provider=idp, user_identity_provider=idp_users, session_factory=session_factory_outer
+            identity_provider=idp, user_identity_provider=idp_users, session_factory=session_factory
         )
 
         self.events_consumer = IdentityEventsSqsConsumer(

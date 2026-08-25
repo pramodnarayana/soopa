@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
@@ -6,6 +7,9 @@ from unittest.mock import AsyncMock
 import pytest
 from identity_worker.adapters.inbound.workers.identity_events_sqs_consumer import (
     IdentityEventsSqsConsumer,
+)
+from identity_worker.adapters.inbound.workers.sqs_identity_event_listener import (
+    SqsIdentityEventListener,
 )
 from identity_worker.ports.inbound.identity_event_listener_port import (
     IdentityEventListenerPort,
@@ -50,12 +54,17 @@ async def test_sqs_consumer_dispatch_flow():
     consumer = IdentityEventsSqsConsumer(listener)
 
     # 3. Setup Fake Handler (representing IdentitySyncService)
-    mock_handler = AsyncMock()
+    handled = asyncio.Event()
+
+    async def handler(event):
+        handled.set()
+
+    mock_handler = AsyncMock(side_effect=handler)
     consumer.subscribe("TenantProvisioned", mock_handler)
 
-    # 4. Run consumer for a brief moment
+    # 4. Run consumer until the handler confirms dispatch
     consumer.start()
-    await asyncio.sleep(0.1) # Yield to event loop to allow _poll_continuous to run
+    await asyncio.wait_for(handled.wait(), timeout=1)
     await consumer.stop()
 
     # 5. Verify flow
@@ -78,17 +87,71 @@ async def test_sqs_consumer_handler_failure_prevents_ack():
     )
     listener = FakeIdentityEventListener([test_event])
     consumer = IdentityEventsSqsConsumer(listener)
+    handled = asyncio.Event()
 
     # Setup handler that raises an exception
     async def failing_handler(event):
+        handled.set()
         raise RuntimeError("Handler Failed")
 
     consumer.subscribe("TenantProvisioned", failing_handler)
 
     consumer.start()
-    await asyncio.sleep(0.1)
+    await asyncio.wait_for(handled.wait(), timeout=1)
     await consumer.stop()
 
     # Event should be re-queued (NACKed)
     assert len(listener.events) == 1
     assert len(listener.processed) == 0
+
+
+async def test_production_listener_propagates_handler_failure():
+    event_data = {
+        "id": str(uuid.uuid4()),
+        "source": "test",
+        "event_type": "TenantProvisioned",
+        "payload": {"tenant_id": "tenant-123"},
+    }
+    sqs_client = AsyncMock()
+    sqs_client.receive_message.return_value = {
+        "Messages": [
+            {
+                "ReceiptHandle": "receipt-1",
+                "MessageId": "message-1",
+                "Body": json.dumps(event_data),
+            }
+        ]
+    }
+    listener = SqsIdentityEventListener(queue_url="https://sqs.test/identity-events")
+    consumer = IdentityEventsSqsConsumer(listener)
+
+    async def failing_handler(event):
+        raise RuntimeError("Handler Failed")
+
+    consumer.subscribe("TenantProvisioned", failing_handler)
+
+    with pytest.raises(RuntimeError, match="Handler Failed"):
+        async with listener._process_with_client(sqs_client) as event:
+            assert event is not None
+            await consumer._dispatch(event)
+
+    sqs_client.delete_message.assert_not_awaited()
+
+
+async def test_malformed_message_is_not_deleted():
+    sqs_client = AsyncMock()
+    sqs_client.receive_message.return_value = {
+        "Messages": [
+            {
+                "ReceiptHandle": "receipt-1",
+                "MessageId": "message-1",
+                "Body": "not-json",
+            }
+        ]
+    }
+    listener = SqsIdentityEventListener(queue_url="https://sqs.test/identity-events")
+
+    async with listener._process_with_client(sqs_client) as event:
+        assert event is None
+
+    sqs_client.delete_message.assert_not_awaited()

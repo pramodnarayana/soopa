@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import uuid4
 
 import structlog
 
@@ -23,7 +24,7 @@ class DummyIdentityProviderPort(IdentityProviderPort):
         first_name: str,
         last_name: str,
     ) -> str:
-        return "dummy_user_id"
+        return f"dummy_user_{uuid4()}"
 
     async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
         pass

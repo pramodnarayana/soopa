@@ -75,35 +75,81 @@ class IdentitySyncService:
         bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, role=role)
         bound_logger.info("syncing_new_user_to_identity_provider", action="create")
         try:
-            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
+            if self.session_factory is None:
+                raise ValueError("session_factory is required to synchronize users")
 
-            idp_user_id = await self.user_identity_provider.create_user(
-                org_id=idp_tenant_id,
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-            )
-            bound_logger.info("identity_sync_create_user_successful", idp_user_id=idp_user_id)
-
-            await self.user_identity_provider.assign_tenant_role(
-                user_id=idp_user_id, org_id=idp_tenant_id, role=role
-            )
-            bound_logger.info(
-                "identity_sync_assign_role_successful", idp_user_id=idp_user_id, role=role
-            )
-
-            # Update the local database with the newly generated idp_user_id
-            assert self.session_factory is not None
             async with self.session_factory() as session:
-                stmt = select(DbUser).where(DbUser.id == user_id)
-                result = await session.execute(stmt)
-                local_user = result.scalar_one_or_none()
-                if local_user:
-                    local_user.idp_user_id = idp_user_id
+                user_result = await session.execute(
+                    select(DbUser).where(DbUser.id == user_id).with_for_update()
+                )
+                local_user = user_result.scalar_one_or_none()
+                if not local_user:
+                    bound_logger.warning("identity_sync_local_user_not_found_for_update")
+                    return
+
+                tenant_result = await session.execute(
+                    select(DbTenant).where(DbTenant.id == tenant_id)
+                )
+                tenant = tenant_result.scalar_one_or_none()
+                if not tenant or not tenant.idp_tenant_id:
+                    raise StateConflictError(
+                        f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
+                    )
+
+                idp_tenant_id = tenant.idp_tenant_id
+                if local_user.idp_user_id:
+                    await self.user_identity_provider.assign_tenant_role(
+                        user_id=local_user.idp_user_id,
+                        org_id=idp_tenant_id,
+                        role=role,
+                    )
+                    bound_logger.info(
+                        "identity_sync_existing_user_reconciled",
+                        idp_user_id=local_user.idp_user_id,
+                    )
+                    return
+
+                created_idp_user_id: str | None = None
+                try:
+                    created_idp_user_id = await self.user_identity_provider.create_user(
+                        org_id=idp_tenant_id,
+                        email=email,
+                        first_name=first_name,
+                        last_name=last_name,
+                    )
+                    bound_logger.info(
+                        "identity_sync_create_user_successful",
+                        idp_user_id=created_idp_user_id,
+                    )
+
+                    await self.user_identity_provider.assign_tenant_role(
+                        user_id=created_idp_user_id,
+                        org_id=idp_tenant_id,
+                        role=role,
+                    )
+                    bound_logger.info(
+                        "identity_sync_assign_role_successful",
+                        idp_user_id=created_idp_user_id,
+                        role=role,
+                    )
+
+                    local_user.idp_user_id = created_idp_user_id
                     await session.commit()
                     bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
-                else:
-                    bound_logger.warning("identity_sync_local_user_not_found_for_update")
+                except BaseException:
+                    try:
+                        await session.rollback()
+                    except Exception:
+                        bound_logger.exception("identity_sync_session_rollback_failed")
+                    if created_idp_user_id:
+                        try:
+                            await self.user_identity_provider.delete_user(created_idp_user_id)
+                        except Exception:
+                            bound_logger.exception(
+                                "identity_sync_create_user_compensation_failed",
+                                idp_user_id=created_idp_user_id,
+                            )
+                    raise
 
         except Exception:
             bound_logger.exception("identity_sync_new_user_failed")

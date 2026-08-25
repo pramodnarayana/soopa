@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from ucp.domain.events import RoleCreatedEvent
-from ucp.domain.models.aggregate_root import AggregateRoot
+from identity.domain.aggregate_root import AggregateRoot
+from identity.domain.events import RoleCreatedEvent
 
 
 class Capability(StrEnum):

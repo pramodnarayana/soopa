@@ -32,7 +32,7 @@ class ZitadelIdentityProviderPort(IdentityProviderPort):
                 return
 
             try:
-                org_id, _ = await self.org_provider.create_organization(tenant.name)
+                org_id, grant_succeeded = await self.org_provider.create_organization(tenant.name)
             except IdentityProviderPortError as e:
                 if e.status_code == 409:
                     logger.warning(
@@ -40,6 +40,11 @@ class ZitadelIdentityProviderPort(IdentityProviderPort):
                         tenant_id=tenant_id,
                     )
                 raise
+
+            if not grant_succeeded:
+                raise IdentityProviderPortError(
+                    "Organization was created but its project grant could not be assigned"
+                )
 
             tenant.idp_tenant_id = org_id
             await session.commit()

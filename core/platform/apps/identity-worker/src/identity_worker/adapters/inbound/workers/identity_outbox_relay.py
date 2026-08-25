@@ -12,6 +12,25 @@ from identity_worker.application.use_cases.identity_outbox_processor_use_case im
 
 logger = structlog.get_logger(__name__)
 
+_ASYNCPG_DSN_QUERY_PARAMETERS = {
+    "database",
+    "dbname",
+    "host",
+    "passfile",
+    "password",
+    "port",
+    "sslcert",
+    "sslcrl",
+    "sslkey",
+    "ssl_max_protocol_version",
+    "ssl_min_protocol_version",
+    "sslmode",
+    "sslpassword",
+    "sslrootcert",
+    "target_session_attrs",
+    "user",
+}
+
 
 class IdentityOutboxRelay:
     """
@@ -44,18 +63,22 @@ class IdentityOutboxRelay:
         self._notify_event.set()
         self.processor.stop()
 
+        if self._task:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+
         if self._connection:
             try:
                 await self._connection.remove_listener("identity_outbox_wakeup", self._on_notify)
                 await self._connection.close()
             except (asyncpg.PostgresError, OSError, ConnectionError) as e:
                 logger.warning("identity_outbox_listener_connection_close_error", error=str(e))
+            finally:
+                self._connection = None
 
-        if self._task:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
-            logger.info("identity_postgres_outbox_listener_stopped")
+        logger.info("identity_postgres_outbox_listener_stopped")
 
     def _on_notify(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
@@ -68,6 +91,15 @@ class IdentityOutboxRelay:
             return
         try:
             url = make_url(self.database_url).set(drivername="postgresql")
+            query = {key.lower(): value for key, value in url.query.items()}
+            if "ssl" in query and "sslmode" not in query:
+                query["sslmode"] = query.pop("ssl")
+            query = {
+                key: value
+                for key, value in query.items()
+                if key in _ASYNCPG_DSN_QUERY_PARAMETERS
+            }
+            url = url.set(query=query)
             asyncpg_url = url.render_as_string(hide_password=False)
 
             self._connection = await asyncpg.connect(asyncpg_url)

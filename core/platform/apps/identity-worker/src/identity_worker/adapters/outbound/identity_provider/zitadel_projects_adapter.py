@@ -1,3 +1,5 @@
+from typing import Any
+
 import structlog
 
 from identity_worker.adapters.outbound.identity_provider.zitadel_client import ZitadelClient
@@ -14,6 +16,50 @@ logger = structlog.get_logger(__name__)
 
 
 class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
+    async def _search_all(
+        self,
+        endpoint: str,
+        *,
+        headers: dict[str, str] | None = None,
+        queries: list[dict[str, Any]] | None = None,
+    ) -> list[Any]:
+        offset = 0
+        limit = 100
+        results: list[Any] = []
+
+        while True:
+            response = await self.fetch_with_auth(
+                endpoint=endpoint,
+                method="POST",
+                headers=headers,
+                json={
+                    "query": {"offset": offset, "limit": limit},
+                    "queries": queries or [],
+                },
+            )
+            if response.status_code >= 400:
+                await self.handle_response_error(response, f"search {endpoint}")
+
+            data = response.json()
+            page = data.get("result", [])
+            if not isinstance(page, list):
+                raise IdentityProviderPortError("Invalid paginated response from ZITADEL")
+            results.extend(page)
+            offset += len(page)
+
+            details = data.get("details", {})
+            raw_total = details.get("totalResult") if isinstance(details, dict) else None
+            total = (
+                int(raw_total)
+                if isinstance(raw_total, int)
+                or (isinstance(raw_total, str) and raw_total.isdigit())
+                else None
+            )
+            if not page or (total is not None and offset >= total):
+                return results
+            if total is None and len(page) < limit:
+                return results
+
     async def create_project_grant(
         self, org_id: str, project_id: str, role_keys: list[str]
     ) -> None:
@@ -54,17 +100,12 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
 
         try:
             # First, search for the grant to get its ID
-            search_response = await self.fetch_with_auth(
-                endpoint=f"/management/v1/projects/{project_id}/grants/_search",
-                method="POST",
-                json={"queries": []},
+            search_data = await self._search_all(
+                endpoint=f"/management/v1/projects/{project_id}/grants/_search"
             )
-
-            if search_response.status_code >= 400:
-                await self.handle_response_error(search_response, "search project grants")
-
-            search_data = search_response.json()
-            parsed_search_data = ZitadelProjectGrantsResponse.model_validate(search_data)
+            parsed_search_data = ZitadelProjectGrantsResponse.model_validate(
+                {"result": search_data}
+            )
 
             grant = next((g for g in parsed_search_data.result if g.granted_org_id == org_id), None)
 
@@ -98,17 +139,10 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
     async def get_roles(self) -> list[IdpRole]:
         logger.info("fetching_roles_for_ucp_project")
 
-        response = await self.fetch_with_auth(
-            endpoint=f"/management/v1/projects/{self.ucp_project_id}/roles/_search",
-            method="POST",
-            json={},
+        data = await self._search_all(
+            endpoint=f"/management/v1/projects/{self.ucp_project_id}/roles/_search"
         )
-
-        if response.status_code >= 400:
-            await self.handle_response_error(response, "fetch roles")
-
-        data = response.json()
-        parsed_data = ZitadelRolesResponse.model_validate(data)
+        parsed_data = ZitadelRolesResponse.model_validate({"result": data})
         return [
             IdpRole(
                 key=role.key or "",
@@ -122,18 +156,11 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
         logger.info("fetching_users_for_org", org_id=org_id)
 
         # 1. Fetch all users in the org
-        response = await self.fetch_with_auth(
+        data = await self._search_all(
             endpoint="/management/v1/users/_search",
-            method="POST",
             headers={"x-zitadel-orgid": org_id},
-            json={},
         )
-
-        if response.status_code >= 400:
-            await self.handle_response_error(response, "fetch users")
-
-        data = response.json()
-        raw_users_data = ZitadelRawUserSearchResponse.model_validate(data)
+        raw_users_data = ZitadelRawUserSearchResponse.model_validate({"result": data})
         users = raw_users_data.result
 
         users_with_roles = []

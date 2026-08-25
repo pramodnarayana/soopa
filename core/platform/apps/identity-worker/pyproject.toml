@@ -13,6 +13,8 @@ dependencies = [
     "aioboto3>=13.1.1",
     "sqlalchemy>=2.0.29",
     "asyncpg>=0.29.0",
+    "structlog>=24.4.0",
+    "pydantic>=2.10.0",
 ]
 
 [build-system]

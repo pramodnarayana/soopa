@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     zitadel_api_url: str = ""
     zitadel_api_token: str = ""
     zitadel_ucp_project_id: str = ""
-    zitadel_default_user_password: str = "TestPassword123!"  # noqa: S105
+    zitadel_default_user_password: str
     zitadel_tenant_role_group: str = "tenant_role"
 
     model_config = SettingsConfigDict(

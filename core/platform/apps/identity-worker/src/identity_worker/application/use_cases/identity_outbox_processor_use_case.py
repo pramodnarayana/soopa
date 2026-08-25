@@ -67,5 +67,9 @@ class IdentityOutboxProcessorUseCase:
                 "identity_outbox_event_published", event_id=event.id, event_type=event.event_type
             )
         except Exception as e:
-            logger.exception("identity_outbox_event_processing_failed", event_id=event.id)
-            await self.repository.mark_failed(event.id, self.worker_id, str(e))
+            logger.exception(
+                "identity_outbox_event_processing_failed",
+                event_id=event.id,
+                error=str(e),
+                retry_after_ms=self.lock_lease_ms,
+            )

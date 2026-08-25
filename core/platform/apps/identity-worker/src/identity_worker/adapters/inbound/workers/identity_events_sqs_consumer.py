@@ -51,10 +51,7 @@ class IdentityEventsSqsConsumer:
 
     async def _run_loop(self) -> None:
         try:
-            if hasattr(self.event_listener, "__aenter__"):
-                async with self.event_listener:
-                    await self._poll_continuous()
-            else:
+            async with self.event_listener:
                 await self._poll_continuous()
         except asyncio.CancelledError:
             pass
