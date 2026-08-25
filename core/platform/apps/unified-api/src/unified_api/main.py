@@ -22,10 +22,10 @@ from edi.adapters.inbound.ucp_adapter import UcpAdapter
 from edi.module import create_edi_app
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
-from ucp.adapters.outbound.database.role_repository import PostgresRoleRepository
+from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
+from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
+from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
-from ucp.adapters.outbound.database.user_repository import UserRepository
 from ucp.application.use_cases.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
@@ -89,9 +89,9 @@ async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepositor
 
 
 @contextlib.asynccontextmanager
-async def user_repo_factory() -> collections.abc.AsyncIterator[UserRepository]:
+async def user_repo_factory() -> collections.abc.AsyncIterator[PostgresUserRepository]:
     async with _async_session_maker() as session:
-        yield UserRepository(session)
+        yield PostgresUserRepository(session)
 
 
 @contextlib.asynccontextmanager

@@ -29,10 +29,12 @@ members = [
     "apps/edi/apps/edi-as2-server",
     "apps/edi/apps/edi-orchestrator-worker",
     "apps/edi/apps/edi-compute-worker",
+    "apps/edi/apps/edi-config-sync-worker",
     "core/platform/apps/scheduler-worker",
     "core/platform/packages/scheduler",
     "core/platform/packages/notification",
     "core/platform/apps/notification-worker",
+    "core/platform/apps/identity-worker",
     "core/platform/apps/unified-api",
     "apps/edi/apps/edi-secrets-sidecar",
 ]

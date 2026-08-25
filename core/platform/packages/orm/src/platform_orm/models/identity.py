@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.common import SoftDeleteMixin
+from platform_orm.models.common import OutboxMixin, SoftDeleteMixin
 from platform_orm.models.core import IdentityBase
 
 
@@ -204,3 +205,26 @@ class UserRole(IdentityBase):
         ),
         {"schema": "identity"},
     )
+
+
+class IdentityOutbox(IdentityBase, OutboxMixin):
+    __tablename__ = "outbox"
+    ID_PREFIX = "id_ob"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_identity_outbox_pending",
+            "status",
+            "created_at",
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        {"schema": "identity"},
+    )
+
+    @property
+    def body(self) -> dict[str, Any]:
+        """Alias for payload to satisfy OutboxEvent protocol."""
+        return self.payload

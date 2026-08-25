@@ -280,3 +280,37 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The AS2 module currently uses `endesive` for S/MIME signature verification and encryption/decryption of EDI data (`src/edi/adapters/outbound/security/smime.py`). While `endesive` provides high-level wrappers for S/MIME, it pulls in heavy, unwanted C-extension dependencies like `PyKCS11` (for HSMs) which caused Docker/CI build failures and required us to inject a dummy package to bypass. The team previously attempted to use the native `cryptography` library directly but faced challenges with standardizing the complex ASN.1 PKCS#7/CMS structures and MIME multipart construction for EDI payloads.
 - **Action Item**: Research and implement a pure `cryptography`-based solution for S/MIME AS2 signing/encryption that doesn't rely on `endesive`. Once the native `cryptography` implementation is proven to cleanly handle AS2 EDI payloads, deprecate `endesive`, remove the `dummy-pykcs11` build override, and clean up the dependencies.
+
+## [Architecture] Extract Scheduled Cleanup Jobs from EDI Orchestrator and Hookup Control Plane Jobs
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: Currently, data-plane cleanup jobs are executing inside `edi-orchestrator-worker` (which polls `edi-orchestrator-jobs`), tightly coupling low-priority DB sweeps with high-throughput real-time AS2/X12 event processing. This queue name is also misleading since it implies "orchestration" rather than "background jobs". Furthermore, control-plane cleanup jobs (`EDI_CONTROL_PLANE_OUTBOX_CLEANUP`) are defined in the domain but the SQS polling logic is missing entirely from `edi-config-sync-worker`, leaving these tables unswept.
+- **Action Item**:
+  1. Rename `edi-orchestrator-jobs` to `edi-data-plane-jobs.fifo` (to match standard FIFO semantics) in Localstack setup and code.
+  2. Following Shopify-style monolith patterns, create a dedicated `edi-background-worker` entrypoint to execute all EDI background jobs, isolating them from the high-throughput workers.
+  3. Ensure the missing control-plane sweeper polling is wired up correctly in the new background worker infrastructure.
+
+## [Architecture] Eliminate `NULL` Tenant IDs in Favor of `PLATFORM_TENANT_ID`
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: Currently, the Identity ORM models (`Role`, `UserRole`) define `tenant_id` as `nullable=True`, using `NULL` to signify "Global" or "Platform" scoped resources. This is a non-enterprise pattern that breaks PostgreSQL referential integrity and makes writing Row-Level Security (RLS) policies and unified SQL constraints difficult. The system already defines a canonical `PLATFORM_TENANT_ID` in `identity_context.py`, but the database and repositories were never refactored to enforce it.
+- **Action Item**:
+  1. Refactor the Identity ORM models to enforce `nullable=False` on `tenant_id` columns.
+  2. Update all Identity repositories (`role_repository.py`, `user_repository.py`, etc.) to use `PLATFORM_TENANT_ID` instead of `None` when querying or saving global platform resources.
+  3. Create an Alembic database migration to backfill any existing `NULL` tenant records with the `PLATFORM_TENANT_ID` and apply the `NOT NULL` constraint.
+
+## [Architecture] Centralize and Dynamic SQS Queue URL Resolution
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: SQS Queue URLs are currently scattered as hardcoded full URL strings across the `.env` file (e.g., `SQS_UCP_IDENTITY_SYNC_QUEUE_URL`, `SQS_IDENTITY_SYNC_QUEUE_URL`, etc.). This violates Convention over Configuration, leading to desyncs between workers and local infrastructure provisioning (e.g., LocalStack).
+- **Action Item**: Refactor all `SqsEventListener` implementations to accept only a Logical Queue Name. Update the adapter constructors to dynamically fetch the absolute Queue URL at runtime via `boto3` (`sqs_client.get_queue_url()`). Remove all explicit URL string configurations from `.env` and `Settings` classes.
+
+## [Architecture Testing] True Enterprise-Grade Data Plane Integration Tests
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: The `test_sweeper_integration.py` in the EDI orchestrator currently uses a hack to simulate shards by dumping Data Plane tables (`audit_log`, `outbox`) directly into the `public` schema of the UCP global database. Furthermore, test data is inserted using hardcoded dictionaries rather than robust ORM factories, leading to brittle tests when domain models evolve (e.g., NotNull violations on new fields).
+- **Action Item**: Refactor integration tests to use true enterprise-grade boundaries. Implement semantic schemas (`test_ctrl_ucp`, `test_data_shard_1`) inside the test database to strictly isolate global and shard data during local runs. Implement a Test Builder Pattern / ORM Factory (e.g., `DataPlaneOutboxBuilder`) to auto-generate valid underlying test data states, completely eradicating brittle hardcoded dictionaries.

@@ -4,6 +4,8 @@ from typing import Annotated, Any
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from identity.domain.identity_context import IdentityContext
+from identity.domain.models.authorization import Capability
+from identity.ports.outbound.user_repository_port import UserRepositoryPort
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.application.use_cases.create_user_use_case import (
     CreateUserCommand,
@@ -24,9 +26,7 @@ from ucp.application.use_cases.update_user_use_case import (
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.exceptions import ResourceNotFoundError
-from ucp.domain.models.authorization import Capability
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
-from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 from unified_api.adapters.inbound.http.dtos.user_dtos import (
     CreateUserRequest,

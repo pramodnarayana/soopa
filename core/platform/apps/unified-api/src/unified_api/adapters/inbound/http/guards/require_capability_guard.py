@@ -1,7 +1,7 @@
 import structlog
 from fastapi import HTTPException, Request, status
 from identity.domain.identity_context import IdentityContext
-from ucp.domain.models.authorization import Capability
+from identity.domain.models.authorization import Capability
 
 logger = structlog.get_logger(__name__)
 

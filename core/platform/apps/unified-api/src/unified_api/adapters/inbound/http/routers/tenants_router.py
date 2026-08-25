@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
+from identity.domain.models.authorization import Capability
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from ucp.application.dto import SubscribeAppCommand, UnsubscribeAppCommand
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.provision_tenant_use_case import (
@@ -30,13 +32,10 @@ from ucp.application.use_cases.update_tenant_name_use_case import (
     UpdateTenantNameCommand,
     UpdateTenantNameUseCase,
 )
-from ucp.bootstrap.config import get_settings
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.exceptions import ResourceNotFoundError
-from ucp.domain.models.authorization import Capability
 from ucp.domain.models.tenant import Tenant
-from ucp.ports.outbound.project_provider_port import ProjectProviderPort
 from ucp.ports.outbound.tenant_query_service_port import TenantQueryServicePort
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
@@ -57,6 +56,13 @@ class PaginatedTenantsResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class RoleResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    capabilities: list[str]
 
 
 @router.get(
@@ -84,15 +90,23 @@ async def find_all(
     )
 
 
-@router.get("/roles", dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))])
+@router.get(
+    "/roles",
+    response_model=list[RoleResponse],
+    dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
+)
 @inject
 async def get_roles(
     request: Request,
-    project_provider: ProjectProviderPort = Depends(Provide[Container.project_provider]),
-) -> list[Any]:
-    roles = await project_provider.get_roles()
-    tenant_group = get_settings().zitadel_tenant_role_group
-    return [role for role in roles if role.group == tenant_group]
+    role_repository: RoleRepositoryPort = Depends(Provide[Container.role_repo.provider]),
+) -> list[RoleResponse]:
+    roles = await role_repository.get_global_roles()
+    return [
+        RoleResponse(
+            id=role.id, name=role.name, description=role.description, capabilities=role.capabilities
+        )
+        for role in roles
+    ]
 
 
 async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> "Tenant":
