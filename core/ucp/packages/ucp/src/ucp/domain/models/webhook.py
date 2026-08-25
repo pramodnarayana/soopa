@@ -2,7 +2,7 @@ import os
 from datetime import UTC, datetime
 from typing import Self
 
-from ucp.domain.events.webhook_events import (
+from ucp.domain.events import (
     WebhookCreatedEvent,
     WebhookUpdatedEvent,
 )

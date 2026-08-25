@@ -4,15 +4,7 @@ version = "0.1.0"
 description = "Worker service for handling UCP Control Plane jobs"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "ucp",
-    "ucp_models",
-    "platform-orm",
-    "observability",
-    "aioboto3>=13.1.1",
-    "sqlalchemy>=2.0.29",
-    "asyncpg>=0.29.0",
-]
+dependencies = ["ucp", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "structlog"]
 
 [tool.uv.sources]
 ucp = { workspace = true }
@@ -20,6 +12,8 @@ ucp_models = { workspace = true }
 platform-orm = { workspace = true }
 observability = { workspace = true }
 
+[tool.deptry]
+known_first_party = ["ucp_worker"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

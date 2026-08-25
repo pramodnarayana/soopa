@@ -1,11 +1,9 @@
-import { config } from './config';
-
 /**
  * Resolves the UCP API URL from config.
  * Throws if VITE_UCP_API_URL is not configured.
  */
 export function getUcpApiUrl(): string {
-  return `${config.ucpApiUrl}/api/v1`;
+  return '/api/v1';
 }
 
 /**

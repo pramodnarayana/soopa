@@ -1,6 +1,6 @@
 import structlog
 
-from ucp.domain.events.webhook_events import WebhookDeletedEvent
+from ucp.domain.events import WebhookDeletedEvent
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 

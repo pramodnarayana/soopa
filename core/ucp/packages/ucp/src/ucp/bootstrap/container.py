@@ -1,17 +1,14 @@
 from dependency_injector import containers, providers
+from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
+from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
+from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from ucp.adapters.outbound.database.postgres_api_token_repository import PostgresApiTokenRepository
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.tenant_query_service import DatabaseTenantQueryService
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.database.user_repository import UserRepository
-from ucp.adapters.outbound.identity.zitadel_client import ZitadelClient
-from ucp.adapters.outbound.identity.zitadel_organizations_adapter import ZitadelOrganizationsAdapter
-from ucp.adapters.outbound.identity.zitadel_projects_adapter import ZitadelProjectsAdapter
-from ucp.adapters.outbound.identity.zitadel_users_adapter import ZitadelUsersAdapter
 from ucp.application.use_cases.api_tokens import (
     CreateApiTokenUseCase,
     DeleteApiTokenUseCase,
@@ -62,21 +59,14 @@ class Container(containers.DeclarativeContainer):
     )
 
     # -----------------------------------------------------------------------
-    # External Adapters & Providers (Stateless singletons / factories)
-    # -----------------------------------------------------------------------
-    zitadel_client = providers.Factory(ZitadelClient)
-    project_provider = providers.Factory(ZitadelProjectsAdapter)
-    org_provider = providers.Factory(ZitadelOrganizationsAdapter, project_provider=project_provider)
-    user_provider = providers.Factory(ZitadelUsersAdapter)
-
-    # -----------------------------------------------------------------------
     # Database Repositories (Session provided at runtime via kwargs)
     # -----------------------------------------------------------------------
     tenant_repo = providers.Factory(TenantRepository)
     tenant_query_service = providers.Factory(DatabaseTenantQueryService)
     app_repo = providers.Factory(PostgresAppRepository)
-    user_repo = providers.Factory(UserRepository)
+    user_repo = providers.Factory(PostgresUserRepository)
     api_token_repo = providers.Factory(PostgresApiTokenRepository)
+    role_repo = providers.Factory(PostgresRoleRepository)
     session_factory_provider = providers.Object(_async_session_maker)
     outbox_repo = providers.Factory(
         PostgresOutboxRepository, session_factory=session_factory_provider
@@ -148,19 +138,16 @@ class Container(containers.DeclarativeContainer):
     update_user_use_case = providers.Factory(
         UpdateUserUseCase,
         uow=uow,
-        idp=user_provider,
     )
 
     toggle_user_status_use_case = providers.Factory(
         ToggleUserStatusUseCase,
         uow=uow,
-        idp=user_provider,
     )
 
     delete_user_use_case = providers.Factory(
         DeleteUserUseCase,
         uow=uow,
-        idp=user_provider,
     )
 
     create_webhook_use_case = providers.Factory(

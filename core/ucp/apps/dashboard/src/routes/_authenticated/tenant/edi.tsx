@@ -4,7 +4,6 @@ import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 import { useTenantContext } from '../../../contexts/TenantContext';
 import { useGetTenant } from '../../../domains/tenants/api/queries';
-import { config } from '../../../lib/config';
 
 export const Route = createFileRoute('/_authenticated/tenant/edi')({
   component: EdiLayout,
@@ -29,15 +28,10 @@ function EdiLayout() {
     return <AppNotSubscribed appName="EDI" />;
   }
 
-  const baseUrl = `${config.ucpApiUrl}/api/v1/tenants/${tenantId}/edi/`;
+  const baseUrl = `/api/v1/tenants/${tenantId}/edi/`;
 
   return (
-    <EdiUIProvider
-      baseUrl={baseUrl}
-      ucpBaseUrl={`${config.ucpApiUrl}/api/v1/`}
-      token={token}
-      tenantId={tenantId}
-    >
+    <EdiUIProvider baseUrl={baseUrl} ucpBaseUrl="/api/v1/" token={token} tenantId={tenantId}>
       <SFTPPartnersProvider>
         <Outlet />
       </SFTPPartnersProvider>

@@ -4,9 +4,9 @@ import secrets
 from datetime import UTC, datetime
 
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
+from identity.domain.models.api_token import ApiTokenDomainModel
+from identity.domain.models.api_token_models import ApiTokenCreatedResult, CreateApiTokenCommand
 
-from ucp.domain.models.api_token import ApiTokenDomainModel
-from ucp.domain.models.api_token_models import ApiTokenCreatedResult, CreateApiTokenCommand
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 

@@ -4,9 +4,9 @@ from contextlib import AbstractAsyncContextManager
 import structlog
 from identity.domain.authentication_strategy import AuthenticationStrategyPort
 from identity.domain.identity_context import M2M_API_KEY_PREFIX, IdentityContext
+from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 
 from ucp.application.use_cases.api_key_authenticator import authenticate_api_key
-from ucp.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

@@ -2,8 +2,8 @@ import asyncio
 import uuid
 
 import structlog
+from platform_orm.events import EventEnvelope
 
-from ucp.domain.models.outbox_event import OutboxEvent
 from ucp.ports.outbound.outbox_publisher_port import OutboxPublisherPort
 from ucp.ports.outbound.outbox_repository_port import OutboxRepositoryPort
 
@@ -55,7 +55,7 @@ class SweepControlPlaneOutboxUseCase:
 
         logger.info("sweep_control_plane_outbox_completed", events_processed=len(events))
 
-    async def process_event(self, event: OutboxEvent) -> None:
+    async def process_event(self, event: EventEnvelope) -> None:
         try:
             await self.publisher.publish(event)
         except Exception as e:

@@ -1,6 +1,4 @@
-import { config } from './config';
-
-const UCP_API_URL = `${config.ucpApiUrl}/api/v1`;
+const UCP_API_URL = '/api/v1';
 
 let globalToken: string | null = null;
 
@@ -32,7 +30,7 @@ export const apiClient = {
   async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const { params, headers, ...customConfig } = options;
 
-    const url = new URL(`${UCP_API_URL}${endpoint}`);
+    const url = new URL(`${UCP_API_URL}${endpoint}`, window.location.origin);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         url.searchParams.append(key, value);

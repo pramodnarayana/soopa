@@ -9,12 +9,12 @@ from identity.application.authenticate_use_case import (
 )
 from identity.domain.authentication_strategy import AuthenticationStrategyPort
 from identity.domain.identity_context import IdentityContext
+from identity.domain.models.authorization import Capability
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
+from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
-from ucp.domain.models.authorization import Capability
-from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
-from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 logger = structlog.get_logger(__name__)
 

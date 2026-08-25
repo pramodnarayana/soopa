@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from ucp.domain.events.tenant_events import (
+from ucp.domain.events import (
     AppSubscribedEvent,
     AppUnsubscribedEvent,
     TenantDeletedEvent,

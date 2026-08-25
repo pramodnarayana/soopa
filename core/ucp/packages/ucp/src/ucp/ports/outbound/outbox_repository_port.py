@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from ucp.domain.models.outbox_event import OutboxEvent
+from platform_orm.events import EventEnvelope
 
 
 class OutboxRepositoryPort(Protocol):
@@ -8,7 +8,7 @@ class OutboxRepositoryPort(Protocol):
 
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int
-    ) -> list[OutboxEvent]: ...
+    ) -> list[EventEnvelope]: ...
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None: ...
 

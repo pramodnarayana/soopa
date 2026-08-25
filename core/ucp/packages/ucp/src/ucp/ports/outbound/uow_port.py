@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Self
 
-from ucp.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
+from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
+from identity.ports.outbound.user_repository_port import UserRepositoryPort
+
 from ucp.ports.outbound.app_repository_port import AppRepositoryPort
 from ucp.ports.outbound.idempotency_repository_port import IdempotencyRepositoryPort
-from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
-from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 from ucp.ports.outbound.webhook_repository_port import WebhookRepositoryPort
 
 

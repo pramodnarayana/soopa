@@ -11,7 +11,7 @@ from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsCon
 from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
+from ucp.adapters.outbound.messaging.ucp_outbox_sns_publisher import UcpOutboxSnsPublisher
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
@@ -40,7 +40,7 @@ async def test_app_subscription_flow(
 ) -> None:
     # 1. Setup Ports
     outbox_repo = PostgresOutboxRepository(lambda: db_session)
-    sns_publisher = UcpSnsOutboxPublisher(
+    sns_publisher = UcpOutboxSnsPublisher(
         topic_arn=localstack_container["sns_topic_arn"],
         endpoint_url=localstack_container["endpoint_url"],
     )

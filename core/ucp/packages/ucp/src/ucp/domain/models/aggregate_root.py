@@ -1,4 +1,4 @@
-from ucp.domain.events.base import DomainEvent
+from ucp.domain.events import DomainEvent
 
 
 class AggregateRoot:

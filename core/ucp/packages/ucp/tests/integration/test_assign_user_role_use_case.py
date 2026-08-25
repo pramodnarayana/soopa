@@ -1,6 +1,8 @@
 import uuid
 
 import pytest
+from identity.domain.models.authorization import Role
+from identity.domain.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
@@ -9,8 +11,6 @@ from ucp.application.use_cases.roles.assign_user_role_use_case import (
     AssignUserRoleUseCase,
 )
 from ucp.domain.exceptions import ResourceNotFoundError
-from ucp.domain.models.authorization import Role
-from ucp.domain.models.user import User
 
 pytestmark = pytest.mark.integration
 

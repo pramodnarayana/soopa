@@ -1,8 +1,7 @@
 from datetime import datetime
 
 import pytest
-
-from ucp.domain.models.user import User
+from identity.domain.models.user import User
 
 
 def test_user_mark_deleted_success() -> None:

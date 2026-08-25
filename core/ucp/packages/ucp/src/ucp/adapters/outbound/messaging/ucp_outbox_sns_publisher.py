@@ -3,14 +3,15 @@ from typing import Any
 
 import aioboto3
 import structlog
+from platform_orm.events import EventEnvelope
+from platform_orm.outbox_serializer import serialize_domain_event
 
-from ucp.domain.models.outbox_event import OutboxEvent
 from ucp.ports.outbound.outbox_publisher_port import OutboxPublisherPort
 
 logger = structlog.get_logger(__name__)
 
 
-class UcpSnsOutboxPublisher(OutboxPublisherPort):
+class UcpOutboxSnsPublisher(OutboxPublisherPort):
     """
     Publishes outbox events to an AWS SNS Topic (Global Bus).
     """
@@ -28,7 +29,7 @@ class UcpSnsOutboxPublisher(OutboxPublisherPort):
         self._client: Any = None
         self._client_context: Any = None
 
-    async def __aenter__(self) -> "UcpSnsOutboxPublisher":
+    async def __aenter__(self) -> "UcpOutboxSnsPublisher":
         """Allows using the publisher as a context manager for batch publishing."""
         if not self._client:
             self._client_context = self.session.client(
@@ -45,19 +46,12 @@ class UcpSnsOutboxPublisher(OutboxPublisherPort):
             self._client = None
             self._client_context = None
 
-    async def publish(self, event: OutboxEvent) -> None:
+    async def publish(self, event: EventEnvelope) -> None:
         if not self.topic_arn:
             raise ValueError("sns_topic_arn_not_configured")
 
-        message = {
-            "eventId": event.id,
-            "eventType": event.event_type,
-            "tenantId": event.tenant_id,
-            "payload": event.payload,
-            "publishedAt": event.created_at.isoformat()
-            if hasattr(event, "created_at") and event.created_at
-            else None,
-        }
+        # Serializes the EventEnvelope exactly as defined in core/platform
+        message = serialize_domain_event(event)
 
         try:
             # If used outside a context manager, create a one-off client.
@@ -77,7 +71,7 @@ class UcpSnsOutboxPublisher(OutboxPublisherPort):
             raise
 
     async def _publish_internal(
-        self, sns_client: Any, event: OutboxEvent, message: dict[str, Any]
+        self, sns_client: Any, event: EventEnvelope, message: dict[str, Any]
     ) -> None:
         publish_params: dict[str, Any] = {
             "TopicArn": self.topic_arn,

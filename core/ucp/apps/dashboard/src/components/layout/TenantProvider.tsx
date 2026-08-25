@@ -109,10 +109,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
       tenantId={tenant?.id ?? ''}
       userId={canonicalUserId}
       accessToken={token}
-      apiUrl={
-        `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(/\/+$/, '') +
-        '/api/v1/notifications'
-      }
+      apiUrl="/api/v1/notifications"
     />
   );
 

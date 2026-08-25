@@ -7,12 +7,11 @@ logger = structlog.get_logger(__name__)
 import typing
 from datetime import UTC, datetime
 
-from platform_orm.models.identity import ApiKey, ApiToken, Role, UserRole
+from platform_orm.models.identity import ApiKey, ApiToken, IdentityOutbox, Role, UserRole
 from platform_orm.models.identity import Tenant as DbTenant
 from platform_orm.models.webhooks import Webhook
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
@@ -124,7 +123,7 @@ class TenantRepository(TenantRepositoryPort):
 
     def _flush_events(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(tenant.domain_events):
-            outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = f"{IdentityOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
             final_idemp_key = (
@@ -142,7 +141,7 @@ class TenantRepository(TenantRepositoryPort):
                     event_payload=payload_dict,
                 )
 
-            outbox_event = ControlPlaneOutbox(
+            outbox_event = IdentityOutbox(
                 id=outbox_id,
                 idempotency_key=final_idemp_key,
                 tenant_id=tenant_id,

@@ -1,10 +1,10 @@
 from typing import Any, Protocol, Self
 
-from ucp.domain.models.outbox_event import OutboxEvent
+from platform_orm.events import EventEnvelope
 
 
 class OutboxPublisherPort(Protocol):
-    async def publish(self, event: OutboxEvent) -> None: ...
+    async def publish(self, event: EventEnvelope) -> None: ...
 
     async def __aenter__(self) -> Self: ...
 
