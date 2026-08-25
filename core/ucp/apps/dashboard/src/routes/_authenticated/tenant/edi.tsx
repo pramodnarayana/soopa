@@ -33,12 +33,7 @@ function EdiLayout() {
   const ucpBaseUrl = getApiUrl('/api/v1');
 
   return (
-    <EdiUIProvider
-      baseUrl={baseUrl}
-      ucpBaseUrl={ucpBaseUrl}
-      token={token}
-      tenantId={tenantId}
-    >
+    <EdiUIProvider baseUrl={baseUrl} ucpBaseUrl={ucpBaseUrl} token={token} tenantId={tenantId}>
       <SFTPPartnersProvider>
         <Outlet />
       </SFTPPartnersProvider>

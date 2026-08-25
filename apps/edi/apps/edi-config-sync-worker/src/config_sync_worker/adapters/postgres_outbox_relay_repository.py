@@ -58,7 +58,7 @@ class PostgresOutboxRelayRepository(OutboxRelayRepositoryPort):
                 )
             return events
 
-    async def sweep_stuck_events(self, lock_lease_ms: int = 30000) -> int:
+    async def sweep_stuck_events(self) -> int:
         import asyncio
 
         total_swept = 0
@@ -68,7 +68,7 @@ class PostgresOutboxRelayRepository(OutboxRelayRepositoryPort):
                     WITH cte AS (
                         SELECT id FROM edi.outbox
                         WHERE status = 'PROCESSING'
-                          AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
+                          AND lease_expires_at < NOW()
                         LIMIT 5000
                         FOR UPDATE SKIP LOCKED
                     )
@@ -78,7 +78,7 @@ class PostgresOutboxRelayRepository(OutboxRelayRepositoryPort):
                 """)
                 result = cast(
                     CursorResult[Any],
-                    await session.execute(query, {"lock_lease_ms": lock_lease_ms}),
+                    await session.execute(query),
                 )
                 swept = int(result.rowcount)
                 total_swept += swept
@@ -108,7 +108,12 @@ class PostgresOutboxRelayRepository(OutboxRelayRepositoryPort):
         async with asynccontextmanager(self.db_router.get_global_session)() as session:
             query = text("""
                 UPDATE edi.outbox
-                SET status = 'FAILED', attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+                    attempts = attempts + 1,
+                    lease_expires_at = NULL,
+                    owner_token = NULL,
+                    updated_at = NOW(),
+                    error_reason = :error_message
                 WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
             await session.execute(
@@ -117,6 +122,7 @@ class PostgresOutboxRelayRepository(OutboxRelayRepositoryPort):
                     "event_id": event_id,
                     "worker_id": worker_id,
                     "error_message": error_message,
+                    "max_attempts": 3,
                 },
             )
             await session.commit()

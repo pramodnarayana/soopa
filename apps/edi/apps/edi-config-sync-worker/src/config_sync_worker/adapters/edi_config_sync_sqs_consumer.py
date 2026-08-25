@@ -7,9 +7,9 @@ from typing import Any
 
 import aioboto3
 import structlog
+from edi.adapters.aws.aws_types import SQSClientContextProtocol, SQSClientProtocol
 
 from config_sync_worker.adapters.acl.registry import translate_external_event
-from config_sync_worker.adapters.aws_types import SQSClientContextProtocol, SQSClientProtocol
 from config_sync_worker.domain.errors import PermanentProvisioningError
 from config_sync_worker.ports.outbound.outbox_port import OutboxEvent, OutboxPort
 
@@ -135,15 +135,18 @@ class EdiConfigSyncSqsConsumer(OutboxPort):
                 try:
                     translated_body = translate_external_event(external_event_type, body)
                     if translated_body is None:
-                        # Unregistered event type - leave message for retry/DLQ
-                        logger.warning(
+                        # Unregistered event type - yield it so the domain service can drop it and delete it
+                        logger.info(
                             "unregistered_external_event_type",
                             external_event_type=external_event_type,
                             message_id=message_id,
-                            action="leave_for_dlq",
+                            action="pass_to_domain_service",
                         )
-                        return None
-                    body = translated_body
+                        # The domain service expects soopa.ucp for raw UCP events that need translation/dropping
+                        body["__source"] = "soopa.ucp"
+                    else:
+                        body = translated_body
+                        body["__source"] = "soopa.edi"
                 except ValueError:
                     # Permanent validation error - malformed message
                     logger.exception(
@@ -204,9 +207,10 @@ class EdiConfigSyncSqsConsumer(OutboxPort):
             yield None
             return
 
+        body.pop("__source", None)
         envelope = EventEnvelope(
             id=message_id,
-            source="sqs",
+            source="soopa.edi",
             event_type=body.get("eventType", body.get("event_type", "unknown")),
             payload=body,
             idempotency_key=body.get("idempotency_key"),

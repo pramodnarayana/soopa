@@ -7,7 +7,7 @@ Each service can use the full AppSettings or cherry-pick specific groups.
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +15,7 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
 
     global_url: str = Field(
-        validation_alias="DB_GLOBAL_URL",
+        validation_alias=AliasChoices("DB_GLOBAL_URL", "DB_URL"),
         serialization_alias="DB_GLOBAL_URL",
         default="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
         description="Async PostgreSQL connection string for the Global Control Plane.",

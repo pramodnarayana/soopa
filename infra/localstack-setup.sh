@@ -39,7 +39,8 @@ create_queue_with_dlq identity-events.fifo identity-events-dlq.fifo true
 create_queue_with_dlq edi-config-sync-queue.fifo edi-config-sync-queue-dlq.fifo true
 create_queue_with_dlq edi-transform.fifo edi-transform-dlq.fifo true
 create_queue_with_dlq edi-lifecycle.fifo edi-lifecycle-dlq.fifo true
-create_queue_with_dlq edi-orchestrator-jobs edi-orchestrator-jobs-dlq false
+create_queue_with_dlq edi-data-plane-jobs.fifo edi-data-plane-jobs-dlq.fifo true
+create_queue_with_dlq edi-control-plane-jobs.fifo edi-control-plane-jobs-dlq.fifo true
 create_queue_with_dlq edi-deliver.fifo edi-deliver-dlq.fifo true
 create_queue_with_dlq edi-priority-notifications.fifo edi-priority-notifications-dlq.fifo true
 

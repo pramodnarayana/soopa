@@ -70,7 +70,9 @@ class InboundRoute(EdiGlobalBase, InboundRouteMixin, TimestampMixin, SoftDeleteM
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 
-    webhook_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    webhook_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("ucp.webhooks.id"), nullable=True
+    )
     as2_partner_id: Mapped[str | None] = mapped_column(
         String(128), ForeignKey("edi.as2_partners.id"), nullable=True
     )

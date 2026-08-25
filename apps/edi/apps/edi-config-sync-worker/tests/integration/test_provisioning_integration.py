@@ -10,7 +10,7 @@ import pytest
 import structlog
 
 
-class TestSqsPublisher:
+class SqsTestPublisher:
     def __init__(self, endpoint_url: str):
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
@@ -42,6 +42,7 @@ from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
+from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from config_sync_worker.adapters.edi_config_sync_sqs_consumer import EdiConfigSyncSqsConsumer
@@ -67,10 +68,9 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
     queue_name = "test-edi-tenant-sync-{uuid.uuid4()}.fifo"
-    outbox_adapter = EdiConfigSyncSqsConsumer(queue_name=queue_name)
-    outbox_adapter.endpoint_url = sqs_endpoint
+    outbox_adapter = EdiConfigSyncSqsConsumer(queue_name=queue_name, endpoint_url=sqs_endpoint)
 
-    message_publisher = TestSqsPublisher(
+    message_publisher = SqsTestPublisher(
         endpoint_url=sqs_endpoint,
     )
 
@@ -89,7 +89,10 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
 
     # Use a dedicated test queue so the integration test is isolated from production traffic.
     # Pass it to the handler constructor — no monkey-patching needed.
-    worker_service = ProvisioningWorkerService(tenant_adapter, outbox_adapter, replication_adapter)
+    translator = DefaultEventTranslator()
+    worker_service = ProvisioningWorkerService(
+        tenant_adapter, outbox_adapter, replication_adapter, translator
+    )
 
     test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
@@ -266,10 +269,10 @@ async def test_provisioning_negative_unregistered_event_dropped(
     await message_publisher.publish(queue_name, payload)
     await asyncio.sleep(2)
 
-    # Worker processes the event. Since sqs_outbox yields None for unregistered events,
-    # process_next_event should return False.
+    # Worker processes the event. Since it's unregistered, it is safely dropped,
+    # but the consumption is considered successful processing, so it returns True.
     processed = await worker_service.process_next_event()
-    assert processed is False
+    assert processed is True
 
 
 @pytest.mark.integration

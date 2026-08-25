@@ -95,7 +95,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 await tenant_session.commit()
                 logger.info(
-                    "[REPLICATION] Successfully performed full state sync for tenant={tenant_id}."
+                    "[REPLICATION] Successfully performed full state sync.",
+                    tenant_id=tenant_id,
                 )
 
             except Exception as e:
@@ -166,9 +167,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         continue  # Optional FK not set on this instance — skip
 
                     logger.info(
-                        "[REPLICATION] {spec.global_model.__name__} {entity_id}: "
-                        "FK {dep.fk_attr}={dep_id} → pre-replicating "
-                        "{dep.global_model.__name__} to shard for tenant={tenant_id}."
+                        "[REPLICATION] Pre-replicating dependency to shard.",
+                        entity_type=spec.global_model.__name__,
+                        entity_id=entity_id,
+                        dependency_type=dep.global_model.__name__,
+                        dependency_id=dep_id,
+                        tenant_id=tenant_id,
                     )
 
                     dep_stmt = select(dep.global_model).where(dep.global_model.id == dep_id)
@@ -188,9 +192,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         tenant_session, dep_tenant_id, dep_entity, dep.tenant_model
                     )
                     logger.info(
-                        "[REPLICATION] Pre-replicated dependency "
-                        "{dep.global_model.__name__} id={dep_id} "
-                        "to shard for tenant={dep_tenant_id}."
+                        "[REPLICATION] Pre-replicated dependency to shard.",
+                        dependency_type=dep.global_model.__name__,
+                        dependency_id=dep_id,
+                        tenant_id=dep_tenant_id,
                     )
 
                 # 3. Upsert the entity — all FK dependencies are now guaranteed to exist
@@ -200,8 +205,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 )
                 await tenant_session.commit()
                 logger.info(
-                    "[REPLICATION] Replicated {spec.global_model.__name__} "
-                    "id={entity_id} to shard for tenant={tenant_id}."
+                    "[REPLICATION] Replicated entity to shard.",
+                    entity_type=spec.global_model.__name__,
+                    entity_id=entity_id,
+                    tenant_id=tenant_id,
                 )
 
             except (TransientProvisioningError, PermanentProvisioningError):
@@ -333,8 +340,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
 
         logger.debug(
-            "[REPLICATION] Upserting {tenant_model.__name__} id={data.get('id')} "
-            "into shard for tenant={tenant_id}."
+            "[REPLICATION] Upserting entity into shard.",
+            entity_type=tenant_model.__name__,
+            entity_id=data.get("id"),
+            tenant_id=tenant_id,
         )
         await tenant_session.execute(stmt)
 
@@ -355,8 +364,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 )
                 await tenant_session.commit()
                 logger.info(
-                    "[REPLICATION] Deleted {tenant_model.__name__} id={entity_id} "
-                    "from shard for tenant={tenant_id}."
+                    "[REPLICATION] Deleted entity from shard.",
+                    entity_type=tenant_model.__name__,
+                    entity_id=entity_id,
+                    tenant_id=tenant_id,
                 )
             except Exception as e:
                 await tenant_session.rollback()
@@ -400,8 +411,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stale_ids = tenant_ids - global_ids
         if stale_ids:
             logger.info(
-                "[REPLICATION] Removing {len(stale_ids)} stale "
-                "{tenant_model.__tablename__} record(s) from shard for tenant={tenant_id}."
+                "[REPLICATION] Removing stale records from shard.",
+                stale_count=len(stale_ids),
+                entity_table=tenant_model.__tablename__,
+                tenant_id=tenant_id,
             )
             await tenant_session.execute(
                 delete(tenant_model).where(tenant_model.id.in_(list(stale_ids)))

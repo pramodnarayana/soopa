@@ -6,6 +6,7 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.config.settings import get_settings
 from edi.domain.events import MessageQueueName
 
+from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from config_sync_worker.adapters.edi_config_sync_sqs_consumer import EdiConfigSyncSqsConsumer
@@ -68,7 +69,10 @@ async def main() -> None:
         endpoint_url=settings.aws.endpoint_url,
         region=settings.aws.default_region,
     )
-    replication_service = ProvisioningWorkerService(tenant_adapter, sqs_outbox, replication_adapter)
+    translator = DefaultEventTranslator()
+    replication_service = ProvisioningWorkerService(
+        tenant_adapter, sqs_outbox, replication_adapter, translator
+    )
     replication_task = asyncio.create_task(
         run_worker(replication_service, "EdiDataPlaneReplicationWorker")
     )

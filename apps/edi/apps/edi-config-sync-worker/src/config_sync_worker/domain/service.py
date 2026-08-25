@@ -11,8 +11,8 @@ from edi.domain.events import (
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 
-from config_sync_worker.adapters.acl.registry import translate_external_event
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
+from config_sync_worker.ports.outbound.event_translator_port import EventTranslatorPort
 from config_sync_worker.ports.outbound.outbox_port import OutboxPort
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
@@ -22,11 +22,16 @@ logger = structlog.get_logger(__name__)
 
 class ProvisioningWorkerService:
     def __init__(
-        self, tenant_port: TenantPort, outbox_port: OutboxPort, replication_port: ReplicationPort
+        self,
+        tenant_port: TenantPort,
+        outbox_port: OutboxPort,
+        replication_port: ReplicationPort,
+        translator_port: EventTranslatorPort,
     ):
         self.tenant_port = tenant_port
         self.outbox_port = outbox_port
         self.replication_port = replication_port
+        self.translator_port = translator_port
 
         # Instantiate the type adapter for our union once
         self._event_adapter: TypeAdapter[ProvisioningEvent] = TypeAdapter(ProvisioningEvent)
@@ -89,7 +94,9 @@ class ProvisioningWorkerService:
     def _parse_event(self, envelope: Any) -> ProvisioningEvent | None:
         try:
             if envelope.source == "soopa.ucp":
-                translated_payload = translate_external_event(envelope.event_type, envelope.payload)
+                translated_payload = self.translator_port.translate_external_event(
+                    envelope.event_type, envelope.payload
+                )
                 if not translated_payload:
                     logger.warning(
                         "unregistered_external_event_type",

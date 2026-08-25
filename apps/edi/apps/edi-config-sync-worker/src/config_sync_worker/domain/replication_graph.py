@@ -103,7 +103,9 @@ def topological_layers(graph: dict[str, EntitySpec]) -> list[list[str]]:
         dep_keys: set[str] = set()
         for dep in spec.dependencies:
             dep_key = model_to_key.get(dep.global_model)
-            if dep_key is not None and dep_key != key:
+            if dep_key is None:
+                raise ValueError(f"Dependency model {dep.global_model} not found in graph.")
+            if dep_key != key:
                 dep_keys.add(dep_key)
         deps_by_key[key] = dep_keys
 

@@ -27,9 +27,11 @@ members = [
     "core/ucp/apps/ucp-worker",
     "apps/edi/packages/edi",
     "apps/edi/apps/edi-as2-server",
-    "apps/edi/apps/edi-orchestrator-worker",
     "apps/edi/apps/edi-compute-worker",
     "apps/edi/apps/edi-config-sync-worker",
+    "apps/edi/apps/edi-orchestrator-worker",
+    "apps/edi/apps/edi-background-worker",
+    "apps/edi/apps/edi-secrets-sidecar",
     "core/platform/apps/scheduler-worker",
     "core/platform/packages/scheduler",
     "core/platform/packages/notification",
@@ -41,6 +43,17 @@ members = [
 exclude = ["apps/edi/packages/ui"]
 
 [tool.uv.sources]
+identity = { workspace = true }
+platform-orm = { workspace = true }
+platform-schemas = { workspace = true }
+observability = { workspace = true }
+notification = { workspace = true }
+scheduler = { workspace = true }
+ucp = { workspace = true }
+ucp-models = { workspace = true }
+edi = { workspace = true }
+as2-server = { workspace = true }
+unified-api = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
@@ -87,6 +100,8 @@ exclude = [
     ".*grammar.*",
     "services/worker",
     "^(.*/)?scripts/.*$",
+    # Standalone entrypoint script — not a package; excluded to avoid duplicate module 'main' conflict.
+    "^apps/edi/apps/edi-secrets-sidecar/main\\.py$",
 ]
 plugins = ["pydantic.mypy"]
 explicit_package_bases = true
@@ -106,6 +121,8 @@ mypy_path = [
     "apps/edi/apps/edi-compute-worker/src",
     "apps/edi/apps/edi-orchestrator-worker/src",
     "apps/edi/apps/edi-as2-server/src",
+    "apps/edi/apps/edi-background-worker/src",
+    "apps/edi/apps/edi-config-sync-worker/src",
 ]
 
 [[tool.mypy.overrides]]
@@ -219,3 +236,23 @@ exclude = ["venv", ".venv", "migrations", "tests", "*bots_core*", "*grammar*", "
 paths = ["apps", "core"]
 ignore_names = ["cls", "kwargs", "args", "QueueName", "MaxNumberOfMessages", "QueueUrl", "WaitTimeSeconds", "ReceiptHandle", "MessageBody", "MessageGroupId", "MessageDeduplicationId", "Entries", "connection", "routedict", "ta_fromfile", "dialect", "memo"]
 min_confidence = 80
+
+[tool.deptry]
+known_first_party = [
+    "config_sync_worker",
+    "scheduler_worker",
+    "orchestrator_worker",
+    "compute_worker",
+    "identity_worker",
+    "ucp_worker",
+    "notification_worker",
+    "api",
+    "ucp",
+    "edi",
+    "identity",
+    "observability",
+    "scheduler",
+    "orm",
+    "as2_server",
+    "notification",
+]

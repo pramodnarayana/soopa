@@ -50,3 +50,10 @@ def translate_external_event(event_type: str, payload: dict[str, Any]) -> dict[s
             raise
 
     return None
+
+
+class DefaultEventTranslator:
+    def translate_external_event(
+        self, event_type: str, payload: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        return translate_external_event(event_type, payload)

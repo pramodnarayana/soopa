@@ -51,6 +51,10 @@ services:
     <<: *monolith-base
     command: ["python", "-m", "config_sync_worker.provision.main"]
 
+  edi-background-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "edi_background_worker.main"]
+
   ucp-worker:
     <<: *monolith-base
     command: ["python", "-m", "ucp_worker.main"]
