@@ -8,8 +8,8 @@ class DomainEvent(ABC):
     """
     Marker base class for all domain events.
 
-    Inheriting from Pydantic BaseModel ensures all events are serialisable
-    to JSON for the Outbox pattern without any extra mapping step.
+    Events are immutable dataclasses serialized for the Outbox pattern by the
+    shared domain-event serializer.
     """
 
     @property

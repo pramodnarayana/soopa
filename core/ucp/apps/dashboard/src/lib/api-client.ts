@@ -1,4 +1,6 @@
-const UCP_API_URL = '/api/v1';
+import { getApiUrl } from './config';
+
+const UCP_API_URL = getApiUrl('/api/v1');
 
 let globalToken: string | null = null;
 

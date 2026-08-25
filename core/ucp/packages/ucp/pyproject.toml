@@ -3,7 +3,7 @@ name = "ucp"
 version = "0.1.0"
 description = "Universal Control Plane API"
 requires-python = ">=3.12"
-dependencies = ["ucp_models", "fastapi>=0.141.1", "pydantic[email] (>=2.13.4,<3.0.0)", "pydantic-settings>=2.3.4", "sqlalchemy>=2.0.31", "httpx>=0.27.0", "asyncpg>=0.29.0", "platform-orm", "identity", "dependency-injector>=4.41.0", "structlog>=24.0.0", "dotenv", "aioboto3", "botocore"]
+dependencies = ["ucp_models", "fastapi>=0.141.1", "pydantic[email] (>=2.13.4,<3.0.0)", "pydantic-settings>=2.3.4", "sqlalchemy>=2.0.31", "httpx>=0.27.0", "asyncpg>=0.29.0", "platform-orm", "identity", "dependency-injector>=4.41.0", "structlog>=24.0.0", "python-dotenv", "aioboto3", "botocore"]
 
 [project.optional-dependencies]
 dev = [

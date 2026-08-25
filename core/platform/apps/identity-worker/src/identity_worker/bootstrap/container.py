@@ -68,7 +68,8 @@ class UserUpdatedPayload(BaseModel):
 
 
 class UserRoleAssignedPayload(BaseModel):
-    idp_user_id: str
+    user_id: str
+    idp_user_id: str | None = None
     tenant_id: str
     role_name: str
 
@@ -155,6 +156,7 @@ class WorkerContainer:
         async def identity_user_role_assigned_handler(event: Any) -> None:
             payload = UserRoleAssignedPayload.model_validate(event.payload)
             await identity_service.handle_user_role_assigned(
+                user_id=payload.user_id,
                 idp_user_id=payload.idp_user_id,
                 tenant_id=payload.tenant_id,
                 role=payload.role_name,

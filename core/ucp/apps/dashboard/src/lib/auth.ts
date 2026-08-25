@@ -1,9 +1,11 @@
+import { getApiUrl } from './config';
+
 /**
  * Resolves the UCP API URL from config.
- * Throws if VITE_UCP_API_URL is not configured.
+ * Defaults to the dashboard origin when VITE_UCP_API_URL is not configured.
  */
 export function getUcpApiUrl(): string {
-  return '/api/v1';
+  return getApiUrl('/api/v1');
 }
 
 /**

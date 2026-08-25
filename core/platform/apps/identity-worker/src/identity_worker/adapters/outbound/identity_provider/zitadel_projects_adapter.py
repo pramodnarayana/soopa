@@ -16,6 +16,8 @@ logger = structlog.get_logger(__name__)
 
 
 class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
+    _MAX_SEARCH_PAGES = 1_000
+
     async def _search_all(
         self,
         endpoint: str,
@@ -25,9 +27,16 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
     ) -> list[Any]:
         offset = 0
         limit = 100
+        page_count = 0
         results: list[Any] = []
 
         while True:
+            if page_count >= self._MAX_SEARCH_PAGES:
+                raise IdentityProviderPortError(
+                    f"ZITADEL search exceeded {self._MAX_SEARCH_PAGES} pages"
+                )
+            page_count += 1
+
             response = await self.fetch_with_auth(
                 endpoint=endpoint,
                 method="POST",

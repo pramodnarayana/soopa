@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import typing
 
@@ -11,6 +12,19 @@ from identity_worker.ports.outbound.identity_provider_port import IdentityProvid
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
+
+
+async def _complete_cleanup(cleanup: typing.Awaitable[None]) -> None:
+    """Wait for cleanup to finish even if this task is cancelled again."""
+    cleanup_task = asyncio.ensure_future(cleanup)
+    while True:
+        try:
+            await asyncio.shield(cleanup_task)
+            return
+        except asyncio.CancelledError:
+            if cleanup_task.done():
+                cleanup_task.result()
+                return
 
 
 class StateConflictError(Exception):
@@ -51,6 +65,20 @@ class IdentitySyncService:
                     f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
                 )
             return tenant.idp_tenant_id
+
+    async def _resolve_idp_user_id(self, user_id: str) -> str:
+        """Resolve a platform user ID to its provisioned IDP user ID."""
+        if self.session_factory is None:
+            raise ValueError("session_factory is required to resolve user IDs")
+
+        async with self.session_factory() as session:
+            result = await session.execute(select(DbUser).where(DbUser.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user or not user.idp_user_id:
+                raise StateConflictError(
+                    f"User {user_id} is not fully provisioned in Identity Provider yet"
+                )
+            return user.idp_user_id
 
     async def handle_tenant_provisioned(self, tenant_id: str) -> None:
         """
@@ -138,12 +166,14 @@ class IdentitySyncService:
                     bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
                 except BaseException:
                     try:
-                        await session.rollback()
+                        await _complete_cleanup(session.rollback())
                     except Exception:
                         bound_logger.exception("identity_sync_session_rollback_failed")
                     if created_idp_user_id:
                         try:
-                            await self.user_identity_provider.delete_user(created_idp_user_id)
+                            await _complete_cleanup(
+                                self.user_identity_provider.delete_user(created_idp_user_id)
+                            )
                         except Exception:
                             bound_logger.exception(
                                 "identity_sync_create_user_compensation_failed",
@@ -155,20 +185,29 @@ class IdentitySyncService:
             bound_logger.exception("identity_sync_new_user_failed")
             raise
 
-    async def handle_user_role_assigned(self, idp_user_id: str, tenant_id: str, role: str) -> None:
+    async def handle_user_role_assigned(
+        self,
+        user_id: str,
+        idp_user_id: str | None,
+        tenant_id: str,
+        role: str,
+    ) -> None:
         """
         Synchronizes a role assignment to the Identity Provider.
         """
-        bound_logger = logger.bind(idp_user_id=idp_user_id, tenant_id=tenant_id, role=role)
+        bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, role=role)
         bound_logger.info("syncing_user_role_assigned_to_identity_provider")
 
         try:
             idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
+            resolved_idp_user_id = idp_user_id or await self._resolve_idp_user_id(user_id)
 
             await self.user_identity_provider.assign_tenant_role(
-                user_id=idp_user_id, org_id=idp_tenant_id, role=role
+                user_id=resolved_idp_user_id, org_id=idp_tenant_id, role=role
             )
-            bound_logger.info("identity_sync_assign_role_successful")
+            bound_logger.info(
+                "identity_sync_assign_role_successful", idp_user_id=resolved_idp_user_id
+            )
         except Exception:
             bound_logger.exception("identity_sync_assign_role_failed")
             raise

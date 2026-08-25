@@ -2,6 +2,7 @@ import asyncio
 import os
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+os.environ.setdefault("ZITADEL_DEFAULT_USER_PASSWORD", "not-for-production")
 
 import pytest
 import pytest_asyncio

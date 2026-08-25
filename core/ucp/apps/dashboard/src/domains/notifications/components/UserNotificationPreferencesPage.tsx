@@ -3,6 +3,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import React from 'react';
 import { toast } from 'sonner';
 import { useTenantContext } from '@/contexts/TenantContext';
+import { getApiUrl } from '@/lib/config';
 import { useUpdateUserPreference, useUserPreferences } from '../api/useUserNotificationPreferences';
 
 export const UserNotificationPreferencesPage: React.FC = () => {
@@ -13,7 +14,7 @@ export const UserNotificationPreferencesPage: React.FC = () => {
   const { data: tenantRules = [], isLoading: isLoadingRules } = usePreferences({
     tenantId: tenantId,
     accessToken: token,
-    apiUrl: '/api/v1/notifications',
+    apiUrl: getApiUrl('/api/v1/notifications'),
   });
   const { data: userPrefs = [], isLoading: isLoadingPrefs } = useUserPreferences();
   const updatePreference = useUpdateUserPreference();

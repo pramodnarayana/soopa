@@ -2,6 +2,7 @@ import { NotificationsPage } from '@soopa/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTenantContext } from '../../../../contexts/TenantContext';
 import { useAuthUser } from '../../../../hooks/useAuthUser';
+import { getApiUrl } from '../../../../lib/config';
 
 export const Route = createFileRoute('/_authenticated/tenant/notifications/')({
   component: NotificationsRoute,
@@ -37,7 +38,7 @@ function NotificationsRoute() {
       tenantId={tenantId}
       userId={canonicalUserId}
       accessToken={token}
-      apiUrl="/api/v1/notifications"
+      apiUrl={getApiUrl('/api/v1/notifications')}
     />
   );
 }

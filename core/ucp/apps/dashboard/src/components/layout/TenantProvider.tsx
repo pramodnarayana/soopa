@@ -6,6 +6,7 @@ import { TenantContext } from '../../contexts/TenantContext';
 import { useGetTenant } from '../../domains/tenants/api/queries';
 import { useAuthUser } from '../../hooks/useAuthUser';
 import { resolveTenantId } from '../../lib/auth';
+import { getApiUrl } from '../../lib/config';
 
 const logger = console;
 
@@ -109,7 +110,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
       tenantId={tenant?.id ?? ''}
       userId={canonicalUserId}
       accessToken={token}
-      apiUrl="/api/v1/notifications"
+      apiUrl={getApiUrl('/api/v1/notifications')}
     />
   );
 
