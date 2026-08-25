@@ -158,9 +158,6 @@ class Message:
             )
         self._checkifrecordsingrammar(node_instance, structure[0], defmessage.grammarname)
         self._canonicaltree(node_instance, structure[0])
-        # should the content of the message (the records read) be logged.
-        if False:
-            self._logmessagecontent(node_instance)
 
     def _checkifrecordsingrammar(self, node_instance, structure, grammarname):
         """check for every node if in grammar recursive"""

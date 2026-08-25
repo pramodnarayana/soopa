@@ -39,7 +39,7 @@ async def seed_database() -> None:
         from dataclasses import dataclass
 
         from platform_orm.clients.scheduler import SchedulerClient
-        from worker.core.scheduler.models import (
+        from worker.domain.scheduler.models import (
             AppNamespace,
             JobName,
             TargetQueue,

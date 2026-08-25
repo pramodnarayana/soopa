@@ -15,10 +15,15 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
 
     global_url: str = Field(
-        validation_alias="DB_URL",
+        validation_alias="DB_GLOBAL_URL",
         serialization_alias="DB_GLOBAL_URL",
         default="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
         description="Async PostgreSQL connection string for the Global Control Plane.",
+    )
+    default_shard_url: str | None = Field(
+        validation_alias="SHARD_1_URL",
+        default=None,
+        description="Fallback shard URL used when UCP database_shards table is empty.",
     )
     pool_size: int = Field(default=10)
     max_overflow: int = Field(default=20)

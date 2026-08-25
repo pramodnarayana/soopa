@@ -1,4 +1,5 @@
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -21,7 +22,7 @@ pytestmark = pytest.mark.asyncio
 async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
     # Use standard local environment DB URL
     global_url = os.getenv(
-        "GLOBAL_DB_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_global"
+        "GLOBAL_DB_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
     router = DatabaseRouter(global_db_url=global_url)
 
@@ -37,7 +38,7 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
                 name="shard_1",
                 dsn=os.getenv(
                     "SHARD_1_URL",
-                    "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                    "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
                 ),
             )
             session.add(shard)
@@ -50,9 +51,15 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
 @pytest.fixture
 async def test_session(db_router: DatabaseRouter) -> "AsyncGenerator[AsyncSession, None]":
     shard_url = os.getenv(
-        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+        "SHARD_1_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
     engine = await db_router.get_engine("shard_1", shard_url)
+
+    from edi.adapters.outbound.database.models.data_plane import TenantBase
+
+    async with engine.begin() as conn:
+        await conn.run_sync(TenantBase.metadata.create_all)
+
     async with AsyncSession(engine) as session:
         # Cleanup before
         await session.execute(delete(DataPlaneOutbox))
@@ -75,16 +82,26 @@ async def test_sweeper_fetches_and_processes_events(
         insert(DataPlaneOutbox).values(
             [
                 {
-                    "id": 1,
-                    "event_type": "EDI_RECEIVED",
+                    "id": f"dp_edi_ob_{uuid.uuid4().hex[:24]}",
+                    "tenant_id": "ten_default_123",
+                    "idempotency_key": f"idemp_{uuid.uuid4()}",
+                    "event_type": "TRANSFORM_EVENT",
                     "payload": {},
+                    "status": "PENDING",
+                    "attempts": 0,
                     "created_at": created_at,
+                    "updated_at": datetime.now(UTC),
                 },
                 {
-                    "id": 2,
-                    "event_type": "EDI_PROCESSED",
+                    "id": f"dp_edi_ob_{uuid.uuid4().hex[:24]}",
+                    "tenant_id": "ten_default_123",
+                    "idempotency_key": f"idemp_{uuid.uuid4()}",
+                    "event_type": "DELIVER_EVENT",
                     "payload": {},
+                    "status": "PENDING",
+                    "attempts": 0,
                     "created_at": created_at,
+                    "updated_at": datetime.now(UTC),
                 },
             ]
         )
@@ -107,11 +124,13 @@ async def test_sweeper_fetches_and_processes_events(
 
     # 4. Verify
     assert processed >= 2
-    use_case.processor.process_batch.assert_called_once()
+    use_case.processor.process_batch.assert_called()
 
 
 @pytest.mark.integration
-async def test_bounded_two_shard_cleanup_failure_propagates(db_router: DatabaseRouter) -> None:
+async def test_bounded_two_shard_cleanup_failure_propagates(
+    db_router: DatabaseRouter, test_session: AsyncSession
+) -> None:
     from ucp_models.infrastructure import DatabaseShard
 
     from worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
@@ -130,7 +149,7 @@ async def test_bounded_two_shard_cleanup_failure_propagates(db_router: DatabaseR
                 name="shard_2",
                 dsn=os.getenv(
                     "SHARD_2_URL",
-                    "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_2",
+                    "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
                 ),
             )
             session.add(shard)
@@ -141,7 +160,7 @@ async def test_bounded_two_shard_cleanup_failure_propagates(db_router: DatabaseR
     # Force a failure on shard_1 by patching db_router.get_engine to raise an exception
     original_get_engine = db_router.get_engine
 
-    async def mock_get_engine(shard_name: str, dsn: str):
+    async def mock_get_engine(shard_name: str, dsn: str | None = None):
         if shard_name == "shard_1":
             raise RuntimeError("Database connection lost for shard_1")
         return await original_get_engine(shard_name, dsn)

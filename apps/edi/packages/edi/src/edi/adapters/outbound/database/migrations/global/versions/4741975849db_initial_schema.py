@@ -222,10 +222,6 @@ def upgrade() -> None:
             ["sftp_partner_id"],
             ["edi.sftp_partners.id"],
         ),
-        sa.ForeignKeyConstraint(
-            ["webhook_id"],
-            ["ucp.webhooks.id"],
-        ),
         sa.PrimaryKeyConstraint("id"),
         schema="edi",
     )

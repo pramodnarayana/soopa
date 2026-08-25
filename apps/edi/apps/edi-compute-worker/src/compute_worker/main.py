@@ -13,6 +13,7 @@ from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
+from edi.domain.events import MessageQueueName
 
 from compute_worker.worker import SQSComputeWorker
 
@@ -48,19 +49,14 @@ async def main() -> None:
         uow = cast(DataPlaneUnitOfWorkPort, uow_factory())
         return ComputeTransformUseCase(uow=uow, transformer=transformer)
 
-    # Resolve SQS Queue URL dynamically
+    # Resolve SQS Queue URL using the canonical domain enum
     session = aioboto3.Session()
-    client_kwargs = {"region_name": "us-east-1"}
+    client_kwargs = {"region_name": settings.aws.resolved_region}
     if aws_endpoint:
         client_kwargs["endpoint_url"] = aws_endpoint
 
     async with session.client("sqs", **client_kwargs) as sqs:
-        queue_name = (
-            settings.aws.sqs_transform_queue_name
-            if hasattr(settings.aws, "sqs_transform_queue_name")
-            else "TransformComputeQueue"
-        )
-        response = await sqs.get_queue_url(QueueName=queue_name)
+        response = await sqs.get_queue_url(QueueName=MessageQueueName.TRANSFORM_QUEUE)
         queue_url = response["QueueUrl"]
 
     worker = SQSComputeWorker(

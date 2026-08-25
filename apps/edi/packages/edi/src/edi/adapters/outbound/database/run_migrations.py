@@ -38,10 +38,14 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
         await engine.dispose()
 
     if not urls:
-        logger.info("No shards found in Global DB. Falling back to default infrastructure shards.")
-        urls = [
-            "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
-        ]
+        settings = get_settings()
+        if settings.database.default_shard_url:
+            logger.info("No shards found in Global DB. Falling back to default_shard_url from env.")
+            urls = [settings.database.default_shard_url]
+        else:
+            logger.info(
+                "No shards found in Global DB and no default_shard_url configured. Skipping tenant migrations."
+            )
     return urls
 
 

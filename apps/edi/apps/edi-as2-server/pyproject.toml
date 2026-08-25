@@ -6,26 +6,14 @@ authors = [
     {name = "EDI AS2 Team", email = "team@edi.com"}
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "ucp_models",
-    "fastapi>=0.141.1",
-    "uvicorn[standard]>=0.22.0",
-    "gunicorn>=22.0.0",
-    "prometheus-client>=0.20.0",
-    "python-dotenv>=1.0.0",
-    "edi",
-    "identity",
-    "observability",
-    "sqlalchemy>=2.0.0",
-    "orchestrator-worker",
-]
+dependencies = ["ucp_models", "fastapi>=0.141.1", "uvicorn[standard]>=0.22.0", "gunicorn>=22.0.0", "prometheus-client>=0.20.0", "python-dotenv>=1.0.0", "edi", "identity", "observability", "sqlalchemy>=2.0.0", "platform-orm"]
 
 [tool.uv.sources]
 ucp_models = { workspace = true }
 edi = { workspace = true }
 identity = { workspace = true }
 observability = { workspace = true }
-orchestrator-worker = { workspace = true }
+platform-orm = { workspace = true }
 
 
 [build-system]

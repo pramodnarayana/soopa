@@ -20,59 +20,26 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - pg_isready -U edi
+      - pg_isready -U edi -d edi_shard_1
       interval: 5s
       timeout: 5s
       retries: 5
 
-  edi-orchestrator-worker:
-    build:
-      context: ../../
-      dockerfile: Dockerfile
-      target: dev
-      args:
-        - APP_MODULE=apps/edi/apps/edi-orchestrator-worker
-    command: >
-      bash -c "cd apps/edi/apps/edi-orchestrator-worker && pnpm start:dev"
-    env_file:
-      - .env.edi
-    volumes:
-      - ../../:/app:cached
-      - ../../apps/edi/edi_sample_files:/app/edi_sample_files
 
-  edi-compute-worker:
-    build:
-      context: ../../
-      dockerfile: Dockerfile
-      target: dev
-      args:
-        - APP_MODULE=apps/edi/apps/edi-compute-worker
-    command: >
-      bash -c "cd apps/edi/apps/edi-compute-worker && uv run python -m compute_worker.main"
 
-  cdcproxy:
-    image: nginx:alpine
-    ports:
-    - 8002:80
-    command: "/bin/sh -c \"echo '\nserver {\n    listen 80;\n    location / {\n  \
-      \      proxy_pass http://host.docker.internal:3000;\n        proxy_set_header\
-      \ Connection \\\"\\\";\n        proxy_set_header Upgrade \\\"\\\";\n    }\n\
-      }' > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'\""
-    extra_hosts:
-    - host.docker.internal:host-gateway
   debezium_shard:
-    image: quay.io/debezium/server:2.7.3.Final
+    image: quay.io/debezium/server:3.6.0.Final
     environment:
     - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard
     - DEBEZIUM_SOURCE_DATABASE_PORT=5432
     - DEBEZIUM_SOURCE_DATABASE_USER=edi
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
     - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
-    - DEBEZIUM_SINK_URL=http://cdcproxy/internal/cdc/relay
+    - DEBEZIUM_SINK_URL=http://host.docker.internal:3000/internal/cdc/relay
     extra_hosts:
     - host.docker.internal:host-gateway
     volumes:
-    - ./docker/debezium/application.properties:/debezium/conf/application.properties
+    - ./docker/debezium/application.properties:/debezium/config/application.properties
     - debezium_data:/debezium/data
     depends_on:
       edi_postgres_shard:

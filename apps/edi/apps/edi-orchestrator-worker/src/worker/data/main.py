@@ -168,14 +168,10 @@ async def main() -> None:
 
     # ─────────────────────────────────────────────────────────────
     # Scheduled Jobs (Cleanup & Sweeper)
+    # Note: Control-plane outbox cleanup/sweeper jobs live in edi-config-sync-worker.
+    # This worker is responsible for data-plane concerns only.
     # ─────────────────────────────────────────────────────────────
     from worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import EdiAuditLogCleanupJobHandler
-    from worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_job import (
-        EdiControlPlaneOutboxCleanupJobHandler,
-    )
-    from worker.adapters.inbound.jobs.edi_control_plane_outbox_sweeper_job import (
-        EdiControlPlaneOutboxSweeperJobHandler,
-    )
     from worker.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
         EdiDataPlaneOutboxCleanupJobHandler,
     )
@@ -188,24 +184,14 @@ async def main() -> None:
     from worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
         SqlAlchemyEdiAuditLogCleanupRepository,
     )
-    from worker.adapters.outbound.database.postgres_edi_control_plane_outbox_cleanup_repository import (
-        SqlAlchemyEdiControlPlaneOutboxCleanupRepository,
-    )
     from worker.adapters.outbound.database.postgres_edi_data_plane_outbox_cleanup_repository import (
         SqlAlchemyEdiDataPlaneOutboxCleanupRepository,
     )
     from worker.adapters.outbound.database.postgres_edi_idempotency_cleanup_repository import (
         SqlAlchemyEdiIdempotencyCleanupRepository,
     )
-    from worker.adapters.postgres_outbox_relay_repository import PostgresOutboxRelayRepository
     from worker.application.use_cases.edi_audit_log_cleanup_use_case import (
         EdiAuditLogCleanupUseCase,
-    )
-    from worker.application.use_cases.edi_control_plane_outbox_cleanup_use_case import (
-        EdiControlPlaneOutboxCleanupUseCase,
-    )
-    from worker.application.use_cases.edi_control_plane_outbox_sweeper_use_case import (
-        EdiControlPlaneOutboxSweeperUseCase,
     )
     from worker.application.use_cases.edi_data_plane_outbox_cleanup_use_case import (
         EdiDataPlaneOutboxCleanupUseCase,
@@ -222,32 +208,17 @@ async def main() -> None:
         endpoint_url=settings.aws.endpoint_url,
         region=settings.aws.resolved_region,
     )
-    outbox_relay_repository = PostgresOutboxRelayRepository(db_router=db_router)
 
-    edi_cp_outbox_cleanup_repo = SqlAlchemyEdiControlPlaneOutboxCleanupRepository(
-        db_router=db_router
-    )
     edi_dp_outbox_cleanup_repo = SqlAlchemyEdiDataPlaneOutboxCleanupRepository(db_router=db_router)
     edi_idemp_cleanup_repo = SqlAlchemyEdiIdempotencyCleanupRepository(db_router=db_router)
     edi_audit_cleanup_repo = SqlAlchemyEdiAuditLogCleanupRepository(db_router=db_router)
 
     orchestrator_sweeper_use_case = EdiDataPlaneOutboxSweeperUseCase(db_router, message_publisher)
-    provisioning_sweeper_use_case = EdiControlPlaneOutboxSweeperUseCase(outbox_relay_repository)
 
     job_registry = JobHandlerRegistry()
     job_registry.register(
         JobName.EDI_ORCHESTRATOR_OUTBOX_SWEEPER.value,
         EdiDataPlaneOutboxSweeperJobHandler(orchestrator_sweeper_use_case),
-    )
-    job_registry.register(
-        JobName.EDI_PROVISIONING_OUTBOX_SWEEPER.value,
-        EdiControlPlaneOutboxSweeperJobHandler(provisioning_sweeper_use_case),
-    )
-    job_registry.register(
-        JobName.EDI_CONTROL_PLANE_OUTBOX_CLEANUP.value,
-        EdiControlPlaneOutboxCleanupJobHandler(
-            EdiControlPlaneOutboxCleanupUseCase(edi_cp_outbox_cleanup_repo)
-        ),
     )
     job_registry.register(
         JobName.EDI_DATA_PLANE_OUTBOX_CLEANUP.value,

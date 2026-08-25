@@ -8,9 +8,6 @@ import pytest
 from worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
 )
-from worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_job import (
-    EdiControlPlaneOutboxCleanupJobHandler,
-)
 from worker.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
     EdiDataPlaneOutboxCleanupJobHandler,
 )
@@ -41,7 +38,6 @@ class _SingleConcurrencyAuditLogCleanupRepository:
 @pytest.mark.parametrize(
     "handler_class,job_name",
     [
-        (EdiControlPlaneOutboxCleanupJobHandler, "edi_control_plane_outbox_cleanup"),
         (EdiDataPlaneOutboxCleanupJobHandler, "edi_data_plane_outbox_cleanup"),
         (EdiIdempotencyCleanupJobHandler, "edi_idempotency_cleanup"),
         (EdiAuditLogCleanupJobHandler, "edi_audit_log_cleanup"),
@@ -64,7 +60,6 @@ async def test_edi_cleanup_execute(handler_class: Any, job_name: str) -> None:
 @pytest.mark.parametrize(
     "handler_class,job_name",
     [
-        (EdiControlPlaneOutboxCleanupJobHandler, "edi_control_plane_outbox_cleanup"),
         (EdiDataPlaneOutboxCleanupJobHandler, "edi_data_plane_outbox_cleanup"),
         (EdiIdempotencyCleanupJobHandler, "edi_idempotency_cleanup"),
         (EdiAuditLogCleanupJobHandler, "edi_audit_log_cleanup"),

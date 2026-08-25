@@ -1,13 +1,18 @@
-.PHONY: build lint format typecheck test check-all dev infra-up infra-down infra-logs
+.PHONY: build lint format typecheck test check-all dev infra-up infra-down infra-logs dev-as2 dev-worker-orchestrator dev-worker-compute dev-worker-config-sync
 
 # ==============================================================================
 # EDI AS2 - Enterprise Task Runner
 # ==============================================================================
 
-# Load variables from root .env (optional)
+# Load variables from root .env and local .env.edi
 -include ../../.env
 ifneq (,$(wildcard ../../.env))
 export $(shell awk -F= '/^[a-zA-Z_][a-zA-Z0-9_]*=/ {print $$1}' ../../.env)
+endif
+
+-include .env.edi
+ifneq (,$(wildcard .env.edi))
+export $(shell awk -F= '/^[a-zA-Z_][a-zA-Z0-9_]*=/ {print $$1}' .env.edi)
 endif
 
 build:
@@ -47,10 +52,11 @@ check-all: format lint typecheck test
 
 dev:
 	@echo "Starting AS2 and Workers concurrently..."
-	exec pnpm dlx concurrently --kill-others -c "magenta,cyan,yellow" -n "as2,orch,comp" \
+	exec pnpm dlx concurrently --kill-others -c "magenta,cyan,yellow,white" -n "as2,orch,compute,config-sync" \
 		"make dev-as2" \
 		"make dev-worker-orchestrator" \
-		"make dev-worker-compute"
+		"make dev-worker-compute" \
+		"make dev-worker-config-sync"
 
 check-env:
 	@if [ -z "$(ZITADEL_EDI_PROJECT_ID)" ]; then echo "Error: ZITADEL_EDI_PROJECT_ID is not set" >&2; exit 1; fi
@@ -70,19 +76,23 @@ dev-web:
 
 dev-worker-orchestrator:
 	@echo "Starting Orchestrator Worker for local development..."
-	exec env ENVIRONMENT=development PYTHONPATH=apps/edi-worker/orchestrator/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src:packages/scheduler/src uv run python apps/edi-worker/orchestrator/src/worker/main.py
+	cd apps/edi-orchestrator-worker && exec env ENVIRONMENT=development uv run python -m worker.main
 
 dev-worker-compute:
 	@echo "Starting Compute Worker for local development..."
-	exec env ENVIRONMENT=development PYTHONPATH=apps/edi-worker/compute/src:packages/database/src:packages/config/src:packages/pipeline/src:packages/domain/src:packages/transformer/src uv run python apps/edi-worker/compute/src/compute_worker/main.py
+	cd apps/edi-compute-worker && exec env ENVIRONMENT=development uv run python -m compute_worker.main
+
+dev-worker-config-sync:
+	@echo "Starting Config Sync Worker for local development..."
+	cd apps/edi-config-sync-worker && exec env ENVIRONMENT=development uv run python -m config_sync_worker.provision.main
 
 db-init:
 	@echo "Waiting for databases to be ready..."
 	@sleep 5
 	@echo "Running database migrations..."
-	PYTHONPATH=packages/database/src:packages/config/src uv run python packages/database/src/database/run_migrations.py
+	cd packages/edi && uv run python src/edi/adapters/outbound/database/run_migrations.py
 	@echo "Seeding the database..."
-	PYTHONPATH=packages/database/src:packages/config/src:apps/edi-worker/orchestrator/src uv run python apps/edi-as2-server/scripts/seed.py
+	cd apps/edi-as2-server && uv run python scripts/seed.py
 
 db-reset:
 	@echo "Restarting Debezium..."
