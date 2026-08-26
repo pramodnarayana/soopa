@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from notification.domain.models import NotificationEvent
 
-from notification_worker.adapters.inbound.workers.consumer import NotificationConsumerWorker
+from notification_worker.adapters.inbound.workers.notification_event_sqs_consumer import (
+    NotificationEventSqsConsumer,
+)
 
 
 class FakeDispatchUseCase:
@@ -27,7 +29,7 @@ class FakeSweeperJobHandler:
 async def test_consumer_process_message_valid():
     use_case = FakeDispatchUseCase()
     sweeper_handler = FakeSweeperJobHandler()
-    worker = NotificationConsumerWorker(use_case, sweeper_handler)
+    worker = NotificationEventSqsConsumer(use_case, sweeper_handler)
 
     body = {
         "event_type": "notification.triggered",
@@ -50,7 +52,7 @@ async def test_consumer_process_message_valid():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_event():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())
+    worker = NotificationEventSqsConsumer(use_case, FakeSweeperJobHandler())
     await worker._process_message({})
     assert len(use_case.events) == 0
 
@@ -58,7 +60,7 @@ async def test_consumer_process_message_missing_event():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_payload():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())
+    worker = NotificationEventSqsConsumer(use_case, FakeSweeperJobHandler())
     await worker._process_message({"event": {}})
     assert len(use_case.events) == 0
 
@@ -67,7 +69,7 @@ async def test_consumer_process_message_missing_payload():
 async def test_consumer_process_sweeper_job():
     use_case = FakeDispatchUseCase()
     sweeper_handler = FakeSweeperJobHandler()
-    worker = NotificationConsumerWorker(use_case, sweeper_handler)
+    worker = NotificationEventSqsConsumer(use_case, sweeper_handler)
 
     body = {
         "event_type": "NOTIFICATION_OUTBOX_SWEEPER",
@@ -84,10 +86,10 @@ async def test_consumer_process_sweeper_job():
 @pytest.mark.asyncio
 async def test_consumer_lifecycle():
     use_case = FakeDispatchUseCase()
-    worker = NotificationConsumerWorker(use_case, FakeSweeperJobHandler())
+    worker = NotificationEventSqsConsumer(use_case, FakeSweeperJobHandler())
 
     with patch(
-        "notification_worker.adapters.inbound.workers.consumer.poll_sqs_queue",
+        "notification_worker.adapters.inbound.workers.notification_event_sqs_consumer.AwsSqsConsumer",
         new_callable=AsyncMock,
     ) as mock_poll:
         # Prevent it from actually looping forever by making it sleep briefly then we stop it

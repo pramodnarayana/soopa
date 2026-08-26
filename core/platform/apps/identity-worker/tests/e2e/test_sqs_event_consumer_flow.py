@@ -8,8 +8,8 @@ import pytest
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
-from identity_worker.adapters.inbound.workers.sqs_identity_event_consumer import (
-    SqsIdentityEventConsumer,
+from identity_worker.adapters.inbound.workers.identity_event_sqs_consumer import (
+    IdentityEventSqsConsumer,
 )
 from identity_worker.ports.inbound.identity_event_consumer_port import (
     IdentityEventConsumerPort,
@@ -128,7 +128,7 @@ async def test_production_listener_propagates_handler_failure():
             }
         ]
     }
-    listener = SqsIdentityEventConsumer(queue_name="identity-events")
+    listener = IdentityEventSqsConsumer(queue_name="identity-events")
     consumer = IdentityEventDispatcher(listener)
 
     async def failing_handler(event):
@@ -155,7 +155,7 @@ async def test_malformed_message_is_not_deleted():
             }
         ]
     }
-    listener = SqsIdentityEventConsumer(queue_name="identity-events")
+    listener = IdentityEventSqsConsumer(queue_name="identity-events")
 
     async with listener._process_with_client(sqs_client) as event:
         assert event is None

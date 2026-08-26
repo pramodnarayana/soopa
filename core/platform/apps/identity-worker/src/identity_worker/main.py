@@ -28,7 +28,7 @@ async def main() -> None:
 
         if container.events_consumer:
             container.events_consumer.start()
-            logger.info("sqs_identity_event_consumer_started_in_worker")
+            logger.info("identity_event_sqs_consumer_started_in_worker")
 
         await stop_event.wait()
     finally:

@@ -94,3 +94,53 @@ async def test_delete_user_idempotent(mock_httpx_request):
     args, _ = mock_httpx_request.call_args
     assert args[0] == "DELETE"
     assert "management/v1/users/user-404" in args[1]
+
+
+async def test_remove_tenant_role_paginated(mock_httpx_request):
+    adapter = ZitadelUsersAdapter()
+    adapter.token = "fake_token"  # noqa: S105
+    adapter.ucp_project_id = "target-proj-id"
+
+    # First page: 1 item, totalResult=2, no target project
+    page_1_resp = httpx.Response(
+        200,
+        json={
+            "details": {"totalResult": 2},
+            "result": [{"grantId": "g1", "projectId": "other-proj", "grantedOrgId": "org-1"}],
+        },
+    )
+    # Second page: 1 item, totalResult=2, contains target project
+    page_2_resp = httpx.Response(
+        200,
+        json={
+            "details": {"totalResult": 2},
+            "result": [
+                {
+                    "grantId": "g2",
+                    "id": "g2",
+                    "projectId": "target-proj-id",
+                    "grantedOrgId": "org-1",
+                }
+            ],
+        },
+    )
+    # Delete response
+    delete_resp = httpx.Response(200, json={})
+
+    mock_httpx_request.side_effect = [page_1_resp, page_2_resp, delete_resp]
+
+    await adapter.remove_tenant_role("user-1", "org-1")
+
+    assert mock_httpx_request.call_count == 3
+
+    # Assert pagination calls
+    _call_1_args, call_1_kwargs = mock_httpx_request.mock_calls[0]
+    assert call_1_kwargs["json"]["query"]["offset"] == 0
+
+    _call_2_args, call_2_kwargs = mock_httpx_request.mock_calls[1]
+    assert call_2_kwargs["json"]["query"]["offset"] == 1
+
+    # Assert delete call
+    call_3_args, _ = mock_httpx_request.mock_calls[2]
+    assert call_3_args[0] == "DELETE"
+    assert "management/v1/users/user-1/grants/g2" in call_3_args[1]

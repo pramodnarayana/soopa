@@ -5,16 +5,16 @@ from typing import Any
 
 import structlog
 from platform_orm.models.identity import Role, User, UserRole
-from platform_orm.models.notifications import InAppNotification
+from platform_orm.models.notifications import NotificationRecord
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....ports.outbound.in_app_notification_persistence_port import InAppNotificationPersistencePort
+from ....ports.outbound.notification_record_repository_port import NotificationRecordRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyInAppPersistence(InAppNotificationPersistencePort):
+class SqlAlchemyNotificationRecordRepository(NotificationRecordRepositoryPort):
     def __init__(self, session_factory: Callable[[], AsyncSession]):
         self.session_factory = session_factory
 
@@ -56,7 +56,7 @@ class SqlAlchemyInAppPersistence(InAppNotificationPersistencePort):
 
             notifications = []
             for uid in user_ids:
-                notification = InAppNotification(
+                notification = NotificationRecord(
                     id=f"notif_inapp_{uuid.uuid4().hex}",
                     tenant_id=tenant_id,
                     user_id=uid,

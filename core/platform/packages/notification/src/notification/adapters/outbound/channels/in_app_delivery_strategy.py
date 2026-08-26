@@ -6,8 +6,8 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
-from notification.ports.outbound.in_app_notification_persistence_port import (
-    InAppNotificationPersistencePort,
+from notification.ports.outbound.notification_record_repository_port import (
+    NotificationRecordRepositoryPort,
 )
 
 
@@ -16,7 +16,7 @@ class DeliveryError(Exception):
 
 
 class InAppDeliveryStrategy:
-    def __init__(self, persistence: InAppNotificationPersistencePort | None = None):
+    def __init__(self, persistence: NotificationRecordRepositoryPort | None = None):
         self.persistence = persistence
 
     async def deliver(

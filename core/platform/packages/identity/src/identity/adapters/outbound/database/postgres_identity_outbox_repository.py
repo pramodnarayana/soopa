@@ -1,20 +1,23 @@
+import asyncio
 from typing import Any, cast
 
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from platform_orm.events import EventEnvelope
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from identity_worker.ports.outbound.outbox_repository_port import OutboxRepositoryPort
-
 
 class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+    """
+    Infrastructure adapter for the Identity outbox table.
+    Implements the outbox port for the identity.outbox schema.
+    """
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
     async def sweep_stuck_events(self, lock_lease_ms: int) -> int:
-        import asyncio
-
         total_swept = 0
         async with self.session_factory() as session:
             while True:
@@ -48,7 +51,9 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
         async with self.session_factory() as session:
             query = text("""
                 UPDATE identity.outbox
-                SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
+                SET status = 'PROCESSING', updated_at = NOW(),
+                    lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms,
+                    owner_token = :worker_id
                 WHERE id IN (
                     SELECT id FROM identity.outbox
                     WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
@@ -90,28 +95,19 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
                 SET status = 'COMPLETED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
                 WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
-            await session.execute(
-                query,
-                {
-                    "event_id": event_id,
-                    "worker_id": worker_id,
-                },
-            )
+            await session.execute(query, {"event_id": event_id, "worker_id": worker_id})
             await session.commit()
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE identity.outbox
-                SET status = 'FAILED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+                SET status = 'FAILED', lease_expires_at = NULL, owner_token = NULL,
+                    updated_at = NOW(), error_reason = :error_message
                 WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
-                {
-                    "event_id": event_id,
-                    "worker_id": worker_id,
-                    "error_message": error_message,
-                },
+                {"event_id": event_id, "worker_id": worker_id, "error_message": error_message},
             )
             await session.commit()

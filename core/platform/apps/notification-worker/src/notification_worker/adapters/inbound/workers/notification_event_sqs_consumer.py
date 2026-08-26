@@ -1,29 +1,29 @@
 import asyncio
 import contextlib
-import os
 from typing import Any
 
 import structlog
-from notification.application.dispatch_use_case import DispatchNotificationUseCase
+from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
 from notification.domain.models import NotificationEvent
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 
-from .sqs_poller import poll_sqs_queue
+from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job import (
+    NotificationOutboxSweeperJobHandler,
+)
+from notification_worker.constants import NotificationJobName
 
 logger = structlog.get_logger(__name__)
 
 
-from ..jobs.notification_outbox_sweeper_job import (
-    NotificationOutboxSweeperJob,
-)
-
-
-class NotificationConsumerWorker:
+class NotificationEventSqsConsumer:
     def __init__(
         self,
-        dispatch_use_case: DispatchNotificationUseCase,
-        cleanup_job_handler: NotificationOutboxSweeperJob,
+        consumer: AwsSqsConsumer,
+        notification_compiler: NotificationCompilerUseCase,
+        cleanup_job_handler: NotificationOutboxSweeperJobHandler,
     ) -> None:
-        self.dispatch_use_case = dispatch_use_case
+        self.consumer = consumer
+        self.notification_compiler = notification_compiler
         self.cleanup_job_handler = cleanup_job_handler
         self._task: asyncio.Task[Any] | None = None
         self._shutdown_event = asyncio.Event()
@@ -36,8 +36,8 @@ class NotificationConsumerWorker:
         # Job-type messages (e.g. NOTIFICATION_OUTBOX_SWEEPER) are top-level envelopes
         # that do NOT contain an inner 'event' key. Route them before the event guard.
         top_level_event_type = body.get("event_type")
-        if top_level_event_type == "NOTIFICATION_OUTBOX_SWEEPER":
-            logger.info("Received sweeper job payload, triggering outbox sweep.")
+        if top_level_event_type == NotificationJobName.NOTIFICATION_OUTBOX_SWEEPER.value:
+            logger.info("notification_sweeper_job_triggered")
             await self.cleanup_job_handler.execute()
             return
 
@@ -51,12 +51,19 @@ class NotificationConsumerWorker:
         # }
         event_wrapper = body.get("event")
         if not event_wrapper:
-            logger.error("SQS message missing 'event' key")
+            logger.error(
+                "notification_sqs_message_missing_event_key",
+                event_type=top_level_event_type,
+                body_keys=list(body.keys()),
+            )
             return
 
         payload = event_wrapper.get("payload")
         if not payload:
-            logger.error("SQS message 'event' missing 'payload' key")
+            logger.error(
+                "notification_sqs_message_missing_payload_key",
+                event_type=top_level_event_type,
+            )
             return
 
         # Ensure tenant_id is available in the payload if not already there
@@ -76,48 +83,40 @@ class NotificationConsumerWorker:
             logger.error("SQS message payload missing 'event_type' / domain_event_type")
             return
 
-        logger.info(
-            "Dispatching notification event: {domain_event_type}",
-            domain_event_type=domain_event_type,
-        )
+        logger.info("notification_event_dispatching", domain_event_type=domain_event_type)
 
         notification_event = NotificationEvent(
             tenant_id=tenant_id, event_type=domain_event_type, data=payload
         )
-        await self.dispatch_use_case.execute(notification_event)
+        await self.notification_compiler.execute(notification_event)
 
     async def _run(self) -> None:
-        queue_name = "PriorityNotificationsQueue"
-        aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
+        logger.info("notification_event_sqs_consumer_started", queue_name=self.consumer.queue_name)
 
-        logger.info(
-            "Starting NotificationConsumerWorker for {queue_name}...", queue_name=queue_name
-        )
+        async def poll_loop() -> None:
+            try:
+                async with self.consumer as active_consumer:
+                    while True:
+                        async with active_consumer.poll_raw_message() as body:
+                            if body:
+                                await self._process_message(body)
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("notification_sqs_poll_loop_fatal_error")
+                raise
 
-        # We run the SQS poller in a task so we can cancel it via the shutdown event
-        poll_task = asyncio.create_task(
-            poll_sqs_queue(
-                queue_name=queue_name,
-                processor_func=self._process_message,
-                aws_endpoint=aws_endpoint,
-            )
-        )
+        poll_task = asyncio.create_task(poll_loop())
 
-        # Wait for whichever completes first: polling task or shutdown signal
         shutdown_task = asyncio.create_task(self._shutdown_event.wait())
         done, pending = await asyncio.wait(
             {poll_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
         )
 
-        # If polling task completed first (possibly with exception), log/propagate it
         if poll_task in done:
-            try:
-                await poll_task  # Re-raise exception if any
-            except Exception:
-                logger.exception("SQS polling task exited with exception")
-                raise
+            with contextlib.suppress(Exception):
+                await poll_task
 
-        # Cancel whichever task is still pending
         for task in pending:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

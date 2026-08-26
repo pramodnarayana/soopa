@@ -71,9 +71,9 @@ class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
     )
 
 
-class InAppNotification(NotificationBase, TimestampMixin):
-    __tablename__ = "in_app_notifications"
-    ID_PREFIX = "notif_inapp"
+class NotificationRecord(NotificationBase, TimestampMixin):
+    __tablename__ = "notification_records"
+    ID_PREFIX = "notif_rec"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -88,7 +88,7 @@ class InAppNotification(NotificationBase, TimestampMixin):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__: Any = (
-        Index("ix_in_app_notif_tenant_user_read", "tenant_id", "user_id", "is_read", "created_at"),
+        Index("ix_notif_record_tenant_user_read", "tenant_id", "user_id", "is_read", "created_at"),
         {"schema": "notifications"},
     )
 

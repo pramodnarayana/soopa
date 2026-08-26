@@ -1,9 +1,9 @@
 import pytest
-from platform_orm.models.notifications import InAppNotification
+from platform_orm.models.notifications import NotificationRecord
 from sqlalchemy import select
 
-from notification.adapters.outbound.database.postgres_in_app_persistence import (
-    SqlAlchemyInAppPersistence,
+from notification.adapters.outbound.database.postgres_notification_record_repository import (
+    SqlAlchemyNotificationRecordRepository,
 )
 
 
@@ -25,7 +25,7 @@ async def test_save_notification_persists_to_database(db_session_factory):
         session.add(tenant)
         session.add(user)
 
-    repo = SqlAlchemyInAppPersistence(db_session_factory)
+    repo = SqlAlchemyNotificationRecordRepository(db_session_factory)
 
     # Execute
     await repo.save_notification(
@@ -37,7 +37,7 @@ async def test_save_notification_persists_to_database(db_session_factory):
 
     # Verify
     async with db_session_factory() as session:
-        stmt = select(InAppNotification).where(InAppNotification.tenant_id == tenant_id)
+        stmt = select(NotificationRecord).where(NotificationRecord.tenant_id == tenant_id)
         result = await session.execute(stmt)
         notification = result.scalar_one_or_none()
 

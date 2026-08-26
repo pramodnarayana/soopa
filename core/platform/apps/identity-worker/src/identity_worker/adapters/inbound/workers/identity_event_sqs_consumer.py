@@ -15,7 +15,7 @@ from identity_worker.ports.inbound.identity_event_consumer_port import (
 logger = structlog.get_logger(__name__)
 
 
-class SqsIdentityEventConsumer(IdentityEventConsumerPort):
+class IdentityEventSqsConsumer(IdentityEventConsumerPort):
     """
     AWS SQS Adapter for consuming Identity events from a queue.
     """
@@ -31,7 +31,7 @@ class SqsIdentityEventConsumer(IdentityEventConsumerPort):
                 "sqs_listener_missing_queue_name",
                 message="SQS Listener started without a Queue Name! Please set SQS_IDENTITY_SYNC_QUEUE_NAME in your .env",
             )
-            raise ValueError("SQS Queue Name must be provided to SqsIdentityEventConsumer")
+            raise ValueError("SQS Queue Name must be provided to IdentityEventSqsConsumer")
 
         self.queue_name = queue_name
         self._queue_url: str | None = None
@@ -41,7 +41,7 @@ class SqsIdentityEventConsumer(IdentityEventConsumerPort):
         self._client: Any = None
         self._client_context: Any = None
 
-    async def __aenter__(self) -> "SqsIdentityEventConsumer":
+    async def __aenter__(self) -> "IdentityEventSqsConsumer":
         """Allows using the listener as a context manager for continuous polling with connection reuse."""
         if not self._client:
             self._client_context = self.session.client(

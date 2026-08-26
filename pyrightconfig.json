@@ -1,0 +1,30 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "core/platform/packages/identity/src",
+    "core/platform/packages/identity/python/src",
+    "core/platform/packages/observability/src",
+    "core/platform/packages/observability/python/src",
+    "core/platform/packages/schemas/python/src",
+    "core/platform/packages/schemas/src",
+    "core/platform/packages/orm/src",
+    "core/platform/packages/notification/src",
+    "core/platform/packages/scheduler/src",
+    "core/platform/packages/outbox/src",
+    "core/platform/packages/pubsub/src",
+    "core/platform/apps/scheduler-worker/src",
+    "core/platform/apps/notification-worker/src",
+    "core/platform/apps/identity-worker/src",
+    "core/platform/apps/unified-api/src",
+    "core/ucp/packages/ucp/src",
+    "core/ucp/packages/models/src",
+    "core/ucp/apps/ucp-worker/src",
+    "apps/edi/packages/edi/src",
+    "apps/edi/apps/edi-compute-worker/src",
+    "apps/edi/apps/edi-orchestrator-worker/src",
+    "apps/edi/apps/edi-as2-server/src",
+    "apps/edi/apps/edi-background-worker/src",
+    "apps/edi/apps/edi-config-sync-worker/src"
+  ]
+}

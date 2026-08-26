@@ -72,7 +72,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
 
     # Check outbox event was emitted (UserCreatedEvent)
     outbox_result = await db_session.execute(
-        text("SELECT event_type FROM ucp.outbox WHERE payload->>'user_id' = :user_id"),
+        text("SELECT event_type FROM identity.outbox WHERE payload->>'user_id' = :user_id"),
         {"user_id": user_id},
     )
     events = [row.event_type for row in outbox_result.fetchall()]

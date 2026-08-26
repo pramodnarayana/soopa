@@ -328,3 +328,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The `test_sweeper_integration.py` in the EDI orchestrator currently uses a hack to simulate shards by dumping Data Plane tables (`audit_log`, `outbox`) directly into the `public` schema of the UCP global database. Furthermore, test data is inserted using hardcoded dictionaries rather than robust ORM factories, leading to brittle tests when domain models evolve (e.g., NotNull violations on new fields).
 - **Action Item**: Refactor integration tests to use true enterprise-grade boundaries. Implement semantic schemas (`test_ctrl_ucp`, `test_data_shard_1`) inside the test database to strictly isolate global and shard data during local runs. Implement a Test Builder Pattern / ORM Factory (e.g., `DataPlaneOutboxBuilder`) to auto-generate valid underlying test data states, completely eradicating brittle hardcoded dictionaries.
+
+## [Architecture] Refactor EDI Data & Control Plane Outboxes
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: The EDI bounded context (both Data and Control planes) currently uses custom outbox jobs/sweepers. They need to be migrated to use the generic `outbox` infrastructure package (like the Notification bounded context did).
+- **Action Item**: Migrate all custom EDI outbox jobs and sweepers to the generic `OutboxProcessorUseCase` and `SweepOutboxUseCase` from the platform outbox package. Remove duplicated legacy logic.

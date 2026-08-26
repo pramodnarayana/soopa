@@ -7,6 +7,9 @@ from notification.domain.models import (
 from notification.ports.outbound.notification_outbox_repository_port import (
     NotificationOutboxRepositoryPort,
 )
+from notification.ports.outbound.notification_record_repository_port import (
+    NotificationRecordRepositoryPort,
+)
 from notification.ports.outbound.notification_route_repository_port import (
     NotificationRouteRepositoryPort,
 )
@@ -98,3 +101,13 @@ class FakeRouteRepo(NotificationRouteRepositoryPort):
 
     async def get_channels(self, tenant_id: str, event_type: str) -> list[Channel]:
         return self.routes.get((tenant_id, event_type), [])
+
+
+class FakeRecordRepo(NotificationRecordRepositoryPort):
+    def __init__(self):
+        self.records = []
+
+    async def save_notification(
+        self, tenant_id: str, content: str, subject: str | None, data: dict
+    ) -> None:
+        self.records.append((tenant_id, content, subject, data))

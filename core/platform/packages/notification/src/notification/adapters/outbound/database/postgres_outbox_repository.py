@@ -3,12 +3,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import structlog
+from platform_orm.events import EventEnvelope
 from platform_orm.models.notifications import NotificationOutbox
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....domain.models import NotificationOutboxEvent
 from ....ports.outbound.notification_outbox_repository_port import NotificationOutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
@@ -18,12 +18,12 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
     def __init__(self, session_factory: Callable[[], AsyncSession]):
         self.session_factory = session_factory
 
-    async def save(self, message: NotificationOutboxEvent) -> None:
+    async def save(self, message: EventEnvelope) -> None:
         import os
 
         async with self.session_factory() as session, session.begin():
             orm_msg = NotificationOutbox(
-                id=f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+                id=message.id or f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
                 tenant_id=message.tenant_id,
                 event_type=message.event_type,
                 idempotency_key=message.idempotency_key,
@@ -31,7 +31,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
             )
             session.add(orm_msg)
 
-    async def sweep_stuck_messages(self, lock_lease_ms: int) -> int:
+    async def sweep_stuck_events(self, lock_lease_ms: int) -> int:
         import asyncio
 
         total_swept = 0
@@ -67,9 +67,9 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
 
         return total_swept
 
-    async def claim_next_messages(
+    async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int
-    ) -> list[NotificationOutboxEvent]:
+    ) -> list[EventEnvelope]:
         async with self.session_factory() as session, session.begin():
             # 1. Select for update skip locked
             stmt = (
@@ -102,8 +102,9 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
             orm_messages = list(updated.scalars().all())
 
             return [
-                NotificationOutboxEvent(
+                EventEnvelope(
                     id=msg.id,
+                    source="notification",
                     tenant_id=msg.tenant_id,
                     event_type=msg.event_type,
                     idempotency_key=msg.idempotency_key,

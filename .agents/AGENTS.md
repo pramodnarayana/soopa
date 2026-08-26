@@ -34,6 +34,7 @@
 # Local Infrastructure
 - NEVER attempt to work around a missing migration with code changes. Missing tables are an infrastructure problem, not a code problem.
 - After any change to a Drizzle schema file, remind the user to run `pnpm db:migrate` to apply the migration locally.
+- **Development Migrations**: We are currently in development. ALWAYS keep a single migration file. Do not create multiple consecutive migration files; squash or amend the existing one if possible.
 
 # Platform Architecture Paradigms (Core Tenets)
 
@@ -71,3 +72,9 @@ The following paradigms define the entire system structure. Any new design or mo
 # Domain Events & Outbox Serialization
 - **Pure Domain Events**: Domain events MUST be pure Python `@dataclass(frozen=True)`. NEVER use Pydantic `BaseModel` for domain events.
 - **Centralized Outbox Serialization**: NEVER write custom `json.loads(json.dumps(...))` logic or call `.model_dump()` inside Outbox Repositories. ALL repositories across the monorepo MUST serialize domain events by importing and using the central `platform_orm.outbox_serializer.serialize_domain_event()` utility.
+
+# 3-Stage Notification Pipeline (Enterprise Grade)
+- **Stage 1 (Ingestion)**: Upstream apps (like EDI or Identity) must NEVER do template rendering or synchronous delivery. They must use the `notify()` facade to drop a raw `EventEnvelope(notification.requested)` into their *local* outbox in the same transaction as their domain changes.
+- **Stage 2 (Compiler)**: The Notification bounded context consumes the raw event from SQS. It is solely responsible for checking preferences, rendering the template, saving the immutable `NotificationRecord` (History Ledger), and dropping the final `channel.requested` (e.g. `email.requested`) event into the notification outbox.
+- **Stage 3 (Delivery)**: Dumb, highly-concurrent delivery workers (like `EmailDeliveryWorker`) pull from the delivery queue and execute HTTP POSTs (e.g. to SendGrid). If the third-party API fails, they retry via SQS NACKs without ever touching the database or re-rendering templates.
+- **Outbox Relay vs Sweeper (Strict Requirement)**: The outbox pattern MUST employ a dual-mechanism. The **Relay** (e.g. Postgres LISTEN/NOTIFY) is for REALTIME event processing. The **Sweeper** is a FALLBACK poller running on a cron to pick up stuck/failed messages. You MUST wire up BOTH mechanisms to guarantee reliability.

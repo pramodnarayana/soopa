@@ -95,6 +95,8 @@ importers:
 
   apps/edi/apps/edi-compute-worker: {}
 
+  apps/edi/apps/edi-config-sync-worker: {}
+
   apps/edi/apps/edi-orchestrator-worker: {}
 
   apps/edi/packages/edi: {}

@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 from platform_orm.models.identity import Role, Tenant, User, UserRole
-from platform_orm.models.notifications import InAppNotification
+from platform_orm.models.notifications import NotificationRecord
 
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
@@ -45,7 +45,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
         )
         session.add(tenant_user)
 
-        notification = InAppNotification(
+        notification = NotificationRecord(
             id=notif_id,
             tenant_id=tenant_id,
             user_id=user_id,

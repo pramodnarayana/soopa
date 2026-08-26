@@ -10,7 +10,7 @@ from ucp.ports.outbound.ucp_event_consumer_port import UcpEventConsumerPort, Ucp
 logger = structlog.get_logger(__name__)
 
 
-class SqsUcpEventConsumer(UcpEventConsumerPort):
+class UcpEventSqsConsumer(UcpEventConsumerPort):
     """
     AWS SQS Adapter for consuming UCP events from a queue.
     Delegates the raw aioboto3 polling to the generic AwsSqsConsumer.
@@ -28,7 +28,7 @@ class SqsUcpEventConsumer(UcpEventConsumerPort):
             endpoint_url=endpoint_url,
         )
 
-    async def __aenter__(self) -> "SqsUcpEventConsumer":
+    async def __aenter__(self) -> "UcpEventSqsConsumer":
         await self._consumer.__aenter__()
         return self
 

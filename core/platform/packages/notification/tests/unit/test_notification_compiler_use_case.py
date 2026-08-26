@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from notification.application.dispatch_use_case import DispatchNotificationUseCase
+from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
 from notification.domain.models import (
     Channel,
     NotificationEvent,
@@ -10,6 +10,7 @@ from notification.domain.models import (
 )
 from tests.fakes import (
     FakeOutboxRepo,
+    FakeRecordRepo,
     FakeRouteRepo,
     FakeTemplateRenderer,
     FakeTemplateRepo,
@@ -24,8 +25,11 @@ async def test_dispatch_success():
     outbox = FakeOutboxRepo()
     routes = FakeRouteRepo()
     user_prefs = FakeUserPrefRepo()
+    record_repo = FakeRecordRepo()
 
-    uc = DispatchNotificationUseCase(template_repo, renderer, outbox, routes, user_prefs)
+    uc = NotificationCompilerUseCase(
+        template_repo, renderer, outbox, routes, user_prefs, record_repo
+    )
 
     tenant_id = "t1"
     event_type = "invoice.created"
@@ -56,7 +60,7 @@ async def test_dispatch_success():
     assert len(outbox.events) == 1
     saved = outbox.events[0]
     assert saved.tenant_id == tenant_id
-    assert saved.event_type == event_type
+    assert saved.event_type == f"{Channel.EMAIL.value}.requested"
     assert saved.payload["channel"] == Channel.EMAIL.value
     assert saved.payload["subject"] == "Invoice 123"
     assert saved.payload["content"] == "Hello, invoice 123 is ready."
@@ -68,12 +72,13 @@ async def test_dispatch_success():
 
 @pytest.mark.asyncio
 async def test_dispatch_no_routes():
-    uc = DispatchNotificationUseCase(
+    uc = NotificationCompilerUseCase(
         FakeTemplateRepo(),
         FakeTemplateRenderer(),
         FakeOutboxRepo(),
         FakeRouteRepo(),
         FakeUserPrefRepo(),
+        FakeRecordRepo(),
     )
 
     event = NotificationEvent(tenant_id="t1", event_type="unknown", data={})

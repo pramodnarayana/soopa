@@ -183,21 +183,40 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             org_id=org_id,
         )
         try:
-            grants_res = await self.fetch_with_auth(
-                endpoint="/management/v1/users/grants/_search",
-                method="POST",
-                headers={"x-zitadel-orgid": org_id},
-                json={"queries": [{"userIdQuery": {"userId": user_id}}]},
-            )
-            if grants_res.status_code >= 400:
-                await self.handle_response_error(grants_res, "fetch user grants")
+            limit = 100
+            offset = 0
+            all_grants = []
 
-            grants_data = grants_res.json()
-            parsed_grants = ZitadelProjectGrantsResponse.model_validate(grants_data)
+            while True:
+                grants_res = await self.fetch_with_auth(
+                    endpoint="/management/v1/users/grants/_search",
+                    method="POST",
+                    headers={"x-zitadel-orgid": org_id},
+                    json={
+                        "query": {"limit": limit, "offset": offset},
+                        "queries": [{"userIdQuery": {"userId": user_id}}],
+                    },
+                )
+                if grants_res.status_code >= 400:
+                    await self.handle_response_error(grants_res, "fetch user grants")
 
-            user_grant = next(
-                (g for g in parsed_grants.result if g.project_id == self.ucp_project_id), None
-            )
+                grants_data = grants_res.json()
+                parsed_grants = ZitadelProjectGrantsResponse.model_validate(grants_data)
+
+                if parsed_grants.result:
+                    all_grants.extend(parsed_grants.result)
+
+                total_result = (
+                    parsed_grants.details.total_result
+                    if parsed_grants.details and parsed_grants.details.total_result is not None
+                    else 0
+                )
+                offset += len(parsed_grants.result) if parsed_grants.result else 0
+
+                if offset >= total_result or not parsed_grants.result:
+                    break
+
+            user_grant = next((g for g in all_grants if g.project_id == self.ucp_project_id), None)
 
             if user_grant:
                 # Delete the grant

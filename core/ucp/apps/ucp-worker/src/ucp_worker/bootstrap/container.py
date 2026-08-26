@@ -10,8 +10,8 @@ from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from ucp.adapters.inbound.workers.sqs_ucp_event_consumer import SqsUcpEventConsumer
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
+from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.postgres_ucp_audit_log_cleanup_repository import (
     SqlAlchemyUcpAuditLogCleanupRepository,
@@ -143,7 +143,7 @@ class WorkerContainer:
         tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
 
         self.events_consumer = UcpEventDispatcher(
-            event_consumer=SqsUcpEventConsumer(
+            event_consumer=UcpEventSqsConsumer(
                 queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
                 endpoint_url=self.settings.aws_endpoint_url,
             )

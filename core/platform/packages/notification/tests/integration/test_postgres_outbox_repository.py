@@ -34,7 +34,7 @@ async def test_outbox_save_and_fetch(db_session_factory):
     await repo.save(event)
 
     # Fetch
-    events = await repo.claim_next_messages(worker_id="test_worker", limit=10, lock_lease_ms=5000)
+    events = await repo.claim_next_events(worker_id="test_worker", limit=10, lock_lease_ms=5000)
     assert len(events) >= 1
 
     fetched = next((e for e in events if e.idempotency_key == "idemp_123"), None)
@@ -45,6 +45,6 @@ async def test_outbox_save_and_fetch(db_session_factory):
     await repo.mark_completed(fetched.id, worker_id="test_worker")
 
     # Fetch again, should not return processed
-    events2 = await repo.claim_next_messages(worker_id="test_worker", limit=10, lock_lease_ms=5000)
+    events2 = await repo.claim_next_events(worker_id="test_worker", limit=10, lock_lease_ms=5000)
     fetched2 = next((e for e in events2 if e.idempotency_key == "idemp_123"), None)
     assert fetched2 is None

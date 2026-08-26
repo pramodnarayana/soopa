@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 
 import structlog
 from dependency_injector import containers, providers
+from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -23,11 +24,11 @@ from notification.adapters.outbound.channels import (
     SlackDeliveryStrategy,
 )
 from notification.adapters.outbound.channels.dummy_email_provider import DummyEmailProvider
-from notification.adapters.outbound.database.postgres_in_app_persistence import (
-    SqlAlchemyInAppPersistence,
-)
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
+)
+from notification.adapters.outbound.database.postgres_notification_record_repository import (
+    SqlAlchemyNotificationRecordRepository,
 )
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
@@ -43,14 +44,8 @@ from notification.adapters.outbound.database.postgres_user_preference_repository
 )
 from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
-from notification.application.dispatch_use_case import DispatchNotificationUseCase
 from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
-from notification.application.notification_outbox_processor_use_case import (
-    NotificationOutboxProcessorUseCase,
-)
-from notification.application.notification_outbox_sweeper_use_case import (
-    NotificationOutboxSweeperUseCase,
-)
+from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
 from notification.application.update_user_preference_use_case import (
     UpdateUserPreferenceUseCase,
 )
@@ -135,7 +130,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     in_app_persistence = providers.Factory(
-        SqlAlchemyInAppPersistence,
+        SqlAlchemyNotificationRecordRepository,
         session_factory=session_factory,
     )
 
@@ -187,13 +182,14 @@ class Container(containers.DeclarativeContainer):
     # Use Cases
     # -----------------------------------------------------------------------
 
-    dispatch_use_case = providers.Factory(
-        DispatchNotificationUseCase,
+    notification_compiler = providers.Factory(
+        NotificationCompilerUseCase,
         template_repo=template_repository,
         template_renderer=template_renderer,
         outbox_repo=outbox_repository,
         route_repo=route_repository,
         user_pref_repo=user_preference_repository,
+        record_repo=in_app_persistence,
     )
 
     update_user_preference_use_case = providers.Factory(
@@ -207,12 +203,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     sweep_outbox_use_case = providers.Factory(
-        NotificationOutboxSweeperUseCase,
+        SweepOutboxUseCase,
         repository=outbox_repository,
-    )
-
-    outbox_processor = providers.Singleton(
-        NotificationOutboxProcessorUseCase,
-        repository=outbox_repository,
-        dispatcher=delivery_dispatcher,
+        publisher=None,  # Will be overridden in worker container with AwsSnsPublisher
     )

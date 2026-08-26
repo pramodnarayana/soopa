@@ -95,9 +95,9 @@ async def test_get_all_shards_closes_global_session_generator(router: DatabaseRo
         finally:
             generator_closed = True
 
-    router.get_global_session = MagicMock(return_value=global_sessions())
+    with patch.object(router, "get_global_session", return_value=global_sessions()):
+        assert await router.get_all_shards() == [("shard_1", "postgresql+asyncpg://shard-1")]
 
-    assert await router.get_all_shards() == [("shard_1", "postgresql+asyncpg://shard-1")]
     assert generator_closed
 
 

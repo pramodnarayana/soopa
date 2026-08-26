@@ -9,10 +9,12 @@ from edi.domain.events import MessageQueueName
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from config_sync_worker.adapters.edi_config_sync_sqs_consumer import EdiConfigSyncSqsConsumer
 from config_sync_worker.adapters.edi_control_plane_outbox_relay import EdiControlPlaneOutboxRelay
 from config_sync_worker.adapters.edi_control_plane_sns_outbox_publisher import (
     EdiControlPlaneOutboxSnsPublisher,
+)
+from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
+    EdiConfigSyncSqsConsumer,
 )
 from config_sync_worker.adapters.postgres_outbox_relay_repository import (
     PostgresOutboxRelayRepository,
