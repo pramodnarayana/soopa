@@ -8,7 +8,7 @@ from notification.ports.outbound.notification_outbox_repository_port import (
     NotificationOutboxRepositoryPort,
 )
 
-from ..domain.models import PLATFORM_TENANT_ID, NotificationEvent
+from ..domain.models import PLATFORM_TENANT_ID, Channel, NotificationEvent
 from ..ports.outbound.notification_record_repository_port import NotificationRecordRepositoryPort
 from ..ports.outbound.notification_route_repository_port import NotificationRouteRepositoryPort
 from ..ports.outbound.template_renderer_port import TemplateRendererPort
@@ -91,16 +91,16 @@ class NotificationCompilerUseCase:
             idempotency_input = f"{event.tenant_id}:{event.event_type}:{channel.value}:{event_id}"
             idempotency_key = hashlib.sha256(idempotency_input.encode()).hexdigest()
 
-            # The Dual Write (History Ledger + Dispatch Outbox)
-            # 1. Save History
-            await self.record_repo.save_notification(
-                tenant_id=event.tenant_id,
-                content=rendered_body,
-                subject=rendered_subject,
-                data=dict(event.data),
-            )
+            # Persist only in-app notifications in the history ledger.
+            if channel == Channel.IN_APP:
+                await self.record_repo.save_notification(
+                    tenant_id=event.tenant_id,
+                    content=rendered_body,
+                    subject=rendered_subject,
+                    data=dict(event.data),
+                )
 
-            # 2. Insert Outbox Dispatch Event (e.g., "email.requested")
+            # Insert Outbox Dispatch Event (e.g., "email.requested")
             dispatch_event_type = f"{channel.value}.requested"
 
             payload: dict[str, Any] = {

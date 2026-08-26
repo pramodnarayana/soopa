@@ -20,3 +20,4 @@ class IdentityOutboxSweeperJobHandler:
             logger.info("identity_outbox_sweeper_completed")
         except Exception:
             logger.exception("identity_outbox_sweeper_failed")
+            raise

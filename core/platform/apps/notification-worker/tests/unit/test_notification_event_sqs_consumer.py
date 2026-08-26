@@ -1,5 +1,6 @@
 import asyncio
-from unittest.mock import AsyncMock, patch
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import pytest
 from notification.domain.models import NotificationEvent
@@ -25,17 +26,46 @@ class FakeSweeperJobHandler:
         self.executed = True
 
 
+class FakeSqsConsumer:
+    queue_name = "test-notifications"
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        return None
+
+    @asynccontextmanager
+    async def poll_raw_message(self) -> AsyncIterator[dict | None]:
+        await asyncio.sleep(0.01)
+        yield None
+
+
+def make_worker(
+    use_case: FakeDispatchUseCase,
+    sweeper_handler: FakeSweeperJobHandler,
+) -> NotificationEventSqsConsumer:
+    return NotificationEventSqsConsumer(
+        consumer=FakeSqsConsumer(),
+        notification_compiler=use_case,
+        cleanup_job_handler=sweeper_handler,
+    )
+
+
 @pytest.mark.asyncio
 async def test_consumer_process_message_valid():
     use_case = FakeDispatchUseCase()
     sweeper_handler = FakeSweeperJobHandler()
-    worker = NotificationEventSqsConsumer(use_case, sweeper_handler)
+    worker = make_worker(use_case, sweeper_handler)
 
     body = {
-        "event_type": "notification.triggered",
-        "event": {
-            "tenant_id": "t1",
-            "payload": {"event_type": "invoice.paid", "invoice_id": "123"},
+        "event_type": "notification.requested",
+        "payload": {
+            "event": {
+                "event_type": "invoice.paid",
+                "tenant_id": "t1",
+                "payload": {"invoice_id": "123"},
+            }
         },
     }
 
@@ -52,7 +82,7 @@ async def test_consumer_process_message_valid():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_event():
     use_case = FakeDispatchUseCase()
-    worker = NotificationEventSqsConsumer(use_case, FakeSweeperJobHandler())
+    worker = make_worker(use_case, FakeSweeperJobHandler())
     await worker._process_message({})
     assert len(use_case.events) == 0
 
@@ -60,8 +90,8 @@ async def test_consumer_process_message_missing_event():
 @pytest.mark.asyncio
 async def test_consumer_process_message_missing_payload():
     use_case = FakeDispatchUseCase()
-    worker = NotificationEventSqsConsumer(use_case, FakeSweeperJobHandler())
-    await worker._process_message({"event": {}})
+    worker = make_worker(use_case, FakeSweeperJobHandler())
+    await worker._process_message({"payload": {"event": {}}})
     assert len(use_case.events) == 0
 
 
@@ -69,7 +99,7 @@ async def test_consumer_process_message_missing_payload():
 async def test_consumer_process_sweeper_job():
     use_case = FakeDispatchUseCase()
     sweeper_handler = FakeSweeperJobHandler()
-    worker = NotificationEventSqsConsumer(use_case, sweeper_handler)
+    worker = make_worker(use_case, sweeper_handler)
 
     body = {
         "event_type": "NOTIFICATION_OUTBOX_SWEEPER",
@@ -86,31 +116,21 @@ async def test_consumer_process_sweeper_job():
 @pytest.mark.asyncio
 async def test_consumer_lifecycle():
     use_case = FakeDispatchUseCase()
-    worker = NotificationEventSqsConsumer(use_case, FakeSweeperJobHandler())
+    worker = make_worker(use_case, FakeSweeperJobHandler())
 
-    with patch(
-        "notification_worker.adapters.inbound.workers.notification_event_sqs_consumer.AwsSqsConsumer",
-        new_callable=AsyncMock,
-    ) as mock_poll:
-        # Prevent it from actually looping forever by making it sleep briefly then we stop it
-        async def mock_poller(*args, **kwargs):
-            await asyncio.sleep(0.1)
+    task = worker.start()
+    assert worker._task is not None
 
-        mock_poll.side_effect = mock_poller
+    # Calling start again shouldn't create a new task
+    task2 = worker.start()
+    assert task == task2
 
-        task = worker.start()
-        assert worker._task is not None
+    await asyncio.sleep(0.01)
+    await worker.stop()
 
-        # Calling start again shouldn't create a new task
-        task2 = worker.start()
-        assert task == task2
+    # Stop again is safe
+    await worker.stop()
 
-        await asyncio.sleep(0.01)
-        await worker.stop()
+    await task
 
-        # Stop again is safe
-        await worker.stop()
-
-        await task
-
-        assert worker._task is None
+    assert worker._task is None

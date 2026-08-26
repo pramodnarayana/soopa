@@ -89,14 +89,15 @@ class EmailChannelSqsConsumer:
             {poll_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
         )
 
-        if poll_task in done:
-            with contextlib.suppress(Exception):
-                await poll_task
-
         for task in pending:
             task.cancel()
+
+        for task in pending:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+
+        if poll_task in done:
+            await poll_task
 
     def start(self) -> asyncio.Task[Any]:
         if self._task is None:

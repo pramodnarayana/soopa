@@ -85,3 +85,45 @@ async def test_dispatch_no_routes():
 
     await uc.execute(event)
     assert len(uc.outbox_repo.events) == 0
+
+
+@pytest.mark.asyncio
+async def test_only_in_app_channel_creates_notification_record():
+    template_repo = FakeTemplateRepo()
+    renderer = FakeTemplateRenderer()
+    outbox = FakeOutboxRepo()
+    routes = FakeRouteRepo()
+    record_repo = FakeRecordRepo()
+    uc = NotificationCompilerUseCase(
+        template_repo,
+        renderer,
+        outbox,
+        routes,
+        FakeUserPrefRepo(),
+        record_repo,
+    )
+    tenant_id = "t1"
+    event_type = "invoice.created"
+    routes.routes[(tenant_id, event_type)] = [Channel.EMAIL, Channel.IN_APP]
+    for channel in (Channel.EMAIL, Channel.IN_APP):
+        template_repo.templates[(tenant_id, event_type, channel)] = Template(
+            id=f"tmpl-{channel.value}",
+            tenant_id=tenant_id,
+            name=f"Invoice Created - {channel.value}",
+            event_type=event_type,
+            subject="Invoice {{id}}",
+            body_content="Invoice {{id}} is ready.",
+            channel=channel,
+        )
+
+    await uc.execute(
+        NotificationEvent(
+            tenant_id=tenant_id,
+            event_type=event_type,
+            data={"id": "123", "event_id": "evt1"},
+        )
+    )
+
+    assert len(outbox.events) == 2
+    assert len(record_repo.records) == 1
+    assert record_repo.records[0][1] == "Invoice 123 is ready."

@@ -19,3 +19,4 @@ class IdentityOutboxCleanupJobHandler:
             logger.info("identity_outbox_cleanup_completed")
         except Exception:
             logger.exception("identity_outbox_cleanup_failed")
+            raise

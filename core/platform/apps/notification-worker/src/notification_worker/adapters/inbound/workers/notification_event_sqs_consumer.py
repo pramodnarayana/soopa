@@ -41,15 +41,19 @@ class NotificationEventSqsConsumer:
             await self.cleanup_job_handler.execute()
             return
 
-        # Notification dispatch messages wrap the event in this envelope:
+        # Notification dispatch messages wrap the event in the envelope payload:
         # {
-        #   "event": {
-        #       "payload": { ... },
-        #       "tenant_id": "..."
-        #   },
-        #   "event_type": "notification.triggered", ...
+        #   "event_type": "notification.requested",
+        #   "payload": {
+        #       "event": {
+        #           "event_type": "invoice.failed",
+        #           "payload": { ... },
+        #           "tenant_id": "..."
+        #       }
+        #   }
         # }
-        event_wrapper = body.get("event")
+        envelope_payload = body.get("payload")
+        event_wrapper = envelope_payload.get("event") if envelope_payload else None
         if not event_wrapper:
             logger.error(
                 "notification_sqs_message_missing_event_key",
@@ -70,9 +74,7 @@ class NotificationEventSqsConsumer:
         if "tenant_id" not in payload and "tenant_id" in event_wrapper:
             payload["tenant_id"] = event_wrapper["tenant_id"]
 
-        # Extract the true domain event type (e.g. "invoice.failed") if it was wrapped
-        # inside a "notification.triggered" routing envelope.
-        domain_event_type = payload.get("event_type", body.get("event_type"))
+        domain_event_type = event_wrapper.get("event_type")
 
         # Validate required fields before constructing domain event
         tenant_id = payload.get("tenant_id")
@@ -113,14 +115,15 @@ class NotificationEventSqsConsumer:
             {poll_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
         )
 
-        if poll_task in done:
-            with contextlib.suppress(Exception):
-                await poll_task
-
         for task in pending:
             task.cancel()
+
+        for task in pending:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+
+        if poll_task in done:
+            await poll_task
 
     def start(self) -> asyncio.Task[Any]:
         if self._task is None:

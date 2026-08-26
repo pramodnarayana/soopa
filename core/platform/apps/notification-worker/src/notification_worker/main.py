@@ -24,9 +24,14 @@ async def run_consumer() -> None:
         logger.error("DATABASE_URL is not set")
         sys.exit(1)
 
+    sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
+    if not sns_topic_arn:
+        logger.error("SNS_TOPIC_ARN is not set")
+        sys.exit(1)
+
     container = Container()
     container.config.database_url.from_value(database_url)
-    container.config.sns_topic_arn.from_value(os.environ.get("SNS_TOPIC_ARN", ""))
+    container.config.sns_topic_arn.from_value(sns_topic_arn)
 
     await cast(Awaitable[None], container.init_resources())
 
