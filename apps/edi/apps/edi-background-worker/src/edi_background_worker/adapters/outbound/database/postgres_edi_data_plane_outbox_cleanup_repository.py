@@ -20,7 +20,7 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort)
         sem = asyncio.Semaphore(concurrency_limit)
         shards = await self.db_router.get_all_shards()
 
-        async def _bounded_cleanup(shard_name: str, shard_dsn: str) -> None:
+        async def _bounded_cleanup(shard_name: str, shard_dsn: str) -> int:
             async with sem:
                 try:
                     cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
@@ -53,6 +53,7 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort)
                         shard_name=shard_name,
                         outbox_deleted=outbox_deleted,
                     )
+                    return outbox_deleted
                 except Exception:
                     logger.exception("sweep_shard_outbox_failed", shard_name=shard_name)
                     raise
@@ -65,7 +66,4 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort)
         if exceptions:
             raise ExceptionGroup("shard_cleanup_had_failures", exceptions)
 
-        # The central port expects an integer count of deleted items, but since this runs across shards concurrently,
-        # returning an aggregated count would require returning it from _bounded_cleanup.
-        # For simplicity we just return 0 here and rely on the shard logs.
-        return 0
+        return sum(cast(int, result) for result in results)

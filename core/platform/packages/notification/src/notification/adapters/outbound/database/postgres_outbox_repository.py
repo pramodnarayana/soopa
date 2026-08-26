@@ -5,7 +5,7 @@ from typing import Any, cast
 import structlog
 from platform_orm.events import EventEnvelope
 from platform_orm.models.notifications import NotificationOutbox
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -140,7 +140,13 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                     NotificationOutbox.owner_token == worker_id,
                 )
                 .values(
-                    status="FAILED",
+                    status=case(
+                        (NotificationOutbox.attempts + 1 >= 3, "FAILED"),
+                        else_="PENDING",
+                    ),
+                    attempts=NotificationOutbox.attempts + 1,
+                    owner_token=None,
+                    lease_expires_at=None,
                     error_reason=error_reason[:1000],
                     updated_at=datetime.now(UTC),
                 )

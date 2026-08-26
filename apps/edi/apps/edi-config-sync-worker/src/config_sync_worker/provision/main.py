@@ -88,7 +88,6 @@ async def main() -> None:
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_relay_repository,
         publisher=outbox_relay_publisher,
-        worker_id="edi-control-plane-worker",
     )
     outbox_listener = PostgresOutboxRelay(
         listen_channel="edi_outbox_channel",

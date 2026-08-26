@@ -224,7 +224,7 @@ async def test_save_transaction_success(service):
 
     assert res == "msg-1"
     mock_dp_uow.transactions.create_edi_message.assert_awaited_once()
-    mock_dp_uow.data_plane_outbox.publish_outbox_event.assert_awaited_once()
-    _args, kwargs = mock_dp_uow.data_plane_outbox.publish_outbox_event.call_args
+    mock_dp_uow.transactions.publish_outbox_event.assert_awaited_once()
+    _args, kwargs = mock_dp_uow.transactions.publish_outbox_event.call_args
     assert kwargs["idempotency_key"] == "msg-1"
     mock_dp_uow.commit.assert_awaited_once()

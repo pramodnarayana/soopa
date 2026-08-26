@@ -10,6 +10,7 @@ from edi.adapters.inbound.as2.mdn import build_mdn, calculate_mic
 from edi.adapters.inbound.as2.message import AS2Message
 from edi.adapters.inbound.as2.parser import parse_as2_request
 from edi.adapters.outbound.security.smime import decrypt_payload, verify_signature
+from edi.domain.events import PipelineEventType
 from edi.domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
@@ -407,19 +408,19 @@ class As2ReceiverService:
                 tenant_id=true_tenant_id, payload=edi_record
             )
 
-            {
+            outbox_payload = {
                 "edi_message_id": str(msg_id),
                 "trace_id": str(edi_record["trace_id"]),
                 "sender_id": isa_sender,
                 "receiver_id": isa_receiver,
                 "status": "RECEIVED",
             }
-            #             await dp_uow.data_plane_outbox.publish_outbox_event(
-            #                 tenant_id=true_tenant_id,
-            #                 event_type=PipelineEventType.TRANSFORM_EVENT,
-            #                 payload=outbox_payload,
-            #                 idempotency_key=msg_id,
-            #             )
+            await dp_uow.transactions.publish_outbox_event(
+                tenant_id=true_tenant_id,
+                event_type=PipelineEventType.TRANSFORM_EVENT,
+                payload=outbox_payload,
+                idempotency_key=msg_id,
+            )
 
             await dp_uow.commit()
 

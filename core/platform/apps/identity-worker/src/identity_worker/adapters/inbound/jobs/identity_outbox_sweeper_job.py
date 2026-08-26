@@ -10,7 +10,7 @@ class IdentityOutboxSweeperJobHandler:
     Events can become stuck in PROCESSING if the worker crashes before marking them COMPLETED.
     """
 
-    def __init__(self, use_case: OutboxSweeperUseCase):
+    def __init__(self, use_case: OutboxSweeperUseCase) -> None:
         self.use_case = use_case
 
     async def execute(self) -> None:

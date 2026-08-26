@@ -144,7 +144,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
 
         query = text("""
             UPDATE edi.data_plane_outbox
-            SET status = 'FAILED', attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+            SET status = 'PENDING', attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
             WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
         """)
         result = await self._session.execute(

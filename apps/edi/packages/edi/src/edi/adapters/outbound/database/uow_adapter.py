@@ -13,6 +13,9 @@ from edi.adapters.outbound.database.inbound_route_repository import SqlAlchemyIn
 from edi.adapters.outbound.database.outbound_route_repository import (
     SqlAlchemyOutboundRouteRepository,
 )
+from edi.adapters.outbound.database.outbox_repository import (
+    SqlAlchemyControlPlaneOutboxRepository,
+)
 from edi.adapters.outbound.database.platform_settings_repository import (
     SqlAlchemyPlatformSettingsRepository,
 )
@@ -21,6 +24,9 @@ from edi.adapters.outbound.database.transaction_repository import SqlAlchemyTran
 from edi.adapters.outbound.sftp.sftp_repository import SqlAlchemySFTPPartnerRepository
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
+from edi.ports.outbound.control_plane_outbox_repository_port import (
+    ControlPlaneOutboxRepositoryPort,
+)
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
@@ -43,6 +49,7 @@ class SqlAlchemyControlPlaneUnitOfWork:
     sftp_partners: SFTPPartnerRepositoryPort
     tenants: TenantRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
+    control_plane_outbox: ControlPlaneOutboxRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
 
     def __init__(self, global_session: AsyncSession) -> None:
@@ -60,6 +67,7 @@ class SqlAlchemyControlPlaneUnitOfWork:
         self.sftp_partners = SqlAlchemySFTPPartnerRepository(gs)
         self.tenants = SqlAlchemyTenantRepository(gs)
         self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
+        self.control_plane_outbox = SqlAlchemyControlPlaneOutboxRepository(gs)
         self.platform_settings = SqlAlchemyPlatformSettingsRepository(gs)
 
     async def __aenter__(self) -> Self:

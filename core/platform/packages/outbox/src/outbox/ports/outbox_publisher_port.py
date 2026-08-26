@@ -18,7 +18,10 @@ class OutboxPublisherPort(Protocol):
 
     async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
         """
-        Publishes a batch of event envelopes.
-        Returns a list of successfully published event IDs.
+        Publish a batch and return only the successfully acknowledged event IDs.
+
+        Implementations must return partial successful IDs without raising when individual
+        entries fail. A transport failure that prevents every entry from being attempted or
+        acknowledged must be propagated so the processor can preserve its failure reason.
         """
         ...

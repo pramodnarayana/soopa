@@ -1,6 +1,7 @@
 import structlog
 
 from edi.application.dto import UpdateOutboundRouteCmd
+from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -19,13 +20,12 @@ class UpdateOutboundRouteUseCase:
     ) -> bool:
         res = await self.uow.outbound_routes.update_outbound_route(tenant_id, route_id, cmd)
         if res:
-            pass
-        #             await self.uow.control_plane_outbox.publish_outbox_event(
-        #                 ProvisioningEvent(
-        #                     tenant_id=tenant_id,
-        #                     event_type=EdiEventType.edi_outbound_route_updated,
-        #                     resource_id=str(route_id),
-        #                 ),
-        #                 idempotency_key=idempotency_key,
-        #             )
+            await self.uow.control_plane_outbox.publish_outbox_event(
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_outbound_route_updated,
+                    resource_id=str(route_id),
+                ),
+                idempotency_key=idempotency_key,
+            )
         return res

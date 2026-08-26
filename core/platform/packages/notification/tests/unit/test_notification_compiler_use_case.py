@@ -60,7 +60,7 @@ async def test_dispatch_success():
     assert len(outbox.events) == 1
     saved = outbox.events[0]
     assert saved.tenant_id == tenant_id
-    assert saved.event_type == f"{Channel.EMAIL.value}.requested"
+    assert saved.event_type == "email.requested"
     assert saved.payload["channel"] == Channel.EMAIL.value
     assert saved.payload["subject"] == "Invoice 123"
     assert saved.payload["content"] == "Hello, invoice 123 is ready."

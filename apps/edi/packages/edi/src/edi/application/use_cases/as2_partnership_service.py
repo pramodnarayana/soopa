@@ -4,6 +4,7 @@ from edi.application.dto import (
     CreateAS2PartnershipCmd,
     UpdateAS2PartnershipCmd,
 )
+from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models import (
     AS2PartnershipDomainModel,
 )
@@ -44,13 +45,13 @@ class AS2PartnershipService:
         partner_id = await self.uow.as2_partnerships.create_as2_partnership(
             tenant_id=tenant_id, cmd=cmd
         )
-        #         await self.uow.control_plane_outbox.publish_outbox_event(
-        #             ProvisioningEvent(
-        #                 tenant_id=tenant_id,
-        #                 event_type=EdiEventType.edi_as2_partnership_created,
-        #                 resource_id=str(partner_id),
-        #             )
-        #         )
+        await self.uow.control_plane_outbox.publish_outbox_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_created,
+                resource_id=str(partner_id),
+            )
+        )
 
         from datetime import datetime
 
@@ -77,13 +78,13 @@ class AS2PartnershipService:
         await self.uow.as2_partnerships.update_as2_partnership(
             tenant_id=tenant_id, partnership_id=partnership_id, cmd=cmd
         )
-        #         await self.uow.control_plane_outbox.publish_outbox_event(
-        #             ProvisioningEvent(
-        #                 tenant_id=tenant_id,
-        #                 event_type=EdiEventType.edi_as2_partnership_updated,
-        #                 resource_id=str(partnership_id),
-        #             )
-        #         )
+        await self.uow.control_plane_outbox.publish_outbox_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_updated,
+                resource_id=str(partnership_id),
+            )
+        )
         updated = await self.uow.as2_partnerships.get_as2_partnership(tenant_id, partnership_id)
         if not updated:
             raise ValueError(f"AS2 partnership {partnership_id} not found")
@@ -98,11 +99,10 @@ class AS2PartnershipService:
         )
         await self.uow.as2_partnerships.delete_as2_partnership(tenant_id, partnership_id)
 
-
-#         await self.uow.control_plane_outbox.publish_outbox_event(
-#             ProvisioningEvent(
-#                 tenant_id=tenant_id,
-#                 event_type=EdiEventType.edi_as2_partnership_deleted,
-#                 resource_id=str(partnership_id),
-#             )
-#         )
+        await self.uow.control_plane_outbox.publish_outbox_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_deleted,
+                resource_id=str(partnership_id),
+            )
+        )

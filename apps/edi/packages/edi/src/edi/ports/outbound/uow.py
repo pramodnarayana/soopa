@@ -2,6 +2,9 @@ from typing import Any, Protocol
 
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
+from edi.ports.outbound.control_plane_outbox_repository_port import (
+    ControlPlaneOutboxRepositoryPort,
+)
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
@@ -25,6 +28,7 @@ class ControlPlaneUnitOfWorkPort(Protocol):
     tenants: TenantRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
+    control_plane_outbox: ControlPlaneOutboxRepositoryPort
 
     async def __aenter__(self) -> "ControlPlaneUnitOfWorkPort": ...
 

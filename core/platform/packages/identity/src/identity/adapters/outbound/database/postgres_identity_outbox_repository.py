@@ -102,12 +102,18 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
         async with self.session_factory() as session:
             query = text("""
                 UPDATE identity.outbox
-                SET status = 'FAILED', lease_expires_at = NULL, owner_token = NULL,
+                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+                    attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL,
                     updated_at = NOW(), error_reason = :error_message
                 WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
-                {"event_id": event_id, "worker_id": worker_id, "error_message": error_message},
+                {
+                    "event_id": event_id,
+                    "worker_id": worker_id,
+                    "error_message": error_message,
+                    "max_attempts": 3,
+                },
             )
             await session.commit()

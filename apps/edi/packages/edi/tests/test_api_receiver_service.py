@@ -22,9 +22,9 @@ async def test_process_api_edi_json_success():
     _create_args, create_kwargs = mock_uow.transactions.create_edi_json.await_args
     assert create_kwargs["payload"]["transaction_type"] == "850"
 
-    mock_uow.data_plane_outbox.publish_outbox_event.assert_awaited_once()
+    mock_uow.transactions.publish_outbox_event.assert_awaited_once()
 
-    _args, kwargs = mock_uow.data_plane_outbox.publish_outbox_event.call_args
+    _args, kwargs = mock_uow.transactions.publish_outbox_event.call_args
     from edi.domain.events import PipelineEventType
 
     assert kwargs["event_type"] == PipelineEventType.TRANSFORM_EVENT

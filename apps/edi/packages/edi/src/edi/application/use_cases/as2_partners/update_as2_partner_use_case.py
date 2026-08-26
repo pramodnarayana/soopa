@@ -3,6 +3,7 @@ import structlog
 from edi.application.dto import (
     UpdateAS2TradingPartnerCmd,
 )
+from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import PartnerNotFoundError
 from edi.domain.models import (
     AS2PartnerDomainModel,
@@ -38,14 +39,14 @@ class UpdateAS2PartnerUseCase:
         if not updated_partner:
             raise PartnerNotFoundError(partner_id, tenant_id)
 
-        #         await self.uow.control_plane_outbox.publish_outbox_event(
-        #             ProvisioningEvent(
-        #                 tenant_id=tenant_id,
-        #                 event_type=EdiEventType.edi_as2_partner_updated,
-        #                 resource_id=str(partner_id),
-        #             ),
-        #             idempotency_key=idempotency_key,
-        #         )
+        await self.uow.control_plane_outbox.publish_outbox_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partner_updated,
+                resource_id=str(partner_id),
+            ),
+            idempotency_key=idempotency_key,
+        )
 
         logger.info(
             "update_as2_partner_completed",

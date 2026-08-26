@@ -101,7 +101,7 @@ class NotificationCompilerUseCase:
                 )
 
             # Insert Outbox Dispatch Event (e.g., "email.requested")
-            dispatch_event_type = f"{channel.value}.requested"
+            dispatch_event_type = f"{channel.value.lower()}.requested"
 
             payload: dict[str, Any] = {
                 "channel": channel.value,

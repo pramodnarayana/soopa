@@ -52,11 +52,16 @@ class OutboxProcessorUseCase:
 
         logger.debug("outbox_relay_events_claimed", worker_id=self.worker_id, count=len(events))
 
+        batch_failure_reason: str | None = None
         try:
             successful_ids = await self.publisher.publish_batch(events)
         except Exception as e:
             logger.exception("outbox_event_batch_publish_failed", error=str(e))
             successful_ids = []
+            batch_failure_reason = str(e) or type(e).__name__
+
+        if not successful_ids and batch_failure_reason is None:
+            batch_failure_reason = "Batch publisher returned no successful event IDs"
 
         tasks = []
         for event in events:
@@ -69,7 +74,9 @@ class OutboxProcessorUseCase:
                 logger.error("outbox_event_processing_failed", event_id=event.id)
                 tasks.append(
                     self.repository.mark_failed(
-                        event.id, self.worker_id, "Failed to publish in batch"
+                        event.id,
+                        self.worker_id,
+                        batch_failure_reason or "Event was not acknowledged by batch publisher",
                     )
                 )
 
