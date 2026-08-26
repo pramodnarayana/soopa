@@ -335,3 +335,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: ✅ RESOLVED
 - **Description**: The EDI bounded context (both Data and Control planes) currently uses custom outbox jobs/sweepers. They need to be migrated to use the generic `outbox` infrastructure package (like the Notification bounded context did).
 - **Action Item**: Migrate all custom EDI outbox jobs and sweepers to the generic `OutboxProcessorUseCase` and `SweepOutboxUseCase` from the platform outbox package. Remove duplicated legacy logic.
+
+## [Architecture] Centralize DDD AggregateRoot and Eliminate Taxonomy Drift
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: The codebase currently suffers from Taxonomy Drift in how it implements Domain-Driven Design (DDD) Aggregates. The `identity` and `ucp` bounded contexts define a custom `AggregateRoot` base class in `domain/aggregate_root.py`, while the `edi` context implements the exact same logic as a `DomainEventMixin` inside `domain/models.py`. This violates the Enterprise Architecture rule against duplicate infrastructure and file path taxonomy drift.
+- **Action Item**: Create a centralized platform package (e.g., `core/platform/packages/ddd`) containing a single, unified `AggregateRoot` base class and `DomainEvent` definition. Refactor all bounded contexts (`identity`, `ucp`, `edi`) to import and inherit from this central package, completely removing the duplicated local implementations and Mixins.
