@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from platform_orm.models.notifications import NotificationRecord
+from database.models.notifications import NotificationRecord
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 

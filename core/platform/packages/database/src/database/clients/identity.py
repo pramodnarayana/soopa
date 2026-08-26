@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_orm.models.identity import ApiToken
+from database.models.identity import ApiToken
 
 
 class IdentityClient:

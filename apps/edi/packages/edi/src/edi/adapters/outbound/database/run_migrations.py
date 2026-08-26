@@ -5,8 +5,8 @@ import structlog
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
+from database.provider import get_async_engine
 from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -17,7 +17,7 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
     Connect to the global DB and fetch all registered shard URLs.
     If none exist (e.g., initial bootstrap), fallback to defaults.
     """
-    engine = create_async_engine(global_url, echo=False)
+    engine = get_async_engine(global_url)
     urls = []
     try:
         async with engine.connect() as conn:

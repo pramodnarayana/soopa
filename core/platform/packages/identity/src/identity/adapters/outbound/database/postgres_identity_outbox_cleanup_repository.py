@@ -2,8 +2,8 @@ import asyncio
 import datetime
 from typing import Any, cast
 
+from database.models.identity import IdentityOutbox
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
-from platform_orm.models.identity import IdentityOutbox
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

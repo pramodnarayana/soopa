@@ -5,7 +5,7 @@ description = "Identity Background Worker"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "platform-orm",
+    "database",
     "identity",
     "observability",
     "ucp",
@@ -22,7 +22,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv.sources]
-platform-orm = { workspace = true }
+database = { workspace = true }
 identity = { workspace = true }
 observability = { workspace = true }
 ucp = { workspace = true }

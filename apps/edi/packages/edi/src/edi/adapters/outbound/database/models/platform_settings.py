@@ -1,9 +1,10 @@
 from typing import Any
 
-from platform_orm.models.common import TimestampMixin
-from platform_orm.models.core import IdentityBase
 from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
+
+from database.models.common import TimestampMixin
+from database.models.core import IdentityBase
 
 
 class PlatformSettings(IdentityBase, TimestampMixin):

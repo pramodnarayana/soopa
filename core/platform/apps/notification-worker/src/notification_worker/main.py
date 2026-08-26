@@ -60,7 +60,15 @@ async def run_consumer() -> None:
     # 3. Outbox Relay
     outbox_listener.start()
 
-    await shutdown_event.wait()
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
+
+    done, _ = await asyncio.wait(
+        [shutdown_task, consumer_task, email_task], return_when=asyncio.FIRST_COMPLETED
+    )
+
+    for task in done:
+        if task is not shutdown_task:
+            task.result()
 
     logger.info("Stopping workers...")
     await outbox_listener.stop()

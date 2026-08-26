@@ -97,8 +97,9 @@ class SqlAlchemyControlPlaneOutboxRepository(
         event: ProvisioningEvent,
         idempotency_key: str | None = None,
     ) -> str:
-        from platform_orm.outbox_serializer import serialize_domain_event
         from sqlalchemy import select
+
+        from database.outbox_serializer import serialize_domain_event
 
         serialized_event = serialize_domain_event(event)
         if idempotency_key:

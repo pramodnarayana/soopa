@@ -63,6 +63,8 @@ The following paradigms define the entire system structure. Any new design or mo
 - NEVER duplicate generic infrastructure patterns (such as Outbox engines, SQS Polling loops, or SNS Publishers) across multiple bounded contexts.
 - Any infrastructure pattern that is agnostic to the domain MUST be extracted into a centralized platform package (e.g., `core/platform/packages/outbox` or `core/platform/packages/pubsub`).
 - Bounded contexts should depend on these generic packages via abstract Ports, keeping the domain completely decoupled from the transport mechanisms.
+- **Enterprise Naming**: Platform packages must be named by their capability (e.g., `database`, `pubsub`, `outbox`) and NEVER by technical implementation detail (like `orm` or `sqs`).
+- **Centralized Database Engine & Connection Pooling**: NEVER use `create_async_engine` or `async_sessionmaker` directly inside a bounded context or worker container. ALWAYS import and inject the centralized `DatabaseProvider` from `core/platform/packages/database`.
 
 # Strict Boundary DTOs / Command Objects
 - **Strict DTO Standard**: Every bounded context MUST define a pure `application/dto.py` file to hold its Request/Command/Query objects (as `@dataclass(frozen=True)`).

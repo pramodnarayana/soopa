@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 
-from platform_orm.models.observability import SystemAuditLog
+from database.models.observability import SystemAuditLog
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

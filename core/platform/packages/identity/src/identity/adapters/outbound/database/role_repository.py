@@ -3,10 +3,10 @@ import uuid
 from typing import Any
 
 import structlog
-from platform_orm.models import Role as OrmRole
-from platform_orm.models import UserRole
-from platform_orm.models.identity import IdentityOutbox
-from platform_orm.outbox_serializer import serialize_domain_event
+from database.models import Role as OrmRole
+from database.models import UserRole
+from database.models.identity import IdentityOutbox
+from database.outbox_serializer import serialize_domain_event
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession

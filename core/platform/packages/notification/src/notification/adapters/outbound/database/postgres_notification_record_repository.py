@@ -4,8 +4,8 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import structlog
-from platform_orm.models.identity import Role, User, UserRole
-from platform_orm.models.notifications import NotificationRecord
+from database.models.identity import Role, User, UserRole
+from database.models.notifications import NotificationRecord
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 

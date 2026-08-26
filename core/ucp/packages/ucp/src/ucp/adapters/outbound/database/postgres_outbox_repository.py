@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

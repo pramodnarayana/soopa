@@ -1,7 +1,7 @@
 from typing import Protocol
 
+from database.events import EventEnvelope
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from platform_orm.events import EventEnvelope
 
 
 class NotificationOutboxRepositoryPort(OutboxRepositoryPort, Protocol):

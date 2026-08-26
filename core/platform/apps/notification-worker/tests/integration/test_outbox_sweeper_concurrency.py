@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import pytest
-from platform_orm.models.identity import Tenant
-from platform_orm.models.notifications import NotificationOutbox
+from database.models.identity import Tenant
+from database.models.notifications import NotificationOutbox
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 

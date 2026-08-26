@@ -9,8 +9,8 @@ from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-import platform_orm.models  # noqa: F401
-from platform_orm.models.core import GlobalRegistry
+import database.models  # noqa: F401
+from database.models.core import GlobalRegistry
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
 

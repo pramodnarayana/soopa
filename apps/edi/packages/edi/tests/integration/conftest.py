@@ -13,9 +13,10 @@ import pytest_asyncio
 
 # Assuming Alembic is used for migrations. We can run it programmatically.
 # Or we can just use BaseModel.metadata.create_all(bind=engine) for tests.
-from platform_orm.models.core import GlobalRegistry
+from database.models.core import GlobalRegistry
+from database.provider import get_async_engine
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 from edi.adapters.outbound.database.models.data_plane import TenantBase
@@ -44,7 +45,7 @@ async def db_engine(postgres_container):
     db_url = postgres_container.get_connection_url().replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
-    engine = create_async_engine(db_url, echo=False)
+    engine = get_async_engine(db_url)
 
     # Initialize the schema
     async with engine.begin() as conn:

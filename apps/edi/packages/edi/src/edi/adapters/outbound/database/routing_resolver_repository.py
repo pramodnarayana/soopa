@@ -1,7 +1,7 @@
-from platform_orm.models import Webhook
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.models import Webhook
 from edi.adapters.outbound.database.models.control_plane import AS2Partner, SFTPPartner
 from edi.adapters.outbound.database.models.data_plane import InboundRoute, OutboundRoute
 from edi.domain.models import ConnectionType

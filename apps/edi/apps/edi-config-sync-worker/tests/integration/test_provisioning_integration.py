@@ -30,13 +30,13 @@ class SqsTestPublisher:
             )
 
 
+from database.models.identity import Tenant
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
 from edi.config.settings import get_settings
 from edi.domain.events import EdiEventType
-from platform_orm.models.identity import Tenant
 from sqlalchemy import delete, select
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry

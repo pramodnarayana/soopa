@@ -3,9 +3,9 @@ from typing import Any, ClassVar, Self
 
 import aioboto3
 import structlog
+from database.events import EventEnvelope
+from database.outbox_serializer import serialize_domain_event
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from platform_orm.events import EventEnvelope
-from platform_orm.outbox_serializer import serialize_domain_event
 
 logger = structlog.get_logger(__name__)
 

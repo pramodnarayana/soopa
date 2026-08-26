@@ -1,5 +1,5 @@
 {
-  "name": "@soopa/platform-orm",
+  "name": "@soopa/database",
   "private": true,
   "scripts": {
     "lint": "uv run ruff check .",

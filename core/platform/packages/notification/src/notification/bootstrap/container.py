@@ -9,14 +9,10 @@ dependency wiring in this bounded context.
 from collections.abc import AsyncGenerator
 
 import structlog
+from database.provider import get_async_engine
 from dependency_injector import containers, providers
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from notification.adapters.outbound.channels import (
     EmailDeliveryStrategy,
@@ -58,7 +54,7 @@ async def _init_async_engine(database_url: str) -> AsyncGenerator[AsyncEngine]:
     """Resource lifecycle hook: creates and disposes the SQLAlchemy async engine."""
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    engine = create_async_engine(database_url, pool_pre_ping=True)
+    engine = get_async_engine(database_url)
     try:
         yield engine
     finally:

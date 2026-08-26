@@ -2,14 +2,14 @@ import uuid
 from typing import Literal
 
 import pytest
+from database.models.identity import Tenant as DbTenant
+from database.models.identity import User as DbUser
 from identity_worker.application.use_cases.identity_sync_service import (
     IdentitySyncService,
     StateConflictError,
 )
 from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
-from platform_orm.models.identity import Tenant as DbTenant
-from platform_orm.models.identity import User as DbUser
 
 pytestmark = pytest.mark.asyncio
 

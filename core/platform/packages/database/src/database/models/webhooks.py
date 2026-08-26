@@ -3,8 +3,8 @@ import os
 from sqlalchemy import Boolean, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.common import SoftDeleteMixin, TimestampMixin
-from platform_orm.models.core import UcpBase
+from database.models.common import SoftDeleteMixin, TimestampMixin
+from database.models.core import UcpBase
 
 
 class Webhook(UcpBase, TimestampMixin, SoftDeleteMixin):

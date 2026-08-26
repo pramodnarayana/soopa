@@ -5,7 +5,7 @@ description = "Generic AWS SQS and SNS Transport"
 requires-python = ">=3.12"
 dependencies = [
     "outbox",
-    "platform-orm",
+    "database",
     "aioboto3",
     "structlog>=24.0.0",
 ]
@@ -19,4 +19,4 @@ packages = ["src/pubsub"]
 
 [tool.uv.sources]
 outbox = { workspace = true }
-platform-orm = { workspace = true }
+database = { workspace = true }

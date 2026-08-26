@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 
 import structlog
+from database.events import EventEnvelope
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from platform_orm.events import EventEnvelope
 from sqlalchemy import CursorResult, text
 
 logger = structlog.get_logger(__name__)

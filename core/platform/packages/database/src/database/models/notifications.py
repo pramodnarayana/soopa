@@ -5,8 +5,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
-from platform_orm.models.common import OutboxMixin, TimestampMixin
-from platform_orm.models.core import NotificationBase
+from database.models.common import OutboxMixin, TimestampMixin
+from database.models.core import NotificationBase
 
 
 class NotificationTemplate(NotificationBase, TimestampMixin):

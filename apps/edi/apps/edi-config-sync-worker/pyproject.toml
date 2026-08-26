@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Worker service for syncing configurations from UCP Control Plane to EDI Data Plane"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "asyncpg>=0.29.0", "edi", "outbox", "ucp_models", "python-dotenv", "boto3", "identity", "pydantic", "botocore", "structlog", "platform_orm"]
+dependencies = ["aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "asyncpg>=0.29.0", "edi", "outbox", "ucp_models", "python-dotenv", "boto3", "identity", "pydantic", "botocore", "structlog", "database"]
 
 [tool.uv.sources]
 edi = { workspace = true }

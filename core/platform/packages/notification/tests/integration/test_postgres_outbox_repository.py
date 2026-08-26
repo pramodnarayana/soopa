@@ -1,5 +1,5 @@
 import pytest
-from platform_orm.models.identity import Tenant
+from database.models.identity import Tenant
 
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,

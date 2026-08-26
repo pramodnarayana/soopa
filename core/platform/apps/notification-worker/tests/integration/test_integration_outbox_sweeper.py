@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from database.models.notifications import NotificationOutbox
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
 )
@@ -8,7 +9,6 @@ from notification.application.notification_outbox_processor_use_case import (
     NotificationOutboxProcessorUseCase,
 )
 from notification.domain.models import Channel, NotificationOutboxEvent
-from platform_orm.models.notifications import NotificationOutbox
 from sqlalchemy import select
 
 
@@ -45,7 +45,7 @@ async def test_outbox_sweeper_integration(db_session_factory):
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
     dispatcher = FakeDispatcher()
 
-    from platform_orm.models.identity import Tenant
+    from database.models.identity import Tenant
 
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(id="t1", name="Test Tenant", slug="t1")

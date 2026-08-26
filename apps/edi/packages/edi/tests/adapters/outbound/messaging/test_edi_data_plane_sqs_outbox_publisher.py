@@ -2,7 +2,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 
 from edi.adapters.outbound.messaging.edi_data_plane_sqs_outbox_publisher import (
     EdiDataPlaneSqsOutboxPublisherAdapter,

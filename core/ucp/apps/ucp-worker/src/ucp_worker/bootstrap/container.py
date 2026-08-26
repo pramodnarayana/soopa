@@ -4,12 +4,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
+from database.provider import get_async_engine
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
@@ -53,7 +54,7 @@ class WorkerContainer:
                 "postgresql://", "postgresql+asyncpg://", 1
             )
 
-        self._engine = create_async_engine(self.database_url, pool_pre_ping=True)
+        self._engine = get_async_engine(self.database_url)
         self.session_factory = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
@@ -63,16 +64,18 @@ class WorkerContainer:
         self.events_consumer: UcpEventDispatcher | None = None
 
     def wire(self) -> None:
-        self._wire_scheduled_jobs()
-        self._wire_outbox_relay()
-        self._wire_events_consumer()
-
-    def _wire_scheduled_jobs(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
         outbox_pub = AwsSnsPublisher(
             topic_arn=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
         )
+        self._wire_scheduled_jobs(outbox_repo, outbox_pub)
+        self._wire_outbox_relay(outbox_repo, outbox_pub)
+        self._wire_events_consumer()
+
+    def _wire_scheduled_jobs(
+        self, outbox_repo: PostgresOutboxRepository, outbox_pub: AwsSnsPublisher
+    ) -> None:
         outbox_cleanup_repo = SqlAlchemyUcpOutboxCleanupRepository(self.session_factory)
         idemp_cleanup_repo = SqlAlchemyUcpIdempotencyCleanupRepository(self.session_factory)
         audit_cleanup_repo = SqlAlchemyUcpAuditLogCleanupRepository(self.session_factory)
@@ -100,12 +103,9 @@ class WorkerContainer:
             UcpAuditLogCleanupJobHandler(audit_cleanup_use_case),
         )
 
-    def _wire_outbox_relay(self) -> None:
-        outbox_repo = PostgresOutboxRepository(self.session_factory)
-        outbox_pub = AwsSnsPublisher(
-            topic_arn=self.settings.sns_tenant_events_topic_arn,
-            endpoint_url=self.settings.aws_endpoint_url,
-        )
+    def _wire_outbox_relay(
+        self, outbox_repo: PostgresOutboxRepository, outbox_pub: AwsSnsPublisher
+    ) -> None:
         outbox_processor = OutboxProcessorUseCase(
             repository=outbox_repo,
             publisher=outbox_pub,

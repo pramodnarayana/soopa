@@ -6,9 +6,10 @@ os.environ.setdefault("ZITADEL_DEFAULT_USER_PASSWORD", "not-for-production")
 
 import pytest
 import pytest_asyncio
-from platform_orm.models.core import GlobalRegistry
+from database.models.core import GlobalRegistry
+from database.provider import get_async_engine
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 
@@ -33,7 +34,7 @@ async def db_engine(postgres_container):
     db_url = postgres_container.get_connection_url().replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
-    engine = create_async_engine(db_url, echo=False)
+    engine = get_async_engine(db_url)
 
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))

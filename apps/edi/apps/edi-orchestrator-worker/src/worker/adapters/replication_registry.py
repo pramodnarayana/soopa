@@ -15,6 +15,7 @@ Adding a new replicated entity:
     the rest — no changes to the adapter are required.
 """
 
+from database.models import Webhook as GlobalWebhook
 from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalAS2Partner
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partnership as GlobalAS2Partnership,
@@ -34,7 +35,6 @@ from edi.adapters.outbound.database.models.data_plane import (
 from edi.adapters.outbound.database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from edi.adapters.outbound.database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
-from platform_orm.models import Webhook as GlobalWebhook
 
 from worker.domain.replication_graph import EntityDependency, EntitySpec
 

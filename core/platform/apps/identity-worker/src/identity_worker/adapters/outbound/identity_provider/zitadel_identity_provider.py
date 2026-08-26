@@ -2,7 +2,7 @@ import contextlib
 import typing
 
 import structlog
-from platform_orm.models.identity import Tenant as DbTenant
+from database.models.identity import Tenant as DbTenant
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

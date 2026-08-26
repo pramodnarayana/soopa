@@ -16,10 +16,11 @@ import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
+from database.provider import get_async_engine
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
@@ -169,7 +170,7 @@ async def db_engine(postgres_container) -> "Any":
     db_url = postgres_container.get_connection_url().replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
-    engine = create_async_engine(db_url, echo=False)
+    engine = get_async_engine(db_url)
 
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))

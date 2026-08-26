@@ -256,7 +256,7 @@ class ReceiveAS2UseCase:
                     )
                     return _RouteResult(failed=True)
 
-                from platform_orm.models.identity import Tenant
+                from database.models.identity import Tenant
                 from sqlalchemy import select
                 from ucp_models.infrastructure import DatabaseShard
 

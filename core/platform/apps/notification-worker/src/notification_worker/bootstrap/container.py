@@ -52,7 +52,7 @@ class WorkerContainer(containers.DeclarativeContainer):
 
     cleanup_worker = providers.Singleton(
         NotificationOutboxSweeperJobHandler,
-        use_case=notification_package.sweep_outbox_use_case(
+        use_case=notification_package.outbox_sweeper_use_case(
             publisher=outbox_publisher,
         ),
     )

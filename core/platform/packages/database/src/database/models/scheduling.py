@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.core import SchedulingBase
+from database.models.core import SchedulingBase
 
 
 class ScheduledJob(SchedulingBase):

@@ -2,7 +2,7 @@ import asyncio
 import datetime
 from typing import Any, cast
 
-from platform_orm.models.idempotency import IdempotencyResult
+from database.models.idempotency import IdempotencyResult
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

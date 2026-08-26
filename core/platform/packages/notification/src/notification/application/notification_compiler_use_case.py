@@ -2,7 +2,7 @@ import hashlib
 from typing import Any
 
 import structlog
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 
 from notification.ports.outbound.notification_outbox_repository_port import (
     NotificationOutboxRepositoryPort,

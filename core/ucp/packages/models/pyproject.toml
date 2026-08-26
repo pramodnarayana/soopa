@@ -6,7 +6,7 @@ authors = [
     {name = "Platform Team", email = "platform@company.com"}
 ]
 requires-python = ">=3.11"
-dependencies = ["sqlalchemy[asyncio]>=2.0.0", "platform-orm"]
+dependencies = ["sqlalchemy[asyncio]>=2.0.0", "database"]
 
 [build-system]
 requires = ["hatchling"]
@@ -26,4 +26,4 @@ extraPaths = [
 extend = "../../../../pyproject.toml"
 
 [tool.uv.sources]
-platform-orm = { workspace = true }
+database = { workspace = true }

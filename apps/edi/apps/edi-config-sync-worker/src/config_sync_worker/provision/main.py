@@ -110,6 +110,7 @@ async def main() -> None:
 
         # Close adapter resources
         await sqs_outbox.close()
+        await db_router.close_all()
 
 
 if __name__ == "__main__":

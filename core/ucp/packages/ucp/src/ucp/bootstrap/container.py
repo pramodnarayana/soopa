@@ -1,8 +1,9 @@
+from database.provider import get_async_engine
 from dependency_injector import containers, providers
 from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
 from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
@@ -34,11 +35,7 @@ from ucp.application.use_cases.webhooks import (
 from ucp.bootstrap.config import get_settings
 
 _settings = get_settings()
-_engine = create_async_engine(
-    _settings.database_url,
-    echo=False,
-    pool_pre_ping=True,
-)
+_engine = get_async_engine(_settings.database_url)
 _async_session_maker = async_sessionmaker(
     _engine,
     expire_on_commit=False,

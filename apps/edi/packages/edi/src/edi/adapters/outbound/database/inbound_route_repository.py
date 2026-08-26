@@ -4,9 +4,9 @@ from typing import Any, cast
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from platform_orm.models import Webhook
 from sqlalchemy import CursorResult, or_, select, update
 
+from database.models import Webhook
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,

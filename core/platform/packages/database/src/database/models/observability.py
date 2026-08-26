@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.core import ObservabilityBase
+from database.models.core import ObservabilityBase
 
 
 class SystemAuditLog(ObservabilityBase):

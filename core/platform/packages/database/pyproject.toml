@@ -1,5 +1,5 @@
 [project]
-name = "platform-orm"
+name = "database"
 version = "0.1.0"
 description = "Platform Core ORM Bases and Utilities"
 authors = [
@@ -20,7 +20,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/platform_orm"]
+packages = ["src/database"]
 
 [tool.pyright]
 venvPath = "../../../.."

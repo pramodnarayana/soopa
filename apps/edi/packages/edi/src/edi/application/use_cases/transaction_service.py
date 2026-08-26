@@ -59,31 +59,20 @@ class TransactionService:
             # For simplicity, we just raise for the first missing one, or could raise a bulk error
             raise TransactionNotFoundError(trace_id=next(iter(missing_trace_ids)))
 
-        # 2. Construct Bulk Events
-        events = []
         for trace_id in unique_trace_ids:
             if command_key:
                 idem_key = f"replay_{command_key}_{trace_id}"
             else:
                 idem_key = f"replay_{trace_id}_{uuid.uuid4().hex}"
 
-            events.append(
-                {
-                    "event_type": "edi.transaction.replay_requested",
-                    "payload": {
-                        "trace_id": trace_id,
-                        "tier": tier,
-                    },
-                    "idempotency_key": idem_key,
-                }
-            )
-
-        for event in events:
             await self.uow.transactions.publish_outbox_event(
                 tenant_id=tenant_id,
-                event_type=event["event_type"],
-                payload=event["payload"],
-                idempotency_key=event["idempotency_key"],
+                event_type="edi.transaction.replay_requested",
+                payload={
+                    "trace_id": trace_id,
+                    "tier": tier,
+                },
+                idempotency_key=idem_key,
             )
 
         return len(unique_trace_ids)

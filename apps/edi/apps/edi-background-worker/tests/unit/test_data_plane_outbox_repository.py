@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 
 from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_cleanup_repository import (
     SqlAlchemyEdiDataPlaneOutboxCleanupRepository,

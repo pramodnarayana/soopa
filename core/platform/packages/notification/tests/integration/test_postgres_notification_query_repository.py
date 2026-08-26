@@ -1,8 +1,8 @@
 import uuid
 
 import pytest
-from platform_orm.models.identity import Role, Tenant, User, UserRole
-from platform_orm.models.notifications import NotificationRecord
+from database.models.identity import Role, Tenant, User, UserRole
+from database.models.notifications import NotificationRecord
 
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,

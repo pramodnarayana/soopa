@@ -1,5 +1,5 @@
 import pytest
-from platform_orm.models.notifications import NotificationRecord
+from database.models.notifications import NotificationRecord
 from sqlalchemy import select
 
 from notification.adapters.outbound.database.postgres_notification_record_repository import (
@@ -13,7 +13,7 @@ async def test_save_notification_persists_to_database(db_session_factory):
     tenant_id = "test-tenant-456"
 
     async with db_session_factory() as session, session.begin():
-        from platform_orm.models.identity import Tenant, User
+        from database.models.identity import Tenant, User
 
         tenant = Tenant(
             id=tenant_id,

@@ -1,15 +1,15 @@
 import os
 
 import structlog
-from platform_orm.outbox_serializer import serialize_domain_event
+from database.outbox_serializer import serialize_domain_event
 
 logger = structlog.get_logger(__name__)
 import typing
 from datetime import UTC, datetime
 
-from platform_orm.models.identity import ApiKey, ApiToken, Role, UserRole
-from platform_orm.models.identity import Tenant as DbTenant
-from platform_orm.models.webhooks import Webhook
+from database.models.identity import ApiKey, ApiToken, Role, UserRole
+from database.models.identity import Tenant as DbTenant
+from database.models.webhooks import Webhook
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox

@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 
 
 def notify(

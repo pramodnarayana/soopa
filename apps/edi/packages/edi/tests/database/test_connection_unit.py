@@ -10,7 +10,7 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 
 @pytest.fixture
 def mock_create_engine() -> Any:
-    with patch("edi.adapters.outbound.database.connection.create_async_engine") as mock:
+    with patch("edi.adapters.outbound.database.connection.get_async_engine") as mock:
         # Use a lambda as side_effect to return a fresh AsyncMock each time it's called
         mock.side_effect = lambda *args, **kwargs: AsyncMock()
         yield mock

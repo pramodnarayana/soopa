@@ -160,7 +160,12 @@ async def main() -> None:
         await asyncio.gather(data_plane_jobs_task, control_plane_jobs_task)
     except asyncio.CancelledError:
         logger.info("edi_background_worker_cancelled")
+    except Exception:
+        logger.exception("edi_background_worker_failed")
     finally:
+        data_plane_jobs_task.cancel()
+        control_plane_jobs_task.cancel()
+        await asyncio.gather(data_plane_jobs_task, control_plane_jobs_task, return_exceptions=True)
         logger.info("edi_background_worker_stopped")
         await db_router.close_all()
 

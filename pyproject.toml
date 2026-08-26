@@ -19,7 +19,7 @@ override-dependencies = ["pykcs11"]
 members = [
     "core/platform/packages/*/python",
     "core/platform/packages/identity",
-    "core/platform/packages/orm",
+    "core/platform/packages/database",
     "core/platform/packages/observability",
     "core/platform/packages/outbox",
     "core/platform/packages/pubsub",
@@ -46,7 +46,7 @@ exclude = ["apps/edi/packages/ui"]
 
 [tool.uv.sources]
 identity = { workspace = true }
-platform-orm = { workspace = true }
+database = { workspace = true }
 platform-schemas = { workspace = true }
 observability = { workspace = true }
 outbox = { workspace = true }
@@ -114,7 +114,7 @@ mypy_path = [
     "core/platform/packages/identity/src",
     "core/platform/packages/observability/src",
     "core/platform/packages/schemas/python/src",
-    "core/platform/packages/orm/src",
+    "core/platform/packages/database/src",
     "core/platform/packages/notification/src",
     "core/platform/apps/scheduler-worker/src",
     "core/platform/packages/scheduler/src",
@@ -237,7 +237,7 @@ extraPaths = [
     "core/platform/packages/observability/python/src",
     "core/platform/packages/schemas/python/src",
     "core/platform/packages/schemas/src",
-    "core/platform/packages/orm/src",
+    "core/platform/packages/database/src",
     "core/platform/packages/notification/src",
     "core/platform/packages/scheduler/src",
     "core/platform/packages/outbox/src",
@@ -278,7 +278,7 @@ known_first_party = [
     "identity",
     "observability",
     "scheduler",
-    "orm",
+    "database",
     "as2_server",
     "notification",
     "outbox",

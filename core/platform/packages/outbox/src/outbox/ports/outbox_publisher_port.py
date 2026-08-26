@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 
 
 class OutboxPublisherPort(Protocol):

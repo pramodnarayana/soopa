@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 

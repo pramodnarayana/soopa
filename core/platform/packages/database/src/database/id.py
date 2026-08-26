@@ -3,7 +3,7 @@
 # within its respective bounded context (DDD: constants live with their domain).
 #
 # Examples:
-#   from platform_orm.models.identity import Tenant
+#   from database.models.identity import Tenant
 #   from ucp_models.subscriptions import App
 #
 #   tenant_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"

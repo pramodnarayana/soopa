@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_orm.models.scheduling import ScheduledJob
+from database.models.scheduling import ScheduledJob
 
 
 class SchedulerClient:

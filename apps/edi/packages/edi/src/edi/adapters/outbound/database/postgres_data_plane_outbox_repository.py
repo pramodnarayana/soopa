@@ -4,11 +4,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from platform_orm.events import EventEnvelope
 from sqlalchemy import CursorResult, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.events import EventEnvelope
 from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort

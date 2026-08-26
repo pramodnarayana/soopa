@@ -1,7 +1,7 @@
 import contextlib
 
+from database.models.identity import Tenant
 from edi.adapters.outbound.database.connection import DatabaseRouter
-from platform_orm.models.identity import Tenant
 from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App

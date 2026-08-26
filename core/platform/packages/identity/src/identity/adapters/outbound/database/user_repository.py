@@ -2,9 +2,9 @@ from datetime import UTC, datetime
 from typing import Literal, cast
 
 import structlog
-from platform_orm.models.identity import IdentityOutbox, Role, UserRole
-from platform_orm.models.identity import User as DbUser
-from platform_orm.outbox_serializer import serialize_domain_event
+from database.models.identity import IdentityOutbox, Role, UserRole
+from database.models.identity import User as DbUser
+from database.outbox_serializer import serialize_domain_event
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

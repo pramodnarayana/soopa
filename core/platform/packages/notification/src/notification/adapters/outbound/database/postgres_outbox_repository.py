@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import structlog
-from platform_orm.events import EventEnvelope
-from platform_orm.models.notifications import NotificationOutbox
+from database.events import EventEnvelope
+from database.models.notifications import NotificationOutbox
 from sqlalchemy import case, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession

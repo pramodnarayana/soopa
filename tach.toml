@@ -33,6 +33,6 @@ depends_on = [
     "ucp.domain",
     "ucp.ports",
     "identity",
-    "platform_orm.models",
+    "database.models",
     "schemas"
 ]

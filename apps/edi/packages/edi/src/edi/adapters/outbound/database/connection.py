@@ -17,9 +17,9 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
-    create_async_engine,
 )
 
+from database.provider import get_async_engine
 from edi.adapters.outbound.database.base_repository import GlobalSession, TenantSession
 
 logger = structlog.get_logger(__name__)
@@ -50,13 +50,7 @@ class DatabaseRouter:
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        return create_async_engine(
-            url,
-            echo=False,
-            pool_pre_ping=True,
-            pool_size=self._pool_size,
-            max_overflow=self._max_overflow,
-        )
+        return get_async_engine(url)
 
     async def get_engine(self, db_key: str, url: str | None = None) -> AsyncEngine:
         """

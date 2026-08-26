@@ -16,7 +16,7 @@ from config_sync_worker.ports.outbound.outbox_port import OutboxEvent, OutboxPor
 logger = structlog.get_logger(__name__)
 
 
-from platform_orm.events import EventEnvelope
+from database.events import EventEnvelope
 
 
 class SqsEvent(OutboxEvent):

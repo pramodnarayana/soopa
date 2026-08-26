@@ -1,8 +1,8 @@
 import uuid
 
 import pytest
+from database.models.identity import Role as OrmRole
 from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
-from platform_orm.models.identity import Role as OrmRole
 from sqlalchemy import insert
 
 pytestmark = pytest.mark.integration
@@ -20,7 +20,7 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
 
         import datetime
 
-        from platform_orm.models.identity import Tenant as OrmTenant
+        from database.models.identity import Tenant as OrmTenant
 
         tenant_id = "ten_12345"
         dummy_tenant = {

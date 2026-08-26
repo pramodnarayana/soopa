@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from database.models.identity import Tenant as DbTenant
+from database.models.identity import User as DbUser
 from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
     DummyIdentityProviderPort,
 )
@@ -20,8 +22,6 @@ from identity_worker.application.use_cases.identity_sync_service import (
 from identity_worker.bootstrap.config import Settings, get_settings
 from identity_worker.bootstrap.container import UserRoleAssignedPayload, WorkerContainer
 from identity_worker.domain.exceptions import IdentityProviderPortError
-from platform_orm.models.identity import Tenant as DbTenant
-from platform_orm.models.identity import User as DbUser
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio

@@ -5,8 +5,8 @@ from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from platform_orm.models.common import OutboxMixin, SoftDeleteMixin
-from platform_orm.models.core import IdentityBase
+from database.models.common import OutboxMixin, SoftDeleteMixin
+from database.models.core import IdentityBase
 
 
 class Tenant(IdentityBase, SoftDeleteMixin):

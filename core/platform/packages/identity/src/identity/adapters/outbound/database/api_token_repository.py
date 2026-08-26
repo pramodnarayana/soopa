@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from platform_orm.models.identity import ApiToken as ApiTokenORM
+from database.models.identity import ApiToken as ApiTokenORM
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 

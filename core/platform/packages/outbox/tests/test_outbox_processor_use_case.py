@@ -1,8 +1,8 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from database.events import EventEnvelope
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from platform_orm.events import EventEnvelope
 
 
 def _event(event_id: str) -> EventEnvelope:

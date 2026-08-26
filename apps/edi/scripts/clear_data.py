@@ -5,9 +5,9 @@ import re
 
 import boto3
 import structlog
+from database.provider import get_async_engine
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.ext.asyncio import create_async_engine
 
 # Configure enterprise-grade logging
 
@@ -56,7 +56,7 @@ def _assert_local_aws_endpoint() -> str:
 async def clear_database(db_url: str) -> None:
     logger.info("Connecting to database {db_url}...", db_url=db_url)
     try:
-        engine = create_async_engine(db_url)
+        engine = get_async_engine(db_url)
         async with engine.begin() as conn:
             for table in TABLES_TO_CLEAR:
                 try:

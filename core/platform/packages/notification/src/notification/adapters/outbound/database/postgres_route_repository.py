@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Callable
 
-from platform_orm.models.notifications import NotificationRouteConfiguration
+from database.models.notifications import NotificationRouteConfiguration
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession

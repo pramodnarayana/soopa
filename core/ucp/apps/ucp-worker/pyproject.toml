@@ -9,7 +9,7 @@ dependencies = ["ucp", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "structlog"]
 [tool.uv.sources]
 ucp = { workspace = true }
 ucp_models = { workspace = true }
-platform-orm = { workspace = true }
+database = { workspace = true }
 observability = { workspace = true }
 
 [tool.deptry]

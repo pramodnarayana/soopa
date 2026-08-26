@@ -1,5 +1,6 @@
-from platform_orm.models.core import GlobalRegistry
 from sqlalchemy.orm import DeclarativeBase
+
+from database.models.core import GlobalRegistry
 
 
 class EdiGlobalBase(DeclarativeBase):

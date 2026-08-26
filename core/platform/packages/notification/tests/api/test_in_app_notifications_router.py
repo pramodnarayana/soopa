@@ -1,10 +1,10 @@
 import uuid
 
 import pytest
+from database.models.identity import Role, Tenant, User, UserRole
+from database.models.notifications import NotificationRecord
 from dependency_injector import providers
 from httpx import ASGITransport, AsyncClient
-from platform_orm.models.identity import Role, Tenant, User, UserRole
-from platform_orm.models.notifications import NotificationRecord
 
 
 @pytest.mark.asyncio

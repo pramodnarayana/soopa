@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 import structlog
+from database.provider import get_async_engine
 from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
     SqlAlchemyIdentityOutboxCleanupRepository,
 )
@@ -16,7 +17,7 @@ from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from identity_worker.adapters.inbound.jobs.identity_outbox_cleanup_job import (
     IdentityOutboxCleanupJobHandler,
@@ -104,7 +105,7 @@ class WorkerContainer:
         self.database_url = database_url
         self.settings = get_settings()
 
-        self._engine = create_async_engine(self.database_url, pool_pre_ping=True)
+        self._engine = get_async_engine(self.database_url)
         self.session_factory = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )

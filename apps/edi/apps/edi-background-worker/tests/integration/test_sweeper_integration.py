@@ -7,13 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from sqlalchemy import delete, insert
-from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.infrastructure import DatabaseShard
-
 from edi_background_worker.application.use_cases.edi_data_plane_outbox_sweeper_use_case import (
     EdiDataPlaneOutboxSweeperUseCase,
 )
+from sqlalchemy import delete, insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.infrastructure import DatabaseShard
 
 pytestmark = pytest.mark.asyncio
 
