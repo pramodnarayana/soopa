@@ -8,6 +8,7 @@ Row-Level Security (RLS).
 
 import asyncio
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import cast
 
 import structlog
@@ -130,13 +131,14 @@ class DatabaseRouter:
 
         from edi.config.settings import get_settings
 
-        async for session in self.get_global_session():
-            res = await session.execute(select(DatabaseShard))
-            shards = res.scalars().all()
-            if not shards:
-                default_url = get_settings().database.default_shard_url
-                if default_url:
-                    logger.info("no_database_shards_found_using_default_shard_url")
-                    return [("shard_1", default_url)]
-            return [(str(shard.name), str(shard.dsn)) for shard in shards]
+        async with aclosing(self.get_global_session()) as sessions:
+            async for session in sessions:
+                res = await session.execute(select(DatabaseShard))
+                shards = res.scalars().all()
+                if not shards:
+                    default_url = get_settings().database.default_shard_url
+                    if default_url:
+                        logger.info("no_database_shards_found_using_default_shard_url")
+                        return [("shard_1", default_url)]
+                return [(str(shard.name), str(shard.dsn)) for shard in shards]
         return []

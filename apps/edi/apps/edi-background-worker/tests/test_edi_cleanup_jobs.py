@@ -1,10 +1,9 @@
 import uuid
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from edi_background_worker.adapters.sqs_poller import _process_message_task
+from edi.adapters.inbound.messaging.sqs_poller import _process_message_task
 
 from edi_background_worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
@@ -79,19 +78,13 @@ async def test_edi_cleanup_execute_exception_propagates(handler_class: Any, job_
 
 @pytest.mark.asyncio
 async def test_grouped_two_shard_failures_leave_scheduled_job_for_retry() -> None:
-    global_session = AsyncMock()
-    shard_result = MagicMock()
-    shard_result.scalars.return_value.all.return_value = [
-        SimpleNamespace(name="shard_1", dsn="postgresql+asyncpg://shard-1"),
-        SimpleNamespace(name="shard_2", dsn="postgresql+asyncpg://shard-2"),
-    ]
-    global_session.execute.return_value = shard_result
-
-    async def get_global_session():
-        yield global_session
-
     db_router = MagicMock()
-    db_router.get_global_session = get_global_session
+    db_router.get_all_shards = AsyncMock(
+        return_value=[
+            ("shard_1", "postgresql+asyncpg://shard-1"),
+            ("shard_2", "postgresql+asyncpg://shard-2"),
+        ]
+    )
     db_router.get_engine = AsyncMock(
         side_effect=[RuntimeError("shard 1 unavailable"), RuntimeError("shard 2 unavailable")]
     )

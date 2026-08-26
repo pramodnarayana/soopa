@@ -14,6 +14,8 @@ from edi.ports.outbound.edi_data_plane_outbox_publisher_port import (
 
 logger = structlog.get_logger(__name__)
 
+_RESERVED_EVENT_KEYS = frozenset({"event_type", "idempotency_key"})
+
 
 class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
     def __init__(self, endpoint_url: str | None = None, region: str = "us-east-1"):
@@ -43,6 +45,11 @@ class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
     ) -> list[str]:
         entries = []
         for msg in batch:
+            reserved_keys = _RESERVED_EVENT_KEYS.intersection(msg.event)
+            if reserved_keys:
+                keys = ", ".join(sorted(reserved_keys))
+                raise ValueError(f"Event contains reserved envelope keys: {keys}")
+
             body = {
                 **msg.event,
                 "event_type": msg.event_type,

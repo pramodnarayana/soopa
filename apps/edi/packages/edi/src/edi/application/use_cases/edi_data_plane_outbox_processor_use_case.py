@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 import structlog
+
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.domain.events import PIPELINE_EVENT_ROUTING_MAP
 from edi.ports.outbound.edi_data_plane_outbox_publisher_port import (

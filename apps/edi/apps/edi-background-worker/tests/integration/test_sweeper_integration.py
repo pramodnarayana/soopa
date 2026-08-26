@@ -137,6 +137,8 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
         SqlAlchemyEdiAuditLogCleanupRepository,
     )
 
+    created_shard_2 = False
+
     # Inject a second shard for the test
     async for session in db_router.get_global_session():
         from sqlalchemy import select
@@ -154,6 +156,7 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
             )
             session.add(shard)
             await session.commit()
+            created_shard_2 = True
 
     repo = SqlAlchemyEdiAuditLogCleanupRepository(db_router=db_router)
 
@@ -176,4 +179,12 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
         assert len(exc_info.value.exceptions) == 1
         assert "Database connection lost for shard_1" in str(exc_info.value.exceptions[0])
     finally:
-        db_router.get_engine = original_get_engine
+        try:
+            if created_shard_2:
+                async for session in db_router.get_global_session():
+                    await session.execute(
+                        delete(DatabaseShard).where(DatabaseShard.id == "test_shard_id_2")
+                    )
+                    await session.commit()
+        finally:
+            db_router.get_engine = original_get_engine

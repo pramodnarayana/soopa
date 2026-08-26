@@ -1,3 +1,5 @@
+from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -74,6 +76,29 @@ async def test_get_global_session(router: DatabaseRouter) -> None:
         async_gen = router.get_global_session()
         session = await async_gen.__anext__()
         assert session == mock_session
+
+
+@pytest.mark.asyncio
+async def test_get_all_shards_closes_global_session_generator(router: DatabaseRouter) -> None:
+    session = AsyncMock()
+    shard_result = MagicMock()
+    shard_result.scalars.return_value.all.return_value = [
+        SimpleNamespace(name="shard_1", dsn="postgresql+asyncpg://shard-1")
+    ]
+    session.execute.return_value = shard_result
+    generator_closed = False
+
+    async def global_sessions() -> AsyncGenerator[object, None]:
+        nonlocal generator_closed
+        try:
+            yield session
+        finally:
+            generator_closed = True
+
+    router.get_global_session = MagicMock(return_value=global_sessions())
+
+    assert await router.get_all_shards() == [("shard_1", "postgresql+asyncpg://shard-1")]
+    assert generator_closed
 
 
 @pytest.mark.asyncio

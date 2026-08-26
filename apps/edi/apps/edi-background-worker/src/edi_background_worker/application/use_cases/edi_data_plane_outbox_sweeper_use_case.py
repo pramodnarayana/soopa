@@ -4,15 +4,15 @@ import datetime
 import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.application.use_cases.edi_data_plane_outbox_processor_use_case import (
+    EdiDataPlaneOutboxProcessorUseCase,
+)
 from edi.domain.events import PIPELINE_EVENT_ROUTING_MAP
 from edi.ports.outbound.edi_data_plane_outbox_publisher_port import (
     EdiDataPlaneOutboxPublisherPort,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from worker.application.use_cases.edi_data_plane_outbox_processor_use_case import (
-    EdiDataPlaneOutboxProcessorUseCase,
-)
 
 logger = structlog.get_logger(__name__)
 

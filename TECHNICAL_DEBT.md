@@ -4,7 +4,7 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 
 
 
-## [Architecture] Rollout Centralized Outbox and PubSub Packages to Remaining Modules
+## [Architecture] Rollout Centralized Outbox and Pub/Sub Packages to Remaining Modules
 
 - **Date Added**: 2026-08-26
 - **Status**: TO DO
@@ -312,8 +312,8 @@ The taxonomy drifted organically as different engineers built different bounded 
 
 - **Date Added**: 2026-08-25
 - **Status**: ✅ RESOLVED
-- **Description**: SQS Queue URLs are currently scattered as hardcoded full URL strings across the `.env` file (e.g., `SQS_UCP_IDENTITY_SYNC_QUEUE_URL`, `SQS_IDENTITY_SYNC_QUEUE_URL`, etc.). This violates Convention over Configuration, leading to desyncs between workers and local infrastructure provisioning (e.g., LocalStack).
-- **Action Item**: Refactor all `SqsEventListener` implementations to accept only a Logical Queue Name. Update the adapter constructors to dynamically fetch the absolute Queue URL at runtime via `boto3` (`sqs_client.get_queue_url()`). Remove all explicit URL string configurations from `.env` and `Settings` classes.
+- **Description**: This work was completed: `SqsEventListener` implementations now accept logical queue names, adapters resolve absolute queue URLs at runtime through boto3 `get_queue_url()`, and explicit URL settings were removed from environment configuration and `Settings` classes.
+- **Action Item**: Completed by migrating consumers to logical queue names and removing the obsolete URL configuration.
 
 ## [RESOLVED] [Architecture] Class Naming Taxonomy Drift (Listener vs Consumer)
 

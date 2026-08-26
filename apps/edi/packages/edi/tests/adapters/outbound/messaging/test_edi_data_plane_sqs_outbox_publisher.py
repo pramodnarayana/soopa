@@ -1,3 +1,4 @@
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,7 +33,12 @@ async def test_sqs_publisher_publish_batch() -> None:
         async with adapter.connect():
             # Publish messages
             messages = [
-                PublishMessageEnvelope(message_id="1", event_type="test", event={"event": "A"}),
+                PublishMessageEnvelope(
+                    message_id="1",
+                    event_type="test",
+                    event={"event": "A"},
+                    idempotency_key="idem-1",
+                ),
                 PublishMessageEnvelope(message_id="2", event_type="test", event={"event": "B"}),
                 PublishMessageEnvelope(message_id="3", event_type="test", event={"event": "C"}),
                 PublishMessageEnvelope(
@@ -45,6 +51,29 @@ async def test_sqs_publisher_publish_batch() -> None:
             assert success_ids == ["1", "2"]
             mock_client.get_queue_url.assert_called_once_with(QueueName="test-queue")
             mock_client.send_message_batch.assert_called_once()
+            entries = mock_client.send_message_batch.await_args.kwargs["Entries"]
+            assert json.loads(entries[0]["MessageBody"]) == {
+                "event": "A",
+                "event_type": "test",
+                "idempotency_key": "idem-1",
+            }
+
+
+@pytest.mark.parametrize("reserved_key", ["event_type", "idempotency_key"])
+async def test_sqs_publisher_rejects_reserved_event_keys(reserved_key: str) -> None:
+    adapter = EdiDataPlaneSqsOutboxPublisherAdapter(region="us-east-1", endpoint_url=None)
+    mock_client = AsyncMock()
+    message = PublishMessageEnvelope(
+        message_id="1",
+        event_type="test",
+        event={reserved_key: "payload-value"},
+        idempotency_key="envelope-value",
+    )
+
+    with pytest.raises(ValueError, match=f"reserved envelope keys: {reserved_key}"):
+        await adapter._send_batch_chunk("test-queue", "http://sqs/test", mock_client, [message])
+
+    mock_client.send_message_batch.assert_not_awaited()
 
 
 async def test_sqs_publisher_not_connected() -> None:
