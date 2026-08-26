@@ -5,7 +5,6 @@ import structlog
 from edi.application.dto import RotateAS2CertificateCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
-from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import (
     InvalidCertificateActionError,
     MissingCertificateError,
@@ -99,14 +98,14 @@ class RotateAS2CertificatesUseCase:
             if not updated_partner:
                 raise PartnerNotFoundError(partner_id, tenant_id)
 
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_as2_partner_updated,
-                    resource_id=str(partner_id),
-                ),
-                idempotency_key=idempotency_key,
-            )
+        #             await self.uow.control_plane_outbox.publish_outbox_event(
+        #                 ProvisioningEvent(
+        #                     tenant_id=tenant_id,
+        #                     event_type=EdiEventType.edi_as2_partner_updated,
+        #                     resource_id=str(partner_id),
+        #                 ),
+        #                 idempotency_key=idempotency_key,
+        #             )
 
         except Exception as e:
             logger.exception(

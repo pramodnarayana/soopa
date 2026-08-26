@@ -105,19 +105,18 @@ class ApiReceiverService:
             )
 
             # 5. Drop Outbox event for Worker to transform
-            from edi.domain.events import PipelineEventType
 
-            await self.uow.data_plane_outbox.publish_outbox_event(
-                tenant_id=tenant_id,
-                event_type=PipelineEventType.TRANSFORM_EVENT,
-                payload={
-                    "trace_id": str(trace_id),
-                    "tenant_id": tenant_id,
-                    "trading_partner_id": trading_partner_id,
-                    "direction": "OUTBOUND",
-                },
-                idempotency_key=str(trace_id),
-            )
+            #             await self.uow.data_plane_outbox.publish_outbox_event(
+            #                 tenant_id=tenant_id,
+            #                 event_type=PipelineEventType.TRANSFORM_EVENT,
+            #                 payload={
+            #                     "trace_id": str(trace_id),
+            #                     "tenant_id": tenant_id,
+            #                     "trading_partner_id": trading_partner_id,
+            #                     "direction": "OUTBOUND",
+            #                 },
+            #                 idempotency_key=str(trace_id),
+            #             )
 
             await self.uow.commit()
             return trace_id

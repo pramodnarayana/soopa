@@ -5,7 +5,6 @@ from edi.application.dto import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
-from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models import (
     SFTPPartnerDomainModel,
 )
@@ -31,14 +30,14 @@ class SFTPPartnerService:
             tenant_id=tenant_id,
         )
         partner_id = await self.uow.sftp_partners.create_sftp_partner(tenant_id=tenant_id, cmd=cmd)
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            event=ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_sftp_partner_created,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
-        )
+        #         await self.uow.control_plane_outbox.publish_outbox_event(
+        #             event=ProvisioningEvent(
+        #                 tenant_id=tenant_id,
+        #                 event_type=EdiEventType.edi_sftp_partner_created,
+        #                 resource_id=str(partner_id),
+        #             ),
+        #             idempotency_key=idempotency_key,
+        #         )
 
         from datetime import datetime
 
@@ -91,14 +90,14 @@ class SFTPPartnerService:
             tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
         )
 
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            event=ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_sftp_partner_updated,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
-        )
+        #         await self.uow.control_plane_outbox.publish_outbox_event(
+        #             event=ProvisioningEvent(
+        #                 tenant_id=tenant_id,
+        #                 event_type=EdiEventType.edi_sftp_partner_updated,
+        #                 resource_id=str(partner_id),
+        #             ),
+        #             idempotency_key=idempotency_key,
+        #         )
         updated_partner = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
         if not updated_partner:
             raise ValueError(f"SFTP partner {partner_id} not found")
@@ -128,11 +127,13 @@ class SFTPPartnerService:
             tenant_id=tenant_id,
         )
         await self.uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_sftp_partner_deleted,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
-        )
+
+
+#         await self.uow.control_plane_outbox.publish_outbox_event(
+#             ProvisioningEvent(
+#                 tenant_id=tenant_id,
+#                 event_type=EdiEventType.edi_sftp_partner_deleted,
+#                 resource_id=str(partner_id),
+#             ),
+#             idempotency_key=idempotency_key,
+#         )

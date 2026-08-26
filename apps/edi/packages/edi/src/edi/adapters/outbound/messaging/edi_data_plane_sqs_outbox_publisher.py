@@ -1,77 +1,63 @@
 import json
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any
 
 import aioboto3
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from platform_orm.events import EventEnvelope
+from platform_orm.outbox_serializer import serialize_domain_event
 
-from edi.adapters.aws.aws_types import SQSClientProtocol
-from edi.ports.outbound.edi_data_plane_outbox_publisher_port import (
-    EdiDataPlaneOutboxPublisherPort,
-    PublishMessageEnvelope,
-)
+from edi.domain.events import PIPELINE_EVENT_ROUTING_MAP
 
 logger = structlog.get_logger(__name__)
 
-_RESERVED_EVENT_KEYS = frozenset({"event_type", "idempotency_key"})
 
-
-class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
+class EdiDataPlaneSqsOutboxPublisherAdapter(OutboxPublisherPort):
     def __init__(self, endpoint_url: str | None = None, region: str = "us-east-1"):
         self.endpoint_url = endpoint_url
         self.region = region
         self.session = aioboto3.Session()
         self._queue_url_cache: dict[str, str] = {}
-        self._sqs_client: SQSClientProtocol | None = None
+        self._sqs_client: Any = None
+        self._client_context: Any = None
 
-    @asynccontextmanager
-    async def connect(self) -> AsyncIterator["EdiDataPlaneOutboxPublisherPort"]:
-        async with self.session.client(
-            "sqs", endpoint_url=self.endpoint_url, region_name=self.region
-        ) as sqs:
-            self._sqs_client = sqs
-            try:
-                yield self
-            finally:
-                self._sqs_client = None
+    async def __aenter__(self) -> "EdiDataPlaneSqsOutboxPublisherAdapter":
+        """Allows using the publisher as a context manager for batch publishing."""
+        if not self._sqs_client:
+            self._client_context = self.session.client(
+                "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+            )
+            self._sqs_client = await self._client_context.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._client_context:
+            await self._client_context.__aexit__(exc_type, exc_val, exc_tb)
+            self._sqs_client = None
+            self._client_context = None
 
     async def _send_batch_chunk(
         self,
         queue_name: str,
         queue_url: str,
-        sqs: SQSClientProtocol,
-        batch: list[PublishMessageEnvelope],
+        sqs: Any,
+        events: list[EventEnvelope],
     ) -> list[str]:
         entries = []
-        for msg in batch:
-            reserved_keys = _RESERVED_EVENT_KEYS.intersection(msg.event)
-            if reserved_keys:
-                keys = ", ".join(sorted(reserved_keys))
-                raise ValueError(f"Event contains reserved envelope keys: {keys}")
+        entry_id_to_event_id = {}
 
-            body = {
-                **msg.event,
-                "event_type": msg.event_type,
-            }
-            if msg.idempotency_key:
-                body["idempotency_key"] = msg.idempotency_key
+        for idx, event in enumerate(events):
+            entry_id = str(idx)
+            entry_id_to_event_id[entry_id] = event.id
+            message = serialize_domain_event(event)
 
-            entry = {
-                "Id": msg.message_id,
-                "MessageBody": json.dumps(body),
+            entry: dict[str, Any] = {
+                "Id": entry_id,
+                "MessageBody": json.dumps(message),
             }
             if queue_name.endswith(".fifo"):
-                entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"
-                dedup_id = msg.idempotency_key or msg.message_id
-                if not dedup_id:
-                    logger.error(
-                        "invalid_fifo_message_skipped",
-                        reason="missing_dedup_id",
-                        message_id=msg.message_id,
-                    )
-                    continue
-                entry["MessageDeduplicationId"] = dedup_id
+                entry["MessageGroupId"] = event.tenant_id or "default"
+                entry["MessageDeduplicationId"] = event.idempotency_key or event.id
             entries.append(entry)
 
         if not entries:
@@ -81,53 +67,76 @@ class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
         try:
             resp = await sqs.send_message_batch(QueueUrl=queue_url, Entries=entries)
             for success in resp.get("Successful", []):
-                successful_ids.append(success["Id"])
+                successful_ids.append(entry_id_to_event_id[success["Id"]])
             for failed in resp.get("Failed", []):
                 logger.error(
                     "edi_data_plane_batch_forward_failed",
                     failedId=failed["Id"],
-                    failedMessage=failed["Message"],
+                    event_id=entry_id_to_event_id[failed["Id"]],
+                    failedMessage=failed.get("Message"),
                 )
         except Exception:
             logger.exception("edi_data_plane_batch_send_failed", queue_name=queue_name)
 
         return successful_ids
 
-    async def publish_batch(
-        self, queue_name: str, messages: list[PublishMessageEnvelope]
-    ) -> list[str]:
-        if not messages:
+    async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
+        if not events:
             return []
 
-        if self._sqs_client is None:
-            raise RuntimeError("publish_batch must be called within the connect() context manager")
-
-        sqs = self._sqs_client
         successful_ids = []
 
-        if queue_name not in self._queue_url_cache:
-            try:
-                resp = await sqs.get_queue_url(QueueName=queue_name)
-                self._queue_url_cache[queue_name] = resp["QueueUrl"]
-            except Exception:
-                logger.exception(
-                    "edi_data_plane_queue_url_resolution_failed", queue_name=queue_name
-                )
-                return []
+        async def _do_publish_batch(sqs: Any) -> None:
+            batches_by_queue: dict[str, list[EventEnvelope]] = {}
 
-        queue_url = self._queue_url_cache[queue_name]
+            for event in events:
+                queue_name = PIPELINE_EVENT_ROUTING_MAP.get(event.event_type)
+                if not queue_name:
+                    logger.warning(
+                        "data_plane_outbox.unknown_event_type_skipped",
+                        event_id=event.id,
+                        event_type=event.event_type,
+                    )
+                    continue
+                batches_by_queue.setdefault(queue_name, []).append(event)
 
-        # SQS allows max 10 messages per batch
-        for i in range(0, len(messages), 10):
-            batch = messages[i : i + 10]
-            successful_ids.extend(await self._send_batch_chunk(queue_name, queue_url, sqs, batch))
+            for queue_name, queue_events in batches_by_queue.items():
+                if queue_name not in self._queue_url_cache:
+                    try:
+                        resp = await sqs.get_queue_url(QueueName=queue_name)
+                        self._queue_url_cache[queue_name] = resp["QueueUrl"]
+                    except Exception:
+                        logger.exception(
+                            "edi_data_plane_queue_url_resolution_failed", queue_name=queue_name
+                        )
+                        continue
+
+                queue_url = self._queue_url_cache[queue_name]
+
+                # SQS allows max 10 messages per batch
+                for i in range(0, len(queue_events), 10):
+                    batch = queue_events[i : i + 10]
+                    successful_ids.extend(
+                        await self._send_batch_chunk(queue_name, queue_url, sqs, batch)
+                    )
+
+        if self._sqs_client:
+            await _do_publish_batch(self._sqs_client)
+        else:
+            async with self.session.client(
+                "sqs", endpoint_url=self.endpoint_url, region_name=self.region
+            ) as sqs:
+                await _do_publish_batch(sqs)
 
         return successful_ids
 
-    async def publish(self, queue_name: str, event: dict[str, Any]) -> None:
+    async def publish(self, event: EventEnvelope) -> None:
         """Publishes a single message, optionally reusing the active connection."""
+        queue_name = PIPELINE_EVENT_ROUTING_MAP.get(event.event_type)
+        if not queue_name:
+            raise ValueError(f"Unknown event_type: {event.event_type} - cannot resolve queue.")
 
-        async def _do_publish(sqs: SQSClientProtocol) -> None:
+        async def _do_publish(sqs: Any) -> None:
             if queue_name not in self._queue_url_cache:
                 try:
                     resp = await sqs.get_queue_url(QueueName=queue_name)
@@ -139,18 +148,16 @@ class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
                     raise
 
             queue_url = self._queue_url_cache[queue_name]
+            message = serialize_domain_event(event)
+
             try:
                 kwargs: dict[str, Any] = {
                     "QueueUrl": queue_url,
-                    "MessageBody": json.dumps(event),
+                    "MessageBody": json.dumps(message),
                 }
                 if queue_name.endswith(".fifo"):
-                    partition_key = event.get("partition_key")
-                    kwargs["MessageGroupId"] = partition_key if partition_key else "default"
-                    idempotency_key = event.get("idempotency_key") or event.get("id")
-                    if not idempotency_key:
-                        raise ValueError("Idempotency key or message ID required for FIFO queues")
-                    kwargs["MessageDeduplicationId"] = idempotency_key
+                    kwargs["MessageGroupId"] = event.tenant_id or "default"
+                    kwargs["MessageDeduplicationId"] = event.idempotency_key or event.id
 
                 await sqs.send_message(**kwargs)
             except Exception:

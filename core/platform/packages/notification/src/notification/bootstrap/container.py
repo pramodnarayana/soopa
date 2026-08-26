@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator
 
 import structlog
 from dependency_injector import containers, providers
-from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -202,8 +202,8 @@ class Container(containers.DeclarativeContainer):
         repository=user_preference_repository,
     )
 
-    sweep_outbox_use_case = providers.Factory(
-        SweepOutboxUseCase,
+    outbox_sweeper_use_case = providers.Factory(
+        OutboxSweeperUseCase,
         repository=outbox_repository,
         publisher=None,  # Will be overridden in worker container with AwsSnsPublisher
     )

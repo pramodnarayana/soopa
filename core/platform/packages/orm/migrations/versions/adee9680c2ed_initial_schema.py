@@ -1,8 +1,8 @@
-"""Initial schema
+"""initial_schema
 
-Revision ID: 881d2a62a41f
+Revision ID: adee9680c2ed
 Revises:
-Create Date: 2026-08-26 16:26:50.572578
+Create Date: 2026-08-26 19:28:36.665278
 
 """
 
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "881d2a62a41f"
+revision: str = "adee9680c2ed"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -213,29 +213,6 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name"),
-        schema="ucp",
-    )
-    op.create_table(
-        "idempotency_results",
-        sa.Column("tenant_id", sa.String(length=128), nullable=False),
-        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("response_status_code", sa.Integer(), nullable=True),
-        sa.Column("response_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("tenant_id", "idempotency_key"),
         schema="ucp",
     )
     op.create_table(
@@ -610,7 +587,6 @@ def downgrade() -> None:
         postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.drop_table("outbox", schema="ucp")
-    op.drop_table("idempotency_results", schema="ucp")
     op.drop_table("database_shards", schema="ucp")
     op.drop_table("apps", schema="ucp")
     op.drop_index("job_status_next_run_idx", table_name="scheduled_jobs", schema="scheduling")

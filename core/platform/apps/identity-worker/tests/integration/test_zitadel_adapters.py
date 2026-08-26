@@ -134,13 +134,13 @@ async def test_remove_tenant_role_paginated(mock_httpx_request):
     assert mock_httpx_request.call_count == 3
 
     # Assert pagination calls
-    _call_1_args, call_1_kwargs = mock_httpx_request.mock_calls[0]
-    assert call_1_kwargs["json"]["query"]["offset"] == 0
+    call_1 = mock_httpx_request.mock_calls[0]
+    assert call_1.kwargs["json"]["query"]["offset"] == 0
 
-    _call_2_args, call_2_kwargs = mock_httpx_request.mock_calls[1]
-    assert call_2_kwargs["json"]["query"]["offset"] == 1
+    call_2 = mock_httpx_request.mock_calls[1]
+    assert call_2.kwargs["json"]["query"]["offset"] == 1
 
     # Assert delete call
-    call_3_args, _ = mock_httpx_request.mock_calls[2]
-    assert call_3_args[0] == "DELETE"
-    assert "management/v1/users/user-1/grants/g2" in call_3_args[1]
+    call_3 = mock_httpx_request.mock_calls[2]
+    assert call_3.args[0] == "DELETE"
+    assert "management/v1/users/user-1/grants/g2" in call_3.args[1]

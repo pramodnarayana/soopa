@@ -5,24 +5,20 @@ from dotenv import load_dotenv
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.config.settings import get_settings
 from edi.domain.events import MessageQueueName
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from config_sync_worker.adapters.edi_control_plane_outbox_relay import EdiControlPlaneOutboxRelay
-from config_sync_worker.adapters.edi_control_plane_sns_outbox_publisher import (
-    EdiControlPlaneOutboxSnsPublisher,
-)
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
     EdiConfigSyncSqsConsumer,
 )
-from config_sync_worker.adapters.postgres_outbox_relay_repository import (
-    PostgresOutboxRelayRepository,
+from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
+    PostgresEdiControlPlaneOutboxRepository,
 )
 from config_sync_worker.domain.service import ProvisioningWorkerService
-from config_sync_worker.provision.edi_control_plane_outbox_processor_use_case import (
-    EdiControlPlaneOutboxProcessorUseCase,
-)
 
 load_dotenv()
 
@@ -80,20 +76,22 @@ async def main() -> None:
     )
 
     # Instantiate Adapters for Outbox Relay
-    outbox_relay_repository = PostgresOutboxRelayRepository(db_router=db_router)
-    outbox_relay_publisher = EdiControlPlaneOutboxSnsPublisher(
+    outbox_relay_repository = PostgresEdiControlPlaneOutboxRepository(db_router=db_router)
+    outbox_relay_publisher = AwsSnsPublisher(
         topic_arn=settings.aws.sns_topic_arn,
         endpoint_url=settings.aws.endpoint_url,
-        region=settings.aws.default_region,
+        region_name=settings.aws.default_region,
     )
 
     # 2. Outbox Processor & Postgres Listener (Control Plane)
     logger.info("initializing_outbox_processor_and_listener")
-    outbox_processor = EdiControlPlaneOutboxProcessorUseCase(
+    outbox_processor = OutboxProcessorUseCase(
         repository=outbox_relay_repository,
         publisher=outbox_relay_publisher,
+        worker_id="edi-control-plane-worker",
     )
-    outbox_listener = EdiControlPlaneOutboxRelay(
+    outbox_listener = PostgresOutboxRelay(
+        listen_channel="edi_outbox_channel",
         processor=outbox_processor,
         database_url=settings.database.global_url,
     )
@@ -113,7 +111,6 @@ async def main() -> None:
 
         # Close adapter resources
         await sqs_outbox.close()
-        await outbox_relay_repository.close()
 
 
 if __name__ == "__main__":

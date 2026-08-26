@@ -4,7 +4,6 @@ import uuid
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from platform_orm.events import EventEnvelope
 
 logger = structlog.get_logger(__name__)
 
@@ -53,16 +52,27 @@ class OutboxProcessorUseCase:
 
         logger.debug("outbox_relay_events_claimed", worker_id=self.worker_id, count=len(events))
 
-        tasks = [self.process_event(event) for event in events]
+        try:
+            successful_ids = await self.publisher.publish_batch(events)
+        except Exception as e:
+            logger.exception("outbox_event_batch_publish_failed", error=str(e))
+            successful_ids = []
+
+        tasks = []
+        for event in events:
+            if event.id in successful_ids:
+                logger.debug(
+                    "outbox_event_published", event_id=event.id, event_type=event.event_type
+                )
+                tasks.append(self.repository.mark_completed(event.id, self.worker_id))
+            else:
+                logger.error("outbox_event_processing_failed", event_id=event.id)
+                tasks.append(
+                    self.repository.mark_failed(
+                        event.id, self.worker_id, "Failed to publish in batch"
+                    )
+                )
+
         await asyncio.gather(*tasks, return_exceptions=True)
 
         return len(events) >= self.max_concurrent_events
-
-    async def process_event(self, event: EventEnvelope) -> None:
-        try:
-            await self.publisher.publish(event)
-            await self.repository.mark_completed(event.id, self.worker_id)
-            logger.debug("outbox_event_published", event_id=event.id, event_type=event.event_type)
-        except Exception as e:
-            logger.exception("outbox_event_processing_failed", event_id=event.id)
-            await self.repository.mark_failed(event.id, self.worker_id, str(e))

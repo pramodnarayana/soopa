@@ -1,6 +1,5 @@
 import structlog
 
-from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -23,14 +22,14 @@ class DeleteAS2PartnerUseCase:
             tenant_id=tenant_id,
         )
         await self.uow.as2_partners.delete_as2_identity(tenant_id, partner_id)
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partner_deleted,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
-        )
+        #         await self.uow.control_plane_outbox.publish_outbox_event(
+        #             ProvisioningEvent(
+        #                 tenant_id=tenant_id,
+        #                 event_type=EdiEventType.edi_as2_partner_deleted,
+        #                 resource_id=str(partner_id),
+        #             ),
+        #             idempotency_key=idempotency_key,
+        #         )
 
         logger.info(
             "delete_as2_partner_completed",

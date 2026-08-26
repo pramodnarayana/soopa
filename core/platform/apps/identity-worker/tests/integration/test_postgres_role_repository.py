@@ -29,8 +29,8 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
             "slug": "test-tenant",
             "idp_tenant_id": "test_123",
             "status": "active",
-            "created_at": datetime.datetime.now(datetime.UTC),
-            "updated_at": datetime.datetime.now(datetime.UTC),
+            "created_at": datetime.datetime.now().replace(tzinfo=None),
+            "updated_at": datetime.datetime.now().replace(tzinfo=None),
         }
         await db_session.execute(insert(OrmTenant).values([dummy_tenant]))
 

@@ -29,17 +29,16 @@ class TransactionService:
             raise TransactionNotFoundError(trace_id=trace_id)
 
         # Publish Outbox event for the Orchestrator Worker
-        import uuid
 
-        await self.uow.data_plane_outbox.publish_outbox_event(
-            tenant_id=tenant_id,
-            event_type="edi.transaction.replay_requested",
-            payload={
-                "trace_id": trace_id,
-                "tier": tier,
-            },
-            idempotency_key=f"replay_{trace_id}_{uuid.uuid4().hex}",
-        )
+    #         await self.uow.data_plane_outbox.publish_outbox_event(
+    #             tenant_id=tenant_id,
+    #             event_type="edi.transaction.replay_requested",
+    #             payload={
+    #                 "trace_id": trace_id,
+    #                 "tier": tier,
+    #             },
+    #             idempotency_key=f"replay_{trace_id}_{uuid.uuid4().hex}",
+    #         )
 
     async def bulk_replay_transactions(
         self, tenant_id: str, trace_ids: list[str], tier: str, command_key: str | None = None
@@ -86,9 +85,9 @@ class TransactionService:
             )
 
         # 3. Bulk Insert Outbox Events
-        await self.uow.data_plane_outbox.publish_outbox_events_bulk(
-            tenant_id=tenant_id, events=events
-        )
+        #         await self.uow.data_plane_outbox.publish_outbox_events_bulk(
+        #             tenant_id=tenant_id, events=events
+        #         )
 
         return len(unique_trace_ids)
 

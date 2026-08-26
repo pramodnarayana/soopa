@@ -83,3 +83,65 @@ class AwsSnsPublisher(OutboxPublisherPort):
 
         await sns_client.publish(**publish_params)
         logger.debug("sns_event_published", event_type=event.event_type, topic_arn=self.topic_arn)
+
+    async def _publish_batch_internal(
+        self, sns_client: Any, events: list[EventEnvelope], is_fifo: bool
+    ) -> list[str]:
+        successful_ids = []
+        for i in range(0, len(events), 10):
+            chunk = events[i : i + 10]
+            entries = []
+            entry_id_to_event_id = {}
+
+            for idx, event in enumerate(chunk):
+                entry_id = str(idx)
+                entry_id_to_event_id[entry_id] = event.id
+                message = serialize_domain_event(event)
+
+                entry: dict[str, Any] = {
+                    "Id": entry_id,
+                    "Message": json.dumps(message),
+                }
+                if is_fifo:
+                    entry["MessageGroupId"] = event.tenant_id or "default"
+                    entry["MessageDeduplicationId"] = event.idempotency_key or event.id
+
+                entries.append(entry)
+
+            try:
+                resp = await sns_client.publish_batch(
+                    TopicArn=self.topic_arn, PublishBatchRequestEntries=entries
+                )
+                for success in resp.get("Successful", []):
+                    successful_ids.append(entry_id_to_event_id[success["Id"]])
+                for failed in resp.get("Failed", []):
+                    logger.error(
+                        "sns_batch_publish_entry_failed",
+                        event_id=entry_id_to_event_id[failed["Id"]],
+                        code=failed.get("Code"),
+                        message=failed.get("Message"),
+                    )
+            except Exception:
+                logger.exception("sns_batch_publish_chunk_failed", topic_arn=self.topic_arn)
+        return successful_ids
+
+    async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
+        if not self.topic_arn:
+            raise ValueError("sns_topic_arn_not_configured")
+        if not events:
+            return []
+
+        is_fifo = self.topic_arn.endswith(".fifo")
+        try:
+            if self._client:
+                return await self._publish_batch_internal(self._client, events, is_fifo)
+
+            async with self.session.client(
+                "sns",
+                region_name=self.region_name,
+                endpoint_url=self.endpoint_url,
+            ) as sns_client:
+                return await self._publish_batch_internal(sns_client, events, is_fifo)
+        except Exception:
+            logger.exception("sns_publish_batch_failed", topic_arn=self.topic_arn)
+            return []

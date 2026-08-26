@@ -1,10 +1,8 @@
 import datetime
 
 import structlog
+from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
 
-from edi_background_worker.application.use_cases.edi_data_plane_outbox_cleanup_use_case import (
-    EdiDataPlaneOutboxCleanupUseCase,
-)
 from edi_background_worker.domain.scheduler.handler import JobHandlerPort
 from edi_background_worker.domain.scheduler.models import Job
 
@@ -12,7 +10,7 @@ logger = structlog.get_logger(__name__)
 
 
 class EdiDataPlaneOutboxCleanupJobHandler(JobHandlerPort):
-    def __init__(self, use_case: EdiDataPlaneOutboxCleanupUseCase) -> None:
+    def __init__(self, use_case: OutboxCleanupUseCase) -> None:
         self.use_case = use_case
 
     async def execute(self, job: Job) -> datetime.datetime | None:

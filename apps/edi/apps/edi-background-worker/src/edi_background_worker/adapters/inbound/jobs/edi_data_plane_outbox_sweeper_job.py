@@ -1,10 +1,10 @@
 import datetime
 
 import structlog
-
-from edi_background_worker.application.use_cases.edi_data_plane_outbox_sweeper_use_case import (
-    EdiDataPlaneOutboxSweeperUseCase,
+from outbox.application.outbox_sweeper_use_case import (
+    OutboxSweeperUseCase,
 )
+
 from edi_background_worker.domain.scheduler.handler import JobHandlerPort
 from edi_background_worker.domain.scheduler.models import Job
 
@@ -12,7 +12,7 @@ logger = structlog.get_logger(__name__)
 
 
 class EdiDataPlaneOutboxSweeperJobHandler(JobHandlerPort):
-    def __init__(self, use_case: EdiDataPlaneOutboxSweeperUseCase) -> None:
+    def __init__(self, use_case: OutboxSweeperUseCase) -> None:
         self.use_case = use_case
 
     async def execute(self, job: Job) -> datetime.datetime | None:

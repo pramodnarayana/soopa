@@ -1,10 +1,11 @@
 import asyncio
 import datetime
+from typing import Any, cast
 
 import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import AuditLog
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi_background_worker.ports.outbound.edi_audit_log_cleanup_repository_port import (
@@ -39,9 +40,6 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
                                     .limit(5000)
                                 )
                             )
-                            from typing import Any, cast
-
-                            from sqlalchemy import CursorResult
 
                             res_audit = cast(CursorResult[Any], await session.execute(stmt_audit))
                             deleted = res_audit.rowcount

@@ -7,7 +7,7 @@ import structlog
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
@@ -77,7 +77,7 @@ class WorkerContainer:
         idemp_cleanup_repo = SqlAlchemyUcpIdempotencyCleanupRepository(self.session_factory)
         audit_cleanup_repo = SqlAlchemyUcpAuditLogCleanupRepository(self.session_factory)
 
-        sweeper_use_case = SweepOutboxUseCase(outbox_repo, outbox_pub)
+        sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
 
         outbox_cleanup_use_case = OutboxCleanupUseCase(outbox_cleanup_repo)
         idemp_cleanup_use_case = UcpIdempotencyCleanupUseCase(idemp_cleanup_repo)

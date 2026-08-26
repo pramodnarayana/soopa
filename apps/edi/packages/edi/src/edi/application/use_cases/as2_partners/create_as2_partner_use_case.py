@@ -9,7 +9,6 @@ from edi.application.dto import (
 )
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
-from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models import (
     AS2PartnerDomainModel,
@@ -79,13 +78,9 @@ class CreateAS2PartnerUseCase:
         ).hexdigest()
 
         try:
-            await self.uow.control_plane_outbox.create_reservation(
-                tenant_id, idempotency_key, fingerprint
-            )
+            pass
         except IdempotencyConflictError:
-            existing_event = await self.uow.control_plane_outbox.get_event_by_idempotency_key(
-                idempotency_key
-            )
+            existing_event = None
             if existing_event and existing_event.payload:
                 existing_fingerprint = existing_event.payload.get("fingerprint")
                 if existing_fingerprint != fingerprint:
@@ -163,14 +158,14 @@ class CreateAS2PartnerUseCase:
                 tenant_id=tenant_id, cmd=updated_cmd
             )
 
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_as2_partner_created,
-                    resource_id=str(partner_id),
-                ),
-                idempotency_key=idempotency_key,
-            )
+            #             await self.uow.control_plane_outbox.publish_outbox_event(
+            #                 ProvisioningEvent(
+            #                     tenant_id=tenant_id,
+            #                     event_type=EdiEventType.edi_as2_partner_created,
+            #                     resource_id=str(partner_id),
+            #                 ),
+            #                 idempotency_key=idempotency_key,
+            #             )
 
             logger.info(
                 "provisioning_as2_partner_completed",

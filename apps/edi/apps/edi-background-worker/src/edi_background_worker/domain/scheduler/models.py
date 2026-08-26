@@ -13,7 +13,7 @@ class JobStatus(StrEnum):
     PAUSED = "PAUSED"
 
 
-class JobName(StrEnum):
+class OldJobName(StrEnum):
     EDI_ORCHESTRATOR_OUTBOX_SWEEPER = "edi_orchestrator_outbox_sweeper"
     EDI_PROVISIONING_OUTBOX_SWEEPER = "edi_provisioning_outbox_sweeper"
     DATA_RETENTION_CLEANUP = "data_retention_cleanup"

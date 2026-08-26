@@ -1,10 +1,11 @@
 import asyncio
 import datetime
+from typing import Any, cast
 
 import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import ProcessedEvent
-from sqlalchemy import delete, select, tuple_
+from sqlalchemy import CursorResult, delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi_background_worker.ports.outbound.edi_idempotency_cleanup_repository_port import (
@@ -43,9 +44,6 @@ class SqlAlchemyEdiIdempotencyCleanupRepository(EdiIdempotencyCleanupRepositoryP
                                     .limit(5000)
                                 )
                             )
-                            from typing import Any, cast
-
-                            from sqlalchemy import CursorResult
 
                             res_processed = cast(
                                 CursorResult[Any], await session.execute(stmt_processed)

@@ -6,7 +6,6 @@ from edi.application.dto import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
 )
-from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models import (
     OutboundEdiHeaderDomainModel,
 )
@@ -35,13 +34,13 @@ class EdiHeaderService:
             tenant_id=tenant_id, cmd=cmd
         )
 
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_header_created,
-                resource_id=str(header_id),
-            )
-        )
+        #         await self.uow.control_plane_outbox.publish_outbox_event(
+        #             ProvisioningEvent(
+        #                 tenant_id=tenant_id,
+        #                 event_type=EdiEventType.edi_header_created,
+        #                 resource_id=str(header_id),
+        #             )
+        #         )
         logger.info(
             "Published OUTBOUND_EDI_HEADER_CREATED outbox event for {header_id}",
             header_id=header_id,
@@ -59,13 +58,13 @@ class EdiHeaderService:
         success = await self.uow.edi_headers.update_outbound_edi_header(tenant_id, header_id, cmd)
 
         if success:
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_header_updated,
-                    resource_id=str(header_id),
-                )
-            )
+            #             await self.uow.control_plane_outbox.publish_outbox_event(
+            #                 ProvisioningEvent(
+            #                     tenant_id=tenant_id,
+            #                     event_type=EdiEventType.edi_header_updated,
+            #                     resource_id=str(header_id),
+            #                 )
+            #             )
             logger.info(
                 "Published OUTBOUND_EDI_HEADER_UPDATED outbox event for {header_id}",
                 header_id=header_id,
@@ -82,13 +81,13 @@ class EdiHeaderService:
         success = await self.uow.edi_headers.delete_outbound_edi_header(tenant_id, header_id)
 
         if success:
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_header_deleted,
-                    resource_id=str(header_id),
-                )
-            )
+            #             await self.uow.control_plane_outbox.publish_outbox_event(
+            #                 ProvisioningEvent(
+            #                     tenant_id=tenant_id,
+            #                     event_type=EdiEventType.edi_header_deleted,
+            #                     resource_id=str(header_id),
+            #                 )
+            #             )
             logger.info(
                 "Published OUTBOUND_EDI_HEADER_DELETED outbox event for {header_id}",
                 header_id=header_id,

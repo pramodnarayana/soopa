@@ -4,8 +4,6 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from identity_worker.adapters.inbound.workers import identity_outbox_relay
-from identity_worker.adapters.inbound.workers.identity_outbox_relay import IdentityOutboxRelay
 from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
     DummyIdentityProviderPort,
 )
@@ -25,60 +23,8 @@ from identity_worker.domain.exceptions import IdentityProviderPortError
 from platform_orm.models.identity import Tenant as DbTenant
 from platform_orm.models.identity import User as DbUser
 from pydantic import ValidationError
-from sqlalchemy.engine import make_url
 
 pytestmark = pytest.mark.asyncio
-
-
-async def test_outbox_relay_filters_asyncpg_dsn_query_parameters(monkeypatch):
-    connection = AsyncMock()
-    captured_url = None
-
-    async def connect(url: str) -> AsyncMock:
-        nonlocal captured_url
-        captured_url = url
-        return connection
-
-    monkeypatch.setattr(identity_outbox_relay.asyncpg, "connect", connect)
-    relay = IdentityOutboxRelay(
-        processor=Mock(),
-        database_url=(
-            "postgresql+asyncpg://user:password@localhost/database"
-            "?ssl=require&prepared_statement_cache_size=0&pgbouncer=true"
-        ),
-    )
-
-    await relay._setup_listener()
-
-    assert captured_url is not None
-    query = make_url(captured_url).query
-    assert query == {"sslmode": "require"}
-    connection.add_listener.assert_awaited_once()
-
-
-async def test_outbox_relay_stops_task_before_closing_connection():
-    order = []
-    processor = Mock()
-    connection = AsyncMock()
-    connection.remove_listener.side_effect = lambda *_args: order.append("remove_listener")
-    connection.close.side_effect = lambda: order.append("close")
-    relay = IdentityOutboxRelay(processor=processor, database_url="postgresql://localhost/db")
-    relay._connection = connection
-
-    async def running_task() -> None:
-        try:
-            await asyncio.Event().wait()
-        finally:
-            order.append("task_cancelled")
-
-    relay._task = asyncio.create_task(running_task())
-    await asyncio.sleep(0)
-
-    await relay.stop()
-    await relay.stop()
-
-    assert relay._task is None
-    assert order[:3] == ["task_cancelled", "remove_listener", "close"]
 
 
 async def test_dummy_identity_provider_returns_unique_user_ids():

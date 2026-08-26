@@ -1,7 +1,7 @@
 import datetime
 
 import structlog
-from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 
 from ucp_worker.core.scheduler.handler import JobHandlerPort
 from ucp_worker.core.scheduler.models import Job
@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 
 
 class UcpOutboxSweeperJobHandler(JobHandlerPort):
-    def __init__(self, use_case: SweepOutboxUseCase) -> None:
+    def __init__(self, use_case: OutboxSweeperUseCase) -> None:
         self.use_case = use_case
 
     async def execute(self, job: Job) -> datetime.datetime | None:

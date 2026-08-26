@@ -1,23 +1,21 @@
 import asyncio
 import datetime
+from typing import Any, cast
 
 import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
-from sqlalchemy import delete, select
-
-from edi_background_worker.ports.outbound.edi_control_plane_outbox_cleanup_repository_port import (
-    EdiControlPlaneOutboxCleanupRepositoryPort,
-)
+from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
+from sqlalchemy import CursorResult, delete, select
 
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(EdiControlPlaneOutboxCleanupRepositoryPort):
+class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort):
     def __init__(self, db_router: DatabaseRouter) -> None:
         self.db_router = db_router
 
-    async def cleanup_control_plane_outbox(self, retention_days: int) -> int:
+    async def cleanup_outbox(self, retention_days: int) -> int:
         cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
         outbox_deleted = 0
         async for session in self.db_router.get_global_session():
@@ -32,10 +30,6 @@ class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(EdiControlPlaneOutboxClea
                         .limit(5000)
                     )
                 )
-                from typing import Any, cast
-
-                from sqlalchemy import CursorResult
-
                 res = cast(CursorResult[Any], await session.execute(stmt))
                 deleted = res.rowcount
                 outbox_deleted += deleted

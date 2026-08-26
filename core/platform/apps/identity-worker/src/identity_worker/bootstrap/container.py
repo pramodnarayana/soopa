@@ -13,7 +13,7 @@ from identity.adapters.outbound.database.postgres_identity_outbox_repository imp
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -130,7 +130,7 @@ class WorkerContainer:
         outbox_pub: AwsSnsPublisher,
     ) -> None:
         outbox_cleanup_repo = SqlAlchemyIdentityOutboxCleanupRepository(self.session_factory)
-        sweeper_use_case = SweepOutboxUseCase(outbox_repo, outbox_pub)
+        sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
         outbox_cleanup_use_case = OutboxCleanupUseCase(outbox_cleanup_repo)
         self.sweeper_job_handler = IdentityOutboxSweeperJobHandler(sweeper_use_case)
         self.cleanup_job_handler = IdentityOutboxCleanupJobHandler(outbox_cleanup_use_case)

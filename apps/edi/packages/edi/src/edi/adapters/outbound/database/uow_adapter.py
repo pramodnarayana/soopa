@@ -13,10 +13,6 @@ from edi.adapters.outbound.database.inbound_route_repository import SqlAlchemyIn
 from edi.adapters.outbound.database.outbound_route_repository import (
     SqlAlchemyOutboundRouteRepository,
 )
-from edi.adapters.outbound.database.outbox_repository import (
-    SqlAlchemyControlPlaneOutboxRepository,
-    SqlAlchemyDataPlaneOutboxRepository,
-)
 from edi.adapters.outbound.database.platform_settings_repository import (
     SqlAlchemyPlatformSettingsRepository,
 )
@@ -28,10 +24,6 @@ from edi.ports.outbound.as2_partnership_repository import AS2PartnershipReposito
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
-from edi.ports.outbound.outbox_repository import (
-    ControlPlaneOutboxRepositoryPort,
-    DataPlaneOutboxRepositoryPort,
-)
 from edi.ports.outbound.platform_settings_repository import PlatformSettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
@@ -48,7 +40,6 @@ class SqlAlchemyControlPlaneUnitOfWork:
     as2_partnerships: AS2PartnershipRepositoryPort
     inbound_routes: InboundRouteRepositoryPort
     outbound_routes: OutboundRouteRepositoryPort
-    control_plane_outbox: ControlPlaneOutboxRepositoryPort
     sftp_partners: SFTPPartnerRepositoryPort
     tenants: TenantRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
@@ -66,7 +57,6 @@ class SqlAlchemyControlPlaneUnitOfWork:
         self.as2_partnerships = SqlAlchemyAS2PartnershipRepository(gs)
         self.inbound_routes = SqlAlchemyInboundRouteRepository(gs)
         self.outbound_routes = SqlAlchemyOutboundRouteRepository(gs)
-        self.control_plane_outbox = SqlAlchemyControlPlaneOutboxRepository(gs)
         self.sftp_partners = SqlAlchemySFTPPartnerRepository(gs)
         self.tenants = SqlAlchemyTenantRepository(gs)
         self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
@@ -105,7 +95,6 @@ class SqlAlchemyDataPlaneUnitOfWork:
     """
 
     transactions: TransactionRepositoryPort
-    data_plane_outbox: DataPlaneOutboxRepositoryPort
 
     def __init__(self, tenant_session: AsyncSession) -> None:
         self.tenant_session = tenant_session
@@ -116,7 +105,6 @@ class SqlAlchemyDataPlaneUnitOfWork:
         ts = cast(TenantSession, tenant_session)
 
         self.transactions = SqlAlchemyTransactionRepository(ts)
-        self.data_plane_outbox = SqlAlchemyDataPlaneOutboxRepository(ts)
 
     async def __aenter__(self) -> Self:
         return self
