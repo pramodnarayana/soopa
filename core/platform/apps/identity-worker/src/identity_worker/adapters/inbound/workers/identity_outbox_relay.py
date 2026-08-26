@@ -95,9 +95,7 @@ class IdentityOutboxRelay:
             if "ssl" in query and "sslmode" not in query:
                 query["sslmode"] = query.pop("ssl")
             query = {
-                key: value
-                for key, value in query.items()
-                if key in _ASYNCPG_DSN_QUERY_PARAMETERS
+                key: value for key, value in query.items() if key in _ASYNCPG_DSN_QUERY_PARAMETERS
             }
             url = url.set(query=query)
             asyncpg_url = url.render_as_string(hide_password=False)

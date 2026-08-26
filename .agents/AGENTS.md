@@ -58,6 +58,11 @@ The following paradigms define the entire system structure. Any new design or mo
     - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.
     - **Strict File Taxonomy Consistency**: Different Bounded Contexts must not drift in their internal folder/file naming taxonomies for identical architectural concepts. If one context uses `database/models/events.py`, another context must use `database/models/events.py` for its events, rather than arbitrary structures. Call out any file path taxonomy drift across domains as a CRITICAL violation.
 
+# Centralized Infrastructure Packages (No Duplicate Infrastructure)
+- NEVER duplicate generic infrastructure patterns (such as Outbox engines, SQS Polling loops, or SNS Publishers) across multiple bounded contexts.
+- Any infrastructure pattern that is agnostic to the domain MUST be extracted into a centralized platform package (e.g., `core/platform/packages/outbox` or `core/platform/packages/pubsub`).
+- Bounded contexts should depend on these generic packages via abstract Ports, keeping the domain completely decoupled from the transport mechanisms.
+
 # Strict Boundary DTOs / Command Objects
 - **Strict DTO Standard**: Every bounded context MUST define a pure `application/dto.py` file to hold its Request/Command/Query objects (as `@dataclass(frozen=True)`).
 - **No Infrastructure Leaks**: NEVER pass web-specific framework models (e.g., FastAPI/Pydantic `BaseModel`) or ORM models directly into the Application Layer (Use Cases/Services).

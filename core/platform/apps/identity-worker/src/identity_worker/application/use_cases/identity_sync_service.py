@@ -41,7 +41,8 @@ class IdentitySyncService:
         self,
         identity_provider: IdentityProviderPort,
         user_identity_provider: UserIdentityProviderPort,
-        session_factory: typing.Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]] | None = None,
+        session_factory: typing.Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]]
+        | None = None,
     ):
         self.identity_provider = identity_provider
         self.user_identity_provider = user_identity_provider

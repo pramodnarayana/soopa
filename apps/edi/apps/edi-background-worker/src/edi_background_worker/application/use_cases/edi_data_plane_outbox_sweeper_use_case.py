@@ -5,15 +5,14 @@ import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.domain.events import PIPELINE_EVENT_ROUTING_MAP
-from worker.application.use_cases.edi_data_plane_outbox_processor_use_case import (
-    EdiDataPlaneOutboxProcessorUseCase,
-)
 from edi.ports.outbound.edi_data_plane_outbox_publisher_port import (
     EdiDataPlaneOutboxPublisherPort,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.infrastructure import DatabaseShard
+from worker.application.use_cases.edi_data_plane_outbox_processor_use_case import (
+    EdiDataPlaneOutboxProcessorUseCase,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -41,9 +40,7 @@ class EdiDataPlaneOutboxSweeperUseCase:
         sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
 
         async with self.message_publisher.connect():
-            async for global_session in self.db_router.get_global_session():
-                res = await global_session.execute(select(DatabaseShard))
-                shards = res.scalars().all()
+            shards = await self.db_router.get_all_shards()
 
             async def _bounded_sweep(shard_name: str, shard_dsn: str) -> int:
                 async with sem:
@@ -55,7 +52,7 @@ class EdiDataPlaneOutboxSweeperUseCase:
 
             results: list[int] = list(
                 await asyncio.gather(
-                    *[_bounded_sweep(shard.name, shard.dsn) for shard in shards]
+                    *[_bounded_sweep(shard_name, shard_dsn) for shard_name, shard_dsn in shards]
                 )
             )
             total_processed += sum(results)

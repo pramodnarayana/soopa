@@ -118,3 +118,25 @@ class DatabaseRouter:
             await engine.dispose()
             logger.info("Closed connection pool for {key}", key=key)
         self._engines.clear()
+
+    async def get_all_shards(self) -> list[tuple[str, str]]:
+        """
+        Retrieves all registered database shards.
+        Falls back to the configured default_shard_url if no shards are registered
+        in the Global Control Plane.
+        """
+        from sqlalchemy import select
+        from ucp_models.infrastructure import DatabaseShard
+
+        from edi.config.settings import get_settings
+
+        async for session in self.get_global_session():
+            res = await session.execute(select(DatabaseShard))
+            shards = res.scalars().all()
+            if not shards:
+                default_url = get_settings().database.default_shard_url
+                if default_url:
+                    logger.info("no_database_shards_found_using_default_shard_url")
+                    return [("shard_1", default_url)]
+            return [(str(shard.name), str(shard.dsn)) for shard in shards]
+        return []

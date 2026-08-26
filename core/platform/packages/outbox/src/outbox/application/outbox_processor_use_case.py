@@ -2,15 +2,14 @@ import asyncio
 import uuid
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from platform_orm.events import EventEnvelope
-
-from ucp.ports.outbound.outbox_publisher_port import OutboxPublisherPort
-from ucp.ports.outbound.outbox_repository_port import OutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
-class UcpOutboxProcessorUseCase:
+class OutboxProcessorUseCase:
     """
     Application Service responsible for claiming outbox events and publishing them.
     Agnostic to how it is triggered (e.g. Postgres LISTEN/NOTIFY, polling, etc).
@@ -33,7 +32,7 @@ class UcpOutboxProcessorUseCase:
 
     def stop(self) -> None:
         self.is_running = False
-        logger.info("ucp_outbox_processor_stopped", worker_id=self.worker_id)
+        logger.info("outbox_processor_stopped", worker_id=self.worker_id)
 
     async def process_pending(self) -> bool:
         """
@@ -52,7 +51,7 @@ class UcpOutboxProcessorUseCase:
         if not events:
             return False
 
-        logger.debug("ucp_relay_events_claimed", worker_id=self.worker_id, count=len(events))
+        logger.debug("outbox_relay_events_claimed", worker_id=self.worker_id, count=len(events))
 
         tasks = [self.process_event(event) for event in events]
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -63,9 +62,7 @@ class UcpOutboxProcessorUseCase:
         try:
             await self.publisher.publish(event)
             await self.repository.mark_completed(event.id, self.worker_id)
-            logger.debug(
-                "ucp_outbox_event_published", event_id=event.id, event_type=event.event_type
-            )
+            logger.debug("outbox_event_published", event_id=event.id, event_type=event.event_type)
         except Exception as e:
-            logger.exception("ucp_outbox_event_processing_failed", event_id=event.id)
+            logger.exception("outbox_event_processing_failed", event_id=event.id)
             await self.repository.mark_failed(event.id, self.worker_id, str(e))

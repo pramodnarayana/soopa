@@ -160,6 +160,7 @@ def localstack_container(request) -> "Any":
         "endpoint_url": endpoint_url,
         "sns_topic_arn": tenant_topic["TopicArn"],
         "sqs_queue_url": queue["QueueUrl"],
+        "sqs_queue_name": "ucp-identity-sync.fifo",
     }
 
 

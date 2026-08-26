@@ -43,9 +43,16 @@ class EdiDataPlaneSqsOutboxPublisherAdapter(EdiDataPlaneOutboxPublisherPort):
     ) -> list[str]:
         entries = []
         for msg in batch:
+            body = {
+                **msg.event,
+                "event_type": msg.event_type,
+            }
+            if msg.idempotency_key:
+                body["idempotency_key"] = msg.idempotency_key
+
             entry = {
                 "Id": msg.message_id,
-                "MessageBody": json.dumps(msg.event),
+                "MessageBody": json.dumps(body),
             }
             if queue_name.endswith(".fifo"):
                 entry["MessageGroupId"] = msg.partition_key if msg.partition_key else "default"

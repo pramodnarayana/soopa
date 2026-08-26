@@ -7,37 +7,37 @@ import aioboto3
 import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
-from ucp.ports.outbound.ucp_event_listener_port import UcpEventListenerPort, UcpEventMessage
-
 logger = structlog.get_logger(__name__)
 
 
-class SqsUcpEventListener(UcpEventListenerPort):
+class AwsSqsConsumer:
     """
-    AWS SQS Adapter for consuming UCP events from a queue.
+    Generic AWS SQS Adapter for long-polling messages from a queue.
+    Handles aioboto3 session pooling, SNS envelope unwrapping, and batch deletion.
     """
 
     def __init__(
         self,
-        queue_url: str,
+        queue_name: str,
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
     ):
-        if not queue_url:
+        if not queue_name:
             logger.error(
-                "sqs_listener_missing_queue_url",
-                message="SQS Listener started without a Queue URL! Please set SQS_UCP_IDENTITY_SYNC_QUEUE_URL in your .env",
+                "sqs_listener_missing_queue_name",
+                message="SQS Listener started without a Queue Name!",
             )
-            raise ValueError("SQS Queue URL must be provided to SqsUcpEventListener")
+            raise ValueError("SQS Queue Name must be provided")
 
-        self.queue_url = queue_url
+        self.queue_name = queue_name
+        self._queue_url: str | None = None
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
         self._client: Any = None
         self._client_context: Any = None
 
-    async def __aenter__(self) -> "SqsUcpEventListener":
+    async def __aenter__(self) -> "AwsSqsConsumer":
         """Allows using the listener as a context manager for continuous polling with connection reuse."""
         if not self._client:
             self._client_context = self.session.client(
@@ -55,12 +55,10 @@ class SqsUcpEventListener(UcpEventListenerPort):
             self._client_context = None
 
     @asynccontextmanager
-    async def process_next_event(self) -> AsyncGenerator[UcpEventMessage | None, None]:
-
+    async def poll_raw_message(self) -> AsyncGenerator[dict[str, Any] | None, None]:
         # Use shared client if available, else create one-off
         if self._client:
-            sqs_client = self._client
-            async with self._process_with_client(sqs_client) as event:
+            async with self._process_with_client(self._client) as event:
                 yield event
         else:
             async with (
@@ -73,13 +71,25 @@ class SqsUcpEventListener(UcpEventListenerPort):
             ):
                 yield event
 
+    async def _get_queue_url(self, sqs_client: Any) -> str:
+        if self._queue_url:
+            return self._queue_url
+        try:
+            resp = await sqs_client.get_queue_url(QueueName=self.queue_name)
+            self._queue_url = resp["QueueUrl"]
+            return self._queue_url
+        except Exception:
+            logger.exception("sqs_queue_url_resolution_failed", queue_name=self.queue_name)
+            raise
+
     @asynccontextmanager
     async def _process_with_client(
         self, sqs_client: Any
-    ) -> AsyncGenerator[UcpEventMessage | None, None]:
+    ) -> AsyncGenerator[dict[str, Any] | None, None]:
         try:
+            queue_url = await self._get_queue_url(sqs_client)
             response = await sqs_client.receive_message(
-                QueueUrl=self.queue_url,
+                QueueUrl=queue_url,
                 MaxNumberOfMessages=1,
                 WaitTimeSeconds=5,
             )
@@ -95,7 +105,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
             body_str = msg["Body"]
 
             yielded = False
-            event_data: Any = {}
+            event_data: dict[str, Any] = {}
             try:
                 raw_body = json.loads(body_str)
                 # Handle SNS Envelope
@@ -108,16 +118,12 @@ class SqsUcpEventListener(UcpEventListenerPort):
                 else:
                     event_data = raw_body
 
-                event_message = UcpEventMessage.model_validate(event_data)
-
                 yielded = True
-                # Yield the message to the pure business logic
-                yield event_message
+                # Yield the raw parsed dictionary
+                yield event_data
 
                 # If we return here without exception, the business logic succeeded.
-                await sqs_client.delete_message(
-                    QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
-                )
+                await sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
 
             except json.JSONDecodeError:
                 logger.exception(
@@ -125,14 +131,11 @@ class SqsUcpEventListener(UcpEventListenerPort):
                     message_id=message_id,
                     payload_length=len(body_str),
                 )
-                await sqs_client.delete_message(
-                    QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
-                )
+                await sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                 if not yielded:
                     yield None
             except Exception as e:
-                # Log the error but DO NOT raise. If we raise, it crashes the entire
-                # polling loop in UcpEventsSqsConsumer, forcing it to sleep for 5 seconds.
+                # Log the error but DO NOT raise. If we raise, it crashes the polling loop.
                 # By swallowing it here, we ensure the message is NOT deleted (so SQS will retry it later),
                 # but the worker can immediately continue polling the next message.
                 event_type = (
@@ -141,7 +144,7 @@ class SqsUcpEventListener(UcpEventListenerPort):
                     else "unknown"
                 )
                 logger.exception(
-                    "ucp_event_processing_failed",
+                    "sqs_event_processing_failed",
                     message_id=message_id,
                     error=str(e),
                     event_type=event_type,

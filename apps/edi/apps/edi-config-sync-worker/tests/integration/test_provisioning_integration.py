@@ -21,7 +21,7 @@ class SqsTestPublisher:
         ) as sqs:
             resp = await sqs.get_queue_url(QueueName=queue_name)
             queue_url = resp["QueueUrl"]
-            dedup_id = payload.get("resource_id") or str(uuid.uuid4())
+            dedup_id = payload.get("idempotency_key") or str(uuid.uuid4())
             await sqs.send_message(
                 QueueUrl=queue_url,
                 MessageBody=json.dumps(payload),

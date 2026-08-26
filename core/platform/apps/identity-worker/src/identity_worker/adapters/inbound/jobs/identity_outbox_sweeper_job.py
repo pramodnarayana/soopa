@@ -11,9 +11,7 @@ class IdentityOutboxSweeperJob:
     Events can become stuck in PROCESSING if the worker crashes before marking them COMPLETED.
     """
 
-    def __init__(
-        self, repository: OutboxRepositoryPort, lock_lease_ms: int = 30000
-    ):
+    def __init__(self, repository: OutboxRepositoryPort, lock_lease_ms: int = 30000):
         self.repository = repository
         self.lock_lease_ms = lock_lease_ms
 

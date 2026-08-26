@@ -1,15 +1,14 @@
 import asyncio
 import datetime
 
+from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp_models.events import ControlPlaneOutbox
 
-from ucp.ports.outbound.ucp_outbox_cleanup_repository_port import UcpOutboxCleanupRepositoryPort
 
-
-class SqlAlchemyUcpOutboxCleanupRepository(UcpOutboxCleanupRepositoryPort):
+class SqlAlchemyUcpOutboxCleanupRepository(OutboxCleanupRepositoryPort):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 

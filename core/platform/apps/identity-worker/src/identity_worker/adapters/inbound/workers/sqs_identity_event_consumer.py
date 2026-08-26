@@ -7,40 +7,41 @@ import aioboto3
 import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
-from identity_worker.ports.inbound.identity_event_listener_port import (
-    IdentityEventListenerPort,
+from identity_worker.ports.inbound.identity_event_consumer_port import (
+    IdentityEventConsumerPort,
     IdentityEventMessage,
 )
 
 logger = structlog.get_logger(__name__)
 
 
-class SqsIdentityEventListener(IdentityEventListenerPort):
+class SqsIdentityEventConsumer(IdentityEventConsumerPort):
     """
     AWS SQS Adapter for consuming Identity events from a queue.
     """
 
     def __init__(
         self,
-        queue_url: str,
+        queue_name: str,
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
     ):
-        if not queue_url:
+        if not queue_name:
             logger.error(
-                "sqs_listener_missing_queue_url",
-                message="SQS Listener started without a Queue URL! Please set SQS_IDENTITY_SYNC_QUEUE_URL in your .env",
+                "sqs_listener_missing_queue_name",
+                message="SQS Listener started without a Queue Name! Please set SQS_IDENTITY_SYNC_QUEUE_NAME in your .env",
             )
-            raise ValueError("SQS Queue URL must be provided to SqsIdentityEventListener")
+            raise ValueError("SQS Queue Name must be provided to SqsIdentityEventConsumer")
 
-        self.queue_url = queue_url
+        self.queue_name = queue_name
+        self._queue_url: str | None = None
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
         self._client: Any = None
         self._client_context: Any = None
 
-    async def __aenter__(self) -> "SqsIdentityEventListener":
+    async def __aenter__(self) -> "SqsIdentityEventConsumer":
         """Allows using the listener as a context manager for continuous polling with connection reuse."""
         if not self._client:
             self._client_context = self.session.client(
@@ -75,13 +76,25 @@ class SqsIdentityEventListener(IdentityEventListenerPort):
             ):
                 yield event
 
+    async def _get_queue_url(self, sqs_client: Any) -> str:
+        if self._queue_url:
+            return self._queue_url
+        try:
+            resp = await sqs_client.get_queue_url(QueueName=self.queue_name)
+            self._queue_url = resp["QueueUrl"]
+            return self._queue_url
+        except Exception:
+            logger.exception("sqs_queue_url_resolution_failed", queue_name=self.queue_name)
+            raise
+
     @asynccontextmanager
     async def _process_with_client(
         self, sqs_client: Any
     ) -> AsyncGenerator[IdentityEventMessage | None, None]:
         try:
+            queue_url = await self._get_queue_url(sqs_client)
             response = await sqs_client.receive_message(
-                QueueUrl=self.queue_url,
+                QueueUrl=queue_url,
                 MaxNumberOfMessages=1,
                 WaitTimeSeconds=5,
             )
@@ -117,9 +130,7 @@ class SqsIdentityEventListener(IdentityEventListenerPort):
                 yield event_message
 
                 # If we return here without exception, the business logic succeeded.
-                await sqs_client.delete_message(
-                    QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
-                )
+                await sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
 
             except json.JSONDecodeError:
                 logger.exception(

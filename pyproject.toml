@@ -21,6 +21,8 @@ members = [
     "core/platform/packages/identity",
     "core/platform/packages/orm",
     "core/platform/packages/observability",
+    "core/platform/packages/outbox",
+    "core/platform/packages/pubsub",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",
@@ -47,6 +49,8 @@ identity = { workspace = true }
 platform-orm = { workspace = true }
 platform-schemas = { workspace = true }
 observability = { workspace = true }
+outbox = { workspace = true }
+pubsub = { workspace = true }
 notification = { workspace = true }
 scheduler = { workspace = true }
 ucp = { workspace = true }
@@ -123,6 +127,8 @@ mypy_path = [
     "apps/edi/apps/edi-as2-server/src",
     "apps/edi/apps/edi-background-worker/src",
     "apps/edi/apps/edi-config-sync-worker/src",
+    "core/platform/packages/outbox/src",
+    "core/platform/packages/pubsub/src",
 ]
 
 [[tool.mypy.overrides]]
@@ -255,4 +261,6 @@ known_first_party = [
     "orm",
     "as2_server",
     "notification",
+    "outbox",
+    "pubsub",
 ]

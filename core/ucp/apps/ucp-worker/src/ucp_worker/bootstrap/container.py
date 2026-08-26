@@ -4,10 +4,14 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from outbox.application.sweep_outbox_use_case import SweepOutboxUseCase
+from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
-from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
-from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
+from ucp.adapters.inbound.workers.sqs_ucp_event_consumer import SqsUcpEventConsumer
+from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.postgres_ucp_audit_log_cleanup_repository import (
     SqlAlchemyUcpAuditLogCleanupRepository,
@@ -19,14 +23,10 @@ from ucp.adapters.outbound.database.postgres_ucp_outbox_cleanup_repository impor
     SqlAlchemyUcpOutboxCleanupRepository,
 )
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.messaging.ucp_outbox_sns_publisher import UcpOutboxSnsPublisher
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
-from ucp.application.use_cases.sweep_outbox_use_case import SweepControlPlaneOutboxUseCase
 from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDeletedEventHandler
 from ucp.application.use_cases.ucp_audit_log_cleanup_use_case import UcpAuditLogCleanupUseCase
 from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
-from ucp.application.use_cases.ucp_outbox_cleanup_use_case import UcpOutboxCleanupUseCase
-from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 from ucp.bootstrap.config import get_settings
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
@@ -59,8 +59,8 @@ class WorkerContainer:
         )
 
         self.registry: JobHandlerRegistry | None = None
-        self.outbox_relay: UcpOutboxRelay | None = None
-        self.events_consumer: UcpEventsSqsConsumer | None = None
+        self.outbox_relay: PostgresOutboxRelay | None = None
+        self.events_consumer: UcpEventDispatcher | None = None
 
     def wire(self) -> None:
         self._wire_scheduled_jobs()
@@ -69,7 +69,7 @@ class WorkerContainer:
 
     def _wire_scheduled_jobs(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
-        outbox_pub = UcpOutboxSnsPublisher(
+        outbox_pub = AwsSnsPublisher(
             topic_arn=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
         )
@@ -77,9 +77,9 @@ class WorkerContainer:
         idemp_cleanup_repo = SqlAlchemyUcpIdempotencyCleanupRepository(self.session_factory)
         audit_cleanup_repo = SqlAlchemyUcpAuditLogCleanupRepository(self.session_factory)
 
-        sweeper_use_case = SweepControlPlaneOutboxUseCase(outbox_repo, outbox_pub)
+        sweeper_use_case = SweepOutboxUseCase(outbox_repo, outbox_pub)
 
-        outbox_cleanup_use_case = UcpOutboxCleanupUseCase(outbox_cleanup_repo)
+        outbox_cleanup_use_case = OutboxCleanupUseCase(outbox_cleanup_repo)
         idemp_cleanup_use_case = UcpIdempotencyCleanupUseCase(idemp_cleanup_repo)
         audit_cleanup_use_case = UcpAuditLogCleanupUseCase(audit_cleanup_repo)
 
@@ -102,22 +102,23 @@ class WorkerContainer:
 
     def _wire_outbox_relay(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
-        outbox_pub = UcpOutboxSnsPublisher(
+        outbox_pub = AwsSnsPublisher(
             topic_arn=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
         )
-        outbox_processor = UcpOutboxProcessorUseCase(
+        outbox_processor = OutboxProcessorUseCase(
             repository=outbox_repo,
             publisher=outbox_pub,
         )
-        self.outbox_relay = UcpOutboxRelay(
+        self.outbox_relay = PostgresOutboxRelay(
             processor=outbox_processor,
             database_url=self.database_url,
+            listen_channel="ucp_outbox_wakeup",
         )
 
     def _register_tenant_handlers(
         self,
-        consumer: UcpEventsSqsConsumer,
+        consumer: UcpEventDispatcher,
         tenant_deleted_handler: TenantDeletedEventHandler,
     ) -> None:
         async def tenant_deleted_event_handler(event: Any) -> None:
@@ -141,9 +142,9 @@ class WorkerContainer:
         provisioner = InfrastructureProvisioner(uow_factory)
         tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
 
-        self.events_consumer = UcpEventsSqsConsumer(
-            event_listener=SqsUcpEventListener(
-                queue_url=self.settings.sqs_ucp_identity_sync_queue_url,
+        self.events_consumer = UcpEventDispatcher(
+            event_consumer=SqsUcpEventConsumer(
+                queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
                 endpoint_url=self.settings.aws_endpoint_url,
             )
         )

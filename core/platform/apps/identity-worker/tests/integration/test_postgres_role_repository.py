@@ -7,6 +7,7 @@ from sqlalchemy import insert
 
 pytestmark = pytest.mark.integration
 
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_postgres_role_repository_get_global_roles(db_session_factory) -> None:
@@ -59,7 +60,9 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
             "capabilities": ["test:read", "test:write"],
         }
 
-        await db_session.execute(insert(OrmRole).values([global_role_1, global_role_2, tenant_role]))
+        await db_session.execute(
+            insert(OrmRole).values([global_role_1, global_role_2, tenant_role])
+        )
 
         # Fetch global roles
         roles = await repo.get_global_roles()

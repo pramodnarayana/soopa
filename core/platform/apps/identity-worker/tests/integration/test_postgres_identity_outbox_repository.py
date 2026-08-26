@@ -29,7 +29,7 @@ async def test_claim_next_events_and_mark_completed(repo, db_session_factory):
             {
                 "id": event_id,
                 "now": datetime.now(UTC),
-            }
+            },
         )
         await session.commit()
 
@@ -41,7 +41,7 @@ async def test_claim_next_events_and_mark_completed(repo, db_session_factory):
     async with db_session_factory() as session:
         result = await session.execute(
             text("SELECT owner_token, lease_expires_at FROM identity.outbox WHERE id = :id"),
-            {"id": event_id}
+            {"id": event_id},
         )
         row = result.fetchone()
         assert row.owner_token == worker_id
@@ -51,8 +51,10 @@ async def test_claim_next_events_and_mark_completed(repo, db_session_factory):
 
     async with db_session_factory() as session:
         result = await session.execute(
-            text("SELECT status, owner_token, lease_expires_at FROM identity.outbox WHERE id = :id"),
-            {"id": event_id}
+            text(
+                "SELECT status, owner_token, lease_expires_at FROM identity.outbox WHERE id = :id"
+            ),
+            {"id": event_id},
         )
         row = result.fetchone()
         assert row.status == "COMPLETED"
@@ -71,11 +73,7 @@ async def test_mark_failed(repo, db_session_factory):
                 (id, event_type, payload, status, created_at, owner_token, idempotency_key)
                 VALUES (:id, 'Ping', '{}', 'PROCESSING', :now, :locked_by, 'key-2')
             """),
-            {
-                "id": event_id,
-                "now": datetime.now(UTC),
-                "locked_by": worker_id
-            }
+            {"id": event_id, "now": datetime.now(UTC), "locked_by": worker_id},
         )
         await session.commit()
 
@@ -83,8 +81,10 @@ async def test_mark_failed(repo, db_session_factory):
 
     async with db_session_factory() as session:
         result = await session.execute(
-            text("SELECT status, error_reason, owner_token, lease_expires_at FROM identity.outbox WHERE id = :id"),
-            {"id": event_id}
+            text(
+                "SELECT status, error_reason, owner_token, lease_expires_at FROM identity.outbox WHERE id = :id"
+            ),
+            {"id": event_id},
         )
         row = result.fetchone()
         assert row.status == "FAILED"

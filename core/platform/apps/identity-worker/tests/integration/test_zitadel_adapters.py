@@ -14,6 +14,7 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
 
 pytestmark = pytest.mark.asyncio
 
+
 @pytest.fixture
 def mock_httpx_request():
     with patch("httpx.AsyncClient.request", new_callable=AsyncMock) as mock_req:
@@ -63,10 +64,7 @@ async def test_create_user_success(mock_httpx_request):
     mock_httpx_request.return_value = mock_user_resp
 
     user_id = await adapter.create_user(
-        org_id="org-123",
-        email="test@test.com",
-        first_name="First",
-        last_name="Last"
+        org_id="org-123", email="test@test.com", first_name="First", last_name="Last"
     )
 
     assert user_id == "new-user-id"

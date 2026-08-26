@@ -14,7 +14,11 @@ logger = structlog.get_logger(__name__)
 
 
 class ZitadelIdentityProviderPort(IdentityProviderPort):
-    def __init__(self, org_provider: OrganizationProviderPort, session_factory: typing.Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]]):
+    def __init__(
+        self,
+        org_provider: OrganizationProviderPort,
+        session_factory: typing.Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]],
+    ):
         self.org_provider = org_provider
         self.session_factory = session_factory
 

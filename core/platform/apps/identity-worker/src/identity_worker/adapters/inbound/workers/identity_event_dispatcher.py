@@ -5,26 +5,29 @@ from typing import Any
 
 import structlog
 
-from ucp.ports.outbound.ucp_event_listener_port import UcpEventListenerPort, UcpEventMessage
+from identity_worker.ports.inbound.identity_event_consumer_port import (
+    IdentityEventConsumerPort,
+    IdentityEventMessage,
+)
 
 logger = structlog.get_logger(__name__)
 
 
-class UcpEventsSqsConsumer:
+class IdentityEventDispatcher:
     """
     Centralized Inbound Adapter that polls the SQS Event Listener
     and dispatches Domain Events to registered pure business Application Services.
     """
 
-    def __init__(self, event_listener: UcpEventListenerPort):
-        self.event_listener = event_listener
+    def __init__(self, event_consumer: IdentityEventConsumerPort):
+        self.event_consumer = event_consumer
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
 
         # Route mapping: event_type -> list of async handlers
-        self._handlers: dict[str, list[Callable[[UcpEventMessage], Any]]] = {}
+        self._handlers: dict[str, list[Callable[[IdentityEventMessage], Any]]] = {}
 
-    def subscribe(self, event_type: str, handler: Callable[[UcpEventMessage], Any]) -> None:
+    def subscribe(self, event_type: str, handler: Callable[[IdentityEventMessage], Any]) -> None:
         """Register a handler for a specific domain event type."""
         if event_type not in self._handlers:
             self._handlers[event_type] = []
@@ -34,7 +37,7 @@ class UcpEventsSqsConsumer:
         if not self.is_running:
             self.is_running = True
             self._task = asyncio.create_task(self._run_loop())
-            logger.info("sqs_event_dispatcher_started")
+            logger.info("identity_sqs_event_dispatcher_started")
 
     async def stop(self) -> None:
         self.is_running = False
@@ -44,19 +47,16 @@ class UcpEventsSqsConsumer:
                 await self._task
             self._task = None
 
-        logger.info("sqs_event_dispatcher_stopped")
+        logger.info("identity_sqs_event_dispatcher_stopped")
 
     async def _run_loop(self) -> None:
         try:
-            if hasattr(self.event_listener, "__aenter__"):
-                async with self.event_listener:
-                    await self._poll_continuous()
-            else:
+            async with self.event_consumer:
                 await self._poll_continuous()
         except asyncio.CancelledError:
             pass
         except Exception:
-            logger.exception("sqs_event_dispatcher_fatal_error")
+            logger.exception("identity_sqs_event_dispatcher_fatal_error")
         finally:
             self.is_running = False
 
@@ -64,7 +64,7 @@ class UcpEventsSqsConsumer:
         while self.is_running:
             try:
                 # Process the message via the context manager which handles ack/delete automatically
-                async with self.event_listener.process_next_event() as event:
+                async with self.event_consumer.process_next_event() as event:
                     if not event:
                         await asyncio.sleep(0.1)
                         continue
@@ -74,10 +74,10 @@ class UcpEventsSqsConsumer:
             except asyncio.CancelledError:
                 break
             except Exception:
-                logger.exception("sqs_event_dispatcher_poll_loop_error")
+                logger.exception("identity_sqs_event_dispatcher_poll_loop_error")
                 await asyncio.sleep(5)
 
-    async def _dispatch(self, event: UcpEventMessage) -> None:
+    async def _dispatch(self, event: IdentityEventMessage) -> None:
         handlers = self._handlers.get(event.event_type, [])
         if not handlers:
             logger.debug("no_handlers_registered_for_event", event_type=event.event_type)

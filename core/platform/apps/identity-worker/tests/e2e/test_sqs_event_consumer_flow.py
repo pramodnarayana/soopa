@@ -5,24 +5,30 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 import pytest
-from identity_worker.adapters.inbound.workers.identity_events_sqs_consumer import (
-    IdentityEventsSqsConsumer,
+from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
+    IdentityEventDispatcher,
 )
-from identity_worker.adapters.inbound.workers.sqs_identity_event_listener import (
-    SqsIdentityEventListener,
+from identity_worker.adapters.inbound.workers.sqs_identity_event_consumer import (
+    SqsIdentityEventConsumer,
 )
-from identity_worker.ports.inbound.identity_event_listener_port import (
-    IdentityEventListenerPort,
+from identity_worker.ports.inbound.identity_event_consumer_port import (
+    IdentityEventConsumerPort,
     IdentityEventMessage,
 )
 
 pytestmark = pytest.mark.asyncio
 
 
-class FakeIdentityEventListener(IdentityEventListenerPort):
+class FakeIdentityEventConsumer(IdentityEventConsumerPort):
     def __init__(self, events: list[IdentityEventMessage]):
         self.events = events
         self.processed = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
 
     @asynccontextmanager
     async def process_next_event(self):
@@ -46,12 +52,12 @@ async def test_sqs_consumer_dispatch_flow():
         id=str(uuid.uuid4()),
         source="test",
         event_type="TenantProvisioned",
-        payload={"tenant_id": "tenant-123"}
+        payload={"tenant_id": "tenant-123"},
     )
-    listener = FakeIdentityEventListener([test_event])
+    listener = FakeIdentityEventConsumer([test_event])
 
     # 2. Setup Consumer
-    consumer = IdentityEventsSqsConsumer(listener)
+    consumer = IdentityEventDispatcher(listener)
 
     # 3. Setup Fake Handler (representing IdentitySyncService)
     handled = asyncio.Event()
@@ -83,10 +89,10 @@ async def test_sqs_consumer_handler_failure_prevents_ack():
         id=str(uuid.uuid4()),
         source="test",
         event_type="TenantProvisioned",
-        payload={"tenant_id": "tenant-123"}
+        payload={"tenant_id": "tenant-123"},
     )
-    listener = FakeIdentityEventListener([test_event])
-    consumer = IdentityEventsSqsConsumer(listener)
+    listener = FakeIdentityEventConsumer([test_event])
+    consumer = IdentityEventDispatcher(listener)
     handled = asyncio.Event()
 
     # Setup handler that raises an exception
@@ -122,8 +128,8 @@ async def test_production_listener_propagates_handler_failure():
             }
         ]
     }
-    listener = SqsIdentityEventListener(queue_url="https://sqs.test/identity-events")
-    consumer = IdentityEventsSqsConsumer(listener)
+    listener = SqsIdentityEventConsumer(queue_name="identity-events")
+    consumer = IdentityEventDispatcher(listener)
 
     async def failing_handler(event):
         raise RuntimeError("Handler Failed")
@@ -149,7 +155,7 @@ async def test_malformed_message_is_not_deleted():
             }
         ]
     }
-    listener = SqsIdentityEventListener(queue_url="https://sqs.test/identity-events")
+    listener = SqsIdentityEventConsumer(queue_name="identity-events")
 
     async with listener._process_with_client(sqs_client) as event:
         assert event is None

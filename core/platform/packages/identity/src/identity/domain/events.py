@@ -100,3 +100,20 @@ class UserRoleAssignedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
+
+
+@dataclass(frozen=True)
+class UserCreatedEvent(DomainEvent):
+    user_id: str
+    tenant_id: str
+    email: str
+    first_name: str
+    last_name: str
+    role: str
+
+    @property
+    def event_name(self) -> str:
+        return "UserInvited"
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id

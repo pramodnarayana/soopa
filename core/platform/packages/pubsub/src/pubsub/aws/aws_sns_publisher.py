@@ -3,17 +3,16 @@ from typing import Any
 
 import aioboto3
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from platform_orm.events import EventEnvelope
 from platform_orm.outbox_serializer import serialize_domain_event
-
-from ucp.ports.outbound.outbox_publisher_port import OutboxPublisherPort
 
 logger = structlog.get_logger(__name__)
 
 
-class UcpOutboxSnsPublisher(OutboxPublisherPort):
+class AwsSnsPublisher(OutboxPublisherPort):
     """
-    Publishes outbox events to an AWS SNS Topic (Global Bus).
+    Generic Publisher that sends outbox events to an AWS SNS Topic.
     """
 
     def __init__(
@@ -29,7 +28,7 @@ class UcpOutboxSnsPublisher(OutboxPublisherPort):
         self._client: Any = None
         self._client_context: Any = None
 
-    async def __aenter__(self) -> "UcpOutboxSnsPublisher":
+    async def __aenter__(self) -> "AwsSnsPublisher":
         """Allows using the publisher as a context manager for batch publishing."""
         if not self._client:
             self._client_context = self.session.client(

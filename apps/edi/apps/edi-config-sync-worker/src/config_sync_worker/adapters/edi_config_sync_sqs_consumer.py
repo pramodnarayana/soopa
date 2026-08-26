@@ -207,10 +207,10 @@ class EdiConfigSyncSqsConsumer(OutboxPort):
             yield None
             return
 
-        body.pop("__source", None)
+        source = body.pop("__source", "soopa.edi")
         envelope = EventEnvelope(
             id=message_id,
-            source="soopa.edi",
+            source=source,
             event_type=body.get("eventType", body.get("event_type", "unknown")),
             payload=body,
             idempotency_key=body.get("idempotency_key"),

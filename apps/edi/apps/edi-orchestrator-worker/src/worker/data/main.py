@@ -34,9 +34,9 @@ from edi.domain.events import MessageQueueName, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 from worker.adapters.aws_secrets_manager import AwsSecretsManagerSecretStore
-from worker.adapters.inbound.workers.edi_data_plane_events_sqs_consumer import (
+from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
+    EdiDataPlaneEventDispatcher,
     EdiDataPlaneEventMessage,
-    EdiDataPlaneEventsSqsConsumer,
 )
 from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
 
@@ -135,7 +135,7 @@ async def main() -> None:
         uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
         await registry.route(event, uow_factory)
 
-    consumer = EdiDataPlaneEventsSqsConsumer(callback=route_event)
+    consumer = EdiDataPlaneEventDispatcher(callback=route_event)
 
     transform_task = asyncio.create_task(
         poll_sqs_queue(

@@ -30,7 +30,10 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
                     SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
                     WHERE id IN (SELECT id FROM cte)
                 """)
-                result = cast(CursorResult[Any], await session.execute(query, {"lock_lease_ms": lock_lease_ms}))
+                result = cast(
+                    CursorResult[Any],
+                    await session.execute(query, {"lock_lease_ms": lock_lease_ms}),
+                )
                 swept = int(result.rowcount)
                 total_swept += swept
                 await session.commit()

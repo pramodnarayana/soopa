@@ -96,13 +96,13 @@ async def main() -> None:
     from config_sync_worker.adapters.postgres_outbox_relay_repository import (
         PostgresOutboxRelayRepository,
     )
+
     from edi_background_worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_job import (
         EdiControlPlaneOutboxCleanupJobHandler,
     )
     from edi_background_worker.adapters.inbound.jobs.edi_control_plane_outbox_sweeper_job import (
         EdiControlPlaneOutboxSweeperJobHandler,
     )
-
     from edi_background_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_cleanup_repository import (
         SqlAlchemyEdiControlPlaneOutboxCleanupRepository,
     )

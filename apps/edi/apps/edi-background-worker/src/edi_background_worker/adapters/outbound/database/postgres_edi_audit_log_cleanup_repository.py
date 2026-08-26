@@ -6,7 +6,6 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import AuditLog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.infrastructure import DatabaseShard
 
 from edi_background_worker.ports.outbound.edi_audit_log_cleanup_repository_port import (
     EdiAuditLogCleanupRepositoryPort,
@@ -21,9 +20,7 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
 
     async def cleanup_audit_logs(self, retention_days: int, concurrency_limit: int = 5) -> None:
         sem = asyncio.Semaphore(concurrency_limit)
-        async for global_session in self.db_router.get_global_session():
-            res = await global_session.execute(select(DatabaseShard))
-            shards = res.scalars().all()
+        shards = await self.db_router.get_all_shards()
 
         async def _bounded_cleanup(shard_name: str, shard_dsn: str) -> None:
             async with sem:
@@ -63,7 +60,8 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
                     raise
 
         results = await asyncio.gather(
-            *[_bounded_cleanup(shard.name, shard.dsn) for shard in shards], return_exceptions=True
+            *[_bounded_cleanup(shard_name, shard_dsn) for shard_name, shard_dsn in shards],
+            return_exceptions=True,
         )
         exceptions = [r for r in results if isinstance(r, Exception)]
         if exceptions:

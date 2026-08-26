@@ -7,12 +7,12 @@ import structlog
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from identity_worker.adapters.inbound.workers.identity_events_sqs_consumer import (
-    IdentityEventsSqsConsumer,
+from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
+    IdentityEventDispatcher,
 )
 from identity_worker.adapters.inbound.workers.identity_outbox_relay import IdentityOutboxRelay
-from identity_worker.adapters.inbound.workers.sqs_identity_event_listener import (
-    SqsIdentityEventListener,
+from identity_worker.adapters.inbound.workers.sqs_identity_event_consumer import (
+    SqsIdentityEventConsumer,
 )
 from identity_worker.adapters.outbound.database.postgres_identity_outbox_repository import (
     PostgresIdentityOutboxRepository,
@@ -102,7 +102,7 @@ class WorkerContainer:
         )
 
         self.outbox_relay: IdentityOutboxRelay | None = None
-        self.events_consumer: IdentityEventsSqsConsumer | None = None
+        self.events_consumer: IdentityEventDispatcher | None = None
 
     def wire(self) -> None:
         self._wire_outbox_relay()
@@ -125,7 +125,7 @@ class WorkerContainer:
 
     def _register_identity_handlers(
         self,
-        consumer: IdentityEventsSqsConsumer,
+        consumer: IdentityEventDispatcher,
         identity_service: IdentitySyncService,
     ) -> None:
         async def identity_tenant_provisioned_handler(event: Any) -> None:
@@ -194,16 +194,18 @@ class WorkerContainer:
             project_provider = ZitadelProjectsAdapter()
             org_provider = ZitadelOrganizationsAdapter(project_provider=project_provider)
 
-            idp = ZitadelIdentityProviderPort(org_provider=org_provider, session_factory=session_factory)
+            idp = ZitadelIdentityProviderPort(
+                org_provider=org_provider, session_factory=session_factory
+            )
             idp_users = ZitadelUsersAdapter()
 
         identity_service = IdentitySyncService(
             identity_provider=idp, user_identity_provider=idp_users, session_factory=session_factory
         )
 
-        self.events_consumer = IdentityEventsSqsConsumer(
-            event_listener=SqsIdentityEventListener(
-                queue_url=self.settings.sqs_identity_sync_queue_url,
+        self.events_consumer = IdentityEventDispatcher(
+            event_consumer=SqsIdentityEventConsumer(
+                queue_name=self.settings.sqs_identity_sync_queue_name,
                 endpoint_url=self.settings.aws_endpoint_url,
             )
         )

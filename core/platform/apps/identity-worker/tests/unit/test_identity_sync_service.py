@@ -89,22 +89,21 @@ async def setup_db(db_session_factory):
         # Create a fully provisioned tenant
         tenant_id = str(uuid.uuid4())
         idp_tenant_id = f"idp_org_{uuid.uuid4()}"
-        tenant = DbTenant(id=tenant_id, name="Test Corp", slug="test-corp", idp_tenant_id=idp_tenant_id)
+        tenant = DbTenant(
+            id=tenant_id, name="Test Corp", slug="test-corp", idp_tenant_id=idp_tenant_id
+        )
         session.add(tenant)
 
         # Create an unprovisioned tenant
         unprovisioned_tenant_id = str(uuid.uuid4())
-        unprovisioned_tenant = DbTenant(id=unprovisioned_tenant_id, name="New Corp", slug="new-corp", idp_tenant_id=None)
+        unprovisioned_tenant = DbTenant(
+            id=unprovisioned_tenant_id, name="New Corp", slug="new-corp", idp_tenant_id=None
+        )
         session.add(unprovisioned_tenant)
 
         # Create a user
         user_id = str(uuid.uuid4())
-        user = DbUser(
-            id=user_id,
-            email="john@test.com",
-            name="John Doe",
-            status="active"
-        )
+        user = DbUser(id=user_id, email="john@test.com", name="John Doe", status="active")
         session.add(user)
 
         await session.commit()
@@ -113,7 +112,7 @@ async def setup_db(db_session_factory):
         "tenant_id": tenant_id,
         "idp_tenant_id": idp_tenant_id,
         "unprovisioned_tenant_id": unprovisioned_tenant_id,
-        "user_id": user_id
+        "user_id": user_id,
     }
 
 
@@ -140,7 +139,7 @@ async def test_handle_user_created(fakes, db_session_factory, setup_db):
         email="john@test.com",
         first_name="John",
         last_name="Doe",
-        role="admin"
+        role="admin",
     )
 
     assert len(user_idp.users) == 1
@@ -152,9 +151,7 @@ async def test_handle_user_created(fakes, db_session_factory, setup_db):
 
     # Assert database updated with idp_user_id
     async with db_session_factory() as session:
-        result = await session.execute(
-            DbUser.__table__.select().where(DbUser.id == user_id)
-        )
+        result = await session.execute(DbUser.__table__.select().where(DbUser.id == user_id))
         db_user = result.fetchone()
         assert db_user.idp_user_id == created_idp_user_id
 
@@ -173,7 +170,7 @@ async def test_handle_user_created_unprovisioned_tenant(fakes, db_session_factor
             email="john@test.com",
             first_name="John",
             last_name="Doe",
-            role="admin"
+            role="admin",
         )
 
 
@@ -249,14 +246,16 @@ async def test_handle_user_updated(fakes, db_session_factory, setup_db):
     service = IdentitySyncService(idp, user_idp, db_session_factory)
 
     # Pre-populate fake user
-    idp_user_id = await user_idp.create_user(setup_db["idp_tenant_id"], "old@test.com", "Old", "Name")
+    idp_user_id = await user_idp.create_user(
+        setup_db["idp_tenant_id"], "old@test.com", "Old", "Name"
+    )
 
     await service.handle_user_updated(
         idp_user_id=idp_user_id,
         tenant_id=setup_db["tenant_id"],
         first_name="New",
         last_name="Name",
-        role="member"
+        role="member",
     )
 
     assert user_idp.users[idp_user_id]["first_name"] == "New"
@@ -271,9 +270,7 @@ async def test_handle_user_status_toggled(fakes, db_session_factory, setup_db):
     assert user_idp.user_status[idp_user_id] == "active"
 
     await service.handle_user_status_toggled(
-        idp_user_id=idp_user_id,
-        tenant_id=setup_db["tenant_id"],
-        action="deactivate"
+        idp_user_id=idp_user_id, tenant_id=setup_db["tenant_id"], action="deactivate"
     )
 
     assert user_idp.user_status[idp_user_id] == "deactivate"

@@ -154,9 +154,7 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
         parsed_data = ZitadelRolesResponse.model_validate({"result": data})
         return [
             IdpRole(
-                key=role.key or "",
-                display_name=role.display_name or "",
-                group=role.group or ""
+                key=role.key or "", display_name=role.display_name or "", group=role.group or ""
             )
             for role in parsed_data.result
         ]

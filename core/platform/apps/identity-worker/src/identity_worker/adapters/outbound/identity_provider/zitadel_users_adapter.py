@@ -224,9 +224,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         first_name: str,
         last_name: str,
     ) -> None:
-        logger.info(
-            "updating_profile_for_user_in_zitadel", user_id=user_id, org_id=org_id
-        )
+        logger.info("updating_profile_for_user_in_zitadel", user_id=user_id, org_id=org_id)
         try:
             profile_res = await self.fetch_with_auth(
                 endpoint=f"/management/v1/users/{user_id}/profile",

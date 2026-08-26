@@ -2,17 +2,16 @@ import asyncio
 import uuid
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from platform_orm.events import EventEnvelope
-
-from ucp.ports.outbound.outbox_publisher_port import OutboxPublisherPort
-from ucp.ports.outbound.outbox_repository_port import OutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
-class SweepControlPlaneOutboxUseCase:
+class SweepOutboxUseCase:
     """
-    Application UseCase to sweep the UCP Control Plane Outbox.
+    Application UseCase to sweep the Outbox.
     It picks up stuck or failed events and publishes them.
     """
 
@@ -30,7 +29,7 @@ class SweepControlPlaneOutboxUseCase:
         self.worker_id = str(uuid.uuid4())
 
     async def execute(self) -> None:
-        logger.info("sweep_control_plane_outbox_started", worker_id=self.worker_id)
+        logger.info("sweep_outbox_started", worker_id=self.worker_id)
 
         # 1. Sweep stuck events
         swept = await self.repository.sweep_stuck_events(self.lock_lease_ms)
@@ -53,7 +52,7 @@ class SweepControlPlaneOutboxUseCase:
         tasks = [self.process_event(event) for event in events]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        logger.info("sweep_control_plane_outbox_completed", events_processed=len(events))
+        logger.info("sweep_outbox_completed", events_processed=len(events))
 
     async def process_event(self, event: EventEnvelope) -> None:
         try:

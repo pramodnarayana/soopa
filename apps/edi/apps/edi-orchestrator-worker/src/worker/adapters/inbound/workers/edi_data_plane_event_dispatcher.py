@@ -18,7 +18,7 @@ class EdiDataPlaneEventMessage:
     idempotency_key: str | None
 
 
-class EdiDataPlaneEventsSqsConsumer:
+class EdiDataPlaneEventDispatcher:
     """
     Strict transport adapter for SQS events.
     Parses SQS JSON into a typed DataPlaneEventMessage, initializes structured

@@ -11,13 +11,12 @@ class UcpEventMessage(BaseModel):
     payload: dict[str, Any]
 
 
-class UcpEventListenerPort(Protocol):
+class UcpEventConsumerPort(Protocol):
     """
-    Port for an inbound asynchronous stream of UCP domain events.
-    Yields events one by one, managing acknowledgment implicitly on yield exit.
+    Protocol for inbound AWS SDK adapters (SQS Consumers).
     """
 
-    async def __aenter__(self) -> "UcpEventListenerPort": ...
+    async def __aenter__(self) -> "UcpEventConsumerPort": ...
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
 
     def process_next_event(self) -> AbstractAsyncContextManager[UcpEventMessage | None]: ...

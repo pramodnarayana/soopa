@@ -4,27 +4,28 @@ from typing import Any
 
 import asyncpg
 import structlog
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from sqlalchemy.engine import make_url
-
-from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 
 logger = structlog.get_logger(__name__)
 
 
-class UcpOutboxRelay:
+class PostgresOutboxRelay:
     """
     Inbound adapter that listens to Postgres NOTIFY events and triggers
-    the application service (UcpOutboxProcessorUseCase).
+    the application service (OutboxProcessorUseCase).
     """
 
     def __init__(
         self,
-        processor: UcpOutboxProcessorUseCase,
+        processor: OutboxProcessorUseCase,
         database_url: str,
+        listen_channel: str,
         fallback_poll_interval: int = 60,
     ):
         self.processor = processor
         self.database_url = database_url
+        self.listen_channel = listen_channel
         self.fallback_poll_interval = fallback_poll_interval
         self.is_running = False
         self._task: asyncio.Task[Any] | None = None
@@ -35,7 +36,7 @@ class UcpOutboxRelay:
         if not self.is_running:
             self.is_running = True
             self._task = asyncio.create_task(self._run_loop())
-            logger.info("ucp_postgres_outbox_listener_started")
+            logger.info("postgres_outbox_listener_started", channel=self.listen_channel)
 
     async def stop(self) -> None:
         self.is_running = False
@@ -44,21 +45,21 @@ class UcpOutboxRelay:
 
         if self._connection:
             try:
-                await self._connection.remove_listener("ucp_outbox_wakeup", self._on_notify)
+                await self._connection.remove_listener(self.listen_channel, self._on_notify)
                 await self._connection.close()
             except (asyncpg.PostgresError, OSError, ConnectionError) as e:
-                logger.warning("ucp_outbox_listener_connection_close_error", error=str(e))
+                logger.warning("outbox_listener_connection_close_error", error=str(e))
 
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            logger.info("ucp_postgres_outbox_listener_stopped")
+            logger.info("postgres_outbox_listener_stopped", channel=self.listen_channel)
 
     def _on_notify(
         self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
     ) -> None:
-        logger.debug("ucp_instant_wakeup_received", channel=channel, pid=pid)
+        logger.debug("instant_wakeup_received", channel=channel, pid=pid)
         self._notify_event.set()
 
     async def _setup_listener(self) -> None:
@@ -69,13 +70,13 @@ class UcpOutboxRelay:
             asyncpg_url = url.render_as_string(hide_password=False)
 
             self._connection = await asyncpg.connect(asyncpg_url)
-            await self._connection.add_listener("ucp_outbox_wakeup", self._on_notify)
-            logger.info("ucp_outbox_listener_listening", channel="ucp_outbox_wakeup")
+            await self._connection.add_listener(self.listen_channel, self._on_notify)
+            logger.info("outbox_listener_listening", channel=self.listen_channel)
         except Exception:
             if self._connection:
                 await self._connection.close()
                 self._connection = None
-            logger.exception("ucp_outbox_listener_connection_failed")
+            logger.exception("outbox_listener_connection_failed")
 
     async def _process_loop_iteration(self) -> None:
         if self._connection and self._connection.is_closed():
@@ -113,7 +114,7 @@ class UcpOutboxRelay:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    logger.exception("ucp_outbox_relay_error")
+                    logger.exception("postgres_outbox_relay_error")
                     await asyncio.sleep(5.0)
 
         with contextlib.suppress(asyncio.CancelledError):

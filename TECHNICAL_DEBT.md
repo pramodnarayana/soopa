@@ -4,6 +4,13 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 
 
 
+## [Architecture] Rollout Centralized Outbox and PubSub Packages to Remaining Modules
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: We successfully extracted the `outbox` and `pubsub` generic infrastructure patterns out of the UCP bounded context and into centralized platform packages (`core/platform/packages/outbox` and `core/platform/packages/pubsub`). The UCP Proof-of-Concept is complete and verified. However, the `identity`, `edi`, and `notification` modules still contain duplicated, module-specific implementations of these patterns (Outbox relays, SQS listeners, SNS publishers, etc.).
+- **Action Item**: Migrate the `identity`, `edi`, and `notification` modules to use the centralized `outbox` and `pubsub` platform packages. Remove their legacy duplicated infrastructure code, update their Dependency Injection containers to inject the generic `PostgresOutboxRelay`, `AwsSnsPublisher`, and `AwsSqsConsumer`, and verify all tests pass.
+
 ## [RESOLVED] [Authorization Architecture] Implement Dynamic Enterprise-Grade PBAC/ABAC
 
 - **Date Added**: 2026-07-27
@@ -301,12 +308,19 @@ The taxonomy drifted organically as different engineers built different bounded 
   2. Update all Identity repositories (`role_repository.py`, `user_repository.py`, etc.) to use `PLATFORM_TENANT_ID` instead of `None` when querying or saving global platform resources.
   3. Create an Alembic database migration to backfill any existing `NULL` tenant records with the `PLATFORM_TENANT_ID` and apply the `NOT NULL` constraint.
 
-## [Architecture] Centralize and Dynamic SQS Queue URL Resolution
+## [RESOLVED] [Architecture] Centralize and Dynamic SQS Queue URL Resolution
 
 - **Date Added**: 2026-08-25
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: SQS Queue URLs are currently scattered as hardcoded full URL strings across the `.env` file (e.g., `SQS_UCP_IDENTITY_SYNC_QUEUE_URL`, `SQS_IDENTITY_SYNC_QUEUE_URL`, etc.). This violates Convention over Configuration, leading to desyncs between workers and local infrastructure provisioning (e.g., LocalStack).
 - **Action Item**: Refactor all `SqsEventListener` implementations to accept only a Logical Queue Name. Update the adapter constructors to dynamically fetch the absolute Queue URL at runtime via `boto3` (`sqs_client.get_queue_url()`). Remove all explicit URL string configurations from `.env` and `Settings` classes.
+
+## [RESOLVED] [Architecture] Class Naming Taxonomy Drift (Listener vs Consumer)
+
+- **Date Added**: 2026-08-26
+- **Status**: ✅ RESOLVED
+- **Description**: There is a class naming taxonomy drift in the Inbound Adapters layer regarding SQS message processors. We currently mix suffixes like `*EventListener`, `*SqsConsumer`, and `*Poller` (e.g., `SqsUcpEventListener`, `UcpEventsSqsConsumer`, `SqsPoller`) to describe similar asynchronous worker patterns. This causes confusion in the mental model.
+- **Action Item**: Establish a canonical naming convention for asynchronous message handlers (e.g., standardizing on `*Consumer` or `*Listener`) and rename the divergent classes across all bounded contexts to adhere to this standard.
 
 ## [Architecture Testing] True Enterprise-Grade Data Plane Integration Tests
 
