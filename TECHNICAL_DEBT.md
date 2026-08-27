@@ -348,14 +348,14 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Date Added**: 2026-08-26
 - **Status**: TO DO
 - **Description**: Currently, every bounded context (`ucp`, `edi`, etc.) implements an identical `SqlAlchemyUnitOfWork` (e.g., `SqlAlchemyUcpUnitOfWork`, `SqlAlchemyDataPlaneUnitOfWork`). The transaction lifecycle methods (`__aenter__`, `__aexit__`, `commit`, `rollback`) are highly duplicated. This includes the complex logic inside `commit()` that intercepts `psycopg` `IntegrityError`, parses the `pgcode`, and translates it into domain-friendly errors.
-- **Action Item**: Centralize the base `UnitOfWork` into `core/platform/packages/orm/src/platform_orm/uow.py`. Bounded contexts should only define a thin subclass to type-hint their specific repositories, inheriting the heavy transaction and error-handling logic from the shared platform base class.
+- **Action Item**: Centralize the base `UnitOfWork` into `core/platform/packages/database/src/database/uow.py`. Bounded contexts should only define a thin subclass to type-hint their specific repositories, inheriting the heavy transaction and error-handling logic from the shared platform base class.
 
 ## [RESOLVED] [Architecture] Standardize Database Engine & Connection Pooling
 
 - **Date Added**: 2026-08-26
 - **Status**: ✅ RESOLVED
 - **Description**: In the Dependency Injection setup (`bootstrap/container.py`), every single worker and API module manually initializes its database connection via `self._engine = create_async_engine(self.database_url, pool_pre_ping=True)`. This means connection pool sizes, timeouts, and recycling strategies are managed on a per-module basis, creating a fragmented infrastructure configuration.
-- **Action Item**: Extract the `AsyncEngine` creation into a centralized `DatabaseProvider` within `core/platform/packages/orm`. Update all DI containers across the monorepo to rely on this provider to guarantee identical infrastructure tuning and a single place to modify pool settings.
+- **Action Item**: Extract the `AsyncEngine` creation into a centralized `DatabaseProvider` within `core/platform/packages/database`. Update all DI containers across the monorepo to rely on this provider to guarantee identical infrastructure tuning and a single place to modify pool settings.
 
 ## [Architecture] Eliminate Dual-Architecture in Database Exception Translation
 
