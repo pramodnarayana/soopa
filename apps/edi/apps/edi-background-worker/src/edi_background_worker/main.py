@@ -177,8 +177,14 @@ async def main() -> None:
         logger.exception("edi_background_worker_failed")
         raise
     finally:
-        await dp_manager.stop()
-        await cp_manager.stop()
+        results = await asyncio.gather(
+            dp_manager.stop(),
+            cp_manager.stop(),
+            return_exceptions=True,
+        )
+        for res in results:
+            if isinstance(res, Exception):
+                logger.error("manager_stop_failed", exc_info=res)
         logger.info("edi_background_worker_stopped")
         await db_router.close_all()
 

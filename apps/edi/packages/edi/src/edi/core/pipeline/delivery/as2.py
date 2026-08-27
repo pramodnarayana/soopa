@@ -1,7 +1,7 @@
-from secrets.ports.secret_store_port import SecretStorePort
 from typing import Any
 
 import structlog
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy

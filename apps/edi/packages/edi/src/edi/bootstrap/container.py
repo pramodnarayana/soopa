@@ -1,7 +1,7 @@
 import os
-from secrets.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 
 from dependency_injector import containers, providers
+from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 
 from edi.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from edi.adapters.outbound.database.uow_adapter import (

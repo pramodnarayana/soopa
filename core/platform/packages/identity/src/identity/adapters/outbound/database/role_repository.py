@@ -87,7 +87,11 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         Queries the database for all roles assigned to the user within the given tenant,
         and aggregates their capabilities into a unified set.
         """
-        tenant_id = tenant_id or PLATFORM_TENANT_ID
+        if tenant_id == "":
+            raise ValueError("tenant_id cannot be an empty string")
+        if tenant_id is None:
+            tenant_id = PLATFORM_TENANT_ID
+
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id)
         bound_logger.debug("role_repo.get_user_capabilities.started")
 
@@ -142,7 +146,11 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         await self.flush()
 
     async def assign_user_role(self, tenant_id: str | None, user_id: str, role_id: str) -> None:
-        tenant_id = tenant_id or PLATFORM_TENANT_ID
+        if tenant_id == "":
+            raise ValueError("tenant_id cannot be an empty string")
+        if tenant_id is None:
+            tenant_id = PLATFORM_TENANT_ID
+
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id, role_id=role_id)
         bound_logger.info("role_repo.assign_user_role.started")
 
@@ -205,7 +213,10 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         bound_logger.info("role_repo.assign_user_role.completed")
 
     async def remove_user_roles(self, tenant_id: str | None, user_id: str) -> None:
-        tenant_id = tenant_id or PLATFORM_TENANT_ID
+        if tenant_id == "":
+            raise ValueError("tenant_id cannot be an empty string")
+        if tenant_id is None:
+            tenant_id = PLATFORM_TENANT_ID
 
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id)
         bound_logger.info("role_repo.remove_user_roles.started")

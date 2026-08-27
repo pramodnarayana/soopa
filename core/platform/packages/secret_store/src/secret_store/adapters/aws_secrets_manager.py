@@ -59,6 +59,9 @@ class AwsSecretsManagerAdapter:
         else:
             category_val = str(category)
 
+        if not category_val or "/" in category_val or category_val == "..":
+            raise ValueError("Invalid category value")
+
         ref_id = str(uuid.uuid4())
         secret_name = f"edi/{category_val}/{ref_id}"
 
