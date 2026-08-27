@@ -63,24 +63,29 @@ def app(container: Container) -> FastAPI:
 
     @test_app.middleware("http")
     async def authentication_middleware(request: Request, call_next: Any) -> Any:
-        identity = raw_identity.model_copy()
+        import dataclasses
+
         repo = MockTenantRepo()
 
         mapped_tenants = set()
-        for tid in identity.authorized_tenants:
+        new_tenant_id = raw_identity.tenant_id
+
+        for tid in raw_identity.authorized_tenants:
             if not tid.startswith("ten_") and tid != "ten_000000000000000000000000":
                 resolved_t = await repo.find_by_idp_tenant_id(tid)
                 if resolved_t:
                     mapped_tenants.add(resolved_t.id)
                     mapped_tenants.add(tid)  # retain IdP ID
-                    if not identity.tenant_id:
-                        identity.tenant_id = resolved_t.id
+                    if not new_tenant_id:
+                        new_tenant_id = resolved_t.id
                 else:
                     raise HTTPException(status_code=403, detail="Not found")
             else:
                 mapped_tenants.add(tid)
 
-        identity.authorized_tenants = mapped_tenants
+        identity = dataclasses.replace(
+            raw_identity, authorized_tenants=mapped_tenants, tenant_id=new_tenant_id
+        )
         request.state.identity = identity
         return await call_next(request)
 
