@@ -50,7 +50,13 @@ class DatabaseRouter:
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        return get_async_engine(url)
+        return get_async_engine(
+            url,
+            pool_size=self._pool_size,
+            max_overflow=self._max_overflow,
+            pool_pre_ping=True,
+            echo=False,
+        )
 
     async def get_engine(self, db_key: str, url: str | None = None) -> AsyncEngine:
         """

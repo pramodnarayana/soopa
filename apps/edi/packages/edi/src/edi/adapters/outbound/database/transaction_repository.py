@@ -33,6 +33,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
     ) -> str:
+        from sqlalchemy.exc import IntegrityError
+
         from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
         from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
@@ -46,9 +48,13 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload=payload,
             status="PENDING",
         )
-        self.session.add(record)
-        await self.session.flush()
-        return str(event_id)
+        try:
+            async with self.session.begin_nested():
+                self.session.add(record)
+                await self.session.flush()
+                return str(event_id)
+        except IntegrityError:
+            return "duplicate"
 
     async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
         from edi.adapters.outbound.database.models.data_plane import EdiJson
