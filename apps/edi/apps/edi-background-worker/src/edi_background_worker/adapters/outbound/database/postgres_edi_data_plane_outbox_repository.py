@@ -29,10 +29,10 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         engine = await self.db_router.get_engine(shard_name, shard_dsn)
         async with AsyncSession(engine, expire_on_commit=False) as session:
             query = text("""
-                UPDATE edi.data_plane_outbox
+                UPDATE outbox
                 SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
                 WHERE id IN (
-                    SELECT id FROM edi.data_plane_outbox
+                    SELECT id FROM outbox
                     WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
                     ORDER BY created_at ASC
                     LIMIT :limit
@@ -110,13 +110,13 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                 while True:
                     query = text("""
                         WITH cte AS (
-                            SELECT id FROM edi.data_plane_outbox
+                            SELECT id FROM outbox
                             WHERE status = 'PROCESSING'
                               AND lease_expires_at < NOW()
                             LIMIT 5000
                             FOR UPDATE SKIP LOCKED
                         )
-                        UPDATE edi.data_plane_outbox
+                        UPDATE outbox
                         SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
                         WHERE id IN (SELECT id FROM cte)
                     """)
@@ -150,7 +150,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
         await self._update_all_shards(
             text("""
-                UPDATE edi.data_plane_outbox
+                UPDATE outbox
                 SET status = 'PROCESSED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
                 WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """),
@@ -160,7 +160,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
         await self._update_all_shards(
             text("""
-                UPDATE edi.data_plane_outbox
+                UPDATE outbox
                 SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
                     attempts = attempts + 1,
                     lease_expires_at = NULL,

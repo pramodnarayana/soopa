@@ -305,14 +305,6 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
 
 class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = "dp_edi_ob"
-
-    id: Mapped[str] = mapped_column(
-        String(128),
-        primary_key=True,
-        default=lambda: f"{DataPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
-    )
-
     __table_args__ = (
         Index(
             "ix_tenant_outbox_pending",
@@ -320,6 +312,14 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
+        {"schema": "edi"},
+    )
+    ID_PREFIX = "dp_edi_ob"
+
+    id: Mapped[str] = mapped_column(
+        String(128),
+        primary_key=True,
+        default=lambda: f"{DataPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
     )
 
 

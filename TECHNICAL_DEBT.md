@@ -370,3 +370,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: While `AwsSqsPublisher` successfully centralizes the publishing of events, the consumer side exhibits architectural drift. Classes like `UcpEventsSqsConsumer` (UCP) and `NotificationOutboxSweeperJob` (Notification) duplicate the boilerplate for polling SQS, acknowledging messages, and handling leases (`mark_completed`, `mark_failed`). Naming conventions also drift between `jobs/` and `workers/`.
 - **Action Item**: Build a centralized `BaseMessagePump` or `SqsConsumerManager` in `core/platform/packages/pubsub` that natively handles the `receive_message -> process -> delete_message` lifecycle loop, so that bounded contexts only need to inject a pure `MessageHandler` callback.
+
+## [Architecture] Enterprise-Grade Monorepo Test Architecture
+
+- **Date Added**: 2026-08-27
+- **Status**: TO DO
+- **Description**: The current monorepo suffers from Python module namespace collisions (`import file mismatch` and `ModuleNotFoundError`) because shared test utilities (like `api_fakes.py`) are placed in generic local `tests/` directories alongside `__init__.py` files. This causes Pytest to conflate all `tests` directories across packages into a single global namespace.
+- **Action Item**: Migrate all shared test helpers (fakes, mock repositories, factories) out of their local `tests/` directories and into proper source-level test modules (e.g., `src/<package_name>/testing/`). Update all corresponding test files to import these utilities from their new fully-qualified namespace (e.g., `from identity.testing.fakes import ...`), and strictly forbid `__init__.py` files in generic `tests` folders.

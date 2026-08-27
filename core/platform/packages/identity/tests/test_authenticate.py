@@ -5,7 +5,7 @@ from identity.application.authenticate_use_case import (
     authenticate_bearer_token,
 )
 from identity.domain.identity_context import IdentityContext, TokenClaims
-from tests.fakes.fake_token_verifier import FakeTokenVerifier
+from identity.testing.fakes.fake_token_verifier import FakeTokenVerifier
 
 
 @pytest.fixture

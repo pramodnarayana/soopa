@@ -14,10 +14,6 @@ from sqlalchemy import delete, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
 
-from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_cleanup_repository import (
-    SqlAlchemyEdiDataPlaneOutboxCleanupRepository,
-)
-
 pytestmark = pytest.mark.asyncio
 
 
@@ -59,8 +55,10 @@ async def test_session(db_router: DatabaseRouter) -> "AsyncGenerator[AsyncSessio
     engine = await db_router.get_engine("shard_1", shard_url)
 
     from edi.adapters.outbound.database.models.data_plane import TenantBase
+    from sqlalchemy import text
 
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
         await conn.run_sync(TenantBase.metadata.create_all)
 
     async with AsyncSession(engine) as session:
@@ -115,11 +113,15 @@ async def test_sweeper_fetches_and_processes_events(
     mock_publisher = MagicMock()
     mock_publisher.publish_batch = AsyncMock(side_effect=lambda events: [e.id for e in events])
 
-    repo = SqlAlchemyEdiDataPlaneOutboxCleanupRepository(db_router=db_router)
+    from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_repository import (
+        PostgresEdiDataPlaneOutboxRepository,
+    )
 
-    use_case = OutboxSweeperUseCase(repository=repo, publisher=mock_publisher)
+    repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
 
-    # 3. Execute Sweeper against real local DB
+    use_case = OutboxSweeperUseCase(
+        repository=repo, publisher=mock_publisher
+    )  # 3. Execute Sweeper against real local DB
     await use_case.execute()
 
     # 4. Verify
@@ -149,13 +151,27 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
                 id="test_shard_id_2",
                 name="shard_2",
                 dsn=os.getenv(
-                    "SHARD_2_URL",
-                    "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
+                    "SHARD_1_URL",
+                    "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
                 ),
             )
             session.add(shard)
             await session.commit()
             created_shard_2 = True
+
+    # Create tables on shard 2 so it doesn't fail with UndefinedTableError
+    engine2 = await db_router.get_engine(
+        "shard_2",
+        os.getenv(
+            "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+        ),
+    )
+    from edi.adapters.outbound.database.models.data_plane import TenantBase
+    from sqlalchemy import text
+
+    async with engine2.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
+        await conn.run_sync(TenantBase.metadata.create_all)
 
     repo = SqlAlchemyEdiAuditLogCleanupRepository(db_router=db_router)
 
