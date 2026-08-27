@@ -7,12 +7,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from edi_background_worker.application.use_cases.edi_data_plane_outbox_sweeper_use_case import (
-    EdiDataPlaneOutboxSweeperUseCase,
+from outbox.application.outbox_sweeper_use_case import (
+    OutboxSweeperUseCase,
 )
 from sqlalchemy import delete, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard
+
+from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_cleanup_repository import (
+    SqlAlchemyEdiDataPlaneOutboxCleanupRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -109,21 +113,17 @@ async def test_sweeper_fetches_and_processes_events(
 
     # 2. Mock external SQS boundary (allowed by Enterprise Rules)
     mock_publisher = MagicMock()
-    mock_publisher.publish_batch = AsyncMock(return_value=[])
+    mock_publisher.publish_batch = AsyncMock(side_effect=lambda events: [e.id for e in events])
 
-    use_case = EdiDataPlaneOutboxSweeperUseCase(
-        db_router=db_router, message_publisher=mock_publisher
-    )
+    repo = SqlAlchemyEdiDataPlaneOutboxCleanupRepository(db_router=db_router)
 
-    # Mock processor to simulate successfully processing the batch
-    use_case.processor.process_batch = AsyncMock(return_value=2)
+    use_case = OutboxSweeperUseCase(repository=repo, publisher=mock_publisher)
 
     # 3. Execute Sweeper against real local DB
-    processed = await use_case.execute()
+    await use_case.execute()
 
     # 4. Verify
-    assert processed >= 2
-    use_case.processor.process_batch.assert_called()
+    mock_publisher.publish_batch.assert_called()
 
 
 @pytest.mark.integration
