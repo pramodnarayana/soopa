@@ -2,11 +2,12 @@ import os
 from datetime import UTC, datetime
 from typing import Self
 
+from seedwork.models import AggregateRoot
+
 from ucp.domain.events import (
     WebhookCreatedEvent,
     WebhookUpdatedEvent,
 )
-from ucp.domain.models.aggregate_root import AggregateRoot
 
 
 class WebhookDomainModel(AggregateRoot):

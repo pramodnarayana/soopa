@@ -1,9 +1,7 @@
-from types import TracebackType
-from typing import Self
-
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.uow import BaseSqlAlchemyUnitOfWork
 from edi.adapters.outbound.database.postgres_data_plane_outbox_repository import (
     SqlAlchemyDataPlaneOutboxRepository,
 )
@@ -16,7 +14,7 @@ from edi.ports.outbound.storage_port import StoragePort
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyDataPlaneUnitOfWork:
+class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     """
     Concrete Unit of Work for the EDI Worker Data Plane.
 
@@ -36,7 +34,7 @@ class SqlAlchemyDataPlaneUnitOfWork:
         settings: AppSettings,
         storage: StoragePort,
     ) -> None:
-        self._session = session
+        super().__init__(session)
         self._settings = settings
         self._storage = storage
         self.repository = SqlAlchemyRepositoryAdapter(
@@ -45,28 +43,3 @@ class SqlAlchemyDataPlaneUnitOfWork:
             storage=storage,
         )
         self.outbox = SqlAlchemyDataPlaneOutboxRepository(session=session)
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        _exc_val: BaseException | None,
-        _exc_tb: TracebackType | None,
-    ) -> None:
-        if exc_type is not None:
-            await self.rollback()
-
-    async def commit(self) -> None:
-        """Flushes and commits the current tenant session."""
-        try:
-            await self._session.flush()
-            await self._session.commit()
-        except Exception:
-            await self.rollback()
-            raise
-
-    async def rollback(self) -> None:
-        """Rolls back the current tenant session."""
-        await self._session.rollback()

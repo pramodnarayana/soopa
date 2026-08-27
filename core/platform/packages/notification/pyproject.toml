@@ -16,12 +16,14 @@ dependencies = [
     "sqlalchemy>=2.0.51",
     "ucp-models",
     "uvicorn>=0.51.0",
+    "seedwork",
 ]
 
 [tool.uv.sources]
 database = { workspace = true }
 ucp-models = { workspace = true }
 outbox = { workspace = true }
+seedwork = { workspace = true }
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"

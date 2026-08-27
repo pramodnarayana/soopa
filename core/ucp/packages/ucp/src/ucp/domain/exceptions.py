@@ -55,11 +55,3 @@ class IdentityProviderPortError(InfrastructureError):
         super().__init__(message)
         self.original_error = original_error
         self.status_code = status_code
-
-
-class DuplicateEntityError(InfrastructureError):
-    """Raised when an infrastructure constraint (e.g. unique constraint) is violated."""
-
-    def __init__(self, message: str, constraint_name: str | None = None):
-        super().__init__(message)
-        self.constraint_name = constraint_name

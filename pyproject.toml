@@ -23,6 +23,7 @@ members = [
     "core/platform/packages/observability",
     "core/platform/packages/outbox",
     "core/platform/packages/pubsub",
+    "core/platform/packages/seedwork",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",

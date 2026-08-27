@@ -16,54 +16,51 @@ logger = structlog.get_logger(__name__)
 
 
 class SqlAlchemyUserNotificationPreferenceRepository(UserNotificationPreferenceRepositoryPort):
-    def __init__(self, session_factory: typing.Any) -> None:
-        self.session_factory = session_factory
+    def __init__(self, session: typing.Any) -> None:
+        self.session = session
 
     async def get_preference(
         self, tenant_id: str, user_id: str, event_type: str, channel: str
     ) -> UserNotificationPreference | None:
-        async with self.session_factory() as session:
-            stmt = select(ORMUserNotificationPreference).where(
-                ORMUserNotificationPreference.tenant_id == tenant_id,
-                ORMUserNotificationPreference.user_id == user_id,
-                ORMUserNotificationPreference.event_type == event_type,
-                ORMUserNotificationPreference.channel == channel,
-            )
-            result = await session.execute(stmt)
-            orm_pref = result.scalars().first()
-            if not orm_pref:
-                return None
-            return self._to_domain(orm_pref)
+        stmt = select(ORMUserNotificationPreference).where(
+            ORMUserNotificationPreference.tenant_id == tenant_id,
+            ORMUserNotificationPreference.user_id == user_id,
+            ORMUserNotificationPreference.event_type == event_type,
+            ORMUserNotificationPreference.channel == channel,
+        )
+        result = await self.session.execute(stmt)
+        orm_pref = result.scalars().first()
+        if not orm_pref:
+            return None
+        return self._to_domain(orm_pref)
 
     async def get_user_preferences(
         self, tenant_id: str, user_id: str
     ) -> list[UserNotificationPreference]:
-        async with self.session_factory() as session:
-            stmt = select(ORMUserNotificationPreference).where(
-                ORMUserNotificationPreference.tenant_id == tenant_id,
-                ORMUserNotificationPreference.user_id == user_id,
-            )
-            result = await session.execute(stmt)
-            return [self._to_domain(orm_pref) for orm_pref in result.scalars().all()]
+        stmt = select(ORMUserNotificationPreference).where(
+            ORMUserNotificationPreference.tenant_id == tenant_id,
+            ORMUserNotificationPreference.user_id == user_id,
+        )
+        result = await self.session.execute(stmt)
+        return [self._to_domain(orm_pref) for orm_pref in result.scalars().all()]
 
     async def save_preference(self, preference: UserNotificationPreference) -> None:
-        async with self.session_factory() as session, session.begin():
-            stmt = (
-                insert(ORMUserNotificationPreference)
-                .values(
-                    id=preference.id,
-                    tenant_id=preference.tenant_id,
-                    user_id=preference.user_id,
-                    event_type=preference.event_type,
-                    channel=preference.channel.value,
-                    is_enabled=preference.is_enabled,
-                )
-                .on_conflict_do_update(
-                    index_elements=["tenant_id", "user_id", "event_type", "channel"],
-                    set_={"is_enabled": preference.is_enabled},
-                )
+        stmt = (
+            insert(ORMUserNotificationPreference)
+            .values(
+                id=preference.id,
+                tenant_id=preference.tenant_id,
+                user_id=preference.user_id,
+                event_type=preference.event_type,
+                channel=preference.channel.value,
+                is_enabled=preference.is_enabled,
             )
-            await session.execute(stmt)
+            .on_conflict_do_update(
+                index_elements=["tenant_id", "user_id", "event_type", "channel"],
+                set_={"is_enabled": preference.is_enabled},
+            )
+        )
+        await self.session.execute(stmt)
 
     def _to_domain(self, orm_pref: ORMUserNotificationPreference) -> UserNotificationPreference:
         return UserNotificationPreference(

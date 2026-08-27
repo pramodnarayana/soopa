@@ -25,7 +25,7 @@ def upgrade() -> None:
     op.create_table(
         "outbox",
         sa.Column("id", sa.String(length=128), nullable=False),
-        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -333,7 +333,7 @@ def upgrade() -> None:
     op.create_table(
         "roles",
         sa.Column("id", sa.String(length=128), nullable=False),
-        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.String(length=1024), nullable=True),
         sa.Column("capabilities", postgresql.ARRAY(sa.String()), nullable=False),
@@ -520,7 +520,7 @@ def upgrade() -> None:
     op.create_table(
         "user_roles",
         sa.Column("id", sa.String(length=128), nullable=False),
-        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("user_id", sa.String(length=128), nullable=False),
         sa.Column("role_id", sa.String(length=128), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

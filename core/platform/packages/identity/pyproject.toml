@@ -9,6 +9,7 @@ dependencies = [
     "pyjwt[crypto]>=2.10.0",
     "pydantic>=2.10.0",
     "httpx>=0.28.1",
+    "seedwork",
 ]
 
 [build-system]
@@ -69,3 +70,6 @@ extraPaths = [
     "../../../../../apps/edi/apps/edi-as2-server/src",
     "../../../../../apps/edi/packages/edi/src",
 ]
+
+[tool.uv.sources]
+seedwork = { workspace = true }

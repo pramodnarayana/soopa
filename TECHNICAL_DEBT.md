@@ -298,10 +298,10 @@ The taxonomy drifted organically as different engineers built different bounded 
   2. Following Shopify-style monolith patterns, create a dedicated `edi-background-worker` entrypoint to execute all EDI background jobs, isolating them from the high-throughput workers.
   3. Ensure the missing control-plane sweeper polling is wired up correctly in the new background worker infrastructure.
 
-## [Architecture] Eliminate `NULL` Tenant IDs in Favor of `PLATFORM_TENANT_ID`
+## [RESOLVED] [Architecture] Eliminate `NULL` Tenant IDs in Favor of `PLATFORM_TENANT_ID`
 
 - **Date Added**: 2026-08-25
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: Currently, the Identity ORM models (`Role`, `UserRole`) define `tenant_id` as `nullable=True`, using `NULL` to signify "Global" or "Platform" scoped resources. This is a non-enterprise pattern that breaks PostgreSQL referential integrity and makes writing Row-Level Security (RLS) policies and unified SQL constraints difficult. The system already defines a canonical `PLATFORM_TENANT_ID` in `identity_context.py`, but the database and repositories were never refactored to enforce it.
 - **Action Item**:
   1. Refactor the Identity ORM models to enforce `nullable=False` on `tenant_id` columns.
@@ -336,17 +336,17 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Description**: The EDI bounded context (both Data and Control planes) currently uses custom outbox jobs/sweepers. They need to be migrated to use the generic `outbox` infrastructure package (like the Notification bounded context did).
 - **Action Item**: Migrate all custom EDI outbox jobs and sweepers to the generic `OutboxProcessorUseCase` and `SweepOutboxUseCase` from the platform outbox package. Remove duplicated legacy logic.
 
-## [Architecture] Centralize DDD AggregateRoot and Eliminate Taxonomy Drift
+## [RESOLVED] [Architecture] Centralize DDD AggregateRoot and Eliminate Taxonomy Drift
 
 - **Date Added**: 2026-08-26
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: The codebase currently suffers from Taxonomy Drift in how it implements Domain-Driven Design (DDD) Aggregates. The `identity` and `ucp` bounded contexts define a custom `AggregateRoot` base class in `domain/aggregate_root.py`, while the `edi` context implements the exact same logic as a `DomainEventMixin` inside `domain/models.py`. This violates the Enterprise Architecture rule against duplicate infrastructure and file path taxonomy drift.
-- **Action Item**: Create a centralized platform package (e.g., `core/platform/packages/ddd`) containing a single, unified `AggregateRoot` base class and `DomainEvent` definition. Refactor all bounded contexts (`identity`, `ucp`, `edi`) to import and inherit from this central package, completely removing the duplicated local implementations and Mixins.
+- **Action Item**: Created a centralized platform package `core/platform/packages/seedwork` containing a single, unified `AggregateRoot` base class and `DomainEvent` definition. Refactored all bounded contexts (`identity`, `ucp`, `edi`, `notification`) to import and inherit from this central package, completely removing the duplicated local implementations and Mixins.
 
-## [Architecture] Centralize UnitOfWork (UoW) Transaction Management
+## [RESOLVED] [Architecture] Centralize UnitOfWork (UoW) Transaction Management
 
 - **Date Added**: 2026-08-26
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: Currently, every bounded context (`ucp`, `edi`, etc.) implements an identical `SqlAlchemyUnitOfWork` (e.g., `SqlAlchemyUcpUnitOfWork`, `SqlAlchemyDataPlaneUnitOfWork`). The transaction lifecycle methods (`__aenter__`, `__aexit__`, `commit`, `rollback`) are highly duplicated. This includes the complex logic inside `commit()` that intercepts `psycopg` `IntegrityError`, parses the `pgcode`, and translates it into domain-friendly errors.
 - **Action Item**: Centralize the base `UnitOfWork` into `core/platform/packages/database/src/database/uow.py`. Bounded contexts should only define a thin subclass to type-hint their specific repositories, inheriting the heavy transaction and error-handling logic from the shared platform base class.
 
@@ -367,9 +367,16 @@ The taxonomy drifted organically as different engineers built different bounded 
 ## [Architecture] Centralize SQS Message Pump / Polling Infrastructure
 
 - **Date Added**: 2026-08-26
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: While `AwsSqsPublisher` successfully centralizes the publishing of events, the consumer side exhibits architectural drift. Classes like `UcpEventsSqsConsumer` (UCP) and `NotificationOutboxSweeperJob` (Notification) duplicate the boilerplate for polling SQS, acknowledging messages, and handling leases (`mark_completed`, `mark_failed`). Naming conventions also drift between `jobs/` and `workers/`.
 - **Action Item**: Build a centralized `BaseMessagePump` or `SqsConsumerManager` in `core/platform/packages/pubsub` that natively handles the `receive_message -> process -> delete_message` lifecycle loop, so that bounded contexts only need to inject a pure `MessageHandler` callback.
+
+## [Architecture] Standardize Testing Taxonomy
+
+- **Date Added**: 2026-08-27
+- **Status**: TO DO
+- **Description**: The testing infrastructure exhibits severe Taxonomy Drift across bounded contexts. UCP enforces a strict split between `tests/integration` and `tests/unit`. Identity dumps all tests into the root `tests/` directory. EDI scatters tests arbitrarily between root, `integration/`, `adapters/`, etc. Furthermore, mock and fake objects are defined inconsistently (e.g., standalone `api_fakes.py` vs dedicated `fakes/` directories).
+- **Action Item**: Define and enforce a strict enterprise standard for testing taxonomy (e.g., mandating `tests/unit`, `tests/integration`, and `tests/factories` directories). Refactor all test suites across the monorepo to align with this standard structure.
 
 ## [Architecture] Enterprise-Grade Monorepo Test Architecture
 

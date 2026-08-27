@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+from seedwork.models import AggregateRoot
+
 from ucp.domain.events import (
     AppSubscribedEvent,
     AppUnsubscribedEvent,
@@ -11,7 +13,6 @@ from ucp.domain.events import (
     TenantStatusToggledEvent,
 )
 from ucp.domain.exceptions import AppSubscriptionError, TenantRenameError
-from ucp.domain.models.aggregate_root import AggregateRoot
 
 
 @dataclass

@@ -4,7 +4,6 @@ from typing import Any
 
 import structlog
 from dotenv import load_dotenv
-from edi.adapters.inbound.messaging.sqs_poller import poll_sqs_queue
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
@@ -32,6 +31,7 @@ from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.events import MessageQueueName, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from worker.adapters.aws_secrets_manager import AwsSecretsManagerSecretStore
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
@@ -137,50 +137,43 @@ async def main() -> None:
 
     consumer = EdiDataPlaneEventDispatcher(callback=route_event)
 
-    transform_task = asyncio.create_task(
-        poll_sqs_queue(
-            MessageQueueName.TRANSFORM_QUEUE,
-            consumer.handle,
-            aws_endpoint,
-        )
+    transform_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.TRANSFORM_QUEUE,
+        handler=consumer.handle,
+        endpoint_url=aws_endpoint,
     )
+    transform_manager.start()
 
-    lifecycle_task = asyncio.create_task(
-        poll_sqs_queue(
-            MessageQueueName.LIFECYCLE_QUEUE,
-            consumer.handle,
-            aws_endpoint,
-        )
+    lifecycle_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.LIFECYCLE_QUEUE,
+        handler=consumer.handle,
+        endpoint_url=aws_endpoint,
     )
+    lifecycle_manager.start()
 
-    deliver_task = asyncio.create_task(
-        poll_sqs_queue(
-            MessageQueueName.DELIVER_QUEUE,
-            consumer.handle,
-            aws_endpoint,
-        )
+    deliver_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.DELIVER_QUEUE,
+        handler=consumer.handle,
+        endpoint_url=aws_endpoint,
     )
+    deliver_manager.start()
 
     # ─────────────────────────────────────────────────────────────
     # Run all workers concurrently
     # ─────────────────────────────────────────────────────────────
+    stop_event = asyncio.Event()
     try:
-        await asyncio.gather(transform_task, lifecycle_task, deliver_task)
+        import signal
+
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, stop_event.set)
+        await stop_event.wait()
     finally:
         logger.info("data_worker.shutting_down_gracefully")
-        transform_task.cancel()
-        lifecycle_task.cancel()
-        deliver_task.cancel()
-
-        import contextlib
-
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.gather(
-                transform_task,
-                lifecycle_task,
-                deliver_task,
-                return_exceptions=True,
-            )
+        await transform_manager.stop()
+        await lifecycle_manager.stop()
+        await deliver_manager.stop()
 
         await db_router.close_all()
 

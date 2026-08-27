@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from identity.domain.aggregate_root import AggregateRoot
+from seedwork.models import AggregateRoot
+
 from identity.domain.events import RoleCreatedEvent
 
 

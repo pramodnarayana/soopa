@@ -1,17 +1,6 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
-class DomainEvent(ABC):
-    @property
-    @abstractmethod
-    def event_name(self) -> str:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_routing_tenant_id(self) -> str | None:
-        raise NotImplementedError
+from seedwork.events import DomainEvent
 
 
 @dataclass(frozen=True)

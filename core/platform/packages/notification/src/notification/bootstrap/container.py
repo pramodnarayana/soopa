@@ -11,7 +11,6 @@ from collections.abc import AsyncGenerator
 import structlog
 from database.provider import get_async_engine
 from dependency_injector import containers, providers
-from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from notification.adapters.outbound.channels import (
@@ -23,21 +22,7 @@ from notification.adapters.outbound.channels.dummy_email_provider import DummyEm
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
 )
-from notification.adapters.outbound.database.postgres_notification_record_repository import (
-    SqlAlchemyNotificationRecordRepository,
-)
-from notification.adapters.outbound.database.postgres_outbox_repository import (
-    SqlAlchemyNotificationOutboxRepository,
-)
-from notification.adapters.outbound.database.postgres_route_repository import (
-    SqlAlchemyNotificationRouteRepository,
-)
-from notification.adapters.outbound.database.postgres_template_repository import (
-    SqlAlchemyTemplateRepository,
-)
-from notification.adapters.outbound.database.postgres_user_preference_repository import (
-    SqlAlchemyUserNotificationPreferenceRepository,
-)
+from notification.adapters.outbound.database.uow import SqlAlchemyNotificationUnitOfWork
 from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
@@ -115,29 +100,12 @@ class Container(containers.DeclarativeContainer):
     #   - SqlAlchemyNotificationRouteRepository: Routing aggregate (dispatch read + API CRUD)
     # -----------------------------------------------------------------------
 
-    template_repository = providers.Factory(
-        SqlAlchemyTemplateRepository,
-        session_factory=session_factory,
-    )
+    # -----------------------------------------------------------------------
+    # Unit of Work
+    # -----------------------------------------------------------------------
 
-    route_repository = providers.Factory(
-        SqlAlchemyNotificationRouteRepository,
-        session_factory=session_factory,
-    )
-
-    in_app_persistence = providers.Factory(
-        SqlAlchemyNotificationRecordRepository,
-        session_factory=session_factory,
-    )
-
-    outbox_repository = providers.Factory(
-        SqlAlchemyNotificationOutboxRepository,
-        session_factory=session_factory,
-    )
-
-    user_preference_repository = providers.Factory(
-        SqlAlchemyUserNotificationPreferenceRepository,
-        session_factory=session_factory,
+    uow = providers.Factory(
+        SqlAlchemyNotificationUnitOfWork,
     )
 
     query_repository = providers.Factory(
@@ -160,7 +128,6 @@ class Container(containers.DeclarativeContainer):
 
     in_app_strategy = providers.Factory(
         InAppDeliveryStrategy,
-        persistence=in_app_persistence,
     )
 
     slack_strategy = providers.Factory(
@@ -180,26 +147,24 @@ class Container(containers.DeclarativeContainer):
 
     notification_compiler = providers.Factory(
         NotificationCompilerUseCase,
-        template_repo=template_repository,
+        uow=uow,
         template_renderer=template_renderer,
-        outbox_repo=outbox_repository,
-        route_repo=route_repository,
-        user_pref_repo=user_preference_repository,
-        record_repo=in_app_persistence,
     )
 
     update_user_preference_use_case = providers.Factory(
         UpdateUserPreferenceUseCase,
-        repo=user_preference_repository,
+        uow=uow,
     )
 
     get_user_preferences_use_case = providers.Factory(
         GetUserPreferencesUseCase,
-        repository=user_preference_repository,
+        uow=uow,
     )
 
-    outbox_sweeper_use_case = providers.Factory(
-        OutboxSweeperUseCase,
-        repository=outbox_repository,
-        publisher=None,  # Will be overridden in worker container with AwsSnsPublisher
-    )
+    # -----------------------------------------------------------------------
+    # We don't inject outbox_sweeper_use_case here because we don't have
+    # the outbox repository in this container anymore (it's inside UoW).
+    # The worker container should redefine it by injecting a raw
+    # OutboxRepositoryPort if needed for the sweeper, or the sweeper
+    # should be refactored to use UoW. We remove it from here for now.
+    # -----------------------------------------------------------------------

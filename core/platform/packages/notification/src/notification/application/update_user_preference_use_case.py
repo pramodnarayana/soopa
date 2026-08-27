@@ -3,16 +3,14 @@ import os
 import structlog
 
 from ..domain.models import Channel, UserNotificationPreference
-from ..ports.outbound.user_notification_preference_repository_port import (
-    UserNotificationPreferenceRepositoryPort,
-)
+from ..ports.outbound.uow_port import NotificationUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
 
 class UpdateUserPreferenceUseCase:
-    def __init__(self, repo: UserNotificationPreferenceRepositoryPort):
-        self.repo = repo
+    def __init__(self, uow: NotificationUnitOfWorkPort):
+        self.uow = uow
 
     async def execute(
         self, tenant_id: str, user_id: str, event_type: str, channel: str, is_enabled: bool
@@ -37,14 +35,19 @@ class UpdateUserPreferenceUseCase:
             is_enabled=is_enabled,
         )
 
-        await self.repo.save_preference(pref)
+        async with self.uow:
+            await self.uow.user_preference_repo.save_preference(pref)
 
-        # We fetch it back to guarantee we return the single source of truth
-        # (especially if the row already existed and the DB performed an UPSERT)
-        updated_pref = await self.repo.get_preference(tenant_id, user_id, event_type, channel)
-        if not updated_pref:
-            bound_logger.error("update_user_preference.verification_failed")
-            raise RuntimeError("Failed to read back preference after save.")
+            # We fetch it back to guarantee we return the single source of truth
+            # (especially if the row already existed and the DB performed an UPSERT)
+            updated_pref = await self.uow.user_preference_repo.get_preference(
+                tenant_id, user_id, event_type, channel
+            )
+            if not updated_pref:
+                bound_logger.error("update_user_preference.verification_failed")
+                raise RuntimeError("Failed to read back preference after save.")
+
+            await self.uow.commit()
 
         bound_logger.info("update_user_preference.completed", pref_id=updated_pref.id)
         return updated_pref

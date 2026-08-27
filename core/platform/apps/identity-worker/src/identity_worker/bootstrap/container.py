@@ -28,9 +28,6 @@ from identity_worker.adapters.inbound.jobs.identity_outbox_sweeper_job import (
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
-from identity_worker.adapters.inbound.workers.identity_event_sqs_consumer import (
-    IdentityEventSqsConsumer,
-)
 from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
     DummyIdentityProviderPort,
 )
@@ -111,7 +108,8 @@ class WorkerContainer:
         )
 
         self.outbox_relay: PostgresOutboxRelay | None = None
-        self.events_consumer: IdentityEventDispatcher | None = None
+        self.events_dispatcher: IdentityEventDispatcher | None = None
+        self.events_consumer: Any | None = None
 
     def wire(self) -> None:
         # Construct shared infrastructure once — both the relay and the sweeper
@@ -240,14 +238,18 @@ class WorkerContainer:
             identity_provider=idp, user_identity_provider=idp_users, session_factory=session_factory
         )
 
-        self.events_consumer = IdentityEventDispatcher(
-            event_consumer=IdentityEventSqsConsumer(
-                queue_name=self.settings.sqs_identity_sync_queue_name,
-                endpoint_url=self.settings.aws_endpoint_url,
-            )
-        )
+        self.events_dispatcher = IdentityEventDispatcher()
 
-        self._register_identity_handlers(self.events_consumer, identity_service)
+        self._register_identity_handlers(self.events_dispatcher, identity_service)
+
+        # Wire up the new centralized SqsConsumerManager from pubsub
+        from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+
+        self.events_consumer = SqsConsumerManager(
+            queue_name=self.settings.sqs_identity_sync_queue_name,
+            endpoint_url=self.settings.aws_endpoint_url,
+            handler=self.events_dispatcher.dispatch_raw,
+        )
 
     async def dispose(self) -> None:
         if self._engine:

@@ -13,7 +13,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
 from config_sync_worker.ports.outbound.event_translator_port import EventTranslatorPort
-from config_sync_worker.ports.outbound.outbox_port import OutboxPort
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
 
@@ -24,12 +23,10 @@ class ProvisioningWorkerService:
     def __init__(
         self,
         tenant_port: TenantPort,
-        outbox_port: OutboxPort,
         replication_port: ReplicationPort,
         translator_port: EventTranslatorPort,
     ):
         self.tenant_port = tenant_port
-        self.outbox_port = outbox_port
         self.replication_port = replication_port
         self.translator_port = translator_port
 
@@ -123,48 +120,79 @@ class ProvisioningWorkerService:
                 f"Invalid provision event payload for {envelope.event_type}: {e}"
             ) from e
 
-    async def process_next_event(self) -> bool:
-        """Process a single event from the outbox. Returns True if an event was processed."""
-        async with self.outbox_port.process_next_event() as event:
-            if not event:
-                return False
-
-            envelope = getattr(event, "envelope", None)
-            if not envelope:
-                logger.error("invalid_event_format_no_envelope", event_id=event.id)
-                raise PermanentProvisioningError("Event is missing envelope attribute")
-
-            parsed_event = self._parse_event(envelope)
-            if not parsed_event:
-                return True
-
+    async def dispatch_raw(self, body: dict[str, Any]) -> None:
+        """Entrypoint called by SqsConsumerManager.
+        body is the raw JSON dictionary from the SQS message or SNS notification.
+        """
+        # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
+        external_event_type = body.get("eventType")
+        if external_event_type:
             try:
-                if parsed_event.resource_id is None:
-                    raise PermanentProvisioningError(
-                        f"Event {parsed_event.event_type} missing required resource_id"
-                    )
-
-                handler = self._handlers.get(parsed_event.event_type)
-                if not handler:
-                    raise PermanentProvisioningError(
-                        f"Unhandled event type: {parsed_event.event_type}"
-                    )
-
-                logger.info(
-                    "dispatching_provision_event",
-                    event_type=parsed_event.event_type,
-                    resource_id=parsed_event.resource_id,
-                    tenant_id=parsed_event.tenant_id,
+                translated_body = self.translator_port.translate_external_event(
+                    external_event_type, body
                 )
-                await self._broadcast_or_replicate(
-                    parsed_event.tenant_id, handler, parsed_event.resource_id
+                if translated_body is None:
+                    # Unregistered event type
+                    logger.info(
+                        "unregistered_external_event_type",
+                        external_event_type=external_event_type,
+                        action="drop",
+                    )
+                    return
+                body = translated_body
+                body["__source"] = "soopa.edi"
+            except ValueError:
+                # Permanent validation error - malformed message
+                logger.exception(
+                    "permanent_validation_error",
+                    external_event_type=external_event_type,
+                    body=body,
+                    action="drop",
                 )
-            except (PermanentProvisioningError, TransientProvisioningError):
-                raise
-            except Exception as e:
-                logger.exception("provisioning_event_processing_failed", event_id=envelope.id)
-                raise TransientProvisioningError(
-                    f"Failed to process event {envelope.id}: {e}"
-                ) from e
+                return
 
-        return True
+        source = body.pop("__source", "soopa.edi")
+
+        # We need a dummy Envelope-like object to pass to _parse_event
+        # but _parse_event is simple enough we can just do it inline or pass a dummy
+        class DummyEnvelope:
+            def __init__(self, **kwargs: Any) -> None:
+                self.__dict__.update(kwargs)
+
+        envelope = DummyEnvelope(
+            id=body.get("id"),
+            source=source,
+            event_type=body.get("eventType", body.get("event_type", "unknown")),
+            payload=body,
+            idempotency_key=body.get("idempotency_key"),
+            tenant_id=body.get("tenant_id"),
+        )
+
+        parsed_event = self._parse_event(envelope)
+        if not parsed_event:
+            return
+
+        try:
+            if parsed_event.resource_id is None:
+                raise PermanentProvisioningError(
+                    f"Event {parsed_event.event_type} missing required resource_id"
+                )
+
+            handler = self._handlers.get(parsed_event.event_type)
+            if not handler:
+                raise PermanentProvisioningError(f"Unhandled event type: {parsed_event.event_type}")
+
+            logger.info(
+                "dispatching_provision_event",
+                event_type=parsed_event.event_type,
+                resource_id=parsed_event.resource_id,
+                tenant_id=parsed_event.tenant_id,
+            )
+            await self._broadcast_or_replicate(
+                parsed_event.tenant_id, handler, parsed_event.resource_id
+            )
+        except (PermanentProvisioningError, TransientProvisioningError):
+            raise
+        except Exception as e:
+            logger.exception("provisioning_event_processing_failed")
+            raise TransientProvisioningError(f"Failed to process event: {e}") from e

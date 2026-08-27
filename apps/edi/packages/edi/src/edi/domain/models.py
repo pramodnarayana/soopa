@@ -4,30 +4,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-
-class DomainEventMixin:
-    """
-    Mixin for DDD Aggregates to store domain events internally.
-    """
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._domain_events: list[Any] = []
-
-    @property
-    def domain_events(self) -> list[Any]:
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        return self._domain_events
-
-    def add_domain_event(self, event: Any) -> None:
-        if not hasattr(self, "_domain_events"):
-            self._domain_events = []
-        self._domain_events.append(event)
-
-    def clear_domain_events(self) -> None:
-        if hasattr(self, "_domain_events"):
-            self._domain_events.clear()
+from seedwork.models import AggregateRoot
 
 
 class Direction(StrEnum):
@@ -68,7 +45,7 @@ class RecordStatus(StrEnum):
 
 
 @dataclass(kw_only=True)
-class EdiRecordBase(DomainEventMixin):
+class EdiRecordBase(AggregateRoot):
     id: str
     tenant_id: str
     trace_id: str
@@ -128,7 +105,7 @@ class ApiGatewayReceiptDomainModel(EdiRecordBase):
 
 
 @dataclass(kw_only=True)
-class WebhookDomainModel(DomainEventMixin):
+class WebhookDomainModel(AggregateRoot):
     id: str
     tenant_id: str
     name: str
@@ -140,7 +117,7 @@ class WebhookDomainModel(DomainEventMixin):
 
 
 @dataclass(kw_only=True)
-class AS2PartnerDomainModel(DomainEventMixin):
+class AS2PartnerDomainModel(AggregateRoot):
     id: str
     as2_id: str
     name: str
@@ -159,7 +136,7 @@ class AS2PartnerDomainModel(DomainEventMixin):
 
 
 @dataclass(kw_only=True)
-class AS2PartnershipDomainModel(DomainEventMixin):
+class AS2PartnershipDomainModel(AggregateRoot):
     id: str
     name: str
     local_partner_id: str
@@ -177,7 +154,7 @@ class AS2PartnershipDomainModel(DomainEventMixin):
 
 
 @dataclass(kw_only=True)
-class SFTPPartnerDomainModel(DomainEventMixin):
+class SFTPPartnerDomainModel(AggregateRoot):
     id: str
     tenant_id: str
     name: str
@@ -196,7 +173,7 @@ class SFTPPartnerDomainModel(DomainEventMixin):
 
 
 @dataclass(kw_only=True)
-class InboundRouteDomainModel(DomainEventMixin):
+class InboundRouteDomainModel(AggregateRoot):
     id: str
     tenant_id: str
     name: str
@@ -218,7 +195,7 @@ class InboundRouteDomainModel(DomainEventMixin):
 
 
 @dataclass(kw_only=True)
-class OutboundRouteDomainModel(DomainEventMixin):
+class OutboundRouteDomainModel(AggregateRoot):
     id: str
     tenant_id: str
     trading_partner_id: str
@@ -234,7 +211,7 @@ class OutboundRouteDomainModel(DomainEventMixin):
 
 
 @dataclass(kw_only=True)
-class OutboundEdiHeaderDomainModel(DomainEventMixin):
+class OutboundEdiHeaderDomainModel(AggregateRoot):
     id: str
     tenant_id: str
     name: str

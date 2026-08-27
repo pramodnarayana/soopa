@@ -158,3 +158,20 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                     message_id=message_id,
                     worker_id=worker_id,
                 )
+
+
+class SqlAlchemyNotificationOutboxPublisher:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def save(self, message: EventEnvelope) -> None:
+        import os
+
+        orm_msg = NotificationOutbox(
+            id=message.id or f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+            tenant_id=message.tenant_id,
+            event_type=message.event_type,
+            idempotency_key=message.idempotency_key,
+            payload=message.payload,
+        )
+        self.session.add(orm_msg)
