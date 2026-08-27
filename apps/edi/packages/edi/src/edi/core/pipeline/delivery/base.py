@@ -1,7 +1,7 @@
 import uuid
-from secrets.ports.secret_store_port import SecretStorePort
 
 import structlog
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.domain.events import PipelineEventType
 from edi.domain.models import EdiMessageDomainModel

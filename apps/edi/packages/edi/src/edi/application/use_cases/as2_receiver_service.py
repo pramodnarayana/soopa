@@ -2,10 +2,10 @@ import email
 import re
 import uuid
 from email import policy
-from secrets.ports.secret_store_port import SecretStorePort
 from typing import Any
 
 import structlog
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.adapters.inbound.as2.mdn import build_mdn, calculate_mic
 from edi.adapters.inbound.as2.message import AS2Message

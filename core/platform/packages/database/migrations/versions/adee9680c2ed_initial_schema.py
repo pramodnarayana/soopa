@@ -545,6 +545,54 @@ def upgrade() -> None:
         schema="identity",
         postgresql_nulls_not_distinct=True,
     )
+    op.execute(
+        """
+        INSERT INTO identity.roles (id, tenant_id, name, description, capabilities, created_at, updated_at)
+        VALUES
+            ('rol_97f48b1115b74100', 'ten_000000000000000000000000', 'PlatformAdmin', 'Full access to the entire platform.', ARRAY['platform:admin'], NOW(), NOW()),
+            ('rol_a62f2225bf70bfac', 'ten_000000000000000000000000', 'TenantAdmin', 'Full access to manage a specific tenant.', ARRAY['tenant:admin', 'tenant_settings:read', 'tenant_settings:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'api_keys:read', 'api_keys:write', 'webhooks:read', 'webhooks:write', 'invoices:read', 'invoices:write'], NOW(), NOW()),
+            ('rol_1d55e88863640224', 'ten_000000000000000000000000', 'Viewer', 'Read-only access to a specific tenant.', ARRAY['tenant_settings:read', 'users:read', 'roles:read', 'api_keys:read', 'webhooks:read', 'invoices:read'], NOW(), NOW())
+        ON CONFLICT (tenant_id, name) DO UPDATE SET
+            description = EXCLUDED.description,
+            capabilities = EXCLUDED.capabilities,
+            updated_at = NOW();
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO ucp.apps (id, slug, name, description, created_at, updated_at)
+        VALUES ('app_edi_core', 'edi', 'EDI', 'B2B Electronic Data Interchange.', NOW(), NOW())
+        ON CONFLICT (slug) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            updated_at = NOW();
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at)
+        VALUES ('edi_shard_1', 'EDI Primary Shard', 'postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1', 'active', NOW(), NOW())
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            dsn = EXCLUDED.dsn,
+            status = EXCLUDED.status,
+            updated_at = NOW();
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO scheduling.scheduled_jobs (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, retry_count, payload, status, created_at, updated_at)
+        VALUES
+            ('job_notif_sweeper', 'NOTIFICATION_OUTBOX_SWEEPER', 'edi-priority-notifications', 'NOTIFICATION', '* * * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
+            ('job_edi_orch_sweep', 'EDI_ORCHESTRATOR_OUTBOX_SWEEPER', 'edi-orchestrator-jobs', 'EDI', '* * * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
+            ('job_edi_prov_sweep', 'EDI_PROVISIONING_OUTBOX_SWEEPER', 'edi-orchestrator-jobs', 'EDI', '* * * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
+            ('job_edi_ctrl_clean', 'EDI_CONTROL_PLANE_OUTBOX_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
+            ('job_edi_data_clean', 'EDI_DATA_PLANE_OUTBOX_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
+            ('job_edi_idem_clean', 'EDI_IDEMPOTENCY_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
+            ('job_edi_audt_clean', 'EDI_AUDIT_LOG_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING;
+        """
+    )
     # ### end Alembic commands ###
 
 

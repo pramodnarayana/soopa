@@ -1,4 +1,6 @@
-from typing import Any, Protocol
+from typing import Protocol, TypeAlias
+
+Category: TypeAlias = str
 
 
 class SecretStorePort(Protocol):
@@ -6,7 +8,9 @@ class SecretStorePort(Protocol):
         """Fetch a secret string from Vault given its reference."""
         ...
 
-    async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
+    async def store_private_key(
+        self, private_key_pem: bytes, category: Category | None = None
+    ) -> str:
         """
         Stores a private key in Vault and returns the Vault reference path.
         """

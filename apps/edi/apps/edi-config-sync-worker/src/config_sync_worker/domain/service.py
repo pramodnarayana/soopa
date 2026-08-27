@@ -1,7 +1,6 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import structlog
 from edi.domain.events import (
     EdiEventType,
     ProvisioningEvent,
@@ -13,8 +12,6 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
-
-logger = structlog.get_logger(__name__)
 
 
 class ProvisioningWorkerService:
@@ -59,18 +56,14 @@ class ProvisioningWorkerService:
 
     async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
         if tenant_id == PLATFORM_TENANT_ID:
-            logger.info(
-                "master_tenant_detected_broadcasting",
-                replicate_fn=replicate_fn.__name__,
-            )
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []
             for t_id in all_tenants:
                 try:
                     await replicate_fn(t_id, *args)
                 except PermanentProvisioningError:
-                    # Log permanent errors but don't retry them
-                    logger.exception("permanent_provisioning_error_ignored", tenant_id=t_id)
+                    # Permanent errors are not retried or re-raised to block other tenants
+                    pass
 
                 except Exception as e:  # noqa: BLE001
                     transient_errors.append(e)
@@ -88,17 +81,10 @@ class ProvisioningWorkerService:
             if not handler:
                 raise PermanentProvisioningError(f"Unhandled event type: {parsed_event.event_type}")
 
-            logger.info(
-                "dispatching_provision_event",
-                event_type=parsed_event.event_type,
-                resource_id=parsed_event.resource_id,
-                tenant_id=parsed_event.tenant_id,
-            )
             await self._broadcast_or_replicate(
                 parsed_event.tenant_id, handler, parsed_event.resource_id
             )
         except (PermanentProvisioningError, TransientProvisioningError):
             raise
         except Exception as e:
-            logger.exception("provisioning_event_processing_failed")
             raise TransientProvisioningError(f"Failed to process event: {e}") from e

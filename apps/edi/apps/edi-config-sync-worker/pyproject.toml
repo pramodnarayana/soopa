@@ -10,7 +10,7 @@ dependencies = ["aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "asyncpg>=0.29.0", "ed
 edi = { workspace = true }
 outbox = { workspace = true }
 seedwork = { workspace = true }
-secrets = { workspace = true }
+secret-store = { workspace = true }
 
 [tool.deptry]
 known_first_party = ["config_sync_worker"]

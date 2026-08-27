@@ -1,5 +1,5 @@
 [project]
-name = "secrets"
+name = "secret-store"
 version = "0.1.0"
 description = "Centralized AWS Secrets Manager Adapter"
 authors = [
@@ -20,4 +20,4 @@ build-backend = "hatchling.build"
 seedwork = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/secrets"]
+packages = ["src/secret_store"]

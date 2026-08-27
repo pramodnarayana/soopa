@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 import structlog
 from dotenv import load_dotenv
@@ -80,8 +81,8 @@ async def main() -> None:
             outbox_listener.start()
 
             # Wait for stop signal, or if sqs_manager/outbox_listener fails
-            manager_task = getattr(sqs_manager, "_manager_task", None)
-            tasks_to_wait = [asyncio.create_task(stop_event.wait())]
+            manager_task = sqs_manager.task
+            tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
             if manager_task:
                 tasks_to_wait.append(manager_task)
 
@@ -90,8 +91,10 @@ async def main() -> None:
             # If the manager task completed with an exception, re-raise it
             for task in done:
                 if task is manager_task and task.exception():
-                    logger.error("sqs_consumer_manager_failed", exc_info=task.exception())
-                    raise task.exception()
+                    exc = task.exception()
+                    logger.error("sqs_consumer_manager_failed", exc_info=exc)
+                    if exc:
+                        raise exc
 
     finally:
         logger.info("shutting_down_gracefully")

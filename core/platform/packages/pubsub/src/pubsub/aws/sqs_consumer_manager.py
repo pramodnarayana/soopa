@@ -41,6 +41,11 @@ class SqsConsumerManager:
             endpoint_url=endpoint_url,
         )
 
+    @property
+    def task(self) -> asyncio.Task[None] | None:
+        """Returns the internal asyncio task for the consumer loop."""
+        return self._task
+
     def start(self) -> None:
         if not self.is_running:
             self.is_running = True

@@ -1,7 +1,7 @@
 import json
-from secrets.ports.secret_store_port import SecretStorePort
 
 import structlog
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.domain.models import EdiMessageDomainModel
