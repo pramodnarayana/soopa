@@ -72,6 +72,8 @@ class MessageQueueName(StrEnum):
     PROVISIONING_QUEUE = "edi-config-sync-queue.fifo"
     CDC_DLQ_QUEUE = "edi-cdc-dlq.fifo"
     PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications.fifo"
+    DATA_PLANE_JOBS_QUEUE = "edi-data-plane-jobs.fifo"
+    CONTROL_PLANE_JOBS_QUEUE = "edi-control-plane-jobs.fifo"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {

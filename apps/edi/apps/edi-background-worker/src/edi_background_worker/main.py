@@ -12,6 +12,7 @@ from edi.adapters.outbound.messaging.edi_data_plane_sqs_outbox_publisher import 
     EdiDataPlaneSqsOutboxPublisherAdapter,
 )
 from edi.config.settings import get_settings
+from edi.domain.events import MessageQueueName
 from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
@@ -133,14 +134,14 @@ async def main() -> None:
     )
 
     dp_manager = SqsConsumerManager(
-        queue_name="edi-data-plane-jobs.fifo",
+        queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
         handler=functools.partial(process_scheduled_job, registry=job_registry),
         endpoint_url=aws_endpoint,
     )
     dp_manager.start()
 
     cp_manager = SqsConsumerManager(
-        queue_name="edi-control-plane-jobs.fifo",
+        queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,
         handler=functools.partial(process_scheduled_job, registry=job_registry),
         endpoint_url=aws_endpoint,
     )
@@ -157,7 +158,18 @@ async def main() -> None:
     loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
 
     try:
-        await stop_event.wait()
+        stop_task = asyncio.create_task(stop_event.wait())
+        tasks = [stop_task]
+        if dp_manager._task:
+            tasks.append(dp_manager._task)
+        if cp_manager._task:
+            tasks.append(cp_manager._task)
+
+        done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in done:
+            if task is not stop_task and task.exception():
+                raise task.exception()
     except asyncio.CancelledError:
         logger.info("edi_background_worker_cancelled")
     except Exception:

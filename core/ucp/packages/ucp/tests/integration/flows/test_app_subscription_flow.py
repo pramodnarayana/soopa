@@ -8,9 +8,9 @@ from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
-from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner

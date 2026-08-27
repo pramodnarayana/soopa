@@ -1,11 +1,10 @@
-import typing
-
 import structlog
 from database.models.notifications import (
     UserNotificationPreference as ORMUserNotificationPreference,
 )
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....domain.models import Channel, UserNotificationPreference
 from ....ports.outbound.user_notification_preference_repository_port import (
@@ -16,7 +15,7 @@ logger = structlog.get_logger(__name__)
 
 
 class SqlAlchemyUserNotificationPreferenceRepository(UserNotificationPreferenceRepositoryPort):
-    def __init__(self, session: typing.Any) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def get_preference(

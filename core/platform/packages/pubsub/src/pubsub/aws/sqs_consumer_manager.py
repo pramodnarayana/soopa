@@ -3,6 +3,7 @@ import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import botocore.exceptions
 import structlog
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 
@@ -56,15 +57,30 @@ class SqsConsumerManager:
         logger.info("sqs_consumer_manager_stopped", queue=self.queue_name)
 
     async def _run_loop(self) -> None:
-        try:
-            async with self.sqs_consumer:
-                await self._poll_continuous()
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception("sqs_consumer_manager_fatal_error", queue=self.queue_name)
-        finally:
-            self.is_running = False
+        while self.is_running:
+            try:
+                async with self.sqs_consumer:
+                    await self._poll_continuous()
+            except asyncio.CancelledError:
+                self.is_running = False
+                raise
+            except botocore.exceptions.ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in (
+                    "AWS.SimpleQueueService.NonExistentQueue",
+                    "InvalidParameterValue",
+                    "AccessDenied",
+                ):
+                    logger.exception("sqs_consumer_manager_terminal_error", queue=self.queue_name)
+                    raise
+                logger.exception("sqs_consumer_manager_transient_error", queue=self.queue_name)
+                await asyncio.sleep(self.error_sleep_seconds)
+            except botocore.exceptions.BotoCoreError:
+                logger.exception("sqs_consumer_manager_transient_error", queue=self.queue_name)
+                await asyncio.sleep(self.error_sleep_seconds)
+            except Exception:
+                logger.exception("sqs_consumer_manager_fatal_error", queue=self.queue_name)
+                raise
 
     async def _poll_continuous(self) -> None:
         while self.is_running:
@@ -80,6 +96,19 @@ class SqsConsumerManager:
                     await self.handler(raw_msg)
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except botocore.exceptions.ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in (
+                    "AWS.SimpleQueueService.NonExistentQueue",
+                    "InvalidParameterValue",
+                    "AccessDenied",
+                ):
+                    raise
                 logger.exception("sqs_consumer_manager_poll_error", queue=self.queue_name)
                 await asyncio.sleep(self.error_sleep_seconds)
+            except botocore.exceptions.BotoCoreError:
+                logger.exception("sqs_consumer_manager_poll_error", queue=self.queue_name)
+                await asyncio.sleep(self.error_sleep_seconds)
+            except Exception:
+                logger.exception("sqs_consumer_manager_handler_error", queue=self.queue_name)
+                # Do not sleep on handler errors, continue polling

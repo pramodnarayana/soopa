@@ -75,10 +75,12 @@ async def main() -> None:
     logger.info("compute_worker_running")
     manager.start()
 
-    await stop_event.wait()
-    logger.info("compute_worker_stopping")
-    await manager.stop()
-    logger.info("compute_worker_stopped")
+    try:
+        await stop_event.wait()
+        logger.info("compute_worker_stopping")
+    finally:
+        await manager.stop()
+        logger.info("compute_worker_stopped")
 
 
 if __name__ == "__main__":

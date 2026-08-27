@@ -210,7 +210,7 @@ class PostgresUserRepository(UserRepositoryPort):
             outbox_event = IdentityOutbox(
                 id=outbox_id,
                 idempotency_key=final_idemp_key,
-                tenant_id=event.get_routing_tenant_id(),
+                tenant_id=event.get_routing_tenant_id() or PLATFORM_TENANT_ID,
                 event_type=event_name,
                 payload=payload_dict,
             )

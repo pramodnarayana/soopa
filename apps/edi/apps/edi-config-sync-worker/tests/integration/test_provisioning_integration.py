@@ -30,6 +30,9 @@ class SqsTestPublisher:
             )
 
 
+from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
+    EdiConfigSyncSqsConsumer,
+)
 from database.models.identity import Tenant
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.connection import DatabaseRouter
@@ -45,9 +48,6 @@ from ucp_models.subscriptions import App
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
-    EdiConfigSyncSqsConsumer,
-)
 from config_sync_worker.domain.errors import PermanentProvisioningError
 from config_sync_worker.domain.service import ProvisioningWorkerService
 

@@ -27,14 +27,13 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}"
         msg = EdiMessage(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
-        await self.session.flush()
+        await self.flush()
         return str(msg.id)
 
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
     ) -> str:
-        from sqlalchemy.exc import IntegrityError
-
+        from database.exceptions import DuplicateEntityError
         from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
         from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
@@ -51,9 +50,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         try:
             async with self.session.begin_nested():
                 self.session.add(record)
-                await self.session.flush()
+                await self.flush()
                 return str(event_id)
-        except IntegrityError:
+        except DuplicateEntityError:
             return "duplicate"
 
     async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
@@ -65,7 +64,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}{uuid.uuid4().hex}"
         msg = EdiJson(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
-        await self.session.flush()
+        await self.flush()
         return str(msg.id)
 
     async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
@@ -78,7 +77,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}"
         log = ApiGateway(tenant_id=tid_str, **payload_copy)
         self.session.add(log)
-        await self.session.flush()
+        await self.flush()
         return str(log.id)
 
     async def list_transactions(

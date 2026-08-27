@@ -13,9 +13,6 @@ from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_publisher import (
-    EdiConfigSyncSqsPublisher,
-)
 from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
     PostgresEdiControlPlaneOutboxRepository,
 )
@@ -36,11 +33,6 @@ async def main() -> None:
 
     # 1. AWS SQS Consumer (Data Plane Replication)
     logger.info("initializing_sqs_consumer")
-    sqs_outbox = EdiConfigSyncSqsPublisher(
-        queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
-        endpoint_url=settings.aws.endpoint_url,
-        region=settings.aws.default_region,
-    )
     translator = DefaultEventTranslator()
     replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter, translator)
 
@@ -80,14 +72,13 @@ async def main() -> None:
     try:
         async with outbox_relay_publisher:
             outbox_listener.start()
-        await stop_event.wait()
+            await stop_event.wait()
     finally:
         logger.info("shutting_down_gracefully")
         await sqs_manager.stop()
         await outbox_listener.stop()
 
         # Close adapter resources
-        await sqs_outbox.close()
         await db_router.close_all()
 
 

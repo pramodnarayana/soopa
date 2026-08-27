@@ -1,6 +1,7 @@
 from typing import Any
 
 import structlog
+from database.exceptions import DuplicateEntityError
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
@@ -17,7 +18,6 @@ from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.secret_store import SecretStorePort
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy.exc import IntegrityError
 
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.services import (
@@ -187,7 +187,7 @@ async def create_platform_as2_partnership(
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except IntegrityError as e:
+    except DuplicateEntityError as e:
         raise HTTPException(
             status_code=400, detail="AS2 Partnership already exists for these partners."
         ) from e
@@ -249,7 +249,7 @@ async def update_platform_as2_partnership(
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except IntegrityError as e:
+    except DuplicateEntityError as e:
         raise HTTPException(
             status_code=400, detail="AS2 Partnership already exists for these partners."
         ) from e

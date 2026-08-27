@@ -2,12 +2,13 @@ import os
 import uuid
 
 import structlog
+from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
 from database.models import Role as OrmRole
 from database.models import UserRole
 from database.models.identity import IdentityOutbox
 from database.outbox_serializer import serialize_domain_event
+from database.repository import BaseSqlAlchemyRepository
 from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
@@ -18,13 +19,13 @@ from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 logger = structlog.get_logger(__name__)
 
 
-class PostgresRoleRepository(RoleRepositoryPort):
+class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
     """
     PostgreSQL adapter for the Role Repository.
     """
 
     def __init__(self, session: AsyncSession):
-        self.session = session
+        BaseSqlAlchemyRepository.__init__(self, session)
 
     async def get_by_id(self, role_id: str) -> DomainRole | None:
         stmt = select(OrmRole).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
@@ -137,6 +138,8 @@ class PostgresRoleRepository(RoleRepositoryPort):
             self.session.add(orm_role)
 
         self._flush_events(role)
+        # Flush the session automatically intercepting errors
+        await self.flush()
 
     async def assign_user_role(self, tenant_id: str | None, user_id: str, role_id: str) -> None:
         tenant_id = tenant_id or PLATFORM_TENANT_ID
@@ -171,28 +174,33 @@ class PostgresRoleRepository(RoleRepositoryPort):
         )
         self.session.add(user_role)
         try:
-            await self.session.flush()
-        except IntegrityError as e:
-            constraint_name = (
-                getattr(e.orig, "constraint_name", None) if hasattr(e, "orig") else None
-            )
+            await self.flush()
+        except DuplicateEntityError as e:
             logger.exception(
-                "role_repo.assign_user_role.integrity_error",
+                "role_repo.assign_user_role.duplicate_entity_error",
                 tenant_id=tenant_id,
                 user_id=user_id,
                 role_id=role_id,
-                constraint_name=constraint_name,
-                reason=str(e.orig) if hasattr(e, "orig") else str(e),
+                constraint_name=e.constraint_name,
             )
             # Check for unique violation on user_role assignment
             if (
-                constraint_name
-                and "user_role" in constraint_name
-                and "unique" in constraint_name.lower()
+                e.constraint_name
+                and "user_role" in e.constraint_name
+                and "unique" in e.constraint_name.lower()
             ):
                 raise IdempotencyConflictError(
                     f"Role '{role_id}' is already assigned to user '{user_id}' in tenant '{tenant_id}'."
                 ) from e
+            raise
+        except ForeignKeyViolationError as e:
+            logger.exception(
+                "role_repo.assign_user_role.foreign_key_error",
+                tenant_id=tenant_id,
+                user_id=user_id,
+                role_id=role_id,
+                constraint_name=e.constraint_name,
+            )
             # Foreign key violations indicate missing user or role
             raise ResourceNotFoundError(
                 f"Cannot assign role: User '{user_id}' or Role '{role_id}' not found."
@@ -209,7 +217,7 @@ class PostgresRoleRepository(RoleRepositoryPort):
         stmt = delete(UserRole).where(UserRole.tenant_id == tenant_id, UserRole.user_id == user_id)
 
         await self.session.execute(stmt)
-        await self.session.flush()
+        await self.flush()
 
         bound_logger.info("role_repo.remove_user_roles.completed")
 

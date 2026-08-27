@@ -24,3 +24,13 @@ class DomainEvent(ABC):
         If the event is platform-wide and has no tenant context, return None.
         """
         raise NotImplementedError
+
+    @property
+    def idempotency_key(self) -> str:
+        """
+        Returns the idempotency key for this event.
+        Defaults to the event id if present, else a newly generated UUID.
+        """
+        import uuid
+
+        return getattr(self, "id", str(uuid.uuid4()))

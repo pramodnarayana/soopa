@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 
 import pytest
 from notification.domain.models import NotificationEvent
-
 from notification_worker.adapters.inbound.workers.notification_event_sqs_consumer import (
     NotificationEventSqsConsumer,
 )

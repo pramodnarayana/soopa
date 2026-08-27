@@ -140,18 +140,16 @@ class ProvisioningWorkerService:
                     )
                     return
                 body = translated_body
-                body["__source"] = "soopa.edi"
-            except ValueError:
+            except ValueError as e:
                 # Permanent validation error - malformed message
                 logger.exception(
                     "permanent_validation_error",
                     external_event_type=external_event_type,
-                    body=body,
-                    action="drop",
+                    action="dlq",
                 )
-                return
-
-        source = body.pop("__source", "soopa.edi")
+                raise PermanentProvisioningError(
+                    f"Malformed external event {external_event_type}: {e}"
+                ) from e
 
         # We need a dummy Envelope-like object to pass to _parse_event
         # but _parse_event is simple enough we can just do it inline or pass a dummy
@@ -161,7 +159,7 @@ class ProvisioningWorkerService:
 
         envelope = DummyEnvelope(
             id=body.get("id"),
-            source=source,
+            source="soopa.edi",
             event_type=body.get("eventType", body.get("event_type", "unknown")),
             payload=body,
             idempotency_key=body.get("idempotency_key"),

@@ -74,29 +74,33 @@ class EdiConfigSyncSqsPublisher(OutboxPort):
         tenant_id: str,
     ) -> None:
         """Publishes an event to the outbox queue."""
-        async with self.session.client(
-            "sqs", endpoint_url=self.endpoint_url, region_name=self.region
-        ) as sqs:
-            queue_url = await self._get_queue_url(sqs)
+        if not self._client:
+            await self.__aenter__()
 
-            message_body = json.dumps(
-                {
-                    **(payload or {}),
-                    "tenant_id": tenant_id,
-                    "event_type": event_type,
-                    "idempotency_key": idempotency_key,
-                }
-            )
+        sqs = self._client
+        if not sqs:
+            raise RuntimeError("SQS client not initialized")
 
-            await sqs.send_message(
-                QueueUrl=queue_url,
-                MessageBody=message_body,
-                MessageGroupId=tenant_id,
-                MessageDeduplicationId=idempotency_key,
-            )
-            logger.info(
-                "sqs_event_published",
-                event_type=event_type,
-                tenant_id=tenant_id,
-                queue_name=self.queue_name,
-            )
+        queue_url = await self._get_queue_url(sqs)
+
+        message_body = json.dumps(
+            {
+                **(payload or {}),
+                "tenant_id": tenant_id,
+                "event_type": event_type,
+                "idempotency_key": idempotency_key,
+            }
+        )
+
+        await sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=message_body,
+            MessageGroupId=tenant_id,
+            MessageDeduplicationId=idempotency_key,
+        )
+        logger.info(
+            "sqs_event_published",
+            event_type=event_type,
+            tenant_id=tenant_id,
+            queue_name=self.queue_name,
+        )

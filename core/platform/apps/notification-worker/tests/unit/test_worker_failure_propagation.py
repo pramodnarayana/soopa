@@ -2,7 +2,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import pytest
-
 from notification_worker.adapters.inbound.workers.email_channel_sqs_consumer import (
     EmailChannelSqsConsumer,
 )

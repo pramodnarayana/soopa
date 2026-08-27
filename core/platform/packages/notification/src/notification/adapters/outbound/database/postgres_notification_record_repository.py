@@ -83,9 +83,10 @@ class SqlAlchemyNotificationRecordRepository(NotificationRecordRepositoryPort):
                         "created_at": (notif.created_at.isoformat() if notif.created_at else None),
                     }
                 )
-                # Escape single quotes in the payload
-                safe_payload = payload.replace("'", "''")
-                await self.session.execute(text(f"NOTIFY in_app_notifications, '{safe_payload}'"))
+                await self.session.execute(
+                    text("SELECT pg_notify(:channel, :payload)"),
+                    {"channel": "in_app_notifications", "payload": payload},
+                )
 
         # Serialize domain events to outbox!
         for event in dispatch.domain_events:
@@ -93,7 +94,7 @@ class SqlAlchemyNotificationRecordRepository(NotificationRecordRepositoryPort):
                 id=f"notif_ob_{uuid.uuid4().hex}",
                 tenant_id=dispatch.tenant_id,
                 event_type=event.event_name,
-                idempotency_key=getattr(event, "idempotency_key", str(uuid.uuid4())),
+                idempotency_key=event.idempotency_key,
                 payload=serialize_domain_event(event),
             )
             self.session.add(outbox_orm)

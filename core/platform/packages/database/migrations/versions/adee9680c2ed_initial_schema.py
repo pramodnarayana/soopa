@@ -76,6 +76,13 @@ def upgrade() -> None:
         sa.UniqueConstraint("slug"),
         schema="identity",
     )
+    op.execute(
+        """
+        INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at)
+        VALUES ('ten_000000000000000000000000', 'Platform', 'platform', 'active', now(), now())
+        ON CONFLICT (id) DO NOTHING;
+        """
+    )
     op.create_table(
         "users",
         sa.Column("id", sa.String(length=128), nullable=False),

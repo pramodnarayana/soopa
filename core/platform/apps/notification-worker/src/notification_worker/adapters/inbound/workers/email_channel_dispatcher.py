@@ -30,8 +30,8 @@ class EmailChannelDispatcher:
             return
 
         payload = body.get("payload")
-        if not payload:
-            logger.error("SQS message missing 'payload' key")
+        if not payload or not isinstance(payload, dict):
+            logger.error("SQS message missing 'payload' dictionary")
             return
 
         tenant_id = body.get("tenant_id")

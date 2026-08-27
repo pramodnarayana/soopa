@@ -1,9 +1,8 @@
 import json
 
 import pytest
-from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload
-
 from compute_worker.worker import SQSComputeWorker
+from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload
 
 
 class FakeProcessInboundEdiUseCase:
