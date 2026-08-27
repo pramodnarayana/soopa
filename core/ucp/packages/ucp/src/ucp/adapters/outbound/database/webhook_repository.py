@@ -2,7 +2,7 @@ import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from platform_orm.models import Webhook as DbWebhook
+from database.models import Webhook as DbWebhook
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox

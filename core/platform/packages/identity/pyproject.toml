@@ -53,7 +53,7 @@ extraPaths = [
     "src",
     "../../observability/python/src",
     "../../schemas/python/src",
-    "../../../../../core/platform/packages/orm/src",
+    "../../../../../core/platform/packages/database/src",
     "../../../../../apps/edi/packages/pipeline/src",
     "../../../../../apps/edi/packages/grammar/src",
     "../../../../../apps/edi/packages/config/src",

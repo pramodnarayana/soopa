@@ -5,6 +5,31 @@ from typing import Any
 from uuid import UUID
 
 
+class DomainEventMixin:
+    """
+    Mixin for DDD Aggregates to store domain events internally.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._domain_events: list[Any] = []
+
+    @property
+    def domain_events(self) -> list[Any]:
+        if not hasattr(self, "_domain_events"):
+            self._domain_events = []
+        return self._domain_events
+
+    def add_domain_event(self, event: Any) -> None:
+        if not hasattr(self, "_domain_events"):
+            self._domain_events = []
+        self._domain_events.append(event)
+
+    def clear_domain_events(self) -> None:
+        if hasattr(self, "_domain_events"):
+            self._domain_events.clear()
+
+
 class Direction(StrEnum):
     INBOUND = "INBOUND"
     OUTBOUND = "OUTBOUND"
@@ -43,7 +68,7 @@ class RecordStatus(StrEnum):
 
 
 @dataclass(kw_only=True)
-class EdiRecordBase:
+class EdiRecordBase(DomainEventMixin):
     id: str
     tenant_id: str
     trace_id: str
@@ -103,7 +128,7 @@ class ApiGatewayReceiptDomainModel(EdiRecordBase):
 
 
 @dataclass(kw_only=True)
-class WebhookDomainModel:
+class WebhookDomainModel(DomainEventMixin):
     id: str
     tenant_id: str
     name: str
@@ -115,7 +140,7 @@ class WebhookDomainModel:
 
 
 @dataclass(kw_only=True)
-class AS2PartnerDomainModel:
+class AS2PartnerDomainModel(DomainEventMixin):
     id: str
     as2_id: str
     name: str
@@ -134,7 +159,7 @@ class AS2PartnerDomainModel:
 
 
 @dataclass(kw_only=True)
-class AS2PartnershipDomainModel:
+class AS2PartnershipDomainModel(DomainEventMixin):
     id: str
     name: str
     local_partner_id: str
@@ -152,7 +177,7 @@ class AS2PartnershipDomainModel:
 
 
 @dataclass(kw_only=True)
-class SFTPPartnerDomainModel:
+class SFTPPartnerDomainModel(DomainEventMixin):
     id: str
     tenant_id: str
     name: str
@@ -171,7 +196,7 @@ class SFTPPartnerDomainModel:
 
 
 @dataclass(kw_only=True)
-class InboundRouteDomainModel:
+class InboundRouteDomainModel(DomainEventMixin):
     id: str
     tenant_id: str
     name: str
@@ -193,7 +218,7 @@ class InboundRouteDomainModel:
 
 
 @dataclass(kw_only=True)
-class OutboundRouteDomainModel:
+class OutboundRouteDomainModel(DomainEventMixin):
     id: str
     tenant_id: str
     trading_partner_id: str
@@ -209,7 +234,7 @@ class OutboundRouteDomainModel:
 
 
 @dataclass(kw_only=True)
-class OutboundEdiHeaderDomainModel:
+class OutboundEdiHeaderDomainModel(DomainEventMixin):
     id: str
     tenant_id: str
     name: str

@@ -242,13 +242,17 @@ async def as2_client(
     mock_partner.as2_id = sender_keypair.as2_id
 
     with (
-        patch("as2_server.adapters.repository.DbTradingPartnerRepository") as mock_partner_repo_cls,
-        patch("as2_server.adapters.repository.DbEdiMessageRepository") as mock_payload_repo_cls,
         patch(
-            "as2_server.adapters.vault.EnvironmentVaultService.get_host_private_key"
+            "as2_server.adapters.outbound.repository.DbTradingPartnerRepository"
+        ) as mock_partner_repo_cls,
+        patch(
+            "as2_server.adapters.outbound.repository.DbEdiMessageRepository"
+        ) as mock_payload_repo_cls,
+        patch(
+            "as2_server.adapters.outbound.vault.EnvironmentVaultService.get_host_private_key"
         ) as mock_get_host_private_key,
         patch(
-            "as2_server.adapters.vault.EnvironmentVaultService.get_host_certificate"
+            "as2_server.adapters.outbound.vault.EnvironmentVaultService.get_host_certificate"
         ) as mock_get_host_certificate,
     ):
         mock_get_host_private_key.return_value = receiver_keypair.private_key_pem

@@ -3,7 +3,6 @@ Bots grammar check
 """
 # pylint: disable=broad-exception-caught
 
-import atexit
 import glob
 import os
 import sys
@@ -25,7 +24,6 @@ def startmulti(grammardir, editype):
     """
     # find locating of bots, configfiles, init paths etc.
     # logger is set up at module level
-    atexit.register(logging.shutdown)  # noqa: F821
 
     search_pattern = os.path.join(grammardir, "*.py") if os.path.isdir(grammardir) else grammardir
     for filename in glob.iglob(search_pattern):
@@ -41,7 +39,7 @@ def startmulti(grammardir, editype):
         filename_noextension = os.path.splitext(filename_basename)[0]
         try:
             grammar.grammarread(editype, filename_noextension, typeofgrammarfile="grammars")
-        except Exception:  # noqa: BLE001
+        except Exception:
             print(txtexc(), end="\n\n")
         else:
             print("OK - no error found in grammar", filename, end="\n\n")
@@ -99,11 +97,10 @@ def start():
 
     # find locating of bots, configfiles, init paths etc.
     # logger is set up at module level
-    atexit.register(logging.shutdown)  # noqa: F821
 
     try:
         grammar.grammarread(editype, messagetype, typeofgrammarfile="grammars")
-    except Exception:  # noqa: BLE001
+    except Exception:
         print("Found error in grammar: ", txtexc())
         sys.exit(1)
     else:

@@ -1,4 +1,3 @@
-# type: ignore
 """
 parsers/__init__.py — Registry of EDI format readers and writers.
 Replacing the legacy globals()[editype] reflection hack in inmessage.py / outmessage.py.

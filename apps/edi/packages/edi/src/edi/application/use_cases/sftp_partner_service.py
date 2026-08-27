@@ -128,6 +128,7 @@ class SFTPPartnerService:
             tenant_id=tenant_id,
         )
         await self.uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
+
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,

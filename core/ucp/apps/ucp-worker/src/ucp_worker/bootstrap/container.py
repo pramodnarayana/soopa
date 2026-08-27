@@ -4,10 +4,15 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
-from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
-from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
+from database.provider import get_async_engine
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
+from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.postgres_ucp_audit_log_cleanup_repository import (
     SqlAlchemyUcpAuditLogCleanupRepository,
@@ -19,22 +24,12 @@ from ucp.adapters.outbound.database.postgres_ucp_outbox_cleanup_repository impor
     SqlAlchemyUcpOutboxCleanupRepository,
 )
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.identity.dummy_identity_provider import DummyIdentityProviderPort
-from ucp.adapters.outbound.identity.zitadel_identity_provider import ZitadelIdentityProviderPort
-from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
-from ucp.application.use_cases.identity_sync_service import IdentitySyncService
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
-from ucp.application.use_cases.sweep_outbox_use_case import SweepControlPlaneOutboxUseCase
 from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDeletedEventHandler
 from ucp.application.use_cases.ucp_audit_log_cleanup_use_case import UcpAuditLogCleanupUseCase
 from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
-from ucp.application.use_cases.ucp_outbox_cleanup_use_case import UcpOutboxCleanupUseCase
-from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 from ucp.bootstrap.config import get_settings
-from ucp.bootstrap.container import Container as CoreContainer
-from ucp.ports.outbound.identity_provider_port import IdentityProviderPort
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
-from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 from ucp_worker.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
 from ucp_worker.adapters.inbound.jobs.ucp_idempotency_cleanup_job import (
@@ -59,33 +54,35 @@ class WorkerContainer:
                 "postgresql://", "postgresql+asyncpg://", 1
             )
 
-        self._engine = create_async_engine(self.database_url, pool_pre_ping=True)
+        self._engine = get_async_engine(self.database_url)
         self.session_factory = async_sessionmaker(
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
 
         self.registry: JobHandlerRegistry | None = None
-        self.outbox_relay: UcpOutboxRelay | None = None
-        self.events_consumer: UcpEventsSqsConsumer | None = None
+        self.outbox_relay: PostgresOutboxRelay | None = None
+        self.events_consumer: UcpEventDispatcher | None = None
 
     def wire(self) -> None:
-        self._wire_scheduled_jobs()
-        self._wire_outbox_relay()
-        self._wire_events_consumer()
-
-    def _wire_scheduled_jobs(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
-        outbox_pub = UcpSnsOutboxPublisher(
+        outbox_pub = AwsSnsPublisher(
             topic_arn=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
         )
+        self._wire_scheduled_jobs(outbox_repo, outbox_pub)
+        self._wire_outbox_relay(outbox_repo, outbox_pub)
+        self._wire_events_consumer()
+
+    def _wire_scheduled_jobs(
+        self, outbox_repo: PostgresOutboxRepository, outbox_pub: AwsSnsPublisher
+    ) -> None:
         outbox_cleanup_repo = SqlAlchemyUcpOutboxCleanupRepository(self.session_factory)
         idemp_cleanup_repo = SqlAlchemyUcpIdempotencyCleanupRepository(self.session_factory)
         audit_cleanup_repo = SqlAlchemyUcpAuditLogCleanupRepository(self.session_factory)
 
-        sweeper_use_case = SweepControlPlaneOutboxUseCase(outbox_repo, outbox_pub)
+        sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
 
-        outbox_cleanup_use_case = UcpOutboxCleanupUseCase(outbox_cleanup_repo)
+        outbox_cleanup_use_case = OutboxCleanupUseCase(outbox_cleanup_repo)
         idemp_cleanup_use_case = UcpIdempotencyCleanupUseCase(idemp_cleanup_repo)
         audit_cleanup_use_case = UcpAuditLogCleanupUseCase(audit_cleanup_repo)
 
@@ -106,82 +103,27 @@ class WorkerContainer:
             UcpAuditLogCleanupJobHandler(audit_cleanup_use_case),
         )
 
-    def _wire_outbox_relay(self) -> None:
-        outbox_repo = PostgresOutboxRepository(self.session_factory)
-        outbox_pub = UcpSnsOutboxPublisher(
-            topic_arn=self.settings.sns_tenant_events_topic_arn,
-            endpoint_url=self.settings.aws_endpoint_url,
-        )
-        outbox_processor = UcpOutboxProcessorUseCase(
+    def _wire_outbox_relay(
+        self, outbox_repo: PostgresOutboxRepository, outbox_pub: AwsSnsPublisher
+    ) -> None:
+        outbox_processor = OutboxProcessorUseCase(
             repository=outbox_repo,
             publisher=outbox_pub,
         )
-        self.outbox_relay = UcpOutboxRelay(
+        self.outbox_relay = PostgresOutboxRelay(
             processor=outbox_processor,
             database_url=self.database_url,
+            listen_channel="ucp_outbox_wakeup",
         )
 
-    def _register_identity_handlers(
+    def _register_tenant_handlers(
         self,
-        consumer: UcpEventsSqsConsumer,
-        identity_service: IdentitySyncService,
+        consumer: UcpEventDispatcher,
         tenant_deleted_handler: TenantDeletedEventHandler,
     ) -> None:
-        async def identity_tenant_provisioned_handler(event: Any) -> None:
-            await identity_service.handle_tenant_provisioned(event.tenant_id)
-
-        async def identity_user_created_handler(event: Any) -> None:
-            payload = event.payload
-            await identity_service.handle_user_created(
-                user_id=payload["user_id"],
-                tenant_id=payload["tenant_id"],
-                email=payload["email"],
-                first_name=payload["first_name"],
-                last_name=payload["last_name"],
-                role=payload["role"],
-            )
-
-        async def identity_user_updated_handler(event: Any) -> None:
-            payload = event.payload
-            await identity_service.handle_user_updated(
-                idp_user_id=payload["idp_user_id"],
-                tenant_id=payload["tenant_id"],
-                first_name=payload["first_name"],
-                last_name=payload["last_name"],
-                role=payload["role"],
-            )
-
-        async def identity_user_role_assigned_handler(event: Any) -> None:
-            payload = event.payload
-            idp_user_id = payload.get("idp_user_id")
-            tenant_id = payload.get("tenant_id")
-            role_name = payload.get("role_name")
-            if idp_user_id and tenant_id and role_name:
-                await identity_service.handle_user_role_assigned(
-                    idp_user_id=idp_user_id,
-                    tenant_id=tenant_id,
-                    role=role_name,
-                )
-            else:
-                logger.warning(
-                    "identity_user_role_assigned_missing_data", event_id=getattr(event, "id", None)
-                )
-
-        async def identity_user_status_toggled_handler(event: Any) -> None:
-            payload = event.payload
-            await identity_service.handle_user_status_toggled(
-                idp_user_id=payload["idp_user_id"],
-                tenant_id=payload["tenant_id"],
-                action=payload["action"],
-            )
-
-        async def identity_user_deleted_handler(event: Any) -> None:
-            payload = event.payload
-            await identity_service.handle_user_deleted(idp_user_id=payload["idp_user_id"])
-
         async def tenant_deleted_event_handler(event: Any) -> None:
             payload = event.payload
-            tenant_id = payload.get("tenant_id") or event.tenant_id
+            tenant_id = payload.get("tenant_id") or getattr(event, "tenant_id", None)
             if tenant_id:
                 await tenant_deleted_handler.handle(tenant_id)
             else:
@@ -189,41 +131,20 @@ class WorkerContainer:
                     "tenant_deleted_missing_tenant_id", event_id=getattr(event, "id", None)
                 )
 
-        consumer.subscribe("tenant.provisioned", identity_tenant_provisioned_handler)
         consumer.subscribe("TenantDeleted", tenant_deleted_event_handler)
-        consumer.subscribe("UserInvited", identity_user_created_handler)
-        consumer.subscribe("UserUpdated", identity_user_updated_handler)
-        consumer.subscribe("user_role_assigned", identity_user_role_assigned_handler)
-        consumer.subscribe("UserStatusToggled", identity_user_status_toggled_handler)
-        consumer.subscribe("UserDeleted", identity_user_deleted_handler)
 
     def _wire_events_consumer(self) -> None:
-        core_container = CoreContainer()
-        idp: IdentityProviderPort
-        idp_users: UserIdentityProviderPort
-
-        if os.environ.get("APP_ENV", "production") in ("local", "test"):
-            idp = DummyIdentityProviderPort()
-            idp_users = DummyIdentityProviderPort()
-        else:
-            idp = ZitadelIdentityProviderPort(org_provider=core_container.org_provider())
-            idp_users = core_container.user_provider()
-
         @asynccontextmanager
         async def uow_factory() -> AsyncGenerator[UcpUnitOfWorkPort, None]:
             async with self.session_factory() as session:
                 yield SqlAlchemyUcpUnitOfWork(session)
 
-        identity_service = IdentitySyncService(
-            identity_provider=idp, user_identity_provider=idp_users, uow_factory=uow_factory
-        )
-
         provisioner = InfrastructureProvisioner(uow_factory)
         tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
 
-        self.events_consumer = UcpEventsSqsConsumer(
-            event_listener=SqsUcpEventListener(
-                queue_url=self.settings.sqs_ucp_identity_sync_queue_url,
+        self.events_consumer = UcpEventDispatcher(
+            event_consumer=UcpEventSqsConsumer(
+                queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
                 endpoint_url=self.settings.aws_endpoint_url,
             )
         )
@@ -232,7 +153,7 @@ class WorkerContainer:
         consumer.subscribe("app.subscribed", provisioner.handle_app_subscribed)
         consumer.subscribe("app.unsubscribed", provisioner.handle_app_unsubscribed)
 
-        self._register_identity_handlers(consumer, identity_service, tenant_deleted_handler)
+        self._register_tenant_handlers(consumer, tenant_deleted_handler)
 
     async def dispose(self) -> None:
         if self._engine:

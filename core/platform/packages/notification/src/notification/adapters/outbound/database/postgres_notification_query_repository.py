@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from platform_orm.models.notifications import InAppNotification
+from database.models.notifications import NotificationRecord
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,12 +20,12 @@ class SqlAlchemyNotificationQueryRepository(NotificationQueryPort):
     ) -> list[NotificationDTO]:
         async with self.session_factory() as session:
             stmt = (
-                select(InAppNotification)
+                select(NotificationRecord)
                 .where(
-                    InAppNotification.tenant_id == tenant_id,
-                    InAppNotification.user_id == user_id,
+                    NotificationRecord.tenant_id == tenant_id,
+                    NotificationRecord.user_id == user_id,
                 )
-                .order_by(InAppNotification.created_at.desc())
+                .order_by(NotificationRecord.created_at.desc())
                 .limit(limit)
             )
             result = await session.execute(stmt)
@@ -46,11 +46,11 @@ class SqlAlchemyNotificationQueryRepository(NotificationQueryPort):
     async def mark_as_read(self, tenant_id: str, user_id: str, notification_id: str) -> bool:
         async with self.session_factory() as session, session.begin():
             stmt = (
-                update(InAppNotification)
+                update(NotificationRecord)
                 .where(
-                    InAppNotification.id == notification_id,
-                    InAppNotification.tenant_id == tenant_id,
-                    InAppNotification.user_id == user_id,
+                    NotificationRecord.id == notification_id,
+                    NotificationRecord.tenant_id == tenant_id,
+                    NotificationRecord.user_id == user_id,
                 )
                 .values(is_read=True)
             )

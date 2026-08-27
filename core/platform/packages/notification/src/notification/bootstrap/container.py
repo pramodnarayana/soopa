@@ -9,13 +9,10 @@ dependency wiring in this bounded context.
 from collections.abc import AsyncGenerator
 
 import structlog
+from database.provider import get_async_engine
 from dependency_injector import containers, providers
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from notification.adapters.outbound.channels import (
     EmailDeliveryStrategy,
@@ -23,11 +20,11 @@ from notification.adapters.outbound.channels import (
     SlackDeliveryStrategy,
 )
 from notification.adapters.outbound.channels.dummy_email_provider import DummyEmailProvider
-from notification.adapters.outbound.database.postgres_in_app_persistence import (
-    SqlAlchemyInAppPersistence,
-)
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
+)
+from notification.adapters.outbound.database.postgres_notification_record_repository import (
+    SqlAlchemyNotificationRecordRepository,
 )
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
@@ -43,14 +40,8 @@ from notification.adapters.outbound.database.postgres_user_preference_repository
 )
 from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
-from notification.application.dispatch_use_case import DispatchNotificationUseCase
 from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
-from notification.application.notification_outbox_processor_use_case import (
-    NotificationOutboxProcessorUseCase,
-)
-from notification.application.notification_outbox_sweeper_use_case import (
-    NotificationOutboxSweeperUseCase,
-)
+from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
 from notification.application.update_user_preference_use_case import (
     UpdateUserPreferenceUseCase,
 )
@@ -63,7 +54,7 @@ async def _init_async_engine(database_url: str) -> AsyncGenerator[AsyncEngine]:
     """Resource lifecycle hook: creates and disposes the SQLAlchemy async engine."""
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    engine = create_async_engine(database_url, pool_pre_ping=True)
+    engine = get_async_engine(database_url)
     try:
         yield engine
     finally:
@@ -135,7 +126,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     in_app_persistence = providers.Factory(
-        SqlAlchemyInAppPersistence,
+        SqlAlchemyNotificationRecordRepository,
         session_factory=session_factory,
     )
 
@@ -187,13 +178,14 @@ class Container(containers.DeclarativeContainer):
     # Use Cases
     # -----------------------------------------------------------------------
 
-    dispatch_use_case = providers.Factory(
-        DispatchNotificationUseCase,
+    notification_compiler = providers.Factory(
+        NotificationCompilerUseCase,
         template_repo=template_repository,
         template_renderer=template_renderer,
         outbox_repo=outbox_repository,
         route_repo=route_repository,
         user_pref_repo=user_preference_repository,
+        record_repo=in_app_persistence,
     )
 
     update_user_preference_use_case = providers.Factory(
@@ -206,13 +198,8 @@ class Container(containers.DeclarativeContainer):
         repository=user_preference_repository,
     )
 
-    sweep_outbox_use_case = providers.Factory(
-        NotificationOutboxSweeperUseCase,
+    outbox_sweeper_use_case = providers.Factory(
+        OutboxSweeperUseCase,
         repository=outbox_repository,
-    )
-
-    outbox_processor = providers.Singleton(
-        NotificationOutboxProcessorUseCase,
-        repository=outbox_repository,
-        dispatcher=delivery_dispatcher,
+        publisher=None,  # Will be overridden in worker container with AwsSnsPublisher
     )

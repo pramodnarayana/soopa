@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import (
@@ -26,6 +27,21 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    @staticmethod
+    def _to_domain_model(record: Any) -> OutboundRouteDomainModel:
+        return OutboundRouteDomainModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            trading_partner_id=record.trading_partner_id,
+            name=record.name,
+            active=record.active,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            protocol=getattr(record, "protocol", None),
+            as2_partner_id=record.as2_partner_id,
+            sftp_partner_id=record.sftp_partner_id,
+        )
+
     async def get_outbound_route(
         self, tenant_id: str, route_id: str
     ) -> OutboundRouteDomainModel | None:
@@ -36,13 +52,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         )
         res = await self.session.execute(stmt)
         record = res.scalar_one_or_none()
-        return (
-            OutboundRouteDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
@@ -55,13 +65,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             )
         )
         record = result.scalar_one_or_none()
-        return (
-            OutboundRouteDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def _validate_outbound_destination(
         self,
@@ -161,7 +165,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
         await self.session.flush()
-        return bool(getattr(result, "rowcount", 0) > 0)
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0
 
     async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteDomainModel]:
         outbound_result = await self.session.execute(
@@ -169,9 +173,4 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                 OutboundRoute.tenant_id == tenant_id, OutboundRoute.deleted_at.is_(None)
             )
         )
-        return [
-            OutboundRouteDomainModel(
-                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
-            )
-            for r in outbound_result.scalars().all()
-        ]
+        return [self._to_domain_model(record) for record in outbound_result.scalars().all()]

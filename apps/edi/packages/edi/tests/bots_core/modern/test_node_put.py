@@ -54,7 +54,8 @@ def test_node_putloop_invalid_mpaths():
 
 def test_node_putloop_none_value():
     node = Node(record={"BOTSID": "ROOT", "BOTSIDnr": "1"})
-    assert node.putloop({"BOTSID": "ROOT"}, {"BOTSID": "CHILD", "F1": None}) is False
+    with pytest.raises(ValueError, match="Cannot putloop None value"):
+        node.putloop({"BOTSID": "ROOT"}, {"BOTSID": "CHILD", "F1": None})
 
 
 def test_node_putloop_single_mpath_same():

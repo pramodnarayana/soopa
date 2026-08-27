@@ -4,8 +4,9 @@ import signal
 import sys
 
 import structlog
+from database.provider import get_async_engine
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +28,7 @@ async def main() -> None:
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    engine = create_async_engine(database_url, pool_pre_ping=True)
+    engine = get_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     from scheduler_worker.bootstrap.container import Container

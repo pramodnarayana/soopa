@@ -3,9 +3,9 @@ import re
 from typing import cast
 
 from edi.core.bots.domain import inmessage, outmessage
-from edi.core.bots.domain.node import Node  # type: ignore[attr-defined]
+from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.x12_ack import (
-    generate_997_ast as internal_generate_997,  # type: ignore[attr-defined]
+    generate_997_ast as internal_generate_997,
 )
 
 
@@ -50,7 +50,7 @@ def edi_to_json(
     else:
         ta_info["filename"] = cast(str, edi_file_path)  # narrowed: edi_file_path is str here
 
-    edifile = inmessage.parse_edi_file(**ta_info)  # type: ignore[attr-defined, no-untyped-call]
+    edifile = inmessage.parse_edi_file(**ta_info)
 
     if edifile.root is None:
         error_msg = (
@@ -69,7 +69,7 @@ def edi_to_json(
     return json.dumps(ast_dict, indent=2)
 
 
-def json_to_edi(  # noqa: C901
+def json_to_edi(
     json_ast: str,
     editype: str,
     messagetype: str,
@@ -104,7 +104,7 @@ def json_to_edi(  # noqa: C901
         ta_info["return_string"] = True
 
     try:
-        out = outmessage.outmessage_init(**ta_info)  # type: ignore[attr-defined, no-untyped-call]
+        out = outmessage.outmessage_init(**ta_info)
         out.root = root_node
         out.writeall()
 
@@ -174,7 +174,7 @@ def json_to_edi(  # noqa: C901
                         err_msg = err_msg.split("Details: ")[1]
                     if err_msg not in errors:
                         errors.append(err_msg)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     if str(e) not in errors:
                         errors.append(str(e))
             return json.dumps({"edi": result, "errors": errors}, indent=2)

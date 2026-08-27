@@ -2,11 +2,11 @@ import asyncio
 import contextlib
 
 import structlog
+from database.models.identity import Tenant
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.config.settings import get_settings
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from platform_orm.models.identity import Tenant
 from sqlalchemy.future import select
 
 load_dotenv()
@@ -38,8 +38,8 @@ async def seed_database() -> None:
         logger.info("Seeding Core System Jobs...")
         from dataclasses import dataclass
 
-        from platform_orm.clients.scheduler import SchedulerClient
-        from worker.core.scheduler.models import (
+        from database.clients.scheduler import SchedulerClient
+        from worker.domain.scheduler.models import (
             AppNamespace,
             JobName,
             TargetQueue,

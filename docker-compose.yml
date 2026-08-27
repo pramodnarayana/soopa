@@ -43,6 +43,26 @@ services:
     <<: *monolith-base
     command: ["python", "-m", "worker.main"]
 
+  edi-compute-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "compute_worker.main"]
+
+  edi-config-sync-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "config_sync_worker.provision.main"]
+
+  edi-background-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "edi_background_worker.main"]
+
+  ucp-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "ucp_worker.main"]
+
+  identity-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "identity_worker.main"]
+
   # -------------------------------------------------------------------------
   # 3. Replication & Reliability Tier (Background Daemons)
   # -------------------------------------------------------------------------

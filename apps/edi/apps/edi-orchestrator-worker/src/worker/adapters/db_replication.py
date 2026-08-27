@@ -27,8 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped
 
 from worker.adapters.replication_registry import REPLICATION_GRAPH
-from worker.core.errors import PermanentProvisioningError, TransientProvisioningError
-from worker.core.replication_graph import EntitySpec, topological_layers
+from worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
+from worker.domain.replication_graph import EntitySpec, topological_layers
 from worker.ports.outbound.replication_port import ReplicationPort
 from worker.ports.outbound.tenant_port import TenantPort
 

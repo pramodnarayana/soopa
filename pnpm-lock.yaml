@@ -95,6 +95,8 @@ importers:
 
   apps/edi/apps/edi-compute-worker: {}
 
+  apps/edi/apps/edi-config-sync-worker: {}
+
   apps/edi/apps/edi-orchestrator-worker: {}
 
   apps/edi/packages/edi: {}
@@ -313,13 +315,13 @@ importers:
 
   core/platform/apps/scheduler-worker: {}
 
+  core/platform/packages/database: {}
+
   core/platform/packages/identity: {}
 
   core/platform/packages/notification: {}
 
   core/platform/packages/observability: {}
-
-  core/platform/packages/orm: {}
 
   core/platform/packages/scheduler: {}
 

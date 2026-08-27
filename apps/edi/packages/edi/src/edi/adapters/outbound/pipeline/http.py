@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 
+from edi.adapters.outbound.security.network import ssrf_safe_context
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 
 
@@ -38,7 +39,7 @@ class HttpxDeliveryClient(HttpDeliveryPort):
                 raise ValueError("URL validation failed for provided destination.")
             ctx = contextlib.nullcontext()
 
-        with ctx:
+        with ctx, ssrf_safe_context(url):
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
                 response = await client.post(url, content=payload, headers=headers)
                 return response.status_code, response.text

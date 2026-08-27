@@ -1,10 +1,12 @@
+import dataclasses
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from platform_orm.models import Webhook
-from sqlalchemy import or_, select, update
+from sqlalchemy import CursorResult, or_, select, update
 
+from database.models import Webhook
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
@@ -181,7 +183,10 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         record = result.scalars().first()
         return (
             InboundRouteDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(InboundRouteDomainModel)
+                }
             )
             if record
             else None
@@ -195,7 +200,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         )
         return [
             InboundRouteDomainModel(
-                **{k: v for k, v in r.__dict__.items() if not k.startswith("_")}
+                **{f.name: getattr(r, f.name) for f in dataclasses.fields(InboundRouteDomainModel)}
             )
             for r in result.scalars().all()
         ]
@@ -213,7 +218,10 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         record = result.scalars().first()
         return (
             InboundRouteDomainModel(
-                **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+                **{
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(InboundRouteDomainModel)
+                }
             )
             if record
             else None
@@ -248,4 +256,4 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
         await self.session.flush()
-        return bool(getattr(result, "rowcount", 0) > 0)
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0

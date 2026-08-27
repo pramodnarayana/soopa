@@ -1,12 +1,10 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
 
-
-class ScheduledJob(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
+@dataclass(frozen=True)
+class ScheduledJob:
     id: str
     name: str
     target_queue: str | None

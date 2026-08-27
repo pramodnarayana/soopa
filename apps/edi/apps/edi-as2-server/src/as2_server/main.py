@@ -15,7 +15,7 @@ from observability import (
     StructlogLogger,
 )
 
-from .routers import as2, ops
+from .adapters.inbound.http.routers import as2, ops
 
 settings = get_settings()
 

@@ -1,7 +1,7 @@
 from typing import Any
 
-from platform_orm.models.common import OutboxMixin
-from platform_orm.models.core import UcpBase
+from database.models.common import OutboxMixin
+from database.models.core import UcpBase
 from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text

@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,16 +29,10 @@ class TransactionService:
         if not result or not result.edi_message:
             raise TransactionNotFoundError(trace_id=trace_id)
 
-        # Publish Outbox event for the Orchestrator Worker
-        import uuid
-
-        await self.uow.data_plane_outbox.publish_outbox_event(
+        await self.uow.transactions.publish_outbox_event(
             tenant_id=tenant_id,
             event_type="edi.transaction.replay_requested",
-            payload={
-                "trace_id": trace_id,
-                "tier": tier,
-            },
+            payload={"trace_id": trace_id, "tier": tier},
             idempotency_key=f"replay_{trace_id}_{uuid.uuid4().hex}",
         )
 
@@ -52,8 +47,6 @@ class TransactionService:
         if not trace_ids:
             return 0
 
-        import uuid
-
         # 0. Deduplicate trace IDs
         unique_trace_ids = list(dict.fromkeys(trace_ids))
 
@@ -66,29 +59,21 @@ class TransactionService:
             # For simplicity, we just raise for the first missing one, or could raise a bulk error
             raise TransactionNotFoundError(trace_id=next(iter(missing_trace_ids)))
 
-        # 2. Construct Bulk Events
-        events = []
         for trace_id in unique_trace_ids:
             if command_key:
                 idem_key = f"replay_{command_key}_{trace_id}"
             else:
                 idem_key = f"replay_{trace_id}_{uuid.uuid4().hex}"
 
-            events.append(
-                {
-                    "event_type": "edi.transaction.replay_requested",
-                    "payload": {
-                        "trace_id": trace_id,
-                        "tier": tier,
-                    },
-                    "idempotency_key": idem_key,
-                }
+            await self.uow.transactions.publish_outbox_event(
+                tenant_id=tenant_id,
+                event_type="edi.transaction.replay_requested",
+                payload={
+                    "trace_id": trace_id,
+                    "tier": tier,
+                },
+                idempotency_key=idem_key,
             )
-
-        # 3. Bulk Insert Outbox Events
-        await self.uow.data_plane_outbox.publish_outbox_events_bulk(
-            tenant_id=tenant_id, events=events
-        )
 
         return len(unique_trace_ids)
 

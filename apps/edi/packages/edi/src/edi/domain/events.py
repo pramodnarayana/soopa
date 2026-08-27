@@ -1,7 +1,5 @@
 from enum import StrEnum
 
-from pydantic import BaseModel
-
 
 class UcpEventType(StrEnum):
     app_subscribed = "app.subscribed"
@@ -57,19 +55,23 @@ ALL_PROVISIONING_EVENT_TYPES = (
 )
 
 
-class ProvisioningEvent(BaseModel):
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ProvisioningEvent:
     tenant_id: str
     event_type: ProvisioningEventType
     resource_id: str | None = None
 
 
 class MessageQueueName(StrEnum):
-    TRANSFORM_QUEUE = "edi-transform"
-    LIFECYCLE_QUEUE = "edi-lifecycle"
-    DELIVER_QUEUE = "edi-deliver"
-    PROVISIONING_QUEUE = "edi-config-sync"
-    CDC_DLQ_QUEUE = "edi-cdc-dlq"
-    PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications"
+    TRANSFORM_QUEUE = "edi-transform.fifo"
+    LIFECYCLE_QUEUE = "edi-lifecycle.fifo"
+    DELIVER_QUEUE = "edi-deliver.fifo"
+    PROVISIONING_QUEUE = "edi-config-sync-queue.fifo"
+    CDC_DLQ_QUEUE = "edi-cdc-dlq.fifo"
+    PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications.fifo"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {

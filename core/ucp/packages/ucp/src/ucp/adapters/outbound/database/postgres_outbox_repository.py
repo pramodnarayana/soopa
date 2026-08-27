@@ -1,7 +1,9 @@
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from typing import Any, cast
 
-from ....domain.models.outbox_event import OutboxEvent
+from database.events import EventEnvelope
+from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 class PostgresOutboxRepository:
@@ -26,8 +28,11 @@ class PostgresOutboxRepository:
                     SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
                     WHERE id IN (SELECT id FROM cte)
                 """)
-                result = await session.execute(query, {"lock_lease_ms": lock_lease_ms})
-                swept = int(result.rowcount)  # type: ignore[attr-defined]
+                result = cast(
+                    CursorResult[Any],
+                    await session.execute(query, {"lock_lease_ms": lock_lease_ms}),
+                )
+                swept = int(result.rowcount)
                 total_swept += swept
                 await session.commit()
                 if swept < 5000:
@@ -37,7 +42,7 @@ class PostgresOutboxRepository:
 
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int
-    ) -> list[OutboxEvent]:
+    ) -> list[EventEnvelope]:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
@@ -65,8 +70,9 @@ class PostgresOutboxRepository:
             for row in result:
                 mapping = row._mapping
                 events.append(
-                    OutboxEvent(
+                    EventEnvelope(
                         id=mapping["id"],
+                        source="soopa.ucp",
                         event_type=mapping["event_type"],
                         payload=mapping["payload"],
                         idempotency_key=mapping.get("idempotency_key"),
@@ -95,7 +101,9 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'FAILED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+                    attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL,
+                    updated_at = NOW(), error_reason = :error_message
                 WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
             """)
             await session.execute(
@@ -104,6 +112,7 @@ class PostgresOutboxRepository:
                     "event_id": event_id,
                     "worker_id": worker_id,
                     "error_message": error_message,
+                    "max_attempts": 3,
                 },
             )
             await session.commit()

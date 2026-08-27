@@ -4,6 +4,13 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 
 
 
+## [Architecture] Rollout Centralized Outbox and Pub/Sub Packages to Remaining Modules
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: We successfully extracted the `outbox` and `pubsub` generic infrastructure patterns out of the UCP bounded context and into centralized platform packages (`core/platform/packages/outbox` and `core/platform/packages/pubsub`). The UCP Proof-of-Concept is complete and verified. However, the `identity`, `edi`, and `notification` modules still contain duplicated, module-specific implementations of these patterns (Outbox relays, SQS listeners, SNS publishers, etc.).
+- **Action Item**: Migrate the `identity`, `edi`, and `notification` modules to use the centralized `outbox` and `pubsub` platform packages. Remove their legacy duplicated infrastructure code, update their Dependency Injection containers to inject the generic `PostgresOutboxRelay`, `AwsSnsPublisher`, and `AwsSqsConsumer`, and verify all tests pass.
+
 ## [RESOLVED] [Authorization Architecture] Implement Dynamic Enterprise-Grade PBAC/ABAC
 
 - **Date Added**: 2026-07-27
@@ -280,3 +287,93 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The AS2 module currently uses `endesive` for S/MIME signature verification and encryption/decryption of EDI data (`src/edi/adapters/outbound/security/smime.py`). While `endesive` provides high-level wrappers for S/MIME, it pulls in heavy, unwanted C-extension dependencies like `PyKCS11` (for HSMs) which caused Docker/CI build failures and required us to inject a dummy package to bypass. The team previously attempted to use the native `cryptography` library directly but faced challenges with standardizing the complex ASN.1 PKCS#7/CMS structures and MIME multipart construction for EDI payloads.
 - **Action Item**: Research and implement a pure `cryptography`-based solution for S/MIME AS2 signing/encryption that doesn't rely on `endesive`. Once the native `cryptography` implementation is proven to cleanly handle AS2 EDI payloads, deprecate `endesive`, remove the `dummy-pykcs11` build override, and clean up the dependencies.
+
+## [Architecture] Extract Scheduled Cleanup Jobs from EDI Orchestrator and Hookup Control Plane Jobs
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: Currently, data-plane cleanup jobs are executing inside `edi-orchestrator-worker` (which polls `edi-orchestrator-jobs`), tightly coupling low-priority DB sweeps with high-throughput real-time AS2/X12 event processing. This queue name is also misleading since it implies "orchestration" rather than "background jobs". Furthermore, control-plane cleanup jobs (`EDI_CONTROL_PLANE_OUTBOX_CLEANUP`) are defined in the domain but the SQS polling logic is missing entirely from `edi-config-sync-worker`, leaving these tables unswept.
+- **Action Item**:
+  1. Rename `edi-orchestrator-jobs` to `edi-data-plane-jobs.fifo` (to match standard FIFO semantics) in Localstack setup and code.
+  2. Following Shopify-style monolith patterns, create a dedicated `edi-background-worker` entrypoint to execute all EDI background jobs, isolating them from the high-throughput workers.
+  3. Ensure the missing control-plane sweeper polling is wired up correctly in the new background worker infrastructure.
+
+## [Architecture] Eliminate `NULL` Tenant IDs in Favor of `PLATFORM_TENANT_ID`
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: Currently, the Identity ORM models (`Role`, `UserRole`) define `tenant_id` as `nullable=True`, using `NULL` to signify "Global" or "Platform" scoped resources. This is a non-enterprise pattern that breaks PostgreSQL referential integrity and makes writing Row-Level Security (RLS) policies and unified SQL constraints difficult. The system already defines a canonical `PLATFORM_TENANT_ID` in `identity_context.py`, but the database and repositories were never refactored to enforce it.
+- **Action Item**:
+  1. Refactor the Identity ORM models to enforce `nullable=False` on `tenant_id` columns.
+  2. Update all Identity repositories (`role_repository.py`, `user_repository.py`, etc.) to use `PLATFORM_TENANT_ID` instead of `None` when querying or saving global platform resources.
+  3. Create an Alembic database migration to backfill any existing `NULL` tenant records with the `PLATFORM_TENANT_ID` and apply the `NOT NULL` constraint.
+
+## [RESOLVED] [Architecture] Centralize and Dynamic SQS Queue URL Resolution
+
+- **Date Added**: 2026-08-25
+- **Status**: ✅ RESOLVED
+- **Description**: This work was completed: `SqsEventListener` implementations now accept logical queue names, adapters resolve absolute queue URLs at runtime through boto3 `get_queue_url()`, and explicit URL settings were removed from environment configuration and `Settings` classes.
+- **Action Item**: Completed by migrating consumers to logical queue names and removing the obsolete URL configuration.
+
+## [RESOLVED] [Architecture] Class Naming Taxonomy Drift (Listener vs Consumer)
+
+- **Date Added**: 2026-08-26
+- **Status**: ✅ RESOLVED
+- **Description**: There is a class naming taxonomy drift in the Inbound Adapters layer regarding SQS message processors. We currently mix suffixes like `*EventListener`, `*SqsConsumer`, and `*Poller` (e.g., `SqsUcpEventListener`, `UcpEventsSqsConsumer`, `SqsPoller`) to describe similar asynchronous worker patterns. This causes confusion in the mental model.
+- **Action Item**: Establish a canonical naming convention for asynchronous message handlers (e.g., standardizing on `*Consumer` or `*Listener`) and rename the divergent classes across all bounded contexts to adhere to this standard.
+
+## [Architecture Testing] True Enterprise-Grade Data Plane Integration Tests
+
+- **Date Added**: 2026-08-25
+- **Status**: TO DO
+- **Description**: The `test_sweeper_integration.py` in the EDI orchestrator currently uses a hack to simulate shards by dumping Data Plane tables (`audit_log`, `outbox`) directly into the `public` schema of the UCP global database. Furthermore, test data is inserted using hardcoded dictionaries rather than robust ORM factories, leading to brittle tests when domain models evolve (e.g., NotNull violations on new fields).
+- **Action Item**: Refactor integration tests to use true enterprise-grade boundaries. Implement semantic schemas (`test_ctrl_ucp`, `test_data_shard_1`) inside the test database to strictly isolate global and shard data during local runs. Implement a Test Builder Pattern / ORM Factory (e.g., `DataPlaneOutboxBuilder`) to auto-generate valid underlying test data states, completely eradicating brittle hardcoded dictionaries.
+
+## [RESOLVED] [Architecture] Refactor EDI Data & Control Plane Outboxes
+
+- **Date Added**: 2026-08-26
+- **Status**: ✅ RESOLVED
+- **Description**: The EDI bounded context (both Data and Control planes) currently uses custom outbox jobs/sweepers. They need to be migrated to use the generic `outbox` infrastructure package (like the Notification bounded context did).
+- **Action Item**: Migrate all custom EDI outbox jobs and sweepers to the generic `OutboxProcessorUseCase` and `SweepOutboxUseCase` from the platform outbox package. Remove duplicated legacy logic.
+
+## [Architecture] Centralize DDD AggregateRoot and Eliminate Taxonomy Drift
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: The codebase currently suffers from Taxonomy Drift in how it implements Domain-Driven Design (DDD) Aggregates. The `identity` and `ucp` bounded contexts define a custom `AggregateRoot` base class in `domain/aggregate_root.py`, while the `edi` context implements the exact same logic as a `DomainEventMixin` inside `domain/models.py`. This violates the Enterprise Architecture rule against duplicate infrastructure and file path taxonomy drift.
+- **Action Item**: Create a centralized platform package (e.g., `core/platform/packages/ddd`) containing a single, unified `AggregateRoot` base class and `DomainEvent` definition. Refactor all bounded contexts (`identity`, `ucp`, `edi`) to import and inherit from this central package, completely removing the duplicated local implementations and Mixins.
+
+## [Architecture] Centralize UnitOfWork (UoW) Transaction Management
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: Currently, every bounded context (`ucp`, `edi`, etc.) implements an identical `SqlAlchemyUnitOfWork` (e.g., `SqlAlchemyUcpUnitOfWork`, `SqlAlchemyDataPlaneUnitOfWork`). The transaction lifecycle methods (`__aenter__`, `__aexit__`, `commit`, `rollback`) are highly duplicated. This includes the complex logic inside `commit()` that intercepts `psycopg` `IntegrityError`, parses the `pgcode`, and translates it into domain-friendly errors.
+- **Action Item**: Centralize the base `UnitOfWork` into `core/platform/packages/database/src/database/uow.py`. Bounded contexts should only define a thin subclass to type-hint their specific repositories, inheriting the heavy transaction and error-handling logic from the shared platform base class.
+
+## [RESOLVED] [Architecture] Standardize Database Engine & Connection Pooling
+
+- **Date Added**: 2026-08-26
+- **Status**: ✅ RESOLVED
+- **Description**: In the Dependency Injection setup (`bootstrap/container.py`), every single worker and API module manually initializes its database connection via `self._engine = create_async_engine(self.database_url, pool_pre_ping=True)`. This means connection pool sizes, timeouts, and recycling strategies are managed on a per-module basis, creating a fragmented infrastructure configuration.
+- **Action Item**: Extract the `AsyncEngine` creation into a centralized `DatabaseProvider` within `core/platform/packages/database`. Update all DI containers across the monorepo to rely on this provider to guarantee identical infrastructure tuning and a single place to modify pool settings.
+
+## [Architecture] Eliminate Dual-Architecture in Database Exception Translation
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: Different bounded contexts handle unique database constraints differently: `ucp` catches and translates constraint violations centrally at the Unit of Work layer (inside `commit()`), whereas `edi` catches them locally inside individual Repositories (e.g., `_constraint_name(e: IntegrityError)` inside `as2_partner_repository.py`), wrapping them into custom exceptions. This creates a confusing dual-architecture for developers writing Application Use Cases.
+- **Action Item**: Standardize exception translation. Build a `BaseSqlAlchemyRepository` in `platform_orm` that exposes standard methods (`save`, `get`) wrapped in a centralized error-interceptor decorator to translate all raw PostgreSQL exceptions into a unified hierarchy of Platform Infrastructure Errors.
+
+## [Architecture] Centralize SQS Message Pump / Polling Infrastructure
+
+- **Date Added**: 2026-08-26
+- **Status**: TO DO
+- **Description**: While `AwsSqsPublisher` successfully centralizes the publishing of events, the consumer side exhibits architectural drift. Classes like `UcpEventsSqsConsumer` (UCP) and `NotificationOutboxSweeperJob` (Notification) duplicate the boilerplate for polling SQS, acknowledging messages, and handling leases (`mark_completed`, `mark_failed`). Naming conventions also drift between `jobs/` and `workers/`.
+- **Action Item**: Build a centralized `BaseMessagePump` or `SqsConsumerManager` in `core/platform/packages/pubsub` that natively handles the `receive_message -> process -> delete_message` lifecycle loop, so that bounded contexts only need to inject a pure `MessageHandler` callback.
+
+## [Architecture] Enterprise-Grade Monorepo Test Architecture
+
+- **Date Added**: 2026-08-27
+- **Status**: TO DO
+- **Description**: The current monorepo suffers from Python module namespace collisions (`import file mismatch` and `ModuleNotFoundError`) because shared test utilities (like `api_fakes.py`) are placed in generic local `tests/` directories alongside `__init__.py` files. This causes Pytest to conflate all `tests` directories across packages into a single global namespace.
+- **Action Item**: Migrate all shared test helpers (fakes, mock repositories, factories) out of their local `tests/` directories and into proper source-level test modules (e.g., `src/<package_name>/testing/`). Update all corresponding test files to import these utilities from their new fully-qualified namespace (e.g., `from identity.testing.fakes import ...`), and strictly forbid `__init__.py` files in generic `tests` folders.

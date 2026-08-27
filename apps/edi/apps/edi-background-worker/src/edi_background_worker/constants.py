@@ -1,0 +1,15 @@
+from enum import StrEnum
+
+
+class EdiJobName(StrEnum):
+    """
+    Canonical event type names for EDI worker scheduled jobs.
+    These must match the event_type values dispatched by the scheduler.
+    """
+
+    EDI_CONTROL_PLANE_OUTBOX_SWEEPER = "EDI_CONTROL_PLANE_OUTBOX_SWEEPER"
+    EDI_CONTROL_PLANE_OUTBOX_CLEANUP = "EDI_CONTROL_PLANE_OUTBOX_CLEANUP"
+    EDI_DATA_PLANE_OUTBOX_SWEEPER = "EDI_DATA_PLANE_OUTBOX_SWEEPER"
+    EDI_DATA_PLANE_OUTBOX_CLEANUP = "EDI_DATA_PLANE_OUTBOX_CLEANUP"
+    EDI_IDEMPOTENCY_CLEANUP = "EDI_IDEMPOTENCY_CLEANUP"
+    EDI_AUDIT_LOG_CLEANUP = "EDI_AUDIT_LOG_CLEANUP"

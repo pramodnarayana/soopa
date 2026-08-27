@@ -3,15 +3,16 @@ from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.inbound.workers.sqs_ucp_event_listener import SqsUcpEventListener
-from ucp.adapters.inbound.workers.ucp_events_sqs_consumer import UcpEventsSqsConsumer
-from ucp.adapters.inbound.workers.ucp_outbox_relay import UcpOutboxRelay
+from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
+from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.adapters.outbound.messaging.ucp_sns_outbox_publisher import UcpSnsOutboxPublisher
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
@@ -21,7 +22,6 @@ from ucp.application.use_cases.subscribe_app_use_case import (
     SubscribeAppCommand,
     SubscribeAppUseCase,
 )
-from ucp.application.use_cases.ucp_outbox_processor_use_case import UcpOutboxProcessorUseCase
 
 pytestmark = pytest.mark.integration
 
@@ -40,7 +40,7 @@ async def test_app_subscription_flow(
 ) -> None:
     # 1. Setup Ports
     outbox_repo = PostgresOutboxRepository(lambda: db_session)
-    sns_publisher = UcpSnsOutboxPublisher(
+    sns_publisher = AwsSnsPublisher(
         topic_arn=localstack_container["sns_topic_arn"],
         endpoint_url=localstack_container["endpoint_url"],
     )
@@ -49,21 +49,22 @@ async def test_app_subscription_flow(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
 
-    outbox_processor = UcpOutboxProcessorUseCase(
+    outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,
         publisher=sns_publisher,
     )
 
-    relay = UcpOutboxRelay(
+    relay = PostgresOutboxRelay(
         processor=outbox_processor,
         database_url=db_url,
+        listen_channel="ucp_outbox_wakeup",
     )
 
-    event_listener = SqsUcpEventListener(
-        queue_url=localstack_container["sqs_queue_url"],
+    event_consumer = UcpEventSqsConsumer(
+        queue_name=localstack_container["sqs_queue_name"],
         endpoint_url=localstack_container["endpoint_url"],
     )
-    dispatcher = UcpEventsSqsConsumer(event_listener)
+    dispatcher = UcpEventDispatcher(event_consumer)
 
     # Fake uow factory for the provisioner
     @asynccontextmanager
@@ -121,7 +122,7 @@ async def test_app_subscription_flow(
     # We might have multiple events (TenantProvisioned, UserInvited, app.subscribed). Process up to 5.
     for _ in range(5):
         try:
-            async with event_listener.process_next_event() as event:
+            async with event_consumer.process_next_event() as event:
                 if not event or event.tenant_id != tenant.id:
                     continue
                 await dispatcher._dispatch(event)

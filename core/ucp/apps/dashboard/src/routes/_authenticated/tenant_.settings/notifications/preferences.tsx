@@ -2,6 +2,7 @@ import { NotificationPreferencesPage } from '@soopa/ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { useAuth } from 'react-oidc-context';
 import { useTenantContext } from '../../../../contexts/TenantContext';
+import { getApiUrl } from '../../../../lib/config';
 
 export const Route = createFileRoute('/_authenticated/tenant_/settings/notifications/preferences')({
   component: NotificationPreferencesRoute,
@@ -15,8 +16,6 @@ function NotificationPreferencesRoute() {
     return null;
   }
 
-  const apiUrl =
-    `${import.meta.env.VITE_UCP_API_URL || 'http://localhost:8000'}`.replace(/\/+$/, '') +
-    '/api/v1/notifications';
+  const apiUrl = getApiUrl('/api/v1/notifications');
   return <NotificationPreferencesPage tenantId={tenantId} accessToken={token} apiUrl={apiUrl} />;
 }

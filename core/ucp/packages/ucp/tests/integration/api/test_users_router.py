@@ -1,8 +1,8 @@
 import uuid
 
 import pytest
+from database.models.identity import Tenant as OrmTenant
 from httpx import AsyncClient
-from platform_orm.models.identity import Tenant as OrmTenant
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +28,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     )
     db_session.add(tenant)
     # Seed the Global PBAC Role required by the CreateUserUseCase
-    from platform_orm.models.identity import Role as OrmRole
+    from database.models.identity import Role as OrmRole
 
     global_role = OrmRole(
         id=f"rol_{uuid.uuid4().hex[:12]}",
@@ -72,7 +72,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
 
     # Check outbox event was emitted (UserCreatedEvent)
     outbox_result = await db_session.execute(
-        text("SELECT event_type FROM ucp.outbox WHERE payload->>'user_id' = :user_id"),
+        text("SELECT event_type FROM identity.outbox WHERE payload->>'user_id' = :user_id"),
         {"user_id": user_id},
     )
     events = [row.event_type for row in outbox_result.fetchall()]

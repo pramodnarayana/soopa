@@ -5,9 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from edi.adapters.outbound.database.connection import DatabaseRouter
+from edi.adapters.outbound.security.network import validate_target_url
 from sqlalchemy.engine.url import make_url
-
-from worker.core.security import validate_target_url
 
 raw_global_url = os.getenv(
     "DATABASE_URL", "postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
@@ -23,9 +22,9 @@ SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hi
 
 
 def test_validate_target_url(monkeypatch: MagicMock) -> None:
-    import worker.core.security
+    import edi.adapters.outbound.security.network
 
-    monkeypatch.setattr(worker.core.security, "IS_DEV", False)
+    monkeypatch.setattr(edi.adapters.outbound.security.network, "IS_DEV", False)
 
     def mock_getaddrinfo(
         host: str, *args: Any, **kwargs: Any

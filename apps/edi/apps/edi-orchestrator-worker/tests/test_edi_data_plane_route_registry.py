@@ -2,10 +2,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from worker.adapters.inbound.workers.edi_data_plane_events_sqs_consumer import (
+from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventMessage,
 )
-from worker.core.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
+from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
 
 pytestmark = pytest.mark.asyncio
 

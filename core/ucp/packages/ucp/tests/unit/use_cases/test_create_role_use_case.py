@@ -1,14 +1,14 @@
 from unittest.mock import create_autospec
 
 import pytest
+from identity.domain.models.authorization import Capability
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 
+from ucp.application.dto import CreateRoleRequest
 from ucp.application.use_cases.roles.create_role_use_case import (
-    CreateRoleRequest,
     CreateRoleUseCase,
 )
 from ucp.domain.exceptions import InvalidCapabilityError
-from ucp.domain.models.authorization import Capability
-from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 

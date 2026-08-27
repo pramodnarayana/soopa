@@ -4,13 +4,13 @@ from edi.adapters.outbound.database.session import get_global_session, get_sessi
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .adapters.repository import (
+from .adapters.outbound.repository import (
     AS2TenantRepositoryAdapter,
     EdiMessageRepositoryAdapter,
     TradingPartnerRepositoryAdapter,
 )
-from .adapters.vault import EnvironmentVaultService
-from .core.receive_as2 import ReceiveAS2UseCase
+from .adapters.outbound.vault import EnvironmentVaultService
+from .application.use_cases.receive_as2 import ReceiveAS2UseCase
 
 GlobalSessionDep = Annotated[AsyncSession, Depends(get_global_session)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

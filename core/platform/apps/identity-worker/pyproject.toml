@@ -1,0 +1,29 @@
+[project]
+name = "identity-worker"
+version = "0.1.0"
+description = "Identity Background Worker"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "database",
+    "identity",
+    "observability",
+    "ucp",
+    "ucp_models",
+    "aioboto3>=13.1.1",
+    "sqlalchemy>=2.0.29",
+    "asyncpg>=0.29.0",
+    "structlog>=24.4.0",
+    "pydantic>=2.10.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+database = { workspace = true }
+identity = { workspace = true }
+observability = { workspace = true }
+ucp = { workspace = true }
+ucp_models = { workspace = true }

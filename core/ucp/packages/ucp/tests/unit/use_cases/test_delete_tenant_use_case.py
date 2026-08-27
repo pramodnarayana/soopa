@@ -1,14 +1,14 @@
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+from identity.domain.models.user import User
+from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
-from ucp.domain.models.user import User
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
-from ucp.ports.outbound.user_repository_port import UserRepositoryPort
 
 
 @pytest.fixture

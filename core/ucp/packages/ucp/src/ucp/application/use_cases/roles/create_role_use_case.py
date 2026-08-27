@@ -1,25 +1,13 @@
 import uuid
 
 import structlog
-from pydantic import BaseModel
+from identity.domain.models.authorization import Capability, Role
 
+from ucp.application.dto import CreateRoleRequest, CreateRoleResponse
 from ucp.domain.exceptions import InvalidCapabilityError
-from ucp.domain.models.authorization import Capability, Role
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
-
-
-class CreateRoleRequest(BaseModel):
-    name: str
-    description: str | None = None
-    capabilities: list[str]
-
-
-class CreateRoleResponse(BaseModel):
-    id: str
-    name: str
-    capabilities: list[str]
 
 
 class CreateRoleUseCase:

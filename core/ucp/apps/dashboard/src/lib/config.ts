@@ -5,12 +5,14 @@
  * All modules must import from here — never access import.meta.env directly.
  */
 
-const env = import.meta.env as unknown as Record<string, string>;
-
-function optionalEnv(key: string, fallback: string): string {
-  return env[key] || fallback;
-}
+const apiOrigin = (import.meta.env.VITE_UCP_API_URL as string | undefined)
+  ?.trim()
+  .replace(/\/+$/, '');
 
 export const config = {
-  ucpApiUrl: optionalEnv('VITE_UCP_API_URL', 'http://localhost:3000').replace(/\/+$/, ''),
+  apiOrigin: apiOrigin ?? '',
 } as const;
+
+export function getApiUrl(path: `/${string}`): string {
+  return `${config.apiOrigin}${path}`;
+}

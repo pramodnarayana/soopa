@@ -3,6 +3,10 @@ from typing import Annotated, Any
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.domain.identity_context import IdentityContext
+from identity.domain.models.api_token_models import (
+    CreateApiTokenCommand,
+    UpdateApiTokenCommand,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.application.use_cases.api_tokens import (
     CreateApiTokenUseCase,
@@ -12,10 +16,6 @@ from ucp.application.use_cases.api_tokens import (
 )
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
-from ucp.domain.models.api_token_models import (
-    CreateApiTokenCommand,
-    UpdateApiTokenCommand,
-)
 
 from unified_api.adapters.inbound.http.dtos.api_token_dtos import (
     ApiTokenCreatedResponse,

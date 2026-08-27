@@ -1,7 +1,7 @@
-from edi.core.bots.domain.node import Node  # type: ignore[attr-defined]
+from edi.core.bots.domain.node import Node
 
 
-def generate_997_ast(in_node: Node, error_list: list[str] | None = None) -> Node:  # noqa: C901
+def generate_997_ast(in_node: Node, error_list: list[str] | None = None) -> Node:
     """
     Generate a stateless 997 Functional Acknowledgment AST from an incoming X12 AST.
 
@@ -48,6 +48,7 @@ def generate_997_ast(in_node: Node, error_list: list[str] | None = None) -> Node
         raise ValueError("Cannot generate 997: no GS segment found in input X12 message")
 
     ak1 = Node({"BOTSID": "AK1", "AK101": "", "AK102": ""})
+    assert ak1.record is not None
     ak1.record["AK101"] = gs_node.get({"BOTSID": "GS", "GS01": None}) or "PO"
     ak1.record["AK102"] = gs_node.get({"BOTSID": "GS", "GS06": None}) or "1"
 

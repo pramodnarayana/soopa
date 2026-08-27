@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "scheduler",
+    "aioboto3>=13.1.1",
     "dependency-injector>=4.44.0",
     "python-dotenv>=1.0.0",
     "structlog>=24.4.0",

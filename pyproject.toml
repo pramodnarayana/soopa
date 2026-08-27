@@ -19,33 +19,50 @@ override-dependencies = ["pykcs11"]
 members = [
     "core/platform/packages/*/python",
     "core/platform/packages/identity",
-    "core/platform/packages/orm",
+    "core/platform/packages/database",
     "core/platform/packages/observability",
+    "core/platform/packages/outbox",
+    "core/platform/packages/pubsub",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",
     "core/ucp/apps/ucp-worker",
     "apps/edi/packages/edi",
     "apps/edi/apps/edi-as2-server",
-    "apps/edi/apps/edi-orchestrator-worker",
     "apps/edi/apps/edi-compute-worker",
+    "apps/edi/apps/edi-config-sync-worker",
+    "apps/edi/apps/edi-orchestrator-worker",
+    "apps/edi/apps/edi-background-worker",
+    "apps/edi/apps/edi-secrets-sidecar",
     "core/platform/apps/scheduler-worker",
     "core/platform/packages/scheduler",
     "core/platform/packages/notification",
     "core/platform/apps/notification-worker",
+    "core/platform/apps/identity-worker",
     "core/platform/apps/unified-api",
     "apps/edi/apps/edi-secrets-sidecar",
 ]
 exclude = ["apps/edi/packages/ui"]
 
 [tool.uv.sources]
+identity = { workspace = true }
+database = { workspace = true }
+platform-schemas = { workspace = true }
+observability = { workspace = true }
+outbox = { workspace = true }
+pubsub = { workspace = true }
+notification = { workspace = true }
+scheduler = { workspace = true }
+ucp = { workspace = true }
+ucp-models = { workspace = true }
+edi = { workspace = true }
+as2-server = { workspace = true }
+unified-api = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 norecursedirs = ["node_modules", "frontend"]
-
-
 addopts = "-v --tb=short --ignore=services/worker"
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
@@ -72,7 +89,22 @@ dev = [
 [tool.mypy]
 strict = true
 warn_unused_ignores = false
-exclude = ["venv", ".venv", "migrations", "tests", ".*/tests/.*", ".*bots_core.*", ".*grammar.*", "services/worker", "^(.*/)?scripts/.*$"]
+exclude = [
+    "venv",
+    ".venv",
+    "migrations",
+    "tests",
+    ".*/tests/.*",
+    # Dynamically composed legacy Bots runtime; other Bots modules remain type-checked.
+    "^apps/edi/packages/edi/src/edi/core/bots/domain(/|$)",
+    "^apps/edi/packages/edi/src/edi/core/bots/utils(/|$)",
+    "^apps/edi/packages/edi/src/edi/core/bots/facade\\.py$",
+    ".*grammar.*",
+    "services/worker",
+    "^(.*/)?scripts/.*$",
+    # Standalone entrypoint script — not a package; excluded to avoid duplicate module 'main' conflict.
+    "^apps/edi/apps/edi-secrets-sidecar/main\\.py$",
+]
 plugins = ["pydantic.mypy"]
 explicit_package_bases = true
 namespace_packages = true
@@ -80,7 +112,7 @@ mypy_path = [
     "core/platform/packages/identity/src",
     "core/platform/packages/observability/src",
     "core/platform/packages/schemas/python/src",
-    "core/platform/packages/orm/src",
+    "core/platform/packages/database/src",
     "core/platform/packages/notification/src",
     "core/platform/apps/scheduler-worker/src",
     "core/platform/packages/scheduler/src",
@@ -91,6 +123,13 @@ mypy_path = [
     "apps/edi/apps/edi-compute-worker/src",
     "apps/edi/apps/edi-orchestrator-worker/src",
     "apps/edi/apps/edi-as2-server/src",
+    "apps/edi/apps/edi-background-worker/src",
+    "apps/edi/apps/edi-config-sync-worker/src",
+    "core/platform/packages/outbox/src",
+    "core/platform/packages/pubsub/src",
+    "core/platform/apps/identity-worker/src",
+    "core/platform/apps/notification-worker/src",
+    "core/ucp/apps/ucp-worker/src",
 ]
 
 [[tool.mypy.overrides]]
@@ -140,10 +179,10 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 
 "apps/edi/apps/edi-as2-server/tests/conftest.py" = ["S603", "S607"]
 # Legacy BOTS engine formatting ignores
-"apps/edi/packages/edi/src/edi/core/bots/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
-"apps/edi/packages/edi/src/edi/core/bots/domain/parsers/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
-"apps/edi/packages/edi/src/edi/core/bots/utils/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
-"apps/edi/packages/edi/src/edi/core/bots/facade.py" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "F821", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S314", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/domain/parsers/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/utils/*" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
+"apps/edi/packages/edi/src/edi/core/bots/facade.py" = ["UP031", "SIM113", "E402", "SIM108", "SIM105", "SIM102", "F841", "UP038", "F405", "F401", "BLE", "TRY", "C901", "S112"]
 "apps/edi/packages/edi/src/edi/core/grammar/**/*.py" = ["F401", "F403", "F405", "F403"]
 
 [tool.ruff.format]
@@ -191,12 +230,29 @@ venvPath = "."
 venv = ".venv"
 extraPaths = [
     "core/platform/packages/identity/src",
+    "core/platform/packages/identity/python/src",
     "core/platform/packages/observability/src",
+    "core/platform/packages/observability/python/src",
     "core/platform/packages/schemas/python/src",
+    "core/platform/packages/schemas/src",
+    "core/platform/packages/database/src",
+    "core/platform/packages/notification/src",
+    "core/platform/packages/scheduler/src",
+    "core/platform/packages/outbox/src",
+    "core/platform/packages/pubsub/src",
+    "core/platform/apps/scheduler-worker/src",
+    "core/platform/apps/notification-worker/src",
+    "core/platform/apps/identity-worker/src",
+    "core/platform/apps/unified-api/src",
+    "core/ucp/packages/ucp/src",
+    "core/ucp/packages/models/src",
+    "core/ucp/apps/ucp-worker/src",
+    "apps/edi/packages/edi/src",
     "apps/edi/apps/edi-compute-worker/src",
     "apps/edi/apps/edi-orchestrator-worker/src",
     "apps/edi/apps/edi-as2-server/src",
-    "apps/edi/packages/edi/src",
+    "apps/edi/apps/edi-background-worker/src",
+    "apps/edi/apps/edi-config-sync-worker/src",
 ]
 
 [tool.vulture]
@@ -204,3 +260,25 @@ exclude = ["venv", ".venv", "migrations", "tests", "*bots_core*", "*grammar*", "
 paths = ["apps", "core"]
 ignore_names = ["cls", "kwargs", "args", "QueueName", "MaxNumberOfMessages", "QueueUrl", "WaitTimeSeconds", "ReceiptHandle", "MessageBody", "MessageGroupId", "MessageDeduplicationId", "Entries", "connection", "routedict", "ta_fromfile", "dialect", "memo"]
 min_confidence = 80
+
+[tool.deptry]
+known_first_party = [
+    "config_sync_worker",
+    "scheduler_worker",
+    "orchestrator_worker",
+    "compute_worker",
+    "identity_worker",
+    "ucp_worker",
+    "notification_worker",
+    "api",
+    "ucp",
+    "edi",
+    "identity",
+    "observability",
+    "scheduler",
+    "database",
+    "as2_server",
+    "notification",
+    "outbox",
+    "pubsub",
+]

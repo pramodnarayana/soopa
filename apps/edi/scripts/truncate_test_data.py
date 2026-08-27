@@ -2,8 +2,8 @@ import asyncio
 import os
 
 import boto3
+from database.provider import get_async_engine
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 # Database Connection
 DATABASE_URL = os.getenv(
@@ -25,7 +25,7 @@ TABLES_TO_TRUNCATE = ["outbox", "processed_events", "edi_messages", "edi_json", 
 
 async def truncate_database():
     print(f"Connecting to database: {DATABASE_URL}")
-    engine = create_async_engine(DATABASE_URL, echo=False)
+    engine = get_async_engine(DATABASE_URL)
     try:
         async with engine.begin() as conn:
             # Truncate all tables in a single statement for efficiency

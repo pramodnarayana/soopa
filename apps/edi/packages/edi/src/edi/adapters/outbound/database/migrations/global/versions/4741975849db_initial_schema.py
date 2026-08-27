@@ -215,16 +215,16 @@ def upgrade() -> None:
             name="chk_inbound_routes_exactly_one_dest",
         ),
         sa.ForeignKeyConstraint(
+            ["webhook_id"],
+            ["ucp.webhooks.id"],
+        ),
+        sa.ForeignKeyConstraint(
             ["as2_partner_id"],
             ["edi.as2_partners.id"],
         ),
         sa.ForeignKeyConstraint(
             ["sftp_partner_id"],
             ["edi.sftp_partners.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["webhook_id"],
-            ["ucp.webhooks.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
         schema="edi",

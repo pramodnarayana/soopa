@@ -2,10 +2,10 @@ import os
 from dataclasses import dataclass
 
 import structlog
+from identity.domain.events import UserCreatedEvent
+from identity.domain.models.user import User
 
-from ucp.domain.events.user_events import UserCreatedEvent
 from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
-from ucp.domain.models.user import User
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

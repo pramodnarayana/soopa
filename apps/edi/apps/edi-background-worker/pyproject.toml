@@ -1,0 +1,57 @@
+[project]
+name = "edi_background_worker"
+version = "0.1.0"
+description = "Worker service for handling scheduled cleanup and background jobs"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "outbox", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database"]
+
+[tool.uv.sources]
+ucp_models = { workspace = true }
+edi = { workspace = true }
+outbox = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.22",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edi_background_worker"]
+
+[tool.mypy]
+strict = true
+exclude = ["tests"]
+
+[[tool.mypy.overrides]]
+module = [
+    "aioboto3",
+    "aioboto3.*",
+    "hvac",
+    "hvac.*",
+    "asyncpg",
+    "pytest_mock",
+    "pytest_mock.*",
+]
+ignore_missing_imports = true
+
+[tool.pyright]
+venvPath = "../../../.."
+venv = ".venv"
+extraPaths = [
+    "../../../../core/ucp/packages/models/src",
+    "../../../../core/platform/packages/identity/src",
+    "../../../../core/platform/packages/observability/python/src",
+    "../../packages/edi/src",
+    "../edi-compute-worker/src",
+    "../edi-secrets-sidecar/src",
+    "src",
+    "../../edi-as2-server/src",
+]
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"

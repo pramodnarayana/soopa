@@ -415,7 +415,7 @@ class As2ReceiverService:
                 "receiver_id": isa_receiver,
                 "status": "RECEIVED",
             }
-            await dp_uow.data_plane_outbox.publish_outbox_event(
+            await dp_uow.transactions.publish_outbox_event(
                 tenant_id=true_tenant_id,
                 event_type=PipelineEventType.TRANSFORM_EVENT,
                 payload=outbox_payload,

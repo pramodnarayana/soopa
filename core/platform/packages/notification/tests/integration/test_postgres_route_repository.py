@@ -1,5 +1,5 @@
 import pytest
-from platform_orm.models.notifications import NotificationRouteConfiguration
+from database.models.notifications import NotificationRouteConfiguration
 
 from notification.adapters.outbound.database.postgres_route_repository import (
     SqlAlchemyNotificationRouteRepository,
@@ -15,7 +15,7 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
 
     async with db_session_factory() as session, session.begin():
         # Because foreign keys are enforced, we must create the tenant first
-        from platform_orm.models.identity import Tenant
+        from database.models.identity import Tenant
 
         tenant = Tenant(
             id=tenant_id,

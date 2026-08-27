@@ -6,31 +6,12 @@ authors = [
     {name = "EDI AS2 Team", email = "team@edi.com"}
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "fastapi>=0.141.1",
-    "uvicorn[standard]>=0.22.0",
-    "gunicorn>=22.0.0",
-    "prometheus-client>=0.20.0",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
-    "sqlalchemy[asyncio]>=2.0.0",
-    "aioboto3>=12.0.0",
-    "identity",
-    "observability",
-    "hvac>=2.4.0",
-    "cryptography>=41.0.0",
-    "httpx>=0.24.1",
-    "paramiko>=3.3.1",
-    "structlog>=24.1.0",
-    "python-dotenv>=1.0.0",
-    "anyio>=3.7.1",
-    "ucp",
-    "dependency-injector>=4.41.0"
-]
+dependencies = ["fastapi>=0.141.1", "uvicorn[standard]>=0.22.0", "gunicorn>=22.0.0", "prometheus-client>=0.20.0", "pydantic>=2.0.0", "pydantic-settings>=2.0.0", "sqlalchemy[asyncio]>=2.0.0", "aioboto3>=12.0.0", "identity", "observability", "outbox", "cryptography>=41.0.0", "httpx>=0.24.1", "paramiko>=3.3.1", "structlog>=24.1.0", "python-dotenv>=1.0.0", "ucp", "dependency-injector>=4.41.0", "ucp_models", "boto3", "endesive", "jsonpath_ng", "botocore", "alembic", "asn1crypto", "database", "unified_api"]
 
 [tool.uv.sources]
 identity = { workspace = true }
 observability = { workspace = true }
+outbox = { workspace = true }
 ucp = { workspace = true }
 
 
@@ -62,6 +43,11 @@ DEP002 = [
 "src/edi/services/*.py" = ["C901"]
 "src/edi/routers/trading_partners/platform/*.py" = ["C901"]
 "src/edi/routers/**/*.py" = ["B008", "E402"]
+"src/edi/core/bots/**/*.py" = ["C901", "BLE001", "SIM108", "SIM113", "S110", "S112"]
+"src/edi/core/bots/domain/grammar/loader.py" = ["F821"]
+"src/edi/core/bots/domain/inmessage.py" = ["F821"]
+"src/edi/core/bots/domain/outmessage.py" = ["F821"]
+"src/edi/core/bots/utils/xml2botsgrammar.py" = ["S314"]
 "src/edi/dependencies/**/*.py" = ["B008"]
 "tests/**/*.py" = ["E402"]
 
@@ -87,7 +73,13 @@ exclude = [
 [tool.mypy]
 exclude = [
     "src/edi/core/grammar",
-    "src/edi/core/bots",
+    # Dynamically composed legacy runtime; config and bundled grammars remain type-checked.
+    "src/edi/core/bots/domain",
+    "src/edi/core/bots/utils",
+    "src/edi/core/bots/facade.py",
+    "src/edi/core/bots/utils/xml2botsgrammar\\.py",
+    "src/edi/core/bots/utils/botslib\\.py",
+    "src/edi/core/bots/domain/grammar/.*",
     "tests/bots_core",
     "tests/grammar"
 ]
@@ -95,6 +87,7 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     "aioboto3.*",
+    "botocore.*",
     "endesive.*",
     "unified_api.*"
 ]

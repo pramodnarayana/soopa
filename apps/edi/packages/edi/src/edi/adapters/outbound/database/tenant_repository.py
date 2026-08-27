@@ -1,10 +1,10 @@
 from typing import Any
 
-from platform_orm.models.identity import (
-    Tenant,
-)
 from sqlalchemy import select
 
+from database.models.identity import (
+    Tenant,
+)
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 

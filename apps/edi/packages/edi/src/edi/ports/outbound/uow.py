@@ -2,13 +2,12 @@ from typing import Any, Protocol
 
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
+from edi.ports.outbound.control_plane_outbox_repository_port import (
+    ControlPlaneOutboxRepositoryPort,
+)
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
-from edi.ports.outbound.outbox_repository import (
-    ControlPlaneOutboxRepositoryPort,
-    DataPlaneOutboxRepositoryPort,
-)
 from edi.ports.outbound.platform_settings_repository import PlatformSettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
@@ -25,11 +24,11 @@ class ControlPlaneUnitOfWorkPort(Protocol):
     as2_partnerships: AS2PartnershipRepositoryPort
     inbound_routes: InboundRouteRepositoryPort
     outbound_routes: OutboundRouteRepositoryPort
-    control_plane_outbox: ControlPlaneOutboxRepositoryPort
     sftp_partners: SFTPPartnerRepositoryPort
     tenants: TenantRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
+    control_plane_outbox: ControlPlaneOutboxRepositoryPort
 
     async def __aenter__(self) -> "ControlPlaneUnitOfWorkPort": ...
 
@@ -52,7 +51,6 @@ class DataPlaneUnitOfWorkPort(Protocol):
     """
 
     transactions: TransactionRepositoryPort
-    data_plane_outbox: DataPlaneOutboxRepositoryPort
 
     async def __aenter__(self) -> "DataPlaneUnitOfWorkPort": ...
 

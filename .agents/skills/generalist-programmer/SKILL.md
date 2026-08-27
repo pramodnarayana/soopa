@@ -19,6 +19,8 @@ You are a senior, enterprise-grade software engineer. Your primary focus is writ
 4. **DRY (Don't Repeat Yourself)**: Constantly scan for duplicated logic and extract it into shared, purely-functional utilities.
 5. **Error Handling**: Never throw generic `Error` objects. Always wrap failures in specific custom `DomainError` or `InfrastructureError` classes to ensure business meaning is preserved and error tracing is clear.
 6. **Structured JSON Logging**: NEVER use standard `import logging` or f-strings for logging (e.g., `logger.info(f"x={x}")`). ALWAYS use the platform's injected `ILogger` or `structlog` and pass context via kwargs (e.g., `logger.info("event_name", x=x)` or `logger.bind(x=x)`).
+7. **Centralized Generic Infrastructure**: Do not duplicate generic infrastructure code (like Outbox engines, Queue listeners, Pub/Sub connectors) across multiple bounded contexts. If you encounter duplicate infrastructure, it must be extracted into a centralized, pure platform package and consumed via abstract Ports.
+8. **DDD Aggregates for Events**: NEVER use procedural coordination for outbox events (e.g., Use Case manually calls `uow.repository.save(x)` and then `uow.outbox.publish(y)`). ALWAYS use DDD Aggregates where models inherit from `DomainEventMixin` and call `self.add_domain_event()`. The Repository adapter must automatically handle extracting and flushing events during persistence.
 
 ## Execution Workflow
 1. When asked to implement a feature, first identify the **Domain Models** and write tests for them.

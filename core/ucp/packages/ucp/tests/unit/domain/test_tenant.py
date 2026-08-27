@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from ucp.domain.events.tenant_events import TenantDeletedEvent
+from ucp.domain.events import TenantDeletedEvent
 from ucp.domain.models.tenant import Tenant
 
 

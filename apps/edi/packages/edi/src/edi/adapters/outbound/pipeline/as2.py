@@ -8,6 +8,7 @@ import typing
 import httpx
 import structlog
 
+from edi.adapters.outbound.security.network import ssrf_safe_context
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 
 logger = structlog.get_logger(__name__)
@@ -53,7 +54,7 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
                 raise ValueError("URL validation failed for provided destination.")
             ctx = contextlib.nullcontext()
 
-        with ctx:
+        with ctx, ssrf_safe_context(url):
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=False,  # AS2 spec does not permit redirect following

@@ -1,16 +1,14 @@
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.ports.outbound.organization_provider_port import OrganizationProviderPort
-from ucp.ports.outbound.role_repository_port import RoleRepositoryPort
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
-from ucp.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 
 @pytest.fixture
@@ -25,7 +23,7 @@ def mock_role_repo() -> RoleRepositoryPort:
     mock = create_autospec(RoleRepositoryPort, instance=True)
 
     # Mock the global role return
-    from ucp.domain.models.authorization import Role
+    from identity.domain.models.authorization import Role
 
     tenant_admin_role = Role(
         id="rol_tenant_admin_123",
@@ -41,20 +39,6 @@ def mock_role_repo() -> RoleRepositoryPort:
 
 
 @pytest.fixture
-def mock_org_provider() -> OrganizationProviderPort:
-    """Strict mock that enforces the OrganizationProviderPort port interface."""
-    mock = create_autospec(OrganizationProviderPort, instance=True)
-    mock.create_organization = AsyncMock(return_value=("zitadel-org-123", "org-name"))
-    return mock
-
-
-@pytest.fixture
-def mock_user_identity_provider() -> UserIdentityProviderPort:
-    """Strict mock that enforces the UserIdentityProviderPort port interface."""
-    return create_autospec(UserIdentityProviderPort, instance=True)
-
-
-@pytest.fixture
 def mock_uow(
     mock_tenant_repo: TenantRepositoryPort, mock_role_repo: RoleRepositoryPort
 ) -> UcpUnitOfWorkPort:
@@ -63,10 +47,10 @@ def mock_uow(
     uow.role_repo = mock_role_repo
 
     # Mock user_repo
-    from ucp.ports.outbound.user_repository_port import UserRepositoryPort
+    from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
     mock_user_repo = create_autospec(UserRepositoryPort, instance=True)
-    from ucp.domain.models.user import User
+    from identity.domain.models.user import User
 
     async def mock_find_by_id(user_id: str) -> User | None:
         from datetime import UTC, datetime

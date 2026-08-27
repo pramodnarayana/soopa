@@ -1,9 +1,9 @@
+from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, Field
 
-
-class TokenClaims(BaseModel):
+@dataclass(frozen=True)
+class TokenClaims:
     sub: str
     iss: str
     aud: str | list[str]
@@ -11,12 +11,11 @@ class TokenClaims(BaseModel):
     iat: int | None = None
     tenant_id: str | None = None
     organization_id: str | None = None
-    authorized_tenants: set[str] = Field(default_factory=set)
-    roles: list[str] = Field(default_factory=list)
-    permissions: list[str] = Field(default_factory=list)
-    tenant_roles: dict[str, list[str]] = Field(default_factory=dict)
-
-    model_config = {"extra": "allow", "populate_by_name": True}
+    authorized_tenants: set[str] = field(default_factory=set)
+    roles: list[str] = field(default_factory=list)
+    permissions: list[str] = field(default_factory=list)
+    tenant_roles: dict[str, list[str]] = field(default_factory=dict)
+    raw_claims: dict[str, Any] = field(default_factory=dict)
 
 
 # The canonical tenant ID used to represent the global platform administrator scope.
@@ -25,17 +24,18 @@ PLATFORM_TENANT_ID = "ten_000000000000000000000000"
 M2M_API_KEY_PREFIX = "sp_api_"
 
 
-class IdentityContext(BaseModel):
+@dataclass(frozen=True)
+class IdentityContext:
     subject: str
+    claims: dict[str, Any]
     tenant_id: str | None = None
     organization_id: str | None = None
-    authorized_tenants: set[str] = Field(default_factory=set)
-    tenant_mapping: dict[str, str] = Field(default_factory=dict)
+    authorized_tenants: set[str] = field(default_factory=set)
+    tenant_mapping: dict[str, str] = field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
-    tenant_roles: dict[str, list[str]] = Field(default_factory=dict)
-    capabilities: set[str] = Field(default_factory=set)
-    claims: dict[str, Any]
+    tenant_roles: dict[str, list[str]] = field(default_factory=dict)
+    capabilities: set[str] = field(default_factory=set)
 
     @property
     def is_platform_admin(self) -> bool:
@@ -76,5 +76,5 @@ def identity_context_from_claims(
         permissions=tuple(claims.permissions),
         tenant_roles=claims.tenant_roles,
         capabilities=set(),
-        claims=claims.model_dump(mode="json"),
+        claims=claims.raw_claims,
     )

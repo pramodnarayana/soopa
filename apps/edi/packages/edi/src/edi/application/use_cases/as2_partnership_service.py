@@ -98,6 +98,7 @@ class AS2PartnershipService:
             tenant_id=tenant_id,
         )
         await self.uow.as2_partnerships.delete_as2_partnership(tenant_id, partnership_id)
+
         await self.uow.control_plane_outbox.publish_outbox_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,

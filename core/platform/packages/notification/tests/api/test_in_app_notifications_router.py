@@ -1,10 +1,10 @@
 import uuid
 
 import pytest
+from database.models.identity import Role, Tenant, User, UserRole
+from database.models.notifications import NotificationRecord
 from dependency_injector import providers
 from httpx import ASGITransport, AsyncClient
-from platform_orm.models.identity import Role, Tenant, User, UserRole
-from platform_orm.models.notifications import InAppNotification
 
 
 @pytest.mark.asyncio
@@ -56,7 +56,7 @@ async def test_in_app_notifications_router_integration(db_session_factory):
         )
         session.add(other_tenant_user)
 
-        notification = InAppNotification(
+        notification = NotificationRecord(
             id=notif_id,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -67,7 +67,7 @@ async def test_in_app_notifications_router_integration(db_session_factory):
         session.add(notification)
 
         # Add notification for other user (same tenant, different user)
-        other_user_notification = InAppNotification(
+        other_user_notification = NotificationRecord(
             id=other_user_notif_id,
             tenant_id=tenant_id,
             user_id=other_user_id,

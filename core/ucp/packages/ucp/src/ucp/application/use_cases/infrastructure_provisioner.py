@@ -3,7 +3,7 @@ from contextlib import AbstractAsyncContextManager
 
 import structlog
 
-from ucp.ports.outbound.ucp_event_listener_port import UcpEventMessage
+from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

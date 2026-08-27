@@ -2,6 +2,7 @@ import contextlib
 from collections.abc import AsyncGenerator
 from typing import Annotated, Any, cast
 
+from database.models.identity import Tenant
 from dependency_injector.wiring import Provide, inject
 from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.session import get_global_session
@@ -12,7 +13,6 @@ from edi.bootstrap.container import Container
 from edi.exceptions import TenantNotSubscribedException
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import Depends, Request
-from platform_orm.models.identity import Tenant
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry

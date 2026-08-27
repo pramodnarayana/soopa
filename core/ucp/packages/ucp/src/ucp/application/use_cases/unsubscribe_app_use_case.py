@@ -1,15 +1,10 @@
 import structlog
-from pydantic import BaseModel
 
+from ucp.application.dto import UnsubscribeAppCommand
 from ucp.application.use_cases._tenant_helpers import resolve_tenant_or_raise
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
-
-
-class UnsubscribeAppCommand(BaseModel):
-    tenant_id: str
-    app_id: str
 
 
 class UnsubscribeAppUseCase:

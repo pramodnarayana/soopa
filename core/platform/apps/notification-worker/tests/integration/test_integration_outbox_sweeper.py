@@ -1,14 +1,15 @@
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
+from database.models.notifications import NotificationOutbox
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
 )
-from notification.application.notification_outbox_processor_use_case import (
-    NotificationOutboxProcessorUseCase,
+from notification.domain.models import NotificationOutboxEvent
+from outbox.application.outbox_sweeper_use_case import (
+    OutboxSweeperUseCase,
 )
-from notification.domain.models import Channel, NotificationOutboxEvent
-from platform_orm.models.notifications import NotificationOutbox
 from sqlalchemy import select
 
 
@@ -16,23 +17,18 @@ class FakeDispatcher:
     def __init__(self):
         self.dispatches = []
 
-    async def dispatch(
-        self,
-        channel: Channel,
-        tenant_id: str,
-        content: str,
-        subject: str | None = None,
-        data: dict[str, Any] | None = None,
-    ) -> None:
-        self.dispatches.append(
-            {
-                "channel": channel,
-                "tenant_id": tenant_id,
-                "content": content,
-                "subject": subject,
-                "data": data,
-            }
-        )
+    async def publish_batch(self, events: Sequence[Any]) -> Sequence[str]:
+        successful_ids = []
+        for event in events:
+            self.dispatches.append(
+                {
+                    "event_type": event.event_type,
+                    "tenant_id": event.tenant_id,
+                    "payload": event.payload,
+                }
+            )
+            successful_ids.append(event.id)
+        return successful_ids
 
 
 @pytest.mark.asyncio
@@ -45,7 +41,7 @@ async def test_outbox_sweeper_integration(db_session_factory):
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
     dispatcher = FakeDispatcher()
 
-    from platform_orm.models.identity import Tenant
+    from database.models.identity import Tenant
 
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(id="t1", name="Test Tenant", slug="t1")
@@ -66,16 +62,14 @@ async def test_outbox_sweeper_integration(db_session_factory):
     )
     await repo.save(message)
 
-    processor = NotificationOutboxProcessorUseCase(
-        repository=repo, dispatcher=dispatcher, worker_id="test_worker_1"
-    )
+    processor = OutboxSweeperUseCase(repository=repo, publisher=dispatcher)
 
     # 2. Run a single poll cycle
-    await processor.process_pending()
+    await processor.execute()
 
     # 3. Verify it was dispatched
     assert len(dispatcher.dispatches) == 1
-    assert dispatcher.dispatches[0]["channel"] == Channel.EMAIL
+    assert dispatcher.dispatches[0]["payload"]["channel"] == "EMAIL"
     assert dispatcher.dispatches[0]["tenant_id"] == "t1"
 
     # 4. Verify it was marked as COMPLETED in the database
@@ -86,5 +80,4 @@ async def test_outbox_sweeper_integration(db_session_factory):
 
         assert outbox_row is not None
         assert outbox_row.status == "COMPLETED"
-        # Safe: dummy token for test
-        assert outbox_row.owner_token == "test_worker_1"  # noqa: S105
+        assert outbox_row.owner_token is not None

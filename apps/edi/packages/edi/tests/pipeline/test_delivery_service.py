@@ -37,12 +37,14 @@ def make_use_case(
         yield u
 
     def router_factory(u_ref):
+        from edi.application.use_cases.pipeline.delivery_router_use_case import (
+            DeliveryRouterUseCase,
+        )
         from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-        from edi.core.pipeline.delivery.router import DeliveryRouter
         from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
         from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 
-        return DeliveryRouter(
+        return DeliveryRouterUseCase(
             u_ref,
             {
                 "webhook_id": WebhookDeliveryStrategy(u_ref, h, vault),

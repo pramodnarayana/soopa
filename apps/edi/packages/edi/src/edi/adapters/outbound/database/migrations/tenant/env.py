@@ -16,11 +16,16 @@ if config.config_file_name is not None:
 target_metadata = TenantBase.metadata
 
 # For generating migrations, we connect to shard 1 as a representative database
-# During actual 'upgrade', the custom runner injects the URL dynamically.
+from edi.config.settings import get_settings
+
 _ini_url = config.get_main_option("sqlalchemy.url")
-TENANT_DB_URL = (
-    _ini_url if _ini_url else "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-)
+if _ini_url:
+    TENANT_DB_URL = _ini_url
+else:
+    fallback = get_settings().database.default_shard_url
+    if not fallback:
+        raise ValueError("sqlalchemy.url is missing and SHARD_1_URL fallback is not set.")
+    TENANT_DB_URL = fallback
 
 
 def run_migrations_offline() -> None:

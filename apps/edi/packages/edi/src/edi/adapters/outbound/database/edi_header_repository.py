@@ -1,7 +1,9 @@
+import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
@@ -54,7 +56,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         )
         result = await self.session.execute(stmt)
         await self.session.flush()
-        return (getattr(result, "rowcount", 0) or 0) > 0
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0
 
     async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> bool:
         tid_str = tenant_id
@@ -69,7 +71,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         )
         result = await self.session.execute(stmt)
         await self.session.flush()
-        return (getattr(result, "rowcount", 0) or 0) > 0
+        return (cast(CursorResult[Any], result).rowcount or 0) > 0
 
     async def get_outbound_edi_headers(
         self, tenant_id: str
@@ -82,9 +84,8 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         return [
             OutboundEdiHeaderDomainModel(
                 **{
-                    k: v
-                    for k, v in r.__dict__.items()
-                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                    f.name: getattr(r, f.name)
+                    for f in dataclasses.fields(OutboundEdiHeaderDomainModel)
                 }
             )
             for r in result.scalars().all()
@@ -104,9 +105,8 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         return (
             OutboundEdiHeaderDomainModel(
                 **{
-                    k: v
-                    for k, v in record.__dict__.items()
-                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                    f.name: getattr(record, f.name)
+                    for f in dataclasses.fields(OutboundEdiHeaderDomainModel)
                 }
             )
             if record

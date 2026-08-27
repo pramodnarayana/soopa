@@ -6,13 +6,13 @@ Botslib should not import code from other Bots-modules.
 """
 # pylint: disable=missing-function-docstring, broad-exception-caught, too-many-lines
 
+import contextlib
 import datetime as python_datetime
 import gettext as std_gettext
 import importlib
 import os
 import platform
 import socket
-import sys
 
 import structlog
 
@@ -43,11 +43,7 @@ class _BotsGlobalStub:
 
 botsglobal = _BotsGlobalStub()
 
-try:  # noqa: SIM105
-    import pickle  # noqa: F401
-
-
-except ImportError:
+with contextlib.suppress(ImportError):
     pass
 
 
@@ -93,7 +89,6 @@ def botsbaseimport(modulename: Any) -> Any:
     Errors/exceptions are handled in calling functions.
     """
     return importlib.import_module(modulename)
-    return importlib.import_module(modulename.encode(sys.getfilesystemencoding()))
 
 
 def botsimport(*args: Any) -> Any:

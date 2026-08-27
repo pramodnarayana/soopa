@@ -40,12 +40,11 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
 
     # 2. Override the token verifier in the app to return a fake identity
     from identity.domain.identity_context import IdentityContext
+    from identity.domain.models.authorization import Capability
 
     # Remove the generic guard overrides so the REAL auth logic executes!
     from unified_api.adapters.inbound.http.guards import tenant_auth_guard
     from unified_api.main import app
-
-    from ucp.domain.models.authorization import Capability
 
     if tenant_auth_guard.require_tenant_member in app.dependency_overrides:
         del app.dependency_overrides[tenant_auth_guard.require_tenant_member]

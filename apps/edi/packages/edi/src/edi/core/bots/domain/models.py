@@ -1,4 +1,3 @@
-# type: ignore
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -70,9 +69,9 @@ def create_field_definition(field_list: list) -> FieldDefinition:
 
 def create_structure_node(node_dict: dict) -> StructureNode:
     return StructureNode(
-        id=node_dict.get(0),
-        min_occ=node_dict.get(1),
-        max_occ=node_dict.get(2),
+        id=node_dict.get(0, ""),
+        min_occ=node_dict.get(1, 0),
+        max_occ=node_dict.get(2, 0),
         count=node_dict.get(3, 0),
         level=node_dict.get(4),
         mpath=node_dict.get(5, []),

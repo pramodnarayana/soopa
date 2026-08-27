@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from ucp.domain.events.tenant_events import (
+from ucp.domain.events import (
     AppSubscribedEvent,
     AppUnsubscribedEvent,
     TenantDeletedEvent,
@@ -69,7 +69,7 @@ class Tenant(AggregateRoot):
             TenantProvisionedEvent(
                 tenant_id=id,
                 tenant_name=name,
-                subscriptions=[s.app_id for s in tenant.subscriptions if s.status == "active"],
+                subscriptions=tuple(s.app_id for s in tenant.subscriptions if s.status == "active"),
             )
         )
         return tenant

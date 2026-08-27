@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import structlog
 
-from edi.core.pipeline.delivery.router import DeliveryRouter
+from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -14,13 +14,13 @@ class DeliveryUseCase:
     Application Use Case for orchestrating final-mile EDI delivery.
 
     Manages outbox leasing to guarantee at-most-once delivery semantics,
-    then delegates to the correct delivery strategy via the DeliveryRouter.
+    then delegates to the correct delivery strategy via the DeliveryRouterUseCase.
     """
 
     def __init__(
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        router_factory: Callable[[DataPlaneUnitOfWorkPort], DeliveryRouter],
+        router_factory: Callable[[DataPlaneUnitOfWorkPort], DeliveryRouterUseCase],
     ) -> None:
         self._uow_factory = uow_factory
         self._router_factory = router_factory

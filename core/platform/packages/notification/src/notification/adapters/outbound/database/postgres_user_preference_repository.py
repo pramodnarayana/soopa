@@ -1,7 +1,7 @@
 import typing
 
 import structlog
-from platform_orm.models.notifications import (
+from database.models.notifications import (
     UserNotificationPreference as ORMUserNotificationPreference,
 )
 from sqlalchemy import select

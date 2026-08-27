@@ -1,9 +1,10 @@
 import os
 
-from platform_orm.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
+
+from database.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
 
 from .base import EdiGlobalBase
 from .replicated_mixins import (

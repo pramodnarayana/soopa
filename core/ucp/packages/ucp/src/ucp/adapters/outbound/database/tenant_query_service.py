@@ -2,7 +2,7 @@ import typing
 from datetime import UTC
 
 import structlog
-from platform_orm.models.identity import Tenant as DbTenant
+from database.models.identity import Tenant as DbTenant
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App, AppSubscription

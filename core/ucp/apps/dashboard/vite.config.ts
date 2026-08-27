@@ -16,4 +16,12 @@ export default defineConfig({
       '@soopa/edi-ui': path.resolve(__dirname, '../../../../apps/edi/packages/ui/src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 });

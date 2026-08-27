@@ -40,7 +40,8 @@ class xmlforgrammar(inmessage.Inmessage):
     def initfromfile(self):
         filename = botslib.abspathdata(self.ta_info["filename"])
         self.ta_info["attributemarker"] = "__"
-        parser = ET.XMLParser()  # noqa: S314
+        # This offline conversion utility only parses an operator-selected local grammar file.
+        parser = ET.XMLParser()
         etree = ET.ElementTree()  # ElementTree: lexes, parses, makes etree; etree is quite similar to bots-node trees but conversion is needed
         etreeroot = etree.parse(filename, parser)
         self.root = self._etree2botstree(etreeroot)  # convert etree to bots-nodes-tree
@@ -89,7 +90,8 @@ class xmlforgrammar_allrecords(inmessage.Inmessage):
     def initfromfile(self):
         filename = botslib.abspathdata(self.ta_info["filename"])
         self.ta_info["attributemarker"] = "__"
-        parser = ET.XMLParser()  # noqa: S314
+        # This offline conversion utility only parses an operator-selected local grammar file.
+        parser = ET.XMLParser()
         etree = ET.ElementTree()  # ElementTree: lexes, parses, makes etree; etree is quite similar to bots-node trees but conversion is needed
         etreeroot = etree.parse(filename, parser)
         self.root = self._etree2botstree(etreeroot)  # convert etree to bots-nodes-tree
@@ -223,7 +225,7 @@ def grammar2file(botsgrammarfilename, structure, recorddefs, targetNamespace):
     print("grammar file is written:", botsgrammarfilename)
 
 
-def start():  # noqa: C901
+def start():
     # ********command line arguments**************************
     usage = """
     This is "{name}" version {version}, part of Bots open source edi translator (https://bots-edi.org).

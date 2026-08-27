@@ -3,16 +3,14 @@ name = "compute_worker"
 version = "0.1.0"
 description = "Heavy compute worker for EDI transformations"
 requires-python = ">=3.11"
-dependencies = [
-    "ucp_models",
-    "edi",
-    "aioboto3>=12.0.0",
-]
+dependencies = ["edi", "aioboto3>=12.0.0", "dotenv", "structlog"]
 
 [tool.uv.sources]
 ucp_models = { workspace = true }
 edi = { workspace = true }
 
+[tool.deptry]
+known_first_party = ["compute_worker"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -10,10 +10,10 @@ from edi.adapters.outbound.database.base_repository import (
 from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.domain.events import ProvisioningEvent
-from edi.ports.outbound.outbox_repository import (
+from edi.ports.outbound.control_plane_outbox_repository_port import (
     ControlPlaneOutboxRepositoryPort,
-    DataPlaneOutboxRepositoryPort,
 )
+from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 
 
 class SqlAlchemyOutboxRepositoryMixin:
@@ -21,7 +21,7 @@ class SqlAlchemyOutboxRepositoryMixin:
     model_class: Any
     id_prefix: str = "obevt_"
 
-    async def publish_outbox_event(
+    async def _publish_record(
         self,
         tenant_id: str,
         event_type: Any,
@@ -92,17 +92,41 @@ class SqlAlchemyControlPlaneOutboxRepository(
         self.model_class = model_class
         self.id_prefix = "edi_cobevt_"
 
-    async def publish_outbox_event(  # type: ignore[override]
+    async def publish_outbox_event(
         self,
         event: ProvisioningEvent,
         idempotency_key: str | None = None,
     ) -> str:
-        event_id = await super().publish_outbox_event(
+        from sqlalchemy import select
+
+        from database.outbox_serializer import serialize_domain_event
+
+        serialized_event = serialize_domain_event(event)
+        if idempotency_key:
+            result = await self.session.execute(
+                select(self.model_class).where(
+                    self.model_class.idempotency_key == idempotency_key,
+                    self.model_class.status == "RESERVED",
+                )
+            )
+            reservation = result.scalar_one_or_none()
+            if reservation is not None:
+                reservation.event_type = str(
+                    event.event_type.value
+                    if hasattr(event.event_type, "value")
+                    else event.event_type
+                )
+                reservation.payload = {**reservation.payload, **serialized_event}
+                reservation.status = "PENDING"
+                await self.session.flush()
+                return str(reservation.id)
+
+        event_id = await self._publish_record(
             tenant_id=event.tenant_id,
             event_type=str(
                 event.event_type.value if hasattr(event.event_type, "value") else event.event_type
             ),
-            payload=event.model_dump(mode="json"),
+            payload=serialized_event,
             idempotency_key=idempotency_key,
         )
         return event_id
@@ -132,8 +156,9 @@ class SqlAlchemyControlPlaneOutboxRepository(
             attempts=0,
         )
         try:
-            await self.session.execute(insert_stmt)
-            await self.session.flush()
+            async with self.session.begin_nested():
+                await self.session.execute(insert_stmt)
+                await self.session.flush()
         except IntegrityError as e:
             raise IdempotencyConflictError() from e
 
@@ -153,3 +178,17 @@ class SqlAlchemyDataPlaneOutboxRepository(
         super().__init__(session)
         self.model_class = DataPlaneOutbox
         self.id_prefix = DATA_PLANE_OUTBOX_EVENT_PREFIX
+
+    async def publish_outbox_event(
+        self,
+        tenant_id: str,
+        event_type: Any,
+        payload: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> str:
+        return await self._publish_record(
+            tenant_id=tenant_id,
+            event_type=event_type,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
