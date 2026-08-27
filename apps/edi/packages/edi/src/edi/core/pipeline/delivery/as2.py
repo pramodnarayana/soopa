@@ -1,3 +1,4 @@
+from secrets.ports.secret_store_port import SecretStorePort
 from typing import Any
 
 import structlog
@@ -8,7 +9,6 @@ from edi.domain.models import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
-from edi.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 

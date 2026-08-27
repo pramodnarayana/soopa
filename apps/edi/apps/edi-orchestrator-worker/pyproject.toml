@@ -4,11 +4,13 @@ version = "0.1.0"
 description = "Worker service for handling provisioning and data orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database"]
+dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database", "seedwork", "secrets"]
 
 [tool.uv.sources]
 ucp_models = { workspace = true }
 edi = { workspace = true }
+seedwork = { workspace = true }
+secrets = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

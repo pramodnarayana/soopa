@@ -171,20 +171,15 @@ class SqlAlchemyAS2TradingPartnerRepository(
             )
         else:
             conds.append(AS2Partner.tenant_id == tid_str)
-        await self.session.execute(delete(AS2Partner).where(*conds))
+        from database.exceptions import ForeignKeyViolationError
+        from database.interceptors import intercept_db_errors
 
         try:
-            await self.flush()
-        except DuplicateEntityError:
-            # Although this is delete, foreign key constraint might throw DuplicateEntityError if
-            # constraint is not translated properly, but technically it's a ForeignKeyViolationError
-            pass
-        except Exception as e:
-            if getattr(e, "constraint_name", None) is not None or "database.exceptions" in str(
-                type(e)
-            ):
-                raise PartnerInUseError(partner_id=partner_id, tenant_id=tenant_id) from e
-            raise
+            async with self.session.begin_nested(), intercept_db_errors():
+                await self.session.execute(delete(AS2Partner).where(*conds))
+                await self.session.flush()
+        except ForeignKeyViolationError as e:
+            raise PartnerInUseError(partner_id=partner_id, tenant_id=tenant_id) from e
 
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         if not ids:

@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime
+from secrets.ports.secret_store_port import SecretStorePort
 
 import structlog
 
@@ -14,7 +15,6 @@ from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models import (
     AS2PartnerDomainModel,
 )
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

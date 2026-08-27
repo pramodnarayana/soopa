@@ -25,7 +25,10 @@ class EdiComputeDispatcher:
     async def dispatch_raw(self, body_json: dict[str, Any]) -> None:
         """Parses the SQS payload and invokes the pure Domain logic."""
         try:
-            payload = body_json.get("payload", {}) if isinstance(body_json, dict) else body_json
+            if isinstance(body_json, dict):
+                payload = body_json.get("payload", body_json)
+            else:
+                payload = body_json
             if not isinstance(payload, dict):
                 raise InvalidMessageError("Message payload must be a dictionary")
 

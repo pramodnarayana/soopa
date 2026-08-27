@@ -9,10 +9,8 @@ from edi.domain.events import (
     WebhookEventType,
 )
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from pydantic import TypeAdapter, ValidationError
 
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
-from config_sync_worker.ports.outbound.event_translator_port import EventTranslatorPort
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
 
@@ -24,14 +22,9 @@ class ProvisioningWorkerService:
         self,
         tenant_port: TenantPort,
         replication_port: ReplicationPort,
-        translator_port: EventTranslatorPort,
     ):
         self.tenant_port = tenant_port
         self.replication_port = replication_port
-        self.translator_port = translator_port
-
-        # Instantiate the type adapter for our union once
-        self._event_adapter: TypeAdapter[ProvisioningEvent] = TypeAdapter(ProvisioningEvent)
 
         self._handlers: dict[ProvisioningEventType, Callable[[str, str], Awaitable[None]]] = {
             # AS2 Partner
@@ -88,94 +81,9 @@ class ProvisioningWorkerService:
         else:
             await replicate_fn(tenant_id, *args)
 
-    def _parse_event(self, envelope: Any) -> ProvisioningEvent | None:
+    async def process_event(self, parsed_event: ProvisioningEvent) -> None:
+        """Processes a strongly-typed domain event."""
         try:
-            if envelope.source == "soopa.ucp":
-                translated_payload = self.translator_port.translate_external_event(
-                    envelope.event_type, envelope.payload
-                )
-                if not translated_payload:
-                    logger.warning(
-                        "unregistered_external_event_type",
-                        external_event_type=envelope.event_type,
-                        event_id=envelope.id,
-                    )
-                    return None
-                return self._event_adapter.validate_python(translated_payload)
-            elif envelope.source == "soopa.edi":
-                event_dict = {
-                    "tenant_id": envelope.tenant_id,
-                    "event_type": envelope.event_type,
-                    "resource_id": envelope.payload.get("resource_id")
-                    or envelope.payload.get("id"),
-                }
-                return self._event_adapter.validate_python(event_dict)
-            else:
-                logger.warning("unknown_event_source", source=envelope.source, event_id=envelope.id)
-                return None
-        except ValidationError as e:
-            # If we don't know how to handle it, we permanently fail it so it goes to DLQ
-            logger.exception("provisioning_event_validation_error", event_type=envelope.event_type)
-            raise PermanentProvisioningError(
-                f"Invalid provision event payload for {envelope.event_type}: {e}"
-            ) from e
-
-    async def dispatch_raw(self, body: dict[str, Any]) -> None:
-        """Entrypoint called by SqsConsumerManager.
-        body is the raw JSON dictionary from the SQS message or SNS notification.
-        """
-        # Anti-Corruption Layer (ACL): Translate UCP external events to EDI internal domain events
-        external_event_type = body.get("eventType")
-        if external_event_type:
-            try:
-                translated_body = self.translator_port.translate_external_event(
-                    external_event_type, body
-                )
-                if translated_body is None:
-                    # Unregistered event type
-                    logger.info(
-                        "unregistered_external_event_type",
-                        external_event_type=external_event_type,
-                        action="drop",
-                    )
-                    return
-                body = translated_body
-            except ValueError as e:
-                # Permanent validation error - malformed message
-                logger.exception(
-                    "permanent_validation_error",
-                    external_event_type=external_event_type,
-                    action="dlq",
-                )
-                raise PermanentProvisioningError(
-                    f"Malformed external event {external_event_type}: {e}"
-                ) from e
-
-        # We need a dummy Envelope-like object to pass to _parse_event
-        # but _parse_event is simple enough we can just do it inline or pass a dummy
-        class DummyEnvelope:
-            def __init__(self, **kwargs: Any) -> None:
-                self.__dict__.update(kwargs)
-
-        envelope = DummyEnvelope(
-            id=body.get("id"),
-            source="soopa.edi",
-            event_type=body.get("eventType", body.get("event_type", "unknown")),
-            payload=body,
-            idempotency_key=body.get("idempotency_key"),
-            tenant_id=body.get("tenant_id"),
-        )
-
-        parsed_event = self._parse_event(envelope)
-        if not parsed_event:
-            return
-
-        try:
-            if parsed_event.resource_id is None:
-                raise PermanentProvisioningError(
-                    f"Event {parsed_event.event_type} missing required resource_id"
-                )
-
             handler = self._handlers.get(parsed_event.event_type)
             if not handler:
                 raise PermanentProvisioningError(f"Unhandled event type: {parsed_event.event_type}")

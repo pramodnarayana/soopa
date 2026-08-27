@@ -169,11 +169,13 @@ async def main() -> None:
 
         for task in done:
             if task is not stop_task and task.exception():
+                logger.error("sqs_consumer_manager_failed", exc_info=task.exception())
                 raise task.exception()
     except asyncio.CancelledError:
         logger.info("edi_background_worker_cancelled")
     except Exception:
         logger.exception("edi_background_worker_failed")
+        raise
     finally:
         await dp_manager.stop()
         await cp_manager.stop()

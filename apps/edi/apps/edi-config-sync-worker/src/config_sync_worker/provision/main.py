@@ -13,6 +13,9 @@ from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
+from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
+    EdiConfigSyncSqsDispatcher,
+)
 from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
     PostgresEdiControlPlaneOutboxRepository,
 )
@@ -34,11 +37,14 @@ async def main() -> None:
     # 1. AWS SQS Consumer (Data Plane Replication)
     logger.info("initializing_sqs_consumer")
     translator = DefaultEventTranslator()
-    replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter, translator)
+    replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
+    dispatcher = EdiConfigSyncSqsDispatcher(
+        domain_service=replication_service, translator_port=translator
+    )
 
     sqs_manager = SqsConsumerManager(
         queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
-        handler=replication_service.dispatch_raw,
+        handler=dispatcher.dispatch_raw,
         endpoint_url=settings.aws.endpoint_url,
     )
     sqs_manager.start()
@@ -72,7 +78,21 @@ async def main() -> None:
     try:
         async with outbox_relay_publisher:
             outbox_listener.start()
-            await stop_event.wait()
+
+            # Wait for stop signal, or if sqs_manager/outbox_listener fails
+            manager_task = getattr(sqs_manager, "_manager_task", None)
+            tasks_to_wait = [asyncio.create_task(stop_event.wait())]
+            if manager_task:
+                tasks_to_wait.append(manager_task)
+
+            done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
+
+            # If the manager task completed with an exception, re-raise it
+            for task in done:
+                if task is manager_task and task.exception():
+                    logger.error("sqs_consumer_manager_failed", exc_info=task.exception())
+                    raise task.exception()
+
     finally:
         logger.info("shutting_down_gracefully")
         await sqs_manager.stop()

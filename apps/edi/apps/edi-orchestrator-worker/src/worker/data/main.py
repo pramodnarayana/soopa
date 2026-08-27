@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable
+from secrets.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 from typing import Any
 
 import structlog
@@ -33,7 +34,6 @@ from edi.domain.events import MessageQueueName, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
-from worker.adapters.aws_secrets_manager import AwsSecretsManagerSecretStore
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
     EdiDataPlaneEventMessage,
@@ -56,7 +56,7 @@ async def main() -> None:
     # Inbound SQS Adapters (Hexagonal: Protocol Translation Only)
     # ─────────────────────────────────────────────────────────────
     transformer = BotsTransformerAdapter()
-    vault = AwsSecretsManagerSecretStore()
+    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
 
     uow_provider = TenantUowProvider(
         resolver=resolver,

@@ -21,6 +21,10 @@ class EmailChannelDispatcher:
         # and yields the EventEnvelope as a dict.
         # body is equivalent to EventEnvelope as a dict.
 
+        if not isinstance(body, dict):
+            logger.error("SQS message body must be a dictionary")
+            return
+
         event_type = body.get("event_type")
         if event_type != "email.requested":
             logger.warning(

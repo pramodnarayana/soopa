@@ -21,9 +21,6 @@ class SqlAlchemyOutboxRepositoryMixin:
     model_class: Any
     id_prefix: str = "obevt_"
 
-    async def flush(self) -> None:
-        raise NotImplementedError
-
     async def _publish_record(
         self,
         tenant_id: str,
@@ -43,7 +40,7 @@ class SqlAlchemyOutboxRepositoryMixin:
             status="PENDING",
         )
         self.session.add(record)
-        await self.flush()
+        await self.session.flush()
         return event_id
 
     async def publish_outbox_events_bulk(
@@ -121,7 +118,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
                 )
                 reservation.payload = {**reservation.payload, **serialized_event}
                 reservation.status = "PENDING"
-                await self.flush()
+                await self.session.flush()
                 return str(reservation.id)
 
         event_id = await self._publish_record(
@@ -159,9 +156,11 @@ class SqlAlchemyControlPlaneOutboxRepository(
             attempts=0,
         )
         try:
-            async with self.session.begin_nested():
+            from database.interceptors import intercept_db_errors
+
+            async with self.session.begin_nested(), intercept_db_errors():
                 await self.session.execute(insert_stmt)
-                await self.flush()
+                await self.session.flush()
         except DuplicateEntityError as e:
             raise IdempotencyConflictError() from e
 

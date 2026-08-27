@@ -24,6 +24,7 @@ members = [
     "core/platform/packages/outbox",
     "core/platform/packages/pubsub",
     "core/platform/packages/seedwork",
+    "core/platform/packages/secrets",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",

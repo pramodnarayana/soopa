@@ -31,6 +31,10 @@ class DomainEvent(ABC):
         Returns the idempotency key for this event.
         Defaults to the event id if present, else a newly generated UUID.
         """
-        import uuid
+        if hasattr(self, "id"):
+            return str(self.id)
+        if not hasattr(self, "_idempotency_key"):
+            import uuid
 
-        return getattr(self, "id", str(uuid.uuid4()))
+            object.__setattr__(self, "_idempotency_key", str(uuid.uuid4()))
+        return self._idempotency_key

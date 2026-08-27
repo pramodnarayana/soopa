@@ -2,6 +2,7 @@ import email
 import re
 import uuid
 from email import policy
+from secrets.ports.secret_store_port import SecretStorePort
 from typing import Any
 
 import structlog
@@ -12,7 +13,6 @@ from edi.adapters.inbound.as2.parser import parse_as2_request
 from edi.adapters.outbound.security.smime import decrypt_payload, verify_signature
 from edi.domain.events import PipelineEventType
 from edi.domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 

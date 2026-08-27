@@ -1,4 +1,5 @@
 import json
+from secrets.ports.secret_store_port import SecretStorePort
 
 import structlog
 
@@ -7,7 +8,6 @@ from edi.domain.models import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
-from edi.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 

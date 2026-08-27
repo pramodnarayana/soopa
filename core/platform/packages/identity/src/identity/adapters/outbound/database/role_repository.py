@@ -184,11 +184,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
                 constraint_name=e.constraint_name,
             )
             # Check for unique violation on user_role assignment
-            if (
-                e.constraint_name
-                and "user_role" in e.constraint_name
-                and "unique" in e.constraint_name.lower()
-            ):
+            if e.constraint_name and e.constraint_name == "uix_user_roles_tenant_user_role":
                 raise IdempotencyConflictError(
                     f"Role '{role_id}' is already assigned to user '{user_id}' in tenant '{tenant_id}'."
                 ) from e

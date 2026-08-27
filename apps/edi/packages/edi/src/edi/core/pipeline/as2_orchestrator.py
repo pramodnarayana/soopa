@@ -13,13 +13,13 @@ single reason to change (SRP):
 """
 
 import functools
+from secrets.ports.secret_store_port import SecretStorePort
 from typing import Any
 
 import structlog
 
 from edi.adapters.inbound.as2 import OutboundAS2Message, build_outbound_message
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
-from edi.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 

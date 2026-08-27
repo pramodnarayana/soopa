@@ -4,13 +4,6 @@ This document tracks known architectural drift, quick fixes, and non-critical re
 
 
 
-## [Architecture] Rollout Centralized Outbox and Pub/Sub Packages to Remaining Modules
-
-- **Date Added**: 2026-08-26
-- **Status**: TO DO
-- **Description**: We successfully extracted the `outbox` and `pubsub` generic infrastructure patterns out of the UCP bounded context and into centralized platform packages (`core/platform/packages/outbox` and `core/platform/packages/pubsub`). The UCP Proof-of-Concept is complete and verified. However, the `identity`, `edi`, and `notification` modules still contain duplicated, module-specific implementations of these patterns (Outbox relays, SQS listeners, SNS publishers, etc.).
-- **Action Item**: Migrate the `identity`, `edi`, and `notification` modules to use the centralized `outbox` and `pubsub` platform packages. Remove their legacy duplicated infrastructure code, update their Dependency Injection containers to inject the generic `PostgresOutboxRelay`, `AwsSnsPublisher`, and `AwsSqsConsumer`, and verify all tests pass.
-
 ## [RESOLVED] [Authorization Architecture] Implement Dynamic Enterprise-Grade PBAC/ABAC
 
 - **Date Added**: 2026-07-27
@@ -384,3 +377,9 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The current monorepo suffers from Python module namespace collisions (`import file mismatch` and `ModuleNotFoundError`) because shared test utilities (like `api_fakes.py`) are placed in generic local `tests/` directories alongside `__init__.py` files. This causes Pytest to conflate all `tests` directories across packages into a single global namespace.
 - **Action Item**: Migrate all shared test helpers (fakes, mock repositories, factories) out of their local `tests/` directories and into proper source-level test modules (e.g., `src/<package_name>/testing/`). Update all corresponding test files to import these utilities from their new fully-qualified namespace (e.g., `from identity.testing.fakes import ...`), and strictly forbid `__init__.py` files in generic `tests` folders.
+
+### [RESOLVED] Centralize AWS Secrets Manager Client (EDI)
+- **Status**: ✅ RESOLVED
+- **Component**: EDI (Platform Infrastructure)
+- **Description**: There are currently 4 identical copies of an `aws_secrets_manager.py` adapter initializing raw `boto3.client('secretsmanager')` scattered across the EDI module (`packages/edi`, `edi-orchestrator-worker`, `edi-config-sync-worker`, `edi-secrets-sidecar`). This violates the Enterprise requirement that domain-agnostic infrastructure patterns must be centralized.
+- **Action Item**: Create a centralized `secrets` or `infrastructure` package in `core/platform/packages/`. Implement a generic `AwsSecretsManagerAdapter`. Refactor all EDI workers and sidecars to inject this centralized adapter and delete the local duplicates.

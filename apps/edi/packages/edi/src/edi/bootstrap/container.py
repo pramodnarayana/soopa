@@ -1,4 +1,5 @@
 import os
+from secrets.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 
 from dependency_injector import containers, providers
 
@@ -10,9 +11,9 @@ from edi.adapters.outbound.database.uow_adapter import (
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.adapters.outbound.messaging.sqs_queue import SQSMessageQueueAdapter
-from edi.adapters.outbound.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
 from edi.application.use_cases.as2_receiver_service import As2ReceiverService
+from edi.config.settings import get_settings
 
 
 class Container(containers.DeclarativeContainer):
@@ -31,7 +32,10 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     sftp_tester = providers.Singleton(ParamikoSftpTesterAdapter)
     as2_tester = providers.Singleton(HttpxAS2TesterAdapter)
-    vault_port = providers.Singleton(AwsSecretsManagerAdapter)
+    vault_port = providers.Singleton(
+        AwsSecretsManagerAdapter,
+        secrets_mount_path=get_settings().secrets.mount_path,
+    )
 
     message_queue = providers.Singleton(
         SQSMessageQueueAdapter,

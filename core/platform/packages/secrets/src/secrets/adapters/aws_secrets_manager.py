@@ -3,24 +3,22 @@ import os
 import sys
 import time
 import uuid
+from typing import Any
 
 import boto3  # type: ignore[import-untyped]
 import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
-
-from edi.config.constants import SecretCategory
-from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 
 class AwsSecretsManagerAdapter:
     """
-    Adapter for AWS Secrets Manager. Replaces HashiCorp Vault.
+    Adapter for AWS Secrets Manager.
     Uses LocalStack endpoints in development and native IAM in production.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, secrets_mount_path: str = "/mnt/secrets") -> None:
         env = os.getenv("ENVIRONMENT", "production")
         if env in ("development", "dev", "test", "local") or "pytest" in sys.modules:
             endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
@@ -36,6 +34,7 @@ class AwsSecretsManagerAdapter:
                 "secretsmanager", region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
             )
 
+        self._secrets_mount_path = secrets_mount_path
         self._cache: dict[str, tuple[bytes, float]] = {}
         self._cache_ttl_seconds = int(os.getenv("SECRETS_CACHE_TTL", "3600"))
         self._cache_max_size = int(os.getenv("SECRETS_CACHE_MAX_SIZE", "1000"))
@@ -48,17 +47,20 @@ class AwsSecretsManagerAdapter:
                 self._locks[vault_ref] = asyncio.Lock()
             return self._locks[vault_ref]
 
-    async def store_private_key(
-        self, private_key_pem: bytes, category: SecretCategory | None = None
-    ) -> str:
+    async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
         """
         Stores a private key in AWS Secrets Manager and returns the secret name (ARN/Reference).
         """
+        # Resolve category string from enum or string
         if category is None:
-            category = SecretCategory.AS2_KEY
+            category_val = "as2_key"
+        elif hasattr(category, "value"):
+            category_val = category.value
+        else:
+            category_val = str(category)
 
         ref_id = str(uuid.uuid4())
-        secret_name = f"edi/{category.value}/{ref_id}"
+        secret_name = f"edi/{category_val}/{ref_id}"
 
         def _execute() -> str:
             try:
@@ -77,7 +79,14 @@ class AwsSecretsManagerAdapter:
 
         return await asyncio.to_thread(_execute)
 
-    async def retrieve_secret(self, vault_ref: str) -> bytes:
+    async def get_secret(self, vault_ref: str) -> str:
+        """
+        Retrieves a secret from AWS Secrets Manager asynchronously.
+        """
+        val = await self.retrieve_secret(vault_ref)
+        return val.decode("utf-8")
+
+    async def retrieve_secret(self, vault_ref: str) -> bytes:  # noqa: C901
         """
         Retrieves any secret (private key, certificate, or credential).
         Enterprise Hybrid Strategy:
@@ -99,9 +108,6 @@ class AwsSecretsManagerAdapter:
                     del self._cache[vault_ref]
 
             def _execute() -> bytes:
-                settings = get_settings()
-                from edi.config.constants import SecretCategory
-
                 # Parse vault_ref (e.g. edi/as2_key/1234)
                 parts = vault_ref.split("/")
 
@@ -117,21 +123,11 @@ class AwsSecretsManagerAdapter:
                 category_str = parts[1]
                 ref_id = parts[2]
 
-                try:
-                    # Validate that the category matches our architectural constants
-                    _ = SecretCategory(category_str)
-                except ValueError:
-                    # Reject unknown categories before constructing path
-                    logger.exception("unknown_secret_category_rejected", category=category_str)
-                    raise ValueError(f"Unknown secret category: {category_str}")
-
-                local_path = os.path.join(
-                    settings.secrets.mount_path, category_str, f"{ref_id}.pem"
-                )
+                local_path = os.path.join(self._secrets_mount_path, category_str, f"{ref_id}.pem")
 
                 # Verify resolved path is within mount directory (path traversal protection)
                 resolved_path = os.path.realpath(local_path)
-                mount_path = os.path.realpath(settings.secrets.mount_path)
+                mount_path = os.path.realpath(self._secrets_mount_path)
                 if (
                     not resolved_path.startswith(mount_path + os.sep)
                     and resolved_path != mount_path
@@ -198,9 +194,6 @@ class AwsSecretsManagerAdapter:
             self._cache.pop(vault_ref, None)
 
             def _execute() -> None:
-                settings = get_settings()
-                from edi.config.constants import SecretCategory
-
                 # Parse vault_ref
                 parts = vault_ref.split("/")
 
@@ -219,12 +212,11 @@ class AwsSecretsManagerAdapter:
                 ref_id = parts[2]
 
                 try:
-                    _ = SecretCategory(category_str)
                     local_path = os.path.join(
-                        settings.secrets.mount_path, category_str, f"{ref_id}.pem"
+                        self._secrets_mount_path, category_str, f"{ref_id}.pem"
                     )
                     resolved_path = os.path.realpath(local_path)
-                    mount_path = os.path.realpath(settings.secrets.mount_path)
+                    mount_path = os.path.realpath(self._secrets_mount_path)
 
                     if (
                         resolved_path.startswith(mount_path + os.sep) or resolved_path == mount_path

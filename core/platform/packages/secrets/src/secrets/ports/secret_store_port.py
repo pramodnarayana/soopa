@@ -1,12 +1,12 @@
-from typing import Protocol
-
-from edi.config.constants import SecretCategory
+from typing import Any, Protocol
 
 
 class SecretStorePort(Protocol):
-    async def store_private_key(
-        self, private_key_pem: bytes, category: SecretCategory = SecretCategory.AS2_KEY
-    ) -> str:
+    async def get_secret(self, vault_ref: str) -> str:
+        """Fetch a secret string from Vault given its reference."""
+        ...
+
+    async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
         """
         Stores a private key in Vault and returns the Vault reference path.
         """
@@ -27,8 +27,4 @@ class SecretStorePort(Protocol):
         """
         ...
 
-    async def delete_secret(self, vault_ref: str) -> None:
-        """
-        Deletes a secret from Vault.
-        """
-        ...
+    async def delete_secret(self, vault_ref: str) -> None: ...

@@ -1,3 +1,4 @@
+from secrets.ports.secret_store_port import SecretStorePort
 from typing import Any
 
 import structlog
@@ -13,7 +14,6 @@ from edi.domain.exceptions import (
     PartnerNotFoundError,
 )
 from edi.domain.models import AS2PartnerDomainModel
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
