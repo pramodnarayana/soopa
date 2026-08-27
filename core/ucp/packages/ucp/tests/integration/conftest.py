@@ -187,7 +187,7 @@ async def db_engine(postgres_container) -> "Any":
         / "core"
         / "platform"
         / "packages"
-        / "orm"
+        / "database"
         / "alembic.ini"
     )
     alembic_cfg = Config(str(alembic_ini_path))
