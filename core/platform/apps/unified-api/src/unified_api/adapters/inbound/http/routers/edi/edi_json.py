@@ -3,7 +3,8 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
-from edi.application.use_cases.api_receiver_service import ApiReceiverService
+from edi.application.dto import ProcessApiEdiJsonCommand
+from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
 from fastapi import APIRouter, Depends, status
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
@@ -32,13 +33,15 @@ async def submit_outbound_message(
     Authentication: Single API Token via Bearer Authorization
       Authorization: Bearer <client_id>_<client_secret>
     """
-    service = ApiReceiverService(uow=uow)
+    service = ProcessApiEdiJsonUseCase(uow=uow)
 
     trace_id = await service.process_api_edi_json(
-        tenant_id=tenant_id,
-        trading_partner_id=request.trading_partner_id,
-        payload=request.payload,
-        transaction_type=request.transaction_type,
+        ProcessApiEdiJsonCommand(
+            tenant_id=tenant_id,
+            trading_partner_id=request.trading_partner_id,
+            payload=request.payload,
+            transaction_type=request.transaction_type,
+        )
     )
 
     return OutboundMessageResponse(trace_id=trace_id, status="ACCEPTED")

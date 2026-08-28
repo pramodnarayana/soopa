@@ -11,8 +11,11 @@ from edi.adapters.outbound.database.uow_adapter import (
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.adapters.outbound.messaging.sqs_queue import SQSMessageQueueAdapter
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
-from edi.application.use_cases.as2_receiver_service import As2ReceiverService
+from edi.application.use_cases.process_inbound_as2_message_use_case import (
+    ProcessInboundAs2MessageUseCase,
+)
 from edi.config.settings import get_settings
 
 
@@ -30,6 +33,7 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     # External Adapters & Providers (Stateless singletons / factories)
     # -----------------------------------------------------------------------
+    crypto_service = providers.Singleton(SmimeCryptoService)
     sftp_tester = providers.Singleton(ParamikoSftpTesterAdapter)
     as2_tester = providers.Singleton(HttpxAS2TesterAdapter)
     vault_port = providers.Singleton(
@@ -54,9 +58,10 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     # Services
     # -----------------------------------------------------------------------
-    # Note: For As2ReceiverService, dp_factory is required, but it relies on
-    # FastAPI's request.app.state.db_router, so we'll inject dependencies dynamically
+    # Note: control_plane_uow and dp_factory are session-scoped and must be
+    # passed at runtime via kwargs. crypto_service is stateless and pre-wired.
     as2_receiver_service = providers.Factory(
-        As2ReceiverService,
+        ProcessInboundAs2MessageUseCase,
         secret_store=vault_port,
+        crypto_service=crypto_service,
     )

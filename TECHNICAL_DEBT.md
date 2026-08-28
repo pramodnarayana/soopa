@@ -315,10 +315,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Description**: There is a class naming taxonomy drift in the Inbound Adapters layer regarding SQS message processors. We currently mix suffixes like `*EventListener`, `*SqsConsumer`, and `*Poller` (e.g., `SqsUcpEventListener`, `UcpEventsSqsConsumer`, `SqsPoller`) to describe similar asynchronous worker patterns. This causes confusion in the mental model.
 - **Action Item**: Establish a canonical naming convention for asynchronous message handlers (e.g., standardizing on `*Consumer` or `*Listener`) and rename the divergent classes across all bounded contexts to adhere to this standard.
 
-## [Architecture Testing] True Enterprise-Grade Data Plane Integration Tests
+## [RESOLVED] [Architecture Testing] True Enterprise-Grade Data Plane Integration Tests
 
 - **Date Added**: 2026-08-25
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: The `test_sweeper_integration.py` in the EDI orchestrator currently uses a hack to simulate shards by dumping Data Plane tables (`audit_log`, `outbox`) directly into the `public` schema of the UCP global database. Furthermore, test data is inserted using hardcoded dictionaries rather than robust ORM factories, leading to brittle tests when domain models evolve (e.g., NotNull violations on new fields).
 - **Action Item**: Refactor integration tests to use true enterprise-grade boundaries. Implement semantic schemas (`test_ctrl_ucp`, `test_data_shard_1`) inside the test database to strictly isolate global and shard data during local runs. Implement a Test Builder Pattern / ORM Factory (e.g., `DataPlaneOutboxBuilder`) to auto-generate valid underlying test data states, completely eradicating brittle hardcoded dictionaries.
 
@@ -364,17 +364,17 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Description**: While `AwsSqsPublisher` successfully centralizes the publishing of events, the consumer side exhibits architectural drift. Classes like `UcpEventsSqsConsumer` (UCP) and `NotificationOutboxSweeperJob` (Notification) duplicate the boilerplate for polling SQS, acknowledging messages, and handling leases (`mark_completed`, `mark_failed`). Naming conventions also drift between `jobs/` and `workers/`.
 - **Action Item**: Build a centralized `BaseMessagePump` or `SqsConsumerManager` in `core/platform/packages/pubsub` that natively handles the `receive_message -> process -> delete_message` lifecycle loop, so that bounded contexts only need to inject a pure `MessageHandler` callback.
 
-## [Architecture] Standardize Testing Taxonomy
+## [RESOLVED] [Architecture] Standardize Testing Taxonomy
 
 - **Date Added**: 2026-08-27
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: The testing infrastructure exhibits severe Taxonomy Drift across bounded contexts. UCP enforces a strict split between `tests/integration` and `tests/unit`. Identity dumps all tests into the root `tests/` directory. EDI scatters tests arbitrarily between root, `integration/`, `adapters/`, etc. Furthermore, mock and fake objects are defined inconsistently (e.g., standalone `api_fakes.py` vs dedicated `fakes/` directories).
 - **Action Item**: Define and enforce a strict enterprise standard for testing taxonomy (e.g., mandating `tests/unit`, `tests/integration`, and `tests/factories` directories). Refactor all test suites across the monorepo to align with this standard structure.
 
-## [Architecture] Enterprise-Grade Monorepo Test Architecture
+## [RESOLVED] [Architecture] Enterprise-Grade Monorepo Test Architecture
 
 - **Date Added**: 2026-08-27
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED
 - **Description**: The current monorepo suffers from Python module namespace collisions (`import file mismatch` and `ModuleNotFoundError`) because shared test utilities (like `api_fakes.py`) are placed in generic local `tests/` directories alongside `__init__.py` files. This causes Pytest to conflate all `tests` directories across packages into a single global namespace.
 - **Action Item**: Migrate all shared test helpers (fakes, mock repositories, factories) out of their local `tests/` directories and into proper source-level test modules (e.g., `src/<package_name>/testing/`). Update all corresponding test files to import these utilities from their new fully-qualified namespace (e.g., `from identity.testing.fakes import ...`), and strictly forbid `__init__.py` files in generic `tests` folders.
 

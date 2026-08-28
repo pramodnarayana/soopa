@@ -5,10 +5,10 @@ Constructs an RFC 4130-compliant AS2 HTTP payload from raw EDI content.
 
 import email
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from .mdn import calculate_mic
+from edi.domain.services.as2_protocol import calculate_mic
 
 
 def _ensure_crlf(data: bytes) -> bytes:
@@ -19,11 +19,7 @@ def _ensure_crlf(data: bytes) -> bytes:
     return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n").replace(b"\n", b"\r\n")
 
 
-@dataclass
-class OutboundAS2Message:
-    body: bytes
-    headers: dict[str, str] = field(default_factory=dict)
-    mic: str | None = None
+from edi.domain.models.as2 import OutboundAS2Message
 
 
 @dataclass

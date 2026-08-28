@@ -9,7 +9,15 @@ from edi.application.dto import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
-from edi.application.use_cases import SFTPPartnerService
+from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
+    CreateSFTPPartnerUseCase,
+)
+from edi.application.use_cases.sftp_partners.delete_sftp_partner_use_case import (
+    DeleteSFTPPartnerUseCase,
+)
+from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
+    UpdateSFTPPartnerUseCase,
+)
 from edi.domain.exceptions import OrchestrationError, VaultError
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -139,7 +147,7 @@ async def create_sftp_partner(
         )
 
     async with uow:
-        service = SFTPPartnerService(uow=uow)
+        service = CreateSFTPPartnerUseCase(uow=uow)
 
         cmd = CreateSFTPPartnerCmd(
             name=request.name if request.name is not None else UNSET,
@@ -192,7 +200,7 @@ async def update_sftp_partner(
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
     async with uow:
-        service = SFTPPartnerService(uow=uow)
+        service = UpdateSFTPPartnerUseCase(uow=uow)
         cmd = UpdateSFTPPartnerCmd(**request.model_dump(exclude_unset=True))
         try:
             _ = await service.update_sftp_partner(
@@ -235,8 +243,8 @@ async def delete_sftp_partner(
     """Deletes an SFTP partner."""
     async with uow:
         try:
-            service = SFTPPartnerService(uow=uow)
-            await service.delete_sftp_partner(
+            use_case = DeleteSFTPPartnerUseCase(uow=uow)
+            await use_case.delete_sftp_partner(
                 tenant_id, partner_id, idempotency_key=idempotency_key
             )
             await uow.commit()

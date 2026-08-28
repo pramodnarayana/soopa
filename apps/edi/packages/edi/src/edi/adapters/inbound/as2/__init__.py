@@ -1,21 +1,24 @@
 """
-AS2 Core Library.
-Contains pure business logic for the AS2 protocol.
+AS2 adapter package.
+
+Domain models (AS2Message, AS2MDN, OutboundAS2Message) live in edi.domain.models.as2.
+This package re-exports them for backward compatibility within the adapters layer,
+and exposes adapter-specific builders/parsers that depend on crypto infrastructure.
 """
 
-from .builder import OutboundAS2Message, build_outbound_message
-from .mdn import Disposition, build_mdn, calculate_mic, generate_mdn
-from .message import AS2MDN, AS2Message
+from edi.domain.models.as2 import AS2MDN, AS2Message, Disposition, MDNResponse, OutboundAS2Message
+
+from .builder import build_outbound_message
+from .mdn import generate_mdn
 from .parser import parse_as2_request, parse_mdn
 
 __all__ = [
     "AS2MDN",
     "AS2Message",
     "Disposition",
+    "MDNResponse",
     "OutboundAS2Message",
-    "build_mdn",
     "build_outbound_message",
-    "calculate_mic",
     "generate_mdn",
     "parse_as2_request",
     "parse_mdn",

@@ -31,11 +31,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return str(msg.id)
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
+        self, tenant_id: str, event_type: str, payload: Any, idempotency_key: str | None
     ) -> str:
         from database.exceptions import DuplicateEntityError
+        from database.outbox_serializer import serialize_domain_event
         from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
         from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+
+        serialized_payload = (
+            serialize_domain_event(payload) if not isinstance(payload, dict) else payload
+        )
 
         tid_str = tenant_id if tenant_id is not None else None
         event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}"
@@ -44,7 +49,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             tenant_id=tid_str,
             idempotency_key=idempotency_key,
             event_type=event_type,
-            payload=payload,
+            payload=serialized_payload,
             status="PENDING",
         )
         try:

@@ -1,5 +1,8 @@
 import structlog
-from edi.application.use_cases.as2_receiver_service import As2ReceiverService
+from edi.application.dto import ProcessInboundAs2Command
+from edi.application.use_cases.process_inbound_as2_message_use_case import (
+    ProcessInboundAs2MessageUseCase,
+)
 from edi.domain.exceptions import OrchestrationError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
@@ -13,12 +16,13 @@ router = APIRouter(tags=["Platform - AS2 Receive"])
 @router.post("/as2/receive")
 async def receive_as2_message(
     request: Request,
-    service: As2ReceiverService = Depends(get_as2_receiver_service),
+    service: ProcessInboundAs2MessageUseCase = Depends(get_as2_receiver_service),
 ) -> Response:
     """
     AS2 HTTP Adapter.
     Strictly handles HTTP parsing and delegates all business logic to the Application Service.
     """
+
     body_bytes = await request.body()
     headers = dict(request.headers)
 
@@ -30,7 +34,7 @@ async def receive_as2_message(
     try:
         # Delegate to the Hexagonal Architecture Use Case
         mdn_body, mdn_headers = await service.process_inbound_message(
-            headers=headers, body_bytes=body_bytes
+            ProcessInboundAs2Command(headers=headers, body_bytes=body_bytes)
         )
     except ValueError as e:
         logger.warning("Business logic rejection: {e}", e=e)

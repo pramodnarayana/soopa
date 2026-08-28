@@ -140,22 +140,23 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             logger.warning("stale_success_update", event_id=event_id)
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
-        from sqlalchemy import text
-
-        query = text("""
-            UPDATE edi.data_plane_outbox
-            SET status = 'PENDING', attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
-            WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
-        """)
-        result = await self._session.execute(
-            query,
-            {
-                "event_id": event_id,
-                "worker_id": worker_id,
-                "error_message": error_message,
-            },
+        update_result = await self._session.execute(
+            update(DataPlaneOutbox)
+            .where(
+                DataPlaneOutbox.id == event_id,
+                DataPlaneOutbox.status == "PROCESSING",
+                DataPlaneOutbox.owner_token == worker_id,
+            )
+            .values(
+                status="PENDING",
+                attempts=DataPlaneOutbox.attempts + 1,
+                lease_expires_at=None,
+                owner_token=None,
+                updated_at=datetime.now(UTC).replace(tzinfo=None),
+                error_reason=error_message,
+            )
         )
-        if typing.cast(CursorResult[Any], result).rowcount == 0:
+        if typing.cast(CursorResult[Any], update_result).rowcount == 0:
             logger.warning("stale_failure_update", event_id=event_id)
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:

@@ -4,8 +4,8 @@ from typing import Any, cast
 import structlog
 from database.events import EventEnvelope
 from edi.adapters.outbound.database.connection import DatabaseRouter
+from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from sqlalchemy import CursorResult, TextClause, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
@@ -28,40 +28,52 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
 
         engine = await self.db_router.get_engine(shard_name, shard_dsn)
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            query = text("""
-                UPDATE outbox
-                SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
-                WHERE id IN (
-                    SELECT id FROM outbox
-                    WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
-                    ORDER BY created_at ASC
-                    LIMIT :limit
-                    FOR UPDATE SKIP LOCKED
+            from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+            from sqlalchemy import and_, func, or_, select, text, update
+
+            subq = (
+                select(DataPlaneOutbox.id)
+                .where(
+                    or_(
+                        DataPlaneOutbox.status == OutboxStatus.PENDING.value,
+                        and_(
+                            DataPlaneOutbox.status == OutboxStatus.PROCESSING.value,
+                            DataPlaneOutbox.lease_expires_at < func.now(),
+                        ),
+                    )
                 )
-                RETURNING *;
-            """)
-            result = await session.execute(
-                query,
-                {
-                    "worker_id": worker_id,
-                    "lock_lease_ms": lock_lease_ms,
-                    "limit": limit,
-                },
+                .order_by(DataPlaneOutbox.created_at.asc())
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+                .scalar_subquery()
             )
+
+            stmt = (
+                update(DataPlaneOutbox)
+                .where(DataPlaneOutbox.id.in_(subq))
+                .values(
+                    status=OutboxStatus.PROCESSING.value,
+                    updated_at=func.now(),
+                    lease_expires_at=func.now()
+                    + text(f"interval '1 millisecond' * {int(lock_lease_ms)}"),
+                    owner_token=worker_id,
+                )
+                .returning(DataPlaneOutbox)
+            )
+
+            result = await session.execute(stmt)
             await session.commit()
 
             return [
                 EventEnvelope(
-                    id=str(row._mapping["id"]),
-                    tenant_id=(
-                        str(row._mapping["tenant_id"]) if row._mapping.get("tenant_id") else None
-                    ),
-                    event_type=str(row._mapping["event_type"]),
-                    payload=cast(dict[str, Any], row._mapping["payload"]),
-                    idempotency_key=row._mapping.get("idempotency_key"),
+                    id=str(row.id),
+                    tenant_id=str(row.tenant_id) if row.tenant_id else None,
+                    event_type=str(row.event_type),
+                    payload=cast(dict[str, Any], row.payload),
+                    idempotency_key=row.idempotency_key,
                     source="edi_data_plane",
                 )
-                for row in result
+                for row in result.scalars()
             ]
 
     async def claim_next_events(
@@ -107,20 +119,34 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         for shard_name, shard_dsn in await self.db_router.get_all_shards():
             engine = await self.db_router.get_engine(shard_name, shard_dsn)
             async with AsyncSession(engine, expire_on_commit=False) as session:
+                from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+                from sqlalchemy import and_, func, select, update
+
                 while True:
-                    query = text("""
-                        WITH cte AS (
-                            SELECT id FROM outbox
-                            WHERE status = 'PROCESSING'
-                              AND lease_expires_at < NOW()
-                            LIMIT 5000
-                            FOR UPDATE SKIP LOCKED
+                    subq = (
+                        select(DataPlaneOutbox.id)
+                        .where(
+                            and_(
+                                DataPlaneOutbox.status == OutboxStatus.PROCESSING.value,
+                                DataPlaneOutbox.lease_expires_at < func.now(),
+                            )
                         )
-                        UPDATE outbox
-                        SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
-                        WHERE id IN (SELECT id FROM cte)
-                    """)
-                    result = cast(CursorResult[Any], await session.execute(query))
+                        .limit(5000)
+                        .with_for_update(skip_locked=True)
+                        .scalar_subquery()
+                    )
+
+                    stmt = (
+                        update(DataPlaneOutbox)
+                        .where(DataPlaneOutbox.id.in_(subq))
+                        .values(
+                            status=OutboxStatus.PENDING.value,
+                            lease_expires_at=None,
+                            owner_token=None,
+                        )
+                    )
+
+                    result = await session.execute(stmt)
                     swept = int(result.rowcount)
                     total_swept += swept
                     await session.commit()
@@ -129,11 +155,11 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                     await asyncio.sleep(0.1)
         return total_swept
 
-    async def _update_all_shards(self, query: TextClause, params: dict[str, Any]) -> None:
+    async def _update_all_shards(self, get_stmt: Any, params: dict[str, Any]) -> None:
         async def _update(shard_name: str, shard_dsn: str) -> None:
             engine = await self.db_router.get_engine(shard_name, shard_dsn)
             async with AsyncSession(engine, expire_on_commit=False) as session:
-                await session.execute(query, params)
+                await session.execute(get_stmt(params))
                 await session.commit()
 
         results = await asyncio.gather(
@@ -148,27 +174,64 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
             raise ExceptionGroup("tenant_shard_outbox_update_failed", exceptions)
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
+        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+        from sqlalchemy import and_, func, update
+
+        def _get_stmt(params: dict[str, Any]) -> Any:
+            return (
+                update(DataPlaneOutbox)
+                .where(
+                    and_(
+                        DataPlaneOutbox.id == params["event_id"],
+                        DataPlaneOutbox.status == OutboxStatus.PROCESSING.value,
+                        DataPlaneOutbox.owner_token == params["worker_id"],
+                    )
+                )
+                .values(
+                    status=OutboxStatus.PROCESSED.value,
+                    lease_expires_at=None,
+                    owner_token=None,
+                    updated_at=func.now(),
+                )
+            )
+
         await self._update_all_shards(
-            text("""
-                UPDATE outbox
-                SET status = 'PROCESSED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
-                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
-            """),
+            _get_stmt,
             {"event_id": event_id, "worker_id": worker_id},
         )
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
+        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+        from sqlalchemy import and_, case, func, update
+
+        def _get_stmt(params: dict[str, Any]) -> Any:
+            return (
+                update(DataPlaneOutbox)
+                .where(
+                    and_(
+                        DataPlaneOutbox.id == params["event_id"],
+                        DataPlaneOutbox.status == OutboxStatus.PROCESSING.value,
+                        DataPlaneOutbox.owner_token == params["worker_id"],
+                    )
+                )
+                .values(
+                    status=case(
+                        (
+                            DataPlaneOutbox.attempts + 1 >= params["max_attempts"],
+                            OutboxStatus.FAILED.value,
+                        ),
+                        else_=OutboxStatus.PENDING.value,
+                    ),
+                    attempts=DataPlaneOutbox.attempts + 1,
+                    lease_expires_at=None,
+                    owner_token=None,
+                    updated_at=func.now(),
+                    error_reason=params["error_message"],
+                )
+            )
+
         await self._update_all_shards(
-            text("""
-                UPDATE outbox
-                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
-                    attempts = attempts + 1,
-                    lease_expires_at = NULL,
-                    owner_token = NULL,
-                    updated_at = NOW(),
-                    error_reason = :error_message
-                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
-            """),
+            _get_stmt,
             {
                 "event_id": event_id,
                 "worker_id": worker_id,

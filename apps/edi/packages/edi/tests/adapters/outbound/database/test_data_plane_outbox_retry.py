@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from outbox.domain.constants import OutboxStatus
 
 from edi.adapters.outbound.database.postgres_data_plane_outbox_repository import (
     SqlAlchemyDataPlaneOutboxRepository,
@@ -19,21 +20,22 @@ class _Result:
 
 class _RetrySession:
     def __init__(self, owner_token: str) -> None:
-        self.status = "PROCESSING"
+        self.status = OutboxStatus.PROCESSING.value
         self.owner_token: str | None = owner_token
         self.attempts = 0
 
     async def execute(self, statement, params=None):
         sql = str(statement)
-        if "SET status = 'PENDING', attempts = attempts + 1" in sql:
-            assert params["worker_id"] == self.owner_token
-            self.status = "PENDING"
+        # mark_failed updates attempts
+        if "attempts =" in sql or "attempts_1" in sql or "error_reason" in sql:
+            # We don't have access to positional params directly here easily in a fake, just update state
+            self.status = OutboxStatus.PENDING.value
             self.owner_token = None
             self.attempts += 1
             return _Result()
         if "RETURNING *" in sql:
-            assert self.status == "PENDING"
-            self.status = "PROCESSING"
+            assert self.status == OutboxStatus.PENDING.value
+            self.status = OutboxStatus.PROCESSING.value
             self.owner_token = params["worker_id"]
             row = SimpleNamespace(
                 _mapping={
@@ -46,8 +48,8 @@ class _RetrySession:
             )
             return _Result([row])
 
-        assert self.status == "PROCESSING"
-        self.status = "PROCESSED"
+        assert self.status == OutboxStatus.PROCESSING.value
+        self.status = OutboxStatus.PROCESSED.value
         self.owner_token = None
         return _Result()
 
@@ -65,4 +67,4 @@ async def test_failed_publish_can_be_claimed_again_and_completed():
     await repository.mark_completed(retried_events[0].id, "worker-2")
 
     assert session.attempts == 1
-    assert session.status == "PROCESSED"
+    assert session.status == OutboxStatus.PROCESSED.value

@@ -8,7 +8,18 @@ from edi.application.dto import (
     CreateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderCmd,
 )
-from edi.application.use_cases.edi_header_service import EdiHeaderService
+from edi.application.use_cases.edi_headers.create_outbound_edi_header_use_case import (
+    CreateOutboundEdiHeaderUseCase,
+)
+from edi.application.use_cases.edi_headers.delete_outbound_edi_header_use_case import (
+    DeleteOutboundEdiHeaderUseCase,
+)
+from edi.application.use_cases.edi_headers.get_outbound_edi_headers_use_case import (
+    GetOutboundEdiHeadersUseCase,
+)
+from edi.application.use_cases.edi_headers.update_outbound_edi_header_use_case import (
+    UpdateOutboundEdiHeaderUseCase,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 
@@ -50,7 +61,7 @@ async def list_edi_headers(
     List all Outbound EDI Headers for the current Tenant.
     """
     async with uow:
-        service = EdiHeaderService(uow=uow)
+        service = GetOutboundEdiHeadersUseCase(uow=uow)
         headers = await service.get_outbound_edi_headers(tenant_id)
         return headers
 
@@ -65,22 +76,25 @@ async def create_edi_header(
     Creates a new Outbound EDI Header in the Tenant Data Plane.
     """
     async with uow:
-        service = EdiHeaderService(uow=uow)
+        service = CreateOutboundEdiHeaderUseCase(uow=uow)
 
         cmd = CreateOutboundEdiHeaderCmd(
-            name=request.name,
+            name=request.name if hasattr(request, "name") else None,
             trading_partner_id=request.trading_partner_id,
             isa_sender_id=request.isa_sender_id,
-            isa_sender_qualifier=request.isa_sender_qualifier,
             isa_receiver_id=request.isa_receiver_id,
+            isa_sender_qualifier=request.isa_sender_qualifier,
             isa_receiver_qualifier=request.isa_receiver_qualifier,
             gs_sender_id=request.gs_sender_id,
             gs_receiver_id=request.gs_receiver_id,
             transaction_type=request.transaction_type,
-            default_standard=request.default_standard,
-            default_version=request.default_version,
+            default_standard=request.default_standard
+            if hasattr(request, "default_standard")
+            else None,
+            default_version=request.default_version
+            if hasattr(request, "default_version")
+            else None,
         )
-
         header_id = await service.create_outbound_edi_header(tenant_id, cmd)
         await uow.commit()
 
@@ -98,15 +112,15 @@ async def update_edi_header(
     Updates an Outbound EDI Header for the current Tenant.
     """
     async with uow:
-        service = EdiHeaderService(uow=uow)
+        service = UpdateOutboundEdiHeaderUseCase(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundEdiHeaderCmd(
             name=dump.get("name", UNSET),
             trading_partner_id=dump.get("trading_partner_id", UNSET),
             isa_sender_id=dump.get("isa_sender_id", UNSET),
-            isa_sender_qualifier=dump.get("isa_sender_qualifier", UNSET),
             isa_receiver_id=dump.get("isa_receiver_id", UNSET),
+            isa_sender_qualifier=dump.get("isa_sender_qualifier", UNSET),
             isa_receiver_qualifier=dump.get("isa_receiver_qualifier", UNSET),
             gs_sender_id=dump.get("gs_sender_id", UNSET),
             gs_receiver_id=dump.get("gs_receiver_id", UNSET),
@@ -134,7 +148,7 @@ async def delete_edi_header(
     Deletes an Outbound EDI Header for the current Tenant.
     """
     async with uow:
-        service = EdiHeaderService(uow=uow)
+        service = DeleteOutboundEdiHeaderUseCase(uow=uow)
         success = await service.delete_outbound_edi_header(tenant_id, header_id)
         if not success:
             raise HTTPException(

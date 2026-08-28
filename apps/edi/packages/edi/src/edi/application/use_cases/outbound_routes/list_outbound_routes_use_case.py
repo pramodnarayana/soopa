@@ -1,5 +1,6 @@
 import structlog
 
+from edi.domain.constants import TransactionDirection
 from edi.domain.models import ConnectionType, OutboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
@@ -42,7 +43,7 @@ class ListOutboundRoutesUseCase:
                 return ConnectionType.SFTP, sftp_names.get(
                     r.sftp_partner_id, str(r.sftp_partner_id)
                 )
-            return "UNKNOWN", "Unknown"
+            return ConnectionType.UNKNOWN, ConnectionType.UNKNOWN.value
 
         for out_r in outbound:
             _dest_type, _dest_name = _resolve_destination(out_r)
@@ -58,7 +59,7 @@ class ListOutboundRoutesUseCase:
                     updated_at=out_r.updated_at,
                     as2_partner_id=str(out_r.as2_partner_id) if out_r.as2_partner_id else None,
                     sftp_partner_id=str(out_r.sftp_partner_id) if out_r.sftp_partner_id else None,
-                    direction="OUTBOUND",
+                    direction=TransactionDirection.OUTBOUND.value,
                     destination_name=_dest_name,
                 )
             )

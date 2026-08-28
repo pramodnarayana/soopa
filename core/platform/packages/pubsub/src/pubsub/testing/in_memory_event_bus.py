@@ -24,11 +24,14 @@ class InMemoryEventBus:
 
     async def publish_batch(self, events: list[dict[str, Any]]) -> list[str]:
         """Simulate publishing a batch of messages."""
+        import dataclasses
+
         successful_ids = []
         for event in events:
-            await self.queue.put(event)
+            payload = dataclasses.asdict(event) if dataclasses.is_dataclass(event) else event
+            await self.queue.put(payload)
             # Assuming the event dict has an 'id' field, like OutboxEvent
-            successful_ids.append(event.get("id", "unknown_id"))
+            successful_ids.append(payload.get("id", "unknown_id"))
         return successful_ids
 
     @asynccontextmanager

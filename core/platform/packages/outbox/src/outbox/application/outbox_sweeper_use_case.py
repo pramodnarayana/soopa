@@ -2,6 +2,7 @@ import asyncio
 import uuid
 
 import structlog
+from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 
@@ -35,7 +36,7 @@ class OutboxSweeperUseCase:
         # 1. Sweep stuck events (Repository handles chunking internally)
         swept = await self.repository.sweep_stuck_events(self.lock_lease_ms)
         if swept > 0:
-            logger.info("stuck_events_swept", count=swept, target_status="PENDING")
+            logger.info("stuck_events_swept", count=swept, target_status=OutboxStatus.PENDING.value)
 
         # 2. Drain pending events using chunked iteration
         while True:

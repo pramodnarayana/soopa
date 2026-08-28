@@ -7,8 +7,16 @@ from edi.adapters.outbound.database.routing_resolver_repository import (
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
-from edi.application.use_cases.routing_resolver import RoutingResolutionService
-from edi.application.use_cases.transaction_service import TransactionService
+from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
+from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
+    BulkReplayTransactionsUseCase,
+)
+from edi.application.use_cases.transactions.get_transaction_use_case import (
+    GetTransactionUseCase,
+)
+from edi.application.use_cases.transactions.replay_transaction_use_case import (
+    ReplayTransactionUseCase,
+)
 from edi.domain.exceptions import TransactionNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -139,11 +147,12 @@ async def get_transaction(
     Get the full deep-dive payload for a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
     """
     resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, uow.tenant_session)
-    resolver = RoutingResolutionService(resolver_repo)
+    resolver = RoutingResolutionUseCase(resolver_repo)
 
     async with uow:
-        svc = TransactionService(uow)
+        svc = GetTransactionUseCase(uow)
         try:
+            # Pass resolver to resolve the trading partner name dynamically
             result = await svc.get_transaction(tenant_id, trace_id, resolver)
             return TransactionDetailResponse(
                 edi_message=result.edi_message,
@@ -166,7 +175,7 @@ async def replay_transaction(
     Trigger an asynchronous replay of a transaction at the specified tier.
     """
     async with uow:
-        svc = TransactionService(uow)
+        svc = ReplayTransactionUseCase(uow)
         try:
             await svc.replay_transaction(tenant_id, trace_id, request.tier)
         except TransactionNotFoundError as e:
@@ -189,7 +198,7 @@ async def bulk_replay_transactions(
     Trigger an asynchronous replay of multiple transactions at the specified tier.
     """
     async with uow:
-        svc = TransactionService(uow)
+        svc = BulkReplayTransactionsUseCase(uow)
         try:
             processed_count = await svc.bulk_replay_transactions(
                 tenant_id, request.trace_ids, request.tier, command_key=idempotency_key
