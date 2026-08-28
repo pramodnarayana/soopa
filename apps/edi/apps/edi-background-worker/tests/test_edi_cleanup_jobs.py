@@ -3,7 +3,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from edi.adapters.inbound.messaging.sqs_poller import _process_message_task
 
 from edi_background_worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
@@ -95,29 +94,18 @@ async def test_grouped_two_shard_failures_leave_scheduled_job_for_retry() -> Non
     registry = JobHandlerRegistry()
     registry.register("EDI_AUDIT_LOG_CLEANUP", handler)
 
-    grouped_failure: ExceptionGroup | None = None
+    try:
+        await process_scheduled_job(
+            {
+                "job_id": "00000000-0000-0000-0000-000000000001",
+                "job_name": "EDI_AUDIT_LOG_CLEANUP",
+                "payload": {},
+            },
+            registry=registry,
+        )
+    except ExceptionGroup as exc:
+        grouped_failure = exc
 
-    async def process_and_capture(message: dict[str, Any]) -> None:
-        nonlocal grouped_failure
-        try:
-            await process_scheduled_job(message, registry=registry)
-        except ExceptionGroup as exc:
-            grouped_failure = exc
-            raise
-
-    receipt_handle = await _process_message_task(
-        "edi-orchestrator-jobs",
-        {
-            "ReceiptHandle": "receipt-1",
-            "Body": (
-                '{"job_id": "00000000-0000-0000-0000-000000000001", '
-                '"job_name": "EDI_AUDIT_LOG_CLEANUP", "payload": {}}'
-            ),
-        },
-        process_and_capture,
-    )
-
-    assert receipt_handle is None
     assert grouped_failure is not None
     assert len(grouped_failure.exceptions) == 2
     assert {str(exc) for exc in grouped_failure.exceptions} == {

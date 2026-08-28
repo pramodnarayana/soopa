@@ -1,8 +1,12 @@
 import structlog
 from dependency_injector import containers, providers
+from notification.adapters.outbound.database.postgres_outbox_repository import (
+    SqlAlchemyNotificationOutboxRepository,
+)
 from notification.bootstrap.container import Container as NotificationContainer
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
@@ -36,9 +40,14 @@ class WorkerContainer(containers.DeclarativeContainer):
         sns_topic_arn=config.sns_topic_arn,
     )
 
+    outbox_repository = providers.Factory(
+        SqlAlchemyNotificationOutboxRepository,
+        session_factory=notification_package.session_factory,
+    )
+
     outbox_processor = providers.Singleton(
         OutboxProcessorUseCase,
-        repository=notification_package.outbox_repository,
+        repository=outbox_repository,
         publisher=outbox_publisher,
         worker_id="notification_worker",
     )
@@ -50,11 +59,16 @@ class WorkerContainer(containers.DeclarativeContainer):
         listen_channel="notification_outbox_channel",
     )
 
+    outbox_sweeper = providers.Singleton(
+        OutboxSweeperUseCase,
+        repository=outbox_repository,
+        publisher=outbox_publisher,
+        worker_id="notification_sweeper",
+    )
+
     cleanup_worker = providers.Singleton(
         NotificationOutboxSweeperJobHandler,
-        use_case=notification_package.outbox_sweeper_use_case(
-            publisher=outbox_publisher,
-        ),
+        use_case=outbox_sweeper,
     )
 
     notification_dispatcher = providers.Singleton(

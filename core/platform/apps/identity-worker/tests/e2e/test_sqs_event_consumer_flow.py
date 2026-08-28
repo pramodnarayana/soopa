@@ -8,13 +8,11 @@ import pytest
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
-from identity_worker.adapters.inbound.workers.identity_event_sqs_consumer import (
-    IdentityEventSqsConsumer,
-)
 from identity_worker.ports.inbound.identity_event_consumer_port import (
     IdentityEventConsumerPort,
     IdentityEventMessage,
 )
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 
 pytestmark = pytest.mark.asyncio
 
@@ -128,7 +126,7 @@ async def test_production_listener_propagates_handler_failure():
             }
         ]
     }
-    listener = IdentityEventSqsConsumer(queue_name="identity-events")
+    listener = AwsSqsConsumer(queue_name="identity-events")
     consumer = IdentityEventDispatcher(listener)
 
     async def failing_handler(event):
@@ -155,7 +153,7 @@ async def test_malformed_message_is_not_deleted():
             }
         ]
     }
-    listener = IdentityEventSqsConsumer(queue_name="identity-events")
+    listener = AwsSqsConsumer(queue_name="identity-events")
 
     async with listener._process_with_client(sqs_client) as event:
         assert event is None

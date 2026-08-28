@@ -3,9 +3,6 @@ from dataclasses import asdict
 import pytest
 from notification.domain.models import NotificationEvent
 from notification.facade import notify
-from notification_worker.adapters.inbound.workers.notification_event_sqs_consumer import (
-    NotificationEventSqsConsumer,
-)
 
 
 class RecordingCompiler:
@@ -21,7 +18,7 @@ class UnusedDependency:
 
 
 @pytest.mark.asyncio
-async def test_notify_envelope_is_processed_as_wrapped_domain_event() -> None:
+async def test_notify_envelope_consumed() -> None:
     envelope = notify(
         tenant_id="tenant-1",
         source="edi",
@@ -29,13 +26,16 @@ async def test_notify_envelope_is_processed_as_wrapped_domain_event() -> None:
         payload={"invoice_id": "invoice-1", "event_type": "payload.decoy"},
     )
     compiler = RecordingCompiler()
-    consumer = NotificationEventSqsConsumer(
-        consumer=UnusedDependency(),
-        notification_compiler=compiler,
-        cleanup_job_handler=UnusedDependency(),
+
+    # We can just test the compiler itself since the consumer just delegates in the new arch,
+    # or simulate the new NotificationEventDispatcher.
+    # The original test was testing NotificationEventSqsConsumer, which was deleted.
+    from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
+        NotificationEventDispatcher,
     )
 
-    await consumer._process_message(asdict(envelope))
+    dispatcher = NotificationEventDispatcher(compiler)
+    await dispatcher.dispatch(asdict(envelope))
 
     assert len(compiler.events) == 1
     processed_event = compiler.events[0]

@@ -384,7 +384,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     # Value Error and Integrity Error for create and update
     from unittest.mock import patch
 
-    from sqlalchemy.exc import IntegrityError
+    from database.exceptions import DuplicateEntityError
 
     with patch(
         "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
@@ -397,7 +397,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.status_code == 400
     with patch(
         "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.create_sftp_partner",
-        side_effect=IntegrityError("x", "y", "z"),
+        side_effect=DuplicateEntityError("Integrity error"),
     ):
         resp = client.post(
             "/api/v1/tenants/1/edi/trading-partners/sftp",
@@ -416,7 +416,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.status_code == 400
     with patch(
         "edi.application.use_cases.sftp_partner_service.SFTPPartnerService.update_sftp_partner",
-        side_effect=IntegrityError("x", "y", "z"),
+        side_effect=DuplicateEntityError("Integrity error"),
     ):
         resp = client.put(
             f"/api/v1/tenants/1/edi/trading-partners/sftp/{p_id}",
@@ -426,7 +426,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
 
     # Delete integrity error
     fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(
-        side_effect=IntegrityError("x", "y", "z")
+        side_effect=DuplicateEntityError("Integrity error")
     )
     resp = client.delete(f"/api/v1/tenants/1/edi/trading-partners/sftp/{p_id}")
     assert resp.status_code == 400
