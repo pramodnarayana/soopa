@@ -7,6 +7,7 @@
 # Enterprise Coding Standards (Strictly Enforced)
 - **Hexagonal Architecture**: Keep the domain isolated. Ports and Adapters must strictly separate business logic from external frameworks, APIs, and databases.
 - **SOLID Principles**: Adhere to Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+- **No Silenced Failures**: NEVER use a bare `except Exception:` to silently swallow domain failures. If a domain or infrastructure error occurs, it MUST either be explicitly handled, re-raised, or properly bubbled up to the caller/infrastructure (e.g., triggering a NACK in a queue).
 - **Red-Green-Refactor Cycle**: Write failing tests first, make them pass, then refactor to clean up.
 - **Zero Mocks for Pure Logic**: Do not mock pure business logic. Domain models and core logic must be self-contained and testable without external mocks.
 - **Narrow Integration Tests**: Stop writing "forced" unit tests with excessive mocking just to hit coverage limits. Focus on writing Narrow Integration Tests that actually connect to databases/external systems via test harnesses to test real behavior.
