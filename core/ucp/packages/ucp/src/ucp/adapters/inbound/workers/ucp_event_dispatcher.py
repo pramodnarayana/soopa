@@ -1,11 +1,10 @@
 import asyncio
-import contextlib
 from collections.abc import Callable
 from typing import Any
 
 import structlog
 
-from ucp.ports.outbound.ucp_event_consumer_port import UcpEventConsumerPort, UcpEventMessage
+from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 
 logger = structlog.get_logger(__name__)
 
@@ -16,11 +15,7 @@ class UcpEventDispatcher:
     and dispatches Domain Events to registered pure business Application Services.
     """
 
-    def __init__(self, event_consumer: UcpEventConsumerPort):
-        self.event_consumer = event_consumer
-        self.is_running = False
-        self._task: asyncio.Task[None] | None = None
-
+    def __init__(self) -> None:
         # Route mapping: event_type -> list of async handlers
         self._handlers: dict[str, list[Callable[[UcpEventMessage], Any]]] = {}
 
@@ -30,49 +25,10 @@ class UcpEventDispatcher:
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
 
-    def start(self) -> None:
-        if not self.is_running:
-            self.is_running = True
-            self._task = asyncio.create_task(self._run_loop())
-            logger.info("sqs_event_dispatcher_started")
-
-    async def stop(self) -> None:
-        self.is_running = False
-        if self._task:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
-            self._task = None
-
-        logger.info("sqs_event_dispatcher_stopped")
-
-    async def _run_loop(self) -> None:
-        try:
-            async with self.event_consumer:
-                await self._poll_continuous()
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception("sqs_event_dispatcher_fatal_error")
-        finally:
-            self.is_running = False
-
-    async def _poll_continuous(self) -> None:
-        while self.is_running:
-            try:
-                # Process the message via the context manager which handles ack/delete automatically
-                async with self.event_consumer.process_next_event() as event:
-                    if not event:
-                        await asyncio.sleep(0.1)
-                        continue
-
-                    await self._dispatch(event)
-
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.exception("sqs_event_dispatcher_poll_loop_error")
-                await asyncio.sleep(5)
+    async def dispatch_raw(self, payload: dict[str, Any]) -> None:
+        """Entrypoint called by the SqsConsumerManager."""
+        event = UcpEventMessage.model_validate(payload)
+        await self._dispatch(event)
 
     async def _dispatch(self, event: UcpEventMessage) -> None:
         handlers = self._handlers.get(event.event_type, [])

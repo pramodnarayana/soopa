@@ -21,6 +21,8 @@ class SqlAlchemyOutboxRepositoryMixin:
     model_class: Any
     id_prefix: str = "obevt_"
 
+    async def flush(self) -> None: ...
+
     async def _publish_record(
         self,
         tenant_id: str,
@@ -40,7 +42,7 @@ class SqlAlchemyOutboxRepositoryMixin:
             status="PENDING",
         )
         self.session.add(record)
-        await self.session.flush()
+        await self.flush()
         return event_id
 
     async def publish_outbox_events_bulk(
@@ -118,7 +120,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
                 )
                 reservation.payload = {**reservation.payload, **serialized_event}
                 reservation.status = "PENDING"
-                await self.session.flush()
+                await self.flush()
                 return str(reservation.id)
 
         event_id = await self._publish_record(
@@ -142,8 +144,8 @@ class SqlAlchemyControlPlaneOutboxRepository(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
     ) -> None:
         from sqlalchemy import insert
-        from sqlalchemy.exc import IntegrityError
 
+        from database.exceptions import DuplicateEntityError
         from edi.domain.exceptions import IdempotencyConflictError
 
         insert_stmt = insert(self.model_class).values(
@@ -156,10 +158,12 @@ class SqlAlchemyControlPlaneOutboxRepository(
             attempts=0,
         )
         try:
-            async with self.session.begin_nested():
+            from database.interceptors import intercept_db_errors
+
+            async with self.session.begin_nested(), intercept_db_errors():
                 await self.session.execute(insert_stmt)
-                await self.session.flush()
-        except IntegrityError as e:
+                await self.flush()
+        except DuplicateEntityError as e:
             raise IdempotencyConflictError() from e
 
 

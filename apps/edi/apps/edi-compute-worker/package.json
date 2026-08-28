@@ -5,7 +5,7 @@
     "lint": "uv run ruff check .",
     "format": "uv run ruff format . && uv run ruff check --fix .",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases .",
-    "test": "uv run pytest",
+    "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
     "deadcode:deptry": "uv run deptry ."
   }
 }

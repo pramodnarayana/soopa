@@ -2,8 +2,9 @@ import os
 from dataclasses import dataclass
 
 import structlog
+from database.exceptions import DuplicateEntityError
 
-from ucp.domain.exceptions import DuplicateEntityError, SlugExhaustedException
+from ucp.domain.exceptions import SlugExhaustedException
 from ucp.domain.models.tenant import Tenant
 from ucp.domain.services.slug_service import generate_slug
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort

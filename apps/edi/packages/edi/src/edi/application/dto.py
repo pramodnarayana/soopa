@@ -309,3 +309,17 @@ class TransactionDetailDTO:
     edi_message: EdiMessageDTO
     edi_jsons: list[EdiJsonDTO]
     api_gateways: list[ApiGatewayDTO]
+
+
+@dataclass(frozen=True)
+class ProcessApiEdiJsonCommand:
+    tenant_id: str
+    trading_partner_id: str
+    payload: dict[str, Any] | list[dict[str, Any]]
+    transaction_type: str | None = None
+
+
+@dataclass(frozen=True)
+class ProcessInboundAs2Command:
+    headers: dict[str, str]
+    body_bytes: bytes

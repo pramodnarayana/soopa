@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import aioboto3
 import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
@@ -14,8 +13,9 @@ from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
 from edi.domain.events import MessageQueueName
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
-from compute_worker.worker import SQSComputeWorker
+from compute_worker.compute_dispatcher import EdiComputeDispatcher
 
 # Configure logging so it prints beautifully to the terminal
 logger = structlog.get_logger("worker_runner")
@@ -49,18 +49,15 @@ async def main() -> None:
         uow = cast(DataPlaneUnitOfWorkPort, uow_factory())
         return ComputeTransformUseCase(uow=uow, transformer=transformer)
 
-    # Resolve SQS Queue URL using the canonical domain enum
-    session = aioboto3.Session()
-    client_kwargs = {"region_name": settings.aws.resolved_region}
-    if aws_endpoint:
-        client_kwargs["endpoint_url"] = aws_endpoint
+    # We don't need queue_url anymore because SqsConsumerManager resolves it!
+    dispatcher = EdiComputeDispatcher(
+        use_case_factory=use_case_factory,
+    )
 
-    async with session.client("sqs", **client_kwargs) as sqs:
-        response = await sqs.get_queue_url(QueueName=MessageQueueName.TRANSFORM_QUEUE)
-        queue_url = response["QueueUrl"]
-
-    worker = SQSComputeWorker(
-        use_case_factory=use_case_factory, queue_url=queue_url, endpoint_url=aws_endpoint
+    manager = SqsConsumerManager(
+        queue_name=MessageQueueName.TRANSFORM_QUEUE.value,
+        endpoint_url=aws_endpoint,
+        handler=dispatcher.dispatch_raw,
     )
 
     # Handle shutdown signals
@@ -76,13 +73,14 @@ async def main() -> None:
     loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
 
     logger.info("compute_worker_running")
-    worker_task = asyncio.create_task(worker.start())
+    manager.start()
 
-    await stop_event.wait()
-    logger.info("compute_worker_stopping")
-    await worker.stop()
-    await worker_task
-    logger.info("compute_worker_stopped")
+    try:
+        await stop_event.wait()
+        logger.info("compute_worker_stopping")
+    finally:
+        await manager.stop()
+        logger.info("compute_worker_stopped")
 
 
 if __name__ == "__main__":

@@ -1,31 +1,12 @@
-from dataclasses import dataclass, field
+"""
+AS2 message module — backward-compatible re-export shim.
 
+Domain models have been canonically moved to edi.domain.models.as2.
+This module re-exports them so any remaining adapter-internal references
+continue to work without modification.
+"""
 
-@dataclass
-class AS2Message:
-    """
-    Pure data representation of an AS2 Message.
-    """
+# Re-export from canonical domain location
+from edi.domain.models.as2 import AS2MDN, AS2Message
 
-    message_id: str
-    as2_from: str
-    as2_to: str
-    headers: dict[str, str] = field(default_factory=dict)
-    payload: bytes = b""
-    is_encrypted: bool = False
-    is_signed: bool = False
-    is_compressed: bool = False
-    raw_mime: bytes | None = None
-
-
-@dataclass
-class AS2MDN:
-    """
-    Pure data representation of an AS2 Message Disposition Notification (MDN).
-    """
-
-    original_message_id: str
-    disposition: str
-    headers: dict[str, str] = field(default_factory=dict)
-    mic: str | None = None
-    is_signed: bool = False
+__all__ = ["AS2MDN", "AS2Message"]

@@ -14,7 +14,7 @@ class TransactionRepositoryPort(Protocol):
         ...
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
+        self, tenant_id: str, event_type: str, payload: Any, idempotency_key: str | None
     ) -> str:
         """
         Publishes an event to the outbox for background processing.

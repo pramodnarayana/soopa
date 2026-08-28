@@ -68,6 +68,7 @@ class InfrastructureProvisioner:
 
         except Exception:
             logger.exception("app.subscribed_failed", event_id=event_id)
+            raise
 
     async def handle_app_unsubscribed(self, event: UcpEventMessage) -> None:
         """
@@ -108,3 +109,4 @@ class InfrastructureProvisioner:
 
         except Exception:
             logger.exception("app.unsubscribed_failed", event_id=event_id)
+            raise

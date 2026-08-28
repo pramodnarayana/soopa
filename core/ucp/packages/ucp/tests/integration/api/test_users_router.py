@@ -27,17 +27,8 @@ async def test_create_user_endpoint_resolves_di_and_persists(
         idp_tenant_id=f"mock_org_{uuid.uuid4().hex[:8]}",
     )
     db_session.add(tenant)
-    # Seed the Global PBAC Role required by the CreateUserUseCase
-    from database.models.identity import Role as OrmRole
-
-    global_role = OrmRole(
-        id=f"rol_{uuid.uuid4().hex[:12]}",
-        name="TenantAdmin",
-        tenant_id=None,
-        description="Global Tenant Admin Role",
-        capabilities=["users:write", "users:read"],
-    )
-    db_session.add(global_role)
+    # The 'TenantAdmin' role is already seeded by the database migration,
+    # so we don't need to insert it manually.
     await db_session.commit()
 
     payload = {

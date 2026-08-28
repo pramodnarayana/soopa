@@ -6,27 +6,21 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
-from notification.ports.outbound.notification_record_repository_port import (
-    NotificationRecordRepositoryPort,
-)
-
-
 class DeliveryError(Exception):
     """Raised when message delivery fails."""
 
 
 class InAppDeliveryStrategy:
-    def __init__(self, persistence: NotificationRecordRepositoryPort | None = None):
-        self.persistence = persistence
+    def __init__(self) -> None:
+        pass
 
     async def deliver(
         self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
     ) -> None:
-        if self.persistence is None:
-            raise DeliveryError("In-app persistence not configured")
 
         logger.info(
             "in_app_notification_delivering",
             tenant_id=tenant_id,
         )
-        await self.persistence.save_notification(tenant_id, content, subject, dict(data))
+        # In-app notification is already saved to DB in Stage 2 (Compiler).
+        # In the future, this is where we'd push to a WebSocket server or SSE.

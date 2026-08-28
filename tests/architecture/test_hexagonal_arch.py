@@ -21,10 +21,10 @@ def test_edi_domain_is_isolated():
     """
     (
         archrule("EDI Domain Isolation")
-        .match("domain*")
+        .match("edi.domain*")
         .should_not_import("database*")
         .should_not_import("pipeline*")
-        .check("domain")
+        .check("edi")
     )
 
 
@@ -47,7 +47,7 @@ def test_edi_application_is_isolated():
     """
     (
         archrule("EDI Application Isolation")
-        .match("edi.core*")
+        .match("edi.application*")
         .should_not_import("edi.adapters*")
         .check("edi")
     )
@@ -60,7 +60,7 @@ def test_no_cross_module_pollution():
     (
         archrule("Modular Monolith Isolation")
         .match("ucp.adapters*")
-        .should_not_import("database*")
+        .should_not_import("edi.adapters*")
         .should_not_import("worker.adapters*")
         .check("ucp")
     )

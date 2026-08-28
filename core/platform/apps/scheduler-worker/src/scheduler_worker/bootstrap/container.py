@@ -2,7 +2,7 @@ import os
 from typing import Any
 
 from dependency_injector import containers, providers
-from scheduler.adapters.outbound.database.postgres_job_repository import PostgresJobRepository
+from scheduler.adapters.outbound.database.uow import SqlAlchemySchedulerUnitOfWork
 from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
 from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecuteJobsUseCase
 from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
@@ -23,9 +23,11 @@ class Container(containers.DeclarativeContainer):
 
     session_factory: providers.Dependency[Any] = providers.Dependency()
 
-    job_repository = providers.Factory(
-        PostgresJobRepository,
-        session_factory=session_factory,
+    uow_factory = providers.Factory(
+        SqlAlchemySchedulerUnitOfWork,
+        session=providers.Factory(
+            lambda session_factory: session_factory(), session_factory=session_factory
+        ),
     )
 
     job_dispatcher = providers.Factory(
@@ -36,12 +38,12 @@ class Container(containers.DeclarativeContainer):
 
     sweep_use_case = providers.Factory(
         SweepStuckJobsUseCase,
-        repository=job_repository,
+        uow_factory=uow_factory.provider,
     )
 
     claim_use_case = providers.Factory(
         ClaimAndExecuteJobsUseCase,
-        repository=job_repository,
+        uow_factory=uow_factory.provider,
         dispatcher=job_dispatcher,
     )
 

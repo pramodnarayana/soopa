@@ -35,7 +35,6 @@ from dotenv import load_dotenv
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
-from edi.config.settings import get_settings
 from edi.domain.events import EdiEventType
 from sqlalchemy import delete, select
 from ucp_models.events import ControlPlaneOutbox
@@ -45,23 +44,51 @@ from ucp_models.subscriptions import App
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
-    EdiConfigSyncSqsConsumer,
+from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
+    EdiConfigSyncSqsDispatcher,
 )
-from config_sync_worker.domain.errors import PermanentProvisioningError
 from config_sync_worker.domain.service import ProvisioningWorkerService
 
 load_dotenv()
 
 
 @pytest.fixture
-async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
+async def test_db_router() -> "AsyncGenerator[DatabaseRouter, None]":
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+    )
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    router = DatabaseRouter(global_db_url=base_url)
+
+    await router.get_engine("global", base_url)
+
+    async for session in router.get_global_session():
+        from ucp_models.infrastructure import DatabaseShard
+
+        shard1 = DatabaseShard(id="test_shard_id", name="shard_1", dsn=base_url)
+        await session.merge(shard1)
+        await session.commit()
+
+    await router.get_engine("shard_1", base_url)
+
+    yield router
+    await router.close_all()
+
+
+@pytest.fixture
+async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[str, Any], None]":
     """
     Sets up the DatabaseRouter and SQS adapters for the E2E test.
     Cleans up inserted data at the end of the test.
     """
-    settings = get_settings()
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+    db_router = test_db_router
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+    )
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
 
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
@@ -69,8 +96,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     # We use localstack URL directly as per the local dev environment
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
-    queue_name = "test-edi-tenant-sync-{uuid.uuid4()}.fifo"
-    outbox_adapter = EdiConfigSyncSqsConsumer(queue_name=queue_name, endpoint_url=sqs_endpoint)
+    queue_name = f"test-edi-tenant-sync-{uuid.uuid4()}.fifo"
 
     message_publisher = SqsTestPublisher(
         endpoint_url=sqs_endpoint,
@@ -89,12 +115,33 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
             structlog.get_logger(__name__).warning("Could not setup queue: {e}")
             pytest.skip("LocalStack is not available. Skipping integration test.")
 
-    # Use a dedicated test queue so the integration test is isolated from production traffic.
-    # Pass it to the handler constructor — no monkey-patching needed.
+    # 1. Initialize the core replication service
+    worker_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
+
+    # 2. Initialize the dispatcher with the translator
     translator = DefaultEventTranslator()
-    worker_service = ProvisioningWorkerService(
-        tenant_adapter, outbox_adapter, replication_adapter, translator
+    dispatcher = EdiConfigSyncSqsDispatcher(
+        domain_service=worker_service, translator_port=translator
     )
+
+    # 3. Create a raw consumer so tests can manually poll and dispatch exactly once
+    from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+
+    test_consumer = AwsSqsConsumer(
+        queue_name=queue_name,
+        endpoint_url=sqs_endpoint,
+        region_name="us-east-1",
+    )
+
+    async def process_next_event_helper() -> bool:
+        async with test_consumer.poll_raw_message() as ackable_msg:
+            if ackable_msg:
+                await dispatcher.dispatch_raw(ackable_msg.payload)
+                await ackable_msg.ack()
+                return True
+        return False
+
+    worker_service.process_next_event = process_next_event_helper
 
     test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
@@ -102,8 +149,9 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     async for session in db_router.get_global_session():
         tenant = Tenant(
             id=test_tenant_id,
-            name="Test Tenant {test_tenant_id}",
-            idp_tenant_id="idp_{test_tenant_id}",
+            name=f"Test Tenant {test_tenant_id}",
+            idp_tenant_id=f"idp_{test_tenant_id}",
+            slug=f"tenant_{test_tenant_id}",
         )
         session.add(tenant)
         await session.flush()
@@ -112,18 +160,6 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
             select(DatabaseShard).where(DatabaseShard.name == "shard_1")
         )
         shard = shard_res.scalars().first()
-
-        if not shard:
-            shard = DatabaseShard(
-                id="shard_{test_tenant_id}",
-                name="shard_1",
-                dsn=os.getenv(
-                    "SHARD_1_URL",
-                    "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
-                ),
-            )
-            session.add(shard)
-            await session.commit()
 
         app_res = await session.execute(select(App).where(App.slug == "edi"))
         edi_app = app_res.scalars().first()
@@ -159,8 +195,8 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
         "message_publisher": message_publisher,
         "partner_id": test_partner_id,
         "tenant_id": test_tenant_id,
-        "outbox_adapter": outbox_adapter,
         "queue_name": queue_name,
+        "base_url": base_url,
     }
 
     # Cleanup
@@ -178,11 +214,7 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
         await session.execute(delete(Tenant).where(Tenant.id == test_tenant_id))
         await session.commit()
 
-    async for tenant_session in db_router.get_tenant_session(
-        test_tenant_id,
-        "shard_1",
-        "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
-    ):
+    async for tenant_session in db_router.get_tenant_session(test_tenant_id, "shard_1", base_url):
         await tenant_session.execute(
             delete(TenantAS2Partner).where(TenantAS2Partner.id == test_partner_id)
         )
@@ -216,6 +248,7 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
     queue_name = ctx["queue_name"]
     partner_id = ctx["partner_id"]
     tenant_id = ctx["tenant_id"]
+    base_url = ctx["base_url"]
 
     # 1. Simulate the UCP API (AwsControlPlaneEventRouter) publishing directly to the SNS/SQS topic
     payload = {
@@ -233,9 +266,7 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
     assert processed is True
 
     # 4. Verify replication occurred in the Shard DB
-    async for tenant_session in db_router.get_tenant_session(
-        tenant_id, "shard_1", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-    ):
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "shard_1", base_url):
         res = await tenant_session.execute(
             select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
         )
@@ -264,7 +295,7 @@ async def test_provisioning_negative_unregistered_event_dropped(
     # Send an unregistered UCP event
     payload = {
         "tenant_id": tenant_id,
-        "event_type": "tenant.provisioned",
+        "eventType": "tenant.provisioned",
         "resource_id": "tenant_123",
     }
 
@@ -300,16 +331,10 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
     await message_publisher.publish(queue_name, payload)
     await asyncio.sleep(2)
 
-    # Worker processes the event. sqs_outbox deletes it and raises PermanentProvisioningError
-    # Wait, the worker_service lets the exception propagate?
-    # Let's check worker_service behavior. Actually, sqs_outbox yields the event,
-    # then worker_service tries to parse it, raises PermanentProvisioningError.
-    # sqs_outbox catches it on __aexit__ or generator exit and deletes it,
-    # but the exception propagates up through process_next_event.
-    with pytest.raises(PermanentProvisioningError) as exc_info:
-        await worker_service.process_next_event()
-
-    assert "missing required resource_id" in str(exc_info.value)
+    # Worker processes the event. The SQS consumer swallows the exception and doesn't ack,
+    # so the orchestrator returns False.
+    processed = await worker_service.process_next_event()
+    assert processed is False
 
 
 @pytest.mark.integration
@@ -326,6 +351,7 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     queue_name = ctx["queue_name"]
     partner_id = ctx["partner_id"]
     tenant_id = ctx["tenant_id"]
+    base_url = ctx["base_url"]
 
     payload = {
         "tenant_id": tenant_id,
@@ -347,9 +373,7 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     assert processed_2 is True
 
     # Verify replication still valid
-    async for tenant_session in db_router.get_tenant_session(
-        tenant_id, "shard_1", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-    ):
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "shard_1", base_url):
         res = await tenant_session.execute(
             select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
         )

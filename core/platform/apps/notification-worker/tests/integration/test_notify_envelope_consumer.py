@@ -1,12 +1,9 @@
 from dataclasses import asdict
+from unittest.mock import AsyncMock
 
 import pytest
 from notification.domain.models import NotificationEvent
 from notification.facade import notify
-
-from notification_worker.adapters.inbound.workers.notification_event_sqs_consumer import (
-    NotificationEventSqsConsumer,
-)
 
 
 class RecordingCompiler:
@@ -17,12 +14,8 @@ class RecordingCompiler:
         self.events.append(event)
 
 
-class UnusedDependency:
-    pass
-
-
 @pytest.mark.asyncio
-async def test_notify_envelope_is_processed_as_wrapped_domain_event() -> None:
+async def test_notify_envelope_consumed() -> None:
     envelope = notify(
         tenant_id="tenant-1",
         source="edi",
@@ -30,13 +23,16 @@ async def test_notify_envelope_is_processed_as_wrapped_domain_event() -> None:
         payload={"invoice_id": "invoice-1", "event_type": "payload.decoy"},
     )
     compiler = RecordingCompiler()
-    consumer = NotificationEventSqsConsumer(
-        consumer=UnusedDependency(),
-        notification_compiler=compiler,
-        cleanup_job_handler=UnusedDependency(),
+    cleanup_mock = AsyncMock()
+
+    from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
+        NotificationEventDispatcher,
     )
 
-    await consumer._process_message(asdict(envelope))
+    dispatcher = NotificationEventDispatcher(
+        notification_compiler=compiler, cleanup_job_handler=cleanup_mock
+    )
+    await dispatcher.dispatch_raw(asdict(envelope))
 
     assert len(compiler.events) == 1
     processed_event = compiler.events[0]

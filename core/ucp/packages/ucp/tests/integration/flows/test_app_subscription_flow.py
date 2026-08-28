@@ -3,25 +3,24 @@ from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
+from database.events import EventEnvelope
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
-from sqlalchemy import text
+from pubsub.testing.in_memory_event_bus import InMemoryEventBus
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.subscriptions import App
 
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
-from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
+from ucp.application.dto import SubscribeAppCommand
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.application.use_cases.subscribe_app_use_case import (
-    SubscribeAppCommand,
-    SubscribeAppUseCase,
-)
+from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
 
 pytestmark = pytest.mark.integration
 
@@ -36,22 +35,26 @@ async def test_app_subscription_flow(
     db_session: AsyncSession,
     uow: SqlAlchemyUcpUnitOfWork,
     localstack_container: dict[str, str],
-    postgres_container,
 ) -> None:
     # 1. Setup Ports
     outbox_repo = PostgresOutboxRepository(lambda: db_session)
-    sns_publisher = AwsSnsPublisher(
-        topic_arn=localstack_container["sns_topic_arn"],
-        endpoint_url=localstack_container["endpoint_url"],
-    )
 
-    db_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+    # Use InMemoryEventBus instead of AWS SNS/SQS
+    event_bus = InMemoryEventBus()
+
+    import os
+
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    db_url = base_url
 
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,
-        publisher=sns_publisher,
+        publisher=event_bus,  # type: ignore[arg-type]
     )
 
     relay = PostgresOutboxRelay(
@@ -60,11 +63,7 @@ async def test_app_subscription_flow(
         listen_channel="ucp_outbox_wakeup",
     )
 
-    event_consumer = UcpEventSqsConsumer(
-        queue_name=localstack_container["sqs_queue_name"],
-        endpoint_url=localstack_container["endpoint_url"],
-    )
-    dispatcher = UcpEventDispatcher(event_consumer)
+    dispatcher = UcpEventDispatcher()
 
     # Fake uow factory for the provisioner
     @asynccontextmanager
@@ -75,17 +74,11 @@ async def test_app_subscription_flow(
 
     dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
 
-    # 1.5 Seed the "edi" app and shard in the database
-    from ucp_models.infrastructure import DatabaseShard
-    from ucp_models.subscriptions import App
-
+    # 1.5 Get the seeded "edi" app from the database
     async with db_session.begin():
-        db_session.add(App(id="edi", name="EDI App", slug="edi", description=""))
-        db_session.add(
-            DatabaseShard(
-                id="edi_shard_1", name="EDI Shard 1", dsn="postgresql://mock", status="active"
-            )
-        )
+        stmt = select(App.id).where(App.slug == "edi")
+        result = await db_session.execute(stmt)
+        edi_app_id = result.scalar_one()
 
     # 2. Trigger Business Logic (Provision Tenant)
     use_case = ProvisionTenantUseCase(uow=uow)
@@ -96,9 +89,9 @@ async def test_app_subscription_flow(
 
     tenant = await use_case.execute(command)
 
-    # Now subscribe the tenant to an app to trigger the app.subscribed event
+    # 3. Simulate UI passing an App ID to the SubscribeAppUseCase
     subscribe_use_case = SubscribeAppUseCase(uow=uow)
-    subscribe_command = SubscribeAppCommand(tenant_id=tenant.id, app_id="edi")
+    subscribe_command = SubscribeAppCommand(tenant_id=tenant.id, app_id=edi_app_id)
     await subscribe_use_case.execute(subscribe_command)
 
     # 3. Process Outbox
@@ -113,24 +106,41 @@ async def test_app_subscription_flow(
     # Fetch pending and publish
     await relay.processor.process_pending()
 
-    # Wait for SQS to receive from SNS
-    await asyncio.sleep(1)
+    # Wait for processing
+    await asyncio.sleep(0.5)
 
-    # 4. Execute SQS Dispatcher for app.subscribed
+    # 4. Execute Dispatcher for app.subscribed
     found_app_subscribed = False
 
-    # We might have multiple events (TenantProvisioned, UserInvited, app.subscribed). Process up to 5.
+    # Drain the in-memory bus
     for _ in range(5):
-        try:
-            async with event_consumer.process_next_event() as event:
-                if not event or event.tenant_id != tenant.id:
-                    continue
+        async with event_bus.poll_raw_message() as ackable_msg:
+            if not ackable_msg:
+                continue
+
+            raw_event = ackable_msg.payload
+            print(f"DEBUG RAW EVENT: {raw_event}")
+
+            if raw_event.get("tenant_id") != tenant.id:
+                await ackable_msg.ack()
+                continue
+
+            event = EventEnvelope(
+                id=raw_event.get("id", ""),
+                source=raw_event.get("source", ""),
+                tenant_id=raw_event.get("tenant_id", ""),
+                event_type=raw_event.get("event_type", ""),
+                idempotency_key=raw_event.get("idempotency_key"),
+                payload=raw_event.get("payload", {}),
+            )
+
+            try:
                 await dispatcher._dispatch(event)
+                await ackable_msg.ack()
                 if event.event_type == "app.subscribed":
                     found_app_subscribed = True
-                    break
-        except Exception:  # noqa: BLE001, S110
-            pass
+            except Exception:  # noqa: BLE001
+                await ackable_msg.nack()
 
     assert found_app_subscribed, "app.subscribed event was never received from SQS"
 
@@ -147,8 +157,10 @@ async def test_app_subscription_flow(
 
     # Verify App Subscription status
     res = await db_session.execute(
-        text("SELECT * FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = 'edi'"),
-        {"tenant_id": tenant.id},
+        text(
+            "SELECT * FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = :app_id"
+        ),
+        {"tenant_id": tenant.id, "app_id": edi_app_id},
     )
     app_sub = res.fetchone()
     assert app_sub is not None

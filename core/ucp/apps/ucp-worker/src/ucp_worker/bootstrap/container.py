@@ -12,7 +12,6 @@ from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
-from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.postgres_ucp_audit_log_cleanup_repository import (
     SqlAlchemyUcpAuditLogCleanupRepository,
@@ -61,7 +60,8 @@ class WorkerContainer:
 
         self.registry: JobHandlerRegistry | None = None
         self.outbox_relay: PostgresOutboxRelay | None = None
-        self.events_consumer: UcpEventDispatcher | None = None
+        self.events_dispatcher: UcpEventDispatcher | None = None
+        self.events_consumer: Any | None = None
 
     def wire(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
@@ -142,18 +142,21 @@ class WorkerContainer:
         provisioner = InfrastructureProvisioner(uow_factory)
         tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
 
-        self.events_consumer = UcpEventDispatcher(
-            event_consumer=UcpEventSqsConsumer(
-                queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
-                endpoint_url=self.settings.aws_endpoint_url,
-            )
-        )
+        self.events_dispatcher = UcpEventDispatcher()
 
-        consumer = self.events_consumer
+        consumer = self.events_dispatcher
         consumer.subscribe("app.subscribed", provisioner.handle_app_subscribed)
         consumer.subscribe("app.unsubscribed", provisioner.handle_app_unsubscribed)
 
         self._register_tenant_handlers(consumer, tenant_deleted_handler)
+
+        from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+
+        self.events_consumer = SqsConsumerManager(
+            queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
+            endpoint_url=self.settings.aws_endpoint_url,
+            handler=self.events_dispatcher.dispatch_raw,
+        )
 
     async def dispose(self) -> None:
         if self._engine:

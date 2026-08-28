@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 from database.events import EventEnvelope
+from outbox.domain.constants import OutboxStatus
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -19,18 +20,25 @@ class PostgresOutboxRepository:
                 query = text("""
                     WITH cte AS (
                         SELECT id FROM ucp.outbox
-                        WHERE status = 'PROCESSING'
+                        WHERE status = :status_processing
                           AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
                         LIMIT 5000
                         FOR UPDATE SKIP LOCKED
                     )
                     UPDATE ucp.outbox
-                    SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
+                    SET status = :status_pending, lease_expires_at = NULL, owner_token = NULL
                     WHERE id IN (SELECT id FROM cte)
                 """)
                 result = cast(
                     CursorResult[Any],
-                    await session.execute(query, {"lock_lease_ms": lock_lease_ms}),
+                    await session.execute(
+                        query,
+                        {
+                            "lock_lease_ms": lock_lease_ms,
+                            "status_processing": OutboxStatus.PROCESSING.value,
+                            "status_pending": OutboxStatus.PENDING.value,
+                        },
+                    ),
                 )
                 swept = int(result.rowcount)
                 total_swept += swept
@@ -46,10 +54,10 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
+                SET status = :status_processing, updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
                 WHERE id IN (
                     SELECT id FROM ucp.outbox
-                    WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
+                    WHERE (status = :status_pending OR (status = :status_processing AND lease_expires_at < NOW()))
                     ORDER BY created_at ASC
                     LIMIT :limit
                     FOR UPDATE SKIP LOCKED
@@ -62,6 +70,8 @@ class PostgresOutboxRepository:
                     "worker_id": worker_id,
                     "lock_lease_ms": lock_lease_ms,
                     "limit": limit,
+                    "status_processing": OutboxStatus.PROCESSING.value,
+                    "status_pending": OutboxStatus.PENDING.value,
                 },
             )
             await session.commit()
@@ -85,14 +95,16 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = 'COMPLETED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
-                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
+                SET status = :status_processed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
+                WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
                 {
                     "event_id": event_id,
                     "worker_id": worker_id,
+                    "status_processed": OutboxStatus.PROCESSED.value,
+                    "status_processing": OutboxStatus.PROCESSING.value,
                 },
             )
             await session.commit()
@@ -101,10 +113,10 @@ class PostgresOutboxRepository:
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
-                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN :status_failed ELSE :status_pending END,
                     attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL,
                     updated_at = NOW(), error_reason = :error_message
-                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
+                WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
@@ -113,6 +125,9 @@ class PostgresOutboxRepository:
                     "worker_id": worker_id,
                     "error_message": error_message,
                     "max_attempts": 3,
+                    "status_failed": OutboxStatus.FAILED.value,
+                    "status_pending": OutboxStatus.PENDING.value,
+                    "status_processing": OutboxStatus.PROCESSING.value,
                 },
             )
             await session.commit()

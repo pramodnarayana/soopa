@@ -4,9 +4,10 @@ from typing import Any
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
-from sqlalchemy.exc import IntegrityError
 
-from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
+from database.exceptions import DuplicateEntityError
+from database.repository import BaseSqlAlchemyRepository
+from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.application.dto import (
     CreateAS2TradingPartnerCmd,
@@ -19,23 +20,11 @@ from edi.domain.models import (
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 
 
-def _constraint_name(e: IntegrityError) -> str:
-    """Extract constraint name from IntegrityError."""
-    constraint_name = ""
-    if hasattr(e, "orig") and e.orig is not None:
-        diag = getattr(e.orig, "diag", None)
-        if diag is not None:
-            constraint_name = str(getattr(diag, "constraint_name", e.orig))
-        else:
-            constraint_name = str(e.orig)
-    return constraint_name
-
-
 class SqlAlchemyAS2TradingPartnerRepository(
-    AS2TradingPartnerRepositoryPort, GlobalSqlAlchemyRepository
+    AS2TradingPartnerRepositoryPort, BaseSqlAlchemyRepository
 ):
     def __init__(self, session: GlobalSession) -> None:
-        GlobalSqlAlchemyRepository.__init__(self, session)
+        BaseSqlAlchemyRepository.__init__(self, session)
 
     async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
         tid_str = tenant_id
@@ -53,9 +42,9 @@ class SqlAlchemyAS2TradingPartnerRepository(
         self.session.add(record)
 
         try:
-            await self.session.flush()
-        except IntegrityError as e:
-            if "uq_tenant_as2_id" in _constraint_name(e):
+            await self.flush()
+        except DuplicateEntityError as e:
+            if e.constraint_name and "uq_tenant_as2_id" in e.constraint_name:
                 raise PartnerAlreadyExistsError(as2_id=cmd.as2_id, tenant_id=tenant_id) from e
             raise
 
@@ -74,9 +63,9 @@ class SqlAlchemyAS2TradingPartnerRepository(
                     setattr(partner, field.name, value)
 
             try:
-                await self.session.flush()
-            except IntegrityError as e:
-                if "uq_tenant_as2_id" in _constraint_name(e):
+                await self.flush()
+            except DuplicateEntityError as e:
+                if e.constraint_name and "uq_tenant_as2_id" in e.constraint_name:
                     from edi.application.dto import UnsetType
 
                     as2_id_val = (
@@ -107,7 +96,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
         if new_private_key_vault_ref is not None:
             partner.private_key_vault_ref = new_private_key_vault_ref
 
-        await self.session.flush()
+        await self.flush()
 
     async def get_as2_partner(
         self, tenant_id: str, partner_id: str
@@ -182,13 +171,14 @@ class SqlAlchemyAS2TradingPartnerRepository(
             )
         else:
             conds.append(AS2Partner.tenant_id == tid_str)
-        await self.session.execute(delete(AS2Partner).where(*conds))
+        from database.exceptions import ForeignKeyViolationError
+        from database.interceptors import intercept_db_errors
 
         try:
-            from sqlalchemy.exc import IntegrityError
-
-            await self.session.flush()
-        except IntegrityError as e:
+            async with self.session.begin_nested(), intercept_db_errors():
+                await self.session.execute(delete(AS2Partner).where(*conds))
+                await self.session.flush()
+        except ForeignKeyViolationError as e:
             raise PartnerInUseError(partner_id=partner_id, tenant_id=tenant_id) from e
 
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:

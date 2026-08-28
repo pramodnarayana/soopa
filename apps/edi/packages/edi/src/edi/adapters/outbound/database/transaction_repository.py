@@ -27,16 +27,20 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}"
         msg = EdiMessage(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
-        await self.session.flush()
+        await self.flush()
         return str(msg.id)
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: dict[str, Any], idempotency_key: str | None
+        self, tenant_id: str, event_type: str, payload: Any, idempotency_key: str | None
     ) -> str:
-        from sqlalchemy.exc import IntegrityError
-
+        from database.exceptions import DuplicateEntityError
+        from database.outbox_serializer import serialize_domain_event
         from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
         from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+
+        serialized_payload = (
+            serialize_domain_event(payload) if not isinstance(payload, dict) else payload
+        )
 
         tid_str = tenant_id if tenant_id is not None else None
         event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}"
@@ -45,15 +49,15 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             tenant_id=tid_str,
             idempotency_key=idempotency_key,
             event_type=event_type,
-            payload=payload,
+            payload=serialized_payload,
             status="PENDING",
         )
         try:
             async with self.session.begin_nested():
                 self.session.add(record)
-                await self.session.flush()
+                await self.flush()
                 return str(event_id)
-        except IntegrityError:
+        except DuplicateEntityError:
             return "duplicate"
 
     async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
@@ -65,7 +69,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}{uuid.uuid4().hex}"
         msg = EdiJson(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
-        await self.session.flush()
+        await self.flush()
         return str(msg.id)
 
     async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
@@ -78,7 +82,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}"
         log = ApiGateway(tenant_id=tid_str, **payload_copy)
         self.session.add(log)
-        await self.session.flush()
+        await self.flush()
         return str(log.id)
 
     async def list_transactions(

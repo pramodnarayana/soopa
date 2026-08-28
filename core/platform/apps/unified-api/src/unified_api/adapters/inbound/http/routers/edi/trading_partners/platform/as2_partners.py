@@ -23,9 +23,9 @@ from edi.domain.exceptions import (
     PartnerAlreadyExistsError,
     PartnerInUseError,
 )
-from edi.ports.outbound.secret_store import SecretStorePort
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow

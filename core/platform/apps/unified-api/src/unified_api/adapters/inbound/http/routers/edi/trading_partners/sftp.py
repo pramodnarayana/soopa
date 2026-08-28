@@ -1,5 +1,6 @@
 from typing import Any
 
+from database.exceptions import DuplicateEntityError
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
@@ -8,12 +9,19 @@ from edi.application.dto import (
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,
 )
-from edi.application.use_cases import SFTPPartnerService
+from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
+    CreateSFTPPartnerUseCase,
+)
+from edi.application.use_cases.sftp_partners.delete_sftp_partner_use_case import (
+    DeleteSFTPPartnerUseCase,
+)
+from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
+    UpdateSFTPPartnerUseCase,
+)
 from edi.domain.exceptions import OrchestrationError, VaultError
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.exc import IntegrityError
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
@@ -131,7 +139,7 @@ async def create_sftp_partner(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
-    from sqlalchemy.exc import IntegrityError
+    from database.exceptions import DuplicateEntityError
 
     if not request.password and not request.credentials_vault_ref:
         raise HTTPException(
@@ -139,7 +147,7 @@ async def create_sftp_partner(
         )
 
     async with uow:
-        service = SFTPPartnerService(uow=uow)
+        service = CreateSFTPPartnerUseCase(uow=uow)
 
         cmd = CreateSFTPPartnerCmd(
             name=request.name if request.name is not None else UNSET,
@@ -158,7 +166,7 @@ async def create_sftp_partner(
             await uow.commit()
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except IntegrityError as e:
+        except DuplicateEntityError as e:
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
@@ -192,7 +200,7 @@ async def update_sftp_partner(
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
     async with uow:
-        service = SFTPPartnerService(uow=uow)
+        service = UpdateSFTPPartnerUseCase(uow=uow)
         cmd = UpdateSFTPPartnerCmd(**request.model_dump(exclude_unset=True))
         try:
             _ = await service.update_sftp_partner(
@@ -201,7 +209,7 @@ async def update_sftp_partner(
             await uow.commit()
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except IntegrityError as e:
+        except DuplicateEntityError as e:
             raise HTTPException(status_code=400, detail="Database integrity error.") from e
 
         async with uow:
@@ -235,12 +243,12 @@ async def delete_sftp_partner(
     """Deletes an SFTP partner."""
     async with uow:
         try:
-            service = SFTPPartnerService(uow=uow)
-            await service.delete_sftp_partner(
+            use_case = DeleteSFTPPartnerUseCase(uow=uow)
+            await use_case.delete_sftp_partner(
                 tenant_id, partner_id, idempotency_key=idempotency_key
             )
             await uow.commit()
-        except IntegrityError as e:
+        except DuplicateEntityError as e:
             raise HTTPException(
                 status_code=400, detail="Partner is in use and cannot be deleted."
             ) from e

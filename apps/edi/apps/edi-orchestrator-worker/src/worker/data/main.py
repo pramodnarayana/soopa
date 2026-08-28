@@ -4,7 +4,6 @@ from typing import Any
 
 import structlog
 from dotenv import load_dotenv
-from edi.adapters.inbound.messaging.sqs_poller import poll_sqs_queue
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
@@ -32,8 +31,9 @@ from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.events import MessageQueueName, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 
-from worker.adapters.aws_secrets_manager import AwsSecretsManagerSecretStore
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
     EdiDataPlaneEventMessage,
@@ -44,7 +44,7 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:
+async def main() -> None:  # noqa: C901
     settings = get_settings()
     aws_endpoint = settings.aws.endpoint_url
     s3_bucket = "soopaedi-dev"
@@ -56,7 +56,7 @@ async def main() -> None:
     # Inbound SQS Adapters (Hexagonal: Protocol Translation Only)
     # ─────────────────────────────────────────────────────────────
     transformer = BotsTransformerAdapter()
-    vault = AwsSecretsManagerSecretStore()
+    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
 
     uow_provider = TenantUowProvider(
         resolver=resolver,
@@ -137,50 +137,63 @@ async def main() -> None:
 
     consumer = EdiDataPlaneEventDispatcher(callback=route_event)
 
-    transform_task = asyncio.create_task(
-        poll_sqs_queue(
-            MessageQueueName.TRANSFORM_QUEUE,
-            consumer.handle,
-            aws_endpoint,
-        )
+    transform_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.TRANSFORM_QUEUE,
+        handler=consumer.handle,
+        endpoint_url=aws_endpoint,
     )
+    transform_manager.start()
 
-    lifecycle_task = asyncio.create_task(
-        poll_sqs_queue(
-            MessageQueueName.LIFECYCLE_QUEUE,
-            consumer.handle,
-            aws_endpoint,
-        )
+    lifecycle_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.LIFECYCLE_QUEUE,
+        handler=consumer.handle,
+        endpoint_url=aws_endpoint,
     )
+    lifecycle_manager.start()
 
-    deliver_task = asyncio.create_task(
-        poll_sqs_queue(
-            MessageQueueName.DELIVER_QUEUE,
-            consumer.handle,
-            aws_endpoint,
-        )
+    deliver_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.DELIVER_QUEUE,
+        handler=consumer.handle,
+        endpoint_url=aws_endpoint,
     )
+    deliver_manager.start()
 
     # ─────────────────────────────────────────────────────────────
     # Run all workers concurrently
     # ─────────────────────────────────────────────────────────────
+    stop_event = asyncio.Event()
     try:
-        await asyncio.gather(transform_task, lifecycle_task, deliver_task)
+        import signal
+
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, stop_event.set)
+
+        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
+        for mgr in [transform_manager, lifecycle_manager, deliver_manager]:
+            # Use the new task property once it is exposed
+            task = getattr(mgr, "task", getattr(mgr, "_task", None))
+            if task:
+                tasks_to_wait.append(task)
+
+        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            if task is not tasks_to_wait[0] and task.exception():
+                exc = task.exception()
+                logger.error("sqs_consumer_manager_failed", exc_info=exc)
+                if exc:
+                    raise exc
     finally:
         logger.info("data_worker.shutting_down_gracefully")
-        transform_task.cancel()
-        lifecycle_task.cancel()
-        deliver_task.cancel()
-
-        import contextlib
-
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.gather(
-                transform_task,
-                lifecycle_task,
-                deliver_task,
-                return_exceptions=True,
-            )
+        results = await asyncio.gather(
+            transform_manager.stop(),
+            lifecycle_manager.stop(),
+            deliver_manager.stop(),
+            return_exceptions=True,
+        )
+        for res in results:
+            if isinstance(res, Exception):
+                logger.error("manager_stop_failed", exc_info=res)
 
         await db_router.close_all()
 

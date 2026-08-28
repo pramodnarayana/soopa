@@ -1,11 +1,11 @@
 import uuid
 
 import structlog
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.domain.events import PipelineEventType
 from edi.domain.models import EdiMessageDomainModel
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
-from edi.ports.outbound.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 

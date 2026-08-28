@@ -7,6 +7,7 @@
 # Enterprise Coding Standards (Strictly Enforced)
 - **Hexagonal Architecture**: Keep the domain isolated. Ports and Adapters must strictly separate business logic from external frameworks, APIs, and databases.
 - **SOLID Principles**: Adhere to Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion.
+- **No Silenced Failures**: NEVER use a bare `except Exception:` to silently swallow domain failures. If a domain or infrastructure error occurs, it MUST either be explicitly handled, re-raised, or properly bubbled up to the caller/infrastructure (e.g., triggering a NACK in a queue).
 - **Red-Green-Refactor Cycle**: Write failing tests first, make them pass, then refactor to clean up.
 - **Zero Mocks for Pure Logic**: Do not mock pure business logic. Domain models and core logic must be self-contained and testable without external mocks.
 - **Narrow Integration Tests**: Stop writing "forced" unit tests with excessive mocking just to hit coverage limits. Focus on writing Narrow Integration Tests that actually connect to databases/external systems via test harnesses to test real behavior.
@@ -18,6 +19,7 @@
 - **DRY (Don't Repeat Yourself)**: Avoid code duplication. Extract shared logic into reusable, well-named functions/modules.
 - **Chunked Database Mutations**: NEVER use unbounded `DELETE` or `UPDATE` queries that could lock massive datasets. Background jobs (like sweeping or data retention) MUST use a chunked iteration (e.g. a `while True` loop with a small `LIMIT`), commit on each iteration, and yield execution (`await asyncio.sleep(0.1)`) to allow PostgreSQL to run autovacuum and serve live API traffic.
 - **Strict API/Worker Decoupling**: NEVER run asynchronous background loops, Queue Pollers (SQS), or Outbox Relays inside the web API container (e.g., FastAPI `lifespan.py`). The web API container must be 100% pure and only serve HTTP requests. All background polling and async processing must be physically isolated into a dedicated worker container.
+- **No Magic Strings (Enterprise Constants)**: NEVER scatter raw "magic strings" or undocumented status codes throughout the codebase. Any string literal that holds semantic meaning (e.g., database error codes, state machine statuses, system event names) MUST be extracted into strongly-typed `Enum`s or explicit Constant classes.
 
 # Package Manager
 - ALWAYS use `pnpm` for frontend/Node.js package management instead of `npm`. Do not use `npm install`.

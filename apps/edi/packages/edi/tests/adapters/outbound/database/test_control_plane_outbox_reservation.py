@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from outbox.domain.constants import OutboxStatus
 
 from edi.adapters.outbound.database.outbox_repository import (
     SqlAlchemyControlPlaneOutboxRepository,
@@ -33,7 +34,7 @@ async def test_publish_finalizes_existing_idempotency_reservation():
     )
 
     assert event_id == "reservation-request-1"
-    assert reservation.status == "PENDING"
+    assert reservation.status == OutboxStatus.PENDING.value
     assert reservation.event_type == "edi.as2_partner.created"
     assert reservation.payload == {
         "fingerprint": "fingerprint-1",

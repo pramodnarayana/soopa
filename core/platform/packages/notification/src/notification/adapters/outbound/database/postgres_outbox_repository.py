@@ -5,6 +5,7 @@ from typing import Any, cast
 import structlog
 from database.events import EventEnvelope
 from database.models.notifications import NotificationOutbox
+from outbox.domain.constants import OutboxStatus
 from sqlalchemy import case, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,15 +46,15 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                         NotificationOutbox.id.in_(
                             select(NotificationOutbox.id)
                             .where(
-                                NotificationOutbox.status == "PROCESSING",
+                                NotificationOutbox.status == OutboxStatus.PROCESSING.value,
                                 NotificationOutbox.updated_at < threshold,
                             )
                             .limit(500)
                         ),
-                        NotificationOutbox.status == "PROCESSING",
+                        NotificationOutbox.status == OutboxStatus.PROCESSING.value,
                         NotificationOutbox.updated_at < threshold,
                     )
-                    .values(status="PENDING", owner_token=None)
+                    .values(status=OutboxStatus.PENDING.value, owner_token=None)
                 )
                 result = await session.execute(stmt)
                 swept = cast(CursorResult[Any], result).rowcount
@@ -74,7 +75,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
             # 1. Select for update skip locked
             stmt = (
                 select(NotificationOutbox.id)
-                .where(NotificationOutbox.status == "PENDING")
+                .where(NotificationOutbox.status == OutboxStatus.PENDING.value)
                 .order_by(NotificationOutbox.created_at.asc())
                 .limit(limit)
                 .with_for_update(skip_locked=True)
@@ -91,7 +92,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                 update(NotificationOutbox)
                 .where(NotificationOutbox.id.in_(message_ids))
                 .values(
-                    status="PROCESSING",
+                    status=OutboxStatus.PROCESSING.value,
                     owner_token=worker_id,
                     updated_at=now,
                     lease_expires_at=now + timedelta(milliseconds=lock_lease_ms),
@@ -121,7 +122,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                     NotificationOutbox.id == message_id,
                     NotificationOutbox.owner_token == worker_id,
                 )
-                .values(status="COMPLETED", updated_at=datetime.now(UTC))
+                .values(status=OutboxStatus.PROCESSED.value, updated_at=datetime.now(UTC))
             )
             result = await session.execute(stmt)
             if cast(CursorResult[Any], result).rowcount == 0:
@@ -141,8 +142,8 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                 )
                 .values(
                     status=case(
-                        (NotificationOutbox.attempts + 1 >= 3, "FAILED"),
-                        else_="PENDING",
+                        (NotificationOutbox.attempts + 1 >= 3, OutboxStatus.FAILED.value),
+                        else_=OutboxStatus.PENDING.value,
                     ),
                     attempts=NotificationOutbox.attempts + 1,
                     owner_token=None,
@@ -158,3 +159,20 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                     message_id=message_id,
                     worker_id=worker_id,
                 )
+
+
+class SqlAlchemyNotificationOutboxPublisher:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def save(self, message: EventEnvelope) -> None:
+        import os
+
+        orm_msg = NotificationOutbox(
+            id=message.id or f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+            tenant_id=message.tenant_id,
+            event_type=message.event_type,
+            idempotency_key=message.idempotency_key,
+            payload=message.payload,
+        )
+        self.session.add(orm_msg)

@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 from typing import Literal
 
-from identity.domain.aggregate_root import AggregateRoot
+from seedwork.models import AggregateRoot
+
 from identity.domain.events import (
     UserDeletedEvent,
     UserMembershipRemovedEvent,

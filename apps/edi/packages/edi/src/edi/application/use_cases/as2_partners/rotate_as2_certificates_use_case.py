@@ -1,6 +1,7 @@
 from typing import Any
 
 import structlog
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.application.dto import RotateAS2CertificateCmd
 from edi.config.constants import SecretCategory
@@ -13,7 +14,6 @@ from edi.domain.exceptions import (
     PartnerNotFoundError,
 )
 from edi.domain.models import AS2PartnerDomainModel
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

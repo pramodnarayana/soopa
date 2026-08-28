@@ -10,6 +10,7 @@ from notification.domain.models import NotificationOutboxEvent
 from outbox.application.outbox_sweeper_use_case import (
     OutboxSweeperUseCase,
 )
+from outbox.domain.constants import OutboxStatus
 from sqlalchemy import select
 
 
@@ -79,5 +80,5 @@ async def test_outbox_sweeper_integration(db_session_factory):
         outbox_row = result.scalars().first()
 
         assert outbox_row is not None
-        assert outbox_row.status == "COMPLETED"
+        assert outbox_row.status == OutboxStatus.PROCESSED.value
         assert outbox_row.owner_token is not None

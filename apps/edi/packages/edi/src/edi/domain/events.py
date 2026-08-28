@@ -65,6 +65,18 @@ class ProvisioningEvent:
     resource_id: str | None = None
 
 
+@dataclass(frozen=True)
+class TransformRequestedEvent:
+    trace_id: str
+    tenant_id: str
+    trading_partner_id: str | None = None
+    sender_id: str | None = None
+    receiver_id: str | None = None
+    direction: str | None = None
+    edi_message_id: str | None = None
+    status: str | None = None
+
+
 class MessageQueueName(StrEnum):
     TRANSFORM_QUEUE = "edi-transform.fifo"
     LIFECYCLE_QUEUE = "edi-lifecycle.fifo"
@@ -72,6 +84,8 @@ class MessageQueueName(StrEnum):
     PROVISIONING_QUEUE = "edi-config-sync-queue.fifo"
     CDC_DLQ_QUEUE = "edi-cdc-dlq.fifo"
     PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications.fifo"
+    DATA_PLANE_JOBS_QUEUE = "edi-data-plane-jobs.fifo"
+    CONTROL_PLANE_JOBS_QUEUE = "edi-control-plane-jobs.fifo"
 
 
 PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {

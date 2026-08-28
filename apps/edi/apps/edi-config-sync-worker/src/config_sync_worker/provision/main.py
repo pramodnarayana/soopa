@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 import structlog
 from dotenv import load_dotenv
@@ -8,12 +9,13 @@ from edi.domain.events import MessageQueueName
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
-from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
-    EdiConfigSyncSqsConsumer,
+from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
+    EdiConfigSyncSqsDispatcher,
 )
 from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
     PostgresEdiControlPlaneOutboxRepository,
@@ -23,33 +25,6 @@ from config_sync_worker.domain.service import ProvisioningWorkerService
 load_dotenv()
 
 logger = structlog.get_logger(__name__)
-
-
-async def run_worker(service: ProvisioningWorkerService, name: str) -> None:
-    bound_logger = logger.bind(worker_name=name)
-    bound_logger.info("worker_started")
-
-    async def _poll_loop() -> None:
-        while True:
-            try:
-                processed_event = await service.process_next_event()
-                # If no event was processed, yield/sleep briefly
-                if not processed_event:
-                    await asyncio.sleep(0.1)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                bound_logger.exception("provisioning_loop_error")
-                await asyncio.sleep(5)
-
-    try:
-        if hasattr(service.outbox_port, "__aenter__"):
-            async with service.outbox_port:
-                await _poll_loop()
-        else:
-            await _poll_loop()
-    except asyncio.CancelledError:
-        pass
 
 
 async def main() -> None:
@@ -62,19 +37,25 @@ async def main() -> None:
 
     # 1. AWS SQS Consumer (Data Plane Replication)
     logger.info("initializing_sqs_consumer")
-    sqs_outbox = EdiConfigSyncSqsConsumer(
-        queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
-        endpoint_url=settings.aws.endpoint_url,
-        region=settings.aws.default_region,
-    )
     translator = DefaultEventTranslator()
-    replication_service = ProvisioningWorkerService(
-        tenant_adapter, sqs_outbox, replication_adapter, translator
-    )
-    replication_task = asyncio.create_task(
-        run_worker(replication_service, "EdiDataPlaneReplicationWorker")
+    replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
+    dispatcher = EdiConfigSyncSqsDispatcher(
+        domain_service=replication_service, translator_port=translator
     )
 
+    sqs_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
+        handler=dispatcher.dispatch_raw,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+    sqs_manager.start()
+
+    import signal
+
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop_event.set)
     # Instantiate Adapters for Outbox Relay
     outbox_relay_repository = PostgresEdiControlPlaneOutboxRepository(db_router=db_router)
     outbox_relay_publisher = AwsSnsPublisher(
@@ -98,18 +79,29 @@ async def main() -> None:
     try:
         async with outbox_relay_publisher:
             outbox_listener.start()
-            await replication_task
+
+            # Wait for stop signal, or if sqs_manager/outbox_listener fails
+            manager_task = sqs_manager.task
+            tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
+            if manager_task:
+                tasks_to_wait.append(manager_task)
+
+            done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
+
+            # If the manager task completed with an exception, re-raise it
+            for task in done:
+                if task is manager_task and task.exception():
+                    exc = task.exception()
+                    logger.error("sqs_consumer_manager_failed", exc_info=exc)
+                    if exc:
+                        raise exc
+
     finally:
         logger.info("shutting_down_gracefully")
-        replication_task.cancel()
+        await sqs_manager.stop()
         await outbox_listener.stop()
-        import contextlib
-
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.gather(replication_task, return_exceptions=True)
 
         # Close adapter resources
-        await sqs_outbox.close()
         await db_router.close_all()
 
 

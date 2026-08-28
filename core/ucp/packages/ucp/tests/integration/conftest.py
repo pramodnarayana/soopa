@@ -7,23 +7,18 @@ from typing import Any
 os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+)
 import asyncio
 import os
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from alembic import command
-from alembic.config import Config
 from database.provider import get_async_engine
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from testcontainers.community.postgres import PostgresContainer
-from testcontainers.core.container import DockerContainer
-from testcontainers.core.waiting_utils import wait_for_logs
 from unified_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
 from unified_api.main import app
 
@@ -68,31 +63,15 @@ def event_loop() -> "Any":
 
 
 @pytest.fixture(scope="session")
-def postgres_container(request) -> "Any":
-    postgres = PostgresContainer("postgres:15-alpine")
-    postgres.start()
-    request.addfinalizer(postgres.stop)
-    return postgres
-
-
-@pytest.fixture(scope="session")
 def localstack_container(request) -> "Any":
-    localstack = DockerContainer("localstack/localstack:3.4.0")
-    localstack.with_exposed_ports(4566)
-    localstack.with_env("SERVICES", "sns,sqs")
+    endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
-    localstack.start()
-    request.addfinalizer(localstack.stop)
-
-    wait_for_logs(localstack, r"Ready\.")
-
-    endpoint_url = (
-        f"http://{localstack.get_container_host_ip()}:{localstack.get_exposed_port(4566)}"
-    )
-
-    import os
+    import json
+    import uuid
 
     import boto3
+
+    unique_suffix = uuid.uuid4().hex[:8]
 
     sns_client = boto3.client(
         "sns",
@@ -109,26 +88,28 @@ def localstack_container(request) -> "Any":
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
     )
 
+    tenant_topic_name = f"ucp-tenant-events-{unique_suffix}.fifo"
+    user_topic_name = f"ucp-user-events-{unique_suffix}.fifo"
+    queue_name = f"ucp-identity-sync-{unique_suffix}.fifo"
+
     # 1. Create SNS Topics
     tenant_topic = sns_client.create_topic(
-        Name="ucp-tenant-events.fifo",
+        Name=tenant_topic_name,
         Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
     )
     user_topic = sns_client.create_topic(
-        Name="ucp-user-events.fifo",
+        Name=user_topic_name,
         Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
     )
 
     # 2. Create SQS Queue
     queue = sqs_client.create_queue(
-        QueueName="ucp-identity-sync.fifo",
+        QueueName=queue_name,
         Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
     )
 
     attrs = sqs_client.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
     queue_arn = attrs["Attributes"]["QueueArn"]
-
-    import json
 
     policy = {
         "Version": "2012-10-17",
@@ -161,62 +142,40 @@ def localstack_container(request) -> "Any":
         "endpoint_url": endpoint_url,
         "sns_topic_arn": tenant_topic["TopicArn"],
         "sqs_queue_url": queue["QueueUrl"],
-        "sqs_queue_name": "ucp-identity-sync.fifo",
+        "sqs_queue_name": queue_name,
     }
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_engine(postgres_container) -> "Any":
-    db_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+async def db_engine() -> "Any":
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
     engine = get_async_engine(db_url)
-
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
-
-    # Run Alembic migrations programmatically
-    alembic_ini_path = (
-        Path(__file__).resolve().parents[6]
-        / "core"
-        / "platform"
-        / "packages"
-        / "database"
-        / "alembic.ini"
-    )
-    alembic_cfg = Config(str(alembic_ini_path))
-
-    # Store old DATABASE_URL and inject the testcontainer URL
-    old_db_url = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = db_url
-
-    try:
-        # command.upgrade blocks and runs migrations synchronously
-        # We run it in a separate thread so its internal asyncio.run() doesn't conflict with pytest-asyncio
-        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
-    finally:
-        # Restore environment
-        if old_db_url is not None:
-            os.environ["DATABASE_URL"] = old_db_url
-        else:
-            os.environ.pop("DATABASE_URL", None)
-
     yield engine
     await engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(db_engine) -> "Any":
-    SessionLocal = async_sessionmaker(bind=db_engine, expire_on_commit=False, class_=AsyncSession)
+    connection = await db_engine.connect()
+    transaction = await connection.begin()
+
+    SessionLocal = async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
     session = SessionLocal()
     yield session
+
     await session.close()
+    await transaction.rollback()
+    await connection.close()
 
 
 @pytest_asyncio.fixture(scope="function")

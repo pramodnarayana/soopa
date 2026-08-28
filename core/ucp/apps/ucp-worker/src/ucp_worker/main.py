@@ -28,9 +28,10 @@ async def main() -> None:
         try:
             async with consumer as active_consumer:
                 while True:
-                    async with active_consumer.poll_raw_message() as body:
-                        if body:
-                            await scheduled_jobs_processor(body)
+                    async with active_consumer.poll_raw_message() as ackable_msg:
+                        if ackable_msg:
+                            await scheduled_jobs_processor(ackable_msg.payload)
+                            await ackable_msg.ack()
         except asyncio.CancelledError:
             pass
         except Exception:

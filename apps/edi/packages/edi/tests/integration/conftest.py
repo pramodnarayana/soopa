@@ -10,16 +10,9 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-
-# Assuming Alembic is used for migrations. We can run it programmatically.
-# Or we can just use BaseModel.metadata.create_all(bind=engine) for tests.
-from database.models.core import GlobalRegistry
 from database.provider import get_async_engine
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from testcontainers.community.postgres import PostgresContainer
-
-from edi.adapters.outbound.database.models.data_plane import TenantBase
 
 
 @pytest.fixture(scope="session")
@@ -29,69 +22,82 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture(scope="session")
-def postgres_container(request):
-    """Spin up a real Postgres database for the test session."""
-    postgres = PostgresContainer("postgres:15-alpine")
-    postgres.start()
-    request.addfinalizer(postgres.stop)
-    return postgres
-
-
 @pytest_asyncio.fixture(scope="function")
-async def db_engine(postgres_container):
-    """Create an async SQLAlchemy engine pointing to the testcontainer."""
-    # testcontainers gives synchronous URL. We replace driver for asyncpg.
-    db_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+async def db_engine():
+    """Create an async SQLAlchemy engine pointing to the test database."""
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
     engine = get_async_engine(db_url)
-
-    # Initialize the schema
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
-
-        # Ensure all models are imported so they are registered with GlobalRegistry
-
-        await conn.run_sync(GlobalRegistry.metadata.drop_all)
-        await conn.run_sync(TenantBase.metadata.drop_all)
-        await conn.run_sync(GlobalRegistry.metadata.create_all)
-        await conn.run_sync(TenantBase.metadata.create_all)
-
     yield engine
     await engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(db_engine):
-    """
-    Provide an AsyncSession that rolls back after each test.
-    This guarantees test isolation.
-    """
+async def db_connection(db_engine):
+    """Provide a connection with an active transaction that rolls back after each test."""
     connection = await db_engine.connect()
     transaction = await connection.begin()
-
-    SessionLocal = async_sessionmaker(bind=connection, expire_on_commit=False, class_=AsyncSession)
-
-    session = SessionLocal()
-    yield session
-    await session.close()
+    yield connection
     await transaction.rollback()
     await connection.close()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def override_get_global_session(db_engine):
+async def tenant_db_engine():
+    """Create an async SQLAlchemy engine pointing to the tenant shard test database."""
+    db_url = os.getenv(
+        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    )
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    engine = get_async_engine(db_url)
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def tenant_db_connection(tenant_db_engine):
+    """Provide a connection with an active transaction that rolls back after each test."""
+    connection = await tenant_db_engine.connect()
+    transaction = await connection.begin()
+    yield connection
+    await transaction.rollback()
+    await connection.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(db_connection):
+    """
+    Provide an AsyncSession that rolls back after each test.
+    This guarantees test isolation.
+    """
+    SessionLocal = async_sessionmaker(
+        bind=db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
+
+    session = SessionLocal()
+    yield session
+    await session.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def override_get_global_session(db_connection):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
-        bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "global"}
+        bind=db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        info={"session_type": "global"},
+        join_transaction_mode="create_savepoint",
     )
 
     async def _override():
@@ -102,11 +108,15 @@ async def override_get_global_session(db_engine):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def override_get_tenant_session(db_engine):
+async def override_get_tenant_session(tenant_db_connection):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
-        bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "tenant"}
+        bind=tenant_db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        info={"session_type": "tenant"},
+        join_transaction_mode="create_savepoint",
     )
     from fastapi import Depends
     from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id

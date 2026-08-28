@@ -145,10 +145,10 @@ class Role(IdentityBase, SoftDeleteMixin):
     ID_PREFIX = "rol"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    tenant_id: Mapped[str | None] = mapped_column(
+    tenant_id: Mapped[str] = mapped_column(
         String(128),
         ForeignKey("identity.tenants.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -181,8 +181,8 @@ class UserRole(IdentityBase):
     ID_PREFIX = "urol"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    tenant_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=True
+    tenant_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("identity.tenants.id", ondelete="CASCADE"), nullable=False
     )
     user_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("identity.users.id", ondelete="CASCADE"), nullable=False
@@ -212,7 +212,7 @@ class IdentityOutbox(IdentityBase, OutboxMixin):
     ID_PREFIX = "id_ob"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
     __table_args__ = (
         Index(

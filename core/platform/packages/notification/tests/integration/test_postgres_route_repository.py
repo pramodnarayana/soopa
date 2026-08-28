@@ -33,9 +33,9 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
         )
         session.add(route)
 
-    # Execute
-    repo = SqlAlchemyNotificationRouteRepository(db_session_factory)
-    channels = await repo.get_channels(tenant_id, event_type)
+    async with db_session_factory() as session:
+        repo = SqlAlchemyNotificationRouteRepository(session)
+        channels = await repo.get_channels(tenant_id, event_type)
 
     # Verify
     assert len(channels) == 2
@@ -45,6 +45,7 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
 
 @pytest.mark.asyncio
 async def test_get_channels_returns_empty_when_no_route(db_session_factory):
-    repo = SqlAlchemyNotificationRouteRepository(db_session_factory)
-    channels = await repo.get_channels("non-existent", "test.event.fired")
-    assert channels == []
+    async with db_session_factory() as session:
+        repo = SqlAlchemyNotificationRouteRepository(session)
+        channels = await repo.get_channels("non-existent", "test.event.fired")
+        assert channels == []

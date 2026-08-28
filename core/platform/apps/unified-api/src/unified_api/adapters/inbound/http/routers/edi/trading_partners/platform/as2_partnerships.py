@@ -1,6 +1,7 @@
 from typing import Any
 
 import structlog
+from database.exceptions import DuplicateEntityError
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
@@ -11,13 +12,20 @@ from edi.application.dto import (
     SignatureAlgorithm,
     UpdateAS2PartnershipCmd,
 )
-from edi.application.use_cases import AS2PartnershipService
+from edi.application.use_cases.as2_partnerships.create_as2_partnership_use_case import (
+    CreateAS2PartnershipUseCase,
+)
+from edi.application.use_cases.as2_partnerships.delete_as2_partnership_use_case import (
+    DeleteAS2PartnershipUseCase,
+)
+from edi.application.use_cases.as2_partnerships.update_as2_partnership_use_case import (
+    UpdateAS2PartnershipUseCase,
+)
 from edi.domain.exceptions import OrchestrationError
 from edi.ports.outbound.as2_tester import AS2TesterPort
-from edi.ports.outbound.secret_store import SecretStorePort
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy.exc import IntegrityError
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.services import (
@@ -163,7 +171,7 @@ async def create_platform_as2_partnership(
                 advanced_flags=request.advanced_flags,
             )
 
-            svc = AS2PartnershipService(uow=uow)
+            svc = CreateAS2PartnershipUseCase(uow=uow)
             entity = await svc.create_as2_partnership(tenant_id=PLATFORM_TENANT_ID, cmd=cmd)
             await uow.commit()
             p = await uow.as2_partnerships.get_as2_partnership(
@@ -187,7 +195,7 @@ async def create_platform_as2_partnership(
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except IntegrityError as e:
+    except DuplicateEntityError as e:
         raise HTTPException(
             status_code=400, detail="AS2 Partnership already exists for these partners."
         ) from e
@@ -222,7 +230,7 @@ async def update_platform_as2_partnership(
                 advanced_flags=get_val("advanced_flags"),
                 active=get_val("active"),
             )
-            svc = AS2PartnershipService(uow=uow)
+            svc = UpdateAS2PartnershipUseCase(uow=uow)
             await svc.update_as2_partnership(
                 tenant_id=PLATFORM_TENANT_ID, partnership_id=partnership_id, cmd=cmd
             )
@@ -249,7 +257,7 @@ async def update_platform_as2_partnership(
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except IntegrityError as e:
+    except DuplicateEntityError as e:
         raise HTTPException(
             status_code=400, detail="AS2 Partnership already exists for these partners."
         ) from e
@@ -270,7 +278,7 @@ async def delete_platform_as2_partnership(
 ) -> None:
     try:
         async with uow:
-            svc = AS2PartnershipService(uow=uow)
+            svc = DeleteAS2PartnershipUseCase(uow=uow)
             await svc.delete_as2_partnership(
                 tenant_id=PLATFORM_TENANT_ID, partnership_id=partnership_id
             )

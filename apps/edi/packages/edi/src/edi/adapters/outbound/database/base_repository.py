@@ -9,13 +9,10 @@ GlobalSession = NewType("GlobalSession", AsyncSession)
 TenantSession = NewType("TenantSession", AsyncSession)
 
 
-class BaseSqlAlchemyRepository:
-    """Base repository providing basic SQLAlchemy functionality."""
-
-    session: AsyncSession
+from database.repository import BaseSqlAlchemyRepository as PlatformBaseSqlAlchemyRepository
 
 
-class GlobalSqlAlchemyRepository(BaseSqlAlchemyRepository):
+class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
     """
     Base class for Control Plane repositories.
     Strictly enforces that the injected session is a GlobalSession.
@@ -34,7 +31,7 @@ class GlobalSqlAlchemyRepository(BaseSqlAlchemyRepository):
         self.session = session
 
 
-class TenantSqlAlchemyRepository(BaseSqlAlchemyRepository):
+class TenantSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
     """
     Base class for Data Plane / Shard repositories.
     Strictly enforces that the injected session is a TenantSession.

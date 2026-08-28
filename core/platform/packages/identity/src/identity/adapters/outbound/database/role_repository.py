@@ -1,30 +1,31 @@
 import os
 import uuid
-from typing import Any
 
 import structlog
+from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
 from database.models import Role as OrmRole
 from database.models import UserRole
 from database.models.identity import IdentityOutbox
 from database.outbox_serializer import serialize_domain_event
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from database.repository import BaseSqlAlchemyRepository
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role as DomainRole
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
-class PostgresRoleRepository(RoleRepositoryPort):
+class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
     """
     PostgreSQL adapter for the Role Repository.
     """
 
     def __init__(self, session: AsyncSession):
-        self.session = session
+        BaseSqlAlchemyRepository.__init__(self, session)
 
     async def get_by_id(self, role_id: str) -> DomainRole | None:
         stmt = select(OrmRole).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
@@ -42,7 +43,9 @@ class PostgresRoleRepository(RoleRepositoryPort):
 
     async def get_global_role_by_name(self, name: str) -> DomainRole | None:
         stmt = select(OrmRole).where(
-            OrmRole.name == name, OrmRole.tenant_id.is_(None), OrmRole.deleted_at.is_(None)
+            OrmRole.name == name,
+            OrmRole.tenant_id == PLATFORM_TENANT_ID,
+            OrmRole.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
@@ -60,7 +63,9 @@ class PostgresRoleRepository(RoleRepositoryPort):
         bound_logger = logger.bind()
         bound_logger.debug("role_repo.get_global_roles.started")
 
-        stmt = select(OrmRole).where(OrmRole.tenant_id.is_(None), OrmRole.deleted_at.is_(None))
+        stmt = select(OrmRole).where(
+            OrmRole.tenant_id == PLATFORM_TENANT_ID, OrmRole.deleted_at.is_(None)
+        )
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
 
@@ -82,19 +87,22 @@ class PostgresRoleRepository(RoleRepositoryPort):
         Queries the database for all roles assigned to the user within the given tenant,
         and aggregates their capabilities into a unified set.
         """
+        if tenant_id == "":
+            raise ValueError("tenant_id cannot be an empty string")
+        if tenant_id is None:
+            tenant_id = PLATFORM_TENANT_ID
+
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id)
         bound_logger.debug("role_repo.get_user_capabilities.started")
-
-        tenant_filter: Any
-        if tenant_id is None:
-            tenant_filter = UserRole.tenant_id.is_(None)
-        else:
-            tenant_filter = UserRole.tenant_id == tenant_id
 
         stmt = (
             select(OrmRole.capabilities)
             .join(UserRole, OrmRole.id == UserRole.role_id)
-            .where(tenant_filter, UserRole.user_id == user_id, OrmRole.deleted_at.is_(None))
+            .where(
+                UserRole.tenant_id == tenant_id,
+                UserRole.user_id == user_id,
+                OrmRole.deleted_at.is_(None),
+            )
         )
 
         result = await self.session.execute(stmt)
@@ -134,25 +142,32 @@ class PostgresRoleRepository(RoleRepositoryPort):
             self.session.add(orm_role)
 
         self._flush_events(role)
+        # Flush the session automatically intercepting errors
+        await self.flush()
 
     async def assign_user_role(self, tenant_id: str | None, user_id: str, role_id: str) -> None:
+        if tenant_id == "":
+            raise ValueError("tenant_id cannot be an empty string")
+        if tenant_id is None:
+            tenant_id = PLATFORM_TENANT_ID
+
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id, role_id=role_id)
         bound_logger.info("role_repo.assign_user_role.started")
 
         # Verify the role exists, is not soft-deleted, and has appropriate scope
-        if tenant_id is None:
-            # Assigning a global role: must be a global role (tenant_id IS NULL)
+        if tenant_id == PLATFORM_TENANT_ID:
+            # Assigning a global role: must be a global role
             stmt = select(OrmRole.id).where(
                 OrmRole.id == role_id,
                 OrmRole.deleted_at.is_(None),
-                OrmRole.tenant_id.is_(None),
+                OrmRole.tenant_id == PLATFORM_TENANT_ID,
             )
         else:
             # Assigning a tenant-scoped role: accept global roles OR tenant-specific roles
             stmt = select(OrmRole.id).where(
                 OrmRole.id == role_id,
                 OrmRole.deleted_at.is_(None),
-                (OrmRole.tenant_id.is_(None) | (OrmRole.tenant_id == tenant_id)),
+                (OrmRole.tenant_id == PLATFORM_TENANT_ID) | (OrmRole.tenant_id == tenant_id),
             )
         result = await self.session.execute(stmt)
         if not result.scalar_one_or_none():
@@ -167,28 +182,29 @@ class PostgresRoleRepository(RoleRepositoryPort):
         )
         self.session.add(user_role)
         try:
-            await self.session.flush()
-        except IntegrityError as e:
-            constraint_name = (
-                getattr(e.orig, "constraint_name", None) if hasattr(e, "orig") else None
-            )
+            await self.flush()
+        except DuplicateEntityError as e:
             logger.exception(
-                "role_repo.assign_user_role.integrity_error",
+                "role_repo.assign_user_role.duplicate_entity_error",
                 tenant_id=tenant_id,
                 user_id=user_id,
                 role_id=role_id,
-                constraint_name=constraint_name,
-                reason=str(e.orig) if hasattr(e, "orig") else str(e),
+                constraint_name=e.constraint_name,
             )
             # Check for unique violation on user_role assignment
-            if (
-                constraint_name
-                and "user_role" in constraint_name
-                and "unique" in constraint_name.lower()
-            ):
+            if e.constraint_name and e.constraint_name == "uix_user_roles_tenant_user_role":
                 raise IdempotencyConflictError(
                     f"Role '{role_id}' is already assigned to user '{user_id}' in tenant '{tenant_id}'."
                 ) from e
+            raise
+        except ForeignKeyViolationError as e:
+            logger.exception(
+                "role_repo.assign_user_role.foreign_key_error",
+                tenant_id=tenant_id,
+                user_id=user_id,
+                role_id=role_id,
+                constraint_name=e.constraint_name,
+            )
             # Foreign key violations indicate missing user or role
             raise ResourceNotFoundError(
                 f"Cannot assign role: User '{user_id}' or Role '{role_id}' not found."
@@ -197,18 +213,18 @@ class PostgresRoleRepository(RoleRepositoryPort):
         bound_logger.info("role_repo.assign_user_role.completed")
 
     async def remove_user_roles(self, tenant_id: str | None, user_id: str) -> None:
-        from sqlalchemy import delete
+        if tenant_id == "":
+            raise ValueError("tenant_id cannot be an empty string")
+        if tenant_id is None:
+            tenant_id = PLATFORM_TENANT_ID
 
         bound_logger = logger.bind(tenant_id=tenant_id, user_id=user_id)
         bound_logger.info("role_repo.remove_user_roles.started")
 
-        tenant_filter = (
-            UserRole.tenant_id.is_(None) if tenant_id is None else UserRole.tenant_id == tenant_id
-        )
-        stmt = delete(UserRole).where(tenant_filter, UserRole.user_id == user_id)
+        stmt = delete(UserRole).where(UserRole.tenant_id == tenant_id, UserRole.user_id == user_id)
 
         await self.session.execute(stmt)
-        await self.session.flush()
+        await self.flush()
 
         bound_logger.info("role_repo.remove_user_roles.completed")
 
@@ -219,7 +235,7 @@ class PostgresRoleRepository(RoleRepositoryPort):
             .join(OrmRole, OrmRole.id == UserRole.role_id)
             .where(
                 UserRole.user_id == user_id,
-                UserRole.tenant_id.is_not(None),
+                UserRole.tenant_id != PLATFORM_TENANT_ID,
                 OrmRole.deleted_at.is_(None),
             )
             .limit(1)
@@ -233,11 +249,7 @@ class PostgresRoleRepository(RoleRepositoryPort):
             event_name = event.event_name
 
             payload_dict = serialize_domain_event(event)
-            tenant_id = event.get_routing_tenant_id()
-            if tenant_id is None:
-                from identity.domain.identity_context import PLATFORM_TENANT_ID
-
-                tenant_id = PLATFORM_TENANT_ID
+            tenant_id = event.get_routing_tenant_id() or PLATFORM_TENANT_ID
 
             final_idemp_key = (
                 f"{idempotency_key}_{index}"

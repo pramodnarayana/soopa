@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, cast
 
 from database.events import EventEnvelope
+from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
@@ -21,16 +22,16 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
         total_swept = 0
         async with self.session_factory() as session:
             while True:
-                query = text("""
+                query = text(f"""
                     WITH cte AS (
                         SELECT id FROM identity.outbox
-                        WHERE status = 'PROCESSING'
+                        WHERE status = '{OutboxStatus.PROCESSING.value}'
                           AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
                         LIMIT 5000
                         FOR UPDATE SKIP LOCKED
                     )
                     UPDATE identity.outbox
-                    SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
+                    SET status = '{OutboxStatus.PENDING.value}', lease_expires_at = NULL, owner_token = NULL
                     WHERE id IN (SELECT id FROM cte)
                 """)
                 result = cast(
@@ -49,14 +50,14 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
         self, worker_id: str, limit: int, lock_lease_ms: int
     ) -> list[EventEnvelope]:
         async with self.session_factory() as session:
-            query = text("""
+            query = text(f"""
                 UPDATE identity.outbox
-                SET status = 'PROCESSING', updated_at = NOW(),
+                SET status = '{OutboxStatus.PROCESSING.value}', updated_at = NOW(),
                     lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms,
                     owner_token = :worker_id
                 WHERE id IN (
                     SELECT id FROM identity.outbox
-                    WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
+                    WHERE (status = '{OutboxStatus.PENDING.value}' OR (status = '{OutboxStatus.PROCESSING.value}' AND lease_expires_at < NOW()))
                     ORDER BY created_at ASC
                     LIMIT :limit
                     FOR UPDATE SKIP LOCKED
@@ -90,22 +91,22 @@ class PostgresIdentityOutboxRepository(OutboxRepositoryPort):
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
         async with self.session_factory() as session:
-            query = text("""
+            query = text(f"""
                 UPDATE identity.outbox
-                SET status = 'COMPLETED', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
-                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
+                SET status = '{OutboxStatus.PROCESSED.value}', lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
+                WHERE id = :event_id AND status = '{OutboxStatus.PROCESSING.value}' AND owner_token = :worker_id
             """)
             await session.execute(query, {"event_id": event_id, "worker_id": worker_id})
             await session.commit()
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
         async with self.session_factory() as session:
-            query = text("""
+            query = text(f"""
                 UPDATE identity.outbox
-                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+                SET status = CASE WHEN attempts + 1 >= :max_attempts THEN '{OutboxStatus.FAILED.value}' ELSE '{OutboxStatus.PENDING.value}' END,
                     attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL,
                     updated_at = NOW(), error_reason = :error_message
-                WHERE id = :event_id AND status = 'PROCESSING' AND owner_token = :worker_id
+                WHERE id = :event_id AND status = '{OutboxStatus.PROCESSING.value}' AND owner_token = :worker_id
             """)
             await session.execute(
                 query,

@@ -4,7 +4,6 @@ import signal
 
 import structlog
 from dotenv import load_dotenv
-from edi.adapters.inbound.messaging.sqs_poller import poll_sqs_queue
 from edi.adapters.outbound.database.connection import DatabaseRouter
 
 # We need the outbox publisher and sqs poller
@@ -13,8 +12,10 @@ from edi.adapters.outbound.messaging.edi_data_plane_sqs_outbox_publisher import 
     EdiDataPlaneSqsOutboxPublisherAdapter,
 )
 from edi.config.settings import get_settings
+from edi.domain.events import MessageQueueName
 from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from edi_background_worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
@@ -132,40 +133,58 @@ async def main() -> None:
         EdiControlPlaneOutboxCleanupJobHandler(OutboxCleanupUseCase(edi_cp_outbox_cleanup_repo)),
     )
 
-    data_plane_jobs_task = asyncio.create_task(
-        poll_sqs_queue(
-            "edi-data-plane-jobs.fifo",
-            functools.partial(process_scheduled_job, registry=job_registry),
-            aws_endpoint,
-        )
+    dp_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
+        handler=functools.partial(process_scheduled_job, registry=job_registry),
+        endpoint_url=aws_endpoint,
     )
-    control_plane_jobs_task = asyncio.create_task(
-        poll_sqs_queue(
-            "edi-control-plane-jobs.fifo",
-            functools.partial(process_scheduled_job, registry=job_registry),
-            aws_endpoint,
-        )
+    dp_manager.start()
+
+    cp_manager = SqsConsumerManager(
+        queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,
+        handler=functools.partial(process_scheduled_job, registry=job_registry),
+        endpoint_url=aws_endpoint,
     )
+    cp_manager.start()
+
+    stop_event = asyncio.Event()
 
     def shutdown_handler(*args: object) -> None:
         logger.info("edi_background_worker_shutdown_signal_received")
-        data_plane_jobs_task.cancel()
-        control_plane_jobs_task.cancel()
+        stop_event.set()
 
     loop = asyncio.get_running_loop()
     loop.add_signal_handler(signal.SIGINT, shutdown_handler)
     loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
 
     try:
-        await asyncio.gather(data_plane_jobs_task, control_plane_jobs_task)
+        stop_task = asyncio.create_task(stop_event.wait())
+        tasks = [stop_task]
+        if dp_manager._task:
+            tasks.append(dp_manager._task)
+        if cp_manager._task:
+            tasks.append(cp_manager._task)
+
+        done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in done:
+            if task is not stop_task and task.exception():
+                logger.error("sqs_consumer_manager_failed", exc_info=task.exception())
+                raise task.exception()
     except asyncio.CancelledError:
         logger.info("edi_background_worker_cancelled")
     except Exception:
         logger.exception("edi_background_worker_failed")
+        raise
     finally:
-        data_plane_jobs_task.cancel()
-        control_plane_jobs_task.cancel()
-        await asyncio.gather(data_plane_jobs_task, control_plane_jobs_task, return_exceptions=True)
+        results = await asyncio.gather(
+            dp_manager.stop(),
+            cp_manager.stop(),
+            return_exceptions=True,
+        )
+        for res in results:
+            if isinstance(res, Exception):
+                logger.error("manager_stop_failed", exc_info=res)
         logger.info("edi_background_worker_stopped")
         await db_router.close_all()
 

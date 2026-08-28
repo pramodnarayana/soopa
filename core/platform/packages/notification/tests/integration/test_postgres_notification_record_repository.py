@@ -25,15 +25,21 @@ async def test_save_notification_persists_to_database(db_session_factory):
         session.add(tenant)
         session.add(user)
 
-    repo = SqlAlchemyNotificationRecordRepository(db_session_factory)
-
     # Execute
-    await repo.save_notification(
-        tenant_id=tenant_id,
-        content="This is the message body.",
-        subject="Important Alert",
-        data={"tx_id": "123", "target_user_id": "user-123"},
-    )
+    async with db_session_factory() as session:
+        repo = SqlAlchemyNotificationRecordRepository(session)
+        from notification.domain.models import Channel, NotificationDispatch
+
+        dispatch = NotificationDispatch.create(
+            tenant_id=tenant_id,
+            channel=Channel.IN_APP,
+            subject="Important Alert",
+            body="This is the message body.",
+            data={"tx_id": "123", "target_user_id": "user-123"},
+            idempotency_key="idemp_123",
+        )
+        await repo.save(dispatch)
+        await session.commit()
 
     # Verify
     async with db_session_factory() as session:

@@ -3,6 +3,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from seedwork.models import AggregateRoot
+
+from notification.domain.events import NotificationDispatchedEvent
+
 
 class Channel(StrEnum):
     EMAIL = "EMAIL"
@@ -58,3 +62,45 @@ class UserNotificationPreference:
 
 # Platform-level sentinel tenant ID used for global default notification templates.
 PLATFORM_TENANT_ID = "ten_000"
+
+
+@dataclass
+class NotificationDispatch(AggregateRoot):
+    id: str
+    tenant_id: str
+    channel: Channel
+    subject: str | None
+    body: str
+    data: dict[str, Any]
+    target_user_id: str | None
+
+    @classmethod
+    def create(
+        cls,
+        tenant_id: str,
+        channel: Channel,
+        subject: str | None,
+        body: str,
+        data: dict[str, Any],
+        idempotency_key: str,
+    ) -> "NotificationDispatch":
+        dispatch = cls(
+            id=idempotency_key,
+            tenant_id=tenant_id,
+            channel=channel,
+            subject=subject,
+            body=body,
+            data=data,
+            target_user_id=data.get("user_id") or data.get("target_user_id"),
+        )
+        dispatch.add_domain_event(
+            NotificationDispatchedEvent(
+                tenant_id=tenant_id,
+                channel=channel.value,
+                subject=subject,
+                content=body,
+                data=data,
+                id=idempotency_key,
+            )
+        )
+        return dispatch

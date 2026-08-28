@@ -10,7 +10,18 @@ from edi.application.dto import (
     UpdateInboundRouteCmd,
     UpdateOutboundRouteCmd,
 )
-from edi.application.use_cases import InboundRouteService
+from edi.application.use_cases.inbound_routes.create_inbound_route_use_case import (
+    CreateInboundRouteUseCase,
+)
+from edi.application.use_cases.inbound_routes.delete_inbound_route_use_case import (
+    DeleteInboundRouteUseCase,
+)
+from edi.application.use_cases.inbound_routes.list_inbound_routes_use_case import (
+    ListInboundRoutesUseCase,
+)
+from edi.application.use_cases.inbound_routes.update_inbound_route_use_case import (
+    UpdateInboundRouteUseCase,
+)
 from edi.application.use_cases.outbound_routes import (
     CreateOutboundRouteUseCase,
     DeleteOutboundRouteUseCase,
@@ -46,7 +57,7 @@ async def list_routes(
     List all Active Routes for the current Tenant.
     """
     async with uow:
-        inbound_service = InboundRouteService(uow=uow)
+        inbound_service = ListInboundRoutesUseCase(uow=uow)
         outbound_use_case = ListOutboundRoutesUseCase(uow=uow)
 
         inbound_routes = await inbound_service.list_inbound_routes(tenant_id)
@@ -67,7 +78,7 @@ async def create_inbound_route(
     Creates a new Inbound Route directly in the Tenant Data Plane.
     """
     async with uow:
-        service = InboundRouteService(uow=uow)
+        service = CreateInboundRouteUseCase(uow=uow)
 
         cmd = CreateInboundRouteCmd(
             trading_partner_id=request.trading_partner_id,
@@ -130,7 +141,7 @@ async def update_inbound_route(
     Updates an Inbound Route for the current Tenant.
     """
     async with uow:
-        service = InboundRouteService(uow=uow)
+        service = UpdateInboundRouteUseCase(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateInboundRouteCmd(
@@ -168,7 +179,7 @@ async def delete_inbound_route(
     Deletes an Inbound Route for the current Tenant.
     """
     async with uow:
-        service = InboundRouteService(uow=uow)
+        service = DeleteInboundRouteUseCase(uow=uow)
         success = await service.delete_inbound_route(
             tenant_id, route_id, idempotency_key=idempotency_key
         )

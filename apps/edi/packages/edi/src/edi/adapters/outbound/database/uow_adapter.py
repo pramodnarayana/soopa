@@ -1,7 +1,6 @@
-from typing import Any, Self
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.uow import BaseSqlAlchemyUnitOfWork
 from edi.adapters.outbound.database.as2_partner_repository import (
     SqlAlchemyAS2TradingPartnerRepository,
 )
@@ -36,7 +35,7 @@ from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 
 
-class SqlAlchemyControlPlaneUnitOfWork:
+class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     """
     Concrete Unit of Work for the Control Plane (Global Schema).
     Manages transactions exclusively for global configuration and routing tables.
@@ -53,6 +52,7 @@ class SqlAlchemyControlPlaneUnitOfWork:
     platform_settings: PlatformSettingsRepositoryPort
 
     def __init__(self, global_session: AsyncSession) -> None:
+        super().__init__(global_session)
         self.global_session = global_session
         from typing import cast
 
@@ -70,33 +70,8 @@ class SqlAlchemyControlPlaneUnitOfWork:
         self.control_plane_outbox = SqlAlchemyControlPlaneOutboxRepository(gs)
         self.platform_settings = SqlAlchemyPlatformSettingsRepository(gs)
 
-    async def __aenter__(self) -> Self:
-        return self
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        _exc_val: BaseException | None,
-        _exc_tb: Any | None,
-    ) -> None:
-        if exc_type is not None:
-            await self.rollback()
-
-    async def commit(self) -> None:
-        """Commits the transaction on the global session."""
-        try:
-            await self.global_session.flush()
-            await self.global_session.commit()
-        except Exception:
-            await self.rollback()
-            raise
-
-    async def rollback(self) -> None:
-        """Rolls back the transaction on the global session."""
-        await self.global_session.rollback()
-
-
-class SqlAlchemyDataPlaneUnitOfWork:
+class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     """
     Concrete Unit of Work for the Data Plane (Tenant Schema).
     Manages transactions exclusively for a specific tenant's data and message processing.
@@ -105,6 +80,7 @@ class SqlAlchemyDataPlaneUnitOfWork:
     transactions: TransactionRepositoryPort
 
     def __init__(self, tenant_session: AsyncSession) -> None:
+        super().__init__(tenant_session)
         self.tenant_session = tenant_session
         from typing import cast
 
@@ -113,28 +89,3 @@ class SqlAlchemyDataPlaneUnitOfWork:
         ts = cast(TenantSession, tenant_session)
 
         self.transactions = SqlAlchemyTransactionRepository(ts)
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        _exc_val: BaseException | None,
-        _exc_tb: Any | None,
-    ) -> None:
-        if exc_type is not None:
-            await self.rollback()
-
-    async def commit(self) -> None:
-        """Commits the transaction on the tenant session."""
-        try:
-            await self.tenant_session.flush()
-            await self.tenant_session.commit()
-        except Exception:
-            await self.rollback()
-            raise
-
-    async def rollback(self) -> None:
-        """Rolls back the transaction on the tenant session."""
-        await self.tenant_session.rollback()

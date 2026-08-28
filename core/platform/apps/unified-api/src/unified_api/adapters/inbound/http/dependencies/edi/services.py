@@ -3,14 +3,16 @@ from typing import Annotated, Any, cast
 from dependency_injector.wiring import Provide, inject
 from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.session import get_global_session
-from edi.application.use_cases.as2_receiver_service import As2ReceiverService
+from edi.application.use_cases.process_inbound_as2_message_use_case import (
+    ProcessInboundAs2MessageUseCase as ProcessInboundAS2MessageUseCase,
+)
 from edi.bootstrap.container import Container
 from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.message_queue import MessageQueuePort
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from fastapi import Depends, Request
+from secret_store.ports.secret_store_port import SecretStorePort
 
 
 @inject
@@ -52,13 +54,13 @@ def get_as2_receiver_service(
     service_factory: Any = Depends(Provide[Container.as2_receiver_service.provider]),
     cp_uow_factory: Any = Depends(Provide[Container.cp_uow.provider]),
     dp_factory_provider: Any = Depends(Provide[Container.dp_factory.provider]),
-) -> As2ReceiverService:
+) -> ProcessInboundAS2MessageUseCase:
     control_plane_uow = cp_uow_factory(global_session=global_session)
     dp_factory = dp_factory_provider(
         global_session=global_session, db_router=request.app.state.db_router
     )
     return cast(
-        As2ReceiverService,
+        ProcessInboundAS2MessageUseCase,
         service_factory(
             control_plane_uow=control_plane_uow,
             dp_factory=dp_factory,

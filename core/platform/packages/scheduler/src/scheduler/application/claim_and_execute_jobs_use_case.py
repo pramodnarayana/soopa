@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import structlog
@@ -6,22 +7,27 @@ from croniter import croniter
 
 from scheduler.domain.models import ScheduledJob
 from scheduler.ports.outbound.job_dispatcher_port import JobDispatcherPort
-from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
+from scheduler.ports.outbound.uow_port import SchedulerUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
 
 class ClaimAndExecuteJobsUseCase:
-    def __init__(self, repository: JobRepositoryPort, dispatcher: JobDispatcherPort):
-        self.repository = repository
+    def __init__(
+        self, uow_factory: Callable[[], SchedulerUnitOfWorkPort], dispatcher: JobDispatcherPort
+    ):
+        self.uow_factory = uow_factory
         self.dispatcher = dispatcher
 
     async def execute(self, worker_id: str, limit: int, lock_lease_ms: int) -> None:
-        jobs = await self.repository.claim_next_jobs(
-            worker_id=worker_id,
-            limit=limit,
-            lock_lease_ms=lock_lease_ms,
-        )
+        async with self.uow_factory() as uow:
+            jobs = await uow.job_repo.claim_next_jobs(
+                worker_id=worker_id,
+                limit=limit,
+                lock_lease_ms=lock_lease_ms,
+            )
+            # claim_next_jobs modifies rows so it must be committed
+            await uow.commit()
 
         if not jobs:
             return
@@ -53,7 +59,9 @@ class ClaimAndExecuteJobsUseCase:
             if job.cron_expression:
                 cron = croniter(job.cron_expression, datetime.now(UTC))
                 next_run_at = cron.get_next(datetime)
-                await self.repository.reschedule(job.id, worker_id, next_run_at)
+                async with self.uow_factory() as uow:
+                    await uow.job_repo.reschedule(job.id, worker_id, next_run_at)
+                    await uow.commit()
                 logger.info(
                     "Successfully rescheduled job {job_name} ({job_id}) for {next_run_at} via cron",
                     job_name=job.name,
@@ -64,7 +72,9 @@ class ClaimAndExecuteJobsUseCase:
                 from datetime import timedelta
 
                 next_run_at = datetime.now(UTC) + timedelta(seconds=job.interval_seconds)
-                await self.repository.reschedule(job.id, worker_id, next_run_at)
+                async with self.uow_factory() as uow:
+                    await uow.job_repo.reschedule(job.id, worker_id, next_run_at)
+                    await uow.commit()
                 logger.info(
                     "Successfully rescheduled job {job_name} ({job_id}) for {next_run_at} via interval",
                     job_name=job.name,
@@ -72,7 +82,9 @@ class ClaimAndExecuteJobsUseCase:
                     next_run_at=next_run_at.isoformat(),
                 )
             else:
-                await self.repository.mark_completed(job.id, worker_id)
+                async with self.uow_factory() as uow:
+                    await uow.job_repo.mark_completed(job.id, worker_id)
+                    await uow.commit()
                 logger.info(
                     "Successfully completed job {job_name} ({job_id})",
                     job_name=job.name,
@@ -88,9 +100,11 @@ class ClaimAndExecuteJobsUseCase:
                     datetime.now(UTC).timestamp() + backoff_seconds, tz=UTC
                 )
 
-                await self.repository.schedule_retry(
-                    job.id, worker_id, job.retry_count + 1, next_run_at
-                )
+                async with self.uow_factory() as uow:
+                    await uow.job_repo.schedule_retry(
+                        job.id, worker_id, job.retry_count + 1, next_run_at
+                    )
+                    await uow.commit()
                 logger.info(
                     "Scheduled retry for job {job_name} ({job_id}) at {next_run_at}",
                     job_name=job.name,
@@ -98,4 +112,6 @@ class ClaimAndExecuteJobsUseCase:
                     next_run_at=next_run_at.isoformat(),
                 )
             else:
-                await self.repository.mark_failed(job.id, worker_id, str(e))
+                async with self.uow_factory() as uow:
+                    await uow.job_repo.mark_failed(job.id, worker_id, str(e))
+                    await uow.commit()

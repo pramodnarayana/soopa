@@ -8,6 +8,7 @@ from database.outbox_serializer import serialize_domain_event
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.user import User
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
@@ -24,7 +25,7 @@ class PostgresUserRepository(UserRepositoryPort):
             .join(Role, Role.id == UserRole.role_id)
             .where(
                 UserRole.user_id == user_id,
-                UserRole.tenant_id.is_not(None),
+                UserRole.tenant_id != PLATFORM_TENANT_ID,
                 Role.deleted_at.is_(None),
             )
             .limit(1)
@@ -209,7 +210,7 @@ class PostgresUserRepository(UserRepositoryPort):
             outbox_event = IdentityOutbox(
                 id=outbox_id,
                 idempotency_key=final_idemp_key,
-                tenant_id=event.get_routing_tenant_id(),
+                tenant_id=event.get_routing_tenant_id() or PLATFORM_TENANT_ID,
                 event_type=event_name,
                 payload=payload_dict,
             )
