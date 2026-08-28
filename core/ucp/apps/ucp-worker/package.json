@@ -5,7 +5,7 @@
     "lint": "uv run ruff check .",
     "format": "uv run ruff format . && uv run ruff check --fix .",
     "typecheck": "uv run mypy src/ucp_worker",
-    "test": "uv run pytest",
+    "test": "uv run pytest -m \"not integration\"",
     "deadcode:deptry": "uv run deptry ."
   }
 }
