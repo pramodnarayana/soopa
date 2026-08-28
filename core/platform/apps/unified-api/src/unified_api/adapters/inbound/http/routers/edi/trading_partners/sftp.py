@@ -11,9 +11,9 @@ from edi.application.dto import (
 )
 from edi.application.use_cases import SFTPPartnerService
 from edi.domain.exceptions import OrchestrationError, VaultError
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from fastapi import APIRouter, Depends, HTTPException, status
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow

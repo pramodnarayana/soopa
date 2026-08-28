@@ -30,9 +30,6 @@ class SqsTestPublisher:
             )
 
 
-from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_consumer import (
-    EdiConfigSyncSqsConsumer,
-)
 from database.models.identity import Tenant
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.connection import DatabaseRouter
@@ -48,6 +45,9 @@ from ucp_models.subscriptions import App
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
+from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
+    EdiConfigSyncSqsDispatcher,
+)
 from config_sync_worker.domain.errors import PermanentProvisioningError
 from config_sync_worker.domain.service import ProvisioningWorkerService
 
@@ -70,7 +70,6 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
     queue_name = "test-edi-tenant-sync-{uuid.uuid4()}.fifo"
-    outbox_adapter = EdiConfigSyncSqsConsumer(queue_name=queue_name, endpoint_url=sqs_endpoint)
 
     message_publisher = SqsTestPublisher(
         endpoint_url=sqs_endpoint,
@@ -89,12 +88,32 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
             structlog.get_logger(__name__).warning("Could not setup queue: {e}")
             pytest.skip("LocalStack is not available. Skipping integration test.")
 
-    # Use a dedicated test queue so the integration test is isolated from production traffic.
-    # Pass it to the handler constructor — no monkey-patching needed.
+    # 1. Initialize the core replication service
+    worker_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
+
+    # 2. Initialize the dispatcher with the translator
     translator = DefaultEventTranslator()
-    worker_service = ProvisioningWorkerService(
-        tenant_adapter, outbox_adapter, replication_adapter, translator
+    dispatcher = EdiConfigSyncSqsDispatcher(
+        domain_service=worker_service, translator_port=translator
     )
+
+    # 3. Create a raw consumer so tests can manually poll and dispatch exactly once
+    from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+
+    test_consumer = AwsSqsConsumer(
+        queue_name=queue_name,
+        endpoint_url=sqs_endpoint,
+        region_name="us-east-1",
+    )
+
+    async def process_next_event_helper() -> bool:
+        async with test_consumer.poll_raw_message() as raw_msg:
+            if raw_msg:
+                await dispatcher.dispatch_raw(raw_msg)
+                return True
+        return False
+
+    worker_service.process_next_event = process_next_event_helper
 
     test_partner_id = str(uuid.uuid4())
     test_tenant_id = str(uuid.uuid4())
@@ -159,7 +178,6 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
         "message_publisher": message_publisher,
         "partner_id": test_partner_id,
         "tenant_id": test_tenant_id,
-        "outbox_adapter": outbox_adapter,
         "queue_name": queue_name,
     }
 

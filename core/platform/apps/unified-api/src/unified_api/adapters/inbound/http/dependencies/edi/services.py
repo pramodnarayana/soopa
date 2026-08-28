@@ -7,10 +7,10 @@ from edi.application.use_cases.as2_receiver_service import As2ReceiverService
 from edi.bootstrap.container import Container
 from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.message_queue import MessageQueuePort
-from edi.ports.outbound.secret_store import SecretStorePort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from fastapi import Depends, Request
+from secret_store.ports.secret_store_port import SecretStorePort
 
 
 @inject
