@@ -60,11 +60,7 @@ async def test_app_subscription_flow(
         listen_channel="ucp_outbox_wakeup",
     )
 
-    event_consumer = AwsSqsConsumer(
-        queue_name=localstack_container["sqs_queue_name"],
-        endpoint_url=localstack_container["endpoint_url"],
-    )
-    dispatcher = UcpEventDispatcher(event_consumer)
+    dispatcher = UcpEventDispatcher()
 
     # Fake uow factory for the provisioner
     @asynccontextmanager
@@ -77,15 +73,10 @@ async def test_app_subscription_flow(
 
     # 1.5 Seed the "edi" app and shard in the database
     from ucp_models.infrastructure import DatabaseShard
-    from ucp_models.subscriptions import App
 
     async with db_session.begin():
-        db_session.add(App(id="edi", name="EDI App", slug="edi", description=""))
-        db_session.add(
-            DatabaseShard(
-                id="edi_shard_1", name="EDI Shard 1", dsn="postgresql://mock", status="active"
-            )
-        )
+        # The "edi" app and shard are already seeded by migrations.
+        pass
 
     # 2. Trigger Business Logic (Provision Tenant)
     use_case = ProvisionTenantUseCase(uow=uow)

@@ -8,7 +8,7 @@ from notification.domain.models import (
     NotificationEvent,
     Template,
 )
-from tests.fakes import (
+from notification.testing.fakes import (
     FakeNotificationUow,
     FakeOutboxRepo,
     FakeRecordRepo,

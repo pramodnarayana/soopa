@@ -2,7 +2,7 @@ import pytest
 
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
 from notification.domain.models import Channel, UserNotificationPreference
-from tests.fakes import FakeNotificationUow, FakeUserPrefRepo
+from notification.testing.fakes import FakeNotificationUow, FakeUserPrefRepo
 
 
 @pytest.fixture

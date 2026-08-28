@@ -40,7 +40,7 @@ async def test_user_preferences_router():
     container = Container()
 
     from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
-    from tests.fakes import FakeNotificationUow, FakeUserPrefRepo
+    from notification.testing.fakes import FakeNotificationUow, FakeUserPrefRepo
 
     # Use the real use case backed by our Fake repository
     fake_repo = FakeUserPrefRepo()
