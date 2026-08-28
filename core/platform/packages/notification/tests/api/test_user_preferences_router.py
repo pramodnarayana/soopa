@@ -40,12 +40,19 @@ async def test_user_preferences_router():
     container = Container()
 
     from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
-    from tests.fakes import FakeUserPrefRepo
+    from tests.fakes import FakeNotificationUow, FakeUserPrefRepo
 
     # Use the real use case backed by our Fake repository
     fake_repo = FakeUserPrefRepo()
-    real_update_use_case = UpdateUserPreferenceUseCase(repo=fake_repo)
-    real_get_use_case = GetUserPreferencesUseCase(repository=fake_repo)
+    uow = FakeNotificationUow(
+        user_preference_repo=fake_repo,
+        template_repo=None,
+        record_repo=None,
+        route_repo=None,
+        outbox_repo=None,
+    )
+    real_update_use_case = UpdateUserPreferenceUseCase(uow=uow)
+    real_get_use_case = GetUserPreferencesUseCase(uow=uow)
 
     # Seed the fake repository for the GET test
     expected_pref = UserNotificationPreference(
@@ -60,7 +67,6 @@ async def test_user_preferences_router():
 
     container.update_user_preference_use_case.override(providers.Object(real_update_use_case))
     container.get_user_preferences_use_case.override(providers.Object(real_get_use_case))
-    container.user_preference_repository.override(providers.Object(fake_repo))
     container.wire(
         modules=["unified_api.adapters.inbound.http.routers.notification_user_preferences_router"]
     )
@@ -115,5 +121,4 @@ async def test_user_preferences_router():
     finally:
         container.update_user_preference_use_case.reset_override()
         container.get_user_preferences_use_case.reset_override()
-        container.user_preference_repository.reset_override()
         container.unwire()

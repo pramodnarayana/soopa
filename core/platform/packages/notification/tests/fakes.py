@@ -1,5 +1,6 @@
 from notification.domain.models import (
     Channel,
+    NotificationDispatch,
     NotificationOutboxEvent,
     Template,
     UserNotificationPreference,
@@ -106,8 +107,57 @@ class FakeRouteRepo(NotificationRouteRepositoryPort):
 class FakeRecordRepo(NotificationRecordRepositoryPort):
     def __init__(self):
         self.records = []
+        self.dispatches = []
 
-    async def save_notification(
-        self, tenant_id: str, content: str, subject: str | None, data: dict
-    ) -> None:
-        self.records.append((tenant_id, content, subject, data))
+    async def save(self, dispatch: "NotificationDispatch") -> None:
+        from notification.domain.models import Channel
+
+        self.dispatches.append(dispatch)
+        if dispatch.channel == Channel.IN_APP:
+            self.records.append(
+                (dispatch.tenant_id, dispatch.body, dispatch.subject, dispatch.data)
+            )
+
+
+from notification.ports.outbound.uow_port import NotificationUnitOfWorkPort
+
+
+class FakeNotificationUow(NotificationUnitOfWorkPort):
+    def __init__(self, user_preference_repo, template_repo, record_repo, route_repo, outbox_repo):
+        self.user_preference_repo = user_preference_repo
+        self.template_repo = template_repo
+        self.record_repo = record_repo
+        self.route_repo = route_repo
+        self.outbox_repo = outbox_repo
+        self.committed = False
+        self.rolled_back = False
+
+    async def _pre_commit(self) -> None:
+        pass
+
+    async def commit(self) -> None:
+        await self._pre_commit()
+        # Simulate Outbox event collection
+        if self.record_repo and hasattr(self.record_repo, "dispatches"):
+            import dataclasses
+
+            for dispatch in self.record_repo.dispatches:
+                for event in dispatch.domain_events:
+                    outbox_event = NotificationOutboxEvent(
+                        tenant_id=event.tenant_id,
+                        event_type=event.event_name,
+                        idempotency_key=event.idempotency_key,
+                        payload=dataclasses.asdict(event),
+                    )
+                    await self.outbox_repo.save(outbox_event)
+                dispatch.clear_domain_events()
+        self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass

@@ -9,7 +9,8 @@ from notification.domain.models import Channel, UserNotificationPreference
 
 @pytest.fixture
 async def repo(db_session_factory):
-    return SqlAlchemyUserNotificationPreferenceRepository(session_factory=db_session_factory)
+    async with db_session_factory() as session:
+        yield SqlAlchemyUserNotificationPreferenceRepository(session=session)
 
 
 @pytest.mark.asyncio

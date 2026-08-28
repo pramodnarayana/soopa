@@ -2,7 +2,7 @@ import pytest
 
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
 from notification.domain.models import Channel, UserNotificationPreference
-from tests.fakes import FakeUserPrefRepo
+from tests.fakes import FakeNotificationUow, FakeUserPrefRepo
 
 
 @pytest.fixture
@@ -12,7 +12,14 @@ def fake_repo():
 
 @pytest.fixture
 def use_case(fake_repo):
-    return UpdateUserPreferenceUseCase(repo=fake_repo)
+    uow = FakeNotificationUow(
+        user_preference_repo=fake_repo,
+        template_repo=None,
+        record_repo=None,
+        route_repo=None,
+        outbox_repo=None,
+    )
+    return UpdateUserPreferenceUseCase(uow=uow)
 
 
 @pytest.mark.asyncio

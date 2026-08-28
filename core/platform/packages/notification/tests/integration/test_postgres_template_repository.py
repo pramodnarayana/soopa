@@ -46,18 +46,19 @@ async def test_get_template(db_session_factory):
         )
         session.add(template2)
 
-    repo = SqlAlchemyTemplateRepository(db_session_factory)
+    async with db_session_factory() as session:
+        repo = SqlAlchemyTemplateRepository(session)
 
-    # Exists and active
-    tmpl = await repo.get_template(tenant_id, "invoice.created", Channel.EMAIL)
-    assert tmpl is not None
-    assert tmpl.id == "tpl_123"
-    assert tmpl.subject == "Subject {{ foo }}"
+        # Exists and active
+        tmpl = await repo.get_template(tenant_id, "invoice.created", Channel.EMAIL)
+        assert tmpl is not None
+        assert tmpl.id == "tpl_123"
+        assert tmpl.subject == "Subject {{ foo }}"
 
-    # Exists but inactive
-    tmpl2 = await repo.get_template(tenant_id, "invoice.created", Channel.IN_APP)
-    assert tmpl2 is None
+        # Exists but inactive
+        tmpl2 = await repo.get_template(tenant_id, "invoice.created", Channel.IN_APP)
+        assert tmpl2 is None
 
-    # Does not exist
-    tmpl3 = await repo.get_template(tenant_id, "invoice.paid", Channel.EMAIL)
-    assert tmpl3 is None
+        # Does not exist
+        tmpl3 = await repo.get_template(tenant_id, "nonexistent", Channel.EMAIL)
+        assert tmpl3 is None

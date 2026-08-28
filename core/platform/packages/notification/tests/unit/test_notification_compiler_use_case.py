@@ -9,6 +9,7 @@ from notification.domain.models import (
     Template,
 )
 from tests.fakes import (
+    FakeNotificationUow,
     FakeOutboxRepo,
     FakeRecordRepo,
     FakeRouteRepo,
@@ -27,9 +28,14 @@ async def test_dispatch_success():
     user_prefs = FakeUserPrefRepo()
     record_repo = FakeRecordRepo()
 
-    uc = NotificationCompilerUseCase(
-        template_repo, renderer, outbox, routes, user_prefs, record_repo
+    uow = FakeNotificationUow(
+        user_preference_repo=user_prefs,
+        template_repo=template_repo,
+        record_repo=record_repo,
+        route_repo=routes,
+        outbox_repo=outbox,
     )
+    uc = NotificationCompilerUseCase(uow=uow, template_renderer=renderer)
 
     tenant_id = "t1"
     event_type = "invoice.created"
@@ -72,19 +78,19 @@ async def test_dispatch_success():
 
 @pytest.mark.asyncio
 async def test_dispatch_no_routes():
-    uc = NotificationCompilerUseCase(
-        FakeTemplateRepo(),
-        FakeTemplateRenderer(),
-        FakeOutboxRepo(),
-        FakeRouteRepo(),
-        FakeUserPrefRepo(),
-        FakeRecordRepo(),
+    uow = FakeNotificationUow(
+        user_preference_repo=FakeUserPrefRepo(),
+        template_repo=FakeTemplateRepo(),
+        record_repo=FakeRecordRepo(),
+        route_repo=FakeRouteRepo(),
+        outbox_repo=FakeOutboxRepo(),
     )
+    uc = NotificationCompilerUseCase(uow=uow, template_renderer=FakeTemplateRenderer())
 
     event = NotificationEvent(tenant_id="t1", event_type="unknown", data={})
 
     await uc.execute(event)
-    assert len(uc.outbox_repo.events) == 0
+    assert len(uc.uow.outbox_repo.events) == 0
 
 
 @pytest.mark.asyncio
@@ -94,14 +100,15 @@ async def test_only_in_app_channel_creates_notification_record():
     outbox = FakeOutboxRepo()
     routes = FakeRouteRepo()
     record_repo = FakeRecordRepo()
-    uc = NotificationCompilerUseCase(
-        template_repo,
-        renderer,
-        outbox,
-        routes,
-        FakeUserPrefRepo(),
-        record_repo,
+    user_prefs = FakeUserPrefRepo()
+    uow = FakeNotificationUow(
+        user_preference_repo=user_prefs,
+        template_repo=template_repo,
+        record_repo=record_repo,
+        route_repo=routes,
+        outbox_repo=outbox,
     )
+    uc = NotificationCompilerUseCase(uow=uow, template_renderer=renderer)
     tenant_id = "t1"
     event_type = "invoice.created"
     routes.routes[(tenant_id, event_type)] = [Channel.EMAIL, Channel.IN_APP]

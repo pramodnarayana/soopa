@@ -11,7 +11,7 @@ class NotificationDispatchedEvent(DomainEvent):
     subject: str | None
     content: str
     data: dict[str, Any]
-    idempotency_key: str
+    id: str
 
     @property
     def event_name(self) -> str:

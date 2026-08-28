@@ -22,6 +22,12 @@ from notification.adapters.outbound.channels.dummy_email_provider import DummyEm
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
 )
+from notification.adapters.outbound.database.postgres_route_repository import (
+    SqlAlchemyNotificationRouteRepository,
+)
+from notification.adapters.outbound.database.postgres_template_repository import (
+    SqlAlchemyTemplateRepository,
+)
 from notification.adapters.outbound.database.uow import SqlAlchemyNotificationUnitOfWork
 from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
@@ -106,12 +112,20 @@ class Container(containers.DeclarativeContainer):
 
     uow = providers.Factory(
         SqlAlchemyNotificationUnitOfWork,
-        session=session_factory.provided(),
+        session=session_factory.provided,
     )
 
     query_repository = providers.Factory(
         SqlAlchemyNotificationQueryRepository,
         session_factory=session_factory,
+    )
+
+    template_repository = providers.Factory(
+        SqlAlchemyTemplateRepository,
+    )
+
+    route_repository = providers.Factory(
+        SqlAlchemyNotificationRouteRepository,
     )
 
     # -----------------------------------------------------------------------

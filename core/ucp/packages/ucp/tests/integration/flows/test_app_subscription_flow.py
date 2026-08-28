@@ -6,9 +6,9 @@ import pytest_asyncio
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp.adapters.inbound.workers.ucp_event_sqs_consumer import UcpEventSqsConsumer
 
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
@@ -60,7 +60,7 @@ async def test_app_subscription_flow(
         listen_channel="ucp_outbox_wakeup",
     )
 
-    event_consumer = UcpEventSqsConsumer(
+    event_consumer = AwsSqsConsumer(
         queue_name=localstack_container["sqs_queue_name"],
         endpoint_url=localstack_container["endpoint_url"],
     )
