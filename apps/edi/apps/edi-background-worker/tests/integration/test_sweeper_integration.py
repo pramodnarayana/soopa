@@ -6,7 +6,6 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from sqlalchemy.ext.asyncio import AsyncSession
-from testcontainers.community.postgres import PostgresContainer
 
 from edi_background_worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
     SqlAlchemyEdiAuditLogCleanupRepository,
@@ -18,35 +17,15 @@ from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_ou
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(scope="session")
-def postgres_container() -> "PostgresContainer":
-    postgres = PostgresContainer("postgres:15-alpine")
-    postgres.start()
-    yield postgres
-    postgres.stop()
-
-
 @pytest.fixture
-async def db_router(
-    postgres_container: PostgresContainer, monkeypatch: pytest.MonkeyPatch
-) -> "AsyncGenerator[DatabaseRouter, None]":
-    base_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+async def db_router(monkeypatch: pytest.MonkeyPatch) -> "AsyncGenerator[DatabaseRouter, None]":
+    import os
+
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    schemas = ["ucp", "edi", "identity", "scheduling", "notifications", "observability", "platform"]
-
-    # 1. Create semantic test schemas for global and shards
-    setup_engine = create_async_engine(base_url)
-    async with setup_engine.begin() as conn:
-        for s in schemas:
-            await conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS test_ctrl_{s}"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS test_data_shard_1_edi"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS test_data_shard_2_edi"))
-    await setup_engine.dispose()
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
 
     router = DatabaseRouter(global_db_url=base_url)
 
@@ -55,25 +34,12 @@ async def db_router(
 
     async def mock_get_engine(db_key: str, url: str | None = None):
         engine = await original_get_engine(db_key, url)
-        if db_key == "global":
-            return engine.execution_options(
-                schema_translate_map={s: f"test_ctrl_{s}" for s in schemas}
-            )
-        elif db_key == "shard_1":
-            return engine.execution_options(schema_translate_map={"edi": "test_data_shard_1_edi"})
-        elif db_key == "shard_2":
-            return engine.execution_options(schema_translate_map={"edi": "test_data_shard_2_edi"})
         return engine
 
     monkeypatch.setattr(router, "get_engine", mock_get_engine)
 
     # Global db has all the schema
-    engine = await router.get_engine("global", base_url)
-
-    async with engine.begin() as conn:
-        from ucp_models.infrastructure import DatabaseShard
-
-        await conn.run_sync(DatabaseShard.metadata.create_all)
+    await router.get_engine("global", base_url)
 
     async for session in router.get_global_session():
         from ucp_models.infrastructure import DatabaseShard
@@ -84,18 +50,9 @@ async def db_router(
         await session.merge(shard2)
         await session.commit()
 
-    # Pre-warm shard connections and run migrations on shards
-    shard1_engine = await router.get_engine("shard_1", base_url)
-    async with shard1_engine.begin() as conn:
-        from edi.adapters.outbound.database.models.data_plane import TenantBase
-
-        await conn.run_sync(TenantBase.metadata.create_all)
-
-    shard2_engine = await router.get_engine("shard_2", base_url)
-    async with shard2_engine.begin() as conn:
-        from edi.adapters.outbound.database.models.data_plane import TenantBase
-
-        await conn.run_sync(TenantBase.metadata.create_all)
+    # Pre-warm shard connections
+    await router.get_engine("shard_1", base_url)
+    await router.get_engine("shard_2", base_url)
 
     yield router
     await router.close_all()

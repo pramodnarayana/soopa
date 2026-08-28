@@ -35,7 +35,6 @@ async def test_app_subscription_flow(
     db_session: AsyncSession,
     uow: SqlAlchemyUcpUnitOfWork,
     localstack_container: dict[str, str],
-    postgres_container,
 ) -> None:
     # 1. Setup Ports
     outbox_repo = PostgresOutboxRepository(lambda: db_session)
@@ -43,9 +42,15 @@ async def test_app_subscription_flow(
     # Use InMemoryEventBus instead of AWS SNS/SQS
     event_bus = InMemoryEventBus()
 
-    db_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+    import os
+
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    db_url = base_url
 
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,

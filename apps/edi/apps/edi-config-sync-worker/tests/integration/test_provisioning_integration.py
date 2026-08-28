@@ -52,43 +52,17 @@ from config_sync_worker.domain.service import ProvisioningWorkerService
 load_dotenv()
 
 
-@pytest.fixture(scope="session")
-def postgres_container() -> "Any":
-    from testcontainers.community.postgres import PostgresContainer
-
-    postgres = PostgresContainer("postgres:15-alpine")
-    postgres.start()
-    yield postgres
-    postgres.stop()
-
-
 @pytest.fixture
-async def test_db_router(postgres_container: Any) -> "AsyncGenerator[DatabaseRouter, None]":
-    base_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+async def test_db_router() -> "AsyncGenerator[DatabaseRouter, None]":
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
 
     router = DatabaseRouter(global_db_url=base_url)
 
-    engine = await router.get_engine("global", base_url)
-    from sqlalchemy import text
-
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
-
-        from database.models.core import GlobalRegistry
-
-        await conn.run_sync(GlobalRegistry.metadata.create_all)
-
-        from edi.adapters.outbound.database.models.data_plane import TenantBase
-
-        await conn.run_sync(TenantBase.metadata.create_all)
+    await router.get_engine("global", base_url)
 
     async for session in router.get_global_session():
         from ucp_models.infrastructure import DatabaseShard
@@ -104,17 +78,17 @@ async def test_db_router(postgres_container: Any) -> "AsyncGenerator[DatabaseRou
 
 
 @pytest.fixture
-async def e2e_context(
-    test_db_router: DatabaseRouter, postgres_container: Any
-) -> "AsyncGenerator[dict[str, Any], None]":
+async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[str, Any], None]":
     """
     Sets up the DatabaseRouter and SQS adapters for the E2E test.
     Cleans up inserted data at the end of the test.
     """
     db_router = test_db_router
-    base_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+    base_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if base_url.startswith("postgresql://"):
+        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
 
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)

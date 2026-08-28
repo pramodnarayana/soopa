@@ -79,7 +79,6 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.9.0",
     "pre-commit>=3.7.0",
-    "testcontainers[postgres]>=4.15.0",
     "pytest-archon>=0.0.6",
     "tach>=0.14.0",
     "vulture>=2.16",

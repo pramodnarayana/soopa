@@ -10,16 +10,9 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-
-# Assuming Alembic is used for migrations. We can run it programmatically.
-# Or we can just use BaseModel.metadata.create_all(bind=engine) for tests.
-from database.models.core import GlobalRegistry
 from database.provider import get_async_engine
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from testcontainers.community.postgres import PostgresContainer
-
-from edi.adapters.outbound.database.models.data_plane import TenantBase
 
 
 @pytest.fixture(scope="session")
@@ -29,41 +22,16 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture(scope="session")
-def postgres_container(request):
-    """Spin up a real Postgres database for the test session."""
-    postgres = PostgresContainer("postgres:15-alpine")
-    postgres.start()
-    request.addfinalizer(postgres.stop)
-    return postgres
-
-
 @pytest_asyncio.fixture(scope="function")
-async def db_engine(postgres_container):
-    """Create an async SQLAlchemy engine pointing to the testcontainer."""
-    # testcontainers gives synchronous URL. We replace driver for asyncpg.
-    db_url = postgres_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
+async def db_engine():
+    """Create an async SQLAlchemy engine pointing to the test database."""
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
     engine = get_async_engine(db_url)
-
-    # Initialize the schema
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS edi"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ucp"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS platform"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS identity"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS notifications"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS observability"))
-
-        # Ensure all models are imported so they are registered with GlobalRegistry
-
-        await conn.run_sync(GlobalRegistry.metadata.drop_all)
-        await conn.run_sync(TenantBase.metadata.drop_all)
-        await conn.run_sync(GlobalRegistry.metadata.create_all)
-        await conn.run_sync(TenantBase.metadata.create_all)
-
     yield engine
     await engine.dispose()
 
