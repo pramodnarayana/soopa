@@ -27,6 +27,12 @@ async def db_router(monkeypatch: pytest.MonkeyPatch) -> "AsyncGenerator[Database
     if base_url.startswith("postgresql://"):
         base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
 
+    shard_1_url = os.getenv(
+        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    )
+    if shard_1_url.startswith("postgresql://"):
+        shard_1_url = shard_1_url.replace("postgresql://", "postgresql+asyncpg://")
+
     router = DatabaseRouter(global_db_url=base_url)
 
     # 2. Monkeypatch get_engine to inject schema_translate_map at execution time
@@ -44,15 +50,15 @@ async def db_router(monkeypatch: pytest.MonkeyPatch) -> "AsyncGenerator[Database
     async for session in router.get_global_session():
         from ucp_models.infrastructure import DatabaseShard
 
-        shard1 = DatabaseShard(id="test_shard_id", name="shard_1", dsn=base_url)
-        shard2 = DatabaseShard(id="test_shard_id_2", name="shard_2", dsn=base_url)
+        shard1 = DatabaseShard(id="test_shard_id", name="shard_1", dsn=shard_1_url)
+        shard2 = DatabaseShard(id="test_shard_id_2", name="shard_2", dsn=shard_1_url)
         await session.merge(shard1)
         await session.merge(shard2)
         await session.commit()
 
     # Pre-warm shard connections
-    await router.get_engine("shard_1", base_url)
-    await router.get_engine("shard_2", base_url)
+    await router.get_engine("shard_1", shard_1_url)
+    await router.get_engine("shard_2", shard_1_url)
 
     yield router
     await router.close_all()

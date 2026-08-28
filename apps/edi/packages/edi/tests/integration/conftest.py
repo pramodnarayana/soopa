@@ -47,6 +47,30 @@ async def db_connection(db_engine):
 
 
 @pytest_asyncio.fixture(scope="function")
+async def tenant_db_engine():
+    """Create an async SQLAlchemy engine pointing to the tenant shard test database."""
+    db_url = os.getenv(
+        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    )
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    engine = get_async_engine(db_url)
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def tenant_db_connection(tenant_db_engine):
+    """Provide a connection with an active transaction that rolls back after each test."""
+    connection = await tenant_db_engine.connect()
+    transaction = await connection.begin()
+    yield connection
+    await transaction.rollback()
+    await connection.close()
+
+
+@pytest_asyncio.fixture(scope="function")
 async def db_session(db_connection):
     """
     Provide an AsyncSession that rolls back after each test.
@@ -84,11 +108,11 @@ async def override_get_global_session(db_connection):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def override_get_tenant_session(db_connection):
+async def override_get_tenant_session(tenant_db_connection):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
-        bind=db_connection,
+        bind=tenant_db_connection,
         expire_on_commit=False,
         class_=AsyncSession,
         info={"session_type": "tenant"},
