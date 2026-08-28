@@ -37,29 +37,43 @@ async def db_engine():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(db_engine):
-    """
-    Provide an AsyncSession that rolls back after each test.
-    This guarantees test isolation.
-    """
+async def db_connection(db_engine):
+    """Provide a connection with an active transaction that rolls back after each test."""
     connection = await db_engine.connect()
     transaction = await connection.begin()
-
-    SessionLocal = async_sessionmaker(bind=connection, expire_on_commit=False, class_=AsyncSession)
-
-    session = SessionLocal()
-    yield session
-    await session.close()
+    yield connection
     await transaction.rollback()
     await connection.close()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def override_get_global_session(db_engine):
+async def db_session(db_connection):
+    """
+    Provide an AsyncSession that rolls back after each test.
+    This guarantees test isolation.
+    """
+    SessionLocal = async_sessionmaker(
+        bind=db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
+
+    session = SessionLocal()
+    yield session
+    await session.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def override_get_global_session(db_connection):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
-        bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "global"}
+        bind=db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        info={"session_type": "global"},
+        join_transaction_mode="create_savepoint",
     )
 
     async def _override():
@@ -70,11 +84,15 @@ async def override_get_global_session(db_engine):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def override_get_tenant_session(db_engine):
+async def override_get_tenant_session(db_connection):
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
-        bind=db_engine, expire_on_commit=False, class_=AsyncSession, info={"session_type": "tenant"}
+        bind=db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        info={"session_type": "tenant"},
+        join_transaction_mode="create_savepoint",
     )
     from fastapi import Depends
     from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id

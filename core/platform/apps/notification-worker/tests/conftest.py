@@ -37,7 +37,12 @@ async def db_session_factory(db_engine):
     connection = await db_engine.connect()
     transaction = await connection.begin()
 
-    SessionLocal = async_sessionmaker(bind=connection, expire_on_commit=False, class_=AsyncSession)
+    SessionLocal = async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
     yield SessionLocal
 
     await transaction.rollback()

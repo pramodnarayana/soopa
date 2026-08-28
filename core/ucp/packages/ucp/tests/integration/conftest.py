@@ -7,7 +7,9 @@ from typing import Any
 os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+)
 import asyncio
 import os
 
@@ -162,7 +164,12 @@ async def db_session(db_engine) -> "Any":
     connection = await db_engine.connect()
     transaction = await connection.begin()
 
-    SessionLocal = async_sessionmaker(bind=connection, expire_on_commit=False, class_=AsyncSession)
+    SessionLocal = async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
     session = SessionLocal()
     yield session
 
