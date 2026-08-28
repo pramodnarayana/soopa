@@ -112,7 +112,7 @@ class Container(containers.DeclarativeContainer):
 
     uow = providers.Factory(
         SqlAlchemyNotificationUnitOfWork,
-        session=session_factory.provided,
+        session=session_factory.provided.call(),
     )
 
     query_repository = providers.Factory(
