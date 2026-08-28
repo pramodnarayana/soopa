@@ -58,18 +58,21 @@ class ProvisioningWorkerService:
         if tenant_id == PLATFORM_TENANT_ID:
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []
+            permanent_errors = []
             for t_id in all_tenants:
                 try:
                     await replicate_fn(t_id, *args)
-                except PermanentProvisioningError:
-                    # Permanent errors are not retried or re-raised to block other tenants
-                    pass
-
+                except PermanentProvisioningError as e:
+                    permanent_errors.append(f"Tenant {t_id}: {e}")
                 except Exception as e:  # noqa: BLE001
-                    transient_errors.append(e)
+                    transient_errors.append(f"Tenant {t_id}: {e}")
             if transient_errors:
                 raise TransientProvisioningError(
-                    f"Broadcast failed for some tenants: {transient_errors}"
+                    f"Broadcast failed transiently for some tenants: {transient_errors}"
+                )
+            if permanent_errors:
+                raise PermanentProvisioningError(
+                    f"Broadcast failed permanently for some tenants: {permanent_errors}"
                 )
         else:
             await replicate_fn(tenant_id, *args)

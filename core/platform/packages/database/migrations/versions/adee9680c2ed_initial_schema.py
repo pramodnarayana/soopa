@@ -6,6 +6,7 @@ Create Date: 2026-08-26 19:28:36.665278
 
 """
 
+import os
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -568,17 +569,18 @@ def upgrade() -> None:
             updated_at = NOW();
         """
     )
-    op.execute(
-        """
-        INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at)
-        VALUES ('edi_shard_1', 'EDI Primary Shard', 'postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1', 'active', NOW(), NOW())
-        ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
-            dsn = EXCLUDED.dsn,
-            status = EXCLUDED.status,
-            updated_at = NOW();
-        """
-    )
+    if os.environ.get("ENVIRONMENT", "development") == "development":
+        op.execute(
+            """
+            INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at)
+            VALUES ('edi_shard_1', 'EDI Primary Shard', 'postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1', 'active', NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                dsn = EXCLUDED.dsn,
+                status = EXCLUDED.status,
+                updated_at = NOW();
+            """
+        )
     op.execute(
         """
         INSERT INTO scheduling.scheduled_jobs (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, retry_count, payload, status, created_at, updated_at)

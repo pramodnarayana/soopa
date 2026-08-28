@@ -97,16 +97,17 @@ async def main() -> None:
                     status="active",
                 )
                 .on_conflict_do_update(
-                    index_elements=[User.id],
+                    index_elements=[User.idp_user_id],
                     set_={
-                        "idp_user_id": platform_admin_id,
                         "email": "admin@soopa.io",
                         "name": "Platform Admin",
                         "status": "active",
                     },
                 )
+                .returning(User.id)
             )
-            await conn.execute(stmt_user)
+            result = await conn.execute(stmt_user)
+            actual_user_id = result.scalar_one()
 
             # Map the user to the platform tenant using user_roles
             platform_admin_role_id = "rol_97f48b1115b74100"  # matches the one from migration
@@ -117,7 +118,7 @@ async def main() -> None:
                 .values(
                     id=user_role_id,
                     tenant_id=PLATFORM_TENANT_ID,
-                    user_id=platform_user_id,
+                    user_id=actual_user_id,
                     role_id=platform_admin_role_id,
                 )
                 .on_conflict_do_nothing(index_elements=["tenant_id", "user_id", "role_id"])
