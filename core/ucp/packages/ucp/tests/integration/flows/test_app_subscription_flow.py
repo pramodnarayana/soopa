@@ -6,8 +6,7 @@ import pytest_asyncio
 from database.events import EventEnvelope
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App
@@ -40,10 +39,9 @@ async def test_app_subscription_flow(
 ) -> None:
     # 1. Setup Ports
     outbox_repo = PostgresOutboxRepository(lambda: db_session)
-    sns_publisher = AwsSnsPublisher(
-        topic_arn=localstack_container["sns_topic_arn"],
-        endpoint_url=localstack_container["endpoint_url"],
-    )
+
+    # Use InMemoryEventBus instead of AWS SNS/SQS
+    event_bus = InMemoryEventBus()
 
     db_url = postgres_container.get_connection_url().replace(
         "postgresql+psycopg2://", "postgresql+asyncpg://"
@@ -51,7 +49,7 @@ async def test_app_subscription_flow(
 
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,
-        publisher=sns_publisher,
+        publisher=event_bus,  # type: ignore[arg-type]
     )
 
     relay = PostgresOutboxRelay(
@@ -60,10 +58,6 @@ async def test_app_subscription_flow(
         listen_channel="ucp_outbox_wakeup",
     )
 
-    event_consumer = AwsSqsConsumer(
-        queue_name=localstack_container["sqs_queue_name"],
-        endpoint_url=localstack_container["endpoint_url"],
-    )
     dispatcher = UcpEventDispatcher()
 
     # Fake uow factory for the provisioner
@@ -107,32 +101,41 @@ async def test_app_subscription_flow(
     # Fetch pending and publish
     await relay.processor.process_pending()
 
-    # Wait for SQS to receive from SNS
-    await asyncio.sleep(1)
+    # Wait for processing
+    await asyncio.sleep(0.5)
 
-    # 4. Execute SQS Dispatcher for app.subscribed
+    # 4. Execute Dispatcher for app.subscribed
     found_app_subscribed = False
 
-    # We might have multiple events (TenantProvisioned, UserInvited, app.subscribed). Process up to 5.
+    # Drain the in-memory bus
     for _ in range(5):
-        try:
-            async with event_consumer.poll_raw_message() as raw_event:
-                if not raw_event or raw_event.get("tenant_id") != tenant.id:
-                    continue
-                event = EventEnvelope(
-                    id=raw_event.get("id", ""),
-                    source=raw_event.get("source", ""),
-                    tenant_id=raw_event.get("tenant_id", ""),
-                    event_type=raw_event.get("event_type", ""),
-                    idempotency_key=raw_event.get("idempotency_key"),
-                    payload=raw_event.get("payload", {}),
-                )
+        async with event_bus.poll_raw_message() as ackable_msg:
+            if not ackable_msg:
+                continue
+
+            raw_event = ackable_msg.payload
+            print(f"DEBUG RAW EVENT: {raw_event}")
+
+            if raw_event.get("tenant_id") != tenant.id:
+                await ackable_msg.ack()
+                continue
+
+            event = EventEnvelope(
+                id=raw_event.get("id", ""),
+                source=raw_event.get("source", ""),
+                tenant_id=raw_event.get("tenant_id", ""),
+                event_type=raw_event.get("event_type", ""),
+                idempotency_key=raw_event.get("idempotency_key"),
+                payload=raw_event.get("payload", {}),
+            )
+
+            try:
                 await dispatcher._dispatch(event)
+                await ackable_msg.ack()
                 if event.event_type == "app.subscribed":
                     found_app_subscribed = True
-                    break
-        except Exception:  # noqa: BLE001, S110
-            pass
+            except Exception:  # noqa: BLE001
+                await ackable_msg.nack()
 
     assert found_app_subscribed, "app.subscribed event was never received from SQS"
 

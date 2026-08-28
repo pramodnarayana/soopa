@@ -90,9 +90,13 @@ def localstack_container(request) -> "Any":
         f"http://{localstack.get_container_host_ip()}:{localstack.get_exposed_port(4566)}"
     )
 
+    import json
     import os
+    import uuid
 
     import boto3
+
+    unique_suffix = uuid.uuid4().hex[:8]
 
     sns_client = boto3.client(
         "sns",
@@ -109,26 +113,28 @@ def localstack_container(request) -> "Any":
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
     )
 
+    tenant_topic_name = f"ucp-tenant-events-{unique_suffix}.fifo"
+    user_topic_name = f"ucp-user-events-{unique_suffix}.fifo"
+    queue_name = f"ucp-identity-sync-{unique_suffix}.fifo"
+
     # 1. Create SNS Topics
     tenant_topic = sns_client.create_topic(
-        Name="ucp-tenant-events.fifo",
+        Name=tenant_topic_name,
         Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
     )
     user_topic = sns_client.create_topic(
-        Name="ucp-user-events.fifo",
+        Name=user_topic_name,
         Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
     )
 
     # 2. Create SQS Queue
     queue = sqs_client.create_queue(
-        QueueName="ucp-identity-sync.fifo",
+        QueueName=queue_name,
         Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
     )
 
     attrs = sqs_client.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
     queue_arn = attrs["Attributes"]["QueueArn"]
-
-    import json
 
     policy = {
         "Version": "2012-10-17",
@@ -161,7 +167,7 @@ def localstack_container(request) -> "Any":
         "endpoint_url": endpoint_url,
         "sns_topic_arn": tenant_topic["TopicArn"],
         "sqs_queue_url": queue["QueueUrl"],
-        "sqs_queue_name": "ucp-identity-sync.fifo",
+        "sqs_queue_name": queue_name,
     }
 
 

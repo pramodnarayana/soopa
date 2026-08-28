@@ -1,6 +1,7 @@
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import aioboto3
@@ -8,6 +9,13 @@ import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass
+class AckableMessage:
+    payload: dict[str, Any]
+    ack: Callable[[], Awaitable[None]]
+    nack: Callable[[], Awaitable[None]]
 
 
 class AwsSqsConsumer:
@@ -55,7 +63,7 @@ class AwsSqsConsumer:
             self._client_context = None
 
     @asynccontextmanager
-    async def poll_raw_message(self) -> AsyncGenerator[dict[str, Any] | None, None]:
+    async def poll_raw_message(self) -> AsyncGenerator[AckableMessage | None, None]:
         # Use shared client if available, else create one-off
         if self._client:
             async with self._process_with_client(self._client) as event:
@@ -85,7 +93,7 @@ class AwsSqsConsumer:
     @asynccontextmanager
     async def _process_with_client(
         self, sqs_client: Any
-    ) -> AsyncGenerator[dict[str, Any] | None, None]:
+    ) -> AsyncGenerator[AckableMessage | None, None]:
         try:
             queue_url = await self._get_queue_url(sqs_client)
             response = await sqs_client.receive_message(
@@ -118,12 +126,17 @@ class AwsSqsConsumer:
                 else:
                     event_data = raw_body
 
-                yielded = True
-                # Yield the raw parsed dictionary
-                yield event_data
+                async def ack() -> None:
+                    await sqs_client.delete_message(
+                        QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                    )
 
-                # If we return here without exception, the business logic succeeded.
-                await sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                async def nack() -> None:
+                    pass
+
+                yielded = True
+                # Yield the ackable message
+                yield AckableMessage(payload=event_data, ack=ack, nack=nack)
 
             except json.JSONDecodeError:
                 logger.exception(

@@ -90,15 +90,16 @@ class SqsConsumerManager:
     async def _poll_continuous(self) -> None:
         while self.is_running:
             try:
-                async with self.sqs_consumer.poll_raw_message() as raw_msg:
-                    if not raw_msg:
+                async with self.sqs_consumer.poll_raw_message() as ackable_msg:
+                    if not ackable_msg:
                         await asyncio.sleep(self.poll_sleep_seconds)
                         continue
 
                     # Dispatch to the pure callback handler.
-                    # A raised exception here means the consumer will NOT delete the message,
+                    # A raised exception here means we skip the ack(),
                     # and it will be visible again in SQS after visibility timeout.
-                    await self.handler(raw_msg)
+                    await self.handler(ackable_msg.payload)
+                    await ackable_msg.ack()
             except asyncio.CancelledError:
                 break
             except botocore.exceptions.ClientError as e:

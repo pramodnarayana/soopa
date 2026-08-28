@@ -107,9 +107,10 @@ async def e2e_context() -> "AsyncGenerator[dict[str, Any], None]":
     )
 
     async def process_next_event_helper() -> bool:
-        async with test_consumer.poll_raw_message() as raw_msg:
-            if raw_msg:
-                await dispatcher.dispatch_raw(raw_msg)
+        async with test_consumer.poll_raw_message() as ackable_msg:
+            if ackable_msg:
+                await dispatcher.dispatch_raw(ackable_msg.payload)
+                await ackable_msg.ack()
                 return True
         return False
 
