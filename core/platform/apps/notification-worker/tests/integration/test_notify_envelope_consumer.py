@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from unittest.mock import AsyncMock
 
 import pytest
 from notification.domain.models import NotificationEvent
@@ -13,10 +14,6 @@ class RecordingCompiler:
         self.events.append(event)
 
 
-class UnusedDependency:
-    pass
-
-
 @pytest.mark.asyncio
 async def test_notify_envelope_consumed() -> None:
     envelope = notify(
@@ -26,16 +23,16 @@ async def test_notify_envelope_consumed() -> None:
         payload={"invoice_id": "invoice-1", "event_type": "payload.decoy"},
     )
     compiler = RecordingCompiler()
+    cleanup_mock = AsyncMock()
 
-    # We can just test the compiler itself since the consumer just delegates in the new arch,
-    # or simulate the new NotificationEventDispatcher.
-    # The original test was testing NotificationEventSqsConsumer, which was deleted.
     from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
         NotificationEventDispatcher,
     )
 
-    dispatcher = NotificationEventDispatcher(compiler)
-    await dispatcher.dispatch(asdict(envelope))
+    dispatcher = NotificationEventDispatcher(
+        notification_compiler=compiler, cleanup_job_handler=cleanup_mock
+    )
+    await dispatcher.dispatch_raw(asdict(envelope))
 
     assert len(compiler.events) == 1
     processed_event = compiler.events[0]

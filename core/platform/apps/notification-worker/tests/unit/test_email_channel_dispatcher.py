@@ -25,6 +25,8 @@ async def test_email_dispatcher_success():
 
     body = {
         "event_type": "email.requested",
+        "tenant_id": "tenant-1",
+        "idempotency_key": "idempotency_key",
         "payload": {
             "tenant_id": "tenant-1",
             "content": "Hello",
@@ -51,6 +53,8 @@ async def test_email_dispatcher_failure_propagates():
 
     body = {
         "event_type": "email.requested",
+        "tenant_id": "tenant-1",
+        "idempotency_key": "idempotency_key",
         "payload": {"tenant_id": "tenant-1", "content": "Hello", "subject": "Subj", "data": {}},
     }
 
@@ -64,7 +68,9 @@ async def test_email_dispatcher_ignores_other_events():
     dispatcher = EmailChannelDispatcher(email_strategy=strategy)
 
     body = {
-        "event_type": "slack.requested",
+        "event_type": "some.other.event",
+        "tenant_id": "tenant-1",
+        "idempotency_key": "idempotency_key",
         "payload": {},
     }
 

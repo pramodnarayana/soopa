@@ -1,12 +1,14 @@
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
+
+from database.events import EventEnvelope
+
 from notification.domain.models import (
     Channel,
     NotificationDispatch,
-    NotificationOutboxEvent,
     Template,
     UserNotificationPreference,
 )
-from seedwork.domain.events import EventEnvelope
 from notification.ports.outbound.notification_outbox_repository_port import (
     NotificationOutboxRepositoryPort,
 )
@@ -100,7 +102,7 @@ class FakeOutboxRepo(NotificationOutboxRepositoryPort):
 
 class FakeRouteRepo(NotificationRouteRepositoryPort):
     def __init__(self) -> None:
-        self.routes: dict[Any, Any] = {}
+        self.routes: dict[tuple[str, str], list[Channel]] = {}
 
     async def get_channels(self, tenant_id: str, event_type: str) -> list[Channel]:
         return self.routes.get((tenant_id, event_type), [])
@@ -149,10 +151,13 @@ class FakeNotificationUow(NotificationUnitOfWorkPort):
         # Simulate Outbox event collection
         if self.record_repo and hasattr(self.record_repo, "dispatches"):
             import dataclasses
+            import uuid
 
             for dispatch in self.record_repo.dispatches:
                 for event in dispatch.domain_events:
                     outbox_event = EventEnvelope(
+                        id=str(uuid.uuid4()),
+                        source="notification",
                         tenant_id=event.tenant_id,
                         event_type=event.event_name,
                         idempotency_key=event.idempotency_key,

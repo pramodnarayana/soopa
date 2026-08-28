@@ -22,9 +22,8 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
 
         from database.models.identity import Tenant as OrmTenant
 
-        tenant_id = "ten_12345"
         dummy_tenant = {
-            "id": tenant_id,
+            "id": "ten_12345",
             "name": "Test Tenant",
             "slug": "test-tenant",
             "idp_tenant_id": "test_123",
@@ -32,14 +31,30 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
             "created_at": datetime.datetime.now().replace(tzinfo=None),
             "updated_at": datetime.datetime.now().replace(tzinfo=None),
         }
-        await db_session.execute(insert(OrmTenant).values([dummy_tenant]))
+        platform_tenant = {
+            "id": "ten_000000000000000000000000",
+            "name": "Platform Tenant",
+            "slug": "platform",
+            "idp_tenant_id": "platform",
+            "status": "active",
+            "created_at": datetime.datetime.now().replace(tzinfo=None),
+            "updated_at": datetime.datetime.now().replace(tzinfo=None),
+        }
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        stmt = (
+            pg_insert(OrmTenant)
+            .values([dummy_tenant, platform_tenant])
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        await db_session.execute(stmt)
 
         # Insert a few global roles (tenant_id IS NULL)
         global_role_1 = {
             "id": f"role_{uuid.uuid4().hex[:12]}",
             "name": "Global Admin Test",
             "description": "Admin for tests",
-            "tenant_id": None,
+            "tenant_id": "ten_000000000000000000000000",
             "capabilities": ["test:read", "test:write"],
         }
 
@@ -47,7 +62,7 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
             "id": f"role_{uuid.uuid4().hex[:12]}",
             "name": "Global Viewer Test",
             "description": "Viewer for tests",
-            "tenant_id": None,
+            "tenant_id": "ten_000000000000000000000000",
             "capabilities": ["test:read"],
         }
 
@@ -76,5 +91,5 @@ async def test_postgres_role_repository_get_global_roles(db_session_factory) -> 
         # Verify mapping
         fetched_role = next(r for r in roles if r.id == global_role_1["id"])
         assert fetched_role.name == "Global Admin Test"
-        assert fetched_role.tenant_id is None
+        assert fetched_role.tenant_id == "ten_000000000000000000000000"
         assert set(fetched_role.capabilities) == {"test:read", "test:write"}

@@ -3,25 +3,25 @@ from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
+from database.events import EventEnvelope
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.subscriptions import App
 
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
+from ucp.application.dto import SubscribeAppCommand
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.application.use_cases.subscribe_app_use_case import (
-    SubscribeAppCommand,
-    SubscribeAppUseCase,
-)
+from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
 
 pytestmark = pytest.mark.integration
 
@@ -60,6 +60,10 @@ async def test_app_subscription_flow(
         listen_channel="ucp_outbox_wakeup",
     )
 
+    event_consumer = AwsSqsConsumer(
+        queue_name=localstack_container["sqs_queue_name"],
+        endpoint_url=localstack_container["endpoint_url"],
+    )
     dispatcher = UcpEventDispatcher()
 
     # Fake uow factory for the provisioner
@@ -71,12 +75,11 @@ async def test_app_subscription_flow(
 
     dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
 
-    # 1.5 Seed the "edi" app and shard in the database
-    from ucp_models.infrastructure import DatabaseShard
-
+    # 1.5 Get the seeded "edi" app from the database
     async with db_session.begin():
-        # The "edi" app and shard are already seeded by migrations.
-        pass
+        stmt = select(App.id).where(App.slug == "edi")
+        result = await db_session.execute(stmt)
+        edi_app_id = result.scalar_one()
 
     # 2. Trigger Business Logic (Provision Tenant)
     use_case = ProvisionTenantUseCase(uow=uow)
@@ -87,9 +90,9 @@ async def test_app_subscription_flow(
 
     tenant = await use_case.execute(command)
 
-    # Now subscribe the tenant to an app to trigger the app.subscribed event
+    # 3. Simulate UI passing an App ID to the SubscribeAppUseCase
     subscribe_use_case = SubscribeAppUseCase(uow=uow)
-    subscribe_command = SubscribeAppCommand(tenant_id=tenant.id, app_id="edi")
+    subscribe_command = SubscribeAppCommand(tenant_id=tenant.id, app_id=edi_app_id)
     await subscribe_use_case.execute(subscribe_command)
 
     # 3. Process Outbox
@@ -113,9 +116,17 @@ async def test_app_subscription_flow(
     # We might have multiple events (TenantProvisioned, UserInvited, app.subscribed). Process up to 5.
     for _ in range(5):
         try:
-            async with event_consumer.process_next_event() as event:
-                if not event or event.tenant_id != tenant.id:
+            async with event_consumer.poll_raw_message() as raw_event:
+                if not raw_event or raw_event.get("tenant_id") != tenant.id:
                     continue
+                event = EventEnvelope(
+                    id=raw_event.get("id", ""),
+                    source=raw_event.get("source", ""),
+                    tenant_id=raw_event.get("tenant_id", ""),
+                    event_type=raw_event.get("event_type", ""),
+                    idempotency_key=raw_event.get("idempotency_key"),
+                    payload=raw_event.get("payload", {}),
+                )
                 await dispatcher._dispatch(event)
                 if event.event_type == "app.subscribed":
                     found_app_subscribed = True
@@ -138,8 +149,10 @@ async def test_app_subscription_flow(
 
     # Verify App Subscription status
     res = await db_session.execute(
-        text("SELECT * FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = 'edi'"),
-        {"tenant_id": tenant.id},
+        text(
+            "SELECT * FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = :app_id"
+        ),
+        {"tenant_id": tenant.id, "app_id": edi_app_id},
     )
     app_sub = res.fetchone()
     assert app_sub is not None
