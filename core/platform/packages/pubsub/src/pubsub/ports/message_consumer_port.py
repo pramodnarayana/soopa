@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
 
-from pubsub.aws.aws_sqs_consumer import AckableMessage
+from pubsub.message import AckableMessage
 
 
 @runtime_checkable

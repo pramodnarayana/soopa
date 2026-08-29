@@ -136,6 +136,7 @@ async def test_template_crud_operations(db_session_factory):
 @pytest.mark.asyncio
 async def test_get_template_fallback_to_platform(db_session_factory):
     tenant_id = f"test-plat-tenant-{uuid.uuid4().hex[:8]}"
+    event_type = f"system.alert.{uuid.uuid4().hex}"
     from notification.domain.models import PLATFORM_TENANT_ID
 
     # Setup test DB
@@ -162,7 +163,7 @@ async def test_get_template_fallback_to_platform(db_session_factory):
             id=f"tpl_plat_{uuid.uuid4().hex[:8]}",
             tenant_id=PLATFORM_TENANT_ID,
             name="Platform Default",
-            event_type="system.alert",
+            event_type=event_type,
             channel="EMAIL",
             is_active=True,
             subject_template="Alert",
@@ -174,7 +175,7 @@ async def test_get_template_fallback_to_platform(db_session_factory):
         repo = SqlAlchemyTemplateRepository(session)
 
         # Query using the regular tenant_id, it should fallback and find the PLATFORM template
-        tmpl = await repo.get_template(tenant_id, "system.alert", Channel.EMAIL)
+        tmpl = await repo.get_template(tenant_id, event_type, Channel.EMAIL)
 
         assert tmpl is not None
         assert tmpl.tenant_id == PLATFORM_TENANT_ID

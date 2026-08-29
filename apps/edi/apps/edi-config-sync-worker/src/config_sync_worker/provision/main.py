@@ -45,7 +45,8 @@ async def main() -> None:
     )
 
     provisioning_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
+        queue_url=settings.sqs.provisioning_queue_url,
+        region_name=settings.aws.resolved_region,
         endpoint_url=settings.aws.endpoint_url,
     )
     sqs_manager = SqsConsumerManager(

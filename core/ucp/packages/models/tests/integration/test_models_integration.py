@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncGenerator
+from uuid import uuid4
 
 import pytest
 from database.provider import get_async_engine
@@ -18,24 +19,22 @@ async def test_session() -> "AsyncGenerator[AsyncSession, None]":
         "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
     engine = get_async_engine(base_url)
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with factory() as session:
-        yield session
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            factory = async_sessionmaker(
+                bind=connection,
+                class_=AsyncSession,
+                expire_on_commit=False,
+                join_transaction_mode="create_savepoint",
+            )
+            async with factory() as session:
+                yield session
+        finally:
+            if transaction.is_active:
+                await transaction.rollback()
 
     await engine.dispose()
-
-
-@pytest.fixture(autouse=True)
-async def clear_ucp_tables(test_session: AsyncSession) -> None:
-    from sqlalchemy import text
-
-    # Clean up tables we test against
-    await test_session.execute(text("TRUNCATE TABLE ucp.outbox RESTART IDENTITY CASCADE;"))
-    await test_session.execute(text("TRUNCATE TABLE ucp.database_shards RESTART IDENTITY CASCADE;"))
-    await test_session.execute(text("TRUNCATE TABLE ucp.apps RESTART IDENTITY CASCADE;"))
-    await test_session.execute(text("TRUNCATE TABLE identity.tenants RESTART IDENTITY CASCADE;"))
-    await test_session.commit()
 
 
 @pytest.mark.integration
@@ -43,15 +42,22 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     # 1. We must insert a Tenant first because ShardRegistry and AppSubscription have FK to identity.tenants
     from sqlalchemy import text
 
+    suffix = uuid4().hex
+    tenant_id = f"tenant-{suffix}"
+    shard_id = f"shard-{suffix}"
+    outbox_id = f"cp_ucp_ob_{suffix}"
+
     await test_session.execute(
         text(
-            "INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) VALUES ('tenant-1', 'Test Tenant', 'test-tenant', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-        )
+            "INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) "
+            "VALUES (:tenant_id, 'Test Tenant', :slug, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+        {"tenant_id": tenant_id, "slug": f"test-tenant-{suffix}"},
     )
 
     # 2. Persist App
     app = App(
-        slug="test-app-slug",
+        slug=f"test-app-{suffix}",
         name="Test App Name",
         description="A great app",
     )
@@ -62,8 +68,8 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
 
     # 3. Persist DatabaseShard
     shard = DatabaseShard(
-        id="shard-1-id",
-        name="shard_1_name",
+        id=shard_id,
+        name=f"shard_{suffix}",
         dsn="postgres://fake",
     )
     test_session.add(shard)
@@ -72,7 +78,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
 
     # 4. Persist ShardRegistry
     registry = ShardRegistry(
-        tenant_id="tenant-1",
+        tenant_id=tenant_id,
         app_id=app.id,
         shard_id=shard.id,
     )
@@ -80,7 +86,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
 
     # 5. Persist AppSubscription
     sub = AppSubscription(
-        tenant_id="tenant-1",
+        tenant_id=tenant_id,
         app_id=app.id,
         tier="enterprise",
     )
@@ -88,8 +94,8 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
 
     # 6. Persist ControlPlaneOutbox
     outbox = ControlPlaneOutbox(
-        id="cp_ucp_ob_999",
-        tenant_id="tenant-1",
+        id=outbox_id,
+        tenant_id=tenant_id,
         event_type="test.event",
         idempotency_key="key-1",
         payload={"some": "data"},
@@ -106,11 +112,11 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     result = await test_session.execute(select(App).where(App.id == app.id))
     fetched_app = result.scalar_one_or_none()
     assert fetched_app is not None
-    assert fetched_app.slug == "test-app-slug"
+    assert fetched_app.slug == f"test-app-{suffix}"
 
     # Sub
     result = await test_session.execute(
-        select(AppSubscription).where(AppSubscription.tenant_id == "tenant-1")
+        select(AppSubscription).where(AppSubscription.tenant_id == tenant_id)
     )
     fetched_sub = result.scalar_one_or_none()
     assert fetched_sub is not None
@@ -118,24 +124,22 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
 
     # Outbox
     result = await test_session.execute(
-        select(ControlPlaneOutbox).where(ControlPlaneOutbox.id == "cp_ucp_ob_999")
+        select(ControlPlaneOutbox).where(ControlPlaneOutbox.id == outbox_id)
     )
     fetched_outbox = result.scalar_one_or_none()
     assert fetched_outbox is not None
     assert fetched_outbox.payload == {"some": "data"}
 
     # Shard
-    result = await test_session.execute(
-        select(DatabaseShard).where(DatabaseShard.id == "shard-1-id")
-    )
+    result = await test_session.execute(select(DatabaseShard).where(DatabaseShard.id == shard_id))
     fetched_shard = result.scalar_one_or_none()
     assert fetched_shard is not None
-    assert fetched_shard.name == "shard_1_name"
+    assert fetched_shard.name == f"shard_{suffix}"
 
     # Shard Registry
     result = await test_session.execute(
-        select(ShardRegistry).where(ShardRegistry.tenant_id == "tenant-1")
+        select(ShardRegistry).where(ShardRegistry.tenant_id == tenant_id)
     )
     fetched_registry = result.scalar_one_or_none()
     assert fetched_registry is not None
-    assert fetched_registry.shard_id == "shard-1-id"
+    assert fetched_registry.shard_id == shard_id

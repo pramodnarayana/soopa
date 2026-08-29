@@ -5,8 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     sns_identity_events_topic_arn: str = ""
-    sqs_identity_sync_queue_name: str = ""
+    sqs_identity_sync_queue_url: str = ""
     aws_endpoint_url: str | None = None
+    aws_region: str = "us-east-1"
     app_env: str = "production"
     zitadel_api_url: str = ""
     zitadel_api_token: str = ""

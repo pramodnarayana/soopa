@@ -57,6 +57,17 @@ class AwsSettings(BaseSettings):
         return self.region or self.default_region
 
 
+class SqsSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="SQS_", env_file=".env", extra="ignore")
+
+    provisioning_queue_url: str = Field(default="")
+    transform_queue_url: str = Field(default="")
+    lifecycle_queue_url: str = Field(default="")
+    deliver_queue_url: str = Field(default="")
+    data_plane_jobs_queue_url: str = Field(default="")
+    control_plane_jobs_queue_url: str = Field(default="")
+
+
 class OtelSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OTEL_", env_file=".env", extra="ignore")
 
@@ -146,6 +157,7 @@ class AppSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     s3: S3Settings = Field(default_factory=S3Settings)
     aws: AwsSettings = Field(default_factory=AwsSettings)
+    sqs: SqsSettings = Field(default_factory=SqsSettings)
     otel: OtelSettings = Field(default_factory=OtelSettings)
     identity: IdentitySettings = Field(default_factory=IdentitySettings)
     public: PublicSettings = Field(default_factory=PublicSettings)

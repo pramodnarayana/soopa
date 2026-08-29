@@ -9,7 +9,7 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 
 # We need the outbox publisher and sqs poller
 # They were in orchestrator-worker, but let's copy them or import them if they are still there
-from edi.config.settings import get_settings
+from edi.config.settings import AppSettings, get_settings
 from edi.domain.events import MessageQueueName
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
@@ -54,26 +54,32 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
+def _create_scheduled_job_consumers(
+    settings: AppSettings,
+) -> tuple[AwsSqsConsumer, AwsSqsConsumer]:
+    def create_consumer(queue_url: str) -> AwsSqsConsumer:
+        return AwsSqsConsumer(
+            queue_url=queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=settings.aws.endpoint_url,
+        )
+
+    return (
+        create_consumer(settings.sqs.data_plane_jobs_queue_url),
+        create_consumer(settings.sqs.control_plane_jobs_queue_url),
+    )
+
+
 async def main() -> None:  # noqa: C901
     logger.info("edi_background_worker.starting")
     settings = get_settings()
-    aws_endpoint = settings.aws.endpoint_url
 
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
 
-    import aioboto3
     from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 
-    async with aioboto3.Session().client(
-        "sqs",
-        endpoint_url=settings.aws.endpoint_url,
-        region_name=settings.aws.resolved_region,
-    ) as sqs:
-        resp = await sqs.get_queue_url(QueueName=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value)
-        data_plane_queue_url = resp["QueueUrl"]
-
     message_publisher = AwsSqsPublisher(
-        queue_url=data_plane_queue_url,
+        queue_url=settings.sqs.data_plane_jobs_queue_url,
         endpoint_url=settings.aws.endpoint_url,
         region_name=settings.aws.resolved_region,
     )
@@ -144,10 +150,7 @@ async def main() -> None:  # noqa: C901
         EdiControlPlaneOutboxCleanupJobHandler(OutboxCleanerUseCase(edi_cp_outbox_cleanup_repo)),
     )
 
-    dp_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
-        endpoint_url=aws_endpoint,
-    )
+    dp_consumer, cp_consumer = _create_scheduled_job_consumers(settings)
     dp_manager = SqsConsumerManager(
         consumer=dp_consumer,
         queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
@@ -155,10 +158,6 @@ async def main() -> None:  # noqa: C901
     )
     dp_manager.start()
 
-    cp_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,
-        endpoint_url=aws_endpoint,
-    )
     cp_manager = SqsConsumerManager(
         consumer=cp_consumer,
         queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,

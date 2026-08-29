@@ -80,14 +80,15 @@ class WorkerContainer(containers.DeclarativeContainer):
 
     priority_queue_consumer = providers.Singleton(
         AwsSqsConsumer,
-        queue_name="PriorityNotificationsQueue",
+        queue_url=config.priority_queue_url,
+        region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
     )
 
     consumer_worker = providers.Singleton(
         SqsConsumerManager,
         consumer=priority_queue_consumer,
-        queue_name="PriorityNotificationsQueue",
+        queue_name="edi-priority-notifications.fifo",
         handler=notification_dispatcher.provided.dispatch_raw,
     )
 
@@ -98,7 +99,8 @@ class WorkerContainer(containers.DeclarativeContainer):
 
     email_delivery_consumer = providers.Singleton(
         AwsSqsConsumer,
-        queue_name="email-delivery.fifo",
+        queue_url=config.email_delivery_queue_url,
+        region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
     )
 

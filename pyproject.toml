@@ -223,8 +223,7 @@ omit = [
 [tool.coverage.report]
 # Required 80% coverage
 show_missing = true
-# TODO(testing-standardization): Temporarily lowered coverage limit for unwritten tests. Restore to 80 later.
-fail_under = 50
+fail_under = 80
 
 [tool.pyright]
 ignore = ["apps/edi/packages/edi/src/edi/core/grammar", "**/migrations"]

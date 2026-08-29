@@ -139,7 +139,8 @@ async def main() -> None:  # noqa: C901
     consumer = EdiDataPlaneEventDispatcher(callback=route_event)
 
     transform_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.TRANSFORM_QUEUE,
+        queue_url=settings.sqs.transform_queue_url,
+        region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
     transform_manager = SqsConsumerManager(
@@ -150,7 +151,8 @@ async def main() -> None:  # noqa: C901
     transform_manager.start()
 
     lifecycle_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.LIFECYCLE_QUEUE,
+        queue_url=settings.sqs.lifecycle_queue_url,
+        region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
     lifecycle_manager = SqsConsumerManager(
@@ -161,7 +163,8 @@ async def main() -> None:  # noqa: C901
     lifecycle_manager.start()
 
     deliver_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.DELIVER_QUEUE,
+        queue_url=settings.sqs.deliver_queue_url,
+        region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
     deliver_manager = SqsConsumerManager(

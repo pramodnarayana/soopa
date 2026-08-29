@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from database.events import EventEnvelope
@@ -77,9 +77,15 @@ async def test_transport_failure_is_propagated_when_nothing_succeeds():
 @pytest.mark.asyncio
 async def test_context_manager_creates_and_destroys_client():
     publisher = AwsSnsPublisher("topic")
+    mock_client = AsyncMock()
+    mock_client_context = MagicMock()
+    mock_client_context.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client_context.__aexit__ = AsyncMock(return_value=False)
+    publisher.session.client = MagicMock(return_value=mock_client_context)
+
     async with publisher as p:
-        assert p._client is not None
-        assert p._client_context is not None
+        assert p._client is mock_client
+        assert p._client_context is mock_client_context
     assert publisher._client is None
     assert publisher._client_context is None
 

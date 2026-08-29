@@ -85,5 +85,6 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Outbox Relay vs Sweeper (Strict Requirement)**: The outbox pattern MUST employ a dual-mechanism. The **Relay** (e.g. Postgres LISTEN/NOTIFY) is for REALTIME event processing. The **Sweeper** is a FALLBACK poller running on a cron to pick up stuck/failed messages. You MUST wire up BOTH mechanisms to guarantee reliability.
 
 # Infrastructure as Code (IaC) Injection (Enterprise AWS)
+
 - **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `boto3.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
 - **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass fully-qualified ARNs or URLs (e.g., `QueueUrl`) directly into the application container as environment variables. The application configuration (`settings.py`) simply reads this exact URL and passes it directly to platform components like `AwsSqsPublisher` or `SqsConsumerManager`.

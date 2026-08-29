@@ -9,11 +9,12 @@ Tests use real EventEnvelope instances to validate type-correct port usage —
 the same way production code and mypy will see it.
 """
 
+import asyncio
 import dataclasses
 
 import pytest
 from database.events import EventEnvelope
-from pubsub.aws.aws_sqs_consumer import AckableMessage
+from pubsub.message import AckableMessage
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 
 
@@ -157,6 +158,36 @@ async def test_nack_reenqueues_the_message_for_redelivery():
     assert bus.queue.qsize() == 1
     requeued = bus.queue.get_nowait()
     assert requeued == dataclasses.asdict(event)
+
+
+@pytest.mark.asyncio
+async def test_consumer_error_reenqueues_unacknowledged_message():
+    bus = InMemoryEventBus()
+    event = _make_event(event_type="payment.failed", index=9)
+    await bus.publish_batch([event])
+
+    with pytest.raises(RuntimeError, match="handler failed"):
+        async with bus.poll_raw_message():
+            raise RuntimeError("handler failed")
+
+    assert bus.queue.qsize() == 1
+    assert bus.queue.get_nowait() == dataclasses.asdict(event)
+    bus.queue.task_done()
+    await asyncio.wait_for(bus.queue.join(), timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_consumer_error_does_not_requeue_acknowledged_message():
+    bus = InMemoryEventBus()
+    await bus.publish_batch([_make_event(index=10)])
+
+    with pytest.raises(RuntimeError, match="post-ack failure"):
+        async with bus.poll_raw_message() as msg:
+            assert msg is not None
+            await msg.ack()
+            raise RuntimeError("post-ack failure")
+
+    assert bus.queue.empty()
 
 
 # ---------------------------------------------------------------------------

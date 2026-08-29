@@ -32,6 +32,14 @@ async def run_consumer() -> None:  # noqa: C901
     container = Container()
     container.config.database_url.from_value(database_url)
     container.config.sns_topic_arn.from_value(sns_topic_arn)
+    container.config.priority_queue_url.from_env(
+        "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", required=True
+    )
+    container.config.email_delivery_queue_url.from_env(
+        "SQS_EMAIL_DELIVERY_QUEUE_URL", required=True
+    )
+    container.config.aws_endpoint_url.from_env("AWS_ENDPOINT_URL")
+    container.config.aws_region.from_env("AWS_REGION", default="us-east-1")
 
     await cast(Awaitable[None], container.init_resources())
 

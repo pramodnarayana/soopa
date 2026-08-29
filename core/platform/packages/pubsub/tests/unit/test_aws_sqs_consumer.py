@@ -9,19 +9,15 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pubsub.aws.aws_sqs_consumer import AckableMessage, AwsSqsConsumer
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.message import AckableMessage
 
-QUEUE_NAME = "test-queue"
 QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/123456789/test-queue"
 
 
-def _make_sqs_client(
-    queue_url: str = QUEUE_URL,
-    messages: list[dict] | None = None,
-) -> AsyncMock:
+def _make_sqs_client(messages: list[dict] | None = None) -> AsyncMock:
     """Builds a fully-configured mock SQS client."""
     client = AsyncMock()
-    client.get_queue_url.return_value = {"QueueUrl": queue_url}
     client.receive_message.return_value = {"Messages": messages or []}
     client.delete_message.return_value = {}
     return client
@@ -52,37 +48,9 @@ def _sns_envelope(inner: dict, receipt_handle: str = "rh-sns") -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_empty_queue_name_raises_value_error():
-    with pytest.raises(ValueError, match="SQS Queue Name must be provided"):
-        AwsSqsConsumer(queue_name="")
-
-
-# ---------------------------------------------------------------------------
-# Helpers: _get_queue_url caching
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_queue_url_is_resolved_once_and_cached():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    client = _make_sqs_client()
-
-    url1 = await consumer._get_queue_url(client)
-    url2 = await consumer._get_queue_url(client)  # should use cached value
-
-    assert url1 == QUEUE_URL
-    assert url2 == QUEUE_URL
-    client.get_queue_url.assert_awaited_once_with(QueueName=QUEUE_NAME)
-
-
-@pytest.mark.asyncio
-async def test_queue_url_resolution_failure_propagates():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    client = AsyncMock()
-    client.get_queue_url.side_effect = RuntimeError("Queue not found")
-
-    with pytest.raises(RuntimeError, match="Queue not found"):
-        await consumer._get_queue_url(client)
+def test_empty_queue_url_raises_value_error():
+    with pytest.raises(ValueError, match="SQS queue URL must be provided"):
+        AwsSqsConsumer(queue_url="")
 
 
 # ---------------------------------------------------------------------------
@@ -92,11 +60,8 @@ async def test_queue_url_resolution_failure_propagates():
 
 @pytest.mark.asyncio
 async def test_poll_raw_message_yields_none_when_queue_is_empty():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     client = _make_sqs_client(messages=[])
-
-    # Inject the pre-resolved URL so we skip get_queue_url
-    consumer._queue_url = QUEUE_URL
 
     # Patch session.client to return our mock
     mock_ctx = MagicMock()
@@ -107,6 +72,8 @@ async def test_poll_raw_message_yields_none_when_queue_is_empty():
     async with consumer.poll_raw_message() as msg:
         assert msg is None
 
+    client.get_queue_url.assert_not_awaited()
+
 
 # ---------------------------------------------------------------------------
 # poll_raw_message — standard JSON message
@@ -115,8 +82,7 @@ async def test_poll_raw_message_yields_none_when_queue_is_empty():
 
 @pytest.mark.asyncio
 async def test_poll_raw_message_yields_ackable_message_for_plain_json():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    consumer._queue_url = QUEUE_URL
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     payload = {"event_type": "order.created", "id": "evt-1"}
     client = _make_sqs_client(messages=[_raw_message(payload)])
 
@@ -137,8 +103,7 @@ async def test_poll_raw_message_yields_ackable_message_for_plain_json():
 
 @pytest.mark.asyncio
 async def test_poll_raw_message_unwraps_sns_notification_envelope():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    consumer._queue_url = QUEUE_URL
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     inner_payload = {"event_type": "invoice.created", "tenant_id": "t1"}
     client = _make_sqs_client(messages=[_sns_envelope(inner_payload)])
 
@@ -159,8 +124,7 @@ async def test_poll_raw_message_unwraps_sns_notification_envelope():
 
 @pytest.mark.asyncio
 async def test_ack_deletes_message_from_sqs():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    consumer._queue_url = QUEUE_URL
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     payload = {"event_type": "test.event"}
     client = _make_sqs_client(messages=[_raw_message(payload, receipt_handle="rh-abc")])
 
@@ -178,8 +142,7 @@ async def test_ack_deletes_message_from_sqs():
 @pytest.mark.asyncio
 async def test_nack_is_a_no_op():
     """nack() does nothing — SQS will redeliver the message after visibility timeout."""
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    consumer._queue_url = QUEUE_URL
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     payload = {"event_type": "test.event"}
     client = _make_sqs_client(messages=[_raw_message(payload)])
 
@@ -203,8 +166,7 @@ async def test_nack_is_a_no_op():
 @pytest.mark.asyncio
 async def test_json_decode_error_deletes_message_and_yields_none():
     """Malformed JSON is treated as a dead letter: delete it and yield None."""
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    consumer._queue_url = QUEUE_URL
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     invalid_msg = {
         "Body": "NOT_VALID_JSON{{{{",
         "ReceiptHandle": "rh-bad",
@@ -231,7 +193,7 @@ async def test_json_decode_error_deletes_message_and_yields_none():
 
 @pytest.mark.asyncio
 async def test_context_manager_creates_and_destroys_shared_client():
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
 
     mock_client = AsyncMock()
     mock_client_ctx = MagicMock()
@@ -250,7 +212,7 @@ async def test_context_manager_creates_and_destroys_shared_client():
 @pytest.mark.asyncio
 async def test_context_manager_reuses_existing_client_on_double_enter():
     """Calling __aenter__ twice should not create a second client."""
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
 
     mock_client = AsyncMock()
     mock_client_ctx = MagicMock()
@@ -273,8 +235,7 @@ async def test_context_manager_reuses_existing_client_on_double_enter():
 @pytest.mark.asyncio
 async def test_poll_raw_message_uses_shared_client_when_available():
     """When used inside a context manager, poll_raw_message should reuse the shared client."""
-    consumer = AwsSqsConsumer(queue_name=QUEUE_NAME)
-    consumer._queue_url = QUEUE_URL
+    consumer = AwsSqsConsumer(queue_url=QUEUE_URL)
     payload = {"event_type": "shared.client.event"}
     shared_client = _make_sqs_client(messages=[_raw_message(payload)])
 
@@ -300,9 +261,8 @@ async def test_poll_raw_message_catches_and_logs_exception_from_caller():
     If the caller raises an exception inside the async with block, it is caught
     by the context manager, logged, and suppresses the error to prevent loop crash.
     """
-    consumer = AwsSqsConsumer("queue")
+    consumer = AwsSqsConsumer(QUEUE_URL)
     mock_client = AsyncMock()
-    mock_client.get_queue_url.return_value = {"QueueUrl": "url"}
     mock_client.receive_message.return_value = {
         "Messages": [
             {
@@ -329,9 +289,8 @@ async def test_poll_raw_message_reraises_client_error():
     """ClientError during receive_message is logged and re-raised."""
     from botocore.exceptions import ClientError
 
-    consumer = AwsSqsConsumer("queue")
+    consumer = AwsSqsConsumer(QUEUE_URL)
     mock_client = AsyncMock()
-    mock_client.get_queue_url.return_value = {"QueueUrl": "url"}
     mock_client.receive_message.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "Denied"}},
         "ReceiveMessage",

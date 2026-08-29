@@ -6,7 +6,7 @@ from typing import Any
 
 from database.events import EventEnvelope
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from pubsub.aws.aws_sqs_consumer import AckableMessage
+from pubsub.message import AckableMessage
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 
 
@@ -65,16 +65,27 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
             return
 
         payload = await self.queue.get()
+        acknowledged = False
 
         async def ack() -> None:
+            nonlocal acknowledged
             self.queue.task_done()
+            acknowledged = True
 
         async def nack() -> None:
+            nonlocal acknowledged
             # Re-enqueue the message to simulate SQS redelivery after visibility timeout
             await self.queue.put(payload)
             self.queue.task_done()
+            acknowledged = True
 
-        yield AckableMessage(payload=payload, ack=ack, nack=nack)
+        try:
+            yield AckableMessage(payload=payload, ack=ack, nack=nack)
+        except BaseException:
+            if not acknowledged:
+                await self.queue.put(payload)
+                self.queue.task_done()
+            raise
 
     # -------------------------------------------------------------------------
     # Test helpers

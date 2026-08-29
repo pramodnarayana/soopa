@@ -1,21 +1,14 @@
 import json
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any
 
 import aioboto3
 import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from pubsub.message import AckableMessage
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass
-class AckableMessage:
-    payload: dict[str, Any]
-    ack: Callable[[], Awaitable[None]]
-    nack: Callable[[], Awaitable[None]]
 
 
 class AwsSqsConsumer:
@@ -26,19 +19,18 @@ class AwsSqsConsumer:
 
     def __init__(
         self,
-        queue_name: str,
+        queue_url: str,
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
     ):
-        if not queue_name:
+        if not queue_url:
             logger.error(
-                "sqs_listener_missing_queue_name",
-                message="SQS Listener started without a Queue Name!",
+                "sqs_listener_missing_queue_url",
+                message="SQS listener started without a queue URL",
             )
-            raise ValueError("SQS Queue Name must be provided")
+            raise ValueError("SQS queue URL must be provided")
 
-        self.queue_name = queue_name
-        self._queue_url: str | None = None
+        self.queue_url = queue_url
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
@@ -79,25 +71,13 @@ class AwsSqsConsumer:
             ):
                 yield event
 
-    async def _get_queue_url(self, sqs_client: Any) -> str:
-        if self._queue_url:
-            return self._queue_url
-        try:
-            resp = await sqs_client.get_queue_url(QueueName=self.queue_name)
-            self._queue_url = resp["QueueUrl"]
-            return self._queue_url
-        except Exception:
-            logger.exception("sqs_queue_url_resolution_failed", queue_name=self.queue_name)
-            raise
-
     @asynccontextmanager
     async def _process_with_client(
         self, sqs_client: Any
     ) -> AsyncGenerator[AckableMessage | None, None]:
         try:
-            queue_url = await self._get_queue_url(sqs_client)
             response = await sqs_client.receive_message(
-                QueueUrl=queue_url,
+                QueueUrl=self.queue_url,
                 MaxNumberOfMessages=1,
                 WaitTimeSeconds=5,
             )
@@ -128,7 +108,7 @@ class AwsSqsConsumer:
 
                 async def ack() -> None:
                     await sqs_client.delete_message(
-                        QueueUrl=queue_url, ReceiptHandle=receipt_handle
+                        QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
                     )
 
                 async def nack() -> None:
@@ -144,7 +124,9 @@ class AwsSqsConsumer:
                     message_id=message_id,
                     payload_length=len(body_str),
                 )
-                await sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                await sqs_client.delete_message(
+                    QueueUrl=self.queue_url, ReceiptHandle=receipt_handle
+                )
                 if not yielded:
                     yield None
             except Exception as e:

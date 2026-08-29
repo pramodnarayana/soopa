@@ -247,12 +247,13 @@ class WorkerContainer:
         from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
         identity_sync_consumer = AwsSqsConsumer(
-            queue_name=self.settings.sqs_identity_sync_queue_name,
+            queue_url=self.settings.sqs_identity_sync_queue_url,
+            region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
         )
         self.events_consumer = SqsConsumerManager(
             consumer=identity_sync_consumer,
-            queue_name=self.settings.sqs_identity_sync_queue_name,
+            queue_name="identity-events.fifo",
             handler=self.events_dispatcher.dispatch_raw,
         )
 

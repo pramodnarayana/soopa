@@ -50,13 +50,13 @@ async def main() -> None:
         uow = cast(DataPlaneUnitOfWorkPort, uow_factory())
         return ComputeTransformUseCase(uow=uow, transformer=transformer)
 
-    # We don't need queue_url anymore because SqsConsumerManager resolves it!
     dispatcher = EdiComputeDispatcher(
         use_case_factory=use_case_factory,
     )
 
     transform_consumer = AwsSqsConsumer(
-        queue_name=MessageQueueName.TRANSFORM_QUEUE.value,
+        queue_url=settings.sqs.transform_queue_url,
+        region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
     manager = SqsConsumerManager(

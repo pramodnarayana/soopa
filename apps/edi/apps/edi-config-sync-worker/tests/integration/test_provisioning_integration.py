@@ -109,7 +109,8 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         try:
             await sqs.create_queue(QueueName=queue_name, Attributes={"FifoQueue": "true"})
             resp = await sqs.get_queue_url(QueueName=queue_name)
-            await sqs.purge_queue(QueueUrl=resp["QueueUrl"])
+            queue_url = resp["QueueUrl"]
+            await sqs.purge_queue(QueueUrl=queue_url)
             await asyncio.sleep(1)
         except Exception:  # noqa: BLE001
             structlog.get_logger(__name__).warning("Could not setup queue: {e}")
@@ -128,7 +129,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 
     test_consumer = AwsSqsConsumer(
-        queue_name=queue_name,
+        queue_url=queue_url,
         endpoint_url=sqs_endpoint,
         region_name="us-east-1",
     )

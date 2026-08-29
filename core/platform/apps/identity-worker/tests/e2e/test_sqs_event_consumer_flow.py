@@ -17,8 +17,8 @@ import pytest
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
-from pubsub.aws.aws_sqs_consumer import AckableMessage
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.message import AckableMessage
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 
 pytestmark = pytest.mark.asyncio

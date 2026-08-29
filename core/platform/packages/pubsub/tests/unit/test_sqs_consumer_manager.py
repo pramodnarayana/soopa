@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import botocore.exceptions
 import pytest
-from pubsub.aws.aws_sqs_consumer import AckableMessage
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.message import AckableMessage
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 
 QUEUE_NAME = "test-mgr-queue"
