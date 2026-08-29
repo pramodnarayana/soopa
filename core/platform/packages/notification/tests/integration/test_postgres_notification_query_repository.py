@@ -11,7 +11,7 @@ from notification.adapters.outbound.database.postgres_notification_query_reposit
 
 @pytest.mark.asyncio
 async def test_notification_query_and_mark_read(db_session_factory):
-    tenant_id = "test-query-tenant"
+    tenant_id = f"test-query-tenant-{uuid.uuid4().hex[:8]}"
     user_id = "test-user-123"
     notif_id = f"notif_inapp_{uuid.uuid4().hex}"
 
@@ -19,7 +19,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name="Test Tenant",
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
             slug=tenant_id,
             status="ACTIVE",
         )

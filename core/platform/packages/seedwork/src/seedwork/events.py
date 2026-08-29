@@ -33,8 +33,8 @@ class DomainEvent(ABC):
         """
         if hasattr(self, "id"):
             return str(self.id)
-        if not hasattr(self, "_idempotency_key"):
+        if "_idempotency_key" not in self.__dict__:
             import uuid
 
-            object.__setattr__(self, "_idempotency_key", str(uuid.uuid4()))
-        return self._idempotency_key
+            self.__dict__["_idempotency_key"] = str(uuid.uuid4())
+        return str(self.__dict__["_idempotency_key"])

@@ -8,7 +8,7 @@ from scheduler.ports.outbound.uow_port import SchedulerUnitOfWorkPort
 logger = structlog.get_logger(__name__)
 
 
-class SweepStuckJobsUseCase:
+class JobSweeperUseCase:
     def __init__(self, uow_factory: Callable[[], SchedulerUnitOfWorkPort]):
         self.uow_factory = uow_factory
 

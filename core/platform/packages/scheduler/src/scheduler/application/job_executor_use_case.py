@@ -12,7 +12,7 @@ from scheduler.ports.outbound.uow_port import SchedulerUnitOfWorkPort
 logger = structlog.get_logger(__name__)
 
 
-class ClaimAndExecuteJobsUseCase:
+class JobExecutorUseCase:
     def __init__(
         self, uow_factory: Callable[[], SchedulerUnitOfWorkPort], dispatcher: JobDispatcherPort
     ):

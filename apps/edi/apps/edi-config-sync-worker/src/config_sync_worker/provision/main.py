@@ -9,6 +9,7 @@ from edi.domain.events import MessageQueueName
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
@@ -43,10 +44,14 @@ async def main() -> None:
         domain_service=replication_service, translator_port=translator
     )
 
+    provisioning_consumer = AwsSqsConsumer(
+        queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
+        endpoint_url=settings.aws.endpoint_url,
+    )
     sqs_manager = SqsConsumerManager(
+        consumer=provisioning_consumer,
         queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
         handler=dispatcher.dispatch_raw,
-        endpoint_url=settings.aws.endpoint_url,
     )
     sqs_manager.start()
 

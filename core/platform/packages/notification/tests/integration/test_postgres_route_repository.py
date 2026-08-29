@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from database.models.notifications import NotificationRouteConfiguration
 
@@ -10,7 +12,7 @@ from notification.domain.models import Channel
 @pytest.mark.asyncio
 async def test_get_channels_returns_configured_channels(db_session_factory):
     # Setup test data
-    tenant_id = "test-tenant-123"
+    tenant_id = f"test-tenant-123-{uuid.uuid4().hex[:8]}"
     event_type = "test.event.fired"
 
     async with db_session_factory() as session, session.begin():
@@ -19,7 +21,7 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
 
         tenant = Tenant(
             id=tenant_id,
-            name="Test Tenant",
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
             slug=tenant_id,
             status="ACTIVE",
         )

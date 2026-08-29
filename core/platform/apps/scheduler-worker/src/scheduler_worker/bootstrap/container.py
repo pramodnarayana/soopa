@@ -4,8 +4,8 @@ from typing import Any
 from dependency_injector import containers, providers
 from scheduler.adapters.outbound.database.uow import SqlAlchemySchedulerUnitOfWork
 from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
-from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecuteJobsUseCase
-from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
+from scheduler.application.job_executor_use_case import JobExecutorUseCase
+from scheduler.application.job_sweeper_use_case import JobSweeperUseCase
 
 from scheduler_worker.adapters.inbound.workers.scheduler_poller import SchedulerPoller
 
@@ -37,12 +37,12 @@ class Container(containers.DeclarativeContainer):
     )
 
     sweep_use_case = providers.Factory(
-        SweepStuckJobsUseCase,
+        JobSweeperUseCase,
         uow_factory=uow_factory.provider,
     )
 
     claim_use_case = providers.Factory(
-        ClaimAndExecuteJobsUseCase,
+        JobExecutorUseCase,
         uow_factory=uow_factory.provider,
         dispatcher=job_dispatcher,
     )

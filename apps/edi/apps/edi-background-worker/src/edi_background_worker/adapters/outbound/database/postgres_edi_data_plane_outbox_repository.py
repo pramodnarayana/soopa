@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from database.events import EventEnvelope
@@ -69,7 +69,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                     id=str(row.id),
                     tenant_id=str(row.tenant_id) if row.tenant_id else None,
                     event_type=str(row.event_type),
-                    payload=cast(dict[str, Any], row.payload),
+                    payload=row.payload,
                     idempotency_key=row.idempotency_key,
                     source="edi_data_plane",
                 )
@@ -147,7 +147,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                     )
 
                     result = await session.execute(stmt)
-                    swept = int(result.rowcount)
+                    swept = int(getattr(result, "rowcount", 0))
                     total_swept += swept
                     await session.commit()
                     if swept < 5000:

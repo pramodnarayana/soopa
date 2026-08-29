@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import signal
+from typing import Any, cast
 
 import structlog
 from dotenv import load_dotenv
@@ -8,13 +9,11 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 
 # We need the outbox publisher and sqs poller
 # They were in orchestrator-worker, but let's copy them or import them if they are still there
-from edi.adapters.outbound.messaging.edi_data_plane_sqs_outbox_publisher import (
-    EdiDataPlaneSqsOutboxPublisherAdapter,
-)
 from edi.config.settings import get_settings
 from edi.domain.events import MessageQueueName
-from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
+from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from edi_background_worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
@@ -55,16 +54,28 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:
+async def main() -> None:  # noqa: C901
     logger.info("edi_background_worker.starting")
     settings = get_settings()
     aws_endpoint = settings.aws.endpoint_url
 
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
 
-    message_publisher = EdiDataPlaneSqsOutboxPublisherAdapter(
+    import aioboto3
+    from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
+
+    async with aioboto3.Session().client(
+        "sqs",
         endpoint_url=settings.aws.endpoint_url,
-        region=settings.aws.resolved_region,
+        region_name=settings.aws.resolved_region,
+    ) as sqs:
+        resp = await sqs.get_queue_url(QueueName=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value)
+        data_plane_queue_url = resp["QueueUrl"]
+
+    message_publisher = AwsSqsPublisher(
+        queue_url=data_plane_queue_url,
+        endpoint_url=settings.aws.endpoint_url,
+        region_name=settings.aws.resolved_region,
     )
 
     edi_dp_outbox_cleanup_repo = SqlAlchemyEdiDataPlaneOutboxCleanupRepository(db_router=db_router)
@@ -84,7 +95,7 @@ async def main() -> None:
     )
     job_registry.register(
         EdiJobName.EDI_DATA_PLANE_OUTBOX_CLEANUP.value,
-        EdiDataPlaneOutboxCleanupJobHandler(OutboxCleanupUseCase(edi_dp_outbox_cleanup_repo)),
+        EdiDataPlaneOutboxCleanupJobHandler(OutboxCleanerUseCase(edi_dp_outbox_cleanup_repo)),
     )
     job_registry.register(
         EdiJobName.EDI_IDEMPOTENCY_CLEANUP.value,
@@ -130,20 +141,28 @@ async def main() -> None:
     )
     job_registry.register(
         EdiJobName.EDI_CONTROL_PLANE_OUTBOX_CLEANUP.value,
-        EdiControlPlaneOutboxCleanupJobHandler(OutboxCleanupUseCase(edi_cp_outbox_cleanup_repo)),
+        EdiControlPlaneOutboxCleanupJobHandler(OutboxCleanerUseCase(edi_cp_outbox_cleanup_repo)),
     )
 
+    dp_consumer = AwsSqsConsumer(
+        queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
+        endpoint_url=aws_endpoint,
+    )
     dp_manager = SqsConsumerManager(
+        consumer=dp_consumer,
         queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
         handler=functools.partial(process_scheduled_job, registry=job_registry),
-        endpoint_url=aws_endpoint,
     )
     dp_manager.start()
 
+    cp_consumer = AwsSqsConsumer(
+        queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,
+        endpoint_url=aws_endpoint,
+    )
     cp_manager = SqsConsumerManager(
+        consumer=cp_consumer,
         queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,
         handler=functools.partial(process_scheduled_job, registry=job_registry),
-        endpoint_url=aws_endpoint,
     )
     cp_manager.start()
 
@@ -159,18 +178,20 @@ async def main() -> None:
 
     try:
         stop_task = asyncio.create_task(stop_event.wait())
-        tasks = [stop_task]
+        tasks: list[asyncio.Task[Any]] = [cast(asyncio.Task[Any], stop_task)]
         if dp_manager._task:
-            tasks.append(dp_manager._task)
+            tasks.append(cast(asyncio.Task[Any], dp_manager._task))
         if cp_manager._task:
-            tasks.append(cp_manager._task)
+            tasks.append(cast(asyncio.Task[Any], cp_manager._task))
 
         done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
         for task in done:
             if task is not stop_task and task.exception():
-                logger.error("sqs_consumer_manager_failed", exc_info=task.exception())
-                raise task.exception()
+                exc = task.exception()
+                logger.error("sqs_consumer_manager_failed", exc_info=exc)
+                if exc:
+                    raise exc
     except asyncio.CancelledError:
         logger.info("edi_background_worker_cancelled")
     except Exception:

@@ -25,6 +25,16 @@
       "env": ["DATABASE_URL", "DB_SHARD_1_URL", "SHARD_1_URL"],
       "outputs": []
     },
+    "test:integration": {
+      "dependsOn": ["build"],
+      "env": ["DATABASE_URL", "DB_SHARD_1_URL", "SHARD_1_URL"],
+      "outputs": []
+    },
+    "cov": {
+      "dependsOn": ["build"],
+      "env": ["DATABASE_URL", "DB_SHARD_1_URL", "SHARD_1_URL"],
+      "outputs": []
+    },
     "lint": {
       "outputs": []
     },

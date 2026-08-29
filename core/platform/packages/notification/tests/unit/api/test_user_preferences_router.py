@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -7,7 +9,7 @@ from notification.domain.models import Channel, UserNotificationPreference
 
 @pytest.mark.asyncio
 async def test_user_preferences_router():
-    tenant_id = "test-tenant-123"
+    tenant_id = f"test-tenant-123-{uuid.uuid4().hex[:8]}"
     user_id = "test-user-123"
 
     from dependency_injector import providers

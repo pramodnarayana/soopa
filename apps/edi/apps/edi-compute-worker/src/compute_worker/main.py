@@ -13,6 +13,7 @@ from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
 from edi.domain.events import MessageQueueName
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
@@ -54,9 +55,13 @@ async def main() -> None:
         use_case_factory=use_case_factory,
     )
 
-    manager = SqsConsumerManager(
+    transform_consumer = AwsSqsConsumer(
         queue_name=MessageQueueName.TRANSFORM_QUEUE.value,
         endpoint_url=aws_endpoint,
+    )
+    manager = SqsConsumerManager(
+        consumer=transform_consumer,
+        queue_name=MessageQueueName.TRANSFORM_QUEUE.value,
         handler=dispatcher.dispatch_raw,
     )
 

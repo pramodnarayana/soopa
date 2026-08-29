@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationTemplate
@@ -10,13 +12,13 @@ from notification.domain.models import Channel
 
 @pytest.mark.asyncio
 async def test_get_template(db_session_factory):
-    tenant_id = "test-query-tenant"
+    tenant_id = f"test-query-tenant-{uuid.uuid4().hex[:8]}"
 
     # Setup test DB
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name="Test Tenant",
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -62,3 +64,118 @@ async def test_get_template(db_session_factory):
         # Does not exist
         tmpl3 = await repo.get_template(tenant_id, "nonexistent", Channel.EMAIL)
         assert tmpl3 is None
+
+
+@pytest.mark.asyncio
+async def test_template_crud_operations(db_session_factory):
+    tenant_id = f"test-crud-tenant-{uuid.uuid4().hex[:8]}"
+
+    # Setup test DB
+    async with db_session_factory() as session, session.begin():
+        tenant = Tenant(
+            id=tenant_id,
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            slug=tenant_id,
+            status="ACTIVE",
+        )
+        session.add(tenant)
+
+    async with db_session_factory() as session:
+        repo = SqlAlchemyTemplateRepository(session)
+
+        # 1. UPSERT (Insert)
+        tmpl = await repo.upsert_template(
+            tenant_id=tenant_id,
+            name="Welcome Email",
+            event_type="user.welcome",
+            channel="EMAIL",
+            subject_template="Welcome {{ name }}",
+            body_template="Hello {{ name }}",
+            is_active=True,
+        )
+        await session.commit()
+        assert tmpl.name == "Welcome Email"
+        assert tmpl.event_type == "user.welcome"
+        assert tmpl.is_active is True
+
+        # 2. LIST
+        tmpls = await repo.list_templates(tenant_id)
+        assert len(tmpls) == 1
+        assert tmpls[0].id == tmpl.id
+
+        # 3. UPSERT (Update)
+        tmpl_updated = await repo.upsert_template(
+            tenant_id=tenant_id,
+            name="Welcome Email Updated",
+            event_type="user.welcome",
+            channel="EMAIL",
+            subject_template="Welcome {{ name }}!",
+            body_template="Hello {{ name }}!",
+            is_active=False,
+        )
+        await session.commit()
+        assert tmpl_updated.id == tmpl.id
+        assert tmpl_updated.name == "Welcome Email Updated"
+        assert tmpl_updated.is_active is False
+
+        # 4. DELETE
+        deleted = await repo.delete_template(tenant_id, tmpl.id)
+        assert deleted is True
+
+        # Attempt delete again
+        deleted2 = await repo.delete_template(tenant_id, tmpl.id)
+        assert deleted2 is False
+
+        await session.commit()
+
+        # Verify List is empty
+        tmpls_after = await repo.list_templates(tenant_id)
+        assert len(tmpls_after) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_template_fallback_to_platform(db_session_factory):
+    tenant_id = f"test-plat-tenant-{uuid.uuid4().hex[:8]}"
+    from notification.domain.models import PLATFORM_TENANT_ID
+
+    # Setup test DB
+    async with db_session_factory() as session, session.begin():
+        tenant = Tenant(
+            id=tenant_id,
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            slug=tenant_id,
+            status="ACTIVE",
+        )
+        session.add(tenant)
+
+        # We assume ten_000 (PLATFORM_TENANT_ID) exists from seedwork or we can just insert if not
+        from sqlalchemy import text
+
+        await session.execute(
+            text(
+                f"INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) VALUES ('{PLATFORM_TENANT_ID}', 'Platform', 'platform', 'ACTIVE', NOW(), NOW()) ON CONFLICT DO NOTHING"  # noqa: S608
+            )
+        )
+
+        # Add template to PLATFORM tenant
+        template = NotificationTemplate(
+            id=f"tpl_plat_{uuid.uuid4().hex[:8]}",
+            tenant_id=PLATFORM_TENANT_ID,
+            name="Platform Default",
+            event_type="system.alert",
+            channel="EMAIL",
+            is_active=True,
+            subject_template="Alert",
+            body_template="Alert Body",
+        )
+        session.add(template)
+
+    async with db_session_factory() as session:
+        repo = SqlAlchemyTemplateRepository(session)
+
+        # Query using the regular tenant_id, it should fallback and find the PLATFORM template
+        tmpl = await repo.get_template(tenant_id, "system.alert", Channel.EMAIL)
+
+        assert tmpl is not None
+        assert tmpl.tenant_id == PLATFORM_TENANT_ID
+        assert tmpl.subject == "Alert"

@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 
 import pytest
 
@@ -37,7 +38,7 @@ async def test_dispatch_success():
     )
     uc = NotificationCompilerUseCase(uow=uow, template_renderer=renderer)
 
-    tenant_id = "t1"
+    tenant_id = f"t1-{uuid.uuid4().hex[:8]}"
     event_type = "invoice.created"
 
     # Setup Fakes
@@ -71,7 +72,7 @@ async def test_dispatch_success():
     assert saved.payload["subject"] == "Invoice 123"
     assert saved.payload["content"] == "Hello, invoice 123 is ready."
 
-    expected_idemp_input = f"t1:invoice.created:{Channel.EMAIL.value}:evt1"
+    expected_idemp_input = f"{tenant_id}:invoice.created:{Channel.EMAIL.value}:evt1"
     expected_idemp = hashlib.sha256(expected_idemp_input.encode()).hexdigest()
     assert saved.idempotency_key == expected_idemp
 
@@ -109,7 +110,7 @@ async def test_only_in_app_channel_creates_notification_record():
         outbox_repo=outbox,
     )
     uc = NotificationCompilerUseCase(uow=uow, template_renderer=renderer)
-    tenant_id = "t1"
+    tenant_id = f"t1-{uuid.uuid4().hex[:8]}"
     event_type = "invoice.created"
     routes.routes[(tenant_id, event_type)] = [Channel.EMAIL, Channel.IN_APP]
     for channel in (Channel.EMAIL, Channel.IN_APP):

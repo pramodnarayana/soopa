@@ -5,41 +5,41 @@ from typing import Any
 
 import botocore.exceptions
 import structlog
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.ports.message_consumer_port import MessageConsumerPort
 
 logger = structlog.get_logger(__name__)
 
 
 class SqsConsumerManager:
     """
-    Centralized Message Pump for polling AWS SQS queues and dispatching
-    to a pure python callback handler.
+    Centralized Message Pump for polling a message broker and dispatching to a
+    pure Python callback handler.
 
-    This manages the background task lifecycle (while True loop), AWS connection sharing,
-    message unwrapping, and deletion upon success.
+    Accepts any MessageConsumerPort implementation — AwsSqsConsumer in production,
+    InMemoryEventBus in tests. This satisfies the Dependency Inversion Principle:
+    the manager depends on the abstraction, not the concrete AWS driver.
+
+    Callers (worker entrypoints / DI containers) are responsible for constructing
+    and injecting the consumer, which keeps object construction at the composition root.
     """
 
     def __init__(
         self,
-        queue_name: str,
+        consumer: MessageConsumerPort,
         handler: Callable[[dict[str, Any]], Awaitable[None]],
-        region_name: str = "us-east-1",
-        endpoint_url: str | None = None,
+        queue_name: str = "",
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
     ):
-        self.queue_name = queue_name
+        self.consumer = consumer
         self.handler = handler
+        # queue_name is kept for logging context only — the consumer owns the queue detail
+        self.queue_name = queue_name
         self.poll_sleep_seconds = poll_sleep_seconds
         self.error_sleep_seconds = error_sleep_seconds
 
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
-        self.sqs_consumer = AwsSqsConsumer(
-            queue_name=queue_name,
-            region_name=region_name,
-            endpoint_url=endpoint_url,
-        )
 
     @property
     def task(self) -> asyncio.Task[None] | None:
@@ -64,7 +64,7 @@ class SqsConsumerManager:
     async def _run_loop(self) -> None:
         while self.is_running:
             try:
-                async with self.sqs_consumer:
+                async with self.consumer:
                     await self._poll_continuous()
             except asyncio.CancelledError:
                 self.is_running = False
@@ -90,7 +90,7 @@ class SqsConsumerManager:
     async def _poll_continuous(self) -> None:
         while self.is_running:
             try:
-                async with self.sqs_consumer.poll_raw_message() as ackable_msg:
+                async with self.consumer.poll_raw_message() as ackable_msg:
                     if not ackable_msg:
                         await asyncio.sleep(self.poll_sleep_seconds)
                         continue

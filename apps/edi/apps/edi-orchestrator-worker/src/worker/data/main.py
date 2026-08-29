@@ -31,6 +31,7 @@ from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.events import MessageQueueName, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 
@@ -137,24 +138,36 @@ async def main() -> None:  # noqa: C901
 
     consumer = EdiDataPlaneEventDispatcher(callback=route_event)
 
+    transform_consumer = AwsSqsConsumer(
+        queue_name=MessageQueueName.TRANSFORM_QUEUE,
+        endpoint_url=aws_endpoint,
+    )
     transform_manager = SqsConsumerManager(
+        consumer=transform_consumer,
         queue_name=MessageQueueName.TRANSFORM_QUEUE,
         handler=consumer.handle,
-        endpoint_url=aws_endpoint,
     )
     transform_manager.start()
 
+    lifecycle_consumer = AwsSqsConsumer(
+        queue_name=MessageQueueName.LIFECYCLE_QUEUE,
+        endpoint_url=aws_endpoint,
+    )
     lifecycle_manager = SqsConsumerManager(
+        consumer=lifecycle_consumer,
         queue_name=MessageQueueName.LIFECYCLE_QUEUE,
         handler=consumer.handle,
-        endpoint_url=aws_endpoint,
     )
     lifecycle_manager.start()
 
+    deliver_consumer = AwsSqsConsumer(
+        queue_name=MessageQueueName.DELIVER_QUEUE,
+        endpoint_url=aws_endpoint,
+    )
     deliver_manager = SqsConsumerManager(
+        consumer=deliver_consumer,
         queue_name=MessageQueueName.DELIVER_QUEUE,
         handler=consumer.handle,
-        endpoint_url=aws_endpoint,
     )
     deliver_manager.start()
 

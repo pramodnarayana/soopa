@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from sqlalchemy import text
 
@@ -18,7 +20,7 @@ async def test_save_and_get_preference(
     repo: SqlAlchemyUserNotificationPreferenceRepository, db_session_factory
 ):
     # Arrange
-    tenant_id = "ten_test_123"
+    tenant_id = f"ten_test_123-{uuid.uuid4().hex[:8]}"
     user_id = "usr_test_123"
     event_type = "invoice.payment_failed"
     channel = "EMAIL"
@@ -27,7 +29,7 @@ async def test_save_and_get_preference(
     async with db_session_factory() as session:
         await session.execute(
             text(
-                f"INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) VALUES ('{tenant_id}', 'Test Tenant', '{tenant_id}', 'active', NOW(), NOW()) ON CONFLICT DO NOTHING"  # noqa: S608
+                f"INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) VALUES ('{tenant_id}', 'Test Tenant {tenant_id}', '{tenant_id}', 'active', NOW(), NOW()) ON CONFLICT DO NOTHING"  # noqa: S608
             )
         )
         await session.execute(

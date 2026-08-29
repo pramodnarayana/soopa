@@ -6,7 +6,7 @@ from typing import Any
 import structlog
 from database.provider import get_async_engine
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
-from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
+from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -82,7 +82,7 @@ class WorkerContainer:
 
         sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
 
-        outbox_cleanup_use_case = OutboxCleanupUseCase(outbox_cleanup_repo)
+        outbox_cleaner_use_case = OutboxCleanerUseCase(outbox_cleanup_repo)
         idemp_cleanup_use_case = UcpIdempotencyCleanupUseCase(idemp_cleanup_repo)
         audit_cleanup_use_case = UcpAuditLogCleanupUseCase(audit_cleanup_repo)
 
@@ -92,7 +92,7 @@ class WorkerContainer:
         )
         self.registry.register(
             JobName.UCP_OUTBOX_CLEANUP.value,
-            UcpOutboxCleanupJobHandler(outbox_cleanup_use_case),
+            UcpOutboxCleanupJobHandler(outbox_cleaner_use_case),
         )
         self.registry.register(
             JobName.UCP_IDEMPOTENCY_CLEANUP.value,
@@ -150,11 +150,16 @@ class WorkerContainer:
 
         self._register_tenant_handlers(consumer, tenant_deleted_handler)
 
+        from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
         from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
-        self.events_consumer = SqsConsumerManager(
+        ucp_identity_sync_consumer = AwsSqsConsumer(
             queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
             endpoint_url=self.settings.aws_endpoint_url,
+        )
+        self.events_consumer = SqsConsumerManager(
+            consumer=ucp_identity_sync_consumer,
+            queue_name=self.settings.sqs_ucp_identity_sync_queue_name,
             handler=self.events_dispatcher.dispatch_raw,
         )
 

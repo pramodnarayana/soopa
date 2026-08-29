@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
@@ -27,7 +29,7 @@ async def test_execute_upserts_and_returns(
     use_case: UpdateUserPreferenceUseCase, fake_repo: FakeUserPrefRepo
 ):
     # Arrange
-    tenant_id = "ten_123"
+    tenant_id = f"ten_123-{uuid.uuid4().hex[:8]}"
     user_id = "usr_123"
     event_type = "invoice.payment_failed"
     channel = "EMAIL"

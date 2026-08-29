@@ -2,8 +2,8 @@ import asyncio
 import uuid
 
 import structlog
-from scheduler.application.claim_and_execute_jobs_use_case import ClaimAndExecuteJobsUseCase
-from scheduler.application.sweep_stuck_jobs_use_case import SweepStuckJobsUseCase
+from scheduler.application.job_executor_use_case import JobExecutorUseCase
+from scheduler.application.job_sweeper_use_case import JobSweeperUseCase
 
 logger = structlog.get_logger(__name__)
 
@@ -11,8 +11,8 @@ logger = structlog.get_logger(__name__)
 class SchedulerPoller:
     def __init__(
         self,
-        sweep_use_case: SweepStuckJobsUseCase,
-        claim_use_case: ClaimAndExecuteJobsUseCase,
+        sweep_use_case: JobSweeperUseCase,
+        claim_use_case: JobExecutorUseCase,
         worker_id: str | None = None,
         poll_interval_seconds: int = 5,
         max_concurrent_jobs: int = 10,

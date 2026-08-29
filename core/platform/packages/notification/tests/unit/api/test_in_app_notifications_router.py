@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 @pytest.mark.asyncio
 async def test_in_app_notifications_router_integration(db_session_factory):
-    tenant_id = "test-router-tenant"
+    tenant_id = f"test-router-tenant-{uuid.uuid4().hex[:8]}"
     user_id = "user-123"
     other_user_id = "user-456"
     notif_id = f"notif_inapp_{uuid.uuid4().hex}"
@@ -19,7 +19,7 @@ async def test_in_app_notifications_router_integration(db_session_factory):
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name="Test Tenant",
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
             slug=tenant_id,
             status="ACTIVE",
         )

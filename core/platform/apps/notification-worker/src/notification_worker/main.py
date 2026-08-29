@@ -3,7 +3,7 @@ import os
 import signal
 import sys
 from collections.abc import Awaitable
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from dotenv import load_dotenv
@@ -13,7 +13,7 @@ from notification_worker.bootstrap.container import WorkerContainer as Container
 logger = structlog.get_logger(__name__)
 
 
-async def run_consumer() -> None:
+async def run_consumer() -> None:  # noqa: C901
     dotenv_path = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../../../../../../.env")
     )
@@ -52,23 +52,29 @@ async def run_consumer() -> None:
     logger.info("Starting workers...")
 
     # 1. Compiler Worker (Stage 2)
-    consumer_task = consumer.start()
+    consumer.start()
 
     # 2. Email Delivery Worker (Stage 3)
-    email_task = email_worker.start()
+    email_worker.start()
 
     # 3. Outbox Relay
     outbox_listener.start()
 
     shutdown_task = asyncio.create_task(shutdown_event.wait())
 
-    done, _ = await asyncio.wait(
-        [shutdown_task, consumer_task, email_task], return_when=asyncio.FIRST_COMPLETED
-    )
+    tasks: list[asyncio.Task[Any]] = [cast(asyncio.Task[Any], shutdown_task)]
+    if consumer.task:
+        tasks.append(cast(asyncio.Task[Any], consumer.task))
+    if email_worker.task:
+        tasks.append(cast(asyncio.Task[Any], email_worker.task))
+
+    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
     for task in done:
         if task is not shutdown_task:
-            task.result()
+            exc = task.exception()
+            if exc:
+                raise exc
 
     logger.info("Stopping workers...")
     await outbox_listener.stop()
@@ -76,7 +82,13 @@ async def run_consumer() -> None:
     await email_worker.stop()
 
     try:
-        await asyncio.wait_for(asyncio.gather(consumer_task, email_task), timeout=5.0)
+        tasks_to_wait = []
+        if consumer.task:
+            tasks_to_wait.append(consumer.task)
+        if email_worker.task:
+            tasks_to_wait.append(email_worker.task)
+        if tasks_to_wait:
+            await asyncio.wait_for(asyncio.gather(*tasks_to_wait), timeout=5.0)
     except TimeoutError:
         logger.warning("Tasks did not shut down gracefully")
 

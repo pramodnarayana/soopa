@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from database.models.notifications import NotificationRecord
 from sqlalchemy import select
@@ -10,7 +12,7 @@ from notification.adapters.outbound.database.postgres_notification_record_reposi
 @pytest.mark.asyncio
 async def test_save_notification_persists_to_database(db_session_factory):
     # Setup
-    tenant_id = "test-tenant-456"
+    tenant_id = f"test-tenant-456-{uuid.uuid4().hex[:8]}"
 
     async with db_session_factory() as session, session.begin():
         from database.models.identity import Tenant, User

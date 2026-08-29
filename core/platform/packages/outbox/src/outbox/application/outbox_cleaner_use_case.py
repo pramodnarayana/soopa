@@ -4,7 +4,7 @@ from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryP
 logger = structlog.get_logger(__name__)
 
 
-class OutboxCleanupUseCase:
+class OutboxCleanerUseCase:
     """Application UseCase to clean up old PROCESSED outbox events."""
 
     def __init__(self, repository: OutboxCleanupRepositoryPort, retention_days: int = 3):
