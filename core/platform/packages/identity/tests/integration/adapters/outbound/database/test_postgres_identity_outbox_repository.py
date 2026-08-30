@@ -23,18 +23,13 @@ async def outbox_session_factory(db_engine):
 
 @pytest.fixture
 async def outbox_repo(outbox_session_factory):
-    repo = PostgresIdentityOutboxRepository(outbox_session_factory)
-    yield repo
-
-    # Cleanup outbox after test
-    async with outbox_session_factory() as session:
-        await session.execute(delete(OrmIdentityOutbox))
-        await session.commit()
+    yield PostgresIdentityOutboxRepository(outbox_session_factory)
 
 
 @pytest.fixture
-def create_dummy_outbox_event(outbox_session_factory):
+async def create_dummy_outbox_event(outbox_session_factory):
     """Inserts a real, committed outbox event so the outbox_repo can see it."""
+    created_event_ids: list[str] = []
 
     async def _create(
         status: str = OutboxStatus.PENDING.value,
@@ -61,9 +56,17 @@ def create_dummy_outbox_event(outbox_session_factory):
             await session.execute(stmt)
             await session.commit()
 
+        created_event_ids.append(event_id)
         return event_id
 
-    return _create
+    yield _create
+
+    if created_event_ids:
+        async with outbox_session_factory() as session:
+            await session.execute(
+                delete(OrmIdentityOutbox).where(OrmIdentityOutbox.id.in_(created_event_ids))
+            )
+            await session.commit()
 
 
 @pytest.mark.asyncio

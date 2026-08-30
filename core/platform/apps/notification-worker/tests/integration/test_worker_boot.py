@@ -57,19 +57,28 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
     container.config.aws_endpoint_url.from_value("http://localhost:4566")
     container.config.aws_region.from_value("us-east-1")
 
-    # We set these in environ as well for any internal boto3 clients that might rely on them
-    os.environ["AWS_ACCESS_KEY_ID"] = "test"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "test"  # noqa: S105
-
-    # Start the worker in the background
-    worker_task = asyncio.create_task(run_consumer(stop_event=stop_event, container=container))
-
+    credential_keys = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
+    original_credentials = {key: os.environ.get(key) for key in credential_keys}
     try:
-        # Give it a second to boot up all infrastructure listeners and consumers
-        await asyncio.sleep(1.0)
-    finally:
-        # Trigger the graceful shutdown
-        stop_event.set()
+        # We set these in environ as well for any internal boto3 clients that might rely on them
+        os.environ["AWS_ACCESS_KEY_ID"] = "test"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "test"  # noqa: S105
 
-    # Await the worker shutdown (with a timeout so we don't hang if it's stuck)
-    await asyncio.wait_for(worker_task, timeout=5.0)
+        # Start the worker in the background
+        worker_task = asyncio.create_task(run_consumer(stop_event=stop_event, container=container))
+
+        try:
+            # Give it a second to boot up all infrastructure listeners and consumers
+            await asyncio.sleep(1.0)
+        finally:
+            # Trigger the graceful shutdown
+            stop_event.set()
+
+        # Await the worker shutdown (with a timeout so we don't hang if it's stuck)
+        await asyncio.wait_for(worker_task, timeout=5.0)
+    finally:
+        for key, original_value in original_credentials.items():
+            if original_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = original_value

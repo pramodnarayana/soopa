@@ -82,6 +82,11 @@ async def test_sftp_connection(
     response_model=TestConnectionResponse,
     status_code=status.HTTP_200_OK,
 )
+@router.post(
+    "/{partner_id}/sftp/test",
+    response_model=TestConnectionResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def test_existing_sftp_connection(
     partner_id: str,
     request: TestSFTPConnectionRequest,

@@ -1,6 +1,7 @@
 from types import TracebackType
 from typing import Any, Self
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.api_token import ApiTokenDomainModel
 from identity.domain.models.authorization import Role
 from identity.domain.models.user import User
@@ -13,12 +14,16 @@ from identity.ports.outbound.user_repository_port import UserRepositoryPort
 class FakeUserRepository(UserRepositoryPort):
     def __init__(self) -> None:
         self.users: list[User] = []
+        self.tenant_memberships: set[tuple[str, str]] = set()
 
     async def find_users_by_tenant(self, tenant_id: str) -> list[User]:
-        return []
+        return [user for user in self.users if (tenant_id, user.id) in self.tenant_memberships]
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        return False
+        return any(
+            member_user_id == user_id and tenant_id != PLATFORM_TENANT_ID
+            for tenant_id, member_user_id in self.tenant_memberships
+        )
 
     async def find_by_email(self, email: str) -> User | None:
         return next((u for u in self.users if u.email == email), None)
@@ -30,7 +35,9 @@ class FakeUserRepository(UserRepositoryPort):
         return next((u for u in self.users if u.idp_user_id == idp_user_id), None)
 
     async def find_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
-        return next((u for u in self.users if u.id == user_id), None)
+        if (tenant_id, user_id) not in self.tenant_memberships:
+            return None
+        return await self.find_by_id(user_id)
 
     async def delete(self, user: User) -> None:
         if user in self.users:
@@ -49,7 +56,8 @@ class FakeRoleRepository(RoleRepositoryPort):
         self.user_roles: dict[tuple[str | None, str], list[str]] = {}
 
     async def get_user_capabilities(self, tenant_id: str | None, user_id: str) -> set[str]:
-        assigned_role_ids = self.user_roles.get((tenant_id, user_id), [])
+        normalized_tenant_id = PLATFORM_TENANT_ID if tenant_id is None else tenant_id
+        assigned_role_ids = self.user_roles.get((normalized_tenant_id, user_id), [])
         caps = set()
         for r_id in assigned_role_ids:
             role = await self.get_by_id(r_id)
@@ -73,14 +81,16 @@ class FakeRoleRepository(RoleRepositoryPort):
         self.roles.append(role)
 
     async def assign_user_role(self, tenant_id: str | None, user_id: str, role_id: str) -> None:
-        key = (tenant_id, user_id)
+        normalized_tenant_id = PLATFORM_TENANT_ID if tenant_id is None else tenant_id
+        key = (normalized_tenant_id, user_id)
         if key not in self.user_roles:
             self.user_roles[key] = []
         if role_id not in self.user_roles[key]:
             self.user_roles[key].append(role_id)
 
     async def remove_user_roles(self, tenant_id: str | None, user_id: str) -> None:
-        key = (tenant_id, user_id)
+        normalized_tenant_id = PLATFORM_TENANT_ID if tenant_id is None else tenant_id
+        key = (normalized_tenant_id, user_id)
         if key in self.user_roles:
             del self.user_roles[key]
 
@@ -119,7 +129,7 @@ class FakeApiTokenRepository(ApiTokenRepositoryPort):
         return False
 
     async def get_by_client_id(self, client_id: str) -> ApiTokenDomainModel | None:
-        return next((t for t in self.tokens if t.client_id == client_id), None)
+        return next((t for t in self.tokens if t.client_id == client_id and t.active), None)
 
 
 class FakeIdentityUnitOfWork(IdentityUnitOfWorkPort):

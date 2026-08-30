@@ -23,7 +23,7 @@ import pytest
 async def test_get_users(auth_client: httpx.AsyncClient, seeded_api_token: dict):
     tenant_id = seeded_api_token["tenant_id"]
     response = await auth_client.get(f"/api/v1/tenants/{tenant_id}/users")
-    assert response.status_code in (200, 403)
+    assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio

@@ -207,7 +207,10 @@ async def test_zitadel_default_password_is_required(monkeypatch):
 async def test_worker_container_requires_database_url(monkeypatch):
     from identity_worker.bootstrap.config import Settings
 
-    bad_settings = Settings(database_url="")
+    bad_settings = Settings(
+        database_url="",
+        zitadel_default_user_password="not-for-production",  # noqa: S106 - test credential
+    )
     with pytest.raises(ValueError, match="database_url"):
         WorkerContainer(settings=bad_settings)
 

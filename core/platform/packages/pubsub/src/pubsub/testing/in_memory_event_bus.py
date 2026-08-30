@@ -81,11 +81,10 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
 
         try:
             yield AckableMessage(payload=payload, ack=ack, nack=nack)
-        except BaseException:
+        finally:
             if not acknowledged:
                 await self.queue.put(payload)
                 self.queue.task_done()
-            raise
 
     # -------------------------------------------------------------------------
     # Test helpers

@@ -190,6 +190,21 @@ async def test_consumer_error_does_not_requeue_acknowledged_message():
     assert bus.queue.empty()
 
 
+@pytest.mark.asyncio
+async def test_normal_exit_reenqueues_unacknowledged_message():
+    bus = InMemoryEventBus()
+    event = _make_event(event_type="payment.pending", index=11)
+    await bus.publish_batch([event])
+
+    async with bus.poll_raw_message() as msg:
+        assert msg is not None
+
+    assert bus.queue.qsize() == 1
+    assert bus.queue.get_nowait() == dataclasses.asdict(event)
+    bus.queue.task_done()
+    await asyncio.wait_for(bus.queue.join(), timeout=0.1)
+
+
 # ---------------------------------------------------------------------------
 # clear
 # ---------------------------------------------------------------------------
