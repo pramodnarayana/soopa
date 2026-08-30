@@ -8,7 +8,6 @@ sqs_consumer._client manipulation.
 """
 
 import asyncio
-import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -20,6 +19,7 @@ from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.message import AckableMessage
 from pubsub.ports.message_consumer_port import MessageConsumerPort
+from seedwork import generate_id
 
 pytestmark = pytest.mark.asyncio
 
@@ -90,7 +90,7 @@ async def test_identity_event_dispatcher_routes_to_correct_handler():
     consumer.subscribe("TenantProvisioned", mock_handler)
 
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
@@ -114,7 +114,7 @@ async def test_handler_failure_propagates_to_prevent_ack():
     consumer.subscribe("TenantProvisioned", mock_handler)
 
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
@@ -142,7 +142,7 @@ async def test_manager_dispatches_message_to_subscribed_handler():
     consumer.subscribe("TenantProvisioned", mock_handler)
 
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
@@ -165,7 +165,7 @@ async def test_manager_does_not_ack_when_handler_raises():
     consumer.subscribe("TenantProvisioned", failing_handler)
 
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
@@ -206,7 +206,7 @@ async def test_malformed_message_does_not_ack():
     """A payload missing required fields must not be acked."""
     consumer = IdentityEventDispatcher()
     # No handlers registered — dispatch_raw will likely raise or silently drop
-    payload = {"id": str(uuid.uuid4())}  # missing event_type, source, payload
+    payload = {"id": generate_id("id")}  # missing event_type, source, payload
 
     ack_mock = AsyncMock()
     call_count = 0

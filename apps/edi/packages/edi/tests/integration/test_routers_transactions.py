@@ -1,9 +1,9 @@
-import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from seedwork import generate_id
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -29,8 +29,8 @@ def override_get_current_tenant_id():
 
 def _make_mock_msg() -> MagicMock:
     m = MagicMock()
-    m.id = str(uuid.uuid4())
-    m.trace_id = str(uuid.uuid4())
+    m.id = generate_id("id")
+    m.trace_id = generate_id("id")
     m.direction = "INBOUND"
     m.connection_type = "UNKNOWN"
     m.sender_id = "A"
@@ -46,13 +46,13 @@ def _make_mock_msg() -> MagicMock:
 
 def _make_mock_json() -> MagicMock:
     j = MagicMock()
-    j.id = str(uuid.uuid4())
+    j.id = generate_id("id")
     j.transaction_type = "850"
     j.sender_id = "A"
     j.receiver_id = "B"
     j.gs_sender_id = "A"
     j.gs_receiver_id = "B"
-    j.business_metadata = {"_routing": {"trading_partner_id": str(uuid.uuid4())}}
+    j.business_metadata = {"_routing": {"trading_partner_id": generate_id("id")}}
     j.payload = "{}"
     j.status = "SUCCESS"
     j.created_at = datetime.now(UTC)
@@ -61,7 +61,7 @@ def _make_mock_json() -> MagicMock:
 
 def _make_mock_gw() -> MagicMock:
     gw = MagicMock()
-    gw.id = str(uuid.uuid4())
+    gw.id = generate_id("id")
     gw.webhook_url = "http://test"
     gw.http_status_code = 200
     gw.payload = "{}"
@@ -94,7 +94,7 @@ def base_mock_uow():
     mock_repo.get_transaction_thread.return_value = [mock_json]
 
     mock_route = MagicMock()
-    mock_route.as2_partner_id = str(uuid.uuid4())
+    mock_route.as2_partner_id = generate_id("id")
     mock_route.sftp_partner_id = None
 
     mock_db_result = MagicMock()
@@ -134,7 +134,7 @@ def test_list_transactions():
 
 
 def test_get_transaction_detail():
-    uid = str(uuid.uuid4())
+    uid = generate_id("id")
     response = client.get(f"/api/v1/tenants/1/edi/transactions/{uid}")
     assert response.status_code == 200
 
@@ -157,8 +157,8 @@ def test_get_transaction_detail_sftp():
     )
 
     mock_msg = MagicMock()
-    mock_msg.id = str(uuid.uuid4())
-    mock_msg.trace_id = str(uuid.uuid4())
+    mock_msg.id = generate_id("id")
+    mock_msg.trace_id = generate_id("id")
     mock_msg.trading_partner_id = "TEST_PARTNER_01"
     mock_msg.created_at = None
 
@@ -171,7 +171,7 @@ def test_get_transaction_detail_sftp():
 
     mock_route = MagicMock()
     mock_route.as2_partner_id = None
-    mock_route.sftp_partner_id = str(uuid.uuid4())
+    mock_route.sftp_partner_id = generate_id("id")
 
     mock_db_result = MagicMock()
     mock_db_result.scalar_one_or_none.side_effect = [mock_route, "SFTP Partner"]
@@ -206,19 +206,19 @@ def test_get_transaction_detail_fallback():
     )
 
     mock_msg = MagicMock()
-    mock_msg.id = str(uuid.uuid4())
-    mock_msg.trace_id = str(uuid.uuid4())
+    mock_msg.id = generate_id("id")
+    mock_msg.trace_id = generate_id("id")
     mock_msg.trading_partner_id = None
     mock_msg.created_at = None
 
     mock_json = EdiJsonDTO(
         id="file_2",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-        trace_id=str(uuid.uuid4()),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        trace_id=generate_id("id"),
         status="RECEIVED",
         transaction_type="mock_type",
-        business_metadata={"_routing": {"trading_partner_id": str(uuid.uuid4())}},
+        business_metadata={"_routing": {"trading_partner_id": generate_id("id")}},
     )
 
     mock_repo = AsyncMock()
@@ -270,7 +270,7 @@ def test_get_transaction_not_found():
 
     app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
     app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
-    uid = str(uuid.uuid4())
+    uid = generate_id("id")
     response = client.get(f"/api/v1/tenants/1/edi/transactions/{uid}")
     assert response.status_code == 404
 
@@ -288,8 +288,8 @@ def test_get_transaction_webhook_fallback():
     mock_repo = AsyncMock()
 
     mock_msg = MagicMock()
-    mock_msg.id = str(uuid.uuid4())
-    mock_msg.trace_id = str(uuid.uuid4())
+    mock_msg.id = generate_id("id")
+    mock_msg.trace_id = generate_id("id")
     mock_msg.direction = "INBOUND"
     mock_msg.sender_id = "SENDER"
     mock_msg.receiver_id = "RECEIVER"
@@ -300,12 +300,12 @@ def test_get_transaction_webhook_fallback():
     mock_msg.trading_partner_id = None
 
     mock_json = EdiJsonDTO(
-        id=str(uuid.uuid4()),
-        trace_id=str(uuid.uuid4()),
+        id=generate_id("id"),
+        trace_id=generate_id("id"),
         status="RECEIVED",
         transaction_type="850",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     mock_repo.get_transaction.return_value = TransactionDetailDTO(
@@ -316,7 +316,7 @@ def test_get_transaction_webhook_fallback():
 
     mock_tenant_session = AsyncMock()
     mock_inbound_route = MagicMock()
-    mock_inbound_route.webhook_id = str(uuid.uuid4())
+    mock_inbound_route.webhook_id = generate_id("id")
 
     mock_tenant_execute = MagicMock()
     mock_tenant_execute.scalar_one_or_none.return_value = mock_inbound_route

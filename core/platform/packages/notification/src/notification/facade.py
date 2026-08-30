@@ -1,7 +1,7 @@
-import uuid
 from typing import Any
 
 from database.events import EventEnvelope
+from seedwork import SystemIdPrefix, generate_id
 
 
 def notify(
@@ -19,7 +19,7 @@ def notify(
     to the caller's local outbox repository in the same transaction as their domain changes.
     """
     return EventEnvelope(
-        id=str(uuid.uuid4()),
+        id=generate_id(SystemIdPrefix.GENERIC),
         source=source,
         event_type="notification.requested",
         tenant_id=tenant_id,

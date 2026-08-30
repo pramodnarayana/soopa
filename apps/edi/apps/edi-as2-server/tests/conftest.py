@@ -181,8 +181,10 @@ class ISALookupConfig:
     def __init__(self) -> None:
         import uuid
 
+        from seedwork import generate_id
+
         # Default: single match found (existing behavior)
-        self.scalar_result = str(uuid.uuid4())
+        self.scalar_result = generate_id("id")
         self.fetchall_result = [(uuid.uuid4(),)]
         self.first_result = None
 
@@ -196,7 +198,9 @@ class ISALookupConfig:
         """Configure ISA lookup to return a single match."""
         import uuid
 
-        tid = tenant_id if tenant_id else str(uuid.uuid4())
+        from seedwork import generate_id
+
+        tid = tenant_id if tenant_id else generate_id("id")
         self.scalar_result = tid
         self.fetchall_result = [(uuid.UUID(tid) if tenant_id else uuid.uuid4(),)]
         self.first_result = None

@@ -64,7 +64,7 @@ async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     tenant_id = "999"
 
     async_gen = router.get_tenant_session(
-        tenant_id=tenant_id, shard_key="shard_1", shard_url=SHARD_1_URL
+        tenant_id=tenant_id, shard_key="ucp_shard_1", shard_url=SHARD_1_URL
     )
 
     session: AsyncSession = await async_gen.__anext__()

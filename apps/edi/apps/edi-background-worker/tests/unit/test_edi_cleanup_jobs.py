@@ -92,15 +92,15 @@ async def test_grouped_two_shard_failures_leave_scheduled_job_for_retry() -> Non
 
         async def get_all_shards(self) -> list[tuple[str, str]]:
             return [
-                ("shard_1", "postgresql+asyncpg://shard-1"),
-                ("shard_2", "postgresql+asyncpg://shard-2"),
+                ("ucp_shard_1", "postgresql+asyncpg://shard-1"),
+                ("ucp_shard_2", "postgresql+asyncpg://shard-2"),
             ]
 
         async def get_shard_session(self, shard_name: str, dsn: str = "") -> Any:
             self.get_engine_count += 1
-            if shard_name == "shard_1":
+            if shard_name == "ucp_shard_1":
                 raise RuntimeError("shard 1 unavailable")
-            if shard_name == "shard_2":
+            if shard_name == "ucp_shard_2":
                 raise RuntimeError("shard 2 unavailable")
             yield "fake_session"
 

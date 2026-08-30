@@ -3,8 +3,10 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from identity.domain.models.api_token import ApiTokenDomainModel
+from seedwork.utils import generate_id
 
 from ucp.application.use_cases.api_key_authenticator import (
     _token_cache,
@@ -38,12 +40,14 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
     client_id = "test_client_id"
     client_secret = "test_client_secret"  # noqa: S105
     token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_secret}"
+    tenant_id = generate_id(IamPrefix.TENANT)
+    token_id = generate_id(IamPrefix.TOKEN)
 
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
 
     mock_token_repo.tokens[client_id] = ApiTokenDomainModel(
-        id="tok_123",
-        tenant_id="ten_456",
+        id=token_id,
+        tenant_id=tenant_id,
         client_id=client_id,
         secret_hash=secret_hash,
         name="Test Token",
@@ -57,17 +61,17 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
     # First call - DB lookup
     identity = await authenticate_api_key(token, mock_token_repo)
     assert identity.subject == f"machine_{client_id}"
-    assert identity.tenant_id == "ten_456"
-    assert "ten_456" in identity.authorized_tenants
+    assert identity.tenant_id == tenant_id
+    assert tenant_id in identity.authorized_tenants
     assert "m2m_api_client" in identity.roles
     assert identity.claims["is_m2m"] is True
 
     assert client_id in _token_cache
 
-    # Second call - Cache hit (we can remove it from DB to prove it hits cache)
+    # Second call - Cache hit (prove it hits cache by removing from DB)
     del mock_token_repo.tokens[client_id]
     identity2 = await authenticate_api_key(token, mock_token_repo)
-    assert identity2.tenant_id == "ten_456"
+    assert identity2.tenant_id == tenant_id
 
     # Invalidate cache
     invalidate_api_key_cache(client_id)
@@ -103,13 +107,14 @@ async def test_authenticate_api_key_not_found(mock_token_repo):
 async def test_authenticate_api_key_wrong_secret(mock_token_repo):
     client_id = "test_client_id"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.wrong_secret"
+    token_id = generate_id(IamPrefix.TOKEN)
+    tenant_id = generate_id(IamPrefix.TENANT)
 
-    # Valid hash for "correct_secret"
     secret_hash = hashlib.sha256(b"correct_secret").hexdigest()
 
     mock_token_repo.tokens[client_id] = ApiTokenDomainModel(
-        id="tok_123",
-        tenant_id="ten_456",
+        id=token_id,
+        tenant_id=tenant_id,
         client_id=client_id,
         secret_hash=secret_hash,
         name="Test Token",

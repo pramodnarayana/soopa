@@ -1,6 +1,5 @@
-import uuid
-
 import pytest
+from seedwork import generate_id
 
 from edi_background_worker.scheduled_jobs_handler import process_scheduled_job
 
@@ -14,13 +13,13 @@ async def test_process_scheduled_job_missing_id() -> None:
 @pytest.mark.asyncio
 async def test_process_scheduled_job_missing_name() -> None:
     # Should log warning and return
-    await process_scheduled_job({"job_id": str(uuid.uuid4())})
+    await process_scheduled_job({"job_id": generate_id("id")})
 
 
 @pytest.mark.asyncio
 async def test_process_scheduled_job_missing_registry() -> None:
     # Should log error and return
-    await process_scheduled_job({"job_id": str(uuid.uuid4()), "job_name": "test_job"})
+    await process_scheduled_job({"job_id": generate_id("id"), "job_name": "test_job"})
 
 
 @pytest.mark.asyncio
@@ -32,7 +31,7 @@ async def test_process_scheduled_job_unknown_job() -> None:
     registry = FakeRegistry()
     with pytest.raises(ValueError, match="Unknown scheduled job name: unknown_job"):
         await process_scheduled_job(
-            {"job_id": str(uuid.uuid4()), "job_name": "unknown_job"},
+            {"job_id": generate_id("id"), "job_name": "unknown_job"},
             registry=registry,  # type: ignore
         )
 
@@ -56,7 +55,7 @@ async def test_process_scheduled_job_success() -> None:
     mock_handler = FakeHandler()
     registry = FakeRegistry(mock_handler)
 
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
     await process_scheduled_job(
         {"job_id": job_id, "job_name": "known_job", "payload": {"foo": "bar"}},
         registry=registry,  # type: ignore

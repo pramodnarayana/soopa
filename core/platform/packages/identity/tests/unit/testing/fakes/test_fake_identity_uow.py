@@ -29,20 +29,20 @@ def _user(user_id: str) -> User:
 @pytest.mark.asyncio
 async def test_fake_user_repository_filters_by_tenant_membership() -> None:
     repo = FakeUserRepository()
-    first_user = _user("usr_first")
-    second_user = _user("usr_second")
+    first_user = _user("iam_usr_first")
+    second_user = _user("iam_usr_second")
     repo.users.extend((first_user, second_user))
     repo.tenant_memberships.update(
         {
-            ("ten_first", first_user.id),
-            ("ten_second", second_user.id),
+            ("iam_ten_first", first_user.id),
+            ("iam_ten_second", second_user.id),
             (PLATFORM_TENANT_ID, first_user.id),
         }
     )
 
-    assert await repo.find_users_by_tenant("ten_first") == [first_user]
-    assert await repo.find_by_id_and_tenant(first_user.id, "ten_first") is first_user
-    assert await repo.find_by_id_and_tenant(first_user.id, "ten_second") is None
+    assert await repo.find_users_by_tenant("iam_ten_first") == [first_user]
+    assert await repo.find_by_id_and_tenant(first_user.id, "iam_ten_first") is first_user
+    assert await repo.find_by_id_and_tenant(first_user.id, "iam_ten_second") is None
     assert await repo.has_any_tenant_memberships(first_user.id) is True
 
 
@@ -58,10 +58,10 @@ async def test_fake_role_repository_normalizes_platform_tenant() -> None:
     )
     repo.roles.append(role)
 
-    await repo.assign_user_role(None, "usr_platform", role.id)
+    await repo.assign_user_role(None, "iam_usr_platform", role.id)
 
-    assert repo.user_roles[(PLATFORM_TENANT_ID, "usr_platform")] == [role.id]
-    assert await repo.get_user_capabilities(None, "usr_platform") == {"platform:admin"}
+    assert repo.user_roles[(PLATFORM_TENANT_ID, "iam_usr_platform")] == [role.id]
+    assert await repo.get_user_capabilities(None, "iam_usr_platform") == {"platform:admin"}
 
 
 @pytest.mark.asyncio
@@ -69,8 +69,8 @@ async def test_fake_api_token_lookup_excludes_inactive_tokens() -> None:
     repo = FakeApiTokenRepository()
     now = datetime.now(UTC)
     inactive_token = ApiTokenDomainModel(
-        id="tok_inactive",
-        tenant_id="ten_first",
+        id="iam_tok_inactive",
+        tenant_id="iam_ten_first",
         name="Inactive",
         client_id="client_inactive",
         secret_hash="hash",

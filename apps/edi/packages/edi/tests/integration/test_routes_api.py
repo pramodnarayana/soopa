@@ -1,14 +1,13 @@
-import uuid
-
 import pytest
 from httpx import AsyncClient
+from seedwork import generate_id
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 async def test_create_and_get_inbound_route(client: AsyncClient):
     payload = {
-        "as2_partner_id": str(uuid.uuid4()),  # Should trigger FK constraint error if checked by DB
+        "as2_partner_id": generate_id("id"),  # Should trigger FK constraint error if checked by DB
         "sftp_partner_id": None,
         "transaction_type": "850",
         "description": "Integration Test Inbound Route",
@@ -24,7 +23,7 @@ async def test_create_and_get_inbound_route(client: AsyncClient):
 
 async def test_create_and_get_outbound_route(client: AsyncClient):
     payload = {
-        "as2_partner_id": str(uuid.uuid4()),  # Should trigger FK constraint error if checked by DB
+        "as2_partner_id": generate_id("id"),  # Should trigger FK constraint error if checked by DB
         "transaction_type": "855",
         "description": "Integration Test Outbound Route",
         "active": True,

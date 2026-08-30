@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 class DatabaseShard(UcpBase):
     __tablename__ = "database_shards"
-    ID_PREFIX = "shard"
+    ID_PREFIX = "ucp_shard"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)

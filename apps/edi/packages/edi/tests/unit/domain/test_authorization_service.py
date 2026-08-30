@@ -6,6 +6,8 @@ We inject a simple in-memory fake — no mocks, no SQLAlchemy.
 """
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork.utils import generate_id
 
 from edi.domain.authorization import AuthorizationService
 from edi.testing.fakes.api_fakes import FakeTenantRepository
@@ -15,14 +17,16 @@ class TestAuthorizationServiceRoleResolution:
     def setup_method(self):
         self.tenant_repo = FakeTenantRepository()
         self.svc = AuthorizationService(tenant_repo=self.tenant_repo)
+        self.tenant_id = generate_id(IamPrefix.TENANT)
 
     async def _get_profile(
         self,
-        tenant_id="ten_001",
+        tenant_id=None,
         is_platform_admin=False,
         current_rls_tenant=None,
         roles=None,
     ):
+        tenant_id = tenant_id or self.tenant_id
         return await self.svc.get_authorization_profile(
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
@@ -91,13 +95,15 @@ class TestAuthorizationServiceRoleResolution:
 
     @pytest.mark.asyncio
     async def test_profile_contains_tenant_id(self):
-        profile = await self._get_profile(tenant_id="ten_abc")
-        assert profile["tenant_id"] == "ten_abc"
+        t_id = generate_id(IamPrefix.TENANT)
+        profile = await self._get_profile(tenant_id=t_id)
+        assert profile["tenant_id"] == t_id
 
     @pytest.mark.asyncio
     async def test_profile_contains_rls_enforced_tenant(self):
-        profile = await self._get_profile(current_rls_tenant="ten_rls")
-        assert profile["rls_enforced_tenant"] == "ten_rls"
+        rls_id = generate_id(IamPrefix.TENANT)
+        profile = await self._get_profile(current_rls_tenant=rls_id)
+        assert profile["rls_enforced_tenant"] == rls_id
 
     @pytest.mark.asyncio
     async def test_profile_status_is_success(self):
@@ -110,18 +116,20 @@ class TestAuthorizationServiceFeatureFlags:
     async def test_allow_private_as2_flag_is_false_by_default(self):
         repo = FakeTenantRepository()
         svc = AuthorizationService(tenant_repo=repo)
+        tenant_id = generate_id(IamPrefix.TENANT)
         profile = await svc.get_authorization_profile(
-            tenant_id="ten_001", is_platform_admin=False, current_rls_tenant=None
+            tenant_id=tenant_id, is_platform_admin=False, current_rls_tenant=None
         )
         assert profile["allow_private_as2"] is False
 
     @pytest.mark.asyncio
     async def test_allow_private_as2_flag_is_read_from_tenant_flags(self):
         repo = FakeTenantRepository()
-        repo.flags["ten_001"] = {"allow_private_as2": True}
+        tenant_id = generate_id(IamPrefix.TENANT)
+        repo.flags[tenant_id] = {"allow_private_as2": True}
         svc = AuthorizationService(tenant_repo=repo)
         profile = await svc.get_authorization_profile(
-            tenant_id="ten_001", is_platform_admin=False, current_rls_tenant=None
+            tenant_id=tenant_id, is_platform_admin=False, current_rls_tenant=None
         )
         assert profile["allow_private_as2"] is True
 

@@ -74,7 +74,7 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
                     yield session
 
         async def get_all_shards(self):
-            return [("shard_1", shard_url)]
+            return [("ucp_shard_1", shard_url)]
 
     yield TestDatabaseRouter(global_db_url=global_url)
 
@@ -90,7 +90,7 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
 @pytest.mark.integration
 async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouter):
     # 1. Setup Data - stuck events that need sweeping
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
         # We will create events with default properties that makes them look "stuck".
         # e.g., in PROCESSING state but with lease expired (which happens when sweep_stuck_events runs).
@@ -140,7 +140,7 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
     original_get_shard_session = db_router.get_shard_session
 
     async def mock_fail_session(shard_name: str, dsn: str | None = None):
-        if shard_name == "shard_1":
+        if shard_name == "ucp_shard_1":
             raise RuntimeError("Database connection lost for shard_1")
         # Yield from original generator
         async for session in original_get_shard_session(shard_name, dsn):

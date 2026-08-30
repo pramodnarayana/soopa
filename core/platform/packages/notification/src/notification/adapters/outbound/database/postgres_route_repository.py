@@ -1,6 +1,5 @@
-import uuid
-
 from database.models.notifications import NotificationRouteConfiguration
+from seedwork import generate_random_hex
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,7 +58,7 @@ class SqlAlchemyNotificationRouteRepository:
         stmt = (
             insert(NotificationRouteConfiguration)
             .values(
-                id=f"notif_rte_{uuid.uuid4().hex}",
+                id=f"notif_rte_{generate_random_hex(6)}",
                 tenant_id=tenant_id,
                 event_type=event_type,
                 channels=channels,

@@ -15,7 +15,7 @@ from unified_api.main import ucp_container
 
 
 class MockTenant:
-    id = "ten_683c22ac40ee6e7b70e7a604"
+    id = "iam_ten_683c22ac40ee6e7b70e7a604"
 
 
 class MockTenantRepo:
@@ -116,7 +116,7 @@ def test_tenant_auth_accepts_canonical_id(client: TestClient) -> None:
     Ensures that when a user requests the Canonical UCP Tenant ID in the URL,
     the perimeter mapping logic correctly authorizes it without a 403.
     """
-    can_id = "ten_683c22ac40ee6e7b70e7a604"
+    can_id = "iam_ten_683c22ac40ee6e7b70e7a604"
     response = client.get(f"/api/v1/tenants/{can_id}")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "tenant_id": can_id}

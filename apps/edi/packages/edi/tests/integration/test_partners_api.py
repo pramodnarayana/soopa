@@ -1,7 +1,6 @@
-import uuid
-
 import pytest
 from httpx import AsyncClient
+from seedwork import generate_id
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -48,7 +47,7 @@ async def test_create_and_get_sftp_partner(client: AsyncClient):
 async def test_create_and_get_as2_partner(platform_client: AsyncClient):
     payload = {
         "name": "Integration Test AS2",
-        "as2_id": "AS2_TEST_" + str(uuid.uuid4())[:8],
+        "as2_id": "AS2_TEST_" + generate_id("id")[:8],
         "is_local": True,
         "url": "http://example.com/as2",
     }

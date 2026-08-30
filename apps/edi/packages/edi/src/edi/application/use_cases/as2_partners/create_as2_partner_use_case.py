@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
@@ -105,8 +105,8 @@ class CreateAS2PartnerUseCase:
                             tenant_id=tenant_id,
                             as2_id="",
                             is_local=False,
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow(),
+                            created_at=datetime.now(UTC),
+                            updated_at=datetime.now(UTC),
                         )
                         return AS2PartnerDomainModel(
                             id=existing_partner_id,
@@ -184,8 +184,8 @@ class CreateAS2PartnerUseCase:
                 name=cmd.name,
                 as2_id=cmd.as2_id,
                 is_local=cmd.is_local,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 active=False,
             )
 

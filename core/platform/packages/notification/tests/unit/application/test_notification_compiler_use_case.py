@@ -1,7 +1,7 @@
 import hashlib
-import uuid
 
 import pytest
+from seedwork import generate_random_hex
 
 from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
 from notification.domain.models import (
@@ -38,7 +38,7 @@ async def test_dispatch_success():
     )
     uc = NotificationCompilerUseCase(uow=uow, template_renderer=renderer)
 
-    tenant_id = f"t1-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"t1-{generate_random_hex(6)}"
     event_type = "invoice.created"
 
     # Setup Fakes
@@ -110,7 +110,7 @@ async def test_only_in_app_channel_creates_notification_record():
         outbox_repo=outbox,
     )
     uc = NotificationCompilerUseCase(uow=uow, template_renderer=renderer)
-    tenant_id = f"t1-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"t1-{generate_random_hex(6)}"
     event_type = "invoice.created"
     routes.routes[(tenant_id, event_type)] = [Channel.EMAIL, Channel.IN_APP]
     for channel in (Channel.EMAIL, Channel.IN_APP):

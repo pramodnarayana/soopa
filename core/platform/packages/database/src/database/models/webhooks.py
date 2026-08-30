@@ -9,7 +9,7 @@ from database.models.core import UcpBase
 
 class Webhook(UcpBase, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "webhooks"
-    ID_PREFIX = "wh"
+    ID_PREFIX = "ucp_cp_wh"
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     id: Mapped[str] = mapped_column(

@@ -85,7 +85,7 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
                     yield session
 
         async def get_all_shards(self):
-            return [("shard_1", shard_url)]
+            return [("ucp_shard_1", shard_url)]
 
     yield TestDatabaseRouter(global_db_url=global_url)
 
@@ -107,7 +107,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         ob1_id = f"dp_edi_ob_{os.urandom(12).hex()}"
         ob2_id = f"dp_edi_ob_{os.urandom(12).hex()}"
         ob3_id = f"dp_edi_ob_{os.urandom(12).hex()}"
@@ -116,7 +116,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
         ob1 = DataPlaneOutbox(
             id=ob1_id,
             tenant_id="tenant-1",
-            idempotency_key=f"key_{os.urandom(12).hex()}",
+            idempotency_key=f"iam_key_{os.urandom(12).hex()}",
             status=OutboxStatus.PROCESSED.value,
             event_type="TEST",
             payload={},
@@ -127,7 +127,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
         ob2 = DataPlaneOutbox(
             id=ob2_id,
             tenant_id="tenant-1",
-            idempotency_key=f"key_{os.urandom(12).hex()}",
+            idempotency_key=f"iam_key_{os.urandom(12).hex()}",
             status=OutboxStatus.PENDING.value,
             event_type="TEST",
             payload={},
@@ -138,7 +138,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
         ob3 = DataPlaneOutbox(
             id=ob3_id,
             tenant_id="tenant-1",
-            idempotency_key=f"key_{os.urandom(12).hex()}",
+            idempotency_key=f"iam_key_{os.urandom(12).hex()}",
             status=OutboxStatus.PROCESSED.value,
             event_type="TEST",
             payload={},
@@ -152,7 +152,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
     use_case = OutboxCleanerUseCase(repository=repo, retention_days=14)
     await use_case.execute()
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         from sqlalchemy import select
 
         result = await test_session.execute(select(DataPlaneOutbox.id))
@@ -170,11 +170,11 @@ async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         import os
 
-        key1 = f"key_{os.urandom(12).hex()}"
-        key2 = f"key_{os.urandom(12).hex()}"
+        key1 = f"iam_key_{os.urandom(12).hex()}"
+        key2 = f"iam_key_{os.urandom(12).hex()}"
 
         # Add old
         ev1 = ProcessedEvent(
@@ -195,7 +195,7 @@ async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
     use_case = EdiIdempotencyCleanupUseCase(repository=repo, retention_days=14)
     await use_case.execute()
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         from sqlalchemy import select
 
         result = await test_session.execute(select(ProcessedEvent.idempotency_key))
@@ -212,7 +212,7 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         import os
 
         audit_1_id = f"audit_{os.urandom(12).hex()}"
@@ -245,7 +245,7 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
     use_case = EdiAuditLogCleanupUseCase(repository=repo, retention_days=14)
     await use_case.execute()
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         from sqlalchemy import select
 
         result = await test_session.execute(select(AuditLog.id))

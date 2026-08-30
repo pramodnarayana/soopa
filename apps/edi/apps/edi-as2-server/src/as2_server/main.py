@@ -58,9 +58,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as e:  # noqa: BLE001
         print(f"LIFESPAN DB ROUTER ERROR: {e}")
 
-    logger.info("edi_as2_server_started", env=settings.env)
+    logger.info("as2_server_started", env=settings.env)
     yield
-    logger.info("edi_as2_server_stopped")
+    logger.info("as2_server_stopped")
     if hasattr(app.state, "db_router"):
         await app.state.db_router.close_all()
 

@@ -145,7 +145,7 @@ class OutboundEdiHeader(EdiGlobalBase, OutboundEdiHeaderMixin, TimestampMixin, S
 
 class ControlPlaneOutbox(EdiGlobalBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = "cp_edi_ob"
+    ID_PREFIX = "edi_cp_ob"
 
     id: Mapped[str] = mapped_column(
         String(128),

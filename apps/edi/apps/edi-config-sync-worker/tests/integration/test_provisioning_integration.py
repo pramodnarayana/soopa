@@ -8,6 +8,7 @@ from typing import Any
 import aioboto3
 import pytest
 import structlog
+from seedwork import generate_id
 
 
 class SqsTestPublisher:
@@ -21,7 +22,7 @@ class SqsTestPublisher:
         ) as sqs:
             resp = await sqs.get_queue_url(QueueName=queue_name)
             queue_url = resp["QueueUrl"]
-            dedup_id = payload.get("idempotency_key") or str(uuid.uuid4())
+            dedup_id = payload.get("idempotency_key") or generate_id("id")
             await sqs.send_message(
                 QueueUrl=queue_url,
                 MessageBody=json.dumps(payload),
@@ -125,17 +126,15 @@ async def test_db_router() -> "AsyncGenerator[DatabaseRouter, None]":
                     yield session
 
         async def get_all_shards(self):
-            return [("shard_1", shard_url)]
+            return [("ucp_shard_1", shard_url)]
 
     yield TestDatabaseRouter(global_db_url=global_url)
 
     await global_trans.rollback()
     await global_conn.close()
-    await global_engine.dispose()
 
     await shard_trans.rollback()
     await shard_conn.close()
-    await shard_engine.dispose()
 
 
 @pytest.fixture
@@ -205,8 +204,8 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
 
     worker_service.process_next_event = process_next_event_helper
 
-    test_partner_id = str(uuid.uuid4())
-    test_tenant_id = str(uuid.uuid4())
+    test_partner_id = generate_id("id")
+    test_tenant_id = generate_id("id")
 
     async for session in db_router.get_global_session():
         tenant = Tenant(
@@ -233,7 +232,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         edi_app = app_res.scalars().first()
         if not edi_app:
             edi_app = App(
-                id="app_{test_tenant_id}",
+                id="ucp_app_{test_tenant_id}",
                 slug="edi",
                 name="EDI Application",
             )
@@ -281,6 +280,18 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def wait_for_process(service, max_retries=10):
+    for _ in range(max_retries):
+        if await service.process_next_event():
+            return True
+        import asyncio
+
+        await asyncio.sleep(1)
+    return False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
     """
     Tests the full replication flow:
@@ -309,11 +320,11 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
     await asyncio.sleep(2)  # Give LocalStack SQS a moment to make the message visible
 
     # 3. Provisioning Worker processes the event
-    processed = await worker_service.process_next_event()
+    processed = await wait_for_process(worker_service)
     assert processed is True
 
     # 4. Verify replication occurred in the Shard DB
-    async for tenant_session in db_router.get_tenant_session(tenant_id, "shard_1", base_url):
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
             select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
         )
@@ -351,7 +362,7 @@ async def test_provisioning_negative_unregistered_event_dropped(
 
     # Worker processes the event. Since it's unregistered, it is safely dropped,
     # but the consumption is considered successful processing, so it returns True.
-    processed = await worker_service.process_next_event()
+    processed = await wait_for_process(worker_service)
     assert processed is True
 
 
@@ -380,7 +391,7 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
 
     # Worker processes the event. The SQS consumer swallows the exception and doesn't ack,
     # so the orchestrator returns False.
-    processed = await worker_service.process_next_event()
+    processed = await wait_for_process(worker_service)
     assert processed is False
 
 
@@ -412,15 +423,15 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     await asyncio.sleep(2)
 
     # Process first event
-    processed_1 = await worker_service.process_next_event()
+    processed_1 = await wait_for_process(worker_service)
     assert processed_1 is True
 
     # Process second event
-    processed_2 = await worker_service.process_next_event()
+    processed_2 = await wait_for_process(worker_service)
     assert processed_2 is True
 
     # Verify replication still valid
-    async for tenant_session in db_router.get_tenant_session(tenant_id, "shard_1", base_url):
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
             select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
         )

@@ -1,7 +1,6 @@
-import uuid
-
 import pytest
 from httpx import AsyncClient
+from seedwork import generate_id
 
 pytestmark = pytest.mark.asyncio
 
@@ -13,8 +12,8 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
     """
     # 1. Create Local AS2 Partner
     local_payload = {
-        "name": f"Local Gateway {str(uuid.uuid4())[:6]}",
-        "as2_id": f"LOCAL_{str(uuid.uuid4())[:8]}",
+        "name": f"Local Gateway {generate_id('id')[:6]}",
+        "as2_id": f"LOCAL_{generate_id('id')[:8]}",
         "is_local": True,
         "url": "http://local.example.com/as2",
     }
@@ -27,8 +26,8 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
 
     # 2. Create Remote AS2 Partner
     remote_payload = {
-        "name": f"Remote Partner {str(uuid.uuid4())[:6]}",
-        "as2_id": f"REMOTE_{str(uuid.uuid4())[:8]}",
+        "name": f"Remote Partner {generate_id('id')[:6]}",
+        "as2_id": f"REMOTE_{generate_id('id')[:8]}",
         "is_local": False,
         "url": "http://remote.partner.com/as2",
     }
@@ -98,8 +97,8 @@ async def test_as2_partnership_validation_error(platform_client: AsyncClient):
     """
     Tests that creating a partnership with non-existent partner IDs fails with an error.
     """
-    fake_id_1 = str(uuid.uuid4())
-    fake_id_2 = str(uuid.uuid4())
+    fake_id_1 = generate_id("id")
+    fake_id_2 = generate_id("id")
     bad_payload = {
         "name": "Invalid Partnership",
         "local_partner_id": fake_id_1,

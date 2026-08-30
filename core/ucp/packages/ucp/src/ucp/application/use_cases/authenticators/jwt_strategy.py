@@ -66,7 +66,7 @@ class JwtStrategy(AuthenticationStrategyPort):
             # 2. Map all authorized tenants that are IdP IDs
             mapped_tenants = set()
             for tid in identity.authorized_tenants:
-                if not tid.startswith("ten_") and tid != "ten_000000000000000000000000":
+                if not tid.startswith("iam_ten_") and tid != "ten_000000000000000000000000":
                     resolved_t = await repo.find_by_idp_tenant_id(tid)
                     if resolved_t:
                         mapped_tenants.add(resolved_t.id)
@@ -90,7 +90,7 @@ class JwtStrategy(AuthenticationStrategyPort):
             updates["authorized_tenants"] = mapped_tenants
 
         # Map IdP user ID to Canonical UCP user ID
-        if subject and not subject.startswith("usr_"):
+        if subject and not subject.startswith("iam_usr_"):
             async with self.user_repo_factory() as user_repo:
                 resolved_u = await user_repo.find_by_idp_user_id(subject)
                 if resolved_u:

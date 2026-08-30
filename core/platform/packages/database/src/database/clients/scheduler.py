@@ -1,7 +1,7 @@
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from seedwork import SystemIdPrefix, generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +46,7 @@ class SchedulerClient:
         now = datetime.now(UTC).replace(tzinfo=None)
 
         new_job = ScheduledJob(
-            id=str(uuid.uuid4()),
+            id=generate_id(SystemIdPrefix.GENERIC),
             name=name,
             target_queue=target_queue,
             app_namespace=app_namespace,

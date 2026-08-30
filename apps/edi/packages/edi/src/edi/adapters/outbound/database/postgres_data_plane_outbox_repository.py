@@ -1,9 +1,9 @@
 import typing
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from seedwork import SystemIdPrefix, generate_id, generate_random_hex
 from sqlalchemy import CursorResult, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,8 +36,10 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
         stmt = (
             insert(DataPlaneOutbox)
             .values(
-                id=f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}",
-                idempotency_key=str(idempotency_key) if idempotency_key else str(uuid.uuid4()),
+                id=f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{generate_random_hex(6)}",
+                idempotency_key=str(idempotency_key)
+                if idempotency_key
+                else generate_id(SystemIdPrefix.GENERIC),
                 event_type=event_type,
                 payload=payload,
                 status="PENDING",
@@ -160,12 +162,12 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             logger.warning("stale_failure_update", event_id=event_id)
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
-        import uuid
         from datetime import UTC, datetime, timedelta
 
+        from seedwork import SystemIdPrefix, generate_id
         from sqlalchemy import or_, update
 
-        owner_token = str(uuid.uuid4())
+        owner_token = generate_id(SystemIdPrefix.GENERIC)
         now = datetime.now(UTC).replace(tzinfo=None)
         lease_expires = now + timedelta(minutes=_DELIVERY_LEASE_MINUTES)
 

@@ -1,7 +1,6 @@
-import uuid
-
 import pytest
 from database.models.identity import Tenant
+from seedwork import generate_random_hex
 
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
@@ -11,13 +10,13 @@ from notification.domain.models import NotificationOutboxEvent
 
 @pytest.mark.asyncio
 async def test_outbox_save_and_fetch(db_session_factory):
-    tenant_id = f"test-outbox-tenant-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-outbox-tenant-{generate_random_hex(6)}"
 
     # Setup Tenant
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -54,13 +53,13 @@ async def test_outbox_save_and_fetch(db_session_factory):
 
 @pytest.mark.asyncio
 async def test_outbox_mark_failed_and_sweep(db_session_factory):
-    tenant_id = f"test-outbox-tenant-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-outbox-tenant-{generate_random_hex(6)}"
 
     # Setup Tenant
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -137,12 +136,12 @@ async def test_sqlalchemy_notification_outbox_publisher(db_session_factory):
         SqlAlchemyNotificationOutboxPublisher,
     )
 
-    tenant_id = f"test-pub-tenant-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-pub-tenant-{generate_random_hex(6)}"
 
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )

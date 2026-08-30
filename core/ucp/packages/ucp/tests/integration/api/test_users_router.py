@@ -1,8 +1,7 @@
-import uuid
-
 import pytest
 from database.models.identity import Tenant as OrmTenant
 from httpx import AsyncClient
+from seedwork import generate_id, generate_random_hex
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,10 +21,10 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     # 1. Arrange: Create a Tenant to associate the user with
     async with db_session.begin():
         tenant = OrmTenant(
-            id=f"ten_{uuid.uuid4().hex[:12]}",
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
-            slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
-            idp_tenant_id=f"mock_org_{uuid.uuid4().hex[:8]}",
+            id=generate_id("ten"),
+            name=f"Test Tenant {generate_random_hex(6)}",
+            slug=f"test-tenant-{generate_random_hex(6)}",
+            idp_tenant_id=generate_id("mock_org"),
         )
         db_session.add(tenant)
         # Ensure the 'TenantAdmin' role exists (in case other tests cleared it)
@@ -45,7 +44,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
         )
 
     payload = {
-        "email": f"integration_{uuid.uuid4().hex[:8]}@test.com",
+        "email": f"integration_{generate_random_hex(6)}@test.com",
         "firstName": "Integration",
         "lastName": "Test",
         "role": "TenantAdmin",

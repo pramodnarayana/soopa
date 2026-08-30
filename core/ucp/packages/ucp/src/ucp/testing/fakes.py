@@ -73,7 +73,14 @@ class FakeUserRepository(UserRepositoryPort):
         return next((u for u in self.users if u.idp_user_id == idp_user_id), None)
 
     async def find_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
-        return next((u for u in self.users if u.id == user_id), None)
+        return next(
+            (
+                u
+                for u in self.users
+                if u.id == user_id and (tenant_id, u.id) in self.tenant_memberships
+            ),
+            None,
+        )
 
     async def delete(self, user: User) -> None:
         self.users = [u for u in self.users if u.id != user.id]

@@ -1,5 +1,6 @@
-import uuid
 from typing import Any
+
+from seedwork import SystemIdPrefix, generate_id, generate_random_hex
 
 from edi.adapters.outbound.database.base_repository import (
     GlobalSqlAlchemyRepository,
@@ -32,11 +33,11 @@ class SqlAlchemyOutboxRepositoryMixin:
     ) -> str:
         tid_str = tenant_id if tenant_id is not None else None
         event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
-        event_id = f"{self.id_prefix}{uuid.uuid4().hex}"
+        event_id = f"{self.id_prefix}{generate_random_hex(6)}"
         record = self.model_class(
             id=event_id,
             tenant_id=tid_str,
-            idempotency_key=idempotency_key or str(uuid.uuid4()),
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             event_type=event_type_str,
             payload=payload,
             status="PENDING",
@@ -58,13 +59,14 @@ class SqlAlchemyOutboxRepositoryMixin:
         for event in events:
             event_type = event["event_type"]
             event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
-            event_id = f"{self.id_prefix}{uuid.uuid4().hex}"
+            event_id = f"{self.id_prefix}{generate_random_hex(6)}"
 
             insert_stmts.append(
                 {
                     "id": event_id,
                     "tenant_id": tid_str,
-                    "idempotency_key": event.get("idempotency_key") or str(uuid.uuid4()),
+                    "idempotency_key": event.get("idempotency_key")
+                    or generate_id(SystemIdPrefix.GENERIC),
                     "event_type": event_type_str,
                     "payload": event.get("payload", {}),
                     "status": "PENDING",

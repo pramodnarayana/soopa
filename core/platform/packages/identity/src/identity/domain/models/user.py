@@ -13,7 +13,7 @@ from identity.domain.events import (
 
 
 class User(AggregateRoot):
-    ID_PREFIX = "usr"
+    ID_PREFIX = "iam_usr"
 
     def __init__(
         self,

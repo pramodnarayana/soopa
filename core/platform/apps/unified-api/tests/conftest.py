@@ -1,8 +1,9 @@
 import asyncio
 import hashlib
 import os
-import uuid
 from unittest.mock import patch
+
+from seedwork import generate_id
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault(
@@ -213,7 +214,7 @@ async def seeded_api_token(db_session_factory):
             )
             session.add(admin_role)
 
-        tenant_id = "ten_test_auth_123"
+        tenant_id = generate_id("iam_ten")
         tenant = await session.get(TenantORM, tenant_id)
         if not tenant:
             tenant = TenantORM(
@@ -291,7 +292,7 @@ async def seeded_api_token(db_session_factory):
 
         client_id = "client_test_123"
         token = ApiTokenORM(
-            id=f"tok_{uuid.uuid4().hex[:16]}",
+            id=generate_id("tok"),
             tenant_id=tenant_id,
             name="Integration Test Token",
             client_id=client_id,

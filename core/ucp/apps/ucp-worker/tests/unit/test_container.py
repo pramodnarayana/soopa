@@ -61,10 +61,10 @@ async def test_worker_container_wiring(mock_env: None) -> None:
         event = MagicMock()
         event.id = "evt_123"
         event.event_type = "TenantDeleted"
-        event.payload = {"tenant_id": "ten_123"}
+        event.payload = {"tenant_id": "iam_ten_123"}
 
         await container.events_dispatcher._dispatch(event)
-        mock_tenant_deleted_handler.handle.assert_awaited_once_with("ten_123")
+        mock_tenant_deleted_handler.handle.assert_awaited_once_with("iam_ten_123")
 
         # Test missing tenant id logs error (doesn't raise)
         bad_event = MagicMock()
@@ -73,7 +73,7 @@ async def test_worker_container_wiring(mock_env: None) -> None:
         bad_event.payload = {}
         bad_event.tenant_id = None
         await container.events_dispatcher._dispatch(bad_event)
-        mock_tenant_deleted_handler.handle.assert_awaited_once_with("ten_123")
+        mock_tenant_deleted_handler.handle.assert_awaited_once_with("iam_ten_123")
 
         # Test uow_factory inline context manager
         # Since uow_factory is passed to provisioner and tenant_deleted_handler, we can't easily extract it.

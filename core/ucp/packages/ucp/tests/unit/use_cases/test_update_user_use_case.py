@@ -24,7 +24,7 @@ def update_user_use_case(fake_uow):
 async def test_update_user_success(fake_uow, update_user_use_case):
     # Setup Tenant
     tenant = Tenant(
-        id="ten_123",
+        id="iam_ten_123",
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
@@ -36,7 +36,7 @@ async def test_update_user_success(fake_uow, update_user_use_case):
 
     # Setup Role
     role = Role(
-        id="rol_abc",
+        id="iam_rol_abc",
         name="admin",
         description="Admin role",
         capabilities=["read", "write"],
@@ -46,7 +46,7 @@ async def test_update_user_success(fake_uow, update_user_use_case):
 
     # Setup User
     user = User(
-        id="usr_123",
+        id="iam_usr_123",
         email="test@example.com",
         name="Old Name",
         idp_user_id="idp_usr_123",
@@ -57,22 +57,27 @@ async def test_update_user_success(fake_uow, update_user_use_case):
     await fake_uow.user_repo.save(user)
 
     # Establish fake membership so find_by_id_and_tenant works
-    fake_uow.user_repo.tenant_memberships.add(("ten_123", "usr_123"))
+    fake_uow.user_repo.tenant_memberships.add(("iam_ten_123", "iam_usr_123"))
 
     command = UpdateUserCommand(
-        tenant_id="ten_123", user_id="usr_123", first_name="New", last_name="Name", role="admin"
+        tenant_id="iam_ten_123",
+        user_id="iam_usr_123",
+        first_name="New",
+        last_name="Name",
+        role="admin",
     )
 
     await update_user_use_case.execute(command)
 
     # Verify user was updated
-    saved_user = await fake_uow.user_repo.find_by_id("usr_123")
+    saved_user = await fake_uow.user_repo.find_by_id("iam_usr_123")
     assert saved_user.name == "New Name"
 
     # Verify PBAC role was assigned
     role_memberships = fake_uow.role_repo.user_roles
     assert any(
-        r[0] == "ten_123" and r[1] == "usr_123" and r[2] == "rol_abc" for r in role_memberships
+        r[0] == "iam_ten_123" and r[1] == "iam_usr_123" and r[2] == "iam_rol_abc"
+        for r in role_memberships
     )
 
     # Verify domain events
@@ -87,18 +92,22 @@ async def test_update_user_success(fake_uow, update_user_use_case):
 @pytest.mark.asyncio
 async def test_update_user_tenant_not_found(update_user_use_case):
     command = UpdateUserCommand(
-        tenant_id="ten_unknown", user_id="usr_123", first_name="New", last_name="Name", role="admin"
+        tenant_id="iam_ten_unknown",
+        user_id="iam_usr_123",
+        first_name="New",
+        last_name="Name",
+        role="admin",
     )
 
     with pytest.raises(ResourceNotFoundError) as exc:
         await update_user_use_case.execute(command)
-    assert "Tenant ten_unknown not found" in str(exc.value)
+    assert "Tenant iam_ten_unknown not found" in str(exc.value)
 
 
 @pytest.mark.asyncio
 async def test_update_user_user_not_found(fake_uow, update_user_use_case):
     tenant = Tenant(
-        id="ten_123",
+        id="iam_ten_123",
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
@@ -109,9 +118,13 @@ async def test_update_user_user_not_found(fake_uow, update_user_use_case):
     await fake_uow.tenant_repo.save(tenant)
 
     command = UpdateUserCommand(
-        tenant_id="ten_123", user_id="usr_unknown", first_name="New", last_name="Name", role="admin"
+        tenant_id="iam_ten_123",
+        user_id="iam_usr_unknown",
+        first_name="New",
+        last_name="Name",
+        role="admin",
     )
 
     with pytest.raises(ResourceNotFoundError) as exc:
         await update_user_use_case.execute(command)
-    assert "User usr_unknown not found" in str(exc.value)
+    assert "User iam_usr_unknown not found" in str(exc.value)

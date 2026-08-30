@@ -13,7 +13,7 @@ pytestmark = pytest.mark.asyncio
 async def test_tenant_uow_provider_success() -> None:
     """Test that TenantUowProvider resolves tenant and yields a DataPlaneUnitOfWorkPort."""
     mock_resolver = AsyncMock()
-    mock_resolver.resolve.return_value = ("shard_2", "postgresql+asyncpg://fake")
+    mock_resolver.resolve.return_value = ("ucp_shard_2", "postgresql+asyncpg://fake")
 
     mock_db_router = MagicMock()
     mock_session = AsyncMock()
@@ -45,5 +45,5 @@ async def test_tenant_uow_provider_success() -> None:
 
     # verify the db router was called with correct parameters
     mock_db_router.get_tenant_session.assert_called_once_with(
-        "tenant_abc", "shard_2", "postgresql+asyncpg://fake"
+        "tenant_abc", "ucp_shard_2", "postgresql+asyncpg://fake"
     )

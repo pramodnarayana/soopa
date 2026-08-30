@@ -1,7 +1,7 @@
-import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from seedwork import generate_random_hex
 from sqlalchemy import or_, select
 
 from edi.adapters.outbound.database.base_repository import TenantSession, TenantSqlAlchemyRepository
@@ -24,7 +24,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}"
+            payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}{generate_random_hex(6)}"
         msg = EdiMessage(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
         await self.flush()
@@ -43,7 +43,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
 
         tid_str = tenant_id if tenant_id is not None else None
-        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}"
+        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{generate_random_hex(6)}"
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tid_str,
@@ -66,7 +66,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}{uuid.uuid4().hex}"
+            payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}{generate_random_hex(6)}"
         msg = EdiJson(tenant_id=tid_str, **payload_copy)
         self.session.add(msg)
         await self.flush()
@@ -79,7 +79,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}"
+            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{generate_random_hex(6)}"
         log = ApiGateway(tenant_id=tid_str, **payload_copy)
         self.session.add(log)
         await self.flush()

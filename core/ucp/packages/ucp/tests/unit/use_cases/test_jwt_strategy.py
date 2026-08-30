@@ -4,9 +4,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 from identity.application.authenticate_use_case import TenantNotProvisionedError
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from identity.domain.identity_context import TokenClaims
 from identity.domain.models.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
+from seedwork.utils import generate_id
 
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.domain.models.tenant import Tenant
@@ -60,12 +62,18 @@ def jwt_strategy(fake_tenant_repo, fake_user_repo, fake_role_repo, mock_token_ve
 async def test_jwt_strategy_resolves_idp_ids(
     jwt_strategy, fake_tenant_repo, fake_user_repo, mock_token_verifier
 ):
-    # Setup Fake DB
+    # Generate canonical IDs — these represent our local DB records
+    canonical_tenant_id = generate_id(IamPrefix.TENANT)
+    canonical_user_id = generate_id(IamPrefix.USER)
+    # IdP IDs are external, opaque strings — not domain-prefixed
+    idp_org_id = "idp_org_456"
+    idp_user_id = "idp_usr_456"
+
     tenant = Tenant(
-        id="ten_123",
+        id=canonical_tenant_id,
         name="Test",
         slug="test",
-        idp_tenant_id="idp_org_456",
+        idp_tenant_id=idp_org_id,
         status="active",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -73,36 +81,32 @@ async def test_jwt_strategy_resolves_idp_ids(
     await fake_tenant_repo.save(tenant)
 
     user = User(
-        id="usr_123",
+        id=canonical_user_id,
         email="test@test.com",
         name="Test User",
-        idp_user_id="idp_usr_456",
+        idp_user_id=idp_user_id,
         status="active",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
     await fake_user_repo.save(user)
 
-    # Mock Token Verifier to return an IdentityContext with IdP IDs
     mock_token_verifier.verify.return_value = TokenClaims(
-        sub="idp_usr_456",
+        sub=idp_user_id,
         iss="https://zitadel",
         aud="test",
         exp=9999999999,
-        tenant_id="idp_org_456",
-        authorized_tenants={"idp_org_456"},
+        tenant_id=idp_org_id,
+        authorized_tenants={idp_org_id},
     )
 
-    # Execute
-    # authenticate_bearer_token calls verifier and constructs basic IdentityContext
     identity = await jwt_strategy.authenticate("mock_token")
 
-    # Assert mappings occurred
-    assert identity.tenant_id == "ten_123"
-    assert identity.subject == "usr_123"
-    assert "ten_123" in identity.authorized_tenants
-    assert "idp_org_456" in identity.authorized_tenants  # Keeps original
-    assert identity.tenant_mapping["idp_org_456"] == "ten_123"
+    assert identity.tenant_id == canonical_tenant_id
+    assert identity.subject == canonical_user_id
+    assert canonical_tenant_id in identity.authorized_tenants
+    assert idp_org_id in identity.authorized_tenants  # Keeps original
+    assert identity.tenant_mapping[idp_org_id] == canonical_tenant_id
 
 
 @pytest.mark.asyncio
@@ -126,43 +130,45 @@ async def test_jwt_strategy_raises_if_tenant_not_provisioned(jwt_strategy, mock_
 async def test_jwt_strategy_handles_canonical_ids(
     jwt_strategy, fake_tenant_repo, fake_user_repo, mock_token_verifier
 ):
-    # Test when the token ALREADY has canonical IDs (starts with ten_ / usr_)
+    # Token already has canonical iam_ IDs — strategy must pass straight through
+    canonical_tenant_id = generate_id(IamPrefix.TENANT)
+    canonical_user_id = generate_id(IamPrefix.USER)
+
     mock_token_verifier.verify.return_value = TokenClaims(
-        sub="usr_789",
+        sub=canonical_user_id,
         iss="https://zitadel",
         aud="test",
         exp=9999999999,
-        tenant_id="ten_789",
-        authorized_tenants={"ten_789"},
+        tenant_id=canonical_tenant_id,
+        authorized_tenants={canonical_tenant_id},
     )
 
     identity = await jwt_strategy.authenticate("mock_token")
 
-    # No DB lookup needed, passes straight through
-    assert identity.tenant_id == "ten_789"
-    assert identity.subject == "usr_789"
-    assert "ten_789" in identity.authorized_tenants
+    assert identity.tenant_id == canonical_tenant_id
+    assert identity.subject == canonical_user_id
+    assert canonical_tenant_id in identity.authorized_tenants
 
 
 @pytest.mark.asyncio
 async def test_jwt_strategy_resolves_dynamic_capabilities(
     jwt_strategy, fake_role_repo, mock_token_verifier
 ):
+    canonical_tenant_id = generate_id(IamPrefix.TENANT)
+    canonical_user_id = generate_id(IamPrefix.USER)
+
     mock_token_verifier.verify.return_value = TokenClaims(
-        sub="usr_999",
+        sub=canonical_user_id,
         iss="https://zitadel",
         aud="test",
         exp=9999999999,
-        tenant_id="ten_999",
-        authorized_tenants={"ten_999"},
+        tenant_id=canonical_tenant_id,
+        authorized_tenants={canonical_tenant_id},
     )
-
-    # Setup Fake DB to return capabilities when get_user_capabilities is called
-    from unittest.mock import AsyncMock
 
     fake_role_repo.get_user_capabilities = AsyncMock(
         side_effect=lambda tenant_id, user_id: (
-            {"cap:read"} if tenant_id == "ten_999" else {"cap:global"}
+            {"cap:read"} if tenant_id == canonical_tenant_id else {"cap:global"}
         )
     )
 

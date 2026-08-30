@@ -1,8 +1,8 @@
 import datetime
-import uuid
 
 import pytest
 from database.models.identity import IdentityOutbox
+from seedwork import generate_id
 
 from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
     SqlAlchemyIdentityOutboxCleanupRepository,
@@ -18,8 +18,8 @@ async def test_identity_outbox_cleanup(db_session_factory):
 
     # Create old processed event
     old_event = IdentityOutbox(
-        id=f"evt_{uuid.uuid4().hex[:12]}",
-        idempotency_key=f"idemp_{uuid.uuid4().hex[:12]}",
+        id=generate_id("evt"),
+        idempotency_key=generate_id("idemp"),
         tenant_id="platform",
         event_type="test",
         payload={},
@@ -28,8 +28,8 @@ async def test_identity_outbox_cleanup(db_session_factory):
     )
     # Create old unprocessed event
     old_unprocessed = IdentityOutbox(
-        id=f"evt_{uuid.uuid4().hex[:12]}",
-        idempotency_key=f"idemp_{uuid.uuid4().hex[:12]}",
+        id=generate_id("evt"),
+        idempotency_key=generate_id("idemp"),
         tenant_id="platform",
         event_type="test",
         payload={},
@@ -38,8 +38,8 @@ async def test_identity_outbox_cleanup(db_session_factory):
     )
     # Create new processed event
     new_event = IdentityOutbox(
-        id=f"evt_{uuid.uuid4().hex[:12]}",
-        idempotency_key=f"idemp_{uuid.uuid4().hex[:12]}",
+        id=generate_id("evt"),
+        idempotency_key=generate_id("idemp"),
         tenant_id="platform",
         event_type="test",
         payload={},

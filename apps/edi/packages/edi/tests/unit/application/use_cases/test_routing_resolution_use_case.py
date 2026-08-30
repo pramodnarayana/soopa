@@ -7,6 +7,12 @@ fallback, AS2 partner resolution, and error recovery.
 """
 
 import pytest
+from seedwork.utils import generate_id
+
+TP_001 = generate_id("tp")
+TP_007 = generate_id("tp")
+TP_META = generate_id("tp")
+TP_X = generate_id("tp")
 
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
 from edi.domain.models import ConnectionType, Direction
@@ -105,8 +111,8 @@ class TestRoutingResolutionOutbound:
 
     @pytest.mark.asyncio
     async def test_resolves_outbound_by_trading_partner_id(self):
-        self.repo.seed_outbound_route("tp_001", ("TradingCo", "AS2"))
-        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id="tp_001")
+        self.repo.seed_outbound_route(TP_001, ("TradingCo", "AS2"))
+        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=TP_001)
         name, conn_type = await self.use_case.resolve_routing_context(msg, [])
         assert name == "TradingCo"
         assert conn_type == "AS2"
@@ -114,20 +120,20 @@ class TestRoutingResolutionOutbound:
     @pytest.mark.asyncio
     async def test_outbound_falls_back_to_business_metadata_when_no_route(self):
         """trading_partner_id is set but outbound route returns None → try business metadata."""
-        self.repo.seed_outbound_route("tp_001", None)
-        self.repo.seed_business_metadata(["tp_001"], "MetaPartner")
+        self.repo.seed_outbound_route(TP_001, None)
+        self.repo.seed_business_metadata([TP_001], "MetaPartner")
         msg = FakeMsg(
             direction=Direction.OUTBOUND,
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
         )
-        edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": "tp_001"}})
+        edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": TP_001}})
         name, _ = await self.use_case.resolve_routing_context(msg, [edi_json])
         assert name == "MetaPartner"
 
     @pytest.mark.asyncio
     async def test_outbound_returns_none_when_no_routes_and_no_metadata(self):
-        self.repo.seed_outbound_route("tp_001", None)
-        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id="tp_001")
+        self.repo.seed_outbound_route(TP_001, None)
+        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=TP_001)
         name, _ = await self.use_case.resolve_routing_context(msg, [])
         assert name is None
 
@@ -148,7 +154,7 @@ class TestRoutingResolutionOutbound:
 
         repo = FailingRepo()
         use_case = RoutingResolutionUseCase(repository=repo)
-        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id="tp_X")
+        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=TP_X)
         # Must not raise
         name, _ = await use_case.resolve_routing_context(msg, [])
         assert name is None
@@ -192,7 +198,7 @@ class TestRoutingResolutionInbound:
     @pytest.mark.asyncio
     async def test_inbound_business_metadata_has_priority_over_route(self):
         """If business_metadata._routing.trading_partner_id resolves, it wins first."""
-        self.repo.seed_business_metadata(["tp_meta"], "MetaPartner")
+        self.repo.seed_business_metadata([TP_META], "MetaPartner")
         self.repo.seed_inbound_route("S1", "R1", "850", ("RoutePartner", "AS2"))
         msg = FakeMsg(
             direction=Direction.INBOUND,
@@ -200,7 +206,7 @@ class TestRoutingResolutionInbound:
             sender_id="S1",
             receiver_id="R1",
         )
-        edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": "tp_meta"}})
+        edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": TP_META}})
         name, _ = await self.use_case.resolve_routing_context(msg, [edi_json])
         assert name == "MetaPartner"
 

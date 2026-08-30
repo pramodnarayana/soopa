@@ -1,11 +1,11 @@
 import json
-import uuid
 from collections.abc import Sequence
 
 import structlog
 from database.models.identity import Role, User, UserRole
 from database.models.notifications import NotificationOutbox, NotificationRecord
 from database.outbox_serializer import serialize_domain_event
+from seedwork import generate_random_hex
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,7 +57,7 @@ class SqlAlchemyNotificationRecordRepository(NotificationRecordRepositoryPort):
             notifications = []
             for uid in user_ids:
                 notification = NotificationRecord(
-                    id=f"notif_inapp_{uuid.uuid4().hex}",
+                    id=f"notif_inapp_{generate_random_hex(6)}",
                     tenant_id=dispatch.tenant_id,
                     user_id=uid,
                     title=dispatch.subject or "New Notification",
@@ -91,7 +91,7 @@ class SqlAlchemyNotificationRecordRepository(NotificationRecordRepositoryPort):
         # Serialize domain events to outbox!
         for event in dispatch.domain_events:
             outbox_orm = NotificationOutbox(
-                id=f"notif_ob_{uuid.uuid4().hex}",
+                id=f"notif_ob_{generate_random_hex(6)}",
                 tenant_id=dispatch.tenant_id,
                 event_type=event.event_name,
                 idempotency_key=event.idempotency_key,

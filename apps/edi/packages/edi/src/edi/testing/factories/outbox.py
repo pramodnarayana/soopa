@@ -4,9 +4,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from outbox.domain.constants import OutboxStatus
+from seedwork import generate_id
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.domain.constants import DomainIdPrefix
 from edi.domain.events import PipelineEventType
 
 
@@ -23,7 +25,7 @@ class DataPlaneOutboxBuilder:
 
     async def create(self, **kwargs) -> DataPlaneOutbox:
         outbox_event = DataPlaneOutbox(
-            id=kwargs.get("id", f"dp_edi_ob_{uuid.uuid4().hex[:24]}"),
+            id=kwargs.get("id", generate_id(DomainIdPrefix.DP_OUTBOX)),
             tenant_id=kwargs.get("tenant_id", self.tenant_id),
             idempotency_key=kwargs.get("idempotency_key", f"idemp_{uuid.uuid4()}"),
             event_type=kwargs.get("event_type", self.event_type),

@@ -1,8 +1,8 @@
 import datetime
-import uuid
 
 import pytest
 from database.models.identity import Tenant as OrmTenant
+from seedwork import generate_id, generate_random_hex
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
@@ -13,12 +13,12 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def dummy_tenant_data():
-    tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
+    tenant_id = generate_id("ten")
     return {
         "id": tenant_id,
-        "name": f"Api Token Test Tenant {uuid.uuid4().hex[:8]}",
-        "slug": f"api-token-tenant-{uuid.uuid4().hex[:8]}",
-        "idp_tenant_id": f"idp_{uuid.uuid4().hex[:12]}",
+        "name": f"Api Token Test Tenant {generate_random_hex(6)}",
+        "slug": f"api-token-tenant-{generate_random_hex(6)}",
+        "idp_tenant_id": generate_id("idp"),
         "status": "active",
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -28,10 +28,10 @@ def dummy_tenant_data():
 @pytest.fixture
 def dummy_token_data(dummy_tenant_data: dict) -> dict:
     return {
-        "id": f"tok_{uuid.uuid4().hex[:12]}",
+        "id": generate_id("tok"),
         "tenant_id": dummy_tenant_data["id"],
         "name": "Test Token",
-        "client_id": f"client_{uuid.uuid4().hex[:12]}",
+        "client_id": generate_id("client"),
         "secret_hash": "hash_xyz",
         "active": True,
         "created_at": datetime.datetime.now().replace(tzinfo=None),

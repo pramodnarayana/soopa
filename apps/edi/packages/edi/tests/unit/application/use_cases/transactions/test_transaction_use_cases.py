@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork.utils import generate_id
 
 from edi.application.use_cases.transactions.get_transaction_use_case import (
     GetTransactionUseCase,
@@ -166,57 +168,70 @@ class TestGetTransactionUseCase:
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
         self.use_case = GetTransactionUseCase(uow=self.uow)
+        self.tenant_id = generate_id(IamPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_transaction_missing(self):
         with pytest.raises(TransactionNotFoundError) as exc_info:
-            await self.use_case.get_transaction("ten_001", "missing-trace")
+            await self.use_case.get_transaction(self.tenant_id, "missing-trace")
         assert exc_info.value.trace_id == "missing-trace"
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_edi_message_is_none(self):
-        self.repo.seed_transaction("ten_001", "trace-123", FakeTransactionResult(edi_message=None))
+        self.repo.seed_transaction(
+            self.tenant_id, "trace-123", FakeTransactionResult(edi_message=None)
+        )
         with pytest.raises(TransactionNotFoundError):
-            await self.use_case.get_transaction("ten_001", "trace-123")
+            await self.use_case.get_transaction(self.tenant_id, "trace-123")
 
     @pytest.mark.asyncio
     async def test_returns_transaction_detail_result(self):
         msg = FakeEdiMessage(trace_id="trace-ok", direction="INBOUND")
-        self.repo.seed_transaction("ten_001", "trace-ok", FakeTransactionResult(edi_message=msg))
-        result = await self.use_case.get_transaction("ten_001", "trace-ok")
+        self.repo.seed_transaction(
+            self.tenant_id, "trace-ok", FakeTransactionResult(edi_message=msg)
+        )
+        result = await self.use_case.get_transaction(self.tenant_id, "trace-ok")
         assert result.edi_message["trace_id"] == str(msg.trace_id)
         assert result.edi_message["direction"] == "INBOUND"
 
     @pytest.mark.asyncio
     async def test_returns_empty_edi_json_list_when_none(self):
         msg = FakeEdiMessage(trace_id="trace-ok")
-        self.repo.seed_transaction("ten_001", "trace-ok", FakeTransactionResult(edi_message=msg))
-        result = await self.use_case.get_transaction("ten_001", "trace-ok")
+        self.repo.seed_transaction(
+            self.tenant_id, "trace-ok", FakeTransactionResult(edi_message=msg)
+        )
+        result = await self.use_case.get_transaction(self.tenant_id, "trace-ok")
         assert result.edi_json == []
 
     @pytest.mark.asyncio
     async def test_returns_empty_api_gateway_list_when_none(self):
         msg = FakeEdiMessage(trace_id="trace-ok")
-        self.repo.seed_transaction("ten_001", "trace-ok", FakeTransactionResult(edi_message=msg))
-        result = await self.use_case.get_transaction("ten_001", "trace-ok")
+        self.repo.seed_transaction(
+            self.tenant_id, "trace-ok", FakeTransactionResult(edi_message=msg)
+        )
+        result = await self.use_case.get_transaction(self.tenant_id, "trace-ok")
         assert result.api_gateway == []
 
     @pytest.mark.asyncio
     async def test_trading_partner_name_is_none_without_resolver(self):
         msg = FakeEdiMessage(trace_id="trace-ok")
-        self.repo.seed_transaction("ten_001", "trace-ok", FakeTransactionResult(edi_message=msg))
-        result = await self.use_case.get_transaction("ten_001", "trace-ok")
+        self.repo.seed_transaction(
+            self.tenant_id, "trace-ok", FakeTransactionResult(edi_message=msg)
+        )
+        result = await self.use_case.get_transaction(self.tenant_id, "trace-ok")
         assert result.trading_partner_name is None
 
     @pytest.mark.asyncio
     async def test_uses_routing_resolver_when_provided(self):
         msg = FakeEdiMessage(trace_id="trace-ok")
-        self.repo.seed_transaction("ten_001", "trace-ok", FakeTransactionResult(edi_message=msg))
+        self.repo.seed_transaction(
+            self.tenant_id, "trace-ok", FakeTransactionResult(edi_message=msg)
+        )
 
         fake_resolver = FakeRoutingContextResolver("TradingCo", "AS2")
 
         result = await self.use_case.get_transaction(
-            "ten_001", "trace-ok", routing_resolver=fake_resolver
+            self.tenant_id, "trace-ok", routing_resolver=fake_resolver
         )
         assert result.trading_partner_name == "TradingCo"
         assert fake_resolver.resolved is True
@@ -232,24 +247,27 @@ class TestReplayTransactionUseCase:
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
         self.use_case = ReplayTransactionUseCase(uow=self.uow)
+        self.tenant_id = generate_id(IamPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_transaction_missing(self):
         with pytest.raises(TransactionNotFoundError) as exc_info:
-            await self.use_case.replay_transaction("ten_001", "missing-trace", tier="transform")
+            await self.use_case.replay_transaction(
+                self.tenant_id, "missing-trace", tier="transform"
+            )
         assert exc_info.value.trace_id == "missing-trace"
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_edi_message_is_none(self):
-        self.repo.seed_transaction("ten_001", "t-001", FakeTransactionResult(edi_message=None))
+        self.repo.seed_transaction(self.tenant_id, "t-001", FakeTransactionResult(edi_message=None))
         with pytest.raises(TransactionNotFoundError):
-            await self.use_case.replay_transaction("ten_001", "t-001", tier="transform")
+            await self.use_case.replay_transaction(self.tenant_id, "t-001", tier="transform")
 
     @pytest.mark.asyncio
     async def test_publishes_replay_event_for_valid_trace(self):
         msg = FakeEdiMessage(trace_id="t-001")
-        self.repo.seed_transaction("ten_001", "t-001", FakeTransactionResult(edi_message=msg))
-        await self.use_case.replay_transaction("ten_001", "t-001", tier="deliver")
+        self.repo.seed_transaction(self.tenant_id, "t-001", FakeTransactionResult(edi_message=msg))
+        await self.use_case.replay_transaction(self.tenant_id, "t-001", tier="deliver")
         assert len(self.repo.outbox_events) == 1
         event = self.repo.outbox_events[0]
         assert event["event_type"] == "edi.transaction.replay_requested"
@@ -257,8 +275,8 @@ class TestReplayTransactionUseCase:
     @pytest.mark.asyncio
     async def test_replay_event_includes_trace_id_and_tier(self):
         msg = FakeEdiMessage(trace_id="t-002")
-        self.repo.seed_transaction("ten_001", "t-002", FakeTransactionResult(edi_message=msg))
-        await self.use_case.replay_transaction("ten_001", "t-002", tier="transform")
+        self.repo.seed_transaction(self.tenant_id, "t-002", FakeTransactionResult(edi_message=msg))
+        await self.use_case.replay_transaction(self.tenant_id, "t-002", tier="transform")
         payload = self.repo.outbox_events[0]["payload"]
         assert payload["trace_id"] == "t-002"
         assert payload["tier"] == "transform"
@@ -266,8 +284,8 @@ class TestReplayTransactionUseCase:
     @pytest.mark.asyncio
     async def test_replay_event_has_unique_idempotency_key(self):
         msg = FakeEdiMessage(trace_id="t-003")
-        self.repo.seed_transaction("ten_001", "t-003", FakeTransactionResult(edi_message=msg))
-        await self.use_case.replay_transaction("ten_001", "t-003", tier="transform")
+        self.repo.seed_transaction(self.tenant_id, "t-003", FakeTransactionResult(edi_message=msg))
+        await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
         key = self.repo.outbox_events[0]["key"]
         assert "t-003" in key  # key is prefixed with trace_id
 
@@ -282,10 +300,11 @@ class TestListTransactionsUseCase:
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
         self.use_case = ListTransactionsUseCase(uow=self.uow)
+        self.tenant_id = generate_id(IamPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_transactions(self):
-        result = await self.use_case.list_transactions("ten_001", skip=0, limit=10)
+        result = await self.use_case.list_transactions(self.tenant_id, skip=0, limit=10)
         assert result == []
 
     @pytest.mark.asyncio
@@ -296,7 +315,7 @@ class TestListTransactionsUseCase:
                 FakeTransactionSummary(trace_id="t-002", transaction_type="810"),
             ]
         )
-        result = await self.use_case.list_transactions("ten_001", skip=0, limit=10)
+        result = await self.use_case.list_transactions(self.tenant_id, skip=0, limit=10)
         assert len(result) == 2
         trace_ids = {r.trace_id for r in result}
         assert "t-001" in trace_ids
@@ -306,12 +325,12 @@ class TestListTransactionsUseCase:
     async def test_passes_skip_and_limit_to_repository(self):
         summaries = [FakeTransactionSummary(trace_id=f"t-{i}") for i in range(5)]
         self.repo.seed_summaries(summaries)
-        result = await self.use_case.list_transactions("ten_001", skip=2, limit=2)
+        result = await self.use_case.list_transactions(self.tenant_id, skip=2, limit=2)
         assert len(result) == 2
         assert result[0].trace_id == "t-2"
 
     @pytest.mark.asyncio
     async def test_result_trace_ids_match_summaries(self):
         self.repo.seed_summaries([FakeTransactionSummary(trace_id="unique-trace")])
-        result = await self.use_case.list_transactions("ten_001", skip=0, limit=10)
+        result = await self.use_case.list_transactions(self.tenant_id, skip=0, limit=10)
         assert result[0].trace_id == "unique-trace"

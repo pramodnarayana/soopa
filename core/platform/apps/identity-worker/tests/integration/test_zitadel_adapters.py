@@ -17,6 +17,7 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
     ZitadelUsersAdapter,
 )
 from identity_worker.domain.exceptions import IdentityProviderPortError
+from seedwork import generate_id
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -48,7 +49,7 @@ def zitadel_users_adapter():
 @pytest.fixture
 async def setup_tenant_db(db_session_factory):
     async with db_session_factory() as session:
-        tenant_id = str(uuid.uuid4())
+        tenant_id = generate_id("id")
         tenant = DbTenant(
             id=tenant_id,
             name="Test Corp Identity Sync",
@@ -195,7 +196,7 @@ async def test_sync_tenant_already_synced(
     db_session_factory, zitadel_orgs_adapter: ZitadelOrganizationsAdapter
 ):
     async with db_session_factory() as session:
-        tenant_id = str(uuid.uuid4())
+        tenant_id = generate_id("id")
         tenant = DbTenant(
             id=tenant_id,
             name="Test Corp Already Synced",

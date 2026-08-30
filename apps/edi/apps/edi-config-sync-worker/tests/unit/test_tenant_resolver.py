@@ -18,7 +18,7 @@ async def test_tenant_resolver_success() -> None:
 
     class MockResult:
         def first(self) -> Any:
-            return (None, MockRow("shard_1", "postgresql://user:pass@host/db"))
+            return (None, MockRow("ucp_shard_1", "postgresql://user:pass@host/db"))
 
     mock_global_session.__anext__.return_value = mock_global_session
     mock_global_session.execute.return_value = MockResult()
@@ -27,14 +27,14 @@ async def test_tenant_resolver_success() -> None:
 
     # First resolve should hit DB
     shard_name, shard_dsn = await resolver.resolve(tenant_id="1")
-    assert shard_name == "shard_1"
+    assert shard_name == "ucp_shard_1"
     assert shard_dsn == "postgresql://user:pass@host/db"
     mock_global_session.execute.assert_awaited_once()
 
     # Second resolve should hit cache
     mock_global_session.execute.reset_mock()
     shard_name_2, shard_dsn_2 = await resolver.resolve(tenant_id="1")
-    assert shard_name_2 == "shard_1"
+    assert shard_name_2 == "ucp_shard_1"
     assert shard_dsn_2 == "postgresql://user:pass@host/db"
     mock_global_session.execute.assert_not_awaited()
 
@@ -71,7 +71,7 @@ async def test_tenant_resolver_eviction() -> None:
 
     class MockResult:
         def first(self) -> Any:
-            return (None, MockRow("shard_1", "postgresql://user:pass@host/db"))
+            return (None, MockRow("ucp_shard_1", "postgresql://user:pass@host/db"))
 
     mock_global_session.__anext__.return_value = mock_global_session
     mock_global_session.execute.return_value = MockResult()

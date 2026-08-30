@@ -2,12 +2,12 @@ import asyncio
 import os
 import sys
 import time
-import uuid
 from typing import Any
 
 import boto3  # type: ignore[import-untyped]
 import structlog
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from seedwork import SystemIdPrefix, generate_id
 
 logger = structlog.get_logger(__name__)
 
@@ -62,7 +62,7 @@ class AwsSecretsManagerAdapter:
         if not category_val or "/" in category_val or category_val == "..":
             raise ValueError("Invalid category value")
 
-        ref_id = str(uuid.uuid4())
+        ref_id = generate_id(SystemIdPrefix.GENERIC)
         secret_name = f"edi/{category_val}/{ref_id}"
 
         def _execute() -> str:

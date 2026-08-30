@@ -1,8 +1,7 @@
-import uuid
-
 import pytest
 from database.models.identity import Role, Tenant, User, UserRole
 from database.models.notifications import NotificationRecord
+from seedwork import generate_id, generate_random_hex
 
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
@@ -11,15 +10,17 @@ from notification.adapters.outbound.database.postgres_notification_query_reposit
 
 @pytest.mark.asyncio
 async def test_notification_query_and_mark_read(db_session_factory):
-    tenant_id = f"test-query-tenant-{uuid.uuid4().hex[:8]}"
-    user_id = "test-user-123"
-    notif_id = f"notif_inapp_{uuid.uuid4().hex}"
+    tenant_id = f"test-query-tenant-{generate_random_hex(6)}"
+    from identity.domain.constants import DomainIdPrefix as IamPrefix
+
+    user_id = generate_id(IamPrefix.USER)
+    notif_id = f"notif_inapp_{generate_random_hex(6)}"
 
     # Setup Data
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -31,7 +32,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
         await session.flush()
 
         role = Role(
-            id=f"rol_{uuid.uuid4().hex[:12]}",
+            id=generate_id(IamPrefix.ROLE),
             tenant_id=tenant_id,
             name="TenantAdmin",
             description="Admin role",
@@ -41,7 +42,10 @@ async def test_notification_query_and_mark_read(db_session_factory):
         await session.flush()
 
         tenant_user = UserRole(
-            id=f"urol_{uuid.uuid4().hex}", tenant_id=tenant_id, user_id=user_id, role_id=role.id
+            id=f"iam_urol_{generate_random_hex(6)}",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role_id=role.id,
         )
         session.add(tenant_user)
 

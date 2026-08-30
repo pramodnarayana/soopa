@@ -13,6 +13,12 @@ We inject a port-conforming in-memory UoW — no DB, no HTTP, no patches.
 from typing import Any
 
 import pytest
+from seedwork.utils import generate_id
+
+TP_001 = generate_id("tp")
+TP_007 = generate_id("tp")
+TP_META = generate_id("tp")
+TP_X = generate_id("tp")
 
 from edi.application.dto import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
@@ -84,7 +90,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_returns_a_trace_id_string(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850", "heading": {}},
             transaction_type="850",
         )
@@ -96,7 +102,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_creates_edi_json_record(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
@@ -109,7 +115,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_saves_edi_json_with_received_status(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
@@ -121,7 +127,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_saves_edi_json_with_outbound_direction(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
@@ -133,19 +139,19 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_routing_metadata_is_injected(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_007",
+            trading_partner_id=TP_007,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
         await self.use_case.process_api_edi_json(cmd)
         bm = self.repo.created_edi_jsons[0]["payload"]["business_metadata"]
-        assert bm["_routing"]["trading_partner_id"] == "tp_007"
+        assert bm["_routing"]["trading_partner_id"] == TP_007
 
     @pytest.mark.asyncio
     async def test_publishes_transform_event_to_outbox(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
@@ -158,7 +164,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_outbox_event_idempotency_key_matches_trace_id(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
@@ -170,7 +176,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     async def test_commits_unit_of_work(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "850"},
             transaction_type="850",
         )
@@ -188,7 +194,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
     async def test_uses_explicit_transaction_type_from_command(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"whatever": "value"},
             transaction_type="810",
         )
@@ -200,7 +206,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
     async def test_resolves_transaction_type_from_payload_transaction_type_key(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"transaction_type": "997"},
             transaction_type=None,
         )
@@ -213,7 +219,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
         """Resolves via heading > transaction_set_header_ST* > transaction_set_identifier_code."""
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={
                 "heading": {"transaction_set_header_ST": {"transaction_set_identifier_code": "204"}}
             },
@@ -228,7 +234,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
         """Resolves via raw ST.ST01 segment when heading approach fails."""
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"ST": {"ST01": "214"}},
             transaction_type=None,
         )
@@ -241,7 +247,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
         """When payload is a list, type is resolved from the first element."""
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload=[
                 {"transaction_type": "850", "heading": {"BEG": {"BEG03": "PO-001"}}},
                 {"transaction_type": "850", "heading": {"BEG": {"BEG03": "PO-002"}}},
@@ -256,7 +262,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
     async def test_saves_none_transaction_type_when_unresolvable(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload={"no_type_here": True},
             transaction_type=None,
         )
@@ -275,7 +281,7 @@ class TestProcessApiEdiJsonUseCaseListPayload:
     async def test_handles_list_payload_with_multiple_items(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload=[
                 {"transaction_type": "850", "heading": {"BEG": {"BEG03": "PO-A"}}},
                 {"transaction_type": "850", "heading": {"BEG": {"BEG03": "PO-B"}}},
@@ -289,7 +295,7 @@ class TestProcessApiEdiJsonUseCaseListPayload:
     async def test_business_metadata_deduplicates_values_across_list_items(self):
         cmd = ProcessApiEdiJsonCommand(
             tenant_id="ten_001",
-            trading_partner_id="tp_001",
+            trading_partner_id=TP_001,
             payload=[
                 {"transaction_type": "850", "heading": {"BEG": {"BEG03": "SAME-PO"}}},
                 {"transaction_type": "850", "heading": {"BEG": {"BEG03": "SAME-PO"}}},

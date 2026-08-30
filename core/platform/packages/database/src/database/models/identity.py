@@ -11,7 +11,7 @@ from database.models.core import IdentityBase
 
 class Tenant(IdentityBase, SoftDeleteMixin):
     __tablename__ = "tenants"
-    ID_PREFIX = "ten"
+    ID_PREFIX = "iam_ten"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
@@ -31,7 +31,7 @@ class Tenant(IdentityBase, SoftDeleteMixin):
 
 class User(IdentityBase, SoftDeleteMixin):
     __tablename__ = "users"
-    ID_PREFIX = "usr"
+    ID_PREFIX = "iam_usr"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
@@ -82,7 +82,7 @@ class ApiToken(IdentityBase, SoftDeleteMixin):
     """
 
     __tablename__ = "api_tokens"
-    ID_PREFIX = "tok"
+    ID_PREFIX = "iam_tok"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -115,7 +115,7 @@ class ApiKey(IdentityBase, SoftDeleteMixin):
     """
 
     __tablename__ = "api_keys"
-    ID_PREFIX = "key"
+    ID_PREFIX = "iam_key"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -142,7 +142,7 @@ class ApiKey(IdentityBase, SoftDeleteMixin):
 
 class Role(IdentityBase, SoftDeleteMixin):
     __tablename__ = "roles"
-    ID_PREFIX = "rol"
+    ID_PREFIX = "iam_rol"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -178,7 +178,7 @@ class Role(IdentityBase, SoftDeleteMixin):
 class UserRole(IdentityBase):
     __tablename__ = "user_roles"
 
-    ID_PREFIX = "urol"
+    ID_PREFIX = "iam_urol"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -209,7 +209,7 @@ class UserRole(IdentityBase):
 
 class IdentityOutbox(IdentityBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = "id_ob"
+    ID_PREFIX = "iam_ob"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)

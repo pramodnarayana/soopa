@@ -14,12 +14,12 @@ Dependency Inversion is enforced via constructor injection:
 import email
 import functools
 import re
-import uuid
 from email import policy
 from typing import Any
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork import SystemIdPrefix, generate_id
 
 from edi.application.dto import ProcessInboundAs2Command
 from edi.domain.constants import EdiConnectionType, TransactionDirection, TransactionStatus
@@ -407,7 +407,7 @@ class ProcessInboundAs2MessageUseCase:
         )
 
         edi_record = {
-            "trace_id": str(uuid.uuid4()),
+            "trace_id": generate_id(SystemIdPrefix.GENERIC),
             "direction": TransactionDirection.INBOUND.value,
             "connection_type": EdiConnectionType.AS2.value,
             "sender_id": isa_sender,

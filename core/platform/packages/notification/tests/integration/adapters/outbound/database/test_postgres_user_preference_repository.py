@@ -1,6 +1,5 @@
-import uuid
-
 import pytest
+from seedwork import generate_id
 from sqlalchemy import text
 
 from notification.adapters.outbound.database.postgres_user_preference_repository import (
@@ -20,8 +19,11 @@ async def test_save_and_get_preference(
     repo: SqlAlchemyUserNotificationPreferenceRepository, db_session_factory
 ):
     # Arrange
-    tenant_id = f"ten_test_123-{uuid.uuid4().hex[:8]}"
-    user_id = "usr_test_123"
+    from identity.domain.constants import DomainIdPrefix as IamPrefix
+
+    tenant_id = generate_id(IamPrefix.TENANT)
+
+    user_id = generate_id(IamPrefix.USER)
     event_type = "invoice.payment_failed"
     channel = "EMAIL"
 

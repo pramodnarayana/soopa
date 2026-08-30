@@ -9,7 +9,9 @@ Covers:
 """
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from jinja2.exceptions import SecurityError
+from seedwork.utils import generate_id
 
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 
@@ -25,9 +27,10 @@ class TestBasicInterpolation:
         assert result == "Hello, Alice!"
 
     def test_renders_multiple_variables(self, renderer: Jinja2TemplateRenderer) -> None:
+        tenant_id = generate_id(IamPrefix.TENANT)
         tmpl = "Tenant {{ tenant_id }} — event {{ event_type }} fired."
-        result = renderer.render(tmpl, {"tenant_id": "ten_123", "event_type": "invoice.failed"})
-        assert result == "Tenant ten_123 — event invoice.failed fired."
+        result = renderer.render(tmpl, {"tenant_id": tenant_id, "event_type": "invoice.failed"})
+        assert result == f"Tenant {tenant_id} — event invoice.failed fired."
 
     def test_renders_subject_template(self, renderer: Jinja2TemplateRenderer) -> None:
         result = renderer.render("Invoice #{{ invoice_id }} Ready", {"invoice_id": "INV-999"})
@@ -44,9 +47,10 @@ class TestChannelSpecificTemplates:
         assert "<p>Your invoice $500 is due.</p>" in result
 
     def test_slack_block_kit_json_template(self, renderer: Jinja2TemplateRenderer) -> None:
+        tenant_id = generate_id(IamPrefix.TENANT)
         tmpl = '{"text": "Alert: {{ event_type }} for tenant {{ tenant_id }}"}'
-        result = renderer.render(tmpl, {"event_type": "payment.failed", "tenant_id": "ten_abc"})
-        assert result == '{"text": "Alert: payment.failed for tenant ten_abc"}'
+        result = renderer.render(tmpl, {"event_type": "payment.failed", "tenant_id": tenant_id})
+        assert result == f'{{"text": "Alert: payment.failed for tenant {tenant_id}"}}'
 
     def test_in_app_plain_text_template(self, renderer: Jinja2TemplateRenderer) -> None:
         tmpl = "Your webhook {{ webhook_name }} has failed {{ failure_count }} times."

@@ -6,7 +6,10 @@ hierarchy, and attribute storage.
 """
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork.utils import generate_id
 
+from edi.domain.constants import DomainIdPrefix as EdiPrefix
 from edi.domain.exceptions import (
     DomainError,
     IdempotencyConflictError,
@@ -59,44 +62,58 @@ class TestExceptionHierarchy:
 
 class TestPartnerNotFoundError:
     def test_stores_partner_id_attribute(self):
-        err = PartnerNotFoundError(partner_id="p_001", tenant_id="ten_001")
-        assert err.partner_id == "p_001"
+        p_id = generate_id(EdiPrefix.AS2_PARTNER)
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
+        assert err.partner_id == p_id
 
     def test_stores_tenant_id_attribute(self):
-        err = PartnerNotFoundError(partner_id="p_001", tenant_id="ten_001")
-        assert err.tenant_id == "ten_001"
+        p_id = generate_id(EdiPrefix.AS2_PARTNER)
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
+        assert err.tenant_id == t_id
 
     def test_message_contains_partner_and_tenant(self):
-        err = PartnerNotFoundError(partner_id="p_001", tenant_id="ten_001")
-        assert "p_001" in str(err)
-        assert "ten_001" in str(err)
+        p_id = generate_id(EdiPrefix.AS2_PARTNER)
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
+        assert p_id in str(err)
+        assert t_id in str(err)
 
     def test_can_be_raised_and_caught(self):
+        p_id = generate_id(EdiPrefix.AS2_PARTNER)
+        t_id = generate_id(IamPrefix.TENANT)
         with pytest.raises(PartnerNotFoundError) as exc_info:
-            raise PartnerNotFoundError(partner_id="p_X", tenant_id="t_X")
-        assert exc_info.value.partner_id == "p_X"
+            raise PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
+        assert exc_info.value.partner_id == p_id
 
 
 class TestPartnerAlreadyExistsError:
     def test_stores_as2_id_and_tenant_id(self):
-        err = PartnerAlreadyExistsError(as2_id="AS2_ID_01", tenant_id="ten_001")
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerAlreadyExistsError(as2_id="AS2_ID_01", tenant_id=t_id)
         assert err.as2_id == "AS2_ID_01"
-        assert err.tenant_id == "ten_001"
+        assert err.tenant_id == t_id
 
     def test_message_contains_as2_id(self):
-        err = PartnerAlreadyExistsError(as2_id="MY_AS2", tenant_id="ten_001")
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerAlreadyExistsError(as2_id="MY_AS2", tenant_id=t_id)
         assert "MY_AS2" in str(err)
 
 
 class TestPartnerInUseError:
     def test_stores_partner_id_and_tenant_id(self):
-        err = PartnerInUseError(partner_id="p_002", tenant_id="ten_002")
-        assert err.partner_id == "p_002"
-        assert err.tenant_id == "ten_002"
+        p_id = generate_id(EdiPrefix.AS2_PARTNER)
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerInUseError(partner_id=p_id, tenant_id=t_id)
+        assert err.partner_id == p_id
+        assert err.tenant_id == t_id
 
     def test_message_contains_partner_id(self):
-        err = PartnerInUseError(partner_id="p_XYZ", tenant_id="ten_001")
-        assert "p_XYZ" in str(err)
+        p_id = generate_id(EdiPrefix.AS2_PARTNER)
+        t_id = generate_id(IamPrefix.TENANT)
+        err = PartnerInUseError(partner_id=p_id, tenant_id=t_id)
+        assert p_id in str(err)
 
 
 class TestInvalidCertificateActionError:
@@ -113,17 +130,20 @@ class TestInvalidCertificateActionError:
 
 class TestTransactionNotFoundError:
     def test_stores_trace_id(self):
-        err = TransactionNotFoundError(trace_id="trace-abc-123")
-        assert err.trace_id == "trace-abc-123"
+        t_id = generate_id("sys_trc")
+        err = TransactionNotFoundError(trace_id=t_id)
+        assert err.trace_id == t_id
 
     def test_message_contains_trace_id(self):
-        err = TransactionNotFoundError(trace_id="trace-abc-123")
-        assert "trace-abc-123" in str(err)
+        t_id = generate_id("sys_trc")
+        err = TransactionNotFoundError(trace_id=t_id)
+        assert t_id in str(err)
 
     def test_can_be_raised_and_caught(self):
+        t_id = generate_id("sys_trc")
         with pytest.raises(TransactionNotFoundError) as exc_info:
-            raise TransactionNotFoundError(trace_id="t-001")
-        assert exc_info.value.trace_id == "t-001"
+            raise TransactionNotFoundError(trace_id=t_id)
+        assert exc_info.value.trace_id == t_id
 
 
 class TestSimpleExceptions:

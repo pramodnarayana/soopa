@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 import pytest
 import pytest_asyncio
 from database.events import EventEnvelope
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
+from seedwork.utils import generate_id
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App
@@ -94,7 +96,7 @@ async def test_app_subscription_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Stark Industries",
-        creator_id="usr_mock",
+        creator_id=generate_id(IamPrefix.USER),
     )
 
     tenant = await use_case.execute(command)

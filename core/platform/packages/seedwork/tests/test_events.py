@@ -1,4 +1,3 @@
-import uuid
 from dataclasses import dataclass
 
 from seedwork.events import DomainEvent
@@ -37,8 +36,8 @@ def test_domain_event_idempotency_key_without_id():
     event = DummyEventNoId()
     key1 = event.idempotency_key
     key2 = event.idempotency_key
-    # Should generate a UUID and memoize it
+    # Should generate a prefixed ID and memoize it
     assert key1 == key2
-    assert isinstance(uuid.UUID(key1), uuid.UUID)
+    assert key1.startswith("sys_id_")
     assert event.event_name == "dummy.event.noid"
     assert event.get_routing_tenant_id() is None

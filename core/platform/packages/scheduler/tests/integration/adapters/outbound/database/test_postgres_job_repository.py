@@ -1,10 +1,10 @@
 import os
-import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from database.provider import get_async_engine
+from seedwork import generate_id
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -39,9 +39,9 @@ async def clear_scheduling_tables(test_session: AsyncSession) -> None:
 async def test_claim_next_jobs(test_session: AsyncSession) -> None:
     # Insert some jobs manually
     now = datetime.now(UTC)
-    job_1_id = str(uuid.uuid4())
-    job_2_id = str(uuid.uuid4())
-    future_job_id = str(uuid.uuid4())
+    job_1_id = generate_id("id")
+    job_2_id = generate_id("id")
+    future_job_id = generate_id("id")
 
     await test_session.execute(
         text("""
@@ -88,7 +88,7 @@ async def test_claim_next_jobs(test_session: AsyncSession) -> None:
 @pytest.mark.integration
 async def test_reschedule(test_session: AsyncSession) -> None:
     now = datetime.now(UTC)
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
 
     await test_session.execute(
         text("""
@@ -121,7 +121,7 @@ async def test_reschedule(test_session: AsyncSession) -> None:
 @pytest.mark.integration
 async def test_schedule_retry(test_session: AsyncSession) -> None:
     now = datetime.now(UTC)
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
 
     await test_session.execute(
         text("""
@@ -156,7 +156,7 @@ async def test_schedule_retry(test_session: AsyncSession) -> None:
 @pytest.mark.integration
 async def test_mark_completed(test_session: AsyncSession) -> None:
     now = datetime.now(UTC)
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
 
     await test_session.execute(
         text("""
@@ -184,7 +184,7 @@ async def test_mark_completed(test_session: AsyncSession) -> None:
 @pytest.mark.integration
 async def test_mark_failed(test_session: AsyncSession) -> None:
     now = datetime.now(UTC)
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
 
     await test_session.execute(
         text("""
@@ -215,8 +215,8 @@ async def test_mark_failed(test_session: AsyncSession) -> None:
 @pytest.mark.integration
 async def test_sweep_stuck_jobs(test_session: AsyncSession) -> None:
     now = datetime.now(UTC)
-    stuck_job_id = str(uuid.uuid4())
-    active_job_id = str(uuid.uuid4())
+    stuck_job_id = generate_id("id")
+    active_job_id = generate_id("id")
 
     await test_session.execute(
         text("""

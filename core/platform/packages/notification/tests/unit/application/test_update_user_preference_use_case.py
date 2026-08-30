@@ -1,6 +1,6 @@
-import uuid
-
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork import generate_id
 
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
 from notification.domain.models import Channel, UserNotificationPreference
@@ -29,8 +29,8 @@ async def test_execute_upserts_and_returns(
     use_case: UpdateUserPreferenceUseCase, fake_repo: FakeUserPrefRepo
 ):
     # Arrange
-    tenant_id = f"ten_123-{uuid.uuid4().hex[:8]}"
-    user_id = "usr_123"
+    tenant_id = generate_id(IamPrefix.TENANT)
+    user_id = generate_id(IamPrefix.USER)
     event_type = "invoice.payment_failed"
     channel = "EMAIL"
     is_enabled = False

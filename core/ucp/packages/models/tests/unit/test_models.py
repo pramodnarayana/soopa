@@ -46,11 +46,11 @@ def test_app_subscription_instantiation():
 
 def test_database_shard_instantiation():
     shard = DatabaseShard(
-        id="shard_1",
+        id="ucp_shard_1",
         name="primary_shard",
         dsn="postgresql://user:pass@localhost:5432/db",
     )
-    assert shard.id == "shard_1"
+    assert shard.id == "ucp_shard_1"
     assert shard.name == "primary_shard"
     assert shard.dsn == "postgresql://user:pass@localhost:5432/db"
 
@@ -59,8 +59,8 @@ def test_shard_registry_instantiation():
     registry = ShardRegistry(
         tenant_id="tenant-1",
         app_id="app-1",
-        shard_id="shard_1",
+        shard_id="ucp_shard_1",
     )
     assert registry.tenant_id == "tenant-1"
     assert registry.app_id == "app-1"
-    assert registry.shard_id == "shard_1"
+    assert registry.shard_id == "ucp_shard_1"

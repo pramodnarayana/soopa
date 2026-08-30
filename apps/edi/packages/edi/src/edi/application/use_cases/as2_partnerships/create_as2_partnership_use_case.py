@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import structlog
 
 from edi.application.dto import CreateAS2PartnershipCmd
@@ -53,8 +55,8 @@ class CreateAS2PartnershipUseCase:
             mdn_type=cmd.mdn_type,
             encryption_algorithm=cmd.encryption_algorithm,
             signature_algorithm=cmd.signature_algorithm,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             tenant_id=tenant_id,
             active=True,
         )

@@ -42,8 +42,8 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     from sqlalchemy import text
 
     suffix = os.urandom(12).hex()
-    tenant_id = f"ten_{suffix}"
-    shard_id = f"shard_{suffix}"
+    tenant_id = f"iam_ten_{suffix}"
+    shard_id = f"ucp_shard_{suffix}"
     outbox_id = f"cp_ucp_ob_{suffix}"
 
     await test_session.execute(
@@ -68,7 +68,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     # 3. Persist DatabaseShard
     shard = DatabaseShard(
         id=shard_id,
-        name=f"shard_{suffix}",
+        name=f"ucp_shard_{suffix}",
         dsn="postgres://fake",
     )
     test_session.add(shard)
@@ -96,7 +96,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
         id=outbox_id,
         tenant_id=tenant_id,
         event_type="test.event",
-        idempotency_key=f"key_{suffix}",
+        idempotency_key=f"iam_key_{suffix}",
         payload={"some": "data"},
         status="PENDING",
     )
@@ -133,7 +133,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     result = await test_session.execute(select(DatabaseShard).where(DatabaseShard.id == shard_id))
     fetched_shard = result.scalar_one_or_none()
     assert fetched_shard is not None
-    assert fetched_shard.name == f"shard_{suffix}"
+    assert fetched_shard.name == f"ucp_shard_{suffix}"
 
     # Shard Registry
     result = await test_session.execute(

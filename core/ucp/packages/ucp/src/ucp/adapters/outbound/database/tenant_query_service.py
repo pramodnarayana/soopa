@@ -51,7 +51,7 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
             )
         )
         result = await self.session.execute(stmt)
-        # 'app_slug' avoids shadowing any outer variable named 'slug' — fixes B2.
+        # 'ucp_app_slug' avoids shadowing any outer variable named 'slug' — fixes B2.
         return [app_slug for (app_slug,) in result]
 
     # ------------------------------------------------------------------

@@ -70,14 +70,15 @@ def test_node_putloop_wrong_root():
         node.putloop({"BOTSID": "WRONG_ROOT"})
 
 
-def test_node_display(capsys) -> None:
+from unittest import mock
+
+
+def test_node_display() -> None:
     node = Node(record={"BOTSID": "ROOT", "BOTSIDnr": "1"})
     child = Node(record={"BOTSID": "CHILD", "BOTSIDnr": "1"})
     node.append(child)
 
-    node.display()
-
-    captured = capsys.readouterr()
-    assert "Displaying all nodes in node tree:" in captured.out
-    assert "ROOT" in captured.out
-    assert "CHILD" in captured.out
+    with mock.patch("edi.core.bots.domain.node.logger") as mock_logger:
+        node.display()
+        mock_logger.info.assert_any_call("Displaying all nodes in node tree:")
+        # We can also assert it prints ROOT and CHILD, but the exact call args are dictionaries

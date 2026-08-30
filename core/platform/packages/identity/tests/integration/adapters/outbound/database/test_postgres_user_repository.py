@@ -1,15 +1,16 @@
 import datetime
-import uuid
 
 import pytest
 from database.models.identity import IdentityOutbox as OrmIdentityOutbox
 from database.models.identity import Role as OrmRole
 from database.models.identity import Tenant as OrmTenant
 from database.models.identity import UserRole as OrmUserRole
+from seedwork import generate_id, generate_random_hex
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from identity.domain.events import UserCreatedEvent
 from identity.domain.models.user import User
 
@@ -18,12 +19,12 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def dummy_tenant_data() -> dict:
-    tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
+    tenant_id = generate_id(IamPrefix.TENANT)
     return {
         "id": tenant_id,
-        "name": f"User Repo Tenant {uuid.uuid4().hex[:8]}",
-        "slug": f"user-tenant-{uuid.uuid4().hex[:8]}",
-        "idp_tenant_id": f"idp_{uuid.uuid4().hex[:12]}",
+        "name": f"User Repo Tenant {generate_random_hex(6)}",
+        "slug": f"user-tenant-{generate_random_hex(6)}",
+        "idp_tenant_id": "idp_ten_123",
         "status": "active",
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -33,8 +34,8 @@ def dummy_tenant_data() -> dict:
 @pytest.fixture
 def dummy_role_data(dummy_tenant_data: dict) -> dict:
     return {
-        "id": f"role_{uuid.uuid4().hex[:12]}",
-        "name": f"User Repo Role {uuid.uuid4().hex[:8]}",
+        "id": generate_id(IamPrefix.ROLE),
+        "name": f"User Repo Role {generate_random_hex(6)}",
         "description": "Role for user repo tests",
         "tenant_id": dummy_tenant_data["id"],
         "capabilities": ["test:read"],
@@ -61,8 +62,8 @@ async def test_user_repository_lifecycle(
         )
 
         # 1. Save User (Create)
-        user_id = f"usr_{uuid.uuid4().hex[:12]}"
-        idp_user_id = f"idp_{uuid.uuid4().hex[:12]}"
+        user_id = generate_id(IamPrefix.USER)
+        idp_user_id = "idp_usr_123"
         email = "test.user@example.com"
         now = datetime.datetime.now(datetime.UTC)
         user = User(
@@ -122,7 +123,7 @@ async def test_user_repository_lifecycle(
         # 5. Link to Tenant and Role (UserRole) manually to test find_users_by_tenant
         await db_session.execute(
             pg_insert(OrmUserRole).values(
-                id=f"urol_{uuid.uuid4().hex[:12]}",
+                id=generate_id(IamPrefix.USER_ROLE),
                 user_id=user.id,
                 role_id=dummy_role_data["id"],
                 tenant_id=dummy_tenant_data["id"],
@@ -140,7 +141,7 @@ async def test_user_repository_lifecycle(
         assert user_in_tenant.role == dummy_role_data["name"]
 
         # 7a. Find By ID and Tenant - Missing
-        assert await repo.find_by_id_and_tenant(user.id, "ten_missing") is None
+        assert await repo.find_by_id_and_tenant(user.id, "iam_ten_missing") is None
 
         # 8. Check Tenant Memberships
         has_memberships = await repo.has_any_tenant_memberships(user.id)

@@ -64,7 +64,7 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
                     yield session
 
         async def get_all_shards(self):
-            return [("shard_1", shard_url)]
+            return [("ucp_shard_1", shard_url)]
 
     yield TestDatabaseRouter(global_db_url=global_url)
 
@@ -79,7 +79,7 @@ async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
 
 @pytest.mark.integration
 async def test_claim_next_events_and_mark_completed(db_router: DatabaseRouter) -> None:
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
         event1 = await builder.create(event_type="TEST_EVENT_1")
         event2 = await builder.create(event_type="TEST_EVENT_2")
@@ -108,7 +108,7 @@ async def test_claim_next_events_and_mark_completed(db_router: DatabaseRouter) -
     await repo.mark_failed(event_id=event2_id, worker_id=worker_id, error_message="some error")
 
     # Let's verify status directly via the test session
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
         from sqlalchemy import select
 
@@ -133,7 +133,7 @@ async def test_claim_next_events_and_mark_completed(db_router: DatabaseRouter) -
 
 @pytest.mark.integration
 async def test_mark_failed_max_attempts(db_router: DatabaseRouter) -> None:
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
         # Set attempts to 2 so the next failure exceeds max_attempts (3)
         event = await builder.create(event_type="TEST_EVENT_FAILED", attempts=2)
@@ -148,7 +148,7 @@ async def test_mark_failed_max_attempts(db_router: DatabaseRouter) -> None:
 
     await repo.mark_failed(event_id=event_id, worker_id=worker_id, error_message="fatal error")
 
-    async for test_session in db_router.get_shard_session("shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
         from sqlalchemy import select
 

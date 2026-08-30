@@ -1,7 +1,7 @@
-import uuid
 from typing import Any
 
 import structlog
+from seedwork import SystemIdPrefix, generate_id
 
 from edi.application.dto import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
@@ -87,7 +87,7 @@ class ProcessApiEdiJsonUseCase:
             business_metadata["_routing"] = {"trading_partner_id": command.trading_partner_id}
 
             # 2. Create Trace ID
-            trace_id = str(uuid.uuid4())
+            trace_id = generate_id(SystemIdPrefix.GENERIC)
             logger.info("trace_id_generated", trace_id=trace_id)
 
             # 3. Save EdiJson (Status: RECEIVED)

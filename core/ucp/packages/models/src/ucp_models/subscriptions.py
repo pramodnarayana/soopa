@@ -8,10 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 class App(UcpBase):
     __tablename__ = "apps"
-    ID_PREFIX = "app"
+    ID_PREFIX = "ucp_app"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: f"app_{os.urandom(12).hex()}"
+        String(128), primary_key=True, default=lambda: f"ucp_app_{os.urandom(12).hex()}"
     )
     slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

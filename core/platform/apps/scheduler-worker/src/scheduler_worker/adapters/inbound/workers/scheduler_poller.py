@@ -1,9 +1,9 @@
 import asyncio
-import uuid
 
 import structlog
 from scheduler.application.job_executor_use_case import JobExecutorUseCase
 from scheduler.application.job_sweeper_use_case import JobSweeperUseCase
+from seedwork import SystemIdPrefix, generate_id
 
 logger = structlog.get_logger(__name__)
 
@@ -20,7 +20,7 @@ class SchedulerPoller:
     ):
         self.sweep_use_case = sweep_use_case
         self.claim_use_case = claim_use_case
-        self.worker_id = worker_id or str(uuid.uuid4())
+        self.worker_id = worker_id or generate_id(SystemIdPrefix.GENERIC)
         self.poll_interval_seconds = poll_interval_seconds
         self.max_concurrent_jobs = max_concurrent_jobs
         self.lock_lease_ms = lock_lease_ms

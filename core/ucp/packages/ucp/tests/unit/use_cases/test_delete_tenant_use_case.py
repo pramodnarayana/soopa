@@ -1,5 +1,7 @@
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from identity.domain.models.user import User
+from seedwork.utils import generate_id
 
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.domain.exceptions import ResourceNotFoundError
@@ -13,12 +15,8 @@ def fake_uow() -> FakeUcpUnitOfWork:
 
 
 @pytest.fixture
-def delete_use_case(
-    fake_uow: FakeUcpUnitOfWork,
-) -> DeleteTenantUseCase:
-    return DeleteTenantUseCase(
-        uow=fake_uow,
-    )
+def delete_use_case(fake_uow: FakeUcpUnitOfWork) -> DeleteTenantUseCase:
+    return DeleteTenantUseCase(uow=fake_uow)
 
 
 @pytest.mark.asyncio
@@ -27,7 +25,7 @@ async def test_delete_tenant_not_found(
     fake_uow: FakeUcpUnitOfWork,
 ) -> None:
     with pytest.raises(ResourceNotFoundError):
-        await delete_use_case.execute("ten_invalid")
+        await delete_use_case.execute(generate_id(IamPrefix.TENANT))
 
 
 @pytest.mark.asyncio
@@ -35,8 +33,11 @@ async def test_delete_tenant_success(
     delete_use_case: DeleteTenantUseCase,
     fake_uow: FakeUcpUnitOfWork,
 ) -> None:
+    tenant_id = generate_id(IamPrefix.TENANT)
+    user_id = generate_id(IamPrefix.USER)
+
     tenant = Tenant.create(
-        id="ten_123",
+        id=tenant_id,
         name="Test",
         slug="test",
         idp_tenant_id="zitadel-org-123",
@@ -45,12 +46,12 @@ async def test_delete_tenant_success(
     fake_uow.tenant_repo.tenants.append(tenant)
 
     mock_user = User.create(
-        id="usr_1", idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
+        id=user_id, idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
     )
     fake_uow.user_repo.users.append(mock_user)
-    fake_uow.user_repo.tenant_memberships.add(("ten_123", mock_user.id))
+    fake_uow.user_repo.tenant_memberships.add((tenant_id, mock_user.id))
 
-    await delete_use_case.execute("ten_123", "idemp-key")
+    await delete_use_case.execute(tenant_id, "idemp-key")
 
     assert tenant.deleted_at is not None
     assert tenant not in fake_uow.tenant_repo.tenants

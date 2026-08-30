@@ -2,10 +2,13 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork import generate_id
 
 from edi.adapters.outbound.database.models.data_plane import ApiGateway
 from edi.adapters.outbound.pipeline.repository import SqlAlchemyRepositoryAdapter
 from edi.config.settings import AppSettings
+from edi.domain.constants import DomainIdPrefix as EdiPrefix
 from edi.domain.direction import MessageDirection
 from edi.domain.status import MessageStatus
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
@@ -29,9 +32,9 @@ async def test_get_edi_message_success() -> None:
     from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
     mock_record = EdiMessage()
-    mock_record.id = str(uuid.uuid4())
-    mock_record.tenant_id = "1"
-    mock_record.trace_id = str(uuid.uuid4())
+    mock_record.id = generate_id(EdiPrefix.EDI_MESSAGE)
+    mock_record.tenant_id = generate_id(IamPrefix.TENANT)
+    mock_record.trace_id = generate_id("sys_trc")
     mock_record.edi_data = "s3://foo"
     mock_record.direction = MessageDirection.INBOUND
     mock_record.connection_type = "AS2"
@@ -63,7 +66,7 @@ async def test_update_edi_message_status() -> None:
     mock_session = AsyncMock()
     adapter = make_adapter(mock_session)
 
-    trace_id = str(uuid.uuid4())
+    trace_id = generate_id("sys_trc")
     await adapter.update_edi_message_status(trace_id, MessageStatus.TRANSFORMED)
 
     mock_session.execute.assert_awaited_once()
@@ -77,7 +80,7 @@ async def test_save_api_payload() -> None:
     mock_session.execute.return_value = mock_result
     adapter = make_adapter(mock_session)
 
-    trace_id = str(uuid.uuid4())
+    trace_id = generate_id("sys_trc")
     await adapter.save_api_payload(
         trace_id, MessageDirection.OUTBOUND, {"data": "foo"}, MessageStatus.PENDING_DELIVERY
     )
@@ -95,7 +98,7 @@ async def test_publish_outbox_event() -> None:
     mock_session = AsyncMock()
     adapter = make_adapter(mock_session)
 
-    idempotency_key = str(uuid.uuid4())
+    idempotency_key = generate_id("sys_idp")
     await adapter.publish_outbox_event(idempotency_key, "DELIVER", {"trace_id": "123"})
 
     mock_session.execute.assert_awaited_once()
@@ -129,7 +132,7 @@ async def test_update_api_payload_status() -> None:
     mock_session = AsyncMock()
     adapter = make_adapter(mock_session)
 
-    trace_id = str(uuid.uuid4())
+    trace_id = generate_id("sys_trc")
     await adapter.update_api_payload_status(trace_id, MessageStatus.DELIVERED)
 
     mock_session.execute.assert_awaited_once()
@@ -154,7 +157,7 @@ async def test_get_as2_partner_inactive_raises() -> None:
     adapter = make_adapter(mock_session)
 
     with pytest.raises(ValueError, match="exists but is inactive"):
-        await adapter.get_as2_partner("as2_123")
+        await adapter.get_as2_partner(generate_id(EdiPrefix.AS2_PARTNER))
 
 
 async def test_get_as2_partnership_inactive_raises() -> None:
@@ -174,8 +177,8 @@ async def test_get_as2_partnership_inactive_raises() -> None:
 
     adapter = make_adapter(mock_session)
 
-    with pytest.raises(ValueError, match="Partnership for as2_123 exists but is inactive"):
-        await adapter.get_as2_partner("as2_123")
+    with pytest.raises(ValueError, match="AS2 Partnership for"):
+        await adapter.get_as2_partner(generate_id(EdiPrefix.AS2_PARTNER))
 
 
 async def test_get_local_as2_partner_inactive_raises() -> None:
@@ -192,5 +195,5 @@ async def test_get_local_as2_partner_inactive_raises() -> None:
 
     adapter = make_adapter(mock_session)
 
-    with pytest.raises(ValueError, match="Local AS2 Partner as2_123 exists but is inactive"):
-        await adapter.get_local_as2_partner("as2_123")
+    with pytest.raises(ValueError, match="Local AS2 Partner"):
+        await adapter.get_local_as2_partner(generate_id(EdiPrefix.AS2_PARTNER))

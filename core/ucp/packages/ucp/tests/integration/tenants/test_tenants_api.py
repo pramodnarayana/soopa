@@ -1,6 +1,5 @@
-import uuid
-
 import pytest
+from seedwork import generate_random_hex
 
 pytestmark = pytest.mark.integration
 from typing import Any
@@ -12,7 +11,7 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 async def test_provision_and_get_tenant(client: AsyncClient) -> "Any":
     # Provision
-    name = f"Integration Test Tenant {uuid.uuid4().hex[:8]}"
+    name = f"Integration Test Tenant {generate_random_hex(6)}"
     response = await client.post("/api/v1/tenants", json={"name": name})
     assert response.status_code == 200
 
@@ -38,8 +37,8 @@ async def test_provision_and_get_tenant(client: AsyncClient) -> "Any":
 @pytest.mark.asyncio
 async def test_update_tenant_name(client: AsyncClient) -> "Any":
     # Provision
-    old_name = f"Old Name {uuid.uuid4().hex[:8]}"
-    new_name = f"New Name {uuid.uuid4().hex[:8]}"
+    old_name = f"Old Name {generate_random_hex(6)}"
+    new_name = f"New Name {generate_random_hex(6)}"
     response = await client.post("/api/v1/tenants", json={"name": old_name})
     tenant_id = response.json()["id"]
 
@@ -56,7 +55,7 @@ async def test_update_tenant_name(client: AsyncClient) -> "Any":
 @pytest.mark.asyncio
 async def test_delete_tenant(client: AsyncClient) -> "Any":
     # Provision
-    name = f"To Delete {uuid.uuid4().hex[:8]}"
+    name = f"To Delete {generate_random_hex(6)}"
     response = await client.post("/api/v1/tenants", json={"name": name})
     tenant_id = response.json()["id"]
 

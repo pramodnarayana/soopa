@@ -159,6 +159,6 @@ class DatabaseRouter:
                     default_url = get_settings().database.default_shard_url
                     if default_url:
                         logger.info("no_database_shards_found_using_default_shard_url")
-                        return [("shard_1", default_url)]
+                        return [("ucp_shard_1", default_url)]
                 return [(str(shard.name), str(shard.dsn)) for shard in shards]
         return []

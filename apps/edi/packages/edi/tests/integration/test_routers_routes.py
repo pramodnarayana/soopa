@@ -28,12 +28,12 @@ def client(fake_uow):
 
 
 def test_create_inbound_route(client):
-    import uuid
+    from seedwork import generate_id
 
     response = client.post(
         "/api/v1/tenants/1/edi/routes/inbound",
         json={
-            "as2_partner_id": str(uuid.uuid4()),
+            "as2_partner_id": generate_id("id"),
             "name": "My Route",
             "isa_sender_id": "S1",
             "isa_receiver_id": "R1",
@@ -54,12 +54,12 @@ def test_create_inbound_route(client):
 
 
 def test_create_outbound_route(client):
-    import uuid
+    from seedwork import generate_id
 
     response = client.post(
         "/api/v1/tenants/1/edi/routes/outbound",
         json={
-            "as2_partner_id": str(uuid.uuid4()),
+            "as2_partner_id": generate_id("id"),
             "name": "My Route",
             "trading_partner_id": "TP1",
         },

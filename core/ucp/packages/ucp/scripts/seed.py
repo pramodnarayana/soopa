@@ -79,7 +79,7 @@ async def main() -> None:
             import hashlib
 
             h = hashlib.sha256(platform_admin_id.encode()).hexdigest()[:16]
-            platform_user_id = f"usr_{h}"
+            platform_user_id = f"iam_usr_{h}"
 
             logger.info(
                 "Seeding platform admin user (id={platform_user_id}, idp_user_id={platform_admin_id})...",
@@ -111,7 +111,7 @@ async def main() -> None:
 
             # Map the user to the platform tenant using user_roles
             platform_admin_role_id = "rol_97f48b1115b74100"  # matches the one from migration
-            user_role_id = f"urol_{h}"
+            user_role_id = f"iam_urol_{h}"
 
             stmt_user_role = (
                 pg_insert(UserRole)

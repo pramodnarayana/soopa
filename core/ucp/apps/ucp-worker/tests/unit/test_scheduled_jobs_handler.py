@@ -1,6 +1,5 @@
-import uuid
-
 import pytest
+from seedwork import generate_id
 
 from ucp_worker.core.job_registry import JobHandlerRegistry
 from ucp_worker.core.scheduler.handler import JobHandlerPort
@@ -22,7 +21,7 @@ async def test_process_scheduled_job_success() -> None:
     handler = TrackingJobHandler()
     registry.register("test_job", handler)
 
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
     message = {"job_id": job_id, "job_name": "test_job", "payload": {"key": "value"}}
 
     await process_scheduled_job(message, registry=registry)
@@ -45,7 +44,7 @@ async def test_process_scheduled_job_missing_identifiers() -> None:
 
 @pytest.mark.asyncio
 async def test_process_scheduled_job_missing_registry() -> None:
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
     message = {
         "job_id": job_id,
         "job_name": "test_job",
@@ -57,7 +56,7 @@ async def test_process_scheduled_job_missing_registry() -> None:
 @pytest.mark.asyncio
 async def test_process_scheduled_job_unknown_job_name() -> None:
     registry = JobHandlerRegistry()
-    job_id = str(uuid.uuid4())
+    job_id = generate_id("id")
     message = {
         "job_id": job_id,
         "job_name": "unknown_job",

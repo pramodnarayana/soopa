@@ -26,7 +26,7 @@ class CreateApiTokenUseCase:
 
         async with self.uow:
             token_model = ApiTokenDomainModel(
-                id=f"tok_{os.urandom(12).hex()}",
+                id=f"iam_tok_{os.urandom(12).hex()}",
                 tenant_id=tenant_id,
                 name=command.name,
                 client_id=client_id,

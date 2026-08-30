@@ -1,8 +1,9 @@
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
+
+from seedwork import SystemIdPrefix, generate_id
 
 
 class JobStatus(StrEnum):
@@ -40,6 +41,6 @@ class Job:
     max_retries: int = 3
     lease_expires_at: datetime | None = None
     owner_token: str | None = None
-    id: uuid.UUID = field(default_factory=uuid.uuid4)
+    id: str = field(default_factory=lambda: generate_id(SystemIdPrefix.JOB))
     created_at: datetime | None = None
     updated_at: datetime | None = None

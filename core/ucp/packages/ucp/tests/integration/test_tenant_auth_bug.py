@@ -15,16 +15,17 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
 
     # 1. Insert a mock tenant into the DB so the middleware can map it.
     import datetime
-    import uuid
+
+    from seedwork import generate_id, generate_random_hex
 
     from ucp.adapters.outbound.database.tenant_repository import TenantRepository
     from ucp.domain.models.tenant import Tenant
 
-    canonical_id = f"ten_{uuid.uuid4().hex[:20]}"
+    canonical_id = generate_id("ten")
     idp_id = "385223051081416707"
 
     repo = TenantRepository(db_session)
-    unique_suffix = uuid.uuid4().hex[:8]
+    unique_suffix = generate_random_hex(6)
     tenant = Tenant(
         id=canonical_id,
         name=f"Test Trucking {unique_suffix}",

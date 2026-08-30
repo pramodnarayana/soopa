@@ -1,6 +1,5 @@
-import uuid
-
 import pytest
+from seedwork import generate_id
 
 from edi.application.dto import (
     CreateAS2TradingPartnerCmd,
@@ -108,7 +107,7 @@ async def test_list_routes(mock_uow, global_repo):
             self.gs_sender_id = "S1"
             self.gs_receiver_id = "R1"
             self.transaction_type = "850"
-            self.trading_partner_id = str(uuid.uuid4())
+            self.trading_partner_id = generate_id("id")
             self.isa_sender_qualifier = "ZZ"
             self.isa_receiver_qualifier = "ZZ"
             self.default_standard = "x12"
@@ -120,8 +119,8 @@ async def test_list_routes(mock_uow, global_repo):
         def __getitem__(self, key):
             return getattr(self, key)
 
-    global_repo.inbound_routes = [FakeRoute(str(uuid.uuid4()), as2_id, sftp_id, None)]
-    global_repo.outbound_routes = [FakeRoute(str(uuid.uuid4()), as2_id, None, None)]
+    global_repo.inbound_routes = [FakeRoute(generate_id("id"), as2_id, sftp_id, None)]
+    global_repo.outbound_routes = [FakeRoute(generate_id("id"), as2_id, None, None)]
 
     inbound_service = ListInboundRoutesUseCase(uow=mock_uow)
     outbound_use_case = ListOutboundRoutesUseCase(uow=mock_uow)
@@ -164,7 +163,7 @@ async def test_update_inbound_route(mock_uow, global_repo):
         trading_partner_id=UNSET,
         isa_sender_id="new sender",
     )
-    route_id = str(uuid.uuid4())
+    route_id = generate_id("id")
     # Mocking or depending on FakeGlobalStore to have an update method
     # Actually FakeGlobalStore probably doesn't implement update_inbound_route properly if it was missing.
     # We will just pass because it's a fake
@@ -184,7 +183,7 @@ async def test_create_outbound_route(mock_uow, global_repo):
         transaction_type="850",
         trading_partner_id="PARTNER_123",
         name="Outbound Route",
-        as2_partner_id=str(uuid.uuid4()),
+        as2_partner_id=generate_id("id"),
     )
     route = await use_case.execute(tenant_id="1", cmd=cmd)
 

@@ -1,18 +1,18 @@
-import uuid
-
 import pytest
 from database.models.notifications import NotificationRouteConfiguration
+from seedwork import generate_id, generate_random_hex
 
 from notification.adapters.outbound.database.postgres_route_repository import (
     SqlAlchemyNotificationRouteRepository,
 )
+from notification.domain.constants import DomainIdPrefix as NotificationPrefix
 from notification.domain.models import Channel
 
 
 @pytest.mark.asyncio
 async def test_get_channels_returns_configured_channels(db_session_factory):
     # Setup test data
-    tenant_id = f"test-tenant-123-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-tenant-123-{generate_random_hex(6)}"
     event_type = "test.event.fired"
 
     async with db_session_factory() as session, session.begin():
@@ -21,14 +21,14 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
 
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
         session.add(tenant)
 
         route = NotificationRouteConfiguration(
-            id="notif_rte_123",
+            id=generate_id(NotificationPrefix.ROUTE),
             tenant_id=tenant_id,
             event_type=event_type,
             channels=["EMAIL", "IN_APP"],
@@ -55,7 +55,7 @@ async def test_get_channels_returns_empty_when_no_route(db_session_factory):
 
 @pytest.mark.asyncio
 async def test_postgres_route_repository_crud_operations(db_session_factory):
-    tenant_id = f"test-tenant-123-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-tenant-123-{generate_random_hex(6)}"
     event_type = "test.crud.event"
 
     async with db_session_factory() as session, session.begin():
@@ -63,7 +63,7 @@ async def test_postgres_route_repository_crud_operations(db_session_factory):
 
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )

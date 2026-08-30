@@ -1,9 +1,9 @@
 import datetime
-import uuid
 
 import pytest
 from database.models.identity import Tenant as OrmTenant
 from database.models.identity import User as OrmUser
+from seedwork import generate_id, generate_random_hex
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
@@ -15,15 +15,15 @@ pytestmark = pytest.mark.integration
 
 
 async def _setup_data(db_session):
-    test_tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
-    test_user_id = f"usr_{uuid.uuid4().hex[:12]}"
+    test_tenant_id = generate_id("ten")
+    test_user_id = generate_id("usr")
     platform_tenant_id = PLATFORM_TENANT_ID
 
     dummy_tenant = {
         "id": test_tenant_id,
-        "name": f"Role Test Tenant {uuid.uuid4().hex[:8]}",
-        "slug": f"role-tenant-{uuid.uuid4().hex[:8]}",
-        "idp_tenant_id": f"idp_{uuid.uuid4().hex[:12]}",
+        "name": f"Role Test Tenant {generate_random_hex(6)}",
+        "slug": f"role-tenant-{generate_random_hex(6)}",
+        "idp_tenant_id": generate_id("idp"),
         "status": "active",
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -39,8 +39,8 @@ async def _setup_data(db_session):
     }
     dummy_user = {
         "id": test_user_id,
-        "email": f"test_{uuid.uuid4().hex[:8]}@example.com",
-        "idp_user_id": f"idp_{uuid.uuid4().hex[:12]}",
+        "email": f"test_{generate_random_hex(6)}@example.com",
+        "idp_user_id": generate_id("idp"),
         "name": "Test User",
         "status": "active",
         "created_at": datetime.datetime.now().replace(tzinfo=None),
@@ -65,7 +65,7 @@ async def test_postgres_role_repository_crud_operations(db_session_factory):
         repo = PostgresRoleRepository(db_session)
 
         # test save (new role)
-        role_id = f"role_{uuid.uuid4().hex[:12]}"
+        role_id = generate_id("role")
         role = DomainRole(
             id=role_id,
             tenant_id=platform_tenant_id,
@@ -113,7 +113,7 @@ async def test_postgres_role_repository_assignments(db_session_factory):
         test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
-        role_id = f"role_{uuid.uuid4().hex[:12]}"
+        role_id = generate_id("role")
         role = DomainRole(
             id=role_id,
             tenant_id=test_tenant_id,
@@ -144,7 +144,7 @@ async def test_duplicate_assignment_raises_idempotency_error(db_session_factory)
         test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
-        role_id = f"role_{uuid.uuid4().hex[:12]}"
+        role_id = generate_id("role")
         role = DomainRole(
             id=role_id,
             tenant_id=test_tenant_id,
@@ -178,15 +178,15 @@ async def test_assign_user_role_cross_tenant_error(db_session_factory):
         test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
-        other_tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
+        other_tenant_id = generate_id("ten")
         await db_session.execute(
             pg_insert(OrmTenant).values(
                 [
                     {
                         "id": other_tenant_id,
                         "name": "Other",
-                        "slug": f"other-{uuid.uuid4().hex[:8]}",
-                        "idp_tenant_id": f"oth-{uuid.uuid4().hex[:8]}",
+                        "slug": f"other-{generate_random_hex(6)}",
+                        "idp_tenant_id": f"oth-{generate_random_hex(6)}",
                         "status": "active",
                         "created_at": datetime.datetime.now().replace(tzinfo=None),
                         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -195,7 +195,7 @@ async def test_assign_user_role_cross_tenant_error(db_session_factory):
             )
         )
         role_other = DomainRole(
-            id=f"role_{uuid.uuid4().hex[:12]}",
+            id=generate_id("role"),
             tenant_id=other_tenant_id,
             name="x",
             description="x",
@@ -214,7 +214,7 @@ async def test_assign_user_role_global_role_as_platform(db_session_factory):
         repo = PostgresRoleRepository(db_session)
 
         role_global = DomainRole(
-            id=f"role_{uuid.uuid4().hex[:12]}",
+            id=generate_id("role"),
             tenant_id=platform_tenant_id,
             name="Global",
             description="G",

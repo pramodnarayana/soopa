@@ -1,8 +1,7 @@
-import uuid
-
 import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationTemplate
+from seedwork import generate_id, generate_random_hex
 
 from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
@@ -12,13 +11,13 @@ from notification.domain.models import Channel
 
 @pytest.mark.asyncio
 async def test_get_template(db_session_factory):
-    tenant_id = f"test-query-tenant-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-query-tenant-{generate_random_hex(6)}"
 
     # Setup test DB
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -68,13 +67,13 @@ async def test_get_template(db_session_factory):
 
 @pytest.mark.asyncio
 async def test_template_crud_operations(db_session_factory):
-    tenant_id = f"test-crud-tenant-{uuid.uuid4().hex[:8]}"
+    tenant_id = f"test-crud-tenant-{generate_random_hex(6)}"
 
     # Setup test DB
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -135,15 +134,15 @@ async def test_template_crud_operations(db_session_factory):
 
 @pytest.mark.asyncio
 async def test_get_template_fallback_to_platform(db_session_factory):
-    tenant_id = f"test-plat-tenant-{uuid.uuid4().hex[:8]}"
-    event_type = f"system.alert.{uuid.uuid4().hex}"
+    tenant_id = f"test-plat-tenant-{generate_random_hex(6)}"
+    event_type = f"system.alert.{generate_random_hex(6)}"
     from notification.domain.models import PLATFORM_TENANT_ID
 
     # Setup test DB
     async with db_session_factory() as session, session.begin():
         tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
             status="ACTIVE",
         )
@@ -152,14 +151,14 @@ async def test_get_template_fallback_to_platform(db_session_factory):
         platform_tenant = Tenant(
             id=PLATFORM_TENANT_ID,
             name="Platform Notification",
-            slug=f"platform_{uuid.uuid4().hex[:8]}",
+            slug=generate_id("platform"),
             status="ACTIVE",
         )
         await session.merge(platform_tenant)
 
         # Add template to PLATFORM tenant
         template = NotificationTemplate(
-            id=f"tpl_plat_{uuid.uuid4().hex[:8]}",
+            id=generate_id("tpl_plat"),
             tenant_id=PLATFORM_TENANT_ID,
             name="Platform Default",
             event_type=event_type,
