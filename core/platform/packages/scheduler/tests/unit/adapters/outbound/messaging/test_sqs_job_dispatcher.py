@@ -26,7 +26,7 @@ def mock_job():
 
 @pytest.mark.asyncio
 async def test_sqs_job_dispatcher_no_target_queue():
-    dispatcher = SQSJobDispatcher()
+    dispatcher = SQSJobDispatcher(queue_url_map={})
     job = ScheduledJob(
         id="job-123",
         name="test-job",
@@ -50,22 +50,16 @@ async def test_sqs_job_dispatcher_success(mock_session_cls, mock_job):
     mock_sqs_client = AsyncMock()
     mock_session.client.return_value.__aenter__.return_value = mock_sqs_client
 
-    mock_sqs_client.get_queue_url.return_value = {"QueueUrl": "https://sqs/test-queue"}
-
-    dispatcher = SQSJobDispatcher()
+    queue_url_map = {"test-queue": "https://sqs/test-queue"}
+    dispatcher = SQSJobDispatcher(queue_url_map=queue_url_map)
     await dispatcher.dispatch(mock_job)
 
-    mock_sqs_client.get_queue_url.assert_awaited_once_with(QueueName="test-queue")
     mock_sqs_client.send_message.assert_awaited_once_with(
         QueueUrl="https://sqs/test-queue",
         MessageBody=json.dumps(
             {"job_id": "job-123", "job_name": "test-job", "payload": {"foo": "bar"}}
         ),
     )
-
-    # Second dispatch uses cache
-    await dispatcher.dispatch(mock_job)
-    assert mock_sqs_client.get_queue_url.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -76,9 +70,9 @@ async def test_sqs_job_dispatcher_fifo(mock_session_cls, mock_job):
     mock_session.client.return_value.__aenter__.return_value = mock_sqs_client
 
     mock_job = dataclasses.replace(mock_job, target_queue="test-queue.fifo")
-    mock_sqs_client.get_queue_url.return_value = {"QueueUrl": "https://sqs/test-queue.fifo"}
 
-    dispatcher = SQSJobDispatcher()
+    queue_url_map = {"test-queue.fifo": "https://sqs/test-queue.fifo"}
+    dispatcher = SQSJobDispatcher(queue_url_map=queue_url_map)
     await dispatcher.dispatch(mock_job)
 
     mock_sqs_client.send_message.assert_awaited_once_with(

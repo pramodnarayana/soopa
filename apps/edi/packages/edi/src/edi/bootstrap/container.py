@@ -41,8 +41,18 @@ class Container(containers.DeclarativeContainer):
         secrets_mount_path=get_settings().secrets.mount_path,
     )
 
+    from edi.domain.events import MessageQueueName
+
     message_queue = providers.Singleton(
         SQSMessageQueueAdapter,
+        queue_url_map={
+            MessageQueueName.TRANSFORM_QUEUE: get_settings().sqs.transform_queue_url,
+            MessageQueueName.LIFECYCLE_QUEUE: get_settings().sqs.lifecycle_queue_url,
+            MessageQueueName.DELIVER_QUEUE: get_settings().sqs.deliver_queue_url,
+            MessageQueueName.PROVISIONING_QUEUE: get_settings().sqs.provisioning_queue_url,
+            MessageQueueName.DATA_PLANE_JOBS_QUEUE: get_settings().sqs.data_plane_jobs_queue_url,
+            MessageQueueName.CONTROL_PLANE_JOBS_QUEUE: get_settings().sqs.control_plane_jobs_queue_url,
+        },
         endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
     )
 

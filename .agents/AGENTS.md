@@ -88,3 +88,9 @@ The following paradigms define the entire system structure. Any new design or mo
 
 - **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `boto3.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
 - **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass fully-qualified ARNs or URLs (e.g., `QueueUrl`) directly into the application container as environment variables. The application configuration (`settings.py`) simply reads this exact URL and passes it directly to platform components like `AwsSqsPublisher` or `SqsConsumerManager`.
+
+# Enterprise Integration Testing (Strictly Enforced)
+
+- **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).
+- **Self-Contained Fixtures**: If an integration test requires prerequisites (like a `TenantAdmin` role or specific configuration), the test's own `pytest` fixture MUST explicitly create and seed that required data.
+- **Transactional Rollbacks (Nested SAVEPOINTs)**: Every single integration test MUST run inside a nested SQLAlchemy transaction (`connection.begin_nested()`). When the test finishes, the fixture MUST completely roll back the transaction. This guarantees that NOTHING is written to the physical database and no manual `DELETE` statements are ever needed for cleanup.

@@ -9,9 +9,9 @@ from dependency_injector import providers
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from identity.domain.identity_context import IdentityContext
-from ucp.bootstrap.container import Container
 
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
+from unified_api.main import ucp_container
 
 
 class MockTenant:
@@ -39,18 +39,16 @@ async def get_tenant(
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
+def container() -> Iterator[Any]:
     """Configure and provide a test container with proper cleanup."""
-    test_container = Container()
-    test_container.tenant_repo.override(providers.Factory(MockTenantRepo))
-    test_container.wire(modules=["unified_api.adapters.inbound.http.guards.tenant_auth_guard"])
-    yield test_container
-    test_container.unwire()
-    test_container.tenant_repo.reset_override()
+    ucp_container.tenant_repo.override(providers.Factory(MockTenantRepo))
+    # Do not call unwire() as it destroys global DI state for all other tests.
+    yield ucp_container
+    ucp_container.tenant_repo.reset_override()
 
 
 @pytest.fixture
-def app(container: Container) -> FastAPI:
+def app(container: Any) -> FastAPI:
     """Create test app with configured container."""
     test_app = FastAPI(title="Unified API Auth Mapping Test")
     test_app.include_router(router)

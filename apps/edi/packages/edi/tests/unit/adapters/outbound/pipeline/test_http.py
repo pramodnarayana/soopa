@@ -7,8 +7,12 @@ from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 pytestmark = pytest.mark.asyncio
 
 
+@patch("edi.adapters.outbound.pipeline.http.ssrf_safe_context")
 @patch("edi.adapters.outbound.pipeline.http.httpx.AsyncClient")
-async def test_httpx_delivery_adapter(mock_client_cls: MagicMock) -> None:
+async def test_httpx_delivery_adapter(mock_client_cls: MagicMock, mock_ssrf: MagicMock) -> None:
+    import contextlib
+
+    mock_ssrf.return_value = contextlib.nullcontext()
     mock_client = AsyncMock()
     mock_client_cls.return_value.__aenter__.return_value = mock_client
 

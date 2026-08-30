@@ -96,13 +96,13 @@ async def test_grouped_two_shard_failures_leave_scheduled_job_for_retry() -> Non
                 ("shard_2", "postgresql+asyncpg://shard-2"),
             ]
 
-        async def get_engine(self, tenant_id: str, dsn: str = "") -> Any:
+        async def get_shard_session(self, shard_name: str, dsn: str = "") -> Any:
             self.get_engine_count += 1
-            if tenant_id == "shard_1":
+            if shard_name == "shard_1":
                 raise RuntimeError("shard 1 unavailable")
-            if tenant_id == "shard_2":
+            if shard_name == "shard_2":
                 raise RuntimeError("shard 2 unavailable")
-            return None
+            yield "fake_session"
 
     db_router = FakeDbRouter()
     cleanup_repository = _SingleConcurrencyAuditLogCleanupRepository(

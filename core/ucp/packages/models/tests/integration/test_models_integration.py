@@ -1,6 +1,5 @@
 import os
 from collections.abc import AsyncGenerator
-from uuid import uuid4
 
 import pytest
 from database.provider import get_async_engine
@@ -42,17 +41,17 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     # 1. We must insert a Tenant first because ShardRegistry and AppSubscription have FK to identity.tenants
     from sqlalchemy import text
 
-    suffix = uuid4().hex
-    tenant_id = f"tenant-{suffix}"
-    shard_id = f"shard-{suffix}"
+    suffix = os.urandom(12).hex()
+    tenant_id = f"ten_{suffix}"
+    shard_id = f"shard_{suffix}"
     outbox_id = f"cp_ucp_ob_{suffix}"
 
     await test_session.execute(
         text(
             "INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) "
-            "VALUES (:tenant_id, 'Test Tenant', :slug, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            "VALUES (:tenant_id, :name, :slug, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
         ),
-        {"tenant_id": tenant_id, "slug": f"test-tenant-{suffix}"},
+        {"tenant_id": tenant_id, "name": f"Test Tenant {suffix}", "slug": f"test-tenant-{suffix}"},
     )
 
     # 2. Persist App
@@ -97,7 +96,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
         id=outbox_id,
         tenant_id=tenant_id,
         event_type="test.event",
-        idempotency_key="key-1",
+        idempotency_key=f"key_{suffix}",
         payload={"some": "data"},
         status="PENDING",
     )

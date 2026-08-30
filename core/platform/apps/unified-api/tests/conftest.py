@@ -70,6 +70,15 @@ async def db_engine():
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
 
     engine = get_async_engine(db_url)
+
+    # In integration tests, the EDI bounded context expects its Tenant schema (e.g. edi_messages)
+    # to be present on the tenant shard. Because we patch all connections to point to this single
+    # global test database, we must ensure the Tenant models are actually created here.
+    from edi.adapters.outbound.database.models.data_plane import TenantBase
+
+    async with engine.begin() as conn:
+        await conn.run_sync(TenantBase.metadata.create_all)
+
     yield engine
     await engine.dispose()
 
@@ -182,35 +191,100 @@ async def seeded_api_token(db_session_factory):
         from identity.domain.identity_context import PLATFORM_TENANT_ID
 
         # Seed platform tenant
-        platform_tenant = TenantORM(
-            id=PLATFORM_TENANT_ID,
-            name="Platform Admin Tenant",
-            slug="platform-admin",
-            status="active",
-        )
-        session.add(platform_tenant)
-        await session.flush()
+        platform_tenant = await session.get(TenantORM, PLATFORM_TENANT_ID)
+        if not platform_tenant:
+            platform_tenant = TenantORM(
+                id=PLATFORM_TENANT_ID,
+                name="Platform Admin Tenant",
+                slug="platform-admin",
+                status="active",
+            )
+            session.add(platform_tenant)
+            await session.flush()
 
-        admin_role = OrmRole(
-            id="role_admin",
-            tenant_id=PLATFORM_TENANT_ID,
-            name="admin",
-            description="Global Administrator",
-            capabilities=["*"],
-        )
-        session.add(admin_role)
+        admin_role = await session.get(OrmRole, "role_admin")
+        if not admin_role:
+            admin_role = OrmRole(
+                id="role_admin",
+                tenant_id=PLATFORM_TENANT_ID,
+                name="admin",
+                description="Global Administrator",
+                capabilities=["*"],
+            )
+            session.add(admin_role)
 
         tenant_id = "ten_test_auth_123"
-        tenant = TenantORM(
-            id=tenant_id,
-            name="Test Auth Tenant",
-            slug="test-auth-tenant",
-            status="active",
-            idp_tenant_id="org_test",
-        )
-        session.add(tenant)
-        await session.flush()
+        tenant = await session.get(TenantORM, tenant_id)
+        if not tenant:
+            tenant = TenantORM(
+                id=tenant_id,
+                name="Test Auth Tenant",
+                slug="test-auth-tenant",
+                status="active",
+                idp_tenant_id="org_test",
+            )
+            session.add(tenant)
+            await session.flush()
 
+        # Seed EDI app and subscription to allow EDI routes to pass the guard
+        from sqlalchemy import text
+        from ucp_models.subscriptions import App as UcpApp
+        from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
+
+        apps_res = await session.execute(text("SELECT id FROM ucp.apps WHERE slug = 'edi'"))
+        existing_app_id = apps_res.scalar()
+
+        existing_app = await session.get(UcpApp, existing_app_id)
+        if not existing_app:
+            async with session.begin_nested():
+                edi_app = UcpApp(
+                    id=existing_app_id, slug="edi", name="EDI Gateway", description="EDI"
+                )
+                session.add(edi_app)
+                await session.flush()
+
+        existing_sub = await session.execute(
+            text(
+                "SELECT tenant_id FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = :app_id"
+            ),
+            {"tenant_id": tenant_id, "app_id": existing_app_id},
+        )
+        if not existing_sub.scalar():
+            async with session.begin_nested():
+                edi_sub = UcpAppSubscription(
+                    tenant_id=tenant_id, app_id=existing_app_id, status="active", tier="free"
+                )
+                session.add(edi_sub)
+                await session.flush()
+
+        from ucp_models.infrastructure import DatabaseShard as UcpDatabaseShard
+        from ucp_models.infrastructure import ShardRegistry as UcpShardRegistry
+
+        existing_shard = await session.get(UcpDatabaseShard, "edi_shard_1")
+        if not existing_shard:
+            async with session.begin_nested():
+                shard = UcpDatabaseShard(
+                    id="edi_shard_1",
+                    name="EDI Primary Shard",
+                    dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                    status="active",
+                )
+                session.add(shard)
+                await session.flush()
+
+        existing_shard_reg = await session.execute(
+            text(
+                "SELECT tenant_id FROM ucp.shard_registry WHERE tenant_id = :tenant_id AND app_id = :app_id"
+            ),
+            {"tenant_id": tenant_id, "app_id": existing_app_id},
+        )
+        if not existing_shard_reg.scalar():
+            async with session.begin_nested():
+                shard_reg = UcpShardRegistry(
+                    tenant_id=tenant_id, app_id=existing_app_id, shard_id="edi_shard_1"
+                )
+                session.add(shard_reg)
+                await session.flush()
         # Create API token
         raw_secret = "test_super_secret"  # noqa: S105
         secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()

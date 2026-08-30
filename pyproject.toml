@@ -65,7 +65,7 @@ pykcs11 = { path = "tools/dummy-pykcs11" }
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 norecursedirs = ["node_modules", "frontend"]
-addopts = "-v --tb=short --ignore=services/worker"
+addopts = "-v --tb=short --ignore=services/worker --import-mode=importlib"
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
 ]

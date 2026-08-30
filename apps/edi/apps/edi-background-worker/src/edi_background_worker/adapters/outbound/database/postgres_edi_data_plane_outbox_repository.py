@@ -6,7 +6,6 @@ from database.events import EventEnvelope
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
@@ -26,8 +25,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         if limit <= 0:
             return []
 
-        engine = await self.db_router.get_engine(shard_name, shard_dsn)
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
             from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
             from sqlalchemy import and_, func, or_, select, text, update
 
@@ -76,6 +74,8 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                 for row in result.scalars()
             ]
 
+        return []
+
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int = 30000
     ) -> list[EventEnvelope]:
@@ -117,8 +117,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         del lock_lease_ms  # Lease expiry is persisted per row and compared to the database clock.
         total_swept = 0
         for shard_name, shard_dsn in await self.db_router.get_all_shards():
-            engine = await self.db_router.get_engine(shard_name, shard_dsn)
-            async with AsyncSession(engine, expire_on_commit=False) as session:
+            async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
                 from sqlalchemy import and_, func, select, update
 
@@ -157,8 +156,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
 
     async def _update_all_shards(self, get_stmt: Any, params: dict[str, Any]) -> None:
         async def _update(shard_name: str, shard_dsn: str) -> None:
-            engine = await self.db_router.get_engine(shard_name, shard_dsn)
-            async with AsyncSession(engine, expire_on_commit=False) as session:
+            async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                 await session.execute(get_stmt(params))
                 await session.commit()
 

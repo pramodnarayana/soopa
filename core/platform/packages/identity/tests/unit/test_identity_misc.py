@@ -10,6 +10,7 @@ from identity.domain.models.api_token_models import (
     CreateApiTokenCommand,
     UpdateApiTokenCommand,
 )
+from identity.ports.outbound.token_verifier_port import TokenValidationError
 from identity.testing.fakes.fake_identity_uow import FakeIdentityUnitOfWork
 
 
@@ -114,5 +115,5 @@ async def test_fake_token_verifier():
     result = await verifier.verify("test")
     assert result == {"sub": "123"}
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TokenValidationError):
         await verifier.verify("invalid")

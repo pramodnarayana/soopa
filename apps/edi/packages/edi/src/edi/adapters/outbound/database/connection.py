@@ -113,6 +113,24 @@ class DatabaseRouter:
             )
             yield cast(TenantSession, session)
 
+    async def get_shard_session(
+        self, shard_key: str, shard_url: str
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """
+        Yields a raw session to a specific shard. Used primarily by background workers
+        that process data across multiple tenants (e.g. sweepers) where RLS context is
+        not globally set at the session level.
+        """
+        engine = await self.get_engine(shard_key, shard_url)
+        factory = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        async with factory() as session:
+            session.info["session_type"] = "shard"
+            yield session
+
     async def close_all(self) -> None:
         """
         Cleanly closes all connection pools.

@@ -81,8 +81,8 @@ def test_is_platform_admin_with_admin_role_wrong_tenant() -> None:
         exp=1000,
         tenant_id="tenant-1",
         authorized_tenants={"other_tenant"},
-        roles=["admin"],
-        tenant_roles={"other_tenant": ["admin"]},
+        roles=["platform-admin"],
+        tenant_roles={"other_tenant": ["platform-admin"]},
     )
     context = identity_context_from_claims(claims)
     assert context.is_platform_admin is False

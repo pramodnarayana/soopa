@@ -149,14 +149,13 @@ async def test_get_template_fallback_to_platform(db_session_factory):
         )
         session.add(tenant)
 
-        # We assume ten_000 (PLATFORM_TENANT_ID) exists from seedwork or we can just insert if not
-        from sqlalchemy import text
-
-        await session.execute(
-            text(
-                f"INSERT INTO identity.tenants (id, name, slug, status, created_at, updated_at) VALUES ('{PLATFORM_TENANT_ID}', 'Platform', 'platform', 'ACTIVE', NOW(), NOW()) ON CONFLICT DO NOTHING"  # noqa: S608
-            )
+        platform_tenant = Tenant(
+            id=PLATFORM_TENANT_ID,
+            name="Platform Notification",
+            slug=f"platform_{uuid.uuid4().hex[:8]}",
+            status="ACTIVE",
         )
+        await session.merge(platform_tenant)
 
         # Add template to PLATFORM tenant
         template = NotificationTemplate(

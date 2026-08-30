@@ -1,3 +1,4 @@
+import os
 import uuid
 from unittest.mock import AsyncMock
 
@@ -17,7 +18,13 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
 )
 from identity_worker.domain.exceptions import IdentityProviderPortError
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.skipif(
+        not os.environ.get("ZITADEL_API_TOKEN"),
+        reason="ZITADEL_API_TOKEN is not set",
+    ),
+]
 
 
 @pytest.fixture

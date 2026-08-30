@@ -20,16 +20,29 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     emitting the outbox event successfully without raising IDP-related DI errors.
     """
     # 1. Arrange: Create a Tenant to associate the user with
-    tenant = OrmTenant(
-        id=f"ten_{uuid.uuid4().hex[:12]}",
-        name=f"Test Tenant {uuid.uuid4().hex[:8]}",
-        slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
-        idp_tenant_id=f"mock_org_{uuid.uuid4().hex[:8]}",
-    )
-    db_session.add(tenant)
-    # The 'TenantAdmin' role is already seeded by the database migration,
-    # so we don't need to insert it manually.
-    await db_session.commit()
+    async with db_session.begin():
+        tenant = OrmTenant(
+            id=f"ten_{uuid.uuid4().hex[:12]}",
+            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
+            slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
+            idp_tenant_id=f"mock_org_{uuid.uuid4().hex[:8]}",
+        )
+        db_session.add(tenant)
+        # Ensure the 'TenantAdmin' role exists (in case other tests cleared it)
+        await db_session.execute(
+            text(
+                "INSERT INTO identity.tenants (id, name, slug, idp_tenant_id, status, created_at, updated_at) "
+                "VALUES ('ten_000000000000000000000000', 'Global', 'global', 'global', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "ON CONFLICT DO NOTHING"
+            )
+        )
+        await db_session.execute(
+            text(
+                "INSERT INTO identity.roles (id, tenant_id, name, description, capabilities, created_at, updated_at) "
+                "VALUES ('rol_a62f2225bf70bfac', 'ten_000000000000000000000000', 'TenantAdmin', 'Tenant admin', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "ON CONFLICT DO NOTHING"
+            )
+        )
 
     payload = {
         "email": f"integration_{uuid.uuid4().hex[:8]}@test.com",
@@ -45,6 +58,8 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     )
 
     # 3. Assert: Verify the DI container resolved and the endpoint succeeded
+    if response.status_code != 200:
+        print(f"DEBUG RESPONSE: {response.json()}")
     assert response.status_code == 200
     data = response.json()
     assert "userId" in data

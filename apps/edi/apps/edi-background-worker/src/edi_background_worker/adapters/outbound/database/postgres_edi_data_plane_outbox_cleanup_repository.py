@@ -7,7 +7,6 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import CursorResult, delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
@@ -26,8 +25,7 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort)
                     cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
                         days=retention_days
                     )
-                    engine = await self.db_router.get_engine(shard_name, shard_dsn)
-                    async with AsyncSession(engine, expire_on_commit=False) as session:
+                    async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                         outbox_deleted = 0
                         while True:
                             stmt_outbox = delete(DataPlaneOutbox).where(

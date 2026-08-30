@@ -74,8 +74,18 @@ async def test_app_subscription_flow(
 
     dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
 
-    # 1.5 Get the seeded "edi" app from the database
+    # 1.5 Ensure the seeded "edi" app and shard exist
     async with db_session.begin():
+        await db_session.execute(
+            text(
+                "INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at) VALUES ('edi_shard_1', 'EDI Primary', 'fake_dsn', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING"
+            )
+        )
+        await db_session.execute(
+            text(
+                "INSERT INTO ucp.apps (id, name, slug, description, created_at, updated_at) VALUES ('app_edi_core', 'EDI', 'edi', 'B2B EDI', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING"
+            )
+        )
         stmt = select(App.id).where(App.slug == "edi")
         result = await db_session.execute(stmt)
         edi_app_id = result.scalar_one()
@@ -96,12 +106,12 @@ async def test_app_subscription_flow(
 
     # 3. Process Outbox
     # First manually clear out any previous test events or claims if they leaked
-    await db_session.execute(
-        text(
-            "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, lease_expires_at = NULL"
+    async with db_session.begin():
+        await db_session.execute(
+            text(
+                "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, lease_expires_at = NULL"
+            )
         )
-    )
-    await db_session.commit()
 
     # Fetch pending and publish
     await relay.processor.process_pending()

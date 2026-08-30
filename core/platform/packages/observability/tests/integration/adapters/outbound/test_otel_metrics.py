@@ -15,14 +15,12 @@ def otel_metrics(memory_reader, monkeypatch):
     # Patch OtelMetrics to use the memory reader for testing
     def patched_init(self, service_name, otlp_endpoint=None):
         # Call original init but ignore otlp_endpoint
-        from opentelemetry import metrics
         from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
         self._service_name = service_name
         resource = Resource(attributes={SERVICE_NAME: service_name})
         provider = MeterProvider(resource=resource, metric_readers=[memory_reader])
-        metrics.set_meter_provider(provider)
         self._meter = provider.get_meter(service_name)
         self._counters = {}
         self._histograms = {}

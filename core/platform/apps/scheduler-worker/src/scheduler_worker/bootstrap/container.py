@@ -32,6 +32,16 @@ class Container(containers.DeclarativeContainer):
 
     job_dispatcher = providers.Factory(
         SQSJobDispatcher,
+        queue_url_map=providers.Dict(
+            {
+                "edi-data-plane-jobs.fifo": providers.Callable(
+                    os.environ.get, "SQS_DATA_PLANE_JOBS_QUEUE_URL", ""
+                ),
+                "edi-control-plane-jobs.fifo": providers.Callable(
+                    os.environ.get, "SQS_CONTROL_PLANE_JOBS_QUEUE_URL", ""
+                ),
+            }
+        ),
         endpoint_url=providers.Callable(os.environ.get, "AWS_ENDPOINT_URL", None),
         region=providers.Callable(os.environ.get, "AWS_REGION", "us-east-1"),
     )

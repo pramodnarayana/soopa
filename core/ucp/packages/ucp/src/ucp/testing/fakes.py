@@ -42,10 +42,14 @@ class FakeTenantRepository(TenantRepositoryPort):
         pass
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
-        pass
+        if not hasattr(self, "allocations"):
+            self.allocations = []
+        self.allocations.append((tenant_id, app_id, shard_id))
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
-        pass
+        if not hasattr(self, "subscriptions"):
+            self.subscriptions = {}
+        self.subscriptions[(tenant_id, app_id)] = status
 
 
 class FakeUserRepository(UserRepositoryPort):
@@ -135,11 +139,14 @@ class DummyApiTokenRepository(ApiTokenRepositoryPort):
 
 
 class DummyAppRepository(AppRepositoryPort):
+    def __init__(self) -> None:
+        self.apps: list[Any] = []
+
     async def find_all(self) -> list[Any]:
-        return []
+        return self.apps
 
     async def find_by_id(self, app_id: str) -> Any | None:
-        return None
+        return next((a for a in self.apps if getattr(a, "id", None) == app_id), None)
 
 
 class DummyWebhookRepository(WebhookRepositoryPort):
