@@ -1,55 +1,31 @@
-from unittest.mock import AsyncMock, create_autospec
-
 import pytest
 from identity.domain.models.user import User
-from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
-from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
-from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+from ucp.testing.fakes import FakeUcpUnitOfWork
 
 
 @pytest.fixture
-def mock_tenant_repo() -> TenantRepositoryPort:
-    """Strict mock that enforces the TenantRepositoryPort port interface."""
-    return create_autospec(TenantRepositoryPort, instance=True)
-
-
-@pytest.fixture
-def mock_user_repo() -> UserRepositoryPort:
-    """Strict mock that enforces the UserRepositoryPort port interface."""
-    return create_autospec(UserRepositoryPort, instance=True)
-
-
-@pytest.fixture
-def mock_uow(
-    mock_tenant_repo: TenantRepositoryPort, mock_user_repo: UserRepositoryPort
-) -> UcpUnitOfWorkPort:
-    uow = create_autospec(UcpUnitOfWorkPort, instance=True)
-    uow.tenant_repo = mock_tenant_repo
-    uow.user_repo = mock_user_repo
-    uow.__aenter__.return_value = uow
-    return uow
+def fake_uow() -> FakeUcpUnitOfWork:
+    return FakeUcpUnitOfWork()
 
 
 @pytest.fixture
 def delete_use_case(
-    mock_uow: UcpUnitOfWorkPort,
+    fake_uow: FakeUcpUnitOfWork,
 ) -> DeleteTenantUseCase:
     return DeleteTenantUseCase(
-        uow=mock_uow,
+        uow=fake_uow,
     )
 
 
 @pytest.mark.asyncio
 async def test_delete_tenant_not_found(
     delete_use_case: DeleteTenantUseCase,
-    mock_tenant_repo: TenantRepositoryPort,
+    fake_uow: FakeUcpUnitOfWork,
 ) -> None:
-    mock_tenant_repo.find_by_id = AsyncMock(return_value=None)
-
     with pytest.raises(ResourceNotFoundError):
         await delete_use_case.execute("ten_invalid")
 
@@ -57,9 +33,7 @@ async def test_delete_tenant_not_found(
 @pytest.mark.asyncio
 async def test_delete_tenant_success(
     delete_use_case: DeleteTenantUseCase,
-    mock_tenant_repo: TenantRepositoryPort,
-    mock_user_repo: UserRepositoryPort,
-    mock_uow: UcpUnitOfWorkPort,
+    fake_uow: FakeUcpUnitOfWork,
 ) -> None:
     tenant = Tenant.create(
         id="ten_123",
@@ -68,26 +42,18 @@ async def test_delete_tenant_success(
         idp_tenant_id="zitadel-org-123",
         subscriptions=[],
     )
-    mock_tenant_repo.find_by_id = AsyncMock(return_value=tenant)
+    fake_uow.tenant_repo.tenants.append(tenant)
 
     mock_user = User.create(
         id="usr_1", idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
     )
-    mock_user_repo.find_users_by_tenant = AsyncMock(return_value=[mock_user])
-    mock_user_repo.has_any_tenant_memberships = AsyncMock(return_value=False)
-    mock_tenant_repo.delete = AsyncMock()
-    mock_user_repo.delete = AsyncMock()
+    fake_uow.user_repo.users.append(mock_user)
 
     await delete_use_case.execute("ten_123", "idemp-key")
 
-    mock_tenant_repo.find_by_id.assert_called_once_with("ten_123")
-    mock_user_repo.find_users_by_tenant.assert_called_once_with("ten_123")
-    mock_tenant_repo.delete.assert_awaited_once_with(tenant, "idemp-key")
     assert tenant.deleted_at is not None
-
-    # User deletion assertions
-    mock_user_repo.has_any_tenant_memberships.assert_awaited_once_with("usr_1")
-    mock_user_repo.delete.assert_awaited_once_with(mock_user)
+    assert tenant not in fake_uow.tenant_repo.tenants
     assert mock_user.deleted_at is not None
+    assert mock_user not in fake_uow.user_repo.users
 
-    mock_uow.commit.assert_awaited_once()
+    assert fake_uow.committed is True
