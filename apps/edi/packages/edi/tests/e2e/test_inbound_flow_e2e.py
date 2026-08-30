@@ -1,6 +1,5 @@
 import base64
 import datetime
-import uuid
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -10,6 +9,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from seedwork import generate_id
 from sqlalchemy import select
 
 from edi.adapters.inbound.as2 import build_outbound_message
@@ -91,7 +91,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
 
         # Create Webhook (Global DB)
         webhook = Webhook(
-            id=str(uuid.uuid4()),
+            id=generate_id("id"),
             tenant_id=tenant_id,
             name="E2E Webhook",
             url="http://127.0.0.1:9999/webhook",

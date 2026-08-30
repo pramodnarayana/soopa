@@ -1,7 +1,6 @@
-import uuid
-
 import pytest
 from httpx import AsyncClient
+from seedwork import generate_id
 
 pytestmark = pytest.mark.asyncio
 
@@ -13,8 +12,8 @@ async def test_edi_header_lifecycle(client: AsyncClient):
     """
     # 1. Create Outbound EDI Header
     payload = {
-        "name": f"Header {str(uuid.uuid4())[:6]}",
-        "trading_partner_id": f"TP_{str(uuid.uuid4())[:8]}",
+        "name": f"Header {generate_id('id')[:6]}",
+        "trading_partner_id": f"TP_{generate_id('id')[:8]}",
         "isa_sender_id": "SENDER01",
         "isa_sender_qualifier": "ZZ",
         "isa_receiver_id": "RECEIVER01",
@@ -45,7 +44,7 @@ async def test_edi_header_lifecycle(client: AsyncClient):
 
     # 3. Update EDI Header (PATCH)
     patch_payload = {
-        "name": f"Updated Header {str(uuid.uuid4())[:6]}",
+        "name": f"Updated Header {generate_id('id')[:6]}",
         "default_version": "00501",
     }
     res_patch = await client.patch(
@@ -76,7 +75,7 @@ async def test_edi_header_not_found(client: AsyncClient):
     """
     Tests PATCH and DELETE on a non-existent EDI header ID return 404.
     """
-    fake_id = str(uuid.uuid4())
+    fake_id = generate_id("id")
     res_patch = await client.patch(
         f"/api/v1/tenants/1/edi/edi-headers/{fake_id}", json={"name": "New Name"}
     )

@@ -16,6 +16,8 @@ import hashlib
 import uuid
 from collections.abc import Callable
 
+from seedwork import generate_random_hex
+
 from edi.domain.models.as2 import AS2MDN, AS2Message, MDNResponse
 
 
@@ -144,7 +146,7 @@ def build_mdn(
     must accept raw bytes and return the signed MIME bytes. The application layer
     supplies this callable from the injected CryptoServicePort.
     """
-    boundary = f"----=_Part_{uuid.uuid4().hex}"
+    boundary = f"----=_Part_{generate_random_hex(6)}"
 
     lines = []
     lines.append(f"--{boundary}")

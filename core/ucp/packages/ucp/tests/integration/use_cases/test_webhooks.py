@@ -1,7 +1,7 @@
 import json
-import uuid
 
 import pytest
+from seedwork import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
@@ -24,7 +24,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     Uses the real PostgreSQL database and actual Repositories to test the full CRUD lifecycle
     and verifies that outbox events are properly committed to the database.
     """
-    tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
+    tenant_id = generate_id("ten")
 
     # Create Use Cases
     uow = SqlAlchemyUcpUnitOfWork(db_session)

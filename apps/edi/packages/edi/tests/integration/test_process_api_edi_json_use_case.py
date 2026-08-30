@@ -1,9 +1,12 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dto import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
+from edi.domain.constants import DomainIdPrefix as EdiPrefix
 
 
 @pytest.mark.asyncio
@@ -13,8 +16,8 @@ async def test_process_api_edi_json_success():
     svc = ProcessApiEdiJsonUseCase(mock_uow)
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id="tenant-123",
-            trading_partner_id="tp-abc",
+            tenant_id=generate_id(IamPrefix.TENANT),
+            trading_partner_id=generate_id(EdiPrefix.AS2_PARTNER),
             payload={"transaction_type": "204", "shipment_id": "SHP001"},
         )
     )
@@ -40,8 +43,8 @@ async def test_process_api_edi_json_heading():
     svc = ProcessApiEdiJsonUseCase(mock_uow)
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id="tenant-123",
-            trading_partner_id="tp-abc",
+            tenant_id=generate_id(IamPrefix.TENANT),
+            trading_partner_id=generate_id(EdiPrefix.AS2_PARTNER),
             payload=[
                 {
                     "heading": {
@@ -63,8 +66,8 @@ async def test_process_api_edi_json_st_segment():
     svc = ProcessApiEdiJsonUseCase(mock_uow)
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id="tenant-123",
-            trading_partner_id="PARTNER_X",
+            tenant_id=generate_id(IamPrefix.TENANT),
+            trading_partner_id=generate_id(EdiPrefix.AS2_PARTNER),
             payload=[{"ST": {"ST01": "855"}}],
         )
     )
@@ -82,9 +85,10 @@ async def test_process_api_edi_json_list_extraction():
         {"ST": {"ST01": "850"}, "BEG": {"BEG03": "123"}, "foo": "bar"},
         {"ST": {"ST01": "850"}, "BEG": {"BEG03": "456"}, "foo": "baz"},
     ]
+    p_id = generate_id(EdiPrefix.AS2_PARTNER)
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id="tenant-123", trading_partner_id="PARTNER_X", payload=payload
+            tenant_id=generate_id(IamPrefix.TENANT), trading_partner_id=p_id, payload=payload
         )
     )
     assert trace_id is not None
@@ -95,5 +99,5 @@ async def test_process_api_edi_json_list_extraction():
     assert create_kwargs["payload"]["business_metadata"] == {
         "po_number": ["123", "456"],
         "business_reference": ["123", "456"],
-        "_routing": {"trading_partner_id": "PARTNER_X"},
+        "_routing": {"trading_partner_id": p_id},
     }

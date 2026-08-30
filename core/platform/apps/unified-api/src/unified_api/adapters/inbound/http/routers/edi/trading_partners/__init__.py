@@ -47,7 +47,7 @@ async def list_trading_partners(
             partners.append(
                 PartnerResponse(
                     partner_id=p.id,
-                    tenant_id=p.tenant_id,
+                    tenant_id=p.tenant_id or "",
                     name=p.name,
                     type="AS2",
                     status="ACTIVE" if p.active else "INACTIVE",

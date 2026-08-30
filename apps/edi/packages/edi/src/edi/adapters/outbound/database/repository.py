@@ -106,12 +106,12 @@ class EdiMessageRepository:
         status: str = "RECEIVED",
         message_id: str | None = None,
     ) -> EdiMessage:
-        import uuid
+        from seedwork import generate_random_hex
 
         from edi.adapters.outbound.database.constants import EDI_MESSAGE_ID_PREFIX
 
         record = EdiMessage(
-            id=f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}",
+            id=f"{EDI_MESSAGE_ID_PREFIX}{generate_random_hex(6)}",
             tenant_id=tenant_id,
             trace_id=str(trace_id),
             direction=direction,

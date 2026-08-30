@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import signal
+from typing import Any
 
 import structlog
 
@@ -9,18 +10,19 @@ from identity_worker.bootstrap.container import WorkerContainer
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None, settings: Any = None) -> None:
     logger.info("Starting Identity Worker...")
 
-    container = WorkerContainer()
+    container = WorkerContainer(settings=settings)
     try:
         container.wire()
 
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            with contextlib.suppress(NotImplementedError, RuntimeError):
-                loop.add_signal_handler(sig, stop_event.set)
+        if stop_event is None:
+            stop_event = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                with contextlib.suppress(NotImplementedError, RuntimeError):
+                    loop.add_signal_handler(sig, stop_event.set)
 
         if container.outbox_relay:
             container.outbox_relay.start()

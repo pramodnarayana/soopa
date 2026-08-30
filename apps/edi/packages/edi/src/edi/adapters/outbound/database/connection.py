@@ -49,6 +49,8 @@ class DatabaseRouter:
         # Enterprise-grade compatibility: transparently handle standard Postgres DSNs
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         return get_async_engine(
             url,
@@ -111,6 +113,24 @@ class DatabaseRouter:
             )
             yield cast(TenantSession, session)
 
+    async def get_shard_session(
+        self, shard_key: str, shard_url: str
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """
+        Yields a raw session to a specific shard. Used primarily by background workers
+        that process data across multiple tenants (e.g. sweepers) where RLS context is
+        not globally set at the session level.
+        """
+        engine = await self.get_engine(shard_key, shard_url)
+        factory = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        async with factory() as session:
+            session.info["session_type"] = "shard"
+            yield session
+
     async def close_all(self) -> None:
         """
         Cleanly closes all connection pools.
@@ -139,6 +159,6 @@ class DatabaseRouter:
                     default_url = get_settings().database.default_shard_url
                     if default_url:
                         logger.info("no_database_shards_found_using_default_shard_url")
-                        return [("shard_1", default_url)]
+                        return [("ucp_shard_1", default_url)]
                 return [(str(shard.name), str(shard.dsn)) for shard in shards]
         return []

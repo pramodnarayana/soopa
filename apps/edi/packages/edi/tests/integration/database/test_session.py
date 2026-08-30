@@ -22,7 +22,7 @@ async def test_get_session_success() -> None:
     mock_tenant = MagicMock()
     mock_tenant.id = 0
     mock_shard = MagicMock()
-    mock_shard.name = "shard_1"
+    mock_shard.name = "ucp_shard_1"
     mock_shard.dsn = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
 
     # Ensure iterating the row unpacks to (tenant, shard)
@@ -48,7 +48,7 @@ async def test_get_session_success() -> None:
     assert session == mock_session
     mock_db_router.get_tenant_session.assert_called_once_with(
         tenant_id=0,
-        shard_key="shard_1",
+        shard_key="ucp_shard_1",
         shard_url="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
     )
 
@@ -73,7 +73,7 @@ async def test_get_session_rollback_on_exception() -> None:
     mock_tenant = MagicMock()
     mock_tenant.id = 0
     mock_shard = MagicMock()
-    mock_shard.name = "shard_1"
+    mock_shard.name = "ucp_shard_1"
     mock_shard.dsn = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
 
     mock_row.__iter__.return_value = iter([mock_tenant, mock_shard])

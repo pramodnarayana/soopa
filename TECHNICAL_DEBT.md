@@ -2,6 +2,13 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
+## [OPEN] [Testing Architecture] Enforce Strict Per-Module 80% Test Coverage
+
+- **Date Added**: 2026-08-30
+- **Status**: 🔴 OPEN
+- **Description**: The CI test suite currently relies on a global `pytest-cov` threshold of 80%. This allows individual bounded contexts (e.g., UCP, EDI, Scheduler) to fall below 80% coverage and "hide" behind the aggregate total of the monorepo, which violates the strict isolation principles of our Enterprise-Grade Hexagonal Architecture.
+- **Action Item**: Implement a custom Python script or update the GitHub Actions CI matrix to strictly parse the coverage report and enforce the 80% minimum on a *per-module* basis. Every bounded context must independently prove 80% coverage to pass the pipeline.
+
 
 
 ## [RESOLVED] [Authorization Architecture] Implement Dynamic Enterprise-Grade PBAC/ABAC

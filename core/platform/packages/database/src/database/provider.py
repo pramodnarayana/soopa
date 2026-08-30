@@ -5,6 +5,8 @@ Centralized capability for provisioning SQLAlchemy AsyncEngines across the monor
 Guarantees identical infrastructure tuning, connection pool strategies, and URL normalization.
 """
 
+from typing import Any
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -25,13 +27,15 @@ def get_async_engine(
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    engine = create_async_engine(
-        url,
-        echo=echo,
-        pool_pre_ping=pool_pre_ping,
-        pool_size=pool_size,
-        max_overflow=max_overflow,
-    )
+    kwargs: dict[str, Any] = {
+        "echo": echo,
+        "pool_pre_ping": pool_pre_ping,
+    }
+    if not url.startswith("sqlite"):
+        kwargs["pool_size"] = pool_size
+        kwargs["max_overflow"] = max_overflow
+
+    engine = create_async_engine(url, **kwargs)
 
     logger.info(
         "database_engine_created",

@@ -1,38 +1,62 @@
 import asyncio
+import dataclasses
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from pubsub.aws.aws_sqs_consumer import AckableMessage
+from database.events import EventEnvelope
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from pubsub.message import AckableMessage
+from pubsub.ports.message_consumer_port import MessageConsumerPort
 
 
-class InMemoryEventBus:
+class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
     """
-    A pure in-memory event bus for testing.
-    Can be used as a drop-in replacement for AwsSnsPublisher and AwsSqsConsumer
-    to test the Outbox -> Dispatcher flow without spinning up Localstack SQS/SNS.
+    Pure in-memory event bus for integration testing.
+
+    Implements both OutboxPublisherPort (producer side) and MessageConsumerPort
+    (consumer side), making it a self-contained drop-in replacement for the full
+    SNS + SQS pipeline without requiring Localstack.
+
+    Type safety: both port signatures are satisfied exactly, so mypy validates
+    test harnesses that accept these ports.
     """
 
     def __init__(self) -> None:
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
-    async def publish(self, topic_arn_or_queue: str, payload: dict[str, Any]) -> None:
-        """Simulate publishing a message to SNS or directly to SQS."""
-        # For simplicity, we just dump the payload into the in-memory queue.
-        # This skips the SNS envelope wrapping since we're testing the domain flow, not AWS.
-        await self.queue.put(payload)
+    # -------------------------------------------------------------------------
+    # MessageConsumerPort — async context manager for connection lifecycle
+    # -------------------------------------------------------------------------
 
-    async def publish_batch(self, events: list[dict[str, Any]]) -> list[str]:
-        """Simulate publishing a batch of messages."""
-        import dataclasses
+    async def __aenter__(self) -> "InMemoryEventBus":
+        return self
 
-        successful_ids = []
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass  # No real connection to release
+
+    # -------------------------------------------------------------------------
+    # OutboxPublisherPort — producer side
+    # -------------------------------------------------------------------------
+
+    async def publish(self, event: EventEnvelope) -> None:
+        """Enqueue a single EventEnvelope as its dict representation."""
+        await self.queue.put(dataclasses.asdict(event))
+
+    async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
+        """
+        Enqueue all events and return their IDs as successfully published.
+        Satisfies OutboxPublisherPort exactly — accepts list[EventEnvelope], not list[Any].
+        """
+        successful_ids: list[str] = []
         for event in events:
-            payload = dataclasses.asdict(event) if dataclasses.is_dataclass(event) else event
-            await self.queue.put(payload)
-            # Assuming the event dict has an 'id' field, like OutboxEvent
-            successful_ids.append(payload.get("id", "unknown_id"))
+            await self.queue.put(dataclasses.asdict(event))
+            successful_ids.append(event.id)
         return successful_ids
+
+    # -------------------------------------------------------------------------
+    # MessageConsumerPort — consumer side
+    # -------------------------------------------------------------------------
 
     @asynccontextmanager
     async def poll_raw_message(self) -> AsyncGenerator[AckableMessage | None, None]:
@@ -41,19 +65,33 @@ class InMemoryEventBus:
             return
 
         payload = await self.queue.get()
+        acknowledged = False
 
         async def ack() -> None:
+            nonlocal acknowledged
             self.queue.task_done()
+            acknowledged = True
 
         async def nack() -> None:
-            # Re-enqueue the message
+            nonlocal acknowledged
+            # Re-enqueue the message to simulate SQS redelivery after visibility timeout
             await self.queue.put(payload)
             self.queue.task_done()
+            acknowledged = True
 
-        yield AckableMessage(payload=payload, ack=ack, nack=nack)
+        try:
+            yield AckableMessage(payload=payload, ack=ack, nack=nack)
+        finally:
+            if not acknowledged:
+                await self.queue.put(payload)
+                self.queue.task_done()
+
+    # -------------------------------------------------------------------------
+    # Test helpers
+    # -------------------------------------------------------------------------
 
     async def clear(self) -> None:
-        """Clear the queue."""
+        """Drain the queue. Useful for test teardown."""
         while not self.queue.empty():
             self.queue.get_nowait()
             self.queue.task_done()

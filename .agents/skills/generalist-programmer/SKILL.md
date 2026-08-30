@@ -27,3 +27,19 @@ You are a senior, enterprise-grade software engineer. Your primary focus is writ
 2. Define the **Ports** (interfaces) required for external communication.
 3. Write the **Application Use Case** (the orchestrator).
 4. Finally, write the **Adapters** (REST controllers, DB repositories) and their Narrow Integration Tests.
+
+# Enterprise Integration Testing (Strictly Enforced)
+
+- **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).
+- **Self-Contained Fixtures**: If an integration test requires prerequisites (like a `TenantAdmin` role or specific configuration), the test's own `pytest` fixture MUST explicitly create and seed that required data.
+- **Transactional Rollbacks (Nested SAVEPOINTs)**: Fixtures MUST bind test sessions to shared outer transactions, use nested SQLAlchemy SAVEPOINTs for individual tests, and roll back every outer transaction during teardown. This guarantees that NOTHING is written to the physical database and no manual `DELETE` statements are ever needed for cleanup.
+
+# Infrastructure as Code (IaC) Injection (Enterprise AWS)
+
+- **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `boto3.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
+- **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass the fully-qualified `QueueUrl` directly into the application container as an environment variable. The application configuration (`settings.py`) MUST pass this exact URL to the concrete `AwsSqsPublisher` and `AwsSqsConsumer` adapters; `SqsConsumerManager.queue_name` is logging-only and is not resource metadata.
+
+# Enterprise ID Generation Standard
+
+- **Prefix-Based IDs**: Domain IDs MUST use class-level prefixes combined with cryptographically secure bytes. NEVER use bare UUIDs (`uuid.uuid4().hex`) or hardcoded strings (e.g. `"test_id"`).
+- **Implementation**: Combine the entities prefix with `os.urandom(12).hex()` (e.g., `f"{Model.ID_PREFIX}_{os.urandom(12).hex()}"`).

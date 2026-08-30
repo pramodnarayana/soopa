@@ -4,7 +4,9 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mock:mock@localhost:5432/mock")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+)
 import asyncio
 from typing import Any
 

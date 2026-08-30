@@ -1,4 +1,4 @@
-import uuid
+from seedwork import generate_random_hex
 
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -22,5 +22,5 @@ class ReplayTransactionUseCase:
             tenant_id=tenant_id,
             event_type="edi.transaction.replay_requested",
             payload={"trace_id": trace_id, "tier": tier},
-            idempotency_key=f"replay_{trace_id}_{uuid.uuid4().hex}",
+            idempotency_key=f"replay_{trace_id}_{generate_random_hex(6)}",
         )

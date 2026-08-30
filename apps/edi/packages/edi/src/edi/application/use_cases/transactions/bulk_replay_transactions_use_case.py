@@ -1,4 +1,4 @@
-import uuid
+from seedwork import generate_random_hex
 
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -15,7 +15,7 @@ class BulkReplayTransactionsUseCase:
         Trigger an asynchronous replay of multiple transactions at the specified tier.
         """
         processed_count = 0
-        batch_id = command_key or uuid.uuid4().hex
+        batch_id = command_key or generate_random_hex(6)
 
         for i, trace_id in enumerate(trace_ids):
             result = await self.uow.transactions.get_transaction(tenant_id, trace_id)

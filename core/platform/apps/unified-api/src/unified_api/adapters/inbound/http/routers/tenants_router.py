@@ -98,8 +98,10 @@ async def find_all(
 @inject
 async def get_roles(
     request: Request,
-    role_repository: RoleRepositoryPort = Depends(Provide[Container.role_repo.provider]),
+    session: AsyncSession = Depends(get_db_session),
+    role_repo_factory: Any = Depends(Provide[Container.role_repo.provider]),
 ) -> list[RoleResponse]:
+    role_repository: RoleRepositoryPort = role_repo_factory(session=session)
     roles = await role_repository.get_global_roles()
     return [
         RoleResponse(

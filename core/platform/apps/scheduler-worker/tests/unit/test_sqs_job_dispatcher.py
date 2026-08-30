@@ -42,12 +42,14 @@ async def test_dispatches_job_to_edi_orchestrator_queue(monkeypatch: pytest.Monk
         next_run_at=datetime.now(UTC),
     )
 
-    await SQSJobDispatcher(endpoint_url="http://localstack:4566").dispatch(job)
+    await SQSJobDispatcher(
+        queue_url_map={"edi-orchestrator-jobs": "http://sqs/edi-orchestrator-jobs"},
+        endpoint_url="http://localstack:4566",
+    ).dispatch(job)
 
     session.client.assert_called_once_with(
         "sqs", region_name="us-east-1", endpoint_url="http://localstack:4566"
     )
-    sqs.get_queue_url.assert_awaited_once_with(QueueName="edi-orchestrator-jobs")
     sent = sqs.send_message.await_args.kwargs
     assert sent["QueueUrl"] == "http://sqs/edi-orchestrator-jobs"
     assert json.loads(sent["MessageBody"]) == {

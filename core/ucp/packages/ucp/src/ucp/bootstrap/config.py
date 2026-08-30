@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # AWS / SNS
     sns_tenant_events_topic_arn: str = ""
-    sqs_ucp_identity_sync_queue_name: str = ""
+    sqs_ucp_identity_sync_queue_url: str = ""
+    sqs_ucp_jobs_queue_url: str = ""
     aws_endpoint_url: str | None = None
     aws_region: str = "us-east-1"
     aws_access_key_id: str = "test"

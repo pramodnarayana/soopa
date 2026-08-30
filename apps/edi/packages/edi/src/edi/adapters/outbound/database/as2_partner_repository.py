@@ -11,6 +11,7 @@ from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.application.dto import (
     CreateAS2TradingPartnerCmd,
+    UnsetType,
     UpdateAS2TradingPartnerCmd,
 )
 from edi.domain.exceptions import PartnerAlreadyExistsError, PartnerInUseError
@@ -55,19 +56,15 @@ class SqlAlchemyAS2TradingPartnerRepository(
     ) -> None:
         partner = await self.get_as2_partner_for_write(tenant_id, partner_id)
         if partner:
-            import dataclasses
-
             for field in dataclasses.fields(cmd):
                 value = getattr(cmd, field.name)
-                if value is not None:
+                if value is not None and not isinstance(value, UnsetType):
                     setattr(partner, field.name, value)
 
             try:
                 await self.flush()
             except DuplicateEntityError as e:
                 if e.constraint_name and "uq_tenant_as2_id" in e.constraint_name:
-                    from edi.application.dto import UnsetType
-
                     as2_id_val = (
                         cmd.as2_id
                         if not isinstance(cmd.as2_id, UnsetType) and cmd.as2_id

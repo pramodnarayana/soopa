@@ -8,6 +8,7 @@ from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job import (
@@ -37,7 +38,9 @@ class WorkerContainer(containers.DeclarativeContainer):
 
     outbox_publisher = providers.Singleton(
         AwsSnsPublisher,
-        sns_topic_arn=config.sns_topic_arn,
+        topic_arn=config.sns_topic_arn,
+        region_name=config.aws_region,
+        endpoint_url=config.aws_endpoint_url,
     )
 
     outbox_repository = providers.Factory(
@@ -63,7 +66,6 @@ class WorkerContainer(containers.DeclarativeContainer):
         OutboxSweeperUseCase,
         repository=outbox_repository,
         publisher=outbox_publisher,
-        worker_id="notification_sweeper",
     )
 
     cleanup_worker = providers.Singleton(
@@ -77,10 +79,17 @@ class WorkerContainer(containers.DeclarativeContainer):
         cleanup_job_handler=cleanup_worker,
     )
 
+    priority_queue_consumer = providers.Singleton(
+        AwsSqsConsumer,
+        queue_url=config.priority_queue_url,
+        region_name=config.aws_region,
+        endpoint_url=config.aws_endpoint_url,
+    )
+
     consumer_worker = providers.Singleton(
         SqsConsumerManager,
-        queue_name="PriorityNotificationsQueue",
-        endpoint_url=config.aws_endpoint_url,
+        consumer=priority_queue_consumer,
+        queue_name="edi-priority-notifications.fifo",
         handler=notification_dispatcher.provided.dispatch_raw,
     )
 
@@ -89,9 +98,16 @@ class WorkerContainer(containers.DeclarativeContainer):
         email_strategy=notification_package.email_strategy,
     )
 
+    email_delivery_consumer = providers.Singleton(
+        AwsSqsConsumer,
+        queue_url=config.email_delivery_queue_url,
+        region_name=config.aws_region,
+        endpoint_url=config.aws_endpoint_url,
+    )
+
     email_worker = providers.Singleton(
         SqsConsumerManager,
+        consumer=email_delivery_consumer,
         queue_name="email-delivery.fifo",
-        endpoint_url=config.aws_endpoint_url,
         handler=email_dispatcher.provided.dispatch_raw,
     )

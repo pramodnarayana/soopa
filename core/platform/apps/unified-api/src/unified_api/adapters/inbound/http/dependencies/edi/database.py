@@ -2,8 +2,12 @@ import contextlib
 from collections.abc import AsyncGenerator
 from typing import Annotated, Any, cast
 
+import structlog
 from database.models.identity import Tenant
 from dependency_injector.wiring import Provide, inject
+
+logger = structlog.get_logger(__name__)
+
 from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.session import get_global_session
 from edi.adapters.outbound.database.uow_adapter import (
@@ -47,7 +51,14 @@ async def get_tenant_session_for_id(
     )
     result = await global_session.execute(stmt)
     row = result.one_or_none()
+
     if not row:
+        logger.error(
+            "tenant_subscription_guard_failed",
+            tenant_id=tenant_id,
+            app_slug="edi",
+            reason="No active subscription or shard mapping found in ShardRegistry",
+        )
         raise TenantNotSubscribedException(tenant_id)
 
     _, shard = row

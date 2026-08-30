@@ -33,7 +33,7 @@ class TimestampMixin:
 class AS2PartnerMixin(TimestampMixin):
     """Shared columns for AS2Partner across Global and Tenant schemas."""
 
-    ID_PREFIX = "as2"
+    ID_PREFIX = "edi_as2"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -89,7 +89,7 @@ class AS2PartnerMixin(TimestampMixin):
 class AS2PartnershipMixin(TimestampMixin):
     """Shared columns for AS2Partnership across Global and Tenant schemas."""
 
-    ID_PREFIX = "as2p"
+    ID_PREFIX = "edi_as2p"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -133,7 +133,7 @@ class AS2PartnershipMixin(TimestampMixin):
 class SFTPPartnerMixin(TimestampMixin):
     """Shared columns for SFTPPartner across Global and Tenant schemas."""
 
-    ID_PREFIX = "sftp"
+    ID_PREFIX = "edi_sftp"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -185,7 +185,7 @@ class SFTPPartnerMixin(TimestampMixin):
 class WebhookMixin(TimestampMixin):
     """Shared columns for Webhook across Global and Tenant schemas."""
 
-    ID_PREFIX = "wh"
+    ID_PREFIX = "edi_dp_wh"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -213,7 +213,7 @@ class WebhookMixin(TimestampMixin):
 class InboundRouteMixin(TimestampMixin):
     """Shared columns for InboundRoute across Global and Tenant schemas."""
 
-    ID_PREFIX = "inbrt"
+    ID_PREFIX = "edi_inbrt"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -261,7 +261,7 @@ class InboundRouteMixin(TimestampMixin):
 class OutboundEdiHeaderMixin(TimestampMixin):
     """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
 
-    ID_PREFIX = "outhdr"
+    ID_PREFIX = "edi_outhdr"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -317,7 +317,7 @@ class OutboundEdiHeaderMixin(TimestampMixin):
 class OutboundRouteMixin(TimestampMixin):
     """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
 
-    ID_PREFIX = "outrt"
+    ID_PREFIX = "edi_outrt"
 
     @declared_attr
     def id(cls) -> Mapped[str]:

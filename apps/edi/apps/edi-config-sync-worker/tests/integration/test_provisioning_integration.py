@@ -8,6 +8,7 @@ from typing import Any
 import aioboto3
 import pytest
 import structlog
+from seedwork import generate_id
 
 
 class SqsTestPublisher:
@@ -21,7 +22,7 @@ class SqsTestPublisher:
         ) as sqs:
             resp = await sqs.get_queue_url(QueueName=queue_name)
             queue_url = resp["QueueUrl"]
-            dedup_id = payload.get("idempotency_key") or str(uuid.uuid4())
+            dedup_id = payload.get("idempotency_key") or generate_id("id")
             await sqs.send_message(
                 QueueUrl=queue_url,
                 MessageBody=json.dumps(payload),
@@ -36,8 +37,7 @@ from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
 from edi.domain.events import EdiEventType
-from sqlalchemy import delete, select
-from ucp_models.events import ControlPlaneOutbox
+from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
@@ -54,27 +54,87 @@ load_dotenv()
 
 @pytest.fixture
 async def test_db_router() -> "AsyncGenerator[DatabaseRouter, None]":
-    base_url = os.getenv(
+    import os
+
+    from database.provider import get_async_engine
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    global_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if base_url.startswith("postgresql://"):
-        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
+    ).replace("postgresql://", "postgresql+asyncpg://")
+    shard_url = os.getenv(
+        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    ).replace("postgresql://", "postgresql+asyncpg://")
 
-    router = DatabaseRouter(global_db_url=base_url)
+    global_engine = get_async_engine(global_url)
+    shard_engine = get_async_engine(shard_url)
 
-    await router.get_engine("global", base_url)
+    global_conn = await global_engine.connect()
+    global_trans = await global_conn.begin()
 
-    async for session in router.get_global_session():
-        from ucp_models.infrastructure import DatabaseShard
+    shard_conn = await shard_engine.connect()
+    shard_trans = await shard_conn.begin()
 
-        shard1 = DatabaseShard(id="test_shard_id", name="shard_1", dsn=base_url)
-        await session.merge(shard1)
-        await session.commit()
+    import asyncio
 
-    await router.get_engine("shard_1", base_url)
+    global_db_lock = asyncio.Lock()
+    shard_db_lock = asyncio.Lock()
 
-    yield router
-    await router.close_all()
+    class TestDatabaseRouter(DatabaseRouter):
+        async def get_global_session(self):
+            async with global_db_lock:
+                factory = async_sessionmaker(
+                    bind=global_conn,
+                    expire_on_commit=False,
+                    class_=AsyncSession,
+                    join_transaction_mode="create_savepoint",
+                )
+                async with factory() as session:
+                    yield session
+
+        async def get_tenant_session(self, tenant_id: str, shard_key: str, shard_url: str):
+            async with shard_db_lock:
+                factory = async_sessionmaker(
+                    bind=shard_conn,
+                    expire_on_commit=False,
+                    class_=AsyncSession,
+                    join_transaction_mode="create_savepoint",
+                )
+                from sqlalchemy import text
+
+                try:
+                    async with factory() as session:
+                        await session.execute(
+                            text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                            {"tenant_id": tenant_id},
+                        )
+                        yield session
+                finally:
+                    await shard_conn.execute(
+                        text("SELECT set_config('app.current_tenant', '', true)")
+                    )
+
+        async def get_shard_session(self, shard_key: str, shard_url: str):
+            async with shard_db_lock:
+                factory = async_sessionmaker(
+                    bind=shard_conn,
+                    expire_on_commit=False,
+                    class_=AsyncSession,
+                    join_transaction_mode="create_savepoint",
+                )
+                async with factory() as session:
+                    yield session
+
+        async def get_all_shards(self):
+            return [("ucp_shard_1", shard_url)]
+
+    yield TestDatabaseRouter(global_db_url=global_url)
+
+    await global_trans.rollback()
+    await global_conn.close()
+
+    await shard_trans.rollback()
+    await shard_conn.close()
 
 
 @pytest.fixture
@@ -109,7 +169,8 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         try:
             await sqs.create_queue(QueueName=queue_name, Attributes={"FifoQueue": "true"})
             resp = await sqs.get_queue_url(QueueName=queue_name)
-            await sqs.purge_queue(QueueUrl=resp["QueueUrl"])
+            queue_url = resp["QueueUrl"]
+            await sqs.purge_queue(QueueUrl=queue_url)
             await asyncio.sleep(1)
         except Exception:  # noqa: BLE001
             structlog.get_logger(__name__).warning("Could not setup queue: {e}")
@@ -128,7 +189,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 
     test_consumer = AwsSqsConsumer(
-        queue_name=queue_name,
+        queue_url=queue_url,
         endpoint_url=sqs_endpoint,
         region_name="us-east-1",
     )
@@ -143,8 +204,8 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
 
     worker_service.process_next_event = process_next_event_helper
 
-    test_partner_id = str(uuid.uuid4())
-    test_tenant_id = str(uuid.uuid4())
+    test_partner_id = generate_id("id")
+    test_tenant_id = generate_id("id")
 
     async for session in db_router.get_global_session():
         tenant = Tenant(
@@ -156,16 +217,22 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         session.add(tenant)
         await session.flush()
 
-        shard_res = await session.execute(
-            select(DatabaseShard).where(DatabaseShard.name == "shard_1")
-        )
-        shard = shard_res.scalars().first()
+        shard = await session.get(DatabaseShard, "edi_shard_1")
+        if not shard:
+            shard = DatabaseShard(
+                id="edi_shard_1",
+                name="EDI Primary Shard",
+                dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                status="active",
+            )
+            await session.merge(shard)
+            await session.flush()
 
         app_res = await session.execute(select(App).where(App.slug == "edi"))
         edi_app = app_res.scalars().first()
         if not edi_app:
             edi_app = App(
-                id="app_{test_tenant_id}",
+                id="ucp_app_{test_tenant_id}",
                 slug="edi",
                 name="EDI Application",
             )
@@ -199,27 +266,8 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         "base_url": base_url,
     }
 
-    # Cleanup
-    async for session in db_router.get_global_session():
-        await session.execute(
-            delete(ControlPlaneOutbox).where(
-                ControlPlaneOutbox.event_type == EdiEventType.edi_as2_partner_created.value,
-                ControlPlaneOutbox.tenant_id == test_tenant_id,
-            )
-        )
-        await session.execute(delete(AS2Partner).where(AS2Partner.id == test_partner_id))
-        await session.execute(
-            delete(ShardRegistry).where(ShardRegistry.tenant_id == test_tenant_id)
-        )
-        await session.execute(delete(Tenant).where(Tenant.id == test_tenant_id))
-        await session.commit()
-
-    async for tenant_session in db_router.get_tenant_session(test_tenant_id, "shard_1", base_url):
-        await tenant_session.execute(
-            delete(TenantAS2Partner).where(TenantAS2Partner.id == test_partner_id)
-        )
-        await tenant_session.commit()
-
+    # Cleanup is now handled entirely by transaction rollbacks via TestDatabaseRouter
+    # We only need to delete the queue
     async with message_publisher.session.client(
         "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
     ) as sqs:
@@ -229,7 +277,17 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         except Exception:  # noqa: BLE001
             structlog.get_logger(__name__).warning("Could not delete queue {queue_name}: {e}")
 
-    await db_router.close_all()
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def wait_for_process(service, max_retries=10):
+    for _ in range(max_retries):
+        if await service.process_next_event():
+            return True
+        import asyncio
+
+        await asyncio.sleep(1)
+    return False
 
 
 @pytest.mark.integration
@@ -262,11 +320,11 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
     await asyncio.sleep(2)  # Give LocalStack SQS a moment to make the message visible
 
     # 3. Provisioning Worker processes the event
-    processed = await worker_service.process_next_event()
+    processed = await wait_for_process(worker_service)
     assert processed is True
 
     # 4. Verify replication occurred in the Shard DB
-    async for tenant_session in db_router.get_tenant_session(tenant_id, "shard_1", base_url):
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
             select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
         )
@@ -304,7 +362,7 @@ async def test_provisioning_negative_unregistered_event_dropped(
 
     # Worker processes the event. Since it's unregistered, it is safely dropped,
     # but the consumption is considered successful processing, so it returns True.
-    processed = await worker_service.process_next_event()
+    processed = await wait_for_process(worker_service)
     assert processed is True
 
 
@@ -333,7 +391,7 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
 
     # Worker processes the event. The SQS consumer swallows the exception and doesn't ack,
     # so the orchestrator returns False.
-    processed = await worker_service.process_next_event()
+    processed = await wait_for_process(worker_service)
     assert processed is False
 
 
@@ -365,15 +423,15 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     await asyncio.sleep(2)
 
     # Process first event
-    processed_1 = await worker_service.process_next_event()
+    processed_1 = await wait_for_process(worker_service)
     assert processed_1 is True
 
     # Process second event
-    processed_2 = await worker_service.process_next_event()
+    processed_2 = await wait_for_process(worker_service)
     assert processed_2 is True
 
     # Verify replication still valid
-    async for tenant_session in db_router.get_tenant_session(tenant_id, "shard_1", base_url):
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
             select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
         )

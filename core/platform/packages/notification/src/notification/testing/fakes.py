@@ -151,12 +151,13 @@ class FakeNotificationUow(NotificationUnitOfWorkPort):
         # Simulate Outbox event collection
         if self.record_repo and hasattr(self.record_repo, "dispatches"):
             import dataclasses
-            import uuid
+
+            from seedwork import SystemIdPrefix, generate_id
 
             for dispatch in self.record_repo.dispatches:
                 for event in dispatch.domain_events:
                     outbox_event = EventEnvelope(
-                        id=str(uuid.uuid4()),
+                        id=generate_id(SystemIdPrefix.GENERIC),
                         source="notification",
                         tenant_id=event.tenant_id,
                         event_type=event.event_name,

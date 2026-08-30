@@ -1,5 +1,5 @@
 import structlog
-from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
+from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 
 logger = structlog.get_logger(__name__)
 
@@ -9,7 +9,7 @@ class IdentityOutboxCleanupJobHandler:
     Background job that sweeps and deletes outbox events that have already been COMPLETED.
     """
 
-    def __init__(self, use_case: OutboxCleanupUseCase):
+    def __init__(self, use_case: OutboxCleanerUseCase):
         self.use_case = use_case
 
     async def execute(self) -> None:

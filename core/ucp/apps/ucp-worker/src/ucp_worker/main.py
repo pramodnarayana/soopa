@@ -20,7 +20,8 @@ async def main() -> None:
     scheduled_jobs_processor = functools.partial(process_scheduled_job, registry=container.registry)
 
     consumer = AwsSqsConsumer(
-        queue_name="ucp-jobs.fifo",
+        queue_url=container.settings.sqs_ucp_jobs_queue_url,
+        region_name=container.settings.aws_region,
         endpoint_url=container.settings.aws_endpoint_url,
     )
 

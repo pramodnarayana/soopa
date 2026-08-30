@@ -1,123 +1,238 @@
+"""
+E2E-style tests for the SQS event consumer flow in identity-worker.
+
+These tests verify the full dispatch chain: raw SQS payload → IdentityEventDispatcher
+→ registered handler. The SqsConsumerManager is tested with an injected
+MessageConsumerPort mock (the correct hexagonal approach), not via internal
+sqs_consumer._client manipulation.
+"""
+
 import asyncio
-import json
-import uuid
-from unittest.mock import AsyncMock
+from contextlib import asynccontextmanager
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.message import AckableMessage
+from pubsub.ports.message_consumer_port import MessageConsumerPort
+from seedwork import generate_id
 
 pytestmark = pytest.mark.asyncio
 
 
-def _manager_with_message(
-    consumer: IdentityEventDispatcher, payload: dict[str, object]
-) -> tuple[SqsConsumerManager, AsyncMock]:
-    manager: SqsConsumerManager
+def _make_single_message_manager(
+    dispatcher: IdentityEventDispatcher,
+    payload: dict[str, Any],
+) -> SqsConsumerManager:
+    """
+    Build a SqsConsumerManager backed by a one-shot MessageConsumerPort mock.
 
-    async def dispatch_once(raw_message: dict[str, object]) -> None:
-        manager.is_running = False
-        await consumer.dispatch_raw(raw_message)
+    After the first message is dispatched the manager stops itself, preventing
+    an infinite poll loop in tests.
+    """
+    manager_ref: list[SqsConsumerManager] = []
 
-    manager = SqsConsumerManager(queue_name="identity-events", handler=dispatch_once)
-    sqs_client = AsyncMock()
-    sqs_client.get_queue_url.return_value = {"QueueUrl": "https://sqs.test/identity-events"}
-    sqs_client.receive_message.return_value = {
-        "Messages": [
-            {
-                "ReceiptHandle": "receipt-1",
-                "MessageId": "message-1",
-                "Body": json.dumps(payload),
-            }
-        ]
-    }
-    manager.sqs_consumer._client = sqs_client
-    manager.is_running = True
-    return manager, sqs_client
+    call_count = 0
+
+    @asynccontextmanager
+    async def poll_raw_message():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            yield AckableMessage(
+                payload=payload,
+                ack=AsyncMock(),
+                nack=AsyncMock(),
+            )
+        else:
+            # Stop the loop after the first message
+            if manager_ref:
+                manager_ref[0].is_running = False
+            yield None
+
+    consumer = MagicMock(spec=MessageConsumerPort)
+    consumer.__aenter__ = AsyncMock(return_value=consumer)
+    consumer.__aexit__ = AsyncMock(return_value=False)
+    consumer.poll_raw_message = poll_raw_message
+
+    async def handler(raw_message: dict[str, Any]) -> None:
+        # Stop after first dispatch so the test doesn't loop forever
+        if manager_ref:
+            manager_ref[0].is_running = False
+        await dispatcher.dispatch_raw(raw_message)
+
+    manager = SqsConsumerManager(
+        consumer=consumer,
+        queue_name="identity-events",
+        handler=handler,
+    )
+    manager_ref.append(manager)
+    return manager
 
 
-async def test_sqs_consumer_dispatch_flow():
-    # 2. Setup Consumer
+# ---------------------------------------------------------------------------
+# Dispatcher unit tests (no SqsConsumerManager involvement)
+# ---------------------------------------------------------------------------
+
+
+async def test_identity_event_dispatcher_routes_to_correct_handler():
     consumer = IdentityEventDispatcher()
-
-    # 3. Setup Fake Handler (representing IdentitySyncService)
     handled = asyncio.Event()
 
-    async def handler(event):
+    async def handler(event: Any) -> None:
         handled.set()
 
     mock_handler = AsyncMock(side_effect=handler)
     consumer.subscribe("TenantProvisioned", mock_handler)
 
-    # 4. Run consumer
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
     }
     await consumer.dispatch_raw(payload)
 
-    # 5. Verify flow
     mock_handler.assert_called_once()
     called_event = mock_handler.call_args[0][0]
     assert called_event.event_type == "TenantProvisioned"
     assert called_event.payload["tenant_id"] == "tenant-123"
 
 
-async def test_sqs_consumer_handler_failure_prevents_ack():
+async def test_handler_failure_propagates_to_prevent_ack():
+    """Exception in a handler must bubble up so SqsConsumerManager skips the ack."""
     consumer = IdentityEventDispatcher()
-    handled = asyncio.Event()
 
-    # Setup handler that raises an exception
-    async def failing_handler(event):
-        handled.set()
+    async def failing_handler(event: Any) -> None:
         raise RuntimeError("Handler Failed")
 
     mock_handler = AsyncMock(side_effect=failing_handler)
     consumer.subscribe("TenantProvisioned", mock_handler)
 
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
     }
 
-    # Exception should bubble up to prevent ACK
     with pytest.raises(RuntimeError, match="Handler Failed"):
         await consumer.dispatch_raw(payload)
 
     mock_handler.assert_called_once()
 
 
-async def test_manager_does_not_delete_message_when_handler_fails():
+# ---------------------------------------------------------------------------
+# Full pipeline tests (SqsConsumerManager → dispatcher → handler)
+# ---------------------------------------------------------------------------
+
+
+async def test_manager_dispatches_message_to_subscribed_handler():
     consumer = IdentityEventDispatcher()
-    failing_handler = AsyncMock(side_effect=RuntimeError("Handler Failed"))
-    consumer.subscribe("TenantProvisioned", failing_handler)
+    handled = asyncio.Event()
+
+    async def handler(event: Any) -> None:
+        handled.set()
+
+    mock_handler = AsyncMock(side_effect=handler)
+    consumer.subscribe("TenantProvisioned", mock_handler)
+
     payload = {
-        "id": str(uuid.uuid4()),
+        "id": generate_id("id"),
         "source": "test",
         "event_type": "TenantProvisioned",
         "payload": {"tenant_id": "tenant-123"},
     }
-    manager, sqs_client = _manager_with_message(consumer, payload)
+    manager = _make_single_message_manager(consumer, payload)
+    manager.is_running = True
 
     await manager._poll_continuous()
+
+    mock_handler.assert_called_once()
+
+
+async def test_manager_does_not_ack_when_handler_raises():
+    """
+    When the domain handler raises, the SqsConsumerManager must NOT ack the message.
+    The message will become visible again in SQS after its visibility timeout.
+    """
+    consumer = IdentityEventDispatcher()
+    failing_handler = AsyncMock(side_effect=RuntimeError("Handler Failed"))
+    consumer.subscribe("TenantProvisioned", failing_handler)
+
+    payload = {
+        "id": generate_id("id"),
+        "source": "test",
+        "event_type": "TenantProvisioned",
+        "payload": {"tenant_id": "tenant-123"},
+    }
+
+    ack_mock = AsyncMock()
+    call_count = 0
+
+    @asynccontextmanager
+    async def poll_raw_message():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            yield AckableMessage(payload=payload, ack=ack_mock, nack=AsyncMock())
+        else:
+            manager.is_running = False
+            yield None
+
+    port = MagicMock(spec=MessageConsumerPort)
+    port.__aenter__ = AsyncMock(return_value=port)
+    port.__aexit__ = AsyncMock(return_value=False)
+    port.poll_raw_message = poll_raw_message
+
+    manager = SqsConsumerManager(
+        consumer=port,
+        queue_name="identity-events",
+        handler=consumer.dispatch_raw,
+    )
+    manager.is_running = True
+
+    await manager._poll_continuous()  # must not raise
 
     failing_handler.assert_awaited_once()
-    sqs_client.delete_message.assert_not_awaited()
+    ack_mock.assert_not_awaited()
 
 
-async def test_malformed_message_is_not_deleted():
+async def test_malformed_message_does_not_ack():
+    """A payload missing required fields must not be acked."""
     consumer = IdentityEventDispatcher()
-    payload = {
-        "id": str(uuid.uuid4()),
-    }
-    manager, sqs_client = _manager_with_message(consumer, payload)
+    # No handlers registered — dispatch_raw will likely raise or silently drop
+    payload = {"id": generate_id("id")}  # missing event_type, source, payload
+
+    ack_mock = AsyncMock()
+    call_count = 0
+
+    @asynccontextmanager
+    async def poll_raw_message():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            yield AckableMessage(payload=payload, ack=ack_mock, nack=AsyncMock())
+        else:
+            manager.is_running = False
+            yield None
+
+    port = MagicMock(spec=MessageConsumerPort)
+    port.__aenter__ = AsyncMock(return_value=port)
+    port.__aexit__ = AsyncMock(return_value=False)
+    port.poll_raw_message = poll_raw_message
+
+    manager = SqsConsumerManager(
+        consumer=port,
+        queue_name="identity-events",
+        handler=consumer.dispatch_raw,
+    )
+    manager.is_running = True
 
     await manager._poll_continuous()
 
-    sqs_client.delete_message.assert_not_awaited()
+    ack_mock.assert_not_awaited()

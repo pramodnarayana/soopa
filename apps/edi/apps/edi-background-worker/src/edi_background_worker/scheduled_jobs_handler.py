@@ -1,4 +1,3 @@
-import uuid
 from typing import Any
 
 import structlog
@@ -34,6 +33,6 @@ async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
         raise ValueError(f"Unknown scheduled job name: {job_name}")
 
     # Reconstruct a dummy Job object just enough for the handler to execute it
-    job = Job(id=uuid.UUID(job_id), name=job_name, payload=job_payload)
+    job = Job(id=job_id, name=job_name, payload=job_payload)
 
     await handler.execute(job)

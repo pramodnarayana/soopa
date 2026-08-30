@@ -61,7 +61,7 @@ class UserNotificationPreference:
 
 
 # Platform-level sentinel tenant ID used for global default notification templates.
-PLATFORM_TENANT_ID = "ten_000"
+PLATFORM_TENANT_ID = "iam_ten_000"
 
 
 @dataclass

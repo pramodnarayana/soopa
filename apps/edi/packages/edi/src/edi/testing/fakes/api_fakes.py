@@ -1,9 +1,9 @@
-import uuid
 from collections.abc import Sequence
 from dataclasses import asdict, replace
 from typing import Any
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork import SystemIdPrefix, generate_id
 
 from edi.application.dto import (
     UNSET,
@@ -63,7 +63,7 @@ class FakeGlobalStore:
                 from edi.domain.exceptions import PartnerAlreadyExistsError
 
                 raise PartnerAlreadyExistsError(as2_id=cmd.as2_id, tenant_id=tenant_id)
-        p_id = str(uuid.uuid4())
+        p_id = generate_id(SystemIdPrefix.GENERIC)
         self.partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
@@ -81,7 +81,7 @@ class FakeGlobalStore:
         ]
 
     async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
-        p_id = str(uuid.uuid4())
+        p_id = generate_id(SystemIdPrefix.GENERIC)
         self.sftp_partners.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
@@ -106,7 +106,7 @@ class FakeGlobalStore:
         ]
 
     async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> str:
-        p_id = str(uuid.uuid4())
+        p_id = generate_id(SystemIdPrefix.GENERIC)
         self.partnerships.append({"id": p_id, "tenant_id": tenant_id, "cmd": cmd})
         return p_id
 
@@ -201,7 +201,7 @@ class FakeGlobalStore:
         event: Any,
         idempotency_key: str | None = None,
     ) -> str:
-        key = idempotency_key or str(uuid.uuid4())
+        key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
         if any(e.get("idempotency_key") == key for e in self.outbox_events):
             raise ValueError(f"Idempotency key {key} already exists")
         self.outbox_events.append(
@@ -264,14 +264,14 @@ class FakeGlobalStore:
         }
 
     async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> str:
-        r_id = str(uuid.uuid4())
+        r_id = generate_id(SystemIdPrefix.GENERIC)
         if not hasattr(self, "inbound_routes"):
             self.inbound_routes = []
         self.inbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
         return r_id
 
     async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> str:
-        r_id = str(uuid.uuid4())
+        r_id = generate_id(SystemIdPrefix.GENERIC)
         if not hasattr(self, "outbound_routes"):
             self.outbound_routes = []
         self.outbound_routes.append(FakeRoute(r_id, tenant_id, cmd))
@@ -387,12 +387,12 @@ class FakeTenantStore:
         self.webhooks = []
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> str:
-        r_id = str(uuid.uuid4())
+        r_id = generate_id(SystemIdPrefix.GENERIC)
         self.inbound_routes.append(FakeRoute(r_id, "1", cmd))
         return r_id
 
     async def create_outbound_route(self, cmd: CreateOutboundRouteCmd) -> str:
-        r_id = str(uuid.uuid4())
+        r_id = generate_id(SystemIdPrefix.GENERIC)
         self.outbound_routes.append(FakeRoute(r_id, "1", cmd))
         return r_id
 
@@ -400,7 +400,7 @@ class FakeTenantStore:
         return {"inbound": self.inbound_routes, "outbound": self.outbound_routes}
 
     async def create_sftp_partner(self, cmd: CreateSFTPPartnerCmd) -> str:
-        p_id = str(uuid.uuid4())
+        p_id = generate_id(SystemIdPrefix.GENERIC)
         self.sftp_partners.append({"id": p_id, "cmd": cmd})
         return p_id
 

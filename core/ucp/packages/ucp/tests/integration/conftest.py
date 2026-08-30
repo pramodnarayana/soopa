@@ -67,11 +67,11 @@ def localstack_container(request) -> "Any":
     endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
     import json
-    import uuid
 
     import boto3
+    from seedwork import generate_random_hex
 
-    unique_suffix = uuid.uuid4().hex[:8]
+    unique_suffix = generate_random_hex(6)
 
     sns_client = boto3.client(
         "sns",

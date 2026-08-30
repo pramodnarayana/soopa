@@ -1,13 +1,20 @@
 from datetime import datetime
 
 import pytest
+from identity.domain.constants import DomainIdPrefix as IamPrefix
+from seedwork.utils import generate_id
 
 from ucp.domain.events import TenantDeletedEvent
 from ucp.domain.models.tenant import Tenant
 
 
 def test_tenant_mark_deleted_success() -> None:
-    tenant = Tenant.create(id="ten_123", name="Test", slug="test", idp_tenant_id="org_123")
+    tenant = Tenant.create(
+        id=generate_id(IamPrefix.TENANT),
+        name="Test",
+        slug="test",
+        idp_tenant_id="org_123",
+    )
     assert tenant.deleted_at is None
 
     tenant.mark_deleted()
@@ -20,7 +27,12 @@ def test_tenant_mark_deleted_success() -> None:
 
 
 def test_tenant_mark_deleted_already_deleted() -> None:
-    tenant = Tenant.create(id="ten_123", name="Test", slug="test", idp_tenant_id="org_123")
+    tenant = Tenant.create(
+        id=generate_id(IamPrefix.TENANT),
+        name="Test",
+        slug="test",
+        idp_tenant_id="org_123",
+    )
     tenant.mark_deleted()
 
     with pytest.raises(ValueError, match="already been deleted"):

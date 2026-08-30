@@ -201,9 +201,7 @@ class PostgresUserRepository(UserRepositoryPort):
             event_name = event.event_name
 
             final_idemp_key = (
-                f"{idempotency_key}_{index}"
-                if idempotency_key
-                else getattr(event, "id", f"{event_name}_{user.id}_{index}")
+                f"{idempotency_key}_{index}" if idempotency_key else event.idempotency_key
             )
             payload_dict = serialize_domain_event(event)
 

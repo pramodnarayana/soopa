@@ -91,7 +91,10 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
 
         try:
             response = await self.fetch_with_auth(
-                endpoint=f"/v2/organizations/{org_id}", method="POST", json={"name": name}
+                endpoint="/management/v1/orgs/me",
+                method="PUT",
+                headers={"x-zitadel-orgid": org_id},
+                json={"name": name},
             )
 
             if response.status_code >= 400:
@@ -106,8 +109,13 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
         logger.info("toggling_organization_status_in_zitadel", org_id=org_id, active=active)
 
         try:
-            endpoint = f"/v2/organizations/{org_id}/{'activate' if active else 'deactivate'}"
-            response = await self.fetch_with_auth(endpoint=endpoint, method="POST", json={})
+            endpoint = f"/management/v1/orgs/me/_{'reactivate' if active else 'deactivate'}"
+            response = await self.fetch_with_auth(
+                endpoint=endpoint,
+                method="POST",
+                headers={"x-zitadel-orgid": org_id},
+                json={},
+            )
 
             if response.status_code >= 400:
                 await self.handle_response_error(response, "toggle org status")

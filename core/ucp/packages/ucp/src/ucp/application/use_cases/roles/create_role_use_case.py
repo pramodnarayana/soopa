@@ -1,7 +1,6 @@
-import uuid
-
 import structlog
 from identity.domain.models.authorization import Capability, Role
+from seedwork import generate_id
 
 from ucp.application.dto import CreateRoleRequest, CreateRoleResponse
 from ucp.domain.exceptions import InvalidCapabilityError
@@ -33,7 +32,7 @@ class CreateRoleUseCase:
 
         async with self.uow:
             role = Role.create(
-                id=f"rol_{uuid.uuid4().hex[:16]}",
+                id=generate_id("rol"),
                 tenant_id=tenant_id,
                 name=request.name,
                 description=request.description,

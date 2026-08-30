@@ -1,7 +1,6 @@
-import uuid
-
 import pytest
 from httpx import AsyncClient
+from seedwork import generate_id
 
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
@@ -16,7 +15,7 @@ async def test_edi_json_submission_and_thread(client: AsyncClient):
     and verifying that it can be queried via the transactions thread endpoint
     and the explorer endpoint against a live PostgreSQL instance.
     """
-    po_num = f"PO-{str(uuid.uuid4())[:8]}"
+    po_num = f"PO-{generate_id('id')[:8]}"
     payload = {
         "trading_partner_id": "TP_TEST_WALMART",
         "transaction_type": "850",
@@ -71,10 +70,10 @@ async def test_edi_message_explorer_and_detail(
     # Expose the tenant ID resolved by the authentication fixture
     tenant_id = "1"
 
-    trace_id = str(uuid.uuid4())
-    sender_id = f"SENDER_{str(uuid.uuid4())[:6]}"
-    receiver_id = f"RECV_{str(uuid.uuid4())[:6]}"
-    msg_id_val = f"MSG_{str(uuid.uuid4())[:6]}"
+    trace_id = generate_id("id")
+    sender_id = f"SENDER_{generate_id('id')[:6]}"
+    receiver_id = f"RECV_{generate_id('id')[:6]}"
+    msg_id_val = f"MSG_{generate_id('id')[:6]}"
 
     # 1. Insert records directly using DataPlaneUnitOfWorkPort to simulate completed pipeline
     gs_gen = override_get_global_session()

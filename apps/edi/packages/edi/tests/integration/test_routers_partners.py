@@ -260,7 +260,7 @@ def test_create_tenant_sftp_partner(client, fake_uow):
         return_value="secretpassword",
     ):
         client.post(
-            f"/api/v1/tenants/1/edi/trading-partners/{p_id}/sftp/test",
+            f"/api/v1/tenants/1/edi/trading-partners/sftp/{p_id}/test",
             json={
                 "host": "sftp.example.com",
                 "port": 22,
@@ -353,7 +353,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         side_effect=ValueError("Decrypt error"),
     ):
         resp = client.post(
-            f"/api/v1/tenants/1/edi/trading-partners/{p_id}/sftp/test",
+            f"/api/v1/tenants/1/edi/trading-partners/sftp/{p_id}/test",
             json={
                 "host": "sftp.example.com",
                 "port": 22,
@@ -370,7 +370,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     )
     assert put_resp.status_code == 200
     resp = client.post(
-        f"/api/v1/tenants/1/edi/trading-partners/{p_id}/sftp/test",
+        f"/api/v1/tenants/1/edi/trading-partners/sftp/{p_id}/test",
         json={
             "host": "sftp.example.com",
             "port": 22,

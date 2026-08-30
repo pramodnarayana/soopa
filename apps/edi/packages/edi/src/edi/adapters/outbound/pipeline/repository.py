@@ -1,7 +1,7 @@
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from seedwork import generate_random_hex
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,7 +151,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             record_kwargs["tenant_id"] = tenant_id
 
         if "id" not in record_kwargs:
-            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}{uuid.uuid4().hex}"
+            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}{generate_random_hex(6)}"
 
         record = EdiMessage(**record_kwargs)
         self.session.add(record)
@@ -221,7 +221,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             record_kwargs["tenant_id"] = tenant_id
 
         if "id" not in record_kwargs:
-            record_kwargs["id"] = f"{EDI_JSON_ID_PREFIX}{uuid.uuid4().hex}"
+            record_kwargs["id"] = f"{EDI_JSON_ID_PREFIX}{generate_random_hex(6)}"
 
         record = EdiJson(**record_kwargs)
         self.session.add(record)
@@ -279,7 +279,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         stmt = (
             insert(Outbox)
             .values(
-                id=f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{uuid.uuid4().hex}",
+                id=f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{generate_random_hex(6)}",
                 idempotency_key=str(idempotency_key),
                 event_type=event_type,
                 payload=payload,
@@ -339,7 +339,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return  # Skip insert
 
         record = ApiGateway(
-            id=f"{API_GATEWAY_ID_PREFIX}{uuid.uuid4().hex}",
+            id=f"{API_GATEWAY_ID_PREFIX}{generate_random_hex(6)}",
             trace_id=str(trace_id),
             direction=direction,
             transaction_type=transaction_type,

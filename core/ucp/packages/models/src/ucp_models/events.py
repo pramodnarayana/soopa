@@ -9,7 +9,7 @@ from sqlalchemy.sql import text
 
 class ControlPlaneOutbox(UcpBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = "cp_ucp_ob"
+    ID_PREFIX = "ucp_cp_ob"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)

@@ -1,10 +1,10 @@
 import pytest
 
 pytestmark = pytest.mark.integration
-import uuid
 from datetime import UTC, datetime
 
 import pytest
+from seedwork import generate_id, generate_random_hex
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
@@ -20,12 +20,12 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
     """
     async with db_session.begin_nested():
         repo = TenantRepository(db_session)
-        tenant_id = f"ten_{uuid.uuid4().hex[:12]}"
+        tenant_id = generate_id("ten")
 
         new_tenant = Tenant(
             id=tenant_id,
-            name=f"Test Tenant {uuid.uuid4().hex[:8]}",
-            slug=f"test-tenant-{uuid.uuid4().hex[:8]}",
+            name=f"Test Tenant {generate_random_hex(6)}",
+            slug=f"test-tenant-{generate_random_hex(6)}",
             idp_tenant_id="idp_test_123",
             status="active",
             created_at=datetime.now(UTC),

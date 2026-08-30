@@ -33,8 +33,8 @@ class DomainEvent(ABC):
         """
         if hasattr(self, "id"):
             return str(self.id)
-        if not hasattr(self, "_idempotency_key"):
-            import uuid
+        if "_idempotency_key" not in self.__dict__:
+            from seedwork import SystemIdPrefix, generate_id
 
-            object.__setattr__(self, "_idempotency_key", str(uuid.uuid4()))
-        return self._idempotency_key
+            self.__dict__["_idempotency_key"] = generate_id(SystemIdPrefix.GENERIC)
+        return str(self.__dict__["_idempotency_key"])

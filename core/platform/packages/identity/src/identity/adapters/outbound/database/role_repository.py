@@ -1,5 +1,4 @@
 import os
-import uuid
 
 import structlog
 from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
@@ -8,10 +7,12 @@ from database.models import UserRole
 from database.models.identity import IdentityOutbox
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository
+from seedwork import generate_id
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
+from identity.domain.constants import DomainIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role as DomainRole
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
@@ -173,7 +174,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         if not result.scalar_one_or_none():
             raise ResourceNotFoundError(f"Role '{role_id}' not found or is inactive.")
 
-        user_role_id = f"urol_{uuid.uuid4().hex[:16]}"
+        user_role_id = generate_id(DomainIdPrefix.USER_ROLE)
         user_role = UserRole(
             id=user_role_id,
             tenant_id=tenant_id,
@@ -252,9 +253,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
             tenant_id = event.get_routing_tenant_id() or PLATFORM_TENANT_ID
 
             final_idemp_key = (
-                f"{idempotency_key}_{index}"
-                if idempotency_key
-                else getattr(event, "id", f"{event_name}_{role.id}_{index}")
+                f"{idempotency_key}_{index}" if idempotency_key else event.idempotency_key
             )
 
             outbox_event = IdentityOutbox(

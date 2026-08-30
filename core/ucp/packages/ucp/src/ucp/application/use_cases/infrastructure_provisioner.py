@@ -26,7 +26,7 @@ class InfrastructureProvisioner:
 
     async def handle_app_subscribed(self, event: UcpEventMessage) -> None:
         """
-        Handles the 'app.subscribed' event (2-hop provisioning).
+        Handles the 'app.subscribed' event.
         """
         tenant_id = event.tenant_id
         event_id = event.id

@@ -1,6 +1,5 @@
-import uuid
-
 from database.models.notifications import NotificationTemplate
+from seedwork import generate_random_hex
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,7 +66,7 @@ class SqlAlchemyTemplateRepository:
         stmt = (
             insert(NotificationTemplate)
             .values(
-                id=f"{NotificationTemplate.ID_PREFIX}_{uuid.uuid4().hex}",
+                id=f"{NotificationTemplate.ID_PREFIX}_{generate_random_hex(6)}",
                 tenant_id=tenant_id,
                 name=name,
                 event_type=event_type,

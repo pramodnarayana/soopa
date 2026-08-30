@@ -1,0 +1,47 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
+
+pytestmark = pytest.mark.asyncio
+
+
+@patch("edi.adapters.outbound.pipeline.http.ssrf_safe_context")
+@patch("edi.adapters.outbound.pipeline.http.httpx.AsyncClient")
+async def test_httpx_delivery_adapter(mock_client_cls: MagicMock, mock_ssrf: MagicMock) -> None:
+    import contextlib
+
+    mock_ssrf.return_value = contextlib.nullcontext()
+    mock_client = AsyncMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.text = '{"success": true}'
+    mock_client.post.return_value = mock_response
+
+    adapter = HttpxDeliveryClient()
+    status, response_body = await adapter.deliver(
+        "https://example.com/webhook", b'{"data": "test"}'
+    )
+
+    assert status == 200
+    assert response_body == '{"success": true}'
+    mock_client.post.assert_awaited_once_with(
+        "https://example.com/webhook",
+        content=b'{"data": "test"}',
+        headers={"Content-Type": "application/json"},
+    )
+
+
+def test_httpx_delivery_adapter_validator() -> None:
+    def fail_validator(url: str) -> bool:
+        return False
+
+    adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator)
+
+    with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
+        import asyncio
+
+        asyncio.run(adapter.deliver("https://bad.com", b"{}"))

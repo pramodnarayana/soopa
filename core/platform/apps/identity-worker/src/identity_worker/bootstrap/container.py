@@ -1,4 +1,3 @@
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, Literal
@@ -12,7 +11,7 @@ from identity.adapters.outbound.database.postgres_identity_outbox_repository imp
     PostgresIdentityOutboxRepository,
 )
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
-from outbox.application.outbox_cleanup_use_case import OutboxCleanupUseCase
+from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -93,14 +92,16 @@ class UserDeletedPayload(BaseModel):
 class WorkerContainer:
     """Dependency Injection container for the Identity Worker."""
 
-    def __init__(self) -> None:
-        database_url = os.environ.get("DATABASE_URL")
+    def __init__(self, settings: Any = None) -> None:
+        self.settings = settings or get_settings()
+
+        database_url = self.settings.database_url
         if not database_url:
-            raise ValueError("DATABASE_URL environment variable is required")
+            raise ValueError("database_url is required in Settings")
+
         if database_url.startswith("postgresql://"):
             database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         self.database_url = database_url
-        self.settings = get_settings()
 
         self._engine = get_async_engine(self.database_url)
         self.session_factory = async_sessionmaker(
@@ -130,9 +131,9 @@ class WorkerContainer:
     ) -> None:
         outbox_cleanup_repo = SqlAlchemyIdentityOutboxCleanupRepository(self.session_factory)
         sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
-        outbox_cleanup_use_case = OutboxCleanupUseCase(outbox_cleanup_repo)
+        outbox_cleaner_use_case = OutboxCleanerUseCase(outbox_cleanup_repo)
         self.sweeper_job_handler = IdentityOutboxSweeperJobHandler(sweeper_use_case)
-        self.cleanup_job_handler = IdentityOutboxCleanupJobHandler(outbox_cleanup_use_case)
+        self.cleanup_job_handler = IdentityOutboxCleanupJobHandler(outbox_cleaner_use_case)
 
     def _wire_outbox_relay(
         self,
@@ -243,11 +244,17 @@ class WorkerContainer:
         self._register_identity_handlers(self.events_dispatcher, identity_service)
 
         # Wire up the new centralized SqsConsumerManager from pubsub
+        from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
         from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
-        self.events_consumer = SqsConsumerManager(
-            queue_name=self.settings.sqs_identity_sync_queue_name,
+        identity_sync_consumer = AwsSqsConsumer(
+            queue_url=self.settings.sqs_identity_sync_queue_url,
+            region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
+        )
+        self.events_consumer = SqsConsumerManager(
+            consumer=identity_sync_consumer,
+            queue_name="identity-events.fifo",
             handler=self.events_dispatcher.dispatch_raw,
         )
 

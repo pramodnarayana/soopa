@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 import pytest
 import pytest_asyncio
 from database.events import EventEnvelope
+from identity.domain.constants import DomainIdPrefix as IamPrefix
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
+from seedwork.utils import generate_id
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App
@@ -74,8 +76,18 @@ async def test_app_subscription_flow(
 
     dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
 
-    # 1.5 Get the seeded "edi" app from the database
+    # 1.5 Ensure the seeded "edi" app and shard exist
     async with db_session.begin():
+        await db_session.execute(
+            text(
+                "INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at) VALUES ('edi_shard_1', 'EDI Primary', 'fake_dsn', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING"
+            )
+        )
+        await db_session.execute(
+            text(
+                "INSERT INTO ucp.apps (id, name, slug, description, created_at, updated_at) VALUES ('app_edi_core', 'EDI', 'edi', 'B2B EDI', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING"
+            )
+        )
         stmt = select(App.id).where(App.slug == "edi")
         result = await db_session.execute(stmt)
         edi_app_id = result.scalar_one()
@@ -84,7 +96,7 @@ async def test_app_subscription_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Stark Industries",
-        creator_id="usr_mock",
+        creator_id=generate_id(IamPrefix.USER),
     )
 
     tenant = await use_case.execute(command)
@@ -96,12 +108,14 @@ async def test_app_subscription_flow(
 
     # 3. Process Outbox
     # First manually clear out any previous test events or claims if they leaked
-    await db_session.execute(
-        text(
-            "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, lease_expires_at = NULL"
+    async with db_session.begin():
+        await db_session.execute(
+            text(
+                "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, "
+                "lease_expires_at = NULL WHERE tenant_id = :tenant_id"
+            ),
+            {"tenant_id": tenant.id},
         )
-    )
-    await db_session.commit()
 
     # Fetch pending and publish
     await relay.processor.process_pending()

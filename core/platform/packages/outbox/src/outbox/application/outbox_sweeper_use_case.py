@@ -1,10 +1,10 @@
 import asyncio
-import uuid
 
 import structlog
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from seedwork import SystemIdPrefix, generate_id
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +27,7 @@ class OutboxSweeperUseCase:
         self.publisher = publisher
         self.max_concurrent_events = max_concurrent_events
         self.lock_lease_ms = lock_lease_ms
-        self.worker_id = str(uuid.uuid4())
+        self.worker_id = generate_id(SystemIdPrefix.GENERIC)
 
     async def execute(self) -> None:
         logger.info("sweep_outbox_started", worker_id=self.worker_id)

@@ -522,9 +522,10 @@ class FakeDataPlaneOutboxRepository:
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
         if key_str in self.processed or key_str in self.leased:
             return None
-        import uuid
 
-        owner_token = str(uuid.uuid4())
+        from seedwork import SystemIdPrefix, generate_id
+
+        owner_token = generate_id(SystemIdPrefix.GENERIC)
         self.leased[key_str] = owner_token
         return owner_token
 

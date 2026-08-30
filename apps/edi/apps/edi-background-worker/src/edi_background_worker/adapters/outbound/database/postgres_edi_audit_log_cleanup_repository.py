@@ -6,7 +6,6 @@ import structlog
 from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import AuditLog
 from sqlalchemy import CursorResult, delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi_background_worker.ports.outbound.edi_audit_log_cleanup_repository_port import (
     EdiAuditLogCleanupRepositoryPort,
@@ -29,8 +28,7 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
                     cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
                         days=retention_days
                     )
-                    engine = await self.db_router.get_engine(shard_name, shard_dsn)
-                    async with AsyncSession(engine, expire_on_commit=False) as session:
+                    async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                         audit_deleted = 0
                         while True:
                             stmt_audit = delete(AuditLog).where(

@@ -322,7 +322,7 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
         ),
         {"schema": "edi"},
     )
-    ID_PREFIX = "dp_edi_ob"
+    ID_PREFIX = "edi_dp_ob"
 
     id: Mapped[str] = mapped_column(
         String(128),

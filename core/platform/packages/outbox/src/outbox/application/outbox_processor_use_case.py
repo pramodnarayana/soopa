@@ -1,9 +1,9 @@
 import asyncio
-import uuid
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from seedwork import SystemIdPrefix, generate_id
 
 logger = structlog.get_logger(__name__)
 
@@ -24,7 +24,7 @@ class OutboxProcessorUseCase:
     ):
         self.repository = repository
         self.publisher = publisher
-        self.worker_id = worker_id or str(uuid.uuid4())
+        self.worker_id = worker_id or generate_id(SystemIdPrefix.GENERIC)
         self.max_concurrent_events = max_concurrent_events
         self.lock_lease_ms = lock_lease_ms
         self.is_running = True

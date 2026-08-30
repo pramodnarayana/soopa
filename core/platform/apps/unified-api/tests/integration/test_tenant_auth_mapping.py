@@ -1,27 +1,21 @@
 # 1. Setup minimal dependencies to isolate the authentication middleware mapping logic
-import os
 from collections.abc import Iterator
 from typing import Annotated, Any
 
 import pytest
+
+# We rely on .env for default test settings. Do not pollute os.environ statically.
+from dependency_injector import providers
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
-
-os.environ["ZITADEL_API_TOKEN"] = "test-token"  # noqa: S105
-os.environ["ZITADEL_UCP_PROJECT_ID"] = "test-project"
-os.environ["ZITADEL_PLATFORM_ORG_ID"] = "test-org"
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
-
-
-from dependency_injector import providers
 from identity.domain.identity_context import IdentityContext
-from ucp.bootstrap.container import Container
 
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
+from unified_api.main import ucp_container
 
 
 class MockTenant:
-    id = "ten_683c22ac40ee6e7b70e7a604"
+    id = "iam_ten_683c22ac40ee6e7b70e7a604"
 
 
 class MockTenantRepo:
@@ -45,18 +39,16 @@ async def get_tenant(
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
+def container() -> Iterator[Any]:
     """Configure and provide a test container with proper cleanup."""
-    test_container = Container()
-    test_container.tenant_repo.override(providers.Factory(MockTenantRepo))
-    test_container.wire(modules=["unified_api.adapters.inbound.http.guards.tenant_auth_guard"])
-    yield test_container
-    test_container.unwire()
-    test_container.tenant_repo.reset_override()
+    ucp_container.tenant_repo.override(providers.Factory(MockTenantRepo))
+    # Do not call unwire() as it destroys global DI state for all other tests.
+    yield ucp_container
+    ucp_container.tenant_repo.reset_override()
 
 
 @pytest.fixture
-def app(container: Container) -> FastAPI:
+def app(container: Any) -> FastAPI:
     """Create test app with configured container."""
     test_app = FastAPI(title="Unified API Auth Mapping Test")
     test_app.include_router(router)
@@ -124,7 +116,7 @@ def test_tenant_auth_accepts_canonical_id(client: TestClient) -> None:
     Ensures that when a user requests the Canonical UCP Tenant ID in the URL,
     the perimeter mapping logic correctly authorizes it without a 403.
     """
-    can_id = "ten_683c22ac40ee6e7b70e7a604"
+    can_id = "iam_ten_683c22ac40ee6e7b70e7a604"
     response = client.get(f"/api/v1/tenants/{can_id}")
     assert response.status_code == 200
     assert response.json() == {"status": "success", "tenant_id": can_id}

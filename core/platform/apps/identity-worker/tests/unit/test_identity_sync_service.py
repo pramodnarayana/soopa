@@ -10,6 +10,7 @@ from identity_worker.application.use_cases.identity_sync_service import (
 )
 from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
+from seedwork import generate_id
 
 pytestmark = pytest.mark.asyncio
 
@@ -87,7 +88,7 @@ async def fakes():
 async def setup_db(db_session_factory):
     async with db_session_factory() as session:
         # Create a fully provisioned tenant
-        tenant_id = str(uuid.uuid4())
+        tenant_id = generate_id("id")
         idp_tenant_id = f"idp_org_{uuid.uuid4()}"
         tenant = DbTenant(
             id=tenant_id, name="Test Corp", slug="test-corp", idp_tenant_id=idp_tenant_id
@@ -95,14 +96,14 @@ async def setup_db(db_session_factory):
         session.add(tenant)
 
         # Create an unprovisioned tenant
-        unprovisioned_tenant_id = str(uuid.uuid4())
+        unprovisioned_tenant_id = generate_id("id")
         unprovisioned_tenant = DbTenant(
             id=unprovisioned_tenant_id, name="New Corp", slug="new-corp", idp_tenant_id=None
         )
         session.add(unprovisioned_tenant)
 
         # Create a user
-        user_id = str(uuid.uuid4())
+        user_id = generate_id("id")
         user = DbUser(id=user_id, email="john@test.com", name="John Doe", status="active")
         session.add(user)
 
@@ -181,7 +182,7 @@ async def test_handle_user_created_missing_local_user_has_no_external_side_effec
     service = IdentitySyncService(idp, user_idp, db_session_factory)
 
     await service.handle_user_created(
-        user_id=str(uuid.uuid4()),
+        user_id=generate_id("id"),
         tenant_id=setup_db["tenant_id"],
         email="missing@test.com",
         first_name="Missing",
