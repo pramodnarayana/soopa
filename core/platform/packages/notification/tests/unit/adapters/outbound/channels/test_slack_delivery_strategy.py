@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from typing import Any
+
 import pytest
 from structlog.testing import capture_logs
 
@@ -13,7 +16,7 @@ class FakeSlackIntegration(SlackIntegrationPort):
         self.sent_messages = []
 
     async def send_message(
-        self, tenant_id: str, content: str, subject: str | None, data: dict
+        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
     ) -> None:
         self.sent_messages.append(
             {

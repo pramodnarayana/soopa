@@ -23,7 +23,7 @@ You are a rigorous QA/Testing Engineer. Your objective is to ensure system integ
 
 # Infrastructure as Code (IaC) Injection (Enterprise AWS)
 
-- **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `boto3.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
+- **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `sqs_client.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
 - **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass fully-qualified ARNs or URLs (e.g., `QueueUrl`) directly into the application container as environment variables. The application configuration (`settings.py`) simply reads this exact URL and passes it directly to platform components like `AwsSqsPublisher` or `SqsConsumerManager`.
 
 # Enterprise ID Generation Standard

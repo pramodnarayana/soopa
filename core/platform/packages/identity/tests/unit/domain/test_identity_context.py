@@ -74,13 +74,15 @@ def test_is_platform_admin_with_non_admin_role() -> None:
 
 
 def test_is_platform_admin_with_admin_role_wrong_tenant() -> None:
+    from identity.domain.identity_context import PLATFORM_TENANT_ID
+
     claims = TokenClaims(
         sub="user-1",
         iss="test",
         aud="test",
         exp=1000,
         tenant_id="tenant-1",
-        authorized_tenants={"other_tenant"},
+        authorized_tenants={PLATFORM_TENANT_ID, "other_tenant"},
         roles=["platform-admin"],
         tenant_roles={"other_tenant": ["platform-admin"]},
     )

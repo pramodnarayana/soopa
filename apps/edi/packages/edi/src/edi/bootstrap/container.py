@@ -17,6 +17,7 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
 from edi.config.settings import get_settings
+from edi.domain.events import MessageQueueName
 
 
 class Container(containers.DeclarativeContainer):
@@ -40,8 +41,6 @@ class Container(containers.DeclarativeContainer):
         AwsSecretsManagerAdapter,
         secrets_mount_path=get_settings().secrets.mount_path,
     )
-
-    from edi.domain.events import MessageQueueName
 
     message_queue = providers.Singleton(
         SQSMessageQueueAdapter,

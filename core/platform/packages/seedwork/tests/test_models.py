@@ -48,7 +48,7 @@ def test_domain_events_property_bypassed_init():
         def __new__(cls):
             return super().__new__(cls)
 
-    aggregate = BypassedAggregate()
+    aggregate = object.__new__(BypassedAggregate)
     assert aggregate.domain_events == []
     aggregate.add_domain_event(DummyEvent(aggregate_id="123"))
     assert len(aggregate.domain_events) == 1

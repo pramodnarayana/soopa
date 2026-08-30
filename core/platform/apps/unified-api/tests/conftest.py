@@ -232,7 +232,7 @@ async def seeded_api_token(db_session_factory):
         from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
 
         apps_res = await session.execute(text("SELECT id FROM ucp.apps WHERE slug = 'edi'"))
-        existing_app_id = apps_res.scalar()
+        existing_app_id = apps_res.scalar() or "app_edi_core"
 
         existing_app = await session.get(UcpApp, existing_app_id)
         if not existing_app:

@@ -109,8 +109,10 @@ async def test_app_subscription_flow(
     async with db_session.begin():
         await db_session.execute(
             text(
-                "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, lease_expires_at = NULL"
-            )
+                "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, "
+                "lease_expires_at = NULL WHERE tenant_id = :tenant_id"
+            ),
+            {"tenant_id": tenant.id},
         )
 
     # Fetch pending and publish

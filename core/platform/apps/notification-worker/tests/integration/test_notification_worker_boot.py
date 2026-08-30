@@ -25,17 +25,14 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
         aws_secret_access_key="test",  # noqa: S106
     )
 
-    try:
-        sqs.create_queue(
-            QueueName="edi-priority-notifications.fifo",
-            Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
-        )
-        sqs.create_queue(
-            QueueName="email-delivery.fifo",
-            Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
-        )
-    except Exception as e:  # noqa: BLE001
-        print(f"Warning: Failed to create queues: {e}")
+    sqs.create_queue(
+        QueueName="edi-priority-notifications.fifo",
+        Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
+    )
+    sqs.create_queue(
+        QueueName="email-delivery.fifo",
+        Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
+    )
 
     # Create the stop event that we'll use to gracefully shut down the worker
     stop_event = asyncio.Event()

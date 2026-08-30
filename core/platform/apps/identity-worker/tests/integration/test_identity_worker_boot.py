@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import pytest
 from identity_worker.bootstrap.config import Settings
@@ -7,7 +6,9 @@ from identity_worker.main import main
 
 
 @pytest.mark.asyncio
-async def test_identity_worker_boots_and_shuts_down_gracefully() -> None:
+async def test_identity_worker_boots_and_shuts_down_gracefully(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Narrow Integration Test (E2E) that verifies the identity worker container
     can successfully wire its real infrastructure dependencies (Postgres, SQS, Zitadel)
@@ -21,6 +22,7 @@ async def test_identity_worker_boots_and_shuts_down_gracefully() -> None:
 
     # Pass in the correct settings for the integration test environment
     test_settings = Settings(
+        app_env="test",
         database_url="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
         sqs_identity_sync_queue_url="http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/identity-events.fifo",
         aws_region="us-east-1",
@@ -28,8 +30,8 @@ async def test_identity_worker_boots_and_shuts_down_gracefully() -> None:
     )
 
     # We set these in environ as well for any internal boto3 clients that might rely on them
-    os.environ["AWS_ACCESS_KEY_ID"] = "test"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "test"  # noqa: S105
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
 
     # Start the worker in the background
     worker_task = asyncio.create_task(main(stop_event=stop_event, settings=test_settings))

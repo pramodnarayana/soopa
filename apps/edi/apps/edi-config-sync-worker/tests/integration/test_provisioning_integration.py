@@ -101,9 +101,17 @@ async def test_db_router() -> "AsyncGenerator[DatabaseRouter, None]":
                 )
                 from sqlalchemy import text
 
-                async with factory() as session:
-                    await session.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}';"))
-                    yield session
+                try:
+                    async with factory() as session:
+                        await session.execute(
+                            text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                            {"tenant_id": tenant_id},
+                        )
+                        yield session
+                finally:
+                    await shard_conn.execute(
+                        text("SELECT set_config('app.current_tenant', '', true)")
+                    )
 
         async def get_shard_session(self, shard_key: str, shard_url: str):
             async with shard_db_lock:
