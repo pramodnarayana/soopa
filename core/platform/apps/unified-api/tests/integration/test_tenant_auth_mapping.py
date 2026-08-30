@@ -1,19 +1,13 @@
 # 1. Setup minimal dependencies to isolate the authentication middleware mapping logic
-import os
 from collections.abc import Iterator
 from typing import Annotated, Any
 
 import pytest
+
+# We rely on .env for default test settings. Do not pollute os.environ statically.
+from dependency_injector import providers
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
-
-os.environ["ZITADEL_API_TOKEN"] = "test-token"  # noqa: S105
-os.environ["ZITADEL_UCP_PROJECT_ID"] = "test-project"
-os.environ["ZITADEL_PLATFORM_ORG_ID"] = "test-org"
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
-
-
-from dependency_injector import providers
 from identity.domain.identity_context import IdentityContext
 from ucp.bootstrap.container import Container
 

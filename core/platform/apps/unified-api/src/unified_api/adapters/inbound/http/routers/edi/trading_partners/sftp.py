@@ -78,7 +78,7 @@ async def test_sftp_connection(
 
 
 @router.post(
-    "/{partner_id}/sftp/test",
+    "/sftp/{partner_id}/test",
     response_model=TestConnectionResponse,
     status_code=status.HTTP_200_OK,
 )
@@ -156,6 +156,7 @@ async def create_sftp_partner(
             username=request.username,
             inbound_remote_path=request.inbound_remote_path,
             outbound_remote_path=request.outbound_remote_path,
+            password=request.password,
             credentials_vault_ref=str(request.credentials_vault_ref)
             if request.credentials_vault_ref
             else "",

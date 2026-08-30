@@ -1,4 +1,3 @@
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, Literal
@@ -93,14 +92,16 @@ class UserDeletedPayload(BaseModel):
 class WorkerContainer:
     """Dependency Injection container for the Identity Worker."""
 
-    def __init__(self) -> None:
-        database_url = os.environ.get("DATABASE_URL")
+    def __init__(self, settings: Any = None) -> None:
+        self.settings = settings or get_settings()
+
+        database_url = self.settings.database_url
         if not database_url:
-            raise ValueError("DATABASE_URL environment variable is required")
+            raise ValueError("database_url is required in Settings")
+
         if database_url.startswith("postgresql://"):
             database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         self.database_url = database_url
-        self.settings = get_settings()
 
         self._engine = get_async_engine(self.database_url)
         self.session_factory = async_sessionmaker(

@@ -43,10 +43,13 @@ async def test_outbox_sweeper_integration(db_session_factory):
     dispatcher = FakeDispatcher()
 
     from database.models.identity import Tenant
+    from sqlalchemy.dialects.postgresql import insert
 
     async with db_session_factory() as session, session.begin():
-        tenant = Tenant(id="t1", name="Test Tenant", slug="t1")
-        session.add(tenant)
+        stmt = (
+            insert(Tenant).values(id="t1", name="Test Tenant", slug="t1").on_conflict_do_nothing()
+        )
+        await session.execute(stmt)
 
     # 1. Insert a pending message into the outbox
     message = NotificationOutboxEvent(

@@ -205,11 +205,10 @@ async def test_zitadel_default_password_is_required(monkeypatch):
 
 
 async def test_worker_container_requires_database_url(monkeypatch):
-    monkeypatch.setenv("ZITADEL_DEFAULT_USER_PASSWORD", "test-password")
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    get_settings.cache_clear()
+    from identity_worker.bootstrap.config import Settings
 
-    with pytest.raises(ValueError, match="DATABASE_URL"):
-        WorkerContainer()
+    bad_settings = Settings(database_url="")
+    with pytest.raises(ValueError, match="database_url"):
+        WorkerContainer(settings=bad_settings)
 
     get_settings.cache_clear()

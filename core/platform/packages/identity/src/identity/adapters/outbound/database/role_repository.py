@@ -252,9 +252,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
             tenant_id = event.get_routing_tenant_id() or PLATFORM_TENANT_ID
 
             final_idemp_key = (
-                f"{idempotency_key}_{index}"
-                if idempotency_key
-                else getattr(event, "id", f"{event_name}_{role.id}_{index}")
+                f"{idempotency_key}_{index}" if idempotency_key else event.idempotency_key
             )
 
             outbox_event = IdentityOutbox(

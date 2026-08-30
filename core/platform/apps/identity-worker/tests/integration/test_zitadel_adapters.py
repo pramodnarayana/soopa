@@ -1,7 +1,11 @@
-from unittest.mock import AsyncMock, patch
+import uuid
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
+from database.models.identity import Tenant as DbTenant
+from identity_worker.adapters.outbound.identity_provider.zitadel_identity_provider import (
+    ZitadelIdentityProviderPort,
+)
 from identity_worker.adapters.outbound.identity_provider.zitadel_organizations_adapter import (
     ZitadelOrganizationsAdapter,
 )
@@ -11,136 +15,197 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_projects_adapte
 from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter import (
     ZitadelUsersAdapter,
 )
+from identity_worker.domain.exceptions import IdentityProviderPortError
 
 pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def mock_httpx_request():
-    with patch("httpx.AsyncClient.request", new_callable=AsyncMock) as mock_req:
-        yield mock_req
+def zitadel_projects_adapter():
+    # Will automatically pick up env vars via config.py
+    return ZitadelProjectsAdapter()
 
 
 @pytest.fixture
-def mock_project_provider():
-    provider = AsyncMock(spec=ZitadelProjectsAdapter)
-    provider.ucp_project_id = "test-ucp-project-id"
-    provider.get_roles.return_value = []
-    return provider
+def zitadel_orgs_adapter(zitadel_projects_adapter):
+    return ZitadelOrganizationsAdapter(project_provider=zitadel_projects_adapter)
 
 
-async def test_create_organization_success(mock_httpx_request, mock_project_provider, monkeypatch):
-    monkeypatch.setenv("ZITADEL_API_TOKEN", "fake_token")
-    monkeypatch.setenv("ZITADEL_UCP_PROJECT_ID", "fake_proj_id")
-    # Refresh settings to pick up env vars if needed, though they might be cached
-    # For now assume ZitadelClient will have a token if we set it, or we just patch the config.
-    adapter = ZitadelOrganizationsAdapter(mock_project_provider)
-    adapter.token = "fake_token"  # noqa: S105
-    adapter.ucp_project_id = "fake_proj_id"
-
-    mock_resp = httpx.Response(200, json={"id": "new-org-id"})
-    mock_httpx_request.return_value = mock_resp
-
-    org_id, _ = await adapter.create_organization("Test Org")
-
-    assert org_id == "new-org-id"
-    # Ensure correct HTTP call was made
-    mock_httpx_request.assert_called_once()
-    args, kwargs = mock_httpx_request.call_args
-    assert args[0] == "POST"
-    assert "management/v1/orgs" in args[1]
-    assert kwargs["json"] == {"name": "Test Org"}
-    assert kwargs["headers"]["Authorization"] == "Bearer fake_token"
-
-
-async def test_create_user_success(mock_httpx_request):
+@pytest.fixture
+def zitadel_users_adapter():
     adapter = ZitadelUsersAdapter()
-    adapter.token = "fake_token"  # noqa: S105
-    adapter.ucp_project_id = "fake_proj_id"
-
-    # Mocking two endpoints: user creation and then _get_project_grant_id
-    mock_user_resp = httpx.Response(200, json={"userId": "new-user-id"})
-
-    mock_httpx_request.return_value = mock_user_resp
-
-    user_id = await adapter.create_user(
-        org_id="org-123", email="test@test.com", first_name="First", last_name="Last"
-    )
-
-    assert user_id == "new-user-id"
-
-    # Check that HTTP payload was constructed exactly as expected
-    args, kwargs = mock_httpx_request.call_args
-    assert args[0] == "POST"
-    assert "management/v1/users/human" in args[1]
-    assert kwargs["headers"]["x-zitadel-orgid"] == "org-123"
-    assert kwargs["json"]["profile"]["firstName"] == "First"
-    assert kwargs["json"]["profile"]["lastName"] == "Last"
-    assert kwargs["json"]["email"]["email"] == "test@test.com"
+    adapter.default_user_password = "ComplexPassword123!"  # noqa: S105
+    return adapter
 
 
-async def test_delete_user_idempotent(mock_httpx_request):
-    adapter = ZitadelUsersAdapter()
-    adapter.token = "fake_token"  # noqa: S105
-    adapter.ucp_project_id = "fake_proj_id"
-
-    # Simulate user already deleted (404)
-    mock_resp = httpx.Response(404, json={})
-    mock_httpx_request.return_value = mock_resp
-
-    # Should not raise exception
-    await adapter.delete_user("user-404")
-
-    args, _ = mock_httpx_request.call_args
-    assert args[0] == "DELETE"
-    assert "management/v1/users/user-404" in args[1]
+@pytest.fixture
+async def setup_tenant_db(db_session_factory):
+    async with db_session_factory() as session:
+        tenant_id = str(uuid.uuid4())
+        tenant = DbTenant(
+            id=tenant_id,
+            name="Test Corp Identity Sync",
+            slug=f"test-corp-{tenant_id[:8]}",
+            idp_tenant_id=None,
+        )
+        session.add(tenant)
+        await session.commit()
+    return tenant_id
 
 
-async def test_remove_tenant_role_paginated(mock_httpx_request):
-    adapter = ZitadelUsersAdapter()
-    adapter.token = "fake_token"  # noqa: S105
-    adapter.ucp_project_id = "target-proj-id"
+async def test_full_zitadel_lifecycle(
+    zitadel_orgs_adapter: ZitadelOrganizationsAdapter,
+    zitadel_projects_adapter: ZitadelProjectsAdapter,
+    zitadel_users_adapter: ZitadelUsersAdapter,
+):
+    """
+    A full narrow integration test testing the actual local Zitadel container.
+    This creates an organization, provisions users, assigns roles, updates them, and then deletes the organization.
+    """
+    # 1. Test Organization Creation
+    test_org_name = f"Test Integration Org {uuid.uuid4()}"
+    org_id, grant_succeeded = await zitadel_orgs_adapter.create_organization(test_org_name)
+    assert org_id is not None
+    assert grant_succeeded is True, "Project grant should be successful"
 
-    # First page: 1 item, totalResult=2, no target project
-    page_1_resp = httpx.Response(
-        200,
-        json={
-            "details": {"totalResult": 2},
-            "result": [{"grantId": "g1", "projectId": "other-proj", "grantedOrgId": "org-1"}],
-        },
-    )
-    # Second page: 1 item, totalResult=2, contains target project
-    page_2_resp = httpx.Response(
-        200,
-        json={
-            "details": {"totalResult": 2},
-            "result": [
-                {
-                    "grantId": "g2",
-                    "id": "g2",
-                    "projectId": "target-proj-id",
-                    "grantedOrgId": "org-1",
-                }
-            ],
-        },
-    )
-    # Delete response
-    delete_resp = httpx.Response(200, json={})
+    try:
+        # 2. Test Get Roles
+        roles = await zitadel_projects_adapter.get_roles()
+        assert len(roles) > 0
+        role_keys = [r.key for r in roles]
+        assert "PlatformAdmin" in role_keys or "TenantAdmin" in role_keys
 
-    mock_httpx_request.side_effect = [page_1_resp, page_2_resp, delete_resp]
+        # 3. Test Create User
+        test_email = f"testuser_{uuid.uuid4()}@example.com"
+        user_id = await zitadel_users_adapter.create_user(
+            org_id=org_id,
+            email=test_email,
+            first_name="Integration",
+            last_name="TestUser",
+        )
+        assert user_id is not None
 
-    await adapter.remove_tenant_role("user-1", "org-1")
+        # 4. Test Update User Profile
+        await zitadel_users_adapter.update_user_profile(
+            user_id=user_id,
+            org_id=org_id,
+            first_name="UpdatedIntegration",
+            last_name="UpdatedTestUser",
+        )
 
-    assert mock_httpx_request.call_count == 3
+        # 5. Test Assign Role
+        await zitadel_users_adapter.assign_tenant_role(
+            user_id=user_id,
+            org_id=org_id,
+            role="TenantAdmin" if "TenantAdmin" in role_keys else role_keys[0],
+        )
 
-    # Assert pagination calls
-    call_1 = mock_httpx_request.mock_calls[0]
-    assert call_1.kwargs["json"]["query"]["offset"] == 0
+        # 6. Test Update Role
+        await zitadel_users_adapter.update_tenant_role(
+            user_id=user_id,
+            org_id=org_id,
+            role="TenantUser" if "TenantUser" in role_keys else role_keys[0],
+        )
 
-    call_2 = mock_httpx_request.mock_calls[1]
-    assert call_2.kwargs["json"]["query"]["offset"] == 1
+        # 7. Test Get Users
+        users = await zitadel_projects_adapter.get_users(org_id=org_id)
+        assert len(users) >= 1
+        found = next((u for u in users if u.id == user_id), None)
+        assert found is not None
+        assert found.email == test_email
+        assert found.first_name == "UpdatedIntegration"
+        assert found.last_name == "UpdatedTestUser"
 
-    # Assert delete call
-    call_3 = mock_httpx_request.mock_calls[2]
-    assert call_3.args[0] == "DELETE"
-    assert "management/v1/users/user-1/grants/g2" in call_3.args[1]
+        # 8. Test Toggle User Status
+        await zitadel_users_adapter.toggle_user_status(
+            user_id=user_id, org_id=org_id, action="deactivate"
+        )
+
+        # Idempotent toggle
+        await zitadel_users_adapter.toggle_user_status(
+            user_id=user_id, org_id=org_id, action="deactivate"
+        )
+
+        await zitadel_users_adapter.toggle_user_status(
+            user_id=user_id, org_id=org_id, action="activate"
+        )
+
+        # 9. Test Remove Role
+        await zitadel_users_adapter.remove_tenant_role(user_id=user_id, org_id=org_id)
+
+        # 10. Test Delete User
+        await zitadel_users_adapter.delete_user(user_id=user_id)
+
+        # Idempotent delete user
+        await zitadel_users_adapter.delete_user(user_id=user_id)
+
+    finally:
+        # 11. Test Delete Organization (Cleanup)
+        await zitadel_orgs_adapter.delete_organization(org_id)
+
+
+async def test_update_organization_name(zitadel_orgs_adapter: ZitadelOrganizationsAdapter):
+    test_org_name = f"Test Update Org {uuid.uuid4()}"
+    org_id, _ = await zitadel_orgs_adapter.create_organization(test_org_name)
+    try:
+        await zitadel_orgs_adapter.update_organization_name(org_id, test_org_name + " Updated")
+    finally:
+        await zitadel_orgs_adapter.delete_organization(org_id)
+
+
+async def test_toggle_organization_status(zitadel_orgs_adapter: ZitadelOrganizationsAdapter):
+    test_org_name = f"Test Toggle Org {uuid.uuid4()}"
+    org_id, _ = await zitadel_orgs_adapter.create_organization(test_org_name)
+    try:
+        await zitadel_orgs_adapter.toggle_organization_status(org_id, active=False)
+        await zitadel_orgs_adapter.toggle_organization_status(org_id, active=True)
+    finally:
+        await zitadel_orgs_adapter.delete_organization(org_id)
+
+
+async def test_sync_tenant_success(
+    db_session_factory, setup_tenant_db, zitadel_orgs_adapter: ZitadelOrganizationsAdapter
+):
+    provider = ZitadelIdentityProviderPort(zitadel_orgs_adapter, db_session_factory)
+    await provider.sync_tenant(setup_tenant_db)
+
+    async with db_session_factory() as session:
+        tenant = await session.get(DbTenant, setup_tenant_db)
+        assert tenant.idp_tenant_id is not None
+
+        # Cleanup from Zitadel
+        await zitadel_orgs_adapter.delete_organization(tenant.idp_tenant_id)
+
+
+async def test_sync_tenant_not_found(
+    db_session_factory, zitadel_orgs_adapter: ZitadelOrganizationsAdapter
+):
+    provider = ZitadelIdentityProviderPort(zitadel_orgs_adapter, db_session_factory)
+    await provider.sync_tenant("missing-id")
+
+
+async def test_sync_tenant_already_synced(
+    db_session_factory, zitadel_orgs_adapter: ZitadelOrganizationsAdapter
+):
+    async with db_session_factory() as session:
+        tenant_id = str(uuid.uuid4())
+        tenant = DbTenant(
+            id=tenant_id,
+            name="Test Corp Already Synced",
+            slug=f"synced-{tenant_id[:8]}",
+            idp_tenant_id="existing-id",
+        )
+        session.add(tenant)
+        await session.commit()
+
+    provider = ZitadelIdentityProviderPort(zitadel_orgs_adapter, db_session_factory)
+    await provider.sync_tenant(tenant_id)
+
+
+async def test_sync_tenant_grant_failed(db_session_factory, setup_tenant_db):
+    org_provider = AsyncMock()
+    org_provider.create_organization.return_value = ("org-id-123", False)
+
+    provider = ZitadelIdentityProviderPort(org_provider, db_session_factory)
+    with pytest.raises(IdentityProviderPortError, match="project grant could not be assigned"):
+        await provider.sync_tenant(setup_tenant_db)

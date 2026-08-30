@@ -56,7 +56,10 @@ async def db_router(monkeypatch: pytest.MonkeyPatch) -> "AsyncGenerator[Database
     await router.get_engine("global", base_url)
 
     async for session in router.get_global_session():
+        from sqlalchemy import delete
         from ucp_models.infrastructure import DatabaseShard
+
+        await session.execute(delete(DatabaseShard))
 
         shard1 = DatabaseShard(id="test_shard_id", name="shard_1", dsn=shard_1_url)
         shard2 = DatabaseShard(id="test_shard_id_2", name="shard_2", dsn=shard_1_url)

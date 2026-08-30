@@ -38,7 +38,9 @@ class WorkerContainer(containers.DeclarativeContainer):
 
     outbox_publisher = providers.Singleton(
         AwsSnsPublisher,
-        sns_topic_arn=config.sns_topic_arn,
+        topic_arn=config.sns_topic_arn,
+        region_name=config.aws_region,
+        endpoint_url=config.aws_endpoint_url,
     )
 
     outbox_repository = providers.Factory(
@@ -64,7 +66,6 @@ class WorkerContainer(containers.DeclarativeContainer):
         OutboxSweeperUseCase,
         repository=outbox_repository,
         publisher=outbox_publisher,
-        worker_id="notification_sweeper",
     )
 
     cleanup_worker = providers.Singleton(

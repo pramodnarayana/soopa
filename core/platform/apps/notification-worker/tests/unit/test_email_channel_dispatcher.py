@@ -76,3 +76,64 @@ async def test_email_dispatcher_ignores_other_events():
 
     await dispatcher.dispatch_raw(body)
     assert len(strategy.delivered) == 0
+
+
+@pytest.mark.asyncio
+async def test_email_dispatcher_invalid_body():
+    strategy = FakeEmailStrategy()
+    dispatcher = EmailChannelDispatcher(email_strategy=strategy)
+
+    await dispatcher.dispatch_raw("not-a-dict")
+    assert len(strategy.delivered) == 0
+
+
+@pytest.mark.asyncio
+async def test_email_dispatcher_missing_payload():
+    strategy = FakeEmailStrategy()
+    dispatcher = EmailChannelDispatcher(email_strategy=strategy)
+
+    body = {
+        "event_type": "email.requested",
+        "tenant_id": "tenant-1",
+        "idempotency_key": "idempotency_key",
+    }
+
+    await dispatcher.dispatch_raw(body)
+    assert len(strategy.delivered) == 0
+
+
+@pytest.mark.asyncio
+async def test_email_dispatcher_missing_tenant_id():
+    strategy = FakeEmailStrategy()
+    dispatcher = EmailChannelDispatcher(email_strategy=strategy)
+
+    body = {
+        "event_type": "email.requested",
+        "idempotency_key": "idempotency_key",
+        "payload": {
+            "content": "Hello",
+            "subject": "Subj",
+        },
+    }
+
+    await dispatcher.dispatch_raw(body)
+    assert len(strategy.delivered) == 0
+
+
+@pytest.mark.asyncio
+async def test_email_dispatcher_missing_content():
+    strategy = FakeEmailStrategy()
+    dispatcher = EmailChannelDispatcher(email_strategy=strategy)
+
+    body = {
+        "event_type": "email.requested",
+        "tenant_id": "tenant-1",
+        "idempotency_key": "idempotency_key",
+        "payload": {
+            "tenant_id": "tenant-1",
+            "subject": "Subj",
+        },
+    }
+
+    await dispatcher.dispatch_raw(body)
+    assert len(strategy.delivered) == 0

@@ -1,6 +1,5 @@
 import uuid
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -32,6 +31,17 @@ class _SingleConcurrencyAuditLogCleanupRepository:
         await self.repository.cleanup_audit_logs(retention_days, concurrency_limit=1)
 
 
+class FakeUseCase:
+    def __init__(self) -> None:
+        self.execute_count = 0
+        self.should_raise = False
+
+    async def execute(self) -> None:
+        if self.should_raise:
+            raise RuntimeError("DB Down")
+        self.execute_count += 1
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "handler_class,job_name",
@@ -42,15 +52,14 @@ class _SingleConcurrencyAuditLogCleanupRepository:
     ],
 )
 async def test_edi_cleanup_execute(handler_class: Any, job_name: str) -> None:
-    mock_use_case = MagicMock()
-    mock_use_case.execute = AsyncMock()
+    fake_use_case = FakeUseCase()
 
-    handler = handler_class(use_case=mock_use_case)
+    handler = handler_class(use_case=fake_use_case)
 
     job = Job(id=uuid.uuid4(), name=job_name, payload={}, interval_seconds=120)
     next_run = await handler.execute(job)
 
-    assert mock_use_case.execute.await_count == 1
+    assert fake_use_case.execute_count == 1
     assert next_run is None
 
 
@@ -64,10 +73,10 @@ async def test_edi_cleanup_execute(handler_class: Any, job_name: str) -> None:
     ],
 )
 async def test_edi_cleanup_execute_exception_propagates(handler_class: Any, job_name: str) -> None:
-    mock_use_case = MagicMock()
-    mock_use_case.execute = AsyncMock(side_effect=Exception("DB Down"))
+    fake_use_case = FakeUseCase()
+    fake_use_case.should_raise = True
 
-    handler = handler_class(use_case=mock_use_case)
+    handler = handler_class(use_case=fake_use_case)
 
     job = Job(id=uuid.uuid4(), name=job_name, payload={}, interval_seconds=120)
 
@@ -77,23 +86,33 @@ async def test_edi_cleanup_execute_exception_propagates(handler_class: Any, job_
 
 @pytest.mark.asyncio
 async def test_grouped_two_shard_failures_leave_scheduled_job_for_retry() -> None:
-    db_router = MagicMock()
-    db_router.get_all_shards = AsyncMock(
-        return_value=[
-            ("shard_1", "postgresql+asyncpg://shard-1"),
-            ("shard_2", "postgresql+asyncpg://shard-2"),
-        ]
-    )
-    db_router.get_engine = AsyncMock(
-        side_effect=[RuntimeError("shard 1 unavailable"), RuntimeError("shard 2 unavailable")]
-    )
+    class FakeDbRouter:
+        def __init__(self) -> None:
+            self.get_engine_count = 0
+
+        async def get_all_shards(self) -> list[tuple[str, str]]:
+            return [
+                ("shard_1", "postgresql+asyncpg://shard-1"),
+                ("shard_2", "postgresql+asyncpg://shard-2"),
+            ]
+
+        async def get_engine(self, tenant_id: str, dsn: str = "") -> Any:
+            self.get_engine_count += 1
+            if tenant_id == "shard_1":
+                raise RuntimeError("shard 1 unavailable")
+            if tenant_id == "shard_2":
+                raise RuntimeError("shard 2 unavailable")
+            return None
+
+    db_router = FakeDbRouter()
     cleanup_repository = _SingleConcurrencyAuditLogCleanupRepository(
-        SqlAlchemyEdiAuditLogCleanupRepository(db_router)
+        SqlAlchemyEdiAuditLogCleanupRepository(db_router)  # type: ignore
     )
-    handler = EdiAuditLogCleanupJobHandler(EdiAuditLogCleanupUseCase(cleanup_repository))
+    handler = EdiAuditLogCleanupJobHandler(EdiAuditLogCleanupUseCase(cleanup_repository))  # type: ignore
     registry = JobHandlerRegistry()
     registry.register("EDI_AUDIT_LOG_CLEANUP", handler)
 
+    grouped_failure = None
     try:
         await process_scheduled_job(
             {
@@ -112,4 +131,4 @@ async def test_grouped_two_shard_failures_leave_scheduled_job_for_retry() -> Non
         "shard 1 unavailable",
         "shard 2 unavailable",
     }
-    assert db_router.get_engine.await_count == 2
+    assert db_router.get_engine_count == 2

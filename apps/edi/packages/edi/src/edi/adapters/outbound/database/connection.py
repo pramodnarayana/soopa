@@ -49,6 +49,8 @@ class DatabaseRouter:
         # Enterprise-grade compatibility: transparently handle standard Postgres DSNs
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         return get_async_engine(
             url,
