@@ -71,7 +71,9 @@ async def test_worker_container_wiring(mock_env: None) -> None:
         bad_event.id = "evt_bad"
         bad_event.event_type = "TenantDeleted"
         bad_event.payload = {}
+        bad_event.tenant_id = None
         await container.events_dispatcher._dispatch(bad_event)
+        mock_tenant_deleted_handler.handle.assert_awaited_once_with("ten_123")
 
         # Test uow_factory inline context manager
         # Since uow_factory is passed to provisioner and tenant_deleted_handler, we can't easily extract it.

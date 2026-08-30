@@ -48,6 +48,7 @@ async def test_delete_tenant_success(
         id="usr_1", idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
     )
     fake_uow.user_repo.users.append(mock_user)
+    fake_uow.user_repo.tenant_memberships.add(("ten_123", mock_user.id))
 
     await delete_use_case.execute("ten_123", "idemp-key")
 

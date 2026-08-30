@@ -51,9 +51,10 @@ class FakeTenantRepository(TenantRepositoryPort):
 class FakeUserRepository(UserRepositoryPort):
     def __init__(self) -> None:
         self.users: list[User] = []
+        self.tenant_memberships: set[tuple[str, str]] = set()
 
     async def find_users_by_tenant(self, tenant_id: str) -> list[User]:
-        return self.users
+        return [user for user in self.users if (tenant_id, user.id) in self.tenant_memberships]
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
         return False
