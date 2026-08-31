@@ -9,7 +9,7 @@ Covers:
 """
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from jinja2.exceptions import SecurityError
 from seedwork.utils import generate_id
 
@@ -27,7 +27,7 @@ class TestBasicInterpolation:
         assert result == "Hello, Alice!"
 
     def test_renders_multiple_variables(self, renderer: Jinja2TemplateRenderer) -> None:
-        tenant_id = generate_id(IamPrefix.TENANT)
+        tenant_id = generate_id(IdentityIdPrefix.TENANT)
         tmpl = "Tenant {{ tenant_id }} — event {{ event_type }} fired."
         result = renderer.render(tmpl, {"tenant_id": tenant_id, "event_type": "invoice.failed"})
         assert result == f"Tenant {tenant_id} — event invoice.failed fired."
@@ -47,7 +47,7 @@ class TestChannelSpecificTemplates:
         assert "<p>Your invoice $500 is due.</p>" in result
 
     def test_slack_block_kit_json_template(self, renderer: Jinja2TemplateRenderer) -> None:
-        tenant_id = generate_id(IamPrefix.TENANT)
+        tenant_id = generate_id(IdentityIdPrefix.TENANT)
         tmpl = '{"text": "Alert: {{ event_type }} for tenant {{ tenant_id }}"}'
         result = renderer.render(tmpl, {"event_type": "payment.failed", "tenant_id": tenant_id})
         assert result == f'{{"text": "Alert: payment.failed for tenant {tenant_id}"}}'

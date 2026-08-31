@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+    database_url: str
     sns_identity_events_topic_arn: str = ""
     sqs_identity_sync_queue_url: str = ""
     aws_endpoint_url: str | None = None

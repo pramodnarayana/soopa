@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.api_token_models import UpdateApiTokenCommand
 from seedwork.utils import generate_id
 
@@ -21,8 +21,8 @@ def update_api_token_use_case(fake_uow):
 async def test_update_api_token_success(update_api_token_use_case, fake_uow):
     command = UpdateApiTokenCommand(name="New Name", active=False)
     result = await update_api_token_use_case.execute(
-        token_id=generate_id(IamPrefix.TOKEN),
-        tenant_id=generate_id(IamPrefix.TENANT),
+        token_id=generate_id(IdentityIdPrefix.TOKEN),
+        tenant_id=generate_id(IdentityIdPrefix.TENANT),
         command=command,
     )
 

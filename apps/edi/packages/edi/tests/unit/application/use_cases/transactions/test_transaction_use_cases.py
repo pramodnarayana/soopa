@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from edi.application.use_cases.transactions.get_transaction_use_case import (
@@ -168,7 +168,7 @@ class TestGetTransactionUseCase:
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
         self.use_case = GetTransactionUseCase(uow=self.uow)
-        self.tenant_id = generate_id(IamPrefix.TENANT)
+        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_transaction_missing(self):
@@ -247,7 +247,7 @@ class TestReplayTransactionUseCase:
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
         self.use_case = ReplayTransactionUseCase(uow=self.uow)
-        self.tenant_id = generate_id(IamPrefix.TENANT)
+        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_transaction_missing(self):
@@ -300,7 +300,7 @@ class TestListTransactionsUseCase:
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
         self.use_case = ListTransactionsUseCase(uow=self.uow)
-        self.tenant_id = generate_id(IamPrefix.TENANT)
+        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_transactions(self):

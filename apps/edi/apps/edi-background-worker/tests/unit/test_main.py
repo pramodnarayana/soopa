@@ -4,12 +4,12 @@ from edi_background_worker.main import _create_scheduled_job_consumers
 
 
 def test_scheduled_job_consumers_use_configured_region_and_queue_urls() -> None:
-    settings = AppSettings(
+    settings = AppSettings.model_construct(
         aws=AwsSettings(
             region="eu-west-2",
             endpoint_url="https://sqs.eu-west-2.amazonaws.com",
         ),
-        sqs=SqsSettings(
+        sqs=SqsSettings.model_construct(
             data_plane_jobs_queue_url=(
                 "https://sqs.eu-west-2.amazonaws.com/123456789/edi-data-plane-jobs.fifo"
             ),

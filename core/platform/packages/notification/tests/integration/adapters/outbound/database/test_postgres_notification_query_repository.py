@@ -11,9 +11,9 @@ from notification.adapters.outbound.database.postgres_notification_query_reposit
 @pytest.mark.asyncio
 async def test_notification_query_and_mark_read(db_session_factory):
     tenant_id = f"test-query-tenant-{generate_random_hex(6)}"
-    from identity.domain.constants import DomainIdPrefix as IamPrefix
+    from identity.domain.constants import IdentityIdPrefix
 
-    user_id = generate_id(IamPrefix.USER)
+    user_id = generate_id(IdentityIdPrefix.USER)
     notif_id = f"notif_inapp_{generate_random_hex(6)}"
 
     # Setup Data
@@ -32,7 +32,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
         await session.flush()
 
         role = Role(
-            id=generate_id(IamPrefix.ROLE),
+            id=generate_id(IdentityIdPrefix.ROLE),
             tenant_id=tenant_id,
             name="TenantAdmin",
             description="Admin role",

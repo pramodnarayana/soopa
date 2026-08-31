@@ -12,8 +12,13 @@ from edi.adapters.outbound.security.network import (
 def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
     import edi.adapters.outbound.security.network
+    from edi.config.settings import AppSettings
 
-    monkeypatch.setattr(edi.adapters.outbound.security.network, "IS_DEV", False)
+    mock_settings = MagicMock(spec=AppSettings)
+    mock_settings.env = "production"
+    monkeypatch.setattr(
+        edi.adapters.outbound.security.network, "get_settings", lambda: mock_settings
+    )
 
 
 def test_validate_target_url_invalid_scheme() -> None:

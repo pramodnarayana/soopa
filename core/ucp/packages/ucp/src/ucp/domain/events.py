@@ -3,6 +3,8 @@ from typing import Any
 
 from seedwork.events import DomainEvent
 
+from ucp.domain.constants import UcpEventType
+
 
 @dataclass(frozen=True)
 class RoleCreatedEvent(DomainEvent):
@@ -15,7 +17,7 @@ class RoleCreatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "role_created"
+        return UcpEventType.ROLE_CREATED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return None  # Global event
@@ -31,7 +33,7 @@ class UserRoleAssignedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "user_role_assigned"
+        return UcpEventType.USER_ROLE_ASSIGNED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -48,7 +50,7 @@ class TenantProvisionedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "tenant.provisioned"
+        return UcpEventType.TENANT_PROVISIONED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -61,7 +63,7 @@ class AppSubscribedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "app.subscribed"
+        return UcpEventType.APP_SUBSCRIBED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -74,7 +76,7 @@ class AppUnsubscribedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "app.unsubscribed"
+        return UcpEventType.APP_UNSUBSCRIBED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -87,7 +89,7 @@ class TenantNameUpdatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "TenantNameUpdated"
+        return UcpEventType.TENANT_NAME_UPDATED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.org_id
@@ -100,7 +102,7 @@ class TenantStatusToggledEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "TenantStatusToggled"
+        return UcpEventType.TENANT_STATUS_TOGGLED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.org_id
@@ -112,7 +114,7 @@ class TenantDeletedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "TenantDeleted"
+        return UcpEventType.TENANT_DELETED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.org_id
@@ -128,7 +130,7 @@ class UserUpdatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserUpdated"
+        return UcpEventType.USER_UPDATED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -142,7 +144,7 @@ class UserStatusToggledEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserStatusToggled"
+        return UcpEventType.USER_STATUS_TOGGLED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -154,7 +156,7 @@ class UserDeletedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserDeleted"
+        return UcpEventType.USER_DELETED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return None  # Global event
@@ -167,7 +169,7 @@ class UserMembershipRemovedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserMembershipRemoved"
+        return UcpEventType.USER_MEMBERSHIP_REMOVED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

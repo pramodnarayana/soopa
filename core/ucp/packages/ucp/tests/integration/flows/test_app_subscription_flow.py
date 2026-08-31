@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import pytest
 import pytest_asyncio
 from database.events import EventEnvelope
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
@@ -23,6 +23,7 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantUseCase,
 )
 from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
+from ucp.domain.constants import UcpEventType
 
 pytestmark = pytest.mark.integration
 
@@ -74,7 +75,7 @@ async def test_app_subscription_flow(
 
     provisioner = InfrastructureProvisioner(uow_factory=fake_uow_factory)
 
-    dispatcher.subscribe("app.subscribed", provisioner.handle_app_subscribed)
+    dispatcher.subscribe(UcpEventType.APP_SUBSCRIBED.value, provisioner.handle_app_subscribed)
 
     # 1.5 Ensure the seeded "edi" app and shard exist
     async with db_session.begin():
@@ -96,7 +97,7 @@ async def test_app_subscription_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Stark Industries",
-        creator_id=generate_id(IamPrefix.USER),
+        creator_id=generate_id(IdentityIdPrefix.USER),
     )
 
     tenant = await use_case.execute(command)
@@ -151,7 +152,7 @@ async def test_app_subscription_flow(
             try:
                 await dispatcher._dispatch(event)
                 await ackable_msg.ack()
-                if event.event_type == "app.subscribed":
+                if event.event_type == UcpEventType.APP_SUBSCRIBED.value:
                     found_app_subscribed = True
             except Exception:  # noqa: BLE001
                 await ackable_msg.nack()
@@ -178,4 +179,6 @@ async def test_app_subscription_flow(
     )
     app_sub = res.fetchone()
     assert app_sub is not None
-    assert app_sub.status == "active"
+    from ucp.domain.constants import LifecycleStatus
+
+    assert app_sub.status == LifecycleStatus.ACTIVE

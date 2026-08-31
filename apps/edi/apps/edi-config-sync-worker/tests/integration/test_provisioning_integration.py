@@ -390,8 +390,8 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
     await asyncio.sleep(2)
 
     # Worker processes the event. The SQS consumer swallows the exception and doesn't ack,
-    # so the orchestrator returns False.
-    processed = await wait_for_process(worker_service)
+    # so the orchestrator returns False. We only call it once to prevent hanging in a retry loop.
+    processed = await worker_service.process_next_event()
     assert processed is False
 
 

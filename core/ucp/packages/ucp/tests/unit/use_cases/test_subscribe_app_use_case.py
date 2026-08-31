@@ -1,24 +1,24 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.dto import SubscribeAppCommand
 from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
-from ucp.domain.constants import DomainIdPrefix as UcpPrefix
+from ucp.domain.constants import UcpIdPrefix
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
 
 @pytest.fixture
 def tenant_id() -> str:
-    return generate_id(IamPrefix.TENANT)
+    return generate_id(IdentityIdPrefix.TENANT)
 
 
 @pytest.fixture
 def app_id() -> str:
-    return generate_id(UcpPrefix.APP)
+    return generate_id(UcpIdPrefix.APP)
 
 
 @pytest.fixture
@@ -64,7 +64,9 @@ async def test_subscribe_app_success(
     # Check subscription
     assert len(saved_tenant.subscriptions) == 1
     assert saved_tenant.subscriptions[0].app_id == app_id
-    assert saved_tenant.subscriptions[0].status == "active"
+    from ucp.domain.constants import LifecycleStatus
+
+    assert saved_tenant.subscriptions[0].status == LifecycleStatus.ACTIVE
 
     # Check domain event
     assert len(saved_tenant.domain_events) == 1

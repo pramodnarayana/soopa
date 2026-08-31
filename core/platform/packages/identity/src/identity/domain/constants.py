@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 
-class DomainIdPrefix(StrEnum):
+class IdentityIdPrefix(StrEnum):
     TENANT = "iam_ten"
     USER = "iam_usr"
     TOKEN = "iam_tok"

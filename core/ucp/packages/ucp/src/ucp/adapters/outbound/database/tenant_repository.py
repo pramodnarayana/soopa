@@ -4,7 +4,6 @@ import structlog
 from database.outbox_serializer import serialize_domain_event
 
 logger = structlog.get_logger(__name__)
-import typing
 from datetime import UTC, datetime
 
 from database.models.identity import ApiKey, ApiToken, Role, UserRole
@@ -27,15 +26,14 @@ class TenantRepository(TenantRepositoryPort):
     def _map_to_domain(
         self, row: DbTenant, subscriptions: list[TenantSubscription] | None = None
     ) -> Tenant:
+        from ucp.domain.constants import LifecycleStatus
+
         return Tenant(
             id=row.id,
             name=row.name,
             slug=row.slug,
             idp_tenant_id=row.idp_tenant_id,
-            status=typing.cast(
-                typing.Literal["active", "inactive"],
-                row.status,
-            ),
+            status=LifecycleStatus(row.status),
             created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=row.updated_at.replace(tzinfo=UTC),
             subscriptions=subscriptions or [],
@@ -216,18 +214,22 @@ class TenantRepository(TenantRepositoryPort):
 
         stmt = insert(ShardRegistry).values(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["tenant_id", "app_id"], set_={"shard_id": shard_id}
+            index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
+            set_={ShardRegistry.shard_id: shard_id},
         )
         await self.session.execute(stmt)
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
         from sqlalchemy.dialects.postgresql import insert
 
+        from ucp.domain.constants import SubscriptionTier
+
         stmt = insert(AppSubscription).values(
-            tenant_id=tenant_id, app_id=app_id, tier="standard", status=status
+            tenant_id=tenant_id, app_id=app_id, tier=SubscriptionTier.STANDARD.value, status=status
         )
         stmt = stmt.on_conflict_do_update(
-            index_elements=["tenant_id", "app_id"], set_={"status": status}
+            index_elements=[AppSubscription.tenant_id, AppSubscription.app_id],
+            set_={AppSubscription.status: status},
         )
         await self.session.execute(stmt)
 

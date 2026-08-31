@@ -4,6 +4,7 @@ All settings are loaded from environment variables and validated by Pydantic.
 Each service can use the full AppSettings or cherry-pick specific groups.
 """
 
+import typing
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -17,7 +18,6 @@ class DatabaseSettings(BaseSettings):
     global_url: str = Field(
         validation_alias=AliasChoices("DB_GLOBAL_URL", "DB_URL"),
         serialization_alias="DB_GLOBAL_URL",
-        default="postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global",
         description="Async PostgreSQL connection string for the Global Control Plane.",
     )
     default_shard_url: str | None = Field(
@@ -73,7 +73,6 @@ class OtelSettings(BaseSettings):
 
     service_name: str = Field(default="edi-as2-server")
     exporter_otlp_endpoint: str = Field(
-        default="http://localhost:4317",
         description="OTLP gRPC endpoint of the OpenTelemetry Collector.",
     )
     enabled: bool = Field(default=True)
@@ -87,23 +86,18 @@ class IdentitySettings(BaseSettings):
         description="The ZITADEL Client ID for the API Gateway Swagger UI",
     )
     authorization_url: str = Field(
-        default="http://ucp.localhost:8080/oauth/v2/authorize",
         description="The OAuth2 authorization endpoint URL",
     )
     token_url: str = Field(
-        default="http://ucp.localhost:8080/oauth/v2/token",
         description="The OAuth2 token endpoint URL",
     )
     issuer: str = Field(
-        default="http://ucp.localhost:8080",
         description="The OIDC Issuer URL",
     )
     jwks_url: str = Field(
-        default="http://ucp.localhost:8080/oauth/v2/keys",
         description="The OIDC JWKS URL for verifying signatures",
     )
     userinfo_url: str = Field(
-        default="http://ucp.localhost:8080/oidc/v1/userinfo",
         description="The OIDC UserInfo endpoint for remote token introspection",
     )
     audience: str | list[str] = Field(
@@ -125,7 +119,6 @@ class PublicSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PUBLIC_", env_file=".env", extra="ignore")
 
     base_url: str = Field(
-        default="http://localhost:3000",
         description="The external base URL of the EDI platform",
     )
 
@@ -154,14 +147,14 @@ class AppSettings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
     storage_backend: Literal["postgres", "s3"] = Field(default="postgres")
 
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    s3: S3Settings = Field(default_factory=S3Settings)
-    aws: AwsSettings = Field(default_factory=AwsSettings)
-    sqs: SqsSettings = Field(default_factory=SqsSettings)
-    otel: OtelSettings = Field(default_factory=OtelSettings)
-    identity: IdentitySettings = Field(default_factory=IdentitySettings)
-    public: PublicSettings = Field(default_factory=PublicSettings)
-    secrets: SecretsSettings = Field(default_factory=SecretsSettings)
+    database: DatabaseSettings = Field(default_factory=lambda: typing.cast(DatabaseSettings, {}))
+    s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
+    aws: AwsSettings = Field(default_factory=lambda: typing.cast(AwsSettings, {}))
+    sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
+    otel: OtelSettings = Field(default_factory=lambda: typing.cast(OtelSettings, {}))
+    identity: IdentitySettings = Field(default_factory=lambda: typing.cast(IdentitySettings, {}))
+    public: PublicSettings = Field(default_factory=lambda: typing.cast(PublicSettings, {}))
+    secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":

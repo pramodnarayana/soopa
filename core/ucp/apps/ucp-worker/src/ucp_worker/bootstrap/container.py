@@ -145,8 +145,10 @@ class WorkerContainer:
         self.events_dispatcher = UcpEventDispatcher()
 
         consumer = self.events_dispatcher
-        consumer.subscribe("app.subscribed", provisioner.handle_app_subscribed)
-        consumer.subscribe("app.unsubscribed", provisioner.handle_app_unsubscribed)
+        from ucp.domain.constants import UcpEventType
+
+        consumer.subscribe(UcpEventType.APP_SUBSCRIBED.value, provisioner.handle_app_subscribed)
+        consumer.subscribe(UcpEventType.APP_UNSUBSCRIBED.value, provisioner.handle_app_unsubscribed)
 
         self._register_tenant_handlers(consumer, tenant_deleted_handler)
 

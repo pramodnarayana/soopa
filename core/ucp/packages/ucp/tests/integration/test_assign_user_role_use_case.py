@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.authorization import Role
 from identity.domain.models.user import User
 from seedwork import generate_id, generate_random_hex
@@ -25,9 +25,9 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
     use_case = AssignUserRoleUseCase(uow)
 
     # 1. Setup Data
-    tenant_id = generate_id(IamPrefix.TENANT)
-    user_id = generate_id(IamPrefix.USER)
-    role_id = generate_id(IamPrefix.ROLE)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    user_id = generate_id(IdentityIdPrefix.USER)
+    role_id = generate_id(IdentityIdPrefix.ROLE)
 
     # Seed Tenant first (required for foreign key relationship)
     from ucp.domain.models.tenant import Tenant
@@ -51,7 +51,7 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
 
     # Seed Role and assign to user — replaces the old TenantUser junction table.
     # find_by_id_and_tenant now joins on identity.user_roles via PBAC.
-    seed_role_id = generate_id(IamPrefix.ROLE)
+    seed_role_id = generate_id(IdentityIdPrefix.ROLE)
     seed_role = Role.create(
         id=seed_role_id,
         tenant_id=tenant_id,
@@ -89,7 +89,7 @@ async def test_assign_user_role_not_found(db_session: AsyncSession) -> None:
     uow = SqlAlchemyUcpUnitOfWork(db_session)
     use_case = AssignUserRoleUseCase(uow)
 
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     request = AssignUserRoleRequest(user_id="iam_usr_doesnt_exist", role_id="iam_rol_xyz")
 
     with pytest.raises(ResourceNotFoundError):
@@ -105,9 +105,9 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
     uow = SqlAlchemyUcpUnitOfWork(db_session)
     use_case = AssignUserRoleUseCase(uow)
 
-    tenant_id = generate_id(IamPrefix.TENANT)
-    user_id = generate_id(IamPrefix.USER)
-    role_id = generate_id(IamPrefix.ROLE)  # never seeded
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    user_id = generate_id(IdentityIdPrefix.USER)
+    role_id = generate_id(IdentityIdPrefix.ROLE)  # never seeded
 
     from ucp.domain.models.tenant import Tenant
 
@@ -122,7 +122,7 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
     user = User.create(id=user_id, idp_user_id=None, email=f"{user_id}@test.com", name="Test User")
     await uow.user_repo.save(user)
     # Seed PBAC membership so find_by_id_and_tenant can resolve the user.
-    seed_role_id2 = generate_id(IamPrefix.ROLE)
+    seed_role_id2 = generate_id(IdentityIdPrefix.ROLE)
     seed_role2 = Role.create(
         id=seed_role_id2,
         tenant_id=tenant_id,

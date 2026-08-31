@@ -1,14 +1,14 @@
 from datetime import datetime
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.user import User
 from seedwork.utils import generate_id
 
 
 def test_user_mark_deleted_success() -> None:
     user = User.create(
-        id=generate_id(IamPrefix.USER),
+        id=generate_id(IdentityIdPrefix.USER),
         idp_user_id="zitadel-user-1",
         email="test@example.com",
         name="Test User",
@@ -26,7 +26,7 @@ def test_user_mark_deleted_success() -> None:
 
 def test_user_mark_deleted_already_deleted() -> None:
     user = User.create(
-        id=generate_id(IamPrefix.USER),
+        id=generate_id(IdentityIdPrefix.USER),
         idp_user_id="zitadel-user-1",
         email="test@example.com",
         name="Test User",

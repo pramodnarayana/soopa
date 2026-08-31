@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from identity.application.authenticate_use_case import TenantNotProvisionedError
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import TokenClaims
 from identity.domain.models.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
@@ -63,8 +63,8 @@ async def test_jwt_strategy_resolves_idp_ids(
     jwt_strategy, fake_tenant_repo, fake_user_repo, mock_token_verifier
 ):
     # Generate canonical IDs — these represent our local DB records
-    canonical_tenant_id = generate_id(IamPrefix.TENANT)
-    canonical_user_id = generate_id(IamPrefix.USER)
+    canonical_tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    canonical_user_id = generate_id(IdentityIdPrefix.USER)
     # IdP IDs are external, opaque strings — not domain-prefixed
     idp_org_id = "idp_org_456"
     idp_user_id = "idp_usr_456"
@@ -131,8 +131,8 @@ async def test_jwt_strategy_handles_canonical_ids(
     jwt_strategy, fake_tenant_repo, fake_user_repo, mock_token_verifier
 ):
     # Token already has canonical iam_ IDs — strategy must pass straight through
-    canonical_tenant_id = generate_id(IamPrefix.TENANT)
-    canonical_user_id = generate_id(IamPrefix.USER)
+    canonical_tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    canonical_user_id = generate_id(IdentityIdPrefix.USER)
 
     mock_token_verifier.verify.return_value = TokenClaims(
         sub=canonical_user_id,
@@ -154,8 +154,8 @@ async def test_jwt_strategy_handles_canonical_ids(
 async def test_jwt_strategy_resolves_dynamic_capabilities(
     jwt_strategy, fake_role_repo, mock_token_verifier
 ):
-    canonical_tenant_id = generate_id(IamPrefix.TENANT)
-    canonical_user_id = generate_id(IamPrefix.USER)
+    canonical_tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    canonical_user_id = generate_id(IdentityIdPrefix.USER)
 
     mock_token_verifier.verify.return_value = TokenClaims(
         sub=canonical_user_id,
