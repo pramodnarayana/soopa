@@ -37,6 +37,7 @@ from unified_api.adapters.inbound.http.dtos.edi.dtos import (
     CreateAS2PartnershipRequest,
     TestAS2ConnectionRequest,
     TestAS2ConnectionResponse,
+    TradingPartnerStatusResponse,
     UpdateAS2PartnershipRequest,
 )
 
@@ -190,7 +191,9 @@ async def create_platform_as2_partnership(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                status="active" if p.active else "inactive",
+                status=TradingPartnerStatusResponse.ACTIVE
+                if p.active
+                else TradingPartnerStatusResponse.INACTIVE,
                 active=p.active,
             )
     except ValueError as e:
@@ -252,7 +255,9 @@ async def update_platform_as2_partnership(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                status="active" if p.active else "inactive",
+                status=TradingPartnerStatusResponse.ACTIVE
+                if p.active
+                else TradingPartnerStatusResponse.INACTIVE,
                 active=p.active,
             )
     except ValueError as e:
@@ -311,7 +316,9 @@ async def list_platform_as2_partnerships(
                 mdn_url=p.mdn_url,
                 encryption_algorithm=p.encryption_algorithm,
                 signature_algorithm=p.signature_algorithm,
-                status="active" if p.active else "inactive",
+                status=TradingPartnerStatusResponse.ACTIVE
+                if p.active
+                else TradingPartnerStatusResponse.INACTIVE,
                 active=p.active,
             )
             for p in partnerships

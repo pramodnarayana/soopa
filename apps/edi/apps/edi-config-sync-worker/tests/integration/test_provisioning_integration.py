@@ -32,8 +32,8 @@ class SqsTestPublisher:
 
 
 from database.models.identity import Tenant
+from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
 from edi.domain.events import EdiEventType
@@ -50,91 +50,6 @@ from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher 
 from config_sync_worker.domain.service import ProvisioningWorkerService
 
 load_dotenv()
-
-
-@pytest.fixture
-async def test_db_router() -> "AsyncGenerator[DatabaseRouter, None]":
-    import os
-
-    from database.provider import get_async_engine
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-    global_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    ).replace("postgresql://", "postgresql+asyncpg://")
-    shard_url = os.getenv(
-        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-    ).replace("postgresql://", "postgresql+asyncpg://")
-
-    global_engine = get_async_engine(global_url)
-    shard_engine = get_async_engine(shard_url)
-
-    global_conn = await global_engine.connect()
-    global_trans = await global_conn.begin()
-
-    shard_conn = await shard_engine.connect()
-    shard_trans = await shard_conn.begin()
-
-    import asyncio
-
-    global_db_lock = asyncio.Lock()
-    shard_db_lock = asyncio.Lock()
-
-    class TestDatabaseRouter(DatabaseRouter):
-        async def get_global_session(self):
-            async with global_db_lock:
-                factory = async_sessionmaker(
-                    bind=global_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                async with factory() as session:
-                    yield session
-
-        async def get_tenant_session(self, tenant_id: str, shard_key: str, shard_url: str):
-            async with shard_db_lock:
-                factory = async_sessionmaker(
-                    bind=shard_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                from sqlalchemy import text
-
-                try:
-                    async with factory() as session:
-                        await session.execute(
-                            text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
-                            {"tenant_id": tenant_id},
-                        )
-                        yield session
-                finally:
-                    await shard_conn.execute(
-                        text("SELECT set_config('app.current_tenant', '', true)")
-                    )
-
-        async def get_shard_session(self, shard_key: str, shard_url: str):
-            async with shard_db_lock:
-                factory = async_sessionmaker(
-                    bind=shard_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                async with factory() as session:
-                    yield session
-
-        async def get_all_shards(self):
-            return [("ucp_shard_1", shard_url)]
-
-    yield TestDatabaseRouter(global_db_url=global_url)
-
-    await global_trans.rollback()
-    await global_conn.close()
-
-    await shard_trans.rollback()
-    await shard_conn.close()
 
 
 @pytest.fixture

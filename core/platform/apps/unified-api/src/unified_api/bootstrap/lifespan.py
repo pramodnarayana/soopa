@@ -63,6 +63,18 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
 
+    from database.provider import DatabaseProvider
+    from dependency_injector import providers
+    from ucp.bootstrap.config import get_settings
+
+    from unified_api.main import ucp_container
+
+    settings = get_settings()
+    db_provider = DatabaseProvider.from_url(settings.database_url)
+    app.state.db_provider = db_provider
+    edi_app.state.db_provider = db_provider
+    ucp_container.db_provider.override(providers.Object(db_provider))
+
     # Nested try/finally blocks ensure cleanup runs in reverse order
     # and only for services that have actually started.
     logger.info("Shell startup: initializing UCP domain workers.")
@@ -88,3 +100,5 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # UCP started successfully, always clean it up
         logger.info("Shell shutdown: stopping UCP domain workers.")
         await ucp_shutdown()
+        logger.info("Shell shutdown: closing DatabaseProvider.")
+        await db_provider.close()

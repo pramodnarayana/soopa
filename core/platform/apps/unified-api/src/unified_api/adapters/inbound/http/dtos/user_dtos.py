@@ -4,9 +4,21 @@ These Pydantic models are the API contract — they live at the HTTP boundary an
 must NOT be imported from the Application or Domain layers.
 """
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
+
+
+class UserStateResponse(StrEnum):
+    """External API state representation for a user.
+
+    Maps internal domain UserStatus to the Zitadel-compatible state strings
+    exposed in the HTTP response contract.
+    """
+
+    ACTIVE = "USER_STATE_ACTIVE"
+    INACTIVE = "USER_STATE_INACTIVE"
 
 
 class CreateUserRequest(BaseModel):
@@ -40,6 +52,6 @@ class UserResponse(BaseModel):
     display_name: str = Field(alias="displayName")
     first_name: str = Field(alias="firstName")
     last_name: str = Field(alias="lastName")
-    state: str
+    state: UserStateResponse
     role: str
     created_at: str = Field(alias="createdAt")

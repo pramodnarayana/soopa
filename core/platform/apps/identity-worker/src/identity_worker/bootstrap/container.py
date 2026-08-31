@@ -10,6 +10,7 @@ from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_reposi
 from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
     PostgresIdentityOutboxRepository,
 )
+from identity.domain.constants import IdentityEventType
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
@@ -201,12 +202,18 @@ class WorkerContainer:
             payload = UserDeletedPayload.model_validate(event.payload)
             await identity_service.handle_user_deleted(idp_user_id=payload.idp_user_id)
 
-        consumer.subscribe("tenant.provisioned", identity_tenant_provisioned_handler)
-        consumer.subscribe("UserInvited", identity_user_created_handler)
-        consumer.subscribe("UserUpdated", identity_user_updated_handler)
-        consumer.subscribe("user_role_assigned", identity_user_role_assigned_handler)
-        consumer.subscribe("UserStatusToggled", identity_user_status_toggled_handler)
-        consumer.subscribe("UserDeleted", identity_user_deleted_handler)
+        consumer.subscribe(
+            IdentityEventType.TENANT_PROVISIONED, identity_tenant_provisioned_handler
+        )
+        consumer.subscribe(IdentityEventType.USER_INVITED, identity_user_created_handler)
+        consumer.subscribe(IdentityEventType.USER_UPDATED, identity_user_updated_handler)
+        consumer.subscribe(
+            IdentityEventType.USER_ROLE_ASSIGNED, identity_user_role_assigned_handler
+        )
+        consumer.subscribe(
+            IdentityEventType.USER_STATUS_TOGGLED, identity_user_status_toggled_handler
+        )
+        consumer.subscribe(IdentityEventType.USER_DELETED, identity_user_deleted_handler)
 
         async def sweep_handler(event: Any) -> None:
             await self.sweeper_job_handler.execute()

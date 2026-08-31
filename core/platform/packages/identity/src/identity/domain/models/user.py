@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
-from typing import Literal
 
 from seedwork.models import AggregateRoot
 
+from identity.domain.constants import UserStatus
 from identity.domain.events import (
     UserDeletedEvent,
     UserMembershipRemovedEvent,
@@ -21,7 +21,7 @@ class User(AggregateRoot):
         idp_user_id: str | None,
         email: str,
         name: str,
-        status: Literal["active", "inactive"],
+        status: UserStatus,
         created_at: datetime,
         updated_at: datetime,
     ):
@@ -50,7 +50,7 @@ class User(AggregateRoot):
             idp_user_id=idp_user_id,
             email=email,
             name=name,
-            status="active",
+            status=UserStatus.ACTIVE,
             created_at=now,
             updated_at=now,
         )
@@ -62,13 +62,13 @@ class User(AggregateRoot):
         self.updated_at = datetime.now(UTC)
 
     def activate(self) -> None:
-        if self.status != "active":
-            self.status = "active"
+        if self.status != UserStatus.ACTIVE:
+            self.status = UserStatus.ACTIVE
             self.updated_at = datetime.now(UTC)
 
     def deactivate(self) -> None:
-        if self.status != "inactive":
-            self.status = "inactive"
+        if self.status != UserStatus.INACTIVE:
+            self.status = UserStatus.INACTIVE
             self.updated_at = datetime.now(UTC)
 
     def update_profile(self, first_name: str, last_name: str, tenant_id: str, role: str) -> None:

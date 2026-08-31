@@ -3,7 +3,7 @@ import datetime
 from typing import Any, cast
 
 import structlog
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import AuditLog
 from sqlalchemy import CursorResult, delete, select
 

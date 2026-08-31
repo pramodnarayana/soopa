@@ -4,7 +4,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
 from sqlalchemy.engine.url import make_url
 

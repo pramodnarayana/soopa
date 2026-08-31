@@ -31,3 +31,8 @@ class UcpEventType(StrEnum):
 class SubscriptionTier(StrEnum):
     STANDARD = "standard"
     PREMIUM = "premium"
+
+
+class IdempotencyStatus(StrEnum):
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from database.models.identity import Tenant as DbTenant
 from database.models.identity import User as DbUser
+from identity.domain.constants import UserStatus
 from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
     DummyIdentityProviderPort,
 )
@@ -89,7 +90,7 @@ async def test_role_assignment_retries_until_idp_mapping_exists():
     tenant = DbTenant(
         id="tenant-1", name="Tenant One", slug="tenant-one", idp_tenant_id="idp-tenant-1"
     )
-    user = DbUser(id="user-1", email="user@example.com", name="User", status="active")
+    user = DbUser(id="user-1", email="user@example.com", name="User", status=UserStatus.ACTIVE)
     tenant_result = Mock()
     tenant_result.scalar_one_or_none.return_value = tenant
     user_result = Mock()
@@ -121,7 +122,9 @@ async def test_role_assignment_retries_until_idp_mapping_exists():
 
 
 async def test_user_creation_completes_compensation_when_cancelled_during_cleanup():
-    local_user = DbUser(id="user-1", email="user@example.com", name="User", status="active")
+    local_user = DbUser(
+        id="user-1", email="user@example.com", name="User", status=UserStatus.ACTIVE
+    )
     tenant = DbTenant(
         id="tenant-1", name="Tenant One", slug="tenant-one", idp_tenant_id="idp-tenant-1"
     )

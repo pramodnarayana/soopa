@@ -17,7 +17,7 @@ pytestmark = pytest.mark.asyncio
 
 
 def make_adapter(session):
-    settings = AppSettings()
+    settings = AppSettings.model_construct()
     settings.storage_backend = "local"
     storage = InMemoryStorageAdapter()
     return SqlAlchemyRepositoryAdapter(session, settings, storage)

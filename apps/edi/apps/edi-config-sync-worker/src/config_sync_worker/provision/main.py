@@ -2,8 +2,8 @@ import asyncio
 from typing import Any
 
 import structlog
+from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.config.settings import get_settings
 from edi.domain.events import MessageQueueName
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay

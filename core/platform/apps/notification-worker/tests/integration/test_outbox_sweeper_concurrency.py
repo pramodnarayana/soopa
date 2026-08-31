@@ -4,6 +4,7 @@ from typing import cast
 import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationOutbox
+from outbox.domain.constants import OutboxStatus
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 
@@ -26,7 +27,7 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
             event_type="test",
             idempotency_key="idemp-c1",
             payload={"test": "data"},
-            status="PROCESSING",
+            status=OutboxStatus.PROCESSING,
             owner_token="crashed_worker",  # noqa: S106
             updated_at=datetime.now(UTC) - timedelta(minutes=10),  # Expired lease
             lease_expires_at=datetime.now(UTC) - timedelta(minutes=5),
@@ -44,7 +45,7 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
         stmt_select = (
             select(NotificationOutbox.id)
             .where(
-                NotificationOutbox.status == "PROCESSING",
+                NotificationOutbox.status == OutboxStatus.PROCESSING,
                 NotificationOutbox.updated_at < threshold,
             )
             .limit(500)
@@ -59,7 +60,11 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
             stmt_interfere = (
                 update(NotificationOutbox)
                 .where(NotificationOutbox.id == "msg-stuck-1")
-                .values(status="COMPLETED", owner_token="worker_2", updated_at=datetime.now(UTC))  # noqa: S106
+                .values(
+                    status=OutboxStatus.COMPLETED,
+                    owner_token="worker_2",  # noqa: S106
+                    updated_at=datetime.now(UTC),
+                )
             )
             await session2.execute(stmt_interfere)
         # -------------------------------
@@ -70,10 +75,10 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
             update(NotificationOutbox)
             .where(
                 NotificationOutbox.id.in_(stuck_ids),
-                NotificationOutbox.status == "PROCESSING",  # The crucial fix!
+                NotificationOutbox.status == OutboxStatus.PROCESSING,  # The crucial fix!
                 NotificationOutbox.updated_at < threshold,  # The crucial fix!
             )
-            .values(status="PENDING", owner_token=None)
+            .values(status=OutboxStatus.PENDING, owner_token=None)
         )
         result = await session1.execute(stmt_update)
         swept = cast(CursorResult, result).rowcount
@@ -90,5 +95,5 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
         final_row = res.scalars().first()
 
         assert final_row is not None
-        assert final_row.status == "COMPLETED"
+        assert final_row.status == OutboxStatus.COMPLETED
         assert final_row.owner_token == "worker_2"  # noqa: S105

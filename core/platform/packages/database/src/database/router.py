@@ -1,35 +1,50 @@
 """
-Dynamic Async SQLAlchemy session provisioner for Hybrid Multi-Tenancy.
+Enterprise Database Routing and Provisioning.
 
-This adapter resolves which database a tenant should connect to,
-manages the connection pools (engines) efficiently, and enforces
-Row-Level Security (RLS).
+This module provides the central multi-tenant database routing capabilities.
+It enforces the Open/Closed Principle via DatabaseRouterPort, allowing the
+application to depend on the interface while the infrastructure provides the
+production engine manager or a transactional test double.
 """
 
 import asyncio
 from collections.abc import AsyncGenerator
-from contextlib import aclosing
-from typing import cast
+from typing import Protocol, cast
 
 import structlog
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-)
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from database.provider import get_async_engine
-from edi.adapters.outbound.database.base_repository import GlobalSession, TenantSession
+from database.types import GlobalSession, TenantSession
 
 logger = structlog.get_logger(__name__)
 
 
-class DatabaseRouter:
+class DatabaseRouterPort(Protocol):
     """
+    Interface for dynamic database routing.
+    Depend on this Port in your application and tests.
+    """
+
+    def get_global_session(self) -> AsyncGenerator[GlobalSession, None]: ...
+
+    def get_tenant_session(
+        self, tenant_id: str, shard_key: str, shard_url: str
+    ) -> AsyncGenerator[TenantSession, None]: ...
+
+    def get_shard_session(
+        self, shard_key: str, shard_url: str
+    ) -> AsyncGenerator[TenantSession, None]: ...
+
+    async def get_all_shards(self) -> list[tuple[str, str]]: ...
+
+    async def close_all(self) -> None: ...
+
+
+class DatabaseRouter(DatabaseRouterPort):
+    """
+    Production implementation of the Database Router.
     Manages connections to the Global DB and dynamic Tenant DBs.
-    Follows DI principles: this should be instantiated once per application lifecycle
-    and injected, rather than used as a global mutable singleton.
     """
 
     def __init__(self, global_db_url: str, pool_size: int = 10, max_overflow: int = 20):
@@ -46,12 +61,6 @@ class DatabaseRouter:
         logger.info("Initialized DatabaseRouter with global connection pool.")
 
     def _create_engine(self, url: str) -> AsyncEngine:
-        # Enterprise-grade compatibility: transparently handle standard Postgres DSNs
-        if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        elif url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-
         return get_async_engine(
             url,
             pool_size=self._pool_size,
@@ -104,22 +113,28 @@ class DatabaseRouter:
             expire_on_commit=False,
         )
 
-        async with factory() as session:
-            session.info["session_type"] = "tenant"
-            # Enforce Row-Level Security isolation
-            await session.execute(
-                text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
-                {"tenant_id": tenant_id},
-            )
-            yield cast(TenantSession, session)
+        from sqlalchemy import text
+
+        try:
+            async with factory() as session:
+                # Enforce Row-Level Security by injecting the tenant ID context
+                await session.execute(
+                    text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                    {"tenant_id": tenant_id},
+                )
+                session.info["session_type"] = "tenant"
+                yield cast(TenantSession, session)
+        finally:
+            # Note: with connection pooling, cleaning up the configuration is important if connection
+            # is reused, but set_config(..., true) makes it local to the transaction.
+            pass
 
     async def get_shard_session(
         self, shard_key: str, shard_url: str
-    ) -> AsyncGenerator[AsyncSession, None]:
+    ) -> AsyncGenerator[TenantSession, None]:
         """
-        Yields a raw session to a specific shard. Used primarily by background workers
-        that process data across multiple tenants (e.g. sweepers) where RLS context is
-        not globally set at the session level.
+        Yields a raw session to a shard, bypassing RLS.
+        Used ONLY by background sweeping and replication jobs.
         """
         engine = await self.get_engine(shard_key, shard_url)
         factory = async_sessionmaker(
@@ -128,37 +143,34 @@ class DatabaseRouter:
             expire_on_commit=False,
         )
         async with factory() as session:
-            session.info["session_type"] = "shard"
-            yield session
-
-    async def close_all(self) -> None:
-        """
-        Cleanly closes all connection pools.
-        """
-        for key, engine in self._engines.items():
-            await engine.dispose()
-            logger.info("Closed connection pool for {key}", key=key)
-        self._engines.clear()
+            session.info["session_type"] = "tenant"
+            yield cast(TenantSession, session)
 
     async def get_all_shards(self) -> list[tuple[str, str]]:
         """
-        Retrieves all registered database shards.
-        Falls back to the configured default_shard_url if no shards are registered
-        in the Global Control Plane.
+        Retrieves all active shards (key, dsn) from the global database.
         """
         from sqlalchemy import select
         from ucp_models.infrastructure import DatabaseShard
 
-        from edi.config.settings import get_settings
+        from database.constants import DatabaseShardStatus
 
-        async with aclosing(self.get_global_session()) as sessions:
-            async for session in sessions:
-                res = await session.execute(select(DatabaseShard))
-                shards = res.scalars().all()
-                if not shards:
-                    default_url = get_settings().database.default_shard_url
-                    if default_url:
-                        logger.info("no_database_shards_found_using_default_shard_url")
-                        return [("ucp_shard_1", default_url)]
-                return [(str(shard.name), str(shard.dsn)) for shard in shards]
+        # Dynamically query the active database shards registered in the control plane
+        async for session in self.get_global_session():
+            result = await session.execute(
+                select(DatabaseShard.id, DatabaseShard.dsn).where(
+                    DatabaseShard.status == DatabaseShardStatus.ACTIVE
+                )
+            )
+            return [(row.id, row.dsn) for row in result]
         return []
+
+    async def close_all(self) -> None:
+        """
+        Closes all cached engine connection pools.
+        """
+        async with self._engine_lock:
+            for engine in self._engines.values():
+                await engine.dispose()
+            self._engines.clear()
+            logger.info("Closed all DatabaseRouter connection pools.")

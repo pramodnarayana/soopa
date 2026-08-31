@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ucp.domain.constants import IdempotencyStatus
 from ucp.domain.exceptions import IdempotencyConflictError
 from ucp.ports.outbound.idempotency_repository_port import IdempotencyRepositoryPort
 
@@ -27,7 +28,7 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
             .values(
                 tenant_id=tenant_id,
                 idempotency_key=idempotency_key,
-                status="IN_PROGRESS",
+                status=IdempotencyStatus.IN_PROGRESS,
                 expires_at=expires_at,
             )
             .on_conflict_do_nothing(index_elements=["tenant_id", "idempotency_key"])
@@ -57,7 +58,7 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
         # Check expiration first - expired records should be regenerated
         if record.expires_at <= now:
             # Record has expired, allow re-processing by replacing it
-            record.status = "IN_PROGRESS"
+            record.status = IdempotencyStatus.IN_PROGRESS
             record.expires_at = expires_at
             record.response_body = None
             record.response_status_code = None
@@ -65,9 +66,9 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
             await self.session.flush()
             return False, None, None
 
-        if record.status == "COMPLETED":
+        if record.status == IdempotencyStatus.COMPLETED:
             return True, record.response_body, record.response_status_code
-        elif record.status == "IN_PROGRESS":
+        elif record.status == IdempotencyStatus.IN_PROGRESS:
             raise IdempotencyConflictError(
                 f"Request with idempotency key {idempotency_key} is already in progress."
             )
@@ -91,7 +92,7 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
         )
         record = result.scalars().first()
         if record:
-            record.status = "COMPLETED"
+            record.status = IdempotencyStatus.COMPLETED
             record.response_body = response_body
             record.response_status_code = response_status_code
             record.updated_at = datetime.now(UTC)

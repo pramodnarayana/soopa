@@ -14,6 +14,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
 )
 
 from edi.application.dto import EdiJsonDTO, TransactionDetailDTO
+from edi.domain.status import MessageStatus
 from edi.module import create_edi_app
 
 app = create_edi_app()
@@ -216,7 +217,7 @@ def test_get_transaction_detail_fallback():
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         trace_id=generate_id("id"),
-        status="RECEIVED",
+        status=MessageStatus.RECEIVED,
         transaction_type="mock_type",
         business_metadata={"_routing": {"trading_partner_id": generate_id("id")}},
     )
@@ -302,7 +303,7 @@ def test_get_transaction_webhook_fallback():
     mock_json = EdiJsonDTO(
         id=generate_id("id"),
         trace_id=generate_id("id"),
-        status="RECEIVED",
+        status=MessageStatus.RECEIVED,
         transaction_type="850",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

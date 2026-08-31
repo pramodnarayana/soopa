@@ -1,9 +1,8 @@
-from database.provider import get_async_engine
+from database.provider import DatabaseProvider
 from dependency_injector import containers, providers
 from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
 from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
@@ -32,21 +31,15 @@ from ucp.application.use_cases.webhooks import (
     ListWebhooksUseCase,
     UpdateWebhookUseCase,
 )
-from ucp.bootstrap.config import get_settings
-
-_settings = get_settings()
-_engine = get_async_engine(_settings.database_url)
-_async_session_maker = async_sessionmaker(
-    _engine,
-    expire_on_commit=False,
-    class_=AsyncSession,
-)
 
 
 class Container(containers.DeclarativeContainer):
     """
     Declarative IoC container for the UCP bounded context.
     """
+
+    config = providers.Configuration()
+    db_provider = providers.Dependency(instance_of=DatabaseProvider)
 
     wiring_config = containers.WiringConfiguration(
         packages=[
@@ -64,7 +57,7 @@ class Container(containers.DeclarativeContainer):
     user_repo = providers.Factory(PostgresUserRepository)
     api_token_repo = providers.Factory(PostgresApiTokenRepository)
     role_repo = providers.Factory(PostgresRoleRepository)
-    session_factory_provider = providers.Object(_async_session_maker)
+    session_factory_provider = db_provider.provided.session_factory
     outbox_repo = providers.Factory(
         PostgresOutboxRepository, session_factory=session_factory_provider
     )

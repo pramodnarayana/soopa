@@ -11,3 +11,11 @@ class MessageStatus(StrEnum):
     DELIVERED = "DELIVERED"
     FAILED = "FAILED"
     ERROR = "ERROR"
+
+
+class AuditLogStatus(StrEnum):
+    """Status values for the AuditLog step-level tracing model."""
+
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+    SKIPPED = "SKIPPED"

@@ -3,8 +3,9 @@ import datetime
 from typing import Any, cast
 
 import structlog
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
+from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import CursorResult, delete, select
 
@@ -24,7 +25,7 @@ class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPo
                     ControlPlaneOutbox.id.in_(
                         select(ControlPlaneOutbox.id)
                         .where(
-                            ControlPlaneOutbox.status == "PROCESSED",
+                            ControlPlaneOutbox.status == OutboxStatus.PROCESSED,
                             ControlPlaneOutbox.created_at < cutoff_date,
                         )
                         .limit(5000)

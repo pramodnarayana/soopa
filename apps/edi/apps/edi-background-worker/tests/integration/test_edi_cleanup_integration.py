@@ -1,13 +1,12 @@
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
+from edi.domain.status import AuditLogStatus
 from outbox.application.outbox_cleaner_use_case import (
     OutboxCleanerUseCase,
 )
 from outbox.domain.constants import OutboxStatus
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi_background_worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
     SqlAlchemyEdiAuditLogCleanupRepository,
@@ -26,76 +25,6 @@ from edi_background_worker.application.use_cases.edi_idempotency_cleanup_use_cas
 )
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
-    import os
-
-    from database.provider import get_async_engine
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
-    global_url = (
-        os.getenv(
-            "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-        )
-        .replace("postgres://", "postgresql+asyncpg://", 1)
-        .replace("postgresql://", "postgresql+asyncpg://", 1)
-    )
-    shard_url = (
-        os.getenv("SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1")
-        .replace("postgres://", "postgresql+asyncpg://", 1)
-        .replace("postgresql://", "postgresql+asyncpg://", 1)
-    )
-
-    global_engine = get_async_engine(global_url)
-    shard_engine = get_async_engine(shard_url)
-
-    global_conn = await global_engine.connect()
-    global_trans = await global_conn.begin()
-
-    shard_conn = await shard_engine.connect()
-    shard_trans = await shard_conn.begin()
-
-    import asyncio
-
-    db_lock = asyncio.Lock()
-
-    class TestDatabaseRouter(DatabaseRouter):
-        async def get_global_session(self):
-            async with db_lock:
-                factory = async_sessionmaker(
-                    bind=global_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                async with factory() as session:
-                    yield session
-
-        async def get_shard_session(self, shard_key: str, shard_url: str):
-            async with db_lock:
-                factory = async_sessionmaker(
-                    bind=shard_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                async with factory() as session:
-                    yield session
-
-        async def get_all_shards(self):
-            return [("ucp_shard_1", shard_url)]
-
-    yield TestDatabaseRouter(global_db_url=global_url)
-
-    await global_trans.rollback()
-    await global_conn.close()
-    await global_engine.dispose()
-
-    await shard_trans.rollback()
-    await shard_conn.close()
-    await shard_engine.dispose()
 
 
 @pytest.mark.integration
@@ -223,7 +152,7 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
             id=audit_1_id,
             trace_id="trace1",
             step="step1",
-            status="SUCCESS",
+            status=AuditLogStatus.SUCCESS,
             tenant_id="tenant-1",
             created_at=old_date,
             updated_at=old_date,
@@ -233,7 +162,7 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
             id=audit_2_id,
             trace_id="trace2",
             step="step2",
-            status="SUCCESS",
+            status=AuditLogStatus.SUCCESS,
             tenant_id="tenant-1",
             created_at=recent_date,
             updated_at=recent_date,

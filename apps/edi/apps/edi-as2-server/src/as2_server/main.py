@@ -17,11 +17,10 @@ from observability import (
 
 from .adapters.inbound.http.routers import as2, ops
 
-settings = get_settings()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
     ObservabilityProvider.configure(
         tracer=OtelTracer(
             service_name=settings.otel.service_name,
@@ -44,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.s3_storage = s3_storage
 
     logger = ObservabilityProvider.logger(__name__)
-    from edi.adapters.outbound.database.connection import DatabaseRouter
+    from database.router import DatabaseRouter
 
     try:
         # Initialize the global DatabaseRouter and mount it to app state

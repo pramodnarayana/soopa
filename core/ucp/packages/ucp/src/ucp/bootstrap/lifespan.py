@@ -32,11 +32,8 @@ async def shutdown() -> None:
     """
     Called by the Shell lifespan on application shutdown.
     """
-    from ucp.bootstrap.container import _engine
-
     logger.info("ucp_api_shutdown")
-    await _engine.dispose()
-    logger.info("ucp_database_engine_disposed")
+    logger.info("ucp_database_engine_disposed (handled globally)")
 
 
 from fastapi import FastAPI

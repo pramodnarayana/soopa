@@ -1,8 +1,6 @@
 from enum import StrEnum
 
 
-class OutboxStatus(StrEnum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
+class DatabaseShardStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"

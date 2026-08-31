@@ -35,6 +35,7 @@ from unified_api.adapters.inbound.http.dtos.edi.dtos import (
     PartnerResponse,
     TestConnectionResponse,
     TestSFTPConnectionRequest,
+    TradingPartnerStatusResponse,
     UpdateSFTPPartnerRequest,
 )
 
@@ -185,7 +186,9 @@ async def create_sftp_partner(
             tenant_id=tenant_id,
             name=partner.name,
             type="SFTP",
-            status="ACTIVE" if partner.active else "INACTIVE",
+            status=TradingPartnerStatusResponse.ACTIVE
+            if partner.active
+            else TradingPartnerStatusResponse.INACTIVE,
             active=partner.active,
             host=partner.host,
             port=partner.port,
@@ -228,7 +231,9 @@ async def update_sftp_partner(
             tenant_id=tenant_id,
             name=partner.name,
             type="SFTP",
-            status="ACTIVE" if partner.active else "INACTIVE",
+            status=TradingPartnerStatusResponse.ACTIVE
+            if partner.active
+            else TradingPartnerStatusResponse.INACTIVE,
             active=partner.active,
             host=partner.host,
             port=partner.port,

@@ -3,8 +3,8 @@ import contextlib
 
 import structlog
 from database.models.identity import Tenant
+from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.config.settings import get_settings
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select

@@ -4,8 +4,8 @@ import signal
 from typing import Any, cast
 
 import structlog
+from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.connection import DatabaseRouter
 
 # We need the outbox publisher and sqs poller
 # They were in orchestrator-worker, but let's copy them or import them if they are still there

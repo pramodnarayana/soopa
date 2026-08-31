@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from outbox.domain.constants import OutboxStatus
 from seedwork import generate_random_hex
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -26,6 +27,7 @@ from edi.adapters.outbound.database.models.data_plane import (
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox as Outbox
 from edi.config.settings import AppSettings
 from edi.domain.models import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
 
@@ -283,7 +285,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 idempotency_key=str(idempotency_key),
                 event_type=event_type,
                 payload=payload,
-                status="PENDING",
+                status=OutboxStatus.PENDING,
             )
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
         )
@@ -299,14 +301,14 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                     select(EdiMessage.id)
                     .where(
                         EdiMessage.trace_id == str(trace_id),
-                        EdiMessage.status == "PENDING_DELIVERY",
+                        EdiMessage.status == MessageStatus.PENDING_DELIVERY,
                     )
                     .order_by(EdiMessage.created_at.desc())
                     .limit(1)
                     .scalar_subquery()
                 )
             )
-            .values(status="PROCESSING")
+            .values(status=MessageStatus.PROCESSING)
             .returning(EdiMessage.id)
         )
         result = await self.session.execute(stmt)
@@ -405,14 +407,14 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                     select(ApiGateway.id)
                     .where(
                         ApiGateway.trace_id == str(trace_id),
-                        ApiGateway.status == "PENDING_DELIVERY",
+                        ApiGateway.status == MessageStatus.PENDING_DELIVERY,
                     )
                     .order_by(ApiGateway.created_at.desc())
                     .limit(1)
                     .scalar_subquery()
                 )
             )
-            .values(status="PROCESSING")
+            .values(status=MessageStatus.PROCESSING)
             .returning(ApiGateway.id)
         )
         result = await self.session.execute(stmt)

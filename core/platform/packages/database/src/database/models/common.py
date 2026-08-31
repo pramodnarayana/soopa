@@ -27,7 +27,7 @@ class OutboxMixin:
 
     @declared_attr
     def status(cls) -> Mapped[str]:
-        from database.constants import OutboxStatus
+        from outbox.domain.constants import OutboxStatus
 
         return mapped_column(String(50), nullable=False, default=OutboxStatus.PENDING)
 
