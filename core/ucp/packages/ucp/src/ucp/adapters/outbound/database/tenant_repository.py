@@ -15,6 +15,7 @@ from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.models.tenant import Tenant, TenantSubscription
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
@@ -26,8 +27,6 @@ class TenantRepository(TenantRepositoryPort):
     def _map_to_domain(
         self, row: DbTenant, subscriptions: list[TenantSubscription] | None = None
     ) -> Tenant:
-        from ucp.domain.constants import LifecycleStatus
-
         return Tenant(
             id=row.id,
             name=row.name,
@@ -80,7 +79,7 @@ class TenantRepository(TenantRepositoryPort):
         subs_by_tenant: dict[str, list[TenantSubscription]] = {}
         for tenant_id, app_id, status in subs_result:
             subs_by_tenant.setdefault(tenant_id, []).append(
-                TenantSubscription(app_id=app_id, status=status)
+                TenantSubscription(app_id=app_id, status=LifecycleStatus(status))
             )
 
         tenants = []
@@ -238,7 +237,10 @@ class TenantRepository(TenantRepositoryPort):
             AppSubscription.tenant_id == tenant_id
         )
         result = await self.session.execute(stmt)
-        return [TenantSubscription(app_id=app_id, status=status) for app_id, status in result.all()]
+        return [
+            TenantSubscription(app_id=app_id, status=LifecycleStatus(status))
+            for app_id, status in result.all()
+        ]
 
 
 logger = structlog.get_logger(__name__)

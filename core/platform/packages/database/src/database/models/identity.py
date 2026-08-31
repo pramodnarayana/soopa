@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,7 +26,10 @@ class Tenant(IdentityBase, SoftDeleteMixin):
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    __table_args__ = ({"schema": "identity"},)
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_tenants_status"),
+        {"schema": "identity"},
+    )
 
 
 class User(IdentityBase, SoftDeleteMixin):

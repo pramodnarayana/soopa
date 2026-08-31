@@ -113,8 +113,6 @@ def get_safe_ip(hostname: str) -> str | None:
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             from seedwork.constants import DeploymentEnvironment
 
-            from edi.config.settings import get_settings
-
             if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
                 return ip_str
             return None

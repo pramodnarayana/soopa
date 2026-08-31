@@ -28,6 +28,7 @@ from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDelet
 from ucp.application.use_cases.ucp_audit_log_cleanup_use_case import UcpAuditLogCleanupUseCase
 from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
 from ucp.bootstrap.config import get_settings
+from ucp.domain.constants import UcpEventType
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 from ucp_worker.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
@@ -131,7 +132,7 @@ class WorkerContainer:
                     "tenant_deleted_missing_tenant_id", event_id=getattr(event, "id", None)
                 )
 
-        consumer.subscribe("TenantDeleted", tenant_deleted_event_handler)
+        consumer.subscribe(UcpEventType.TENANT_DELETED.value, tenant_deleted_event_handler)
 
     def _wire_events_consumer(self) -> None:
         @asynccontextmanager
@@ -145,8 +146,6 @@ class WorkerContainer:
         self.events_dispatcher = UcpEventDispatcher()
 
         consumer = self.events_dispatcher
-        from ucp.domain.constants import UcpEventType
-
         consumer.subscribe(UcpEventType.APP_SUBSCRIBED.value, provisioner.handle_app_subscribed)
         consumer.subscribe(UcpEventType.APP_UNSUBSCRIBED.value, provisioner.handle_app_unsubscribed)
 

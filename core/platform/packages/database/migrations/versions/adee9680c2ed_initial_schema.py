@@ -70,6 +70,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_by", sa.String(), nullable=True),
+        sa.CheckConstraint("status IN ('active', 'inactive')", name="ck_tenants_status"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_tenant_id"),
         sa.UniqueConstraint("name"),
