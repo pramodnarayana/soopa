@@ -13,14 +13,17 @@ class DeleteInboundRouteUseCase:
     async def delete_inbound_route(
         self, tenant_id: str, route_id: str, idempotency_key: str | None = None
     ) -> bool:
-        res = await self.uow.inbound_routes.delete_inbound_route(tenant_id, route_id)
-        if res:
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_inbound_route_deleted,
-                    resource_id=str(route_id),
-                ),
-                idempotency_key=idempotency_key,
+        aggregate = await self.uow.inbound_routes.get_inbound_route_by_id(tenant_id, route_id)
+        if not aggregate:
+            return False
+
+        aggregate.add_domain_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_inbound_route_deleted,
+                resource_id=route_id,
+                explicit_idempotency_key=idempotency_key,
             )
-        return res
+        )
+        await self.uow.inbound_routes.delete(aggregate)
+        return True

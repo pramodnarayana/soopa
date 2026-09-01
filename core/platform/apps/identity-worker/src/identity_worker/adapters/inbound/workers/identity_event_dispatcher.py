@@ -27,7 +27,18 @@ class IdentityEventDispatcher:
 
     async def dispatch_raw(self, payload: dict[str, Any]) -> None:
         """Entrypoint called by the SqsConsumerManager."""
-        event = IdentityEventMessage.model_validate(payload)
+        event_type = str(payload.get("eventType") or payload.get("event_type") or "")
+        if not event_type:
+            raise ValueError("Malformed message: missing event type")
+
+        event = IdentityEventMessage(
+            id=str(payload.get("eventId") or payload.get("id") or ""),
+            source=str(payload.get("source") or ""),
+            event_type=event_type,
+            payload=payload.get("payload", {}),
+            idempotency_key=payload.get("idempotencyKey") or payload.get("idempotency_key"),
+            tenant_id=payload.get("tenantId") or payload.get("tenant_id"),
+        )
         await self._dispatch(event)
 
     async def _dispatch(self, event: IdentityEventMessage) -> None:

@@ -64,6 +64,11 @@ class DeliveryUseCase:
                         await uow.outbox.mark_delivery_failure(key_str, owner_token)
                         await uow.commit()
                     except Exception:
-                        logger.exception("Failed to mark outbox as FAILED")
-                logger.exception("delivery.failed", trace_id=trace_id)
+                        logger.exception(
+                            "outbox_delivery_failure_mark_failed",
+                            trace_id=trace_id,
+                            idempotency_key=key_str,
+                        )
+
+                logger.exception("delivery_failed", trace_id=trace_id)
                 raise

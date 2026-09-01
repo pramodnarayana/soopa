@@ -1,20 +1,14 @@
+import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.models.control_plane import (
     SFTPPartner,
 )
-from edi.application.dto import (
-    CreateSFTPPartnerCmd,
-    UpdateSFTPPartnerCmd,
-)
-from edi.domain.models import (
-    SFTPPartnerDomainModel,
-)
+from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 
 
@@ -25,27 +19,25 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
     # ------------------------------------------------------------------------
     # SFTP Partners (Now in Control Plane)
     # ------------------------------------------------------------------------
-    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
-        record = SFTPPartner(
-            tenant_id=tenant_id,
-            name=cmd.name,
-            host=cmd.host,
-            port=cmd.port,
-            username=cmd.username,
-            inbound_remote_path=cmd.inbound_remote_path
-            if hasattr(cmd, "inbound_remote_path")
-            else None,
-            outbound_remote_path=cmd.outbound_remote_path
-            if hasattr(cmd, "outbound_remote_path")
-            else None,
-            password_encrypted=None,
-            credentials_vault_ref=cmd.credentials_vault_ref,
-            host_key=None,
-            active=False,
+    async def save(self, aggregate: SFTPPartnerDomainModel) -> None:
+        result = await self.session.execute(
+            select(SFTPPartner).where(
+                SFTPPartner.id == aggregate.id,
+                SFTPPartner.tenant_id == aggregate.tenant_id,
+                SFTPPartner.deleted_at.is_(None),
+            )
         )
-        self.session.add(record)
+        record = result.scalar_one_or_none()
+        if not record:
+            record = SFTPPartner(id=aggregate.id)
+            self.session.add(record)
+
+        for field in dataclasses.fields(aggregate):
+            if field.name not in ("created_at", "updated_at", "_domain_events"):
+                setattr(record, field.name, getattr(aggregate, field.name))
+
+        self._drain_events(aggregate)
         await self.session.flush()
-        return record.id
 
     async def get_sftp_partner(
         self, tenant_id: str, partner_id: str
@@ -87,44 +79,18 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
             for r in result.scalars().all()
         ]
 
-    async def update_sftp_partner(
-        self, tenant_id: str, partner_id: str, cmd: UpdateSFTPPartnerCmd
-    ) -> None:
-        result = await self.session.execute(
-            select(SFTPPartner).where(
-                SFTPPartner.id == partner_id,
-                SFTPPartner.tenant_id == tenant_id,
-                SFTPPartner.deleted_at.is_(None),
-            )
-        )
-        partner = result.scalar_one_or_none()
-        if partner:
-            import dataclasses
-
-            from edi.application.dto import UNSET
-
-            update_data = {
-                f.name: getattr(cmd, f.name)
-                for f in dataclasses.fields(cmd)
-                if getattr(cmd, f.name) is not UNSET
-            }
-            for key, value in update_data.items():
-                if key == "password":
-                    partner.password_encrypted = db_encryption.encrypt(value) if value else None
-                else:
-                    setattr(partner, key, value)
-        await self.session.flush()
-
-    async def delete_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
+    async def delete(self, aggregate: SFTPPartnerDomainModel) -> None:
         await self.session.execute(
             update(SFTPPartner)
             .where(
-                SFTPPartner.id == partner_id,
-                SFTPPartner.tenant_id == tenant_id,
+                SFTPPartner.id == aggregate.id,
+                SFTPPartner.tenant_id == aggregate.tenant_id,
                 SFTPPartner.deleted_at.is_(None),
             )
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
         )
+
+        self._drain_events(aggregate)
         await self.session.flush()
 
     async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:

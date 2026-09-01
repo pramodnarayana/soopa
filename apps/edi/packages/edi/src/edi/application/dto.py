@@ -209,6 +209,12 @@ class CreateOutboundEdiHeaderCmd:
     transaction_type: str | None = None
     default_standard: str | None = None
     default_version: str | None = None
+    isa_control_version: str | None = None
+    isa_usage_indicator: str | None = None
+    gs_version: str | None = None
+    segment_terminator: str | None = None
+    element_separator: str | None = None
+    subelement_separator: str | None = None
 
 
 @dataclass(frozen=True)
@@ -323,3 +329,31 @@ class ProcessApiEdiJsonCommand:
 class ProcessInboundAs2Command:
     headers: dict[str, str]
     body_bytes: bytes
+
+
+@dataclass(frozen=True)
+class RouteDTO:
+    """
+    Typed DTO returned by TransactionRepositoryPort.get_route().
+    Replaces raw dict[str, Any] to enforce strict DTO boundary.
+    """
+
+    trading_partner_id: str | None
+    webhook_id: str | None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
+    processing_mode: str | None = None
+
+
+@dataclass(frozen=True)
+class WebhookDTO:
+    """
+    Typed DTO returned by TransactionRepositoryPort.get_webhook().
+    Replaces raw dict[str, Any] to enforce strict DTO boundary.
+    """
+
+    id: str
+    url: str
+    name: str
+    active: bool
+    auth_header_vault_ref: str | None = None

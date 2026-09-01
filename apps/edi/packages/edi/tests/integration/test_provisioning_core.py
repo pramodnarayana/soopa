@@ -119,8 +119,10 @@ async def test_list_routes(mock_uow, global_repo):
         def __getitem__(self, key):
             return getattr(self, key)
 
-    global_repo.inbound_routes = [FakeRoute(generate_id("id"), as2_id, sftp_id, None)]
-    global_repo.outbound_routes = [FakeRoute(generate_id("id"), as2_id, None, None)]
+    route_in = FakeRoute(generate_id("id"), as2_id, sftp_id, None)
+    global_repo.inbound_routes = {route_in.id: route_in}
+    route_out = FakeRoute(generate_id("id"), as2_id, None, None)
+    global_repo.outbound_routes = {route_out.id: route_out}
 
     inbound_service = ListInboundRoutesUseCase(uow=mock_uow)
     outbound_use_case = ListOutboundRoutesUseCase(uow=mock_uow)

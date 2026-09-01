@@ -1,6 +1,6 @@
 from typing import Any, Protocol
 
-from edi.domain.models import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 
 
 class EDIMessagePort(Protocol):

@@ -247,6 +247,9 @@ async def test_save_transaction_success(service):
         encryption_algorithm="AES256",
     )
     mock_as2_msg = MagicMock(as2_from="ME", as2_to="YOU", message_id="msg-1")
+    _events = []
+    mock_as2_msg.add_domain_event.side_effect = lambda e: _events.append(e)
+    mock_as2_msg.collect_events.side_effect = lambda: _events.copy()
 
     res = await service._save_transaction(
         mock_partnership,
@@ -256,7 +259,14 @@ async def test_save_transaction_success(service):
 
     assert res == "msg-1"
     mock_dp_uow.transactions.create_edi_message.assert_awaited_once()
-    mock_dp_uow.transactions.publish_outbox_event.assert_awaited_once()
-    _args, kwargs = mock_dp_uow.transactions.publish_outbox_event.call_args
-    assert kwargs["idempotency_key"] == "msg-1"
+    # The use case now adds domain events to the aggregate and delegates persistence
+    # via transactions.save(aggregate). publish_outbox_event is NOT called directly.
+    mock_dp_uow.transactions.save.assert_awaited_once()
+    saved_aggregate = mock_dp_uow.transactions.save.call_args[0][0]
+    from edi.domain.events import TransformRequestedEvent
+
+    domain_events = saved_aggregate.domain_events
+    assert len(domain_events) == 1
+    assert isinstance(domain_events[0], TransformRequestedEvent)
+    assert domain_events[0].explicit_idempotency_key == "msg-1"
     mock_dp_uow.commit.assert_awaited_once()

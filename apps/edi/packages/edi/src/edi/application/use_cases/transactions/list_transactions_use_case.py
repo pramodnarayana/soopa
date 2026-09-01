@@ -1,5 +1,5 @@
 from edi.domain.constants import TransactionStatus
-from edi.domain.models import TransactionListDomainModel
+from edi.domain.models.transactions import TransactionListDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 

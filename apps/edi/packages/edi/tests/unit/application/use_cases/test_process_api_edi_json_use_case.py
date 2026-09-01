@@ -35,26 +35,34 @@ class FakeTransactionRepository:
         self.created_edi_jsons: list[dict[str, Any]] = []
         self.outbox_events: list[dict[str, Any]] = []
 
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
-        self.created_edi_jsons.append({"tenant_id": tenant_id, "payload": payload})
-        return payload.get("trace_id", "fake-trace")
-
-    async def publish_outbox_event(
-        self,
-        tenant_id: str,
-        event_type: str,
-        payload: Any,
-        idempotency_key: str | None,
-    ) -> str:
-        self.outbox_events.append(
+    async def save_json(self, aggregate: Any) -> None:
+        self.created_edi_jsons.append(
             {
-                "tenant_id": tenant_id,
-                "event_type": str(event_type),
-                "payload": payload,
-                "idempotency_key": idempotency_key,
+                "tenant_id": aggregate.tenant_id,
+                "payload": {
+                    "trace_id": aggregate.trace_id,
+                    "direction": aggregate.direction.value
+                    if hasattr(aggregate.direction, "value")
+                    else aggregate.direction,
+                    "transaction_type": aggregate.transaction_type,
+                    "business_metadata": aggregate.business_metadata,
+                    "payload": aggregate.payload,
+                    "status": aggregate.status.value
+                    if hasattr(aggregate.status, "value")
+                    else aggregate.status,
+                },
             }
         )
-        return idempotency_key or "auto"
+        for event in aggregate.domain_events:
+            self.outbox_events.append(
+                {
+                    "tenant_id": aggregate.tenant_id,
+                    "event_type": str(event.__class__.__name__),
+                    "payload": event,
+                    "idempotency_key": event.trace_id if hasattr(event, "trace_id") else None,
+                }
+            )
+        aggregate.clear_domain_events()
 
 
 class FakeDataPlaneUnitOfWork:

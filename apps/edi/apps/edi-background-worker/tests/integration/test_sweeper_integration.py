@@ -70,6 +70,11 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
     # Force a failure on shard_1 by patching db_router.get_shard_session
     original_get_shard_session = db_router.get_shard_session
 
+    async def mock_get_all_shards():
+        return [("ucp_shard_1", "mock_dsn_1"), ("ucp_shard_2", "mock_dsn_2")]
+
+    monkeypatch.setattr(db_router, "get_all_shards", mock_get_all_shards)
+
     async def mock_fail_session(shard_name: str, dsn: str | None = None):
         if shard_name == "ucp_shard_1":
             raise RuntimeError("Database connection lost for shard_1")

@@ -16,19 +16,22 @@ class DeleteOutboundEdiHeaderUseCase:
             header_id=header_id,
             tenant_id=tenant_id,
         )
-        success = await self.uow.edi_headers.delete_outbound_edi_header(tenant_id, header_id)
+        aggregate = await self.uow.edi_headers.get_outbound_edi_header(tenant_id, header_id)
+        if not aggregate:
+            return False
 
-        if success:
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_header_deleted,
-                    resource_id=str(header_id),
-                )
+        aggregate.add_domain_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_header_deleted,
+                resource_id=header_id,
             )
-            logger.info(
-                "Published OUTBOUND_EDI_HEADER_DELETED outbox event for {header_id}",
-                header_id=header_id,
-            )
+        )
 
-        return success
+        await self.uow.edi_headers.delete(aggregate)
+        logger.info(
+            "Published OUTBOUND_EDI_HEADER_DELETED outbox event for {header_id}",
+            header_id=header_id,
+        )
+
+        return True

@@ -1,6 +1,6 @@
 from typing import Any
 
-from edi.domain.models import EdiMessageDomainModel
+from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
@@ -88,10 +88,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
         # Return an object-like view for the tests
         class DummyEdiJson:
-            def __init__(self, d):
+            def __init__(self, d: dict[str, Any]) -> None:
                 self.__dict__.update(d)
 
-            def __getattr__(self, name):
+            def __getattr__(self, name: str) -> Any | None:
                 # Return None for attributes not in the seeded dict
                 return None
 
@@ -167,7 +167,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             from datetime import UTC, datetime
 
             from edi.domain.direction import MessageDirection
-            from edi.domain.models import EdiMessageDomainModel
+            from edi.domain.models.transactions import EdiMessageDomainModel
             from edi.domain.status import MessageStatus
 
             # Shallow-copy so mutations inside the domain model (or test assertions)

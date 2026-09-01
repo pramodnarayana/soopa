@@ -1,10 +1,9 @@
 import dataclasses
 from datetime import UTC, datetime
-from typing import Any, cast
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import CursorResult, or_, select, update
+from sqlalchemy import or_, select, update
 
 from database.models import Webhook
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
@@ -13,14 +12,8 @@ from edi.adapters.outbound.database.models.control_plane import (
     InboundRoute,
     SFTPPartner,
 )
-from edi.application.dto import (
-    CreateInboundRouteCmd,
-    UnsetType,
-    UpdateInboundRouteCmd,
-)
-from edi.domain.models import (
-    InboundRouteDomainModel,
-)
+from edi.application.dto import UnsetType
+from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 
 
@@ -85,76 +78,32 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     f"SFTP partner {sftp_id} not found or does not belong to this tenant"
                 )
 
-    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> str:
+    async def save(self, aggregate: InboundRouteDomainModel) -> None:
         await self._validate_inbound_destination(
-            tenant_id, cmd.webhook_id, cmd.as2_partner_id, cmd.sftp_partner_id
+            aggregate.tenant_id,
+            aggregate.webhook_id,
+            aggregate.as2_partner_id,
+            aggregate.sftp_partner_id,
         )
 
-        record = InboundRoute(
-            tenant_id=tenant_id,
-            name=cmd.name,
-            trading_partner_id=cmd.trading_partner_id,
-            isa_sender_id=cmd.isa_sender_id,
-            isa_receiver_id=cmd.isa_receiver_id,
-            gs_sender_id=cmd.gs_sender_id,
-            gs_receiver_id=cmd.gs_receiver_id,
-            transaction_type=cmd.transaction_type,
-            webhook_id=cmd.webhook_id,
-            as2_partner_id=cmd.as2_partner_id,
-            sftp_partner_id=cmd.sftp_partner_id,
-            processing_mode=cmd.processing_mode,
-        )
-        self.session.add(record)
-        await self.session.flush()
-        return record.id
-
-    async def update_inbound_route(
-        self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
-    ) -> bool:
         result = await self.session.execute(
             select(InboundRoute).where(
-                InboundRoute.id == route_id,
-                InboundRoute.tenant_id == tenant_id,
+                InboundRoute.id == aggregate.id,
+                InboundRoute.tenant_id == aggregate.tenant_id,
                 InboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
         if not record:
-            return False
-        if not isinstance(cmd.name, UnsetType):
-            record.name = cmd.name
-        if not isinstance(cmd.trading_partner_id, UnsetType):
-            record.trading_partner_id = cmd.trading_partner_id
-        if not isinstance(cmd.isa_sender_id, UnsetType):
-            record.isa_sender_id = cmd.isa_sender_id
-        if not isinstance(cmd.isa_receiver_id, UnsetType):
-            record.isa_receiver_id = cmd.isa_receiver_id
-        if not isinstance(cmd.gs_sender_id, UnsetType):
-            record.gs_sender_id = cmd.gs_sender_id
-        if not isinstance(cmd.gs_receiver_id, UnsetType):
-            record.gs_receiver_id = cmd.gs_receiver_id
-        if not isinstance(cmd.transaction_type, UnsetType):
-            record.transaction_type = cmd.transaction_type
-        if not isinstance(cmd.processing_mode, UnsetType):
-            record.processing_mode = cmd.processing_mode
-        if not isinstance(cmd.webhook_id, UnsetType):
-            record.webhook_id = str(cmd.webhook_id) if cmd.webhook_id else None
-        if not isinstance(cmd.as2_partner_id, UnsetType):
-            record.as2_partner_id = str(cmd.as2_partner_id) if cmd.as2_partner_id else None
-        if not isinstance(cmd.sftp_partner_id, UnsetType):
-            record.sftp_partner_id = str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None
-        if not isinstance(cmd.active, UnsetType):
-            record.active = cmd.active
+            record = InboundRoute(id=aggregate.id)
+            self.session.add(record)
 
-        await self._validate_inbound_destination(
-            tenant_id,
-            record.webhook_id,
-            record.as2_partner_id,
-            record.sftp_partner_id,
-        )
+        for field in dataclasses.fields(aggregate):
+            if field.name not in ("created_at", "updated_at", "_domain_events"):
+                setattr(record, field.name, getattr(aggregate, field.name))
 
+        self._drain_events(aggregate)
         await self.session.flush()
-        return True
 
     async def get_inbound_route(
         self,
@@ -245,15 +194,16 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             )
         return str(rows[0]) if rows else None
 
-    async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
-        result = await self.session.execute(
+    async def delete(self, aggregate: InboundRouteDomainModel) -> None:
+        await self.session.execute(
             update(InboundRoute)
             .where(
-                InboundRoute.id == route_id,
-                InboundRoute.tenant_id == tenant_id,
+                InboundRoute.id == aggregate.id,
+                InboundRoute.tenant_id == aggregate.tenant_id,
                 InboundRoute.deleted_at.is_(None),
             )
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
+
+        self._drain_events(aggregate)
         await self.session.flush()
-        return (cast(CursorResult[Any], result).rowcount or 0) > 0

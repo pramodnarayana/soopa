@@ -26,7 +26,7 @@ from edi.adapters.outbound.database.models.data_plane import (
 )
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox as Outbox
 from edi.config.settings import AppSettings
-from edi.domain.models import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
@@ -59,7 +59,11 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             edi_data = raw_bytes.decode("utf-8")
 
         domain_model = EdiMessageDomainModel(
-            **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            **{
+                k: v
+                for k, v in record.__dict__.items()
+                if not k.startswith("_") and k in EdiMessageDomainModel.__dataclass_fields__
+            }
         )
         domain_model.edi_data = edi_data
         return domain_model
@@ -251,7 +255,11 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             payload = json.loads(raw_bytes.decode("utf-8"))
 
         domain_model = EdiJsonDomainModel(
-            **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            **{
+                k: v
+                for k, v in record.__dict__.items()
+                if not k.startswith("_") and k in EdiJsonDomainModel.__dataclass_fields__
+            }
         )
         domain_model.payload = payload
         return domain_model

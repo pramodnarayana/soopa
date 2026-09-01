@@ -7,6 +7,7 @@ no patches/mocks. This is hexagonal architecture: inject a Port-conforming
 fake and assert on observable behavior.
 """
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
@@ -136,6 +137,37 @@ class FakeTransactionRepository:
             {"tenant_id": tenant_id, "event_type": event_type, "payload": payload, "key": key}
         )
         return key
+
+    async def get_edi_message(self, trace_id: str) -> Any:
+        from edi.domain.models.base import Direction, RecordStatus
+        from edi.domain.models.transactions import EdiMessageDomainModel
+
+        # Mock returning an aggregate
+        return EdiMessageDomainModel(
+            id="fake_id",
+            tenant_id="tenant",
+            trace_id=trace_id,
+            direction=Direction.INBOUND,
+            status=RecordStatus.SUCCESS,
+        )
+
+    async def save(self, model: Any) -> None:
+        for e in model.domain_events:
+            event_type = getattr(e, "event_type", "edi.transaction.replay_requested")
+            if dataclasses.is_dataclass(e):
+                payload = dataclasses.asdict(e)
+            else:
+                payload = getattr(e, "model_dump", lambda ev=e: vars(ev))()
+            key = getattr(e, "explicit_idempotency_key", None)
+            self.outbox_events.append(
+                {
+                    "tenant_id": model.tenant_id,
+                    "event_type": event_type,
+                    "payload": payload,
+                    "key": key,
+                }
+            )
+        model.clear_domain_events()
 
 
 class FakeDataPlaneUnitOfWork:

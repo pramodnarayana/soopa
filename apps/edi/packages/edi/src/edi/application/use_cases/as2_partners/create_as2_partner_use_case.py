@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 
 import structlog
@@ -12,9 +13,7 @@ from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
-from edi.domain.models import (
-    AS2PartnerDomainModel,
-)
+from edi.domain.models.as2 import AS2PartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -148,8 +147,11 @@ class CreateAS2PartnerUseCase:
                     public_cert_pem,
                 ) = await self._provision_local_key(cmd)
 
-            # Update command with potentially new vault ref and cert
-            updated_cmd = CreateAS2TradingPartnerCmd(
+            partner_id = f"{AS2PartnerDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+
+            aggregate = AS2PartnerDomainModel(
+                id=partner_id,
+                tenant_id=tenant_id,
                 name=cmd.name,
                 as2_id=cmd.as2_id,
                 is_local=cmd.is_local,
@@ -157,20 +159,21 @@ class CreateAS2PartnerUseCase:
                 public_cert_pem=public_cert_pem,
                 public_cert_vault_ref=cmd.public_cert_vault_ref,
                 private_key_vault_ref=private_key_vault_ref,
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+                updated_at=datetime.now(UTC).replace(tzinfo=None),
+                active=False,
             )
 
-            partner_id = await self.uow.as2_partners.create_as2_identity(
-                tenant_id=tenant_id, cmd=updated_cmd
-            )
-
-            await self.uow.control_plane_outbox.publish_outbox_event(
+            aggregate.add_domain_event(
                 ProvisioningEvent(
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_as2_partner_created,
-                    resource_id=str(partner_id),
-                ),
-                idempotency_key=idempotency_key,
+                    resource_id=partner_id,
+                    explicit_idempotency_key=idempotency_key,
+                )
             )
+
+            await self.uow.as2_partners.save(aggregate)
 
             logger.info(
                 "provisioning_as2_partner_completed",
@@ -178,16 +181,7 @@ class CreateAS2PartnerUseCase:
                 tenant_id=tenant_id,
             )
 
-            return AS2PartnerDomainModel(
-                id=partner_id,
-                tenant_id=tenant_id,
-                name=cmd.name,
-                as2_id=cmd.as2_id,
-                is_local=cmd.is_local,
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
-                active=False,
-            )
+            return aggregate
 
         except Exception as e:
             # Note: We don't catch PartnerAlreadyExistsError specifically because we want it to bubble up,

@@ -6,7 +6,11 @@ These are domain value objects with no external dependencies — only the Python
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
+from typing import Any
+
+from seedwork.models import AggregateRoot
 
 
 class Disposition(StrEnum):
@@ -72,3 +76,44 @@ class MDNResponse:
 
     body: bytes
     headers: dict[str, str]
+
+
+@dataclass(kw_only=True)
+class AS2PartnerDomainModel(AggregateRoot):
+    ID_PREFIX = "as2"
+
+    id: str
+    as2_id: str
+    name: str
+    is_local: bool
+    created_at: datetime
+    updated_at: datetime
+    tenant_id: str | None = None
+    public_cert_pem: str | None = None
+    public_cert_vault_ref: str | None = None
+    private_key_vault_ref: str | None = None
+    prev_public_cert_pem: str | None = None
+    prev_public_cert_vault_ref: str | None = None
+    prev_private_key_vault_ref: str | None = None
+    url: str | None = None
+    active: bool = False
+
+
+@dataclass(kw_only=True)
+class AS2PartnershipDomainModel(AggregateRoot):
+    ID_PREFIX = "pship"
+
+    id: str
+    name: str
+    local_partner_id: str
+    remote_partner_id: str
+    mdn_type: str
+    encryption_algorithm: str
+    signature_algorithm: str
+    created_at: datetime
+    updated_at: datetime
+    tenant_id: str | None = None
+    credentials_vault_ref: str | None = None
+    mdn_url: str | None = None
+    advanced_flags: dict[str, Any] | None = None
+    active: bool = False

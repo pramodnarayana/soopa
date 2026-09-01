@@ -1,8 +1,11 @@
+import os
+from datetime import UTC, datetime
+
 import structlog
 
 from edi.application.dto import CreateOutboundRouteCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import OutboundRouteDomainModel
+from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -20,29 +23,34 @@ class CreateOutboundRouteUseCase:
             cmd_trading_partner_id=cmd.trading_partner_id,
             tenant_id=tenant_id,
         )
-        route_id = await self.uow.outbound_routes.create_outbound_route(
-            tenant_id=tenant_id, cmd=cmd
+        route_id = f"{OutboundRouteDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+
+        aggregate = OutboundRouteDomainModel(
+            id=route_id,
+            tenant_id=tenant_id,
+            trading_partner_id=cmd.trading_partner_id,
+            name=cmd.name,
+            active=False,
+            created_at=datetime.now(UTC).replace(tzinfo=None),
+            updated_at=datetime.now(UTC).replace(tzinfo=None),
+            as2_partner_id=str(cmd.as2_partner_id) if cmd.as2_partner_id else None,
+            sftp_partner_id=str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None,
         )
-        await self.uow.control_plane_outbox.publish_outbox_event(
+
+        aggregate.add_domain_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_outbound_route_created,
-                resource_id=str(route_id),
-            ),
-            idempotency_key=idempotency_key,
+                resource_id=route_id,
+                explicit_idempotency_key=idempotency_key,
+            )
         )
 
-        route_obj = await self.uow.outbound_routes.get_outbound_route(tenant_id, str(route_id))
-        if not route_obj:
-            raise ValueError("Outbound route not found after creation")
-        return OutboundRouteDomainModel(
-            id=route_obj.id,
+        await self.uow.outbound_routes.save(aggregate)
+
+        logger.info(
+            "outbound_route_created",
+            route_id=route_id,
             tenant_id=tenant_id,
-            trading_partner_id=route_obj.trading_partner_id,
-            name=route_obj.name,
-            active=route_obj.active,
-            created_at=route_obj.created_at,
-            updated_at=route_obj.updated_at,
-            as2_partner_id=str(route_obj.as2_partner_id) if route_obj.as2_partner_id else None,
-            sftp_partner_id=str(route_obj.sftp_partner_id) if route_obj.sftp_partner_id else None,
         )
+        return aggregate

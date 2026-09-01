@@ -1,21 +1,12 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from edi.application.dto import (
-    CreateSFTPPartnerCmd,
-    UpdateSFTPPartnerCmd,
-)
-from edi.domain.models import (
-    SFTPPartnerDomainModel,
-)
+from edi.domain.models.sftp import SFTPPartnerDomainModel
 
 
 class SFTPPartnerRepositoryPort(Protocol):
-    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str: ...
-    async def update_sftp_partner(
-        self, tenant_id: str, partner_id: str, cmd: UpdateSFTPPartnerCmd
-    ) -> None: ...
-    async def delete_sftp_partner(self, tenant_id: str, partner_id: str) -> None: ...
+    async def save(self, aggregate: SFTPPartnerDomainModel) -> None: ...
+    async def delete(self, aggregate: SFTPPartnerDomainModel) -> None: ...
     async def get_sftp_partner(
         self, tenant_id: str, partner_id: str
     ) -> SFTPPartnerDomainModel | None: ...

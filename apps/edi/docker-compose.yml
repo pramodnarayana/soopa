@@ -35,7 +35,6 @@ services:
     - DEBEZIUM_SOURCE_DATABASE_USER=edi
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
     - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
-    - DEBEZIUM_SINK_URL=http://host.docker.internal:3000/internal/cdc/relay
     extra_hosts:
     - host.docker.internal:host-gateway
     volumes:

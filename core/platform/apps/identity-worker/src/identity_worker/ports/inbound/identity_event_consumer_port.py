@@ -1,10 +1,10 @@
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from typing import Any, Protocol
 
-from pydantic import BaseModel
 
-
-class IdentityEventMessage(BaseModel):
+@dataclass(frozen=True)
+class IdentityEventMessage:
     """
     Schema for an incoming domain event received from the event broker.
     This exactly matches the fields in EventEnvelope.

@@ -1,8 +1,10 @@
+import dataclasses
+
 import structlog
 
 from edi.application.dto import UNSET, UpdateSFTPPartnerCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import SFTPPartnerDomainModel
+from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -29,8 +31,8 @@ class UpdateSFTPPartnerUseCase:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
         has_password = (
-            bool(getattr(cmd, "password", None))
-            if getattr(cmd, "password", None) is not UNSET
+            bool(cmd.password)
+            if cmd.password is not UNSET
             else bool(getattr(existing, "password_encrypted", None))
         )
         has_vault = (
@@ -45,34 +47,25 @@ class UpdateSFTPPartnerUseCase:
         if has_password and has_vault:
             raise ValueError("SFTP partner cannot have both a password and a credentials_vault_ref")
 
-        await self.uow.sftp_partners.update_sftp_partner(
-            tenant_id=tenant_id, partner_id=partner_id, cmd=cmd
-        )
+        for field in dataclasses.fields(cmd):
+            value = getattr(cmd, field.name)
+            if value is not UNSET:
+                setattr(existing, field.name, value)
 
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            event=ProvisioningEvent(
+        existing.add_domain_event(
+            ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_sftp_partner_updated,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
+                resource_id=partner_id,
+                explicit_idempotency_key=idempotency_key,
+            )
         )
-        updated_partner = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
-        if not updated_partner:
-            raise ValueError(f"SFTP partner {partner_id} not found")
 
-        from datetime import datetime
+        await self.uow.sftp_partners.save(existing)
 
-        return SFTPPartnerDomainModel(
-            id=partner_id,
+        logger.info(
+            "sftp_partner_updated",
+            partner_id=partner_id,
             tenant_id=tenant_id,
-            name=str(cmd.name)
-            if (cmd.name is not UNSET and cmd.name)
-            else str(updated_partner.name),
-            host=updated_partner.host,
-            port=updated_partner.port,
-            username=updated_partner.username,
-            active=updated_partner.active,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
         )
+        return existing

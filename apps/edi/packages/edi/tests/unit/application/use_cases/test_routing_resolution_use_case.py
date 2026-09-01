@@ -15,7 +15,7 @@ TP_META = generate_id("tp")
 TP_X = generate_id("tp")
 
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
-from edi.domain.models import ConnectionType, Direction
+from edi.domain.models.base import ConnectionType, Direction
 
 # ---------------------------------------------------------------------------
 # Fake Port Implementation

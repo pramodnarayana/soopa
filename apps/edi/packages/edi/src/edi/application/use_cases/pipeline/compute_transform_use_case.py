@@ -1,15 +1,16 @@
+import contextlib
 import copy
-import uuid
+from collections.abc import Callable
 
 import structlog
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
 from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
+from edi.domain.events import PipelineEventType, TransformCompleted
 from edi.domain.status import MessageStatus
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.transformer_port import TransformerPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -22,22 +23,29 @@ class ComputeTransformUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWorkPort,
+        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
     ) -> None:
-        self.uow = uow
+        self.uow_factory = uow_factory
         self.transformer = transformer
 
     async def execute(self, trace_id: str, standard: str, transaction_type: str) -> None:
         """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORM_COMPLETED."""
-        logger.info("compute_transform.started", trace_id=trace_id)
+        logger.info(
+            "compute_transform.started",
+            trace_id=trace_id,
+            standard=standard,
+            transaction_type=transaction_type,
+        )
 
-        async with self.uow:
-            edi_msg = await self.uow.repository.get_edi_message(trace_id)
+        async with self.uow_factory() as uow, uow:
+            edi_msg = await uow.transactions.get_edi_message(trace_id)
             if not edi_msg:
+                logger.warning("compute_transform.edi_message_not_found", trace_id=trace_id)
                 raise ValueError(f"No EDI message found for trace_id={trace_id}")
 
             if not edi_msg.edi_data:
+                logger.warning("compute_transform.edi_data_missing", trace_id=trace_id)
                 raise ValueError(f"No EDI data found for trace_id={trace_id}")
 
             raw_payload = edi_msg.edi_data.encode("utf-8")
@@ -47,7 +55,18 @@ class ComputeTransformUseCase:
                 payload=raw_payload, standard=standard, transaction_type=transaction_type
             )
             if not transformed_txns:
+                logger.warning(
+                    "compute_transform.transform_failed",
+                    trace_id=trace_id,
+                    transaction_type=transaction_type,
+                )
                 raise ValueError(f"Failed to transform EDI transaction {transaction_type}")
+
+            logger.info(
+                "compute_transform.transform_succeeded",
+                trace_id=trace_id,
+                transaction_count=len(transformed_txns),
+            )
 
             # 2. Process each transaction
             extractor = MetadataExtractorService()
@@ -62,8 +81,8 @@ class ComputeTransformUseCase:
                 else edi_msg.transaction_type
             )
             route = (
-                await self.uow.repository.get_route(
-                    MessageDirection.INBOUND.value,
+                await uow.transactions.get_route(
+                    MessageDirection.INBOUND,
                     str(edi_msg.sender_id),
                     str(edi_msg.receiver_id),
                     str(transaction_type_global) if transaction_type_global else "",
@@ -71,7 +90,13 @@ class ComputeTransformUseCase:
                 if edi_msg.sender_id and edi_msg.receiver_id
                 else None
             )
-            partnership_id_str = route.get("trading_partner_id") if route else None
+            partnership_id_str = route.trading_partner_id if route else None
+            logger.info(
+                "compute_transform.route_resolved",
+                trace_id=trace_id,
+                partner_id=partnership_id_str,
+                has_route=route is not None,
+            )
 
             for txn in transformed_txns:
                 txn_type = txn.transaction_type
@@ -87,7 +112,7 @@ class ComputeTransformUseCase:
                     json_dict["transaction_type"] = txn_type
                 business_metadata = extractor.extract(txn_type, json_dict)
 
-                await self.uow.repository.save_edi_json(
+                await uow.transactions.save_edi_json(
                     trace_id=trace_id,
                     direction=MessageDirection.INBOUND.value,
                     partnership_id=partnership_id_str,
@@ -102,6 +127,11 @@ class ComputeTransformUseCase:
                     status=MessageStatus.PARSED.value,
                     tenant_id=edi_msg.tenant_id,
                 )
+                logger.info(
+                    "compute_transform.edi_json_saved",
+                    trace_id=trace_id,
+                    transaction_type=txn_type,
+                )
                 json_payloads.append(json_dict)
 
             # Metadata to emit in event
@@ -111,10 +141,22 @@ class ComputeTransformUseCase:
             trading_partner_id = partnership_id_str
 
             webhook_url = None
-            if route and route.get("webhook_id"):
-                partner = await self.uow.repository.get_webhook(str(route.get("webhook_id")))
+            if route and route.webhook_id:
+                partner = await uow.transactions.get_webhook(str(route.webhook_id))
                 if partner:
-                    webhook_url = partner.get("url")
+                    webhook_url = partner.url
+                    logger.info(
+                        "compute_transform.webhook_resolved",
+                        trace_id=trace_id,
+                        webhook_id=route.webhook_id,
+                        webhook_url=webhook_url,
+                    )
+                else:
+                    logger.warning(
+                        "compute_transform.webhook_not_found",
+                        trace_id=trace_id,
+                        webhook_id=route.webhook_id,
+                    )
 
             envelope = EdiWebhookPayload.build(
                 trace_id=trace_id,
@@ -127,31 +169,35 @@ class ComputeTransformUseCase:
             )
 
             # Save ApiGateway to DB as a single webhook delivery
-            await self.uow.repository.save_api_payload(
+            await uow.transactions.save_api_payload(
                 trace_id=trace_id,
+                tenant_id=edi_msg.tenant_id,
                 direction=MessageDirection.OUTBOUND.value,
                 payload=envelope.model_dump(),
                 status=MessageStatus.PENDING_DELIVERY.value,
                 transaction_type=standard,
                 webhook_url=webhook_url,
             )
+            logger.info("compute_transform.api_payload_saved", trace_id=trace_id)
 
-            # 4. Publish TRANSFORM_COMPLETED event
-            transform_completed_key = str(
-                uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:TRANSFORM_COMPLETED")
+            # 4. Record TRANSFORM_COMPLETED on the aggregate — repository drains to outbox.
+            edi_msg.add_domain_event(
+                TransformCompleted(
+                    trace_id=trace_id,
+                    tenant_id=edi_msg.tenant_id or "",
+                    direction=MessageDirection.INBOUND.value,
+                    gs_sender_id=gs_sender_global,
+                    gs_receiver_id=gs_receiver_global,
+                    transaction_type=txn_type_for_parent,
+                )
             )
-            await self.uow.outbox.append_event(
-                idempotency_key=transform_completed_key,
+            await uow.transactions.save(edi_msg)
+            logger.info(
+                "compute_transform.outbox_event_dispatched",
+                trace_id=trace_id,
                 event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
-                payload={
-                    "trace_id": trace_id,
-                    "direction": MessageDirection.INBOUND.value,
-                    "gs_sender_id": gs_sender_global,
-                    "gs_receiver_id": gs_receiver_global,
-                    "transaction_type": txn_type_for_parent,
-                },
             )
 
-            await self.uow.commit()
+            await uow.commit()
 
         logger.info("compute_transform.completed", trace_id=trace_id)

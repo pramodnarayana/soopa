@@ -23,9 +23,12 @@ from seedwork import SystemIdPrefix, generate_id
 
 from edi.application.dto import ProcessInboundAs2Command
 from edi.domain.constants import EdiConnectionType, TransactionDirection, TransactionStatus
-from edi.domain.events import PipelineEventType
-from edi.domain.models import AS2PartnerDomainModel, AS2PartnershipDomainModel
-from edi.domain.models.as2 import AS2Message, MDNResponse
+from edi.domain.models.as2 import (
+    AS2Message,
+    AS2PartnerDomainModel,
+    AS2PartnershipDomainModel,
+    MDNResponse,
+)
 from edi.domain.services.as2_protocol import (
     build_mdn,
     calculate_mic,
@@ -424,11 +427,62 @@ class ProcessInboundAs2MessageUseCase:
 
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
-            msg_id = await dp_uow.transactions.create_edi_message(
-                tenant_id=true_tenant_id, payload=edi_record
+            import os
+
+            from edi.adapters.outbound.database.constants import EDI_MESSAGE_ID_PREFIX
+            from edi.domain.events import TransformRequestedEvent
+            from edi.domain.models.base import Direction, RecordStatus
+            from edi.domain.models.transactions import EdiMessageDomainModel
+
+            edi_message_aggregate = EdiMessageDomainModel(
+                id=f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}",
+                tenant_id=true_tenant_id,
+                trace_id=str(edi_record["trace_id"]),
+                direction=Direction(str(edi_record["direction"])),
+                connection_type=str(edi_record["connection_type"])
+                if edi_record.get("connection_type")
+                else None,
+                sender_id=str(edi_record["sender_id"]) if edi_record.get("sender_id") else None,
+                receiver_id=str(edi_record["receiver_id"])
+                if edi_record.get("receiver_id")
+                else None,
+                as2_sender_id=str(edi_record["as2_sender_id"])
+                if edi_record.get("as2_sender_id")
+                else None,
+                as2_receiver_id=str(edi_record["as2_receiver_id"])
+                if edi_record.get("as2_receiver_id")
+                else None,
+                message_id=str(edi_record["message_id"]) if edi_record.get("message_id") else None,
+                mdn_mode=str(edi_record["mdn_mode"]) if edi_record.get("mdn_mode") else None,
+                signature_algorithm=str(edi_record["signature_algorithm"])
+                if edi_record.get("signature_algorithm")
+                else None,
+                encryption_algorithm=str(edi_record["encryption_algorithm"])
+                if edi_record.get("encryption_algorithm")
+                else None,
+                edi_data=pure_edi_bytes.decode("utf-8", errors="ignore"),
+                status=RecordStatus(str(edi_record["status"])),
             )
 
-            from edi.domain.events import TransformRequestedEvent
+            msg_id = await dp_uow.transactions.create_edi_message(
+                tenant_id=true_tenant_id,
+                payload={
+                    "id": edi_message_aggregate.id,
+                    "trace_id": edi_message_aggregate.trace_id,
+                    "direction": edi_message_aggregate.direction,
+                    "connection_type": edi_message_aggregate.connection_type,
+                    "sender_id": edi_message_aggregate.sender_id,
+                    "receiver_id": edi_message_aggregate.receiver_id,
+                    "as2_sender_id": edi_message_aggregate.as2_sender_id,
+                    "as2_receiver_id": edi_message_aggregate.as2_receiver_id,
+                    "message_id": edi_message_aggregate.message_id,
+                    "mdn_mode": edi_message_aggregate.mdn_mode,
+                    "signature_algorithm": edi_message_aggregate.signature_algorithm,
+                    "encryption_algorithm": edi_message_aggregate.encryption_algorithm,
+                    "edi_data": edi_message_aggregate.edi_data,
+                    "status": edi_message_aggregate.status,
+                },
+            )
 
             outbox_payload = TransformRequestedEvent(
                 trace_id=str(edi_record["trace_id"]),
@@ -437,13 +491,12 @@ class ProcessInboundAs2MessageUseCase:
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
                 status=TransactionStatus.RECEIVED.value,
+                explicit_idempotency_key=str(msg_id),
             )
-            await dp_uow.transactions.publish_outbox_event(
-                tenant_id=true_tenant_id,
-                event_type=PipelineEventType.TRANSFORM_EVENT,
-                payload=outbox_payload,
-                idempotency_key=str(msg_id),
-            )
+
+            edi_message_aggregate.add_domain_event(outbox_payload)
+
+            await dp_uow.transactions.save(edi_message_aggregate)
 
             await dp_uow.commit()
 

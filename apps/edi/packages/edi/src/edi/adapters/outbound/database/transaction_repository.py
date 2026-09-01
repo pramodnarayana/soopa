@@ -1,19 +1,38 @@
+import os
 from collections.abc import Sequence
 from typing import Any
 
 from outbox.domain.constants import OutboxStatus
-from seedwork import generate_random_hex
 from sqlalchemy import or_, select
 
+from database.exceptions import DuplicateEntityError
+from database.outbox_serializer import serialize_domain_event
 from edi.adapters.outbound.database.base_repository import TenantSession, TenantSqlAlchemyRepository
-from edi.adapters.outbound.database.constants import EDI_JSON_ID_PREFIX, EDI_MESSAGE_ID_PREFIX
-from edi.adapters.outbound.database.models.data_plane import EdiMessage
+from edi.adapters.outbound.database.constants import (
+    API_GATEWAY_ID_PREFIX,
+    DATA_PLANE_OUTBOX_EVENT_PREFIX,
+    EDI_JSON_ID_PREFIX,
+    EDI_MESSAGE_ID_PREFIX,
+)
+from edi.adapters.outbound.database.models.data_plane import (
+    ApiGateway,
+    DataPlaneOutbox,
+    EdiJson,
+    EdiMessage,
+    InboundRoute,
+    OutboundRoute,
+    Webhook,
+)
 from edi.application.dto import (
     ApiGatewayDTO,
     EdiJsonDTO,
     EdiMessageDTO,
+    RouteDTO,
     TransactionDetailDTO,
+    WebhookDTO,
 )
+from edi.domain.direction import MessageDirection
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 
 
@@ -22,11 +41,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         TenantSqlAlchemyRepository.__init__(self, session)
 
     async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
-        tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}{generate_random_hex(6)}"
-        msg = EdiMessage(tenant_id=tid_str, **payload_copy)
+            payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}"
+        msg = EdiMessage(tenant_id=tenant_id, **payload_copy)
         self.session.add(msg)
         await self.flush()
         return str(msg.id)
@@ -34,20 +52,14 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: Any, idempotency_key: str | None
     ) -> str:
-        from database.exceptions import DuplicateEntityError
-        from database.outbox_serializer import serialize_domain_event
-        from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-
         serialized_payload = (
             serialize_domain_event(payload) if not isinstance(payload, dict) else payload
         )
 
-        tid_str = tenant_id if tenant_id is not None else None
-        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{generate_random_hex(6)}"
+        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
         record = DataPlaneOutbox(
             id=event_id,
-            tenant_id=tid_str,
+            tenant_id=tenant_id,
             idempotency_key=idempotency_key,
             event_type=event_type,
             payload=serialized_payload,
@@ -59,29 +71,272 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 await self.flush()
                 return str(event_id)
         except DuplicateEntityError:
-            return "duplicate"
+            return ""
+
+    async def save(self, aggregate: EdiMessageDomainModel) -> None:
+        """
+        Drains domain events from the aggregate into the outbox table within
+        the same open transaction. This is the DDD-compliant publishing mechanism.
+        """
+        # Save aggregate state
+        record_id = (
+            aggregate.id if aggregate.id else f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}"
+        )
+        record = EdiMessage(
+            id=record_id,
+            trace_id=aggregate.trace_id,
+            tenant_id=aggregate.tenant_id,
+            direction=aggregate.direction.value if aggregate.direction else None,
+            status=aggregate.status.value if aggregate.status else None,
+            format_standard=aggregate.format_standard,
+            transaction_type=aggregate.transaction_type,
+            connection_type=aggregate.connection_type,
+            sender_id=aggregate.sender_id,
+            receiver_id=aggregate.receiver_id,
+            gs_sender_id=aggregate.gs_sender_id,
+            gs_receiver_id=aggregate.gs_receiver_id,
+            edi_data=aggregate.edi_data,
+            trading_partner_id=aggregate.trading_partner_id,
+            storage_uri=aggregate.storage_uri,
+        )
+        await self.session.merge(record)
+
+        for index, event in enumerate(aggregate.domain_events):
+            event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
+            idempotency_key = (
+                f"{event.idempotency_key}_{index}"
+                if len(aggregate.domain_events) > 1
+                else event.idempotency_key
+            )
+            payload_dict = serialize_domain_event(event)
+            outbox_record = DataPlaneOutbox(
+                id=event_id,
+                tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
+                idempotency_key=idempotency_key,
+                event_type=event.event_name,
+                payload=payload_dict,
+                status=OutboxStatus.PENDING,
+            )
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(outbox_record)
+                    await self.flush()
+            except DuplicateEntityError:
+                pass  # Idempotent: already published, safe to skip.
+
+        aggregate.clear_domain_events()
+
+    async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
+        """
+        Drains domain events from the EdiJson aggregate into the outbox table within
+        the same open transaction.
+        """
+        # Save aggregate state
+        record_id = aggregate.id if aggregate.id else f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
+        record = EdiJson(
+            id=record_id,
+            trace_id=aggregate.trace_id,
+            tenant_id=aggregate.tenant_id,
+            direction=aggregate.direction.value if aggregate.direction else None,
+            status=aggregate.status.value if aggregate.status else None,
+            trading_partner_id=aggregate.trading_partner_id,
+            transaction_type=aggregate.transaction_type,
+            standard=aggregate.standard,
+            sender_id=aggregate.sender_id,
+            receiver_id=aggregate.receiver_id,
+            gs_sender_id=aggregate.gs_sender_id,
+            gs_receiver_id=aggregate.gs_receiver_id,
+            business_metadata=aggregate.business_metadata,
+            payload=aggregate.payload,
+        )
+        await self.session.merge(record)
+
+        for index, event in enumerate(aggregate.domain_events):
+            event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
+            idempotency_key = (
+                f"{event.idempotency_key}_{index}"
+                if len(aggregate.domain_events) > 1
+                else event.idempotency_key
+            )
+            payload_dict = serialize_domain_event(event)
+            outbox_record = DataPlaneOutbox(
+                id=event_id,
+                tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
+                idempotency_key=idempotency_key,
+                event_type=event.event_name,
+                payload=payload_dict,
+                status=OutboxStatus.PENDING,
+            )
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(outbox_record)
+                    await self.flush()
+            except DuplicateEntityError:
+                pass  # Idempotent: already published, safe to skip.
+
+        aggregate.clear_domain_events()
+
+    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+        stmt = (
+            select(EdiMessage)
+            .where(EdiMessage.trace_id == str(trace_id))
+            .order_by(EdiMessage.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return _map_edi_message_to_domain(record)
+
+    async def get_route(
+        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
+    ) -> RouteDTO | None:
+        stmt: Any = None
+        if direction == MessageDirection.INBOUND:
+            stmt = select(InboundRoute).where(
+                InboundRoute.isa_sender_id == sender_id,
+                InboundRoute.isa_receiver_id == receiver_id,
+                or_(
+                    InboundRoute.transaction_type == transaction_type,
+                    InboundRoute.transaction_type.is_(None),
+                ),
+            )
+        else:
+            from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
+
+            stmt = (
+                select(OutboundRoute)
+                .join(
+                    OutboundEdiHeader,
+                    OutboundRoute.trading_partner_id == OutboundEdiHeader.trading_partner_id,
+                )
+                .where(
+                    OutboundEdiHeader.isa_sender_id == sender_id,
+                    OutboundEdiHeader.isa_receiver_id == receiver_id,
+                    or_(
+                        OutboundEdiHeader.transaction_type == transaction_type,
+                        OutboundEdiHeader.transaction_type.is_(None),
+                    ),
+                )
+            )
+
+        result = await self.session.execute(stmt)
+        record = result.scalars().first()
+        if not record:
+            return None
+        return RouteDTO(
+            trading_partner_id=record.trading_partner_id,
+            webhook_id=getattr(record, "webhook_id", None),
+            as2_partner_id=getattr(record, "as2_partner_id", None),
+            sftp_partner_id=getattr(record, "sftp_partner_id", None),
+            processing_mode=getattr(record, "processing_mode", None),
+        )
+
+    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
+        stmt = select(Webhook).where(Webhook.id == partner_id)
+        result = await self.session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return WebhookDTO(
+            id=str(record.id),
+            url=str(record.url),
+            name=str(record.name),
+            active=bool(record.active),
+            auth_header_vault_ref=record.auth_header_vault_ref,
+        )
+
+    async def save_api_payload(
+        self,
+        trace_id: str,
+        direction: str,
+        payload: dict[str, Any],
+        status: str,
+        transaction_type: str | None = None,
+        webhook_url: str | None = None,
+        tenant_id: str | None = None,
+    ) -> None:
+        record_id = f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}"
+        record = ApiGateway(
+            id=record_id,
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            direction=direction,
+            payload=payload,
+            status=status,
+            transaction_type=transaction_type,
+            webhook_url=webhook_url,
+        )
+        self.session.add(record)
+        await self.flush()
+
+    async def save_edi_json(
+        self,
+        trace_id: str,
+        direction: str,
+        partnership_id: str | None,
+        transaction_type: str | None,
+        standard: str | None,
+        sender_id: str | None,
+        receiver_id: str | None,
+        gs_sender_id: str | None,
+        gs_receiver_id: str | None,
+        business_metadata: dict[str, Any],
+        payload: dict[str, Any],
+        status: str,
+        tenant_id: str | None = None,
+    ) -> str:
+        # Idempotency check
+        stmt = (
+            select(EdiJson.id)
+            .where(
+                EdiJson.trace_id == str(trace_id),
+                EdiJson.direction == direction,
+                EdiJson.transaction_type == transaction_type,
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        existing_id = result.scalar_one_or_none()
+        if existing_id:
+            return str(existing_id)
+
+        record_id = f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
+        record = EdiJson(
+            id=record_id,
+            trace_id=str(trace_id),
+            tenant_id=tenant_id,
+            direction=direction,
+            trading_partner_id=partnership_id,
+            transaction_type=transaction_type,
+            standard=standard,
+            sender_id=sender_id,
+            receiver_id=receiver_id,
+            gs_sender_id=gs_sender_id,
+            gs_receiver_id=gs_receiver_id,
+            business_metadata=business_metadata,
+            payload=payload,
+            status=status,
+        )
+        self.session.add(record)
+        await self.flush()
+        return record_id
 
     async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
-
-        tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}{generate_random_hex(6)}"
-        msg = EdiJson(tenant_id=tid_str, **payload_copy)
+            payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
+        msg = EdiJson(tenant_id=tenant_id, **payload_copy)
         self.session.add(msg)
         await self.flush()
         return str(msg.id)
 
     async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
-        from edi.adapters.outbound.database.constants import API_GATEWAY_ID_PREFIX
-        from edi.adapters.outbound.database.models.data_plane import ApiGateway
-
-        tid_str = tenant_id if tenant_id is not None else None
         payload_copy = dict(payload)
         if "id" not in payload_copy:
-            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}{generate_random_hex(6)}"
-        log = ApiGateway(tenant_id=tid_str, **payload_copy)
+            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}"
+        log = ApiGateway(tenant_id=tenant_id, **payload_copy)
         self.session.add(log)
         await self.flush()
         return str(log.id)
@@ -430,3 +685,33 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         result = await self.session.execute(stmt)
         return set(result.scalars().all())
+
+
+def _map_edi_message_to_domain(record: EdiMessage) -> EdiMessageDomainModel:
+    """
+    Explicit ORM → Domain mapper for EdiMessage.
+    Any structural mismatch between the ORM model and domain model is a clear
+    AttributeError here, not a silent data drop.
+    """
+
+    from edi.domain.models.base import Direction, RecordStatus
+
+    return EdiMessageDomainModel(
+        id=str(record.id),
+        tenant_id=str(record.tenant_id),
+        trace_id=str(record.trace_id),
+        direction=Direction(record.direction),
+        status=RecordStatus(record.status),
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        format_standard=record.format_standard,
+        transaction_type=record.transaction_type,
+        connection_type=record.connection_type,
+        sender_id=record.sender_id,
+        receiver_id=record.receiver_id,
+        gs_sender_id=record.gs_sender_id,
+        gs_receiver_id=record.gs_receiver_id,
+        edi_data=record.edi_data,
+        trading_partner_id=record.trading_partner_id,
+        storage_uri=record.storage_uri,
+    )

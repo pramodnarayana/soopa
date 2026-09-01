@@ -61,16 +61,23 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             query = text("""
                 WITH cte AS (
                     SELECT id FROM edi.data_plane_outbox
-                    WHERE status = 'PROCESSING'
+                    WHERE status = :processing_status
                       AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
                     LIMIT 5000
                     FOR UPDATE SKIP LOCKED
                 )
                 UPDATE edi.data_plane_outbox
-                SET status = 'PENDING', lease_expires_at = NULL, owner_token = NULL
+                SET status = :pending_status, lease_expires_at = NULL, owner_token = NULL
                 WHERE id IN (SELECT id FROM cte)
             """)
-            result = await self._session.execute(query, {"lock_lease_ms": lock_lease_ms})
+            result = await self._session.execute(
+                query,
+                {
+                    "lock_lease_ms": lock_lease_ms,
+                    "processing_status": OutboxStatus.PROCESSING.value,
+                    "pending_status": OutboxStatus.PENDING.value,
+                },
+            )
             swept = int(result.rowcount)  # type: ignore[attr-defined]
             total_swept += swept
             await self._session.flush()
@@ -86,10 +93,10 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
 
         query = text("""
             UPDATE edi.data_plane_outbox
-            SET status = 'PROCESSING', updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
+            SET status = :processing_status, updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
             WHERE id IN (
                 SELECT id FROM edi.data_plane_outbox
-                WHERE (status = 'PENDING' OR (status = 'PROCESSING' AND lease_expires_at < NOW()))
+                WHERE (status = :pending_status OR (status = :processing_status AND lease_expires_at < NOW()))
                 ORDER BY created_at ASC
                 LIMIT :limit
                 FOR UPDATE SKIP LOCKED
@@ -102,6 +109,8 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 "worker_id": worker_id,
                 "lock_lease_ms": lock_lease_ms,
                 "limit": limit,
+                "processing_status": OutboxStatus.PROCESSING.value,
+                "pending_status": OutboxStatus.PENDING.value,
             },
         )
         await self._session.flush()

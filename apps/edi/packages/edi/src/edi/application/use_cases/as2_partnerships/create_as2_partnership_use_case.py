@@ -1,10 +1,11 @@
-from datetime import UTC
+import os
+from datetime import UTC, datetime
 
 import structlog
 
 from edi.application.dto import CreateAS2PartnershipCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
-from edi.domain.models import AS2PartnershipDomainModel
+from edi.domain.models.as2 import AS2PartnershipDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -30,26 +31,17 @@ class CreateAS2PartnershipUseCase:
             raise ValueError(f"Remote AS2 partner {cmd.remote_partner_id} not found")
 
         logger.info(
-            "Provisioning AS2 partnership {cmd_local_id} -> {cmd_remote_id}",
+            "edi_as2_partnership_creation_started",
             cmd_local_id=cmd.local_partner_id,
             cmd_remote_id=cmd.remote_partner_id,
-        )
-        partner_id = await self.uow.as2_partnerships.create_as2_partnership(
-            tenant_id=tenant_id, cmd=cmd
-        )
-        await self.uow.control_plane_outbox.publish_outbox_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partnership_created,
-                resource_id=str(partner_id),
-            )
+            tenant_id=tenant_id,
         )
 
-        from datetime import datetime
+        partner_id = f"{AS2PartnershipDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
 
-        return AS2PartnershipDomainModel(
+        aggregate = AS2PartnershipDomainModel(
             id=partner_id,
-            name="New Partnership",
+            name=cmd.name,
             local_partner_id=str(cmd.local_partner_id),
             remote_partner_id=str(cmd.remote_partner_id),
             mdn_type=cmd.mdn_type,
@@ -59,4 +51,23 @@ class CreateAS2PartnershipUseCase:
             updated_at=datetime.now(UTC),
             tenant_id=tenant_id,
             active=True,
+            mdn_url=cmd.mdn_url,
         )
+
+        aggregate.add_domain_event(
+            ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partnership_created,
+                resource_id=partner_id,
+            )
+        )
+
+        await self.uow.as2_partnerships.save(aggregate)
+
+        logger.info(
+            "edi_as2_partnership_created",
+            partnership_id=partner_id,
+            tenant_id=tenant_id,
+        )
+
+        return aggregate

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from edi.domain.models import ConnectionType
+from edi.domain.models.base import ConnectionType
 
 
 class RoutingResolverRepositoryPort(Protocol):
