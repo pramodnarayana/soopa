@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -10,6 +10,8 @@ class DomainEvent(ABC):
     Events are immutable dataclasses serialized for the Outbox pattern by the
     shared domain-event serializer.
     """
+
+    explicit_idempotency_key: str | None = field(default=None, kw_only=True)
 
     @property
     @abstractmethod
@@ -29,8 +31,11 @@ class DomainEvent(ABC):
     def idempotency_key(self) -> str:
         """
         Returns the idempotency key for this event.
+        Uses explicit_idempotency_key if provided.
         Defaults to the event id if present, else a newly generated UUID.
         """
+        if self.explicit_idempotency_key is not None:
+            return self.explicit_idempotency_key
         if hasattr(self, "id"):
             return str(self.id)
         if "_idempotency_key" not in self.__dict__:
