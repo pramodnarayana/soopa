@@ -1,4 +1,3 @@
-import os
 from datetime import UTC, datetime
 
 import structlog
@@ -23,7 +22,7 @@ class CreateOutboundRouteUseCase:
             cmd_trading_partner_id=cmd.trading_partner_id,
             tenant_id=tenant_id,
         )
-        route_id = f"{OutboundRouteDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+        route_id = OutboundRouteDomainModel.new_id()
 
         aggregate = OutboundRouteDomainModel(
             id=route_id,

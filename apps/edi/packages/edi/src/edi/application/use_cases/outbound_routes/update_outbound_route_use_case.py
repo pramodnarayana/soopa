@@ -4,6 +4,7 @@ import structlog
 
 from edi.application.dto import UNSET, UpdateOutboundRouteCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -24,9 +25,12 @@ class UpdateOutboundRouteUseCase:
         if not aggregate:
             return False
 
+        persisted_fields = {field.name for field in dataclasses.fields(OutboundRouteDomainModel)}
         for field in dataclasses.fields(cmd):
             value = getattr(cmd, field.name)
             if value is not UNSET:
+                if field.name not in persisted_fields:
+                    raise ValueError(f"Unsupported outbound route field: {field.name}")
                 setattr(aggregate, field.name, value)
 
         aggregate.add_domain_event(

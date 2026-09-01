@@ -30,7 +30,7 @@ class DeleteOutboundEdiHeaderUseCase:
 
         await self.uow.edi_headers.delete(aggregate)
         logger.info(
-            "Published OUTBOUND_EDI_HEADER_DELETED outbox event for {header_id}",
+            "outbound_edi_header_deleted_domain_event_attached",
             header_id=header_id,
         )
 

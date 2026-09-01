@@ -1,4 +1,3 @@
-import os
 from datetime import UTC, datetime
 
 import structlog
@@ -24,7 +23,7 @@ class CreateOutboundEdiHeaderUseCase:
             tenant_id=tenant_id,
         )
 
-        header_id = f"{OutboundEdiHeaderDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+        header_id = OutboundEdiHeaderDomainModel.new_id()
 
         aggregate = OutboundEdiHeaderDomainModel(
             id=header_id,

@@ -58,3 +58,24 @@ async def test_existing_idempotency_key_reuses_partner_before_secret_provisionin
     assert partner.id == "partner-1"
     uow.as2_partners.create_as2_identity.assert_not_awaited()
     secret_store.store_private_key.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_new_idempotency_key_finalizes_reservation_through_outbox_repository():
+    command = CreateAS2TradingPartnerCmd(
+        name="Partner",
+        as2_id="PARTNER",
+    )
+    uow = AsyncMock()
+    secret_store = AsyncMock()
+    use_case = CreateAS2PartnerUseCase(uow, secret_store)
+
+    partner = await use_case.execute("tenant-1", command, idempotency_key="request-1")
+
+    uow.as2_partners.save.assert_awaited_once_with(partner)
+    event = uow.control_plane_outbox.publish_outbox_event.await_args.args[0]
+    assert event.resource_id == partner.id
+    assert event.explicit_idempotency_key is None
+    uow.control_plane_outbox.publish_outbox_event.assert_awaited_once_with(
+        event, idempotency_key="request-1"
+    )

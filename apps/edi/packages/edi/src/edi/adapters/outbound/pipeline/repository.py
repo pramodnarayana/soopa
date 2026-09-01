@@ -11,7 +11,6 @@ from edi.adapters.outbound.database.constants import (
     API_GATEWAY_ID_PREFIX,
     DATA_PLANE_OUTBOX_EVENT_PREFIX,
     EDI_JSON_ID_PREFIX,
-    EDI_MESSAGE_ID_PREFIX,
 )
 from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.models.data_plane import (
@@ -26,6 +25,7 @@ from edi.adapters.outbound.database.models.data_plane import (
 )
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox as Outbox
 from edi.config.settings import AppSettings
+from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort

@@ -102,13 +102,21 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
     assert count == 3
 
     # Verify exactly 3 events with the idempotency key sequence
-    result = await tenant_session.execute(
-        text(
-            "SELECT idempotency_key FROM outbox WHERE event_type = 'edi.transaction.replay_requested' AND tenant_id = :tenant_id ORDER BY idempotency_key"
-        ),
-        {"tenant_id": tenant_id},
+    VerificationSession = async_sessionmaker(
+        bind=tenant_session.bind,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+        info={"session_type": "tenant"},
     )
-    rows = result.fetchall()
+    async with VerificationSession() as verification_session:
+        result = await verification_session.execute(
+            text(
+                "SELECT idempotency_key FROM outbox WHERE event_type = 'edi.transaction.replay_requested' AND tenant_id = :tenant_id ORDER BY idempotency_key"
+            ),
+            {"tenant_id": tenant_id},
+        )
+        rows = result.fetchall()
     assert len(rows) == 3
 
     keys = {row[0] for row in rows}

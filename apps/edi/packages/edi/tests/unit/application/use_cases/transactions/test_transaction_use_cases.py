@@ -15,6 +15,9 @@ import pytest
 from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
+from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
+    BulkReplayTransactionsUseCase,
+)
 from edi.application.use_cases.transactions.get_transaction_use_case import (
     GetTransactionUseCase,
 )
@@ -320,6 +323,25 @@ class TestReplayTransactionUseCase:
         await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
         key = self.repo.outbox_events[0]["key"]
         assert "t-003" in key  # key is prefixed with trace_id
+
+
+@pytest.mark.asyncio
+async def test_bulk_replay_commits_after_saving_events():
+    repository = FakeTransactionRepository()
+    uow = FakeDataPlaneUnitOfWork(repository)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    repository.seed_transaction(
+        tenant_id,
+        "trace-1",
+        FakeTransactionResult(edi_message=FakeEdiMessage(trace_id="trace-1")),
+    )
+
+    count = await BulkReplayTransactionsUseCase(uow).bulk_replay_transactions(
+        tenant_id, ["trace-1"], "raw", command_key="request-1"
+    )
+
+    assert count == 1
+    assert uow.committed is True
 
 
 # ---------------------------------------------------------------------------

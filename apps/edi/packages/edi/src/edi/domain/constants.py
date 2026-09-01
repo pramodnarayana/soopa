@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+EDI_MESSAGE_ID_PREFIX = "edi_msg_"
+
 
 class TransactionDirection(StrEnum):
     INBOUND = "INBOUND"

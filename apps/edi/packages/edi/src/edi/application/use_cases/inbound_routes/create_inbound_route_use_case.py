@@ -1,4 +1,3 @@
-import os
 from datetime import UTC, datetime
 
 import structlog
@@ -24,7 +23,7 @@ class CreateInboundRouteUseCase:
             cmd_isa_sender_id=cmd.isa_sender_id,
             tenant_id=tenant_id,
         )
-        route_id = f"{InboundRouteDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+        route_id = InboundRouteDomainModel.new_id()
 
         aggregate = InboundRouteDomainModel(
             id=route_id,

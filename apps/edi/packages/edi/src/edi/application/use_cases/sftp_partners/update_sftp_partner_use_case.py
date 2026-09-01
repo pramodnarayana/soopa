@@ -5,14 +5,16 @@ import structlog
 from edi.application.dto import UNSET, UpdateSFTPPartnerCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
+from edi.ports.outbound.field_encryption import FieldEncryptionPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
 
 class UpdateSFTPPartnerUseCase:
-    def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWork, field_encryption: FieldEncryptionPort) -> None:
         self.uow = uow
+        self.field_encryption = field_encryption
 
     async def update_sftp_partner(
         self,
@@ -47,10 +49,18 @@ class UpdateSFTPPartnerUseCase:
         if has_password and has_vault:
             raise ValueError("SFTP partner cannot have both a password and a credentials_vault_ref")
 
+        persisted_fields = {field.name for field in dataclasses.fields(SFTPPartnerDomainModel)}
         for field in dataclasses.fields(cmd):
             value = getattr(cmd, field.name)
             if value is not UNSET:
-                setattr(existing, field.name, value)
+                if field.name == "password":
+                    existing.password_encrypted = (
+                        self.field_encryption.encrypt(value) if value else None
+                    )
+                elif field.name in persisted_fields:
+                    setattr(existing, field.name, value)
+                else:
+                    raise ValueError(f"Unsupported SFTP partner field: {field.name}")
 
         existing.add_domain_event(
             ProvisioningEvent(

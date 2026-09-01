@@ -29,16 +29,20 @@ services:
 
   debezium_shard:
     image: quay.io/debezium/server:3.6.0.Final
+    entrypoint: /debezium/validate-sns-config.sh
     environment:
     - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard
     - DEBEZIUM_SOURCE_DATABASE_PORT=5432
     - DEBEZIUM_SOURCE_DATABASE_USER=edi
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
     - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
+    - AWS_REGION=${AWS_REGION:-us-east-1}
+    - AWS_SNS_TOPIC_ARN=${AWS_SNS_TOPIC_ARN:?AWS_SNS_TOPIC_ARN is required}
     extra_hosts:
     - host.docker.internal:host-gateway
     volumes:
     - ./docker/debezium/application.properties:/debezium/config/application.properties
+    - ./docker/debezium/validate-sns-config.sh:/debezium/validate-sns-config.sh:ro
     - debezium_data:/debezium/data
     depends_on:
       edi_postgres_shard:

@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any, TypeVar
 
+from database.outbox_serializer import serialize_domain_event
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork import SystemIdPrefix, generate_id
 
@@ -157,7 +158,7 @@ class FakeGlobalStore:
             active = True
 
             @property
-            def tenant_id(self):
+            def tenant_id(self) -> str:
                 return self.self_tenant_id
 
         self.partnerships[p_id] = FakePartnership()
@@ -200,13 +201,27 @@ class FakeGlobalStore:
         idempotency_key: str | None = None,
     ) -> str:
         key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
-        if any(e.get("idempotency_key") == key for e in self.outbox_events):
-            raise ValueError(f"Idempotency key {key} already exists")
+        existing = next((e for e in self.outbox_events if e.get("idempotency_key") == key), None)
+        if existing:
+            if existing.get("status") != "RESERVED":
+                raise ValueError(f"Idempotency key {key} already exists")
+            existing.update(
+                {
+                    "tenant_id": getattr(event, "tenant_id", None),
+                    "event_type": getattr(event, "event_type", None),
+                    "payload": {
+                        **existing.get("payload", {}),
+                        **serialize_domain_event(event),
+                    },
+                    "status": "PENDING",
+                }
+            )
+            return key
         self.outbox_events.append(
             {
                 "tenant_id": getattr(event, "tenant_id", None),
                 "event_type": getattr(event, "event_type", None),
-                "payload": event.model_dump(mode="json") if hasattr(event, "model_dump") else event,
+                "payload": serialize_domain_event(event),
                 "idempotency_key": key,
             }
         )
@@ -259,10 +274,12 @@ class FakeGlobalStore:
     async def update_inbound_route(
         self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
     ) -> bool:
-        return route_id in self.inbound_routes
+        route = self.inbound_routes.get(route_id)
+        return bool(route and route.tenant_id == tenant_id)
 
     async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
-        if route_id in self.inbound_routes:
+        route = self.inbound_routes.get(route_id)
+        if route and route.tenant_id == tenant_id:
             del self.inbound_routes[route_id]
             return True
         return False
@@ -270,10 +287,12 @@ class FakeGlobalStore:
     async def update_outbound_route(
         self, tenant_id: str, route_id: str, cmd: UpdateOutboundRouteCmd
     ) -> bool:
-        return route_id in self.outbound_routes
+        route = self.outbound_routes.get(route_id)
+        return bool(route and route.tenant_id == tenant_id)
 
     async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
-        if route_id in self.outbound_routes:
+        route = self.outbound_routes.get(route_id)
+        if route and route.tenant_id == tenant_id:
             del self.outbound_routes[route_id]
             return True
         return False
@@ -331,6 +350,18 @@ class FakeGlobalStore:
         elif isinstance(aggregate, OutboundEdiHeaderDomainModel):
             self._edi_headers[aggregate.id] = aggregate
 
+        for event in aggregate.domain_events:
+            self.outbox_events.append(
+                {
+                    "tenant_id": event.get_routing_tenant_id()
+                    or getattr(aggregate, "tenant_id", None),
+                    "event_type": event.event_name,
+                    "payload": serialize_domain_event(event),
+                    "idempotency_key": event.idempotency_key,
+                }
+            )
+        aggregate.clear_domain_events()
+
     async def delete(self, aggregate: Any) -> None:
         """Remove aggregate from the appropriate in-memory store."""
         if isinstance(aggregate, AS2PartnerDomainModel):
@@ -356,7 +387,42 @@ class FakeGlobalStore:
         return False
 
     async def get_partnership_by_as2_ids(self, as2_from: str, as2_to: str) -> Any:
-        return None
+        local_partner = next(
+            (
+                partner
+                for partner in self.partners.values()
+                if isinstance(partner, AS2PartnerDomainModel)
+                and partner.as2_id.lower() == as2_to.lower()
+                and partner.active
+            ),
+            None,
+        )
+        remote_partner = next(
+            (
+                partner
+                for partner in self.partners.values()
+                if isinstance(partner, AS2PartnerDomainModel)
+                and partner.as2_id.lower() == as2_from.lower()
+                and partner.active
+            ),
+            None,
+        )
+        if not local_partner or not remote_partner:
+            return None
+
+        partnership = next(
+            (
+                partnership
+                for partnership in self.partnerships.values()
+                if partnership.local_partner_id == local_partner.id
+                and partnership.remote_partner_id == remote_partner.id
+                and partnership.active
+            ),
+            None,
+        )
+        if not partnership:
+            return None
+        return partnership, local_partner, remote_partner
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         for r in self.inbound_routes.values():

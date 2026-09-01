@@ -87,8 +87,6 @@ class CreateAS2PartnershipCmd:
 @dataclass(frozen=True)
 class UpdateAS2PartnershipCmd:
     name: str | UnsetType = UNSET
-    local_url: str | UnsetType | None = UNSET
-    remote_url: str | UnsetType | None = UNSET
     credentials_vault_ref: str | UnsetType | None = UNSET
     mdn_type: str | UnsetType = UNSET
     mdn_url: str | UnsetType | None = UNSET
@@ -180,9 +178,6 @@ class CreateOutboundRouteCmd:
 
 @dataclass(frozen=True)
 class UpdateOutboundRouteCmd:
-    isa_sender_id: str | UnsetType = UNSET
-    isa_receiver_id: str | UnsetType = UNSET
-    transaction_type: str | UnsetType = UNSET
     as2_partner_id: str | UnsetType | None = UNSET
     sftp_partner_id: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET

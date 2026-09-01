@@ -107,6 +107,7 @@ class RotateAS2CertificatesUseCase:
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_as2_partner_updated,
                     resource_id=str(partner_id),
+                    explicit_idempotency_key=idempotency_key,
                 )
             )
 

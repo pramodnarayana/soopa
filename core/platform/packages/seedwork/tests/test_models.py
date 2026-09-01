@@ -17,7 +17,16 @@ class DummyEvent(DomainEvent):
 
 
 class DummyAggregate(AggregateRoot):
-    pass
+    ID_PREFIX = "dummy"
+
+
+def test_new_id_uses_aggregate_prefix_and_12_random_bytes():
+    aggregate_id = DummyAggregate.new_id()
+    prefix, random_hex = aggregate_id.split("_", maxsplit=1)
+
+    assert prefix == "dummy"
+    assert len(random_hex) == 24
+    assert int(random_hex, 16) >= 0
 
 
 def test_aggregate_root_initializes_empty_events():

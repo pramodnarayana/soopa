@@ -38,9 +38,12 @@ class UpdateAS2PartnerUseCase:
         if not aggregate:
             raise PartnerNotFoundError(partner_id, tenant_id)
 
+        persisted_fields = {field.name for field in dataclasses.fields(AS2PartnerDomainModel)}
         for field in dataclasses.fields(cmd):
             value = getattr(cmd, field.name)
             if value is not UNSET:
+                if field.name not in persisted_fields:
+                    raise ValueError(f"Unsupported AS2 partner field: {field.name}")
                 setattr(aggregate, field.name, value)
 
         aggregate.add_domain_event(

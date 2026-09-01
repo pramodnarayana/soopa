@@ -59,7 +59,7 @@ class FakeTransactionRepository:
                     "tenant_id": aggregate.tenant_id,
                     "event_type": str(event.__class__.__name__),
                     "payload": event,
-                    "idempotency_key": event.trace_id if hasattr(event, "trace_id") else None,
+                    "idempotency_key": event.idempotency_key,
                 }
             )
         aggregate.clear_domain_events()
@@ -169,16 +169,32 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
         assert "TRANSFORM" in event["event_type"].upper()
 
     @pytest.mark.asyncio
-    async def test_outbox_event_idempotency_key_matches_trace_id(self):
-        cmd = ProcessApiEdiJsonCommand(
+    async def test_fake_preserves_event_idempotency_key(self):
+        from edi.domain.events import TransformRequestedEvent
+        from edi.domain.models.base import Direction, RecordStatus
+        from edi.domain.models.transactions import EdiJsonDomainModel
+
+        aggregate = EdiJsonDomainModel(
+            id="json-1",
             tenant_id="ten_001",
-            trading_partner_id=TP_001,
-            payload={"transaction_type": "850"},
-            transaction_type="850",
+            trace_id="trace-1",
+            direction=Direction.OUTBOUND,
+            status=RecordStatus.RECEIVED,
+            payload={},
         )
-        trace_id = await self.use_case.process_api_edi_json(cmd)
+        aggregate.add_domain_event(
+            TransformRequestedEvent(
+                trace_id="trace-1",
+                tenant_id="ten_001",
+                explicit_idempotency_key="request-1",
+            )
+        )
+
+        await self.repo.save_json(aggregate)
+
         key = self.repo.outbox_events[0]["idempotency_key"]
-        assert key == trace_id
+        assert key == "request-1"
+        assert key != "trace-1"
 
     @pytest.mark.asyncio
     async def test_commits_unit_of_work(self):

@@ -12,7 +12,6 @@ from edi.adapters.outbound.database.constants import (
     API_GATEWAY_ID_PREFIX,
     DATA_PLANE_OUTBOX_EVENT_PREFIX,
     EDI_JSON_ID_PREFIX,
-    EDI_MESSAGE_ID_PREFIX,
 )
 from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
@@ -31,6 +30,7 @@ from edi.application.dto import (
     TransactionDetailDTO,
     WebhookDTO,
 )
+from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.direction import MessageDirection
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort

@@ -429,7 +429,7 @@ class ProcessInboundAs2MessageUseCase:
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
             import os
 
-            from edi.adapters.outbound.database.constants import EDI_MESSAGE_ID_PREFIX
+            from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
             from edi.domain.events import TransformRequestedEvent
             from edi.domain.models.base import Direction, RecordStatus
             from edi.domain.models.transactions import EdiMessageDomainModel

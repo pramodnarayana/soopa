@@ -53,4 +53,5 @@ class BulkReplayTransactionsUseCase:
                 await self.uow.transactions.save_json(edi_json)
             processed_count += 1
 
+        await self.uow.commit()
         return processed_count

@@ -208,8 +208,10 @@ async def update_sftp_partner(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
+    from edi.adapters.outbound.database.encryption import db_encryption
+
     async with uow:
-        service = UpdateSFTPPartnerUseCase(uow=uow)
+        service = UpdateSFTPPartnerUseCase(uow=uow, field_encryption=db_encryption)
         cmd = UpdateSFTPPartnerCmd(**request.model_dump(exclude_unset=True))
         try:
             _ = await service.update_sftp_partner(
