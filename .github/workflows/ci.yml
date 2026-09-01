@@ -17,20 +17,15 @@ jobs:
       contents: read
     env:
       ENVIRONMENT: test
-      AWS_ENDPOINT_URL: http://localhost:4566
-      DATABASE_URL: postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global
-      SHARD_1_URL: postgresql://edi:edi_password@localhost:5433/edi_shard_1
-      POSTGRES_PASSWORD: zitadel_password
-      ZITADEL_MASTERKEY: a-32-byte-long-secret-key-for-zitadel-in-ci
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      AWS_DEFAULT_REGION: us-east-1
 
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
+      - name: Load local environment
+        run: cp .env.example .env
 
       - name: Install pnpm
         uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
