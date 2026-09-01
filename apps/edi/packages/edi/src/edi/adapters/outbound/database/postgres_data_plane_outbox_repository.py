@@ -183,9 +183,10 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 ),
             )
             .values(
-                status=OutboxStatus.PROCESSING,
+                status=OutboxStatus.DELIVERING,
                 owner_token=owner_token,
                 lease_expires_at=lease_expires,
+                updated_at=now,
             )
             .returning(DataPlaneOutbox.idempotency_key)
         )

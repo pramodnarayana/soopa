@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from database.router import DatabaseRouter
 from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.domain.constants import OutboxStatus
@@ -16,8 +15,11 @@ from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_ou
 pytestmark = pytest.mark.integration
 
 
+from database.router import DatabaseRouterPort
+
+
 @pytest.mark.integration
-async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouter):
+async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPort):
     # 1. Setup Data - stuck events that need sweeping
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
@@ -61,7 +63,7 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouter):
 
 @pytest.mark.integration
 async def test_bounded_two_shard_cleanup_failure_propagates(
-    db_router: DatabaseRouter, monkeypatch: pytest.MonkeyPatch
+    db_router: DatabaseRouterPort, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = SqlAlchemyEdiAuditLogCleanupRepository(db_router=db_router)
 

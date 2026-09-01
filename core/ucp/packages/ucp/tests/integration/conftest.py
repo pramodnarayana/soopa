@@ -182,7 +182,7 @@ async def db_session(db_engine) -> "Any":
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session, monkeypatch) -> "Any":
-    async def override_get_db_session() -> "Any":
+    async def override_get_db_session(request: Request) -> "Any":
         yield db_session
 
     old_overrides = dict(app.dependency_overrides)

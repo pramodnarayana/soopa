@@ -6,7 +6,7 @@ from seedwork.utils import generate_id
 
 from ucp.application.dto import SubscribeAppCommand
 from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
-from ucp.domain.constants import UcpIdPrefix
+from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
@@ -30,7 +30,7 @@ def fake_uow(tenant_id: str) -> FakeUcpUnitOfWork:
         name="Test Tenant",
         slug="test-tenant",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         subscriptions=[],

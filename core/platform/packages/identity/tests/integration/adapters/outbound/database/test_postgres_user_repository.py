@@ -8,9 +8,10 @@ from database.models.identity import UserRole as OrmUserRole
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from ucp.domain.constants import LifecycleStatus
 
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from identity.domain.constants import IdentityIdPrefix
+from identity.domain.constants import IdentityIdPrefix, UserStatus
 from identity.domain.events import UserCreatedEvent
 from identity.domain.models.user import User
 
@@ -25,7 +26,7 @@ def dummy_tenant_data() -> dict:
         "name": f"User Repo Tenant {generate_random_hex(6)}",
         "slug": f"user-tenant-{generate_random_hex(6)}",
         "idp_tenant_id": "idp_ten_123",
-        "status": "active",
+        "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
     }
@@ -71,7 +72,7 @@ async def test_user_repository_lifecycle(
             idp_user_id=idp_user_id,
             email=email,
             name="Test User",
-            status="active",
+            status=UserStatus.ACTIVE,
             created_at=now,
             updated_at=now,
         )

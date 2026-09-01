@@ -16,6 +16,8 @@ def mock_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "SNS_TENANT_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:000000000000:tenant-events"
     )
     monkeypatch.setenv("SQS_UCP_IDENTITY_SYNC_QUEUE_URL", "http://localhost:4566/sync")
+    monkeypatch.setenv("ZITADEL_API_URL", "http://localhost:8080")
+    monkeypatch.setenv("ZITADEL_ISSUER", "http://localhost:8080")
 
 
 @pytest.mark.asyncio

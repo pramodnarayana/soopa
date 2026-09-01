@@ -11,6 +11,7 @@ from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeRoleRepository, FakeTenantRepository, FakeUserRepository
 
@@ -74,7 +75,7 @@ async def test_jwt_strategy_resolves_idp_ids(
         name="Test",
         slug="test",
         idp_tenant_id=idp_org_id,
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -85,7 +86,7 @@ async def test_jwt_strategy_resolves_idp_ids(
         email="test@test.com",
         name="Test User",
         idp_user_id=idp_user_id,
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

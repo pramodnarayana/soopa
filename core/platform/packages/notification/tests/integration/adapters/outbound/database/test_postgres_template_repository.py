@@ -2,6 +2,7 @@ import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationTemplate
 from seedwork import generate_id, generate_random_hex
+from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
@@ -19,7 +20,7 @@ async def test_get_template(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 
@@ -75,7 +76,7 @@ async def test_template_crud_operations(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 
@@ -144,7 +145,7 @@ async def test_get_template_fallback_to_platform(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 
@@ -152,7 +153,7 @@ async def test_get_template_fallback_to_platform(db_session_factory):
             id=PLATFORM_TENANT_ID,
             name="Platform Notification",
             slug=generate_id("platform"),
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         await session.merge(platform_tenant)
 

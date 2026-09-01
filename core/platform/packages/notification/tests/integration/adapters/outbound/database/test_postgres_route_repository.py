@@ -1,6 +1,7 @@
 import pytest
 from database.models.notifications import NotificationRouteConfiguration
 from seedwork import generate_id, generate_random_hex
+from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_route_repository import (
     SqlAlchemyNotificationRouteRepository,
@@ -23,7 +24,7 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 
@@ -65,7 +66,7 @@ async def test_postgres_route_repository_crud_operations(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 

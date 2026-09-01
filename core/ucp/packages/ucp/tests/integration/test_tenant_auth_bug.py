@@ -19,7 +19,7 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     from seedwork import generate_id, generate_random_hex
 
     from ucp.adapters.outbound.database.tenant_repository import TenantRepository
-    from ucp.domain.models.tenant import Tenant
+    from ucp.domain.models.tenant import LifecycleStatus, Tenant
 
     canonical_id = generate_id("ten")
     idp_id = "385223051081416707"
@@ -31,7 +31,7 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
         name=f"Test Trucking {unique_suffix}",
         slug=f"test-trucking-{unique_suffix}",
         idp_tenant_id=idp_id,
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.datetime.now(datetime.UTC),
         updated_at=datetime.datetime.now(datetime.UTC),
         subscriptions=[],

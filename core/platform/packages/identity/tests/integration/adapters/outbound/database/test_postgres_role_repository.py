@@ -5,6 +5,7 @@ from database.models.identity import Tenant as OrmTenant
 from database.models.identity import User as OrmUser
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
 from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
@@ -24,16 +25,16 @@ async def _setup_data(db_session):
         "name": f"Role Test Tenant {generate_random_hex(6)}",
         "slug": f"role-tenant-{generate_random_hex(6)}",
         "idp_tenant_id": generate_id("idp"),
-        "status": "active",
+        "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
     }
     platform_tenant = {
         "id": platform_tenant_id,
         "name": "Platform Tenant",
-        "slug": "platform",
-        "idp_tenant_id": "platform",
-        "status": "active",
+        "slug": f"platform-{generate_random_hex(6)}",
+        "idp_tenant_id": f"platform-{generate_random_hex(6)}",
+        "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
     }
@@ -42,7 +43,7 @@ async def _setup_data(db_session):
         "email": f"test_{generate_random_hex(6)}@example.com",
         "idp_user_id": generate_id("idp"),
         "name": "Test User",
-        "status": "active",
+        "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
     }

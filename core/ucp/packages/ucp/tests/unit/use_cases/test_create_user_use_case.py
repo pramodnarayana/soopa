@@ -6,6 +6,7 @@ from identity.domain.models.authorization import Role
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.create_user_use_case import CreateUserCommand, CreateUserUseCase
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
@@ -31,7 +32,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -97,7 +98,7 @@ async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
         name="Test Tenant",
         slug="test",
         idp_tenant_id=None,
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -124,7 +125,7 @@ async def test_create_user_role_not_found(fake_uow, create_user_use_case):
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

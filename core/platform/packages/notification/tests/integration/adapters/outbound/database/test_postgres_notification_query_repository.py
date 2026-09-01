@@ -2,6 +2,7 @@ import pytest
 from database.models.identity import Role, Tenant, User, UserRole
 from database.models.notifications import NotificationRecord
 from seedwork import generate_id, generate_random_hex
+from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
@@ -22,7 +23,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 

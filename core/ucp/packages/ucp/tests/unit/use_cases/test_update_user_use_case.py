@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
 import pytest
+from identity.domain.constants import UserStatus
 from identity.domain.models.authorization import Role
 from identity.domain.models.user import User
 
 from ucp.application.use_cases.update_user_use_case import UpdateUserCommand, UpdateUserUseCase
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
@@ -28,7 +30,7 @@ async def test_update_user_success(fake_uow, update_user_use_case):
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -50,7 +52,7 @@ async def test_update_user_success(fake_uow, update_user_use_case):
         email="test@example.com",
         name="Old Name",
         idp_user_id="idp_usr_123",
-        status="active",
+        status=UserStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -111,7 +113,7 @@ async def test_update_user_user_not_found(fake_uow, update_user_use_case):
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

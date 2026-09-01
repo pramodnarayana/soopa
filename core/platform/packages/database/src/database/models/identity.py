@@ -51,6 +51,7 @@ class User(IdentityBase, SoftDeleteMixin):
     )
 
     __table_args__ = (
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_users_status"),
         Index("uq_users_email_lower", func.lower(email), unique=True),
         {"schema": "identity"},
     )

@@ -51,6 +51,17 @@ def container() -> Iterator[Any]:
 def app(container: Any) -> FastAPI:
     """Create test app with configured container."""
     test_app = FastAPI(title="Unified API Auth Mapping Test")
+    import contextlib
+    from unittest.mock import Mock
+
+    mock_db = Mock()
+
+    @contextlib.asynccontextmanager
+    async def mock_session():
+        yield Mock()
+
+    mock_db.session = mock_session
+    test_app.state.db_provider = mock_db
     test_app.include_router(router)
 
     @test_app.middleware("http")
