@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
-from identity.domain.constants import DomainIdPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role as DomainRole
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
@@ -174,7 +174,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         if not result.scalar_one_or_none():
             raise ResourceNotFoundError(f"Role '{role_id}' not found or is inactive.")
 
-        user_role_id = generate_id(DomainIdPrefix.USER_ROLE)
+        user_role_id = generate_id(IdentityIdPrefix.USER_ROLE)
         user_role = UserRole(
             id=user_role_id,
             tenant_id=tenant_id,

@@ -13,6 +13,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from identity.domain.constants import IdentityEventType
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
@@ -87,19 +88,19 @@ async def test_identity_event_dispatcher_routes_to_correct_handler():
         handled.set()
 
     mock_handler = AsyncMock(side_effect=handler)
-    consumer.subscribe("TenantProvisioned", mock_handler)
+    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, mock_handler)
 
     payload = {
         "id": generate_id("id"),
         "source": "test",
-        "event_type": "TenantProvisioned",
+        "event_type": IdentityEventType.TENANT_PROVISIONED,
         "payload": {"tenant_id": "tenant-123"},
     }
     await consumer.dispatch_raw(payload)
 
     mock_handler.assert_called_once()
     called_event = mock_handler.call_args[0][0]
-    assert called_event.event_type == "TenantProvisioned"
+    assert called_event.event_type == IdentityEventType.TENANT_PROVISIONED
     assert called_event.payload["tenant_id"] == "tenant-123"
 
 
@@ -111,12 +112,12 @@ async def test_handler_failure_propagates_to_prevent_ack():
         raise RuntimeError("Handler Failed")
 
     mock_handler = AsyncMock(side_effect=failing_handler)
-    consumer.subscribe("TenantProvisioned", mock_handler)
+    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, mock_handler)
 
     payload = {
         "id": generate_id("id"),
         "source": "test",
-        "event_type": "TenantProvisioned",
+        "event_type": IdentityEventType.TENANT_PROVISIONED,
         "payload": {"tenant_id": "tenant-123"},
     }
 
@@ -139,12 +140,12 @@ async def test_manager_dispatches_message_to_subscribed_handler():
         handled.set()
 
     mock_handler = AsyncMock(side_effect=handler)
-    consumer.subscribe("TenantProvisioned", mock_handler)
+    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, mock_handler)
 
     payload = {
         "id": generate_id("id"),
         "source": "test",
-        "event_type": "TenantProvisioned",
+        "event_type": IdentityEventType.TENANT_PROVISIONED,
         "payload": {"tenant_id": "tenant-123"},
     }
     manager = _make_single_message_manager(consumer, payload)
@@ -162,12 +163,12 @@ async def test_manager_does_not_ack_when_handler_raises():
     """
     consumer = IdentityEventDispatcher()
     failing_handler = AsyncMock(side_effect=RuntimeError("Handler Failed"))
-    consumer.subscribe("TenantProvisioned", failing_handler)
+    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, failing_handler)
 
     payload = {
         "id": generate_id("id"),
         "source": "test",
-        "event_type": "TenantProvisioned",
+        "event_type": IdentityEventType.TENANT_PROVISIONED,
         "payload": {"tenant_id": "tenant-123"},
     }
 

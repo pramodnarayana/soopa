@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from identity.domain.constants import UserStatus
 from identity.domain.models.authorization import Role
 from identity.domain.models.user import User
 
@@ -31,7 +32,7 @@ def fake_uow() -> FakeUcpUnitOfWork:
         idp_user_id="idp_creator_123",
         email="creator@example.com",
         name="Creator",
-        status="active",
+        status=UserStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

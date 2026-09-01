@@ -8,9 +8,10 @@ from database.models.identity import UserRole as OrmUserRole
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from ucp.domain.constants import LifecycleStatus
 
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix, UserStatus
 from identity.domain.events import UserCreatedEvent
 from identity.domain.models.user import User
 
@@ -19,13 +20,13 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def dummy_tenant_data() -> dict:
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     return {
         "id": tenant_id,
         "name": f"User Repo Tenant {generate_random_hex(6)}",
         "slug": f"user-tenant-{generate_random_hex(6)}",
         "idp_tenant_id": "idp_ten_123",
-        "status": "active",
+        "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
     }
@@ -34,7 +35,7 @@ def dummy_tenant_data() -> dict:
 @pytest.fixture
 def dummy_role_data(dummy_tenant_data: dict) -> dict:
     return {
-        "id": generate_id(IamPrefix.ROLE),
+        "id": generate_id(IdentityIdPrefix.ROLE),
         "name": f"User Repo Role {generate_random_hex(6)}",
         "description": "Role for user repo tests",
         "tenant_id": dummy_tenant_data["id"],
@@ -62,7 +63,7 @@ async def test_user_repository_lifecycle(
         )
 
         # 1. Save User (Create)
-        user_id = generate_id(IamPrefix.USER)
+        user_id = generate_id(IdentityIdPrefix.USER)
         idp_user_id = "idp_usr_123"
         email = "test.user@example.com"
         now = datetime.datetime.now(datetime.UTC)
@@ -71,7 +72,7 @@ async def test_user_repository_lifecycle(
             idp_user_id=idp_user_id,
             email=email,
             name="Test User",
-            status="active",
+            status=UserStatus.ACTIVE,
             created_at=now,
             updated_at=now,
         )
@@ -123,7 +124,7 @@ async def test_user_repository_lifecycle(
         # 5. Link to Tenant and Role (UserRole) manually to test find_users_by_tenant
         await db_session.execute(
             pg_insert(OrmUserRole).values(
-                id=generate_id(IamPrefix.USER_ROLE),
+                id=generate_id(IdentityIdPrefix.USER_ROLE),
                 user_id=user.id,
                 role_id=dummy_role_data["id"],
                 tenant_id=dummy_tenant_data["id"],

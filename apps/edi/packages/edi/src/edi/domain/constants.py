@@ -20,7 +20,7 @@ class EdiConnectionType(StrEnum):
     SFTP = "SFTP"
 
 
-class DomainIdPrefix(StrEnum):
+class EdiIdPrefix(StrEnum):
     CP_OUTBOX = "edi_cp_ob"
     DP_OUTBOX = "edi_dp_ob"
     AS2_SERVER = "edi_as2"

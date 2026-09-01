@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
+from scheduler.domain.constants import JobStatus
 from scheduler.domain.models import ScheduledJob
 
 
@@ -13,7 +14,7 @@ def mock_job():
     return ScheduledJob(
         id="job-123",
         name="test-job",
-        status="PENDING",
+        status=JobStatus.PENDING,
         cron_expression=None,
         interval_seconds=None,
         retry_count=0,
@@ -30,7 +31,7 @@ async def test_sqs_job_dispatcher_no_target_queue():
     job = ScheduledJob(
         id="job-123",
         name="test-job",
-        status="PENDING",
+        status=JobStatus.PENDING,
         cron_expression=None,
         interval_seconds=None,
         retry_count=0,

@@ -6,7 +6,7 @@ We inject a simple in-memory fake — no mocks, no SQLAlchemy.
 """
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from edi.domain.authorization import AuthorizationService
@@ -17,7 +17,7 @@ class TestAuthorizationServiceRoleResolution:
     def setup_method(self):
         self.tenant_repo = FakeTenantRepository()
         self.svc = AuthorizationService(tenant_repo=self.tenant_repo)
-        self.tenant_id = generate_id(IamPrefix.TENANT)
+        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
 
     async def _get_profile(
         self,
@@ -95,13 +95,13 @@ class TestAuthorizationServiceRoleResolution:
 
     @pytest.mark.asyncio
     async def test_profile_contains_tenant_id(self):
-        t_id = generate_id(IamPrefix.TENANT)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         profile = await self._get_profile(tenant_id=t_id)
         assert profile["tenant_id"] == t_id
 
     @pytest.mark.asyncio
     async def test_profile_contains_rls_enforced_tenant(self):
-        rls_id = generate_id(IamPrefix.TENANT)
+        rls_id = generate_id(IdentityIdPrefix.TENANT)
         profile = await self._get_profile(current_rls_tenant=rls_id)
         assert profile["rls_enforced_tenant"] == rls_id
 
@@ -116,7 +116,7 @@ class TestAuthorizationServiceFeatureFlags:
     async def test_allow_private_as2_flag_is_false_by_default(self):
         repo = FakeTenantRepository()
         svc = AuthorizationService(tenant_repo=repo)
-        tenant_id = generate_id(IamPrefix.TENANT)
+        tenant_id = generate_id(IdentityIdPrefix.TENANT)
         profile = await svc.get_authorization_profile(
             tenant_id=tenant_id, is_platform_admin=False, current_rls_tenant=None
         )
@@ -125,7 +125,7 @@ class TestAuthorizationServiceFeatureFlags:
     @pytest.mark.asyncio
     async def test_allow_private_as2_flag_is_read_from_tenant_flags(self):
         repo = FakeTenantRepository()
-        tenant_id = generate_id(IamPrefix.TENANT)
+        tenant_id = generate_id(IdentityIdPrefix.TENANT)
         repo.flags[tenant_id] = {"allow_private_as2": True}
         svc = AuthorizationService(tenant_repo=repo)
         profile = await svc.get_authorization_profile(

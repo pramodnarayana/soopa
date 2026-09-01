@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import structlog
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter

@@ -4,7 +4,6 @@ import structlog
 from database.outbox_serializer import serialize_domain_event
 
 logger = structlog.get_logger(__name__)
-import typing
 from datetime import UTC, datetime
 
 from database.models.identity import ApiKey, ApiToken, Role, UserRole
@@ -16,6 +15,7 @@ from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.models.tenant import Tenant, TenantSubscription
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
@@ -32,10 +32,7 @@ class TenantRepository(TenantRepositoryPort):
             name=row.name,
             slug=row.slug,
             idp_tenant_id=row.idp_tenant_id,
-            status=typing.cast(
-                typing.Literal["active", "inactive"],
-                row.status,
-            ),
+            status=LifecycleStatus(row.status),
             created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=row.updated_at.replace(tzinfo=UTC),
             subscriptions=subscriptions or [],
@@ -82,7 +79,7 @@ class TenantRepository(TenantRepositoryPort):
         subs_by_tenant: dict[str, list[TenantSubscription]] = {}
         for tenant_id, app_id, status in subs_result:
             subs_by_tenant.setdefault(tenant_id, []).append(
-                TenantSubscription(app_id=app_id, status=status)
+                TenantSubscription(app_id=app_id, status=LifecycleStatus(status))
             )
 
         tenants = []
@@ -216,18 +213,22 @@ class TenantRepository(TenantRepositoryPort):
 
         stmt = insert(ShardRegistry).values(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["tenant_id", "app_id"], set_={"shard_id": shard_id}
+            index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
+            set_={ShardRegistry.shard_id: shard_id},
         )
         await self.session.execute(stmt)
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
         from sqlalchemy.dialects.postgresql import insert
 
+        from ucp.domain.constants import SubscriptionTier
+
         stmt = insert(AppSubscription).values(
-            tenant_id=tenant_id, app_id=app_id, tier="standard", status=status
+            tenant_id=tenant_id, app_id=app_id, tier=SubscriptionTier.STANDARD.value, status=status
         )
         stmt = stmt.on_conflict_do_update(
-            index_elements=["tenant_id", "app_id"], set_={"status": status}
+            index_elements=[AppSubscription.tenant_id, AppSubscription.app_id],
+            set_={AppSubscription.status: status},
         )
         await self.session.execute(stmt)
 
@@ -236,7 +237,10 @@ class TenantRepository(TenantRepositoryPort):
             AppSubscription.tenant_id == tenant_id
         )
         result = await self.session.execute(stmt)
-        return [TenantSubscription(app_id=app_id, status=status) for app_id, status in result.all()]
+        return [
+            TenantSubscription(app_id=app_id, status=LifecycleStatus(status))
+            for app_id, status in result.all()
+        ]
 
 
 logger = structlog.get_logger(__name__)

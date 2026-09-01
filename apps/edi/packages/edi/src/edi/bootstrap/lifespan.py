@@ -19,9 +19,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
+from database.router import DatabaseRouter
 from fastapi import FastAPI
 
-from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)

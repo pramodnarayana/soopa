@@ -94,3 +94,9 @@ The following paradigms define the entire system structure. Any new design or mo
 - **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).
 - **Self-Contained Fixtures**: If an integration test requires prerequisites (like a `TenantAdmin` role or specific configuration), the test's own `pytest` fixture MUST explicitly create and seed that required data.
 - **Transactional Rollbacks (Nested SAVEPOINTs)**: Every single integration test MUST run inside a nested SQLAlchemy transaction (`connection.begin_nested()`). When the test finishes, the fixture MUST completely roll back the transaction. This guarantees that NOTHING is written to the physical database and no manual `DELETE` statements are ever needed for cleanup.
+
+# Enterprise Configuration (Shopify Style)
+
+- **Single Source of Truth**: NEVER hardcode dummy environment variables inline in `package.json` scripts (e.g. `export DATABASE_URL="..."`) or duplicate them heavily in CI workflow files (e.g. `ci.yml`).
+- **.env Parity**: Both Local and CI environments MUST rely strictly on `.env` as the sole provider of configuration. The `.env.example` file must contain a fully comprehensive set of development/test dummy credentials.
+- **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.

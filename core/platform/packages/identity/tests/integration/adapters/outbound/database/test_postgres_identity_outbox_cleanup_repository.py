@@ -2,6 +2,7 @@ import datetime
 
 import pytest
 from database.models.identity import IdentityOutbox
+from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
 
 from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
@@ -23,7 +24,7 @@ async def test_identity_outbox_cleanup(db_session_factory):
         tenant_id="platform",
         event_type="test",
         payload={},
-        status="COMPLETED",
+        status=OutboxStatus.COMPLETED,
         created_at=now - datetime.timedelta(days=10),
     )
     # Create old unprocessed event
@@ -33,7 +34,7 @@ async def test_identity_outbox_cleanup(db_session_factory):
         tenant_id="platform",
         event_type="test",
         payload={},
-        status="PENDING",
+        status=OutboxStatus.PENDING,
         created_at=now - datetime.timedelta(days=10),
     )
     # Create new processed event
@@ -43,7 +44,7 @@ async def test_identity_outbox_cleanup(db_session_factory):
         tenant_id="platform",
         event_type="test",
         payload={},
-        status="COMPLETED",
+        status=OutboxStatus.COMPLETED,
         created_at=now,
     )
 

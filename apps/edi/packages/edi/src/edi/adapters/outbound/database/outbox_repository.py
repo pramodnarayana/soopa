@@ -1,5 +1,6 @@
 from typing import Any
 
+from outbox.domain.constants import OutboxStatus
 from seedwork import SystemIdPrefix, generate_id, generate_random_hex
 
 from edi.adapters.outbound.database.base_repository import (
@@ -40,7 +41,7 @@ class SqlAlchemyOutboxRepositoryMixin:
             idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             event_type=event_type_str,
             payload=payload,
-            status="PENDING",
+            status=OutboxStatus.PENDING,
         )
         self.session.add(record)
         await self.flush()
@@ -69,7 +70,7 @@ class SqlAlchemyOutboxRepositoryMixin:
                     or generate_id(SystemIdPrefix.GENERIC),
                     "event_type": event_type_str,
                     "payload": event.get("payload", {}),
-                    "status": "PENDING",
+                    "status": OutboxStatus.PENDING,
                 }
             )
             event_ids.append(event_id)
@@ -110,7 +111,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
             result = await self.session.execute(
                 select(self.model_class).where(
                     self.model_class.idempotency_key == idempotency_key,
-                    self.model_class.status == "RESERVED",
+                    self.model_class.status == OutboxStatus.RESERVED,
                 )
             )
             reservation = result.scalar_one_or_none()
@@ -121,7 +122,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
                     else event.event_type
                 )
                 reservation.payload = {**reservation.payload, **serialized_event}
-                reservation.status = "PENDING"
+                reservation.status = OutboxStatus.PENDING
                 await self.flush()
                 return str(reservation.id)
 
@@ -156,7 +157,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
             idempotency_key=idempotency_key,
             event_type="RESERVATION",
             payload={"fingerprint": fingerprint},
-            status="RESERVED",
+            status=OutboxStatus.RESERVED,
             attempts=0,
         )
         try:

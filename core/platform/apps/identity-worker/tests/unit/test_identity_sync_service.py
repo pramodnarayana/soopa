@@ -4,6 +4,7 @@ from typing import Literal
 import pytest
 from database.models.identity import Tenant as DbTenant
 from database.models.identity import User as DbUser
+from identity.domain.constants import UserStatus
 from identity_worker.application.use_cases.identity_sync_service import (
     IdentitySyncService,
     StateConflictError,
@@ -104,7 +105,7 @@ async def setup_db(db_session_factory):
 
         # Create a user
         user_id = generate_id("id")
-        user = DbUser(id=user_id, email="john@test.com", name="John Doe", status="active")
+        user = DbUser(id=user_id, email="john@test.com", name="John Doe", status=UserStatus.ACTIVE)
         session.add(user)
 
         await session.commit()

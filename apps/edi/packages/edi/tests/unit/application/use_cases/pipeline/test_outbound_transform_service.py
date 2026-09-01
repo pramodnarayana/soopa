@@ -21,8 +21,12 @@ import typing
 
 
 class FakeSettings(AppSettings):
-    edi_environment: typing.Literal["P", "T", "I"] = "T"
-    enable_heavy_compute_queue: bool = False
+    @classmethod
+    def create(cls, env="T", heavy_compute=False) -> "FakeSettings":
+        return cls.model_construct(
+            edi_environment=env,
+            enable_heavy_compute_queue=heavy_compute,
+        )
 
 
 def make_use_case(
@@ -30,14 +34,13 @@ def make_use_case(
     transformer: FakeTransformerAdapter | None = None,
     settings: FakeSettings | None = None,
 ) -> DispatchOutboundTransformUseCase:
-    import typing
 
     from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
     u = uow or FakeDataPlaneUnitOfWork()
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, u)
     t = transformer or FakeTransformerAdapter()
-    s = settings or FakeSettings()
+    s = settings or FakeSettings.create()
     s_casted = typing.cast(AppSettings, s)
     return DispatchOutboundTransformUseCase(uow=uow_casted, transformer=t, settings=s_casted)
 
@@ -95,7 +98,7 @@ async def test_outbound_transform_success() -> None:
 async def test_outbound_transform_heavy_compute_offload() -> None:
     uow = FakeDataPlaneUnitOfWork()
     transformer = FakeTransformerAdapter()
-    settings = FakeSettings(enable_heavy_compute_queue=True)
+    settings = FakeSettings.create(heavy_compute=True)
     trace_id = "trace-456"
 
     # Seed data

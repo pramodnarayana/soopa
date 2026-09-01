@@ -3,6 +3,7 @@ import datetime
 from typing import Any, cast
 
 from database.models.identity import IdentityOutbox
+from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
@@ -26,7 +27,7 @@ class SqlAlchemyIdentityOutboxCleanupRepository(OutboxCleanupRepositoryPort):
                     IdentityOutbox.id.in_(
                         select(IdentityOutbox.id)
                         .where(
-                            IdentityOutbox.status == "COMPLETED",
+                            IdentityOutbox.status == OutboxStatus.COMPLETED,
                             IdentityOutbox.created_at < cutoff_date,
                         )
                         .limit(5000)

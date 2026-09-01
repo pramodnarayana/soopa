@@ -12,6 +12,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import get_data
 from unified_api.adapters.inbound.http.dtos.edi.dtos import (
     OutboundMessageRequest,
     OutboundMessageResponse,
+    OutboundMessageStatus,
 )
 
 router = APIRouter(prefix="/api/v1/edi_json", tags=["EDI JSON"])
@@ -44,4 +45,4 @@ async def submit_outbound_message(
         )
     )
 
-    return OutboundMessageResponse(trace_id=trace_id, status="ACCEPTED")
+    return OutboundMessageResponse(trace_id=trace_id, status=OutboundMessageStatus.ACCEPTED)

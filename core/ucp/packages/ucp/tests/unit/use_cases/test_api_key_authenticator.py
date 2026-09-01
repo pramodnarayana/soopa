@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from identity.domain.models.api_token import ApiTokenDomainModel
 from seedwork.utils import generate_id
@@ -40,8 +40,8 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
     client_id = "test_client_id"
     client_secret = "test_client_secret"  # noqa: S105
     token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_secret}"
-    tenant_id = generate_id(IamPrefix.TENANT)
-    token_id = generate_id(IamPrefix.TOKEN)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    token_id = generate_id(IdentityIdPrefix.TOKEN)
 
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
 
@@ -107,8 +107,8 @@ async def test_authenticate_api_key_not_found(mock_token_repo):
 async def test_authenticate_api_key_wrong_secret(mock_token_repo):
     client_id = "test_client_id"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.wrong_secret"
-    token_id = generate_id(IamPrefix.TOKEN)
-    tenant_id = generate_id(IamPrefix.TENANT)
+    token_id = generate_id(IdentityIdPrefix.TOKEN)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
 
     secret_hash = hashlib.sha256(b"correct_secret").hexdigest()
 

@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.authorization import Capability
 from seedwork.utils import generate_id
 
@@ -21,7 +21,7 @@ def use_case(fake_uow: FakeUcpUnitOfWork) -> CreateRoleUseCase:
 
 @pytest.mark.asyncio
 async def test_create_role_success(use_case: CreateRoleUseCase, fake_uow: FakeUcpUnitOfWork):
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     request = CreateRoleRequest(
         name="Custom Role",
         description="A role with read access.",
@@ -45,7 +45,7 @@ async def test_create_role_success(use_case: CreateRoleUseCase, fake_uow: FakeUc
 async def test_create_role_invalid_capability(
     use_case: CreateRoleUseCase, fake_uow: FakeUcpUnitOfWork
 ):
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     request = CreateRoleRequest(
         name="Custom Role",
         capabilities=["invalid:capability"],

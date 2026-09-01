@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.domain.events import TenantDeletedEvent
@@ -10,7 +10,7 @@ from ucp.domain.models.tenant import Tenant
 
 def test_tenant_mark_deleted_success() -> None:
     tenant = Tenant.create(
-        id=generate_id(IamPrefix.TENANT),
+        id=generate_id(IdentityIdPrefix.TENANT),
         name="Test",
         slug="test",
         idp_tenant_id="org_123",
@@ -28,7 +28,7 @@ def test_tenant_mark_deleted_success() -> None:
 
 def test_tenant_mark_deleted_already_deleted() -> None:
     tenant = Tenant.create(
-        id=generate_id(IamPrefix.TENANT),
+        id=generate_id(IdentityIdPrefix.TENANT),
         name="Test",
         slug="test",
         idp_tenant_id="org_123",

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
+from scheduler.domain.constants import JobStatus
 from scheduler.domain.models import ScheduledJob
 
 from scheduler_worker.bootstrap.container import Container
@@ -34,7 +35,7 @@ async def test_dispatches_job_to_edi_orchestrator_queue(monkeypatch: pytest.Monk
         name="EDI_AUDIT_LOG_CLEANUP",
         target_queue="edi-orchestrator-jobs",
         payload={"retention_days": 90},
-        status="RUNNING",
+        status=JobStatus.RUNNING,
         cron_expression="0 2 * * *",
         interval_seconds=None,
         retry_count=0,

@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from outbox.domain.constants import OutboxStatus
 from seedwork import generate_random_hex
 from sqlalchemy import or_, select
 
@@ -50,7 +51,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             idempotency_key=idempotency_key,
             event_type=event_type,
             payload=serialized_payload,
-            status="PENDING",
+            status=OutboxStatus.PENDING,
         )
         try:
             async with self.session.begin_nested():

@@ -19,7 +19,10 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from fastapi import APIRouter, Depends
 
-from unified_api.adapters.inbound.http.dtos.edi.dtos import PartnerResponse
+from unified_api.adapters.inbound.http.dtos.edi.dtos import (
+    PartnerResponse,
+    TradingPartnerStatusResponse,
+)
 from unified_api.adapters.inbound.http.routers.edi.trading_partners import as2, sftp
 
 _PREFIX = "/api/v1/tenants/{tenant_id}/edi/trading-partners"
@@ -50,7 +53,9 @@ async def list_trading_partners(
                     tenant_id=p.tenant_id or "",
                     name=p.name,
                     type="AS2",
-                    status="ACTIVE" if p.active else "INACTIVE",
+                    status=TradingPartnerStatusResponse.ACTIVE
+                    if p.active
+                    else TradingPartnerStatusResponse.INACTIVE,
                     active=p.active,
                     as2_id=p.as2_id,
                     is_local=p.is_local,
@@ -64,7 +69,9 @@ async def list_trading_partners(
                     tenant_id=sp.tenant_id,
                     name=sp.name,
                     type="SFTP",
-                    status="ACTIVE" if sp.active else "INACTIVE",
+                    status=TradingPartnerStatusResponse.ACTIVE
+                    if sp.active
+                    else TradingPartnerStatusResponse.INACTIVE,
                     active=sp.active,
                     host=sp.host,
                     port=sp.port,

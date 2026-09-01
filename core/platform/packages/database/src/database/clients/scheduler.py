@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from scheduler.domain.constants import JobStatus
 from seedwork import SystemIdPrefix, generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +55,7 @@ class SchedulerClient:
             timezone=default_timezone,
             max_retries=max_retries,
             payload=payload or {},
-            status="PENDING",
+            status=JobStatus.PENDING,
             created_at=now,
             updated_at=now,
         )

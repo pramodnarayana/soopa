@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.user import User
 from seedwork.utils import generate_id
 
@@ -25,7 +25,7 @@ async def test_delete_tenant_not_found(
     fake_uow: FakeUcpUnitOfWork,
 ) -> None:
     with pytest.raises(ResourceNotFoundError):
-        await delete_use_case.execute(generate_id(IamPrefix.TENANT))
+        await delete_use_case.execute(generate_id(IdentityIdPrefix.TENANT))
 
 
 @pytest.mark.asyncio
@@ -33,8 +33,8 @@ async def test_delete_tenant_success(
     delete_use_case: DeleteTenantUseCase,
     fake_uow: FakeUcpUnitOfWork,
 ) -> None:
-    tenant_id = generate_id(IamPrefix.TENANT)
-    user_id = generate_id(IamPrefix.USER)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    user_id = generate_id(IdentityIdPrefix.USER)
 
     tenant = Tenant.create(
         id=tenant_id,

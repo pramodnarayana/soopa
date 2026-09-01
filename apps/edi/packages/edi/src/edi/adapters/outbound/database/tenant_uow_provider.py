@@ -1,7 +1,7 @@
 import contextlib
 from collections.abc import AsyncGenerator, Callable
 
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork,

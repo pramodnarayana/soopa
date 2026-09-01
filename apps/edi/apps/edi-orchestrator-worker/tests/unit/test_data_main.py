@@ -4,7 +4,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
 from sqlalchemy.engine.url import make_url
 
@@ -23,8 +23,13 @@ SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hi
 
 def test_validate_target_url(monkeypatch: MagicMock) -> None:
     import edi.adapters.outbound.security.network
+    from edi.config.settings import AppSettings
 
-    monkeypatch.setattr(edi.adapters.outbound.security.network, "IS_DEV", False)
+    mock_settings = MagicMock(spec=AppSettings)
+    mock_settings.env = "production"
+    monkeypatch.setattr(
+        edi.adapters.outbound.security.network, "get_settings", lambda: mock_settings
+    )
 
     def mock_getaddrinfo(
         host: str, *args: Any, **kwargs: Any

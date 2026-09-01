@@ -1,9 +1,32 @@
+from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
 
 # Reusable constrained identifier type for request ID fields (up to 255 chars for String(255) columns)
 ConstrainedId = Annotated[str, StringConstraints(min_length=1, max_length=255)]
+
+
+class TradingPartnerStatusResponse(StrEnum):
+    """HTTP response representation of a trading partner's active/inactive state.
+
+    Domain trading partners expose a boolean `active` flag. This enum translates
+    that flag into the external API contract string consumed by the frontend.
+    """
+
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
+class OutboundMessageStatus(StrEnum):
+    """HTTP response status for an outbound EDI message submission.
+
+    ACCEPTED means the message has been persisted to the outbox and will be
+    delivered asynchronously. It does NOT mean delivery has completed.
+    """
+
+    ACCEPTED = "ACCEPTED"
+
 
 # ---------------------------------------------------------------------------
 # Partner Creation Requests
@@ -292,7 +315,7 @@ class PartnerResponse(BaseModel):
     tenant_id: str
     name: str
     type: str  # AS2, SFTP, WEBHOOK
-    status: str
+    status: TradingPartnerStatusResponse
     active: bool
     as2_id: str | None = None
     is_local: bool | None = None
@@ -357,7 +380,7 @@ class AS2PartnershipResponse(BaseModel):
     encryption_algorithm: str
     signature_algorithm: str
 
-    status: str
+    status: TradingPartnerStatusResponse
     active: bool = False
 
 
@@ -420,7 +443,7 @@ class OutboundMessageRequest(BaseModel):
 
 class OutboundMessageResponse(BaseModel):
     trace_id: str = Field(..., description="The Trace ID to track the message lifecycle")
-    status: str = Field(default="ACCEPTED")
+    status: OutboundMessageStatus = Field(default=OutboundMessageStatus.ACCEPTED)
 
 
 # ---------------------------------------------------------------------------

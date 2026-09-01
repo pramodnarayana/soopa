@@ -145,6 +145,13 @@ def create_edi_app() -> FastAPI:
         return profile
 
     container = Container()
+    container.config.from_pydantic(settings)
+
+    # Expose the resolved AWS endpoint url to the DI container for localstack support
+    import os
+
+    container.config.aws.endpoint_url.from_value(os.getenv("AWS_ENDPOINT_URL"))
+
     app.container = container  # type: ignore[attr-defined]
 
     return app

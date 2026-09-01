@@ -1,6 +1,7 @@
 import pytest
 
 from scheduler.adapters.outbound.messaging.dummy_job_dispatcher import DummyJobDispatcher
+from scheduler.domain.constants import JobStatus
 from scheduler.domain.models import ScheduledJob
 
 
@@ -10,7 +11,7 @@ async def test_dummy_job_dispatcher():
     job = ScheduledJob(
         id="job-123",
         name="test-job",
-        status="PENDING",
+        status=JobStatus.PENDING,
         cron_expression=None,
         interval_seconds=None,
         retry_count=0,

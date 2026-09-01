@@ -19,7 +19,7 @@ from contextlib import aclosing, asynccontextmanager
 from typing import Any, ClassVar, Protocol, cast
 
 import structlog
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert

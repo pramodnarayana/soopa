@@ -20,19 +20,19 @@ class Settings(BaseSettings):
     outbox_sweeper_cron_interval: int = 5
 
     # Zitadel Identity Provider
-    zitadel_api_url: str = "http://ucp.localhost:8080"
+    zitadel_api_url: str
     zitadel_api_token: str = "test"  # noqa: S105
     zitadel_ucp_project_id: str = "test"
     zitadel_tenant_role_group: str = "Tenant"
     zitadel_platform_org_id: str = "test"
     # The OIDC issuer URL is used by the token verifier to fetch JWKS and validate JWTs.
     # For Zitadel this is the same as the API URL (e.g. http://ucp.localhost:8080).
-    zitadel_issuer: str = "http://ucp.localhost:8080"
+    zitadel_issuer: str
     # Default password for newly created users (local dev only - users must change on first login)
     zitadel_default_user_password: str = "Password1!"  # noqa: S105
 
     # Database
-    database_url: str = ""
+    database_url: str
 
     @field_validator("database_url")
     @classmethod

@@ -1,7 +1,9 @@
 import pytest
 from database.models.notifications import NotificationRecord
+from identity.domain.constants import UserStatus
 from seedwork import generate_random_hex
 from sqlalchemy import select
+from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_notification_record_repository import (
     SqlAlchemyNotificationRecordRepository,
@@ -20,9 +22,11 @@ async def test_save_notification_persists_to_database(db_session_factory):
             id=tenant_id,
             name="Test Tenant 456",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
-        user = User(id="user-123", email="test@user.com", name="Test User", status="ACTIVE")
+        user = User(
+            id="user-123", email="test@user.com", name="Test User", status=UserStatus.ACTIVE
+        )
         session.add(tenant)
         session.add(user)
 

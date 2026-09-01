@@ -1,7 +1,7 @@
 from typing import Annotated, Any, cast
 
+from database.types import GlobalSession
 from dependency_injector.wiring import Provide, inject
-from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.session import get_global_session
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase as ProcessInboundAS2MessageUseCase,

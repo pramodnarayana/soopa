@@ -6,10 +6,10 @@ hierarchy, and attribute storage.
 """
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
-from edi.domain.constants import DomainIdPrefix as EdiPrefix
+from edi.domain.constants import EdiIdPrefix
 from edi.domain.exceptions import (
     DomainError,
     IdempotencyConflictError,
@@ -62,27 +62,27 @@ class TestExceptionHierarchy:
 
 class TestPartnerNotFoundError:
     def test_stores_partner_id_attribute(self):
-        p_id = generate_id(EdiPrefix.AS2_PARTNER)
-        t_id = generate_id(IamPrefix.TENANT)
+        p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
         assert err.partner_id == p_id
 
     def test_stores_tenant_id_attribute(self):
-        p_id = generate_id(EdiPrefix.AS2_PARTNER)
-        t_id = generate_id(IamPrefix.TENANT)
+        p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
         assert err.tenant_id == t_id
 
     def test_message_contains_partner_and_tenant(self):
-        p_id = generate_id(EdiPrefix.AS2_PARTNER)
-        t_id = generate_id(IamPrefix.TENANT)
+        p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
         assert p_id in str(err)
         assert t_id in str(err)
 
     def test_can_be_raised_and_caught(self):
-        p_id = generate_id(EdiPrefix.AS2_PARTNER)
-        t_id = generate_id(IamPrefix.TENANT)
+        p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         with pytest.raises(PartnerNotFoundError) as exc_info:
             raise PartnerNotFoundError(partner_id=p_id, tenant_id=t_id)
         assert exc_info.value.partner_id == p_id
@@ -90,28 +90,28 @@ class TestPartnerNotFoundError:
 
 class TestPartnerAlreadyExistsError:
     def test_stores_as2_id_and_tenant_id(self):
-        t_id = generate_id(IamPrefix.TENANT)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerAlreadyExistsError(as2_id="AS2_ID_01", tenant_id=t_id)
         assert err.as2_id == "AS2_ID_01"
         assert err.tenant_id == t_id
 
     def test_message_contains_as2_id(self):
-        t_id = generate_id(IamPrefix.TENANT)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerAlreadyExistsError(as2_id="MY_AS2", tenant_id=t_id)
         assert "MY_AS2" in str(err)
 
 
 class TestPartnerInUseError:
     def test_stores_partner_id_and_tenant_id(self):
-        p_id = generate_id(EdiPrefix.AS2_PARTNER)
-        t_id = generate_id(IamPrefix.TENANT)
+        p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerInUseError(partner_id=p_id, tenant_id=t_id)
         assert err.partner_id == p_id
         assert err.tenant_id == t_id
 
     def test_message_contains_partner_id(self):
-        p_id = generate_id(EdiPrefix.AS2_PARTNER)
-        t_id = generate_id(IamPrefix.TENANT)
+        p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+        t_id = generate_id(IdentityIdPrefix.TENANT)
         err = PartnerInUseError(partner_id=p_id, tenant_id=t_id)
         assert p_id in str(err)
 

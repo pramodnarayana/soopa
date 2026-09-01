@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
 
 from seedwork.models import AggregateRoot
 
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.events import (
     AppSubscribedEvent,
     AppUnsubscribedEvent,
@@ -18,7 +18,7 @@ from ucp.domain.exceptions import AppSubscriptionError, TenantRenameError
 @dataclass
 class TenantSubscription:
     app_id: str
-    status: Literal["active", "inactive"]
+    status: LifecycleStatus
 
 
 class Tenant(AggregateRoot):
@@ -30,7 +30,7 @@ class Tenant(AggregateRoot):
         name: str,
         slug: str,
         idp_tenant_id: str | None,
-        status: Literal["active", "inactive"],
+        status: LifecycleStatus,
         created_at: datetime,
         updated_at: datetime,
         subscriptions: list[TenantSubscription] | None = None,
@@ -61,7 +61,7 @@ class Tenant(AggregateRoot):
             name=name,
             slug=slug,
             idp_tenant_id=idp_tenant_id,
-            status="active",
+            status=LifecycleStatus.ACTIVE,
             created_at=now,
             updated_at=now,
             subscriptions=subscriptions,
@@ -70,7 +70,9 @@ class Tenant(AggregateRoot):
             TenantProvisionedEvent(
                 tenant_id=id,
                 tenant_name=name,
-                subscriptions=tuple(s.app_id for s in tenant.subscriptions if s.status == "active"),
+                subscriptions=tuple(
+                    s.app_id for s in tenant.subscriptions if s.status == LifecycleStatus.ACTIVE
+                ),
             )
         )
         return tenant
@@ -95,37 +97,39 @@ class Tenant(AggregateRoot):
         self.updated_at = datetime.now(UTC)
 
     def subscribe(self, app_id: str) -> None:
-        if self.status != "active":
+        if self.status != LifecycleStatus.ACTIVE:
             raise AppSubscriptionError("Cannot subscribe an inactive tenant to an app.")
 
         sub = next((s for s in self.subscriptions if s.app_id == app_id), None)
         if sub:
-            if sub.status == "active":
+            if sub.status == LifecycleStatus.ACTIVE:
                 raise AppSubscriptionError(f"Tenant is already subscribed to '{app_id}'.")
-            sub.status = "active"
+            sub.status = LifecycleStatus.ACTIVE
         else:
-            self.subscriptions.append(TenantSubscription(app_id=app_id, status="active"))
+            self.subscriptions.append(
+                TenantSubscription(app_id=app_id, status=LifecycleStatus.ACTIVE)
+            )
 
         self.updated_at = datetime.now(UTC)
         self.add_domain_event(AppSubscribedEvent(tenant_id=self.id, app_id=app_id))
 
     def unsubscribe_from_app(self, app_id: str) -> None:
         sub = next((s for s in self.subscriptions if s.app_id == app_id), None)
-        if not sub or sub.status == "inactive":
+        if not sub or sub.status == LifecycleStatus.INACTIVE:
             raise AppSubscriptionError(f"Tenant is not subscribed to '{app_id}'.")
 
-        sub.status = "inactive"
+        sub.status = LifecycleStatus.INACTIVE
         self.updated_at = datetime.now(UTC)
         self.add_domain_event(AppUnsubscribedEvent(tenant_id=self.id, app_id=app_id))
 
-    def change_status(self, new_status: Literal["active", "inactive"]) -> None:
+    def change_status(self, new_status: LifecycleStatus) -> None:
         if self.status != new_status:
             self.status = new_status
             self.updated_at = datetime.now(UTC)
             if self.idp_tenant_id:
                 self.add_domain_event(
                     TenantStatusToggledEvent(
-                        org_id=self.idp_tenant_id, active=self.status == "active"
+                        org_id=self.idp_tenant_id, active=self.status == LifecycleStatus.ACTIVE
                     )
                 )
 

@@ -3,8 +3,8 @@ from collections.abc import Callable
 from typing import Any
 
 import structlog
+from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
 )

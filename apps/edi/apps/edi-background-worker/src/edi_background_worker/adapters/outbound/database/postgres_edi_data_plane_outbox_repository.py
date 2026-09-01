@@ -3,7 +3,7 @@ from typing import Any
 
 import structlog
 from database.events import EventEnvelope
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 

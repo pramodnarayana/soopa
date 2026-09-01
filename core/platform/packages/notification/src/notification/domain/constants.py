@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 
-class DomainIdPrefix(StrEnum):
+class NotificationIdPrefix(StrEnum):
     TEMPLATE = "notif_tmpl"
     OUTBOX = "notif_ob"
     ROUTE = "notif_rt"

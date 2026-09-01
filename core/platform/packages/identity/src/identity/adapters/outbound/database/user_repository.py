@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import Literal, cast
 
 import structlog
 from database.models.identity import IdentityOutbox, Role, UserRole
@@ -8,11 +7,20 @@ from database.outbox_serializer import serialize_domain_event
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from identity.domain.constants import UserStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.user import User
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
 logger = structlog.get_logger(__name__)
+
+
+def _safe_user_status(status_str: str) -> UserStatus:
+    try:
+        return UserStatus(status_str)
+    except ValueError:
+        logger.warning("invalid_user_status_found", status=status_str)
+        return UserStatus.INACTIVE
 
 
 class PostgresUserRepository(UserRepositoryPort):
@@ -58,7 +66,7 @@ class PostgresUserRepository(UserRepositoryPort):
                     idp_user_id=db_user.idp_user_id,
                     email=db_user.email,
                     name=db_user.name or "",
-                    status=db_user.status,
+                    status=_safe_user_status(db_user.status),
                     created_at=db_user.created_at.replace(tzinfo=UTC),
                     updated_at=db_user.updated_at.replace(tzinfo=UTC),
                 )
@@ -81,7 +89,7 @@ class PostgresUserRepository(UserRepositoryPort):
             idp_user_id=db_user.idp_user_id,
             email=db_user.email,
             name=db_user.name or "",
-            status=cast(Literal["active", "inactive"], db_user.status),
+            status=_safe_user_status(db_user.status),
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )
@@ -101,7 +109,7 @@ class PostgresUserRepository(UserRepositoryPort):
             idp_user_id=db_user.idp_user_id,
             email=db_user.email,
             name=db_user.name or "",
-            status=cast(Literal["active", "inactive"], db_user.status),
+            status=_safe_user_status(db_user.status),
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )
@@ -119,7 +127,7 @@ class PostgresUserRepository(UserRepositoryPort):
             idp_user_id=db_user.idp_user_id,
             email=db_user.email,
             name=db_user.name or "",
-            status=cast(Literal["active", "inactive"], db_user.status),
+            status=_safe_user_status(db_user.status),
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )
@@ -152,7 +160,7 @@ class PostgresUserRepository(UserRepositoryPort):
             idp_user_id=db_user.idp_user_id,
             email=db_user.email,
             name=db_user.name or "",
-            status=cast(Literal["active", "inactive"], db_user.status),
+            status=_safe_user_status(db_user.status),
             created_at=db_user.created_at.replace(tzinfo=UTC),
             updated_at=db_user.updated_at.replace(tzinfo=UTC),
         )

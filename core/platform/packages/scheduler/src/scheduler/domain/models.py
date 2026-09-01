@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from scheduler.domain.constants import JobStatus
+
 
 @dataclass(frozen=True)
 class ScheduledJob:
@@ -9,7 +11,7 @@ class ScheduledJob:
     name: str
     target_queue: str | None
     payload: dict[str, Any]
-    status: str
+    status: JobStatus
     cron_expression: str | None
     interval_seconds: int | None
     retry_count: int

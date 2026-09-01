@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 
+from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
@@ -21,7 +22,7 @@ class SqlAlchemyUcpOutboxCleanupRepository(OutboxCleanupRepositoryPort):
                     ControlPlaneOutbox.id.in_(
                         select(ControlPlaneOutbox.id)
                         .where(
-                            ControlPlaneOutbox.status == "PROCESSED",
+                            ControlPlaneOutbox.status == OutboxStatus.PROCESSED,
                             ControlPlaneOutbox.created_at < cutoff_date,
                         )
                         .limit(5000)

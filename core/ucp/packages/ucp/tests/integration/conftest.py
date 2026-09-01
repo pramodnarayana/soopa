@@ -7,6 +7,8 @@ from typing import Any
 os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
+os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
+os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
 )
@@ -180,7 +182,7 @@ async def db_session(db_engine) -> "Any":
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session, monkeypatch) -> "Any":
-    async def override_get_db_session() -> "Any":
+    async def override_get_db_session(request: Request) -> "Any":
         yield db_session
 
     old_overrides = dict(app.dependency_overrides)

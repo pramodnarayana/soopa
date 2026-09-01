@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.authorization import Role
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.create_user_use_case import CreateUserCommand, CreateUserUseCase
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
@@ -23,15 +24,15 @@ def create_user_use_case(fake_uow):
 
 @pytest.mark.asyncio
 async def test_create_user_success(fake_uow, create_user_use_case):
-    tenant_id = generate_id(IamPrefix.TENANT)
-    role_id = generate_id(IamPrefix.ROLE)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    role_id = generate_id(IdentityIdPrefix.ROLE)
 
     tenant = Tenant(
         id=tenant_id,
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -74,7 +75,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
 
 @pytest.mark.asyncio
 async def test_create_user_tenant_not_found(create_user_use_case):
-    unknown_tenant_id = generate_id(IamPrefix.TENANT)
+    unknown_tenant_id = generate_id(IdentityIdPrefix.TENANT)
     command = CreateUserCommand(
         tenant_id=unknown_tenant_id,
         email="test@example.com",
@@ -91,13 +92,13 @@ async def test_create_user_tenant_not_found(create_user_use_case):
 
 @pytest.mark.asyncio
 async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     tenant = Tenant(
         id=tenant_id,
         name="Test Tenant",
         slug="test",
         idp_tenant_id=None,
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -118,13 +119,13 @@ async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
 
 @pytest.mark.asyncio
 async def test_create_user_role_not_found(fake_uow, create_user_use_case):
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     tenant = Tenant(
         id=tenant_id,
         name="Test Tenant",
         slug="test",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

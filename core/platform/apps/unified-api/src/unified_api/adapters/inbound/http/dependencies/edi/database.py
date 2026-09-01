@@ -8,7 +8,7 @@ from dependency_injector.wiring import Provide, inject
 
 logger = structlog.get_logger(__name__)
 
-from edi.adapters.outbound.database.base_repository import GlobalSession
+from database.types import GlobalSession
 from edi.adapters.outbound.database.session import get_global_session
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,

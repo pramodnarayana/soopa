@@ -8,6 +8,7 @@ from edi.adapters.outbound.database.repository import (
     EdiMessageRepository,
     TradingPartnerRepository,
 )
+from edi.domain.status import MessageStatus
 
 pytestmark = pytest.mark.asyncio
 
@@ -48,12 +49,12 @@ async def test_edi_message_repository_save_message() -> None:
         edi_data="s3://bucket/tenants/1/inbound/test.edi",
         sender_id="SENDER123",
         receiver_id="RECV456",
-        status="RECEIVED",
+        status=MessageStatus.RECEIVED,
         message_id="msg-123",
     )
 
     assert result.direction == "INBOUND"
-    assert result.status == "RECEIVED"
+    assert result.status == MessageStatus.RECEIVED
     assert result.sender_id == "SENDER123"
     assert result.receiver_id == "RECV456"
     assert result.edi_data == "s3://bucket/tenants/1/inbound/test.edi"

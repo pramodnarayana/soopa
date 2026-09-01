@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any
 
 import structlog
 from dependency_injector.wiring import Provide, inject
@@ -34,6 +34,7 @@ from ucp.application.use_cases.update_tenant_name_use_case import (
 )
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.tenant_query_service_port import TenantQueryServicePort
@@ -232,9 +233,7 @@ async def update_status(
     use_case: ToggleTenantStatusUseCase = use_case_factory(uow__session=session)
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
-    command = ToggleTenantStatusCommand(
-        tenant_id=tenant_id, status=cast(Literal["active", "inactive"], dto.status)
-    )
+    command = ToggleTenantStatusCommand(tenant_id=tenant_id, status=LifecycleStatus(dto.status))
     await use_case.execute(command, idempotency_key)
 
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
@@ -334,7 +333,7 @@ async def subscribe_app(
         raise HTTPException(status_code=400, detail="Subscription failed") from e
 
     return SubscriptionResponse(
-        id=f"{id}_{dto.appId}", appId=dto.appId, tenantId=id, status="active"
+        id=f"{id}_{dto.appId}", appId=dto.appId, tenantId=id, status=LifecycleStatus.ACTIVE
     )
 
 

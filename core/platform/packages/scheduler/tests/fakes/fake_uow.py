@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from scheduler.domain.constants import JobStatus
 from scheduler.domain.models import ScheduledJob
 from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 from scheduler.ports.outbound.uow_port import SchedulerUnitOfWorkPort
@@ -20,13 +21,13 @@ class FakeJobRepository(JobRepositoryPort):
     ) -> list[ScheduledJob]:
         claimed = []
         for job in self.jobs.values():
-            if job.status == "PENDING":
+            if job.status == JobStatus.PENDING:
                 job_copy = ScheduledJob(
                     id=job.id,
                     name=job.name,
                     target_queue=job.target_queue,
                     payload=job.payload,
-                    status="RUNNING",
+                    status=JobStatus.RUNNING,
                     cron_expression=job.cron_expression,
                     interval_seconds=job.interval_seconds,
                     retry_count=job.retry_count,
@@ -47,7 +48,7 @@ class FakeJobRepository(JobRepositoryPort):
                 name=job.name,
                 target_queue=job.target_queue,
                 payload=job.payload,
-                status="PENDING",
+                status=JobStatus.PENDING,
                 cron_expression=job.cron_expression,
                 interval_seconds=job.interval_seconds,
                 retry_count=0,
@@ -65,7 +66,7 @@ class FakeJobRepository(JobRepositoryPort):
                 name=job.name,
                 target_queue=job.target_queue,
                 payload=job.payload,
-                status="PENDING",
+                status=JobStatus.PENDING,
                 cron_expression=job.cron_expression,
                 interval_seconds=job.interval_seconds,
                 retry_count=retry_count,
@@ -81,7 +82,7 @@ class FakeJobRepository(JobRepositoryPort):
                 name=job.name,
                 target_queue=job.target_queue,
                 payload=job.payload,
-                status="COMPLETED",
+                status=JobStatus.COMPLETED,
                 cron_expression=job.cron_expression,
                 interval_seconds=job.interval_seconds,
                 retry_count=job.retry_count,
@@ -97,7 +98,7 @@ class FakeJobRepository(JobRepositoryPort):
                 name=job.name,
                 target_queue=job.target_queue,
                 payload=job.payload,
-                status="FAILED",
+                status=JobStatus.FAILED,
                 cron_expression=job.cron_expression,
                 interval_seconds=job.interval_seconds,
                 retry_count=job.retry_count,

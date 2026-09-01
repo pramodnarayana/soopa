@@ -1,24 +1,24 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.dto import UnsubscribeAppCommand
 from ucp.application.use_cases.unsubscribe_app_use_case import UnsubscribeAppUseCase
-from ucp.domain.constants import DomainIdPrefix as UcpPrefix
+from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
 from ucp.domain.models.tenant import Tenant, TenantSubscription
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
 
 @pytest.fixture
 def tenant_id() -> str:
-    return generate_id(IamPrefix.TENANT)
+    return generate_id(IdentityIdPrefix.TENANT)
 
 
 @pytest.fixture
 def app_id() -> str:
-    return generate_id(UcpPrefix.APP)
+    return generate_id(UcpIdPrefix.APP)
 
 
 @pytest.fixture
@@ -30,10 +30,10 @@ def fake_uow(tenant_id: str, app_id: str) -> FakeUcpUnitOfWork:
         name="Test Tenant",
         slug="test-tenant",
         idp_tenant_id="idp_org_123",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
-        subscriptions=[TenantSubscription(app_id=app_id, status="active")],
+        subscriptions=[TenantSubscription(app_id=app_id, status=LifecycleStatus.ACTIVE)],
     )
     uow.tenant_repo.tenants.append(tenant)
     return uow
@@ -64,7 +64,9 @@ async def test_unsubscribe_app_success(
     # Check subscription
     assert len(saved_tenant.subscriptions) == 1
     assert saved_tenant.subscriptions[0].app_id == app_id
-    assert saved_tenant.subscriptions[0].status == "inactive"
+    from ucp.domain.constants import LifecycleStatus
+
+    assert saved_tenant.subscriptions[0].status == LifecycleStatus.INACTIVE
 
     # Check domain event
     assert len(saved_tenant.domain_events) == 1

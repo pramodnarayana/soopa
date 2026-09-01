@@ -29,7 +29,6 @@ from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.application.use_cases.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
-from ucp.bootstrap.container import _async_session_maker
 from ucp.bootstrap.dependencies import get_token_verifier
 from ucp.ports.outbound.edi_service_port import EdiServicePort
 
@@ -58,6 +57,7 @@ app = FastAPI(
 )
 setup_observability(app)
 
+
 # ---------------------------------------------------------------------------
 # Middlewares are added in LIFO (Last In, First Out) order.
 # The LAST middleware added will be the FIRST one to execute.
@@ -78,25 +78,25 @@ app.add_middleware(TenantContextMiddleware, public_paths=_PUBLIC_PATHS)
 # (M2M API Keys, IdP JWTs) without needing modification when adding new methods.
 @contextlib.asynccontextmanager
 async def api_token_repo_factory() -> collections.abc.AsyncIterator[PostgresApiTokenRepository]:
-    async with _async_session_maker() as session:
+    async with app.state.db_provider.session() as session:
         yield PostgresApiTokenRepository(session)
 
 
 @contextlib.asynccontextmanager
 async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepository]:
-    async with _async_session_maker() as session:
+    async with app.state.db_provider.session() as session:
         yield TenantRepository(session)
 
 
 @contextlib.asynccontextmanager
 async def user_repo_factory() -> collections.abc.AsyncIterator[PostgresUserRepository]:
-    async with _async_session_maker() as session:
+    async with app.state.db_provider.session() as session:
         yield PostgresUserRepository(session)
 
 
 @contextlib.asynccontextmanager
 async def role_repo_factory() -> collections.abc.AsyncIterator[PostgresRoleRepository]:
-    async with _async_session_maker() as session:
+    async with app.state.db_provider.session() as session:
         yield PostgresRoleRepository(session)
 
 

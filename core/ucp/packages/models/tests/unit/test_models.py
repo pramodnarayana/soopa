@@ -1,3 +1,6 @@
+from outbox.domain.constants import OutboxStatus
+from ucp.domain.constants import LifecycleStatus
+
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
@@ -10,12 +13,12 @@ def test_control_plane_outbox_instantiation():
         event_type="test_event",
         idempotency_key="key-1",
         payload={"key": "value"},
-        status="PENDING",
+        status=OutboxStatus.PENDING,
     )
     assert event.id == "cp_ucp_ob_123"
     assert event.tenant_id == "tenant-1"
     assert event.event_type == "test_event"
-    assert event.status == "PENDING"
+    assert event.status == OutboxStatus.PENDING
     # Ensure body alias returns payload
     assert event.body == {"key": "value"}
 
@@ -37,7 +40,7 @@ def test_app_subscription_instantiation():
         tenant_id="tenant-1",
         app_id="app-1",
         tier="premium",
-        status="active",
+        status=LifecycleStatus.ACTIVE,
     )
     assert sub.tenant_id == "tenant-1"
     assert sub.app_id == "app-1"

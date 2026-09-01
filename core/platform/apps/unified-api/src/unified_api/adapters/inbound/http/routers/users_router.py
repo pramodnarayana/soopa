@@ -3,6 +3,7 @@ from typing import Annotated, Any
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from identity.domain.constants import UserStatus
 from identity.domain.identity_context import IdentityContext
 from identity.domain.models.authorization import Capability
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
@@ -32,6 +33,7 @@ from unified_api.adapters.inbound.http.dtos.user_dtos import (
     CreateUserRequest,
     ToggleUserStatusRequest,
     UpdateUserRequest,
+    UserStateResponse,
 )
 from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
@@ -75,7 +77,9 @@ async def get_users(
                 "displayName": u.name,
                 "firstName": first_name,
                 "lastName": last_name,
-                "state": "USER_STATE_INACTIVE" if u.status == "inactive" else "USER_STATE_ACTIVE",
+                "state": UserStateResponse.INACTIVE
+                if u.status == UserStatus.INACTIVE
+                else UserStateResponse.ACTIVE,
                 "role": getattr(u, "role", "Unknown"),
                 "createdAt": u.created_at.isoformat(),
             }

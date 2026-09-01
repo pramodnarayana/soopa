@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App, AppSubscription
 
+from ucp.domain.constants import LifecycleStatus
 from ucp.ports.outbound.tenant_query_service_port import (
     PaginatedTenants,
     TenantQueryServicePort,
@@ -47,7 +48,7 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
             .join(AppSubscription, App.id == AppSubscription.app_id)
             .where(
                 AppSubscription.tenant_id == tenant_id,
-                AppSubscription.status == "active",
+                AppSubscription.status == LifecycleStatus.ACTIVE,
             )
         )
         result = await self.session.execute(stmt)
@@ -87,7 +88,7 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
             .join(App, App.id == AppSubscription.app_id)
             .where(
                 AppSubscription.tenant_id.in_(tenant_ids),
-                AppSubscription.status == "active",
+                AppSubscription.status == LifecycleStatus.ACTIVE,
             )
         )
         subs_result = await self.session.execute(stmt_subs)

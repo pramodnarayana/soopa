@@ -8,6 +8,7 @@ from seedwork import generate_id, generate_random_hex
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.models.tenant import Tenant
 
 
@@ -27,7 +28,7 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=f"test-tenant-{generate_random_hex(6)}",
             idp_tenant_id="idp_test_123",
-            status="active",
+            status=LifecycleStatus.ACTIVE,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
             subscriptions=[],

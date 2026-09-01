@@ -70,6 +70,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_by", sa.String(), nullable=True),
+        sa.CheckConstraint("status IN ('active', 'inactive')", name="ck_tenants_status"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_tenant_id"),
         sa.UniqueConstraint("name"),
@@ -94,6 +95,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_by", sa.String(), nullable=True),
+        sa.CheckConstraint("status IN ('active', 'inactive')", name="ck_users_status"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idp_user_id"),
         schema="identity",
@@ -282,6 +284,29 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_by", sa.String(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+        schema="ucp",
+    )
+    op.create_table(
+        "idempotency_results",
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
+        sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("response_status_code", sa.Integer(), nullable=True),
+        sa.Column("response_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("tenant_id", "idempotency_key"),
         schema="ucp",
     )
     op.create_index(
@@ -635,6 +660,7 @@ def downgrade() -> None:
     op.drop_table("api_keys", schema="identity")
     op.drop_index(op.f("ix_ucp_webhooks_tenant_id"), table_name="webhooks", schema="ucp")
     op.drop_table("webhooks", schema="ucp")
+    op.drop_table("idempotency_results", schema="ucp")
     op.drop_index(
         "ix_global_outbox_pending",
         table_name="outbox",

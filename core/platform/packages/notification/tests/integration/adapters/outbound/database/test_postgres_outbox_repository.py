@@ -1,6 +1,7 @@
 import pytest
 from database.models.identity import Tenant
 from seedwork import generate_random_hex
+from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
@@ -18,7 +19,7 @@ async def test_outbox_save_and_fetch(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 
@@ -61,7 +62,7 @@ async def test_outbox_mark_failed_and_sweep(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 
@@ -143,7 +144,7 @@ async def test_sqlalchemy_notification_outbox_publisher(db_session_factory):
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=tenant_id,
-            status="ACTIVE",
+            status=LifecycleStatus.ACTIVE,
         )
         session.add(tenant)
 

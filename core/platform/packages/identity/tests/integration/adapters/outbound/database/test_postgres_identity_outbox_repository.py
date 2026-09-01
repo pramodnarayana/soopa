@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
     PostgresIdentityOutboxRepository,
 )
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -38,14 +38,14 @@ async def create_dummy_outbox_event(outbox_session_factory):
         lease_expires_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
     ) -> str:
-        event_id = generate_id(IamPrefix.OUTBOX)
+        event_id = generate_id(IdentityIdPrefix.OUTBOX)
         now = updated_at or datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
         async with outbox_session_factory() as session:
             stmt = pg_insert(OrmIdentityOutbox).values(
                 id=event_id,
                 idempotency_key=f"idemp_{event_id}",
-                tenant_id=generate_id(IamPrefix.TENANT),
+                tenant_id=generate_id(IdentityIdPrefix.TENANT),
                 event_type="TestEvent",
                 payload={"test": "data"},
                 status=status,

@@ -16,3 +16,10 @@ class SystemIdPrefix(StrEnum):
     CLIENT = "sys_client"
     TRACE = "sys_trc"
     TX = "sys_tx"
+
+
+class DeploymentEnvironment(StrEnum):
+    DEVELOPMENT = "development"
+    TEST = "test"
+    PRODUCTION = "production"
+    STAGING = "staging"

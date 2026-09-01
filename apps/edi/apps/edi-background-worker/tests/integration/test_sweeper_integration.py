@@ -1,11 +1,9 @@
-from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from edi.adapters.outbound.database.connection import DatabaseRouter
 from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
-from sqlalchemy.ext.asyncio import AsyncSession
+from outbox.domain.constants import OutboxStatus
 
 from edi_background_worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
     SqlAlchemyEdiAuditLogCleanupRepository,
@@ -17,78 +15,11 @@ from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_ou
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
-async def db_router() -> "AsyncGenerator[DatabaseRouter, None]":
-    import os
-
-    from database.provider import get_async_engine
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
-    global_url = (
-        os.getenv(
-            "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-        )
-        .replace("postgres://", "postgresql+asyncpg://", 1)
-        .replace("postgresql://", "postgresql+asyncpg://", 1)
-    )
-    shard_url = (
-        os.getenv("SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1")
-        .replace("postgres://", "postgresql+asyncpg://", 1)
-        .replace("postgresql://", "postgresql+asyncpg://", 1)
-    )
-
-    global_engine = get_async_engine(global_url)
-    shard_engine = get_async_engine(shard_url)
-
-    global_conn = await global_engine.connect()
-    global_trans = await global_conn.begin()
-
-    shard_conn = await shard_engine.connect()
-    shard_trans = await shard_conn.begin()
-
-    import asyncio
-
-    db_lock = asyncio.Lock()
-
-    class TestDatabaseRouter(DatabaseRouter):
-        async def get_global_session(self):
-            async with db_lock:
-                factory = async_sessionmaker(
-                    bind=global_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                async with factory() as session:
-                    yield session
-
-        async def get_shard_session(self, shard_key: str, shard_url: str):
-            async with db_lock:
-                factory = async_sessionmaker(
-                    bind=shard_conn,
-                    expire_on_commit=False,
-                    class_=AsyncSession,
-                    join_transaction_mode="create_savepoint",
-                )
-                async with factory() as session:
-                    yield session
-
-        async def get_all_shards(self):
-            return [("ucp_shard_1", shard_url)]
-
-    yield TestDatabaseRouter(global_db_url=global_url)
-
-    await global_trans.rollback()
-    await global_conn.close()
-    await global_engine.dispose()
-
-    await shard_trans.rollback()
-    await shard_conn.close()
-    await shard_engine.dispose()
+from database.router import DatabaseRouterPort
 
 
 @pytest.mark.integration
-async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouter):
+async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPort):
     # 1. Setup Data - stuck events that need sweeping
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
@@ -98,8 +29,8 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouter):
 
         # We'll just create pending events to simulate they were swept and can now be published.
         # Note: the sweep stuck logic resets them, then the sweeper daemon claims them.
-        event1 = await builder.create(event_type="TRANSFORM_EVENT", status="PROCESSING")
-        event2 = await builder.create(event_type="DELIVER_EVENT", status="PROCESSING")
+        event1 = await builder.create(event_type="TRANSFORM_EVENT", status=OutboxStatus.PROCESSING)
+        event2 = await builder.create(event_type="DELIVER_EVENT", status=OutboxStatus.PROCESSING)
 
         # Manually force them to be "stuck" by setting lease_expires_at to the past
         import datetime
@@ -132,7 +63,7 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouter):
 
 @pytest.mark.integration
 async def test_bounded_two_shard_cleanup_failure_propagates(
-    db_router: DatabaseRouter, monkeypatch: pytest.MonkeyPatch
+    db_router: DatabaseRouterPort, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = SqlAlchemyEdiAuditLogCleanupRepository(db_router=db_router)
 

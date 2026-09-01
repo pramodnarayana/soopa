@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Literal
 
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
@@ -8,7 +8,7 @@ from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 @dataclass
 class ToggleTenantStatusCommand:
     tenant_id: str
-    status: Literal["active", "inactive"]
+    status: LifecycleStatus
 
 
 class ToggleTenantStatusUseCase:

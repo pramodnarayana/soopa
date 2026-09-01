@@ -17,7 +17,7 @@ async def test_publish_finalizes_existing_idempotency_reservation():
         id="reservation-request-1",
         event_type="RESERVATION",
         payload={"fingerprint": "fingerprint-1"},
-        status="RESERVED",
+        status=OutboxStatus.RESERVED,
     )
     result = MagicMock()
     result.scalar_one_or_none.return_value = reservation

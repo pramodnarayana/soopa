@@ -5,6 +5,7 @@ import structlog
 from database.models.identity import Role, User, UserRole
 from database.models.notifications import NotificationOutbox, NotificationRecord
 from database.outbox_serializer import serialize_domain_event
+from identity.domain.constants import UserStatus
 from seedwork import generate_random_hex
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +39,7 @@ class SqlAlchemyNotificationRecordRepository(NotificationRecordRepositoryPort):
                         Role.name.in_(["TenantAdmin", "PlatformAdmin"]),
                         Role.deleted_at.is_(None),
                         User.deleted_at.is_(None),
-                        User.status == "active",
+                        User.status == UserStatus.ACTIVE,
                     )
                     .distinct()
                 )

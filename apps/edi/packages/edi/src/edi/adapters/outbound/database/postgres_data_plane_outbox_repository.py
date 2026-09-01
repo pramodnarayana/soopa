@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from outbox.domain.constants import OutboxStatus
 from seedwork import SystemIdPrefix, generate_id, generate_random_hex
 from sqlalchemy import CursorResult, update
 from sqlalchemy.dialects.postgresql import insert
@@ -42,7 +43,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 else generate_id(SystemIdPrefix.GENERIC),
                 event_type=event_type,
                 payload=payload,
-                status="PENDING",
+                status=OutboxStatus.PENDING,
             )
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
         )
@@ -125,11 +126,11 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             update(DataPlaneOutbox)
             .where(
                 DataPlaneOutbox.id == event_id,
-                DataPlaneOutbox.status == "PROCESSING",
+                DataPlaneOutbox.status == OutboxStatus.PROCESSING,
                 DataPlaneOutbox.owner_token == worker_id,
             )
             .values(
-                status="PROCESSED",
+                status=OutboxStatus.PROCESSED,
                 owner_token=None,
                 lease_expires_at=None,
                 updated_at=datetime.now(UTC).replace(tzinfo=None),
@@ -146,11 +147,11 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             update(DataPlaneOutbox)
             .where(
                 DataPlaneOutbox.id == event_id,
-                DataPlaneOutbox.status == "PROCESSING",
+                DataPlaneOutbox.status == OutboxStatus.PROCESSING,
                 DataPlaneOutbox.owner_token == worker_id,
             )
             .values(
-                status="PENDING",
+                status=OutboxStatus.PENDING,
                 attempts=DataPlaneOutbox.attempts + 1,
                 lease_expires_at=None,
                 owner_token=None,
@@ -175,16 +176,17 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             update(DataPlaneOutbox)
             .where(
                 DataPlaneOutbox.idempotency_key == key_str,
-                DataPlaneOutbox.status != "PROCESSED",
+                DataPlaneOutbox.status != OutboxStatus.PROCESSED,
                 or_(
                     DataPlaneOutbox.lease_expires_at.is_(None),
                     DataPlaneOutbox.lease_expires_at < now,
                 ),
             )
             .values(
-                status="DELIVERING",
+                status=OutboxStatus.DELIVERING,
                 owner_token=owner_token,
                 lease_expires_at=lease_expires,
+                updated_at=now,
             )
             .returning(DataPlaneOutbox.idempotency_key)
         )
@@ -205,7 +207,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 DataPlaneOutbox.idempotency_key == key_str,
                 DataPlaneOutbox.owner_token == owner_token,
             )
-            .values(status="PROCESSED", owner_token=None, lease_expires_at=None)
+            .values(status=OutboxStatus.PROCESSED, owner_token=None, lease_expires_at=None)
         )
         if typing.cast(CursorResult[Any], update_result).rowcount > 0:
             await self._session.execute(
@@ -223,7 +225,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 DataPlaneOutbox.idempotency_key == key_str,
                 DataPlaneOutbox.owner_token == owner_token,
             )
-            .values(status="FAILED", owner_token=None, lease_expires_at=None)
+            .values(status=OutboxStatus.FAILED, owner_token=None, lease_expires_at=None)
         )
         if typing.cast(CursorResult[Any], result).rowcount == 0:
             logger.warning("stale_failure_update", key_str=key_str)

@@ -10,16 +10,20 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
 )
 os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
+os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
 
 import httpx
 import pytest
 import pytest_asyncio
+from database.constants import DatabaseShardStatus
 from database.models.identity import ApiToken as ApiTokenORM
 from database.models.identity import Tenant as TenantORM
 from database.provider import get_async_engine
 from identity.domain.identity_context import IdentityContext
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator
+from ucp.domain.constants import LifecycleStatus
 
 
 def mock_build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
@@ -99,15 +103,39 @@ async def db_session_factory(db_engine):
         join_transaction_mode="create_savepoint",
     )
 
+    import contextlib
+    from unittest.mock import AsyncMock, Mock
+
+    mock_provider = Mock()
+    mock_provider.session_factory = SessionLocal
+
+    @contextlib.asynccontextmanager
+    async def mock_session():
+        async with SessionLocal() as session:
+            yield session
+
+    mock_provider.session = mock_session
+    mock_provider.close = AsyncMock()
+
+    async def mock_global_session(*args, **kwargs):
+        async with SessionLocal() as session:
+            session.info["session_type"] = "global"
+            yield session
+
+    async def mock_tenant_session(*args, **kwargs):
+        async with SessionLocal() as session:
+            session.info["session_type"] = "tenant"
+            yield session
+
+    mock_router = Mock()
+    mock_router.get_global_session = mock_global_session
+    mock_router.get_tenant_session = mock_tenant_session
+    mock_router.close_all = AsyncMock()
+
     # Patch the session makers across all domains that unified_api touches
     with (
-        patch("unified_api.main._async_session_maker", SessionLocal),
-        patch("ucp.bootstrap.dependencies._async_session_maker", SessionLocal),
-        patch("ucp.bootstrap.container._async_session_maker", SessionLocal),
-        patch(
-            "edi.adapters.outbound.database.connection.async_sessionmaker",
-            return_value=SessionLocal,
-        ),
+        patch("database.provider.DatabaseProvider.from_url", return_value=mock_provider),
+        patch("edi.bootstrap.lifespan.DatabaseRouter", return_value=mock_router),
     ):
         yield SessionLocal
 
@@ -198,7 +226,7 @@ async def seeded_api_token(db_session_factory):
                 id=PLATFORM_TENANT_ID,
                 name="Platform Admin Tenant",
                 slug="platform-admin",
-                status="active",
+                status=LifecycleStatus.ACTIVE,
             )
             session.add(platform_tenant)
             await session.flush()
@@ -221,7 +249,7 @@ async def seeded_api_token(db_session_factory):
                 id=tenant_id,
                 name="Test Auth Tenant",
                 slug="test-auth-tenant",
-                status="active",
+                status=LifecycleStatus.ACTIVE,
                 idp_tenant_id="org_test",
             )
             session.add(tenant)
@@ -253,7 +281,10 @@ async def seeded_api_token(db_session_factory):
         if not existing_sub.scalar():
             async with session.begin_nested():
                 edi_sub = UcpAppSubscription(
-                    tenant_id=tenant_id, app_id=existing_app_id, status="active", tier="free"
+                    tenant_id=tenant_id,
+                    app_id=existing_app_id,
+                    status=LifecycleStatus.ACTIVE,
+                    tier="free",
                 )
                 session.add(edi_sub)
                 await session.flush()
@@ -268,7 +299,7 @@ async def seeded_api_token(db_session_factory):
                     id="edi_shard_1",
                     name="EDI Primary Shard",
                     dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
-                    status="active",
+                    status=DatabaseShardStatus.ACTIVE,
                 )
                 session.add(shard)
                 await session.flush()

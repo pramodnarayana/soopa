@@ -5,7 +5,7 @@ from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from database.models.identity import Tenant
-from edi.adapters.outbound.database.connection import DatabaseRouter
+from database.router import DatabaseRouter
 
 EDI_APP_SLUG = "edi"
 

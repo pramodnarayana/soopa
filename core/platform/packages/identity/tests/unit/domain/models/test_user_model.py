@@ -1,5 +1,6 @@
 import pytest
 
+from identity.domain.constants import UserStatus
 from identity.domain.models.user import User
 
 
@@ -8,7 +9,7 @@ def test_user_create_and_properties():
     assert user.id == "iam_usr_123"
     assert user.email == "test@test.com"
     assert user.name == "Test User"
-    assert user.status == "active"
+    assert user.status == UserStatus.ACTIVE
     assert user.idp_user_id is None
 
 
@@ -24,27 +25,27 @@ def test_user_set_idp_user_id():
 def test_user_status_changes():
     user = User.create(id="iam_usr_123", idp_user_id="idp_123", email="test@test.com", name="Test")
     user.deactivate()
-    assert user.status == "inactive"
+    assert user.status == UserStatus.INACTIVE
 
     # deactivating again does nothing
     user.deactivate()
-    assert user.status == "inactive"
+    assert user.status == UserStatus.INACTIVE
 
     user.activate()
-    assert user.status == "active"
+    assert user.status == UserStatus.ACTIVE
 
     # activating again does nothing
     user.activate()
-    assert user.status == "active"
+    assert user.status == UserStatus.ACTIVE
 
 
 def test_user_change_status():
     user = User.create(id="iam_usr_123", idp_user_id="idp_123", email="test@test.com", name="Test")
     user.change_status("deactivate", "tenant_123")
-    assert user.status == "inactive"
+    assert user.status == UserStatus.INACTIVE
 
     user.change_status("activate", "tenant_123")
-    assert user.status == "active"
+    assert user.status == UserStatus.ACTIVE
 
     with pytest.raises(ValueError):
         user.change_status("invalid_action", "tenant_123")

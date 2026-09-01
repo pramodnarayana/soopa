@@ -19,11 +19,11 @@ async def test_save_and_get_preference(
     repo: SqlAlchemyUserNotificationPreferenceRepository, db_session_factory
 ):
     # Arrange
-    from identity.domain.constants import DomainIdPrefix as IamPrefix
+    from identity.domain.constants import IdentityIdPrefix
 
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
 
-    user_id = generate_id(IamPrefix.USER)
+    user_id = generate_id(IdentityIdPrefix.USER)
     event_type = "invoice.payment_failed"
     channel = "EMAIL"
 

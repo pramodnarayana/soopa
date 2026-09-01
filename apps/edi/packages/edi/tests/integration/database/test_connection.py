@@ -3,11 +3,10 @@ import os
 from collections.abc import AsyncGenerator
 
 import pytest
+from database.router import DatabaseRouter
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from edi.adapters.outbound.database.connection import DatabaseRouter
 
 # We use the local test databases spun up by docker-compose, but allow overrides.
 # Since Node.js and Python share the DATABASE_URL environment variable,

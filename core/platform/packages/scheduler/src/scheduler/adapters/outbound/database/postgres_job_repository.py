@@ -5,6 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scheduler.domain.constants import JobStatus
 from scheduler.domain.models import ScheduledJob
 from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 
@@ -63,7 +64,7 @@ class PostgresJobRepository(JobRepositoryPort):
                     name=mapping["name"],
                     target_queue=mapping.get("target_queue"),
                     payload=mapping.get("payload", {}),
-                    status=mapping["status"],
+                    status=JobStatus(mapping["status"]),
                     cron_expression=mapping.get("cron_expression"),
                     interval_seconds=mapping.get("interval_seconds"),
                     retry_count=mapping.get("retry_count", 0),

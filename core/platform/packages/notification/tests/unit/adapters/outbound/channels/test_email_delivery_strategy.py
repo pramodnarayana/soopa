@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
-from identity.domain.constants import DomainIdPrefix as IamPrefix
+from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
@@ -35,7 +35,7 @@ async def test_email_delivery_strategy_delivers():
     provider = FakeEmailProvider()
     strategy = EmailDeliveryStrategy(email_provider=provider)
 
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with capture_logs() as cap_logs:
         await strategy.deliver(
             tenant_id=tenant_id,
@@ -55,7 +55,7 @@ async def test_email_delivery_strategy_delivers():
 async def test_email_delivery_strategy_fails_without_provider():
     strategy = EmailDeliveryStrategy(email_provider=None)
 
-    tenant_id = generate_id(IamPrefix.TENANT)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with pytest.raises(DeliveryError, match="Email provider not configured"):
         await strategy.deliver(
             tenant_id=tenant_id,
