@@ -43,12 +43,15 @@ class RoutingResolutionUseCase:
                 res = await self.repository.resolve_outbound_route(tp_id)
                 if res:
                     return res
-            except Exception:
+            except Exception as e:
                 logger.exception(
                     "outbound_route_resolution_failed",
                     trace_id=msg.trace_id,
                     trading_partner_id=tp_id,
                 )
+                raise RuntimeError(
+                    f"Outbound route resolution failed for trace_id={msg.trace_id}"
+                ) from e
 
         # 2. Fallback to business_metadata from EDI JSON
         return await self._resolve_business_metadata_fallback(msg, edi_jsons)
@@ -81,11 +84,14 @@ class RoutingResolutionUseCase:
             if res:
                 return res
 
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "inbound_route_resolution_failed",
                 trace_id=msg.trace_id,
             )
+            raise RuntimeError(
+                f"Inbound route resolution failed for trace_id={msg.trace_id}"
+            ) from e
 
         return None, msg.connection_type
 
@@ -112,10 +118,13 @@ class RoutingResolutionUseCase:
                 name = await self.repository.resolve_business_metadata(partner_ids)
                 if name:
                     return name, msg.connection_type
-            except Exception:
+            except Exception as e:
                 logger.exception(
                     "business_metadata_route_resolution_failed",
                     trace_id=msg.trace_id,
                 )
+                raise RuntimeError(
+                    f"Business metadata route resolution failed for trace_id={msg.trace_id}"
+                ) from e
 
         return None, msg.connection_type

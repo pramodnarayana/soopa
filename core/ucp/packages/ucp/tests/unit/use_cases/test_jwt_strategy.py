@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from identity.application.authenticate_use_case import TenantNotProvisionedError
-from identity.domain.constants import IdentityIdPrefix
+from identity.domain.constants import IdentityIdPrefix, UserStatus
 from identity.domain.identity_context import TokenClaims
 from identity.domain.models.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
@@ -86,7 +86,7 @@ async def test_jwt_strategy_resolves_idp_ids(
         email="test@test.com",
         name="Test User",
         idp_user_id=idp_user_id,
-        status=LifecycleStatus.ACTIVE,
+        status=UserStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

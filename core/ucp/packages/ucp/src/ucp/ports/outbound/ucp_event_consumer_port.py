@@ -1,13 +1,13 @@
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from typing import Any, Protocol
 
-from pydantic import AliasChoices, BaseModel, Field
 
-
-class UcpEventMessage(BaseModel):
-    id: str = Field(validation_alias=AliasChoices("eventId", "id"))
-    event_type: str = Field(validation_alias=AliasChoices("eventType", "event_type"))
-    tenant_id: str = Field(validation_alias=AliasChoices("tenantId", "tenant_id"))
+@dataclass(frozen=True)
+class UcpEventMessage:
+    id: str
+    event_type: str
+    tenant_id: str
     payload: dict[str, Any]
 
 

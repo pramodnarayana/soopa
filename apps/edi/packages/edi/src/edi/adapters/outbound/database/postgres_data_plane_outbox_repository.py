@@ -78,7 +78,8 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                     "pending_status": OutboxStatus.PENDING.value,
                 },
             )
-            swept = int(result.rowcount)  # type: ignore[attr-defined]
+            cursor_result = typing.cast(CursorResult[Any], result)
+            swept = int(cursor_result.rowcount)
             total_swept += swept
             await self._session.flush()
             if swept < 5000:

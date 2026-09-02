@@ -39,11 +39,13 @@ def apply_legacy_3des_support() -> None:
     ) -> pkcs7.PKCS7EnvelopeBuilder:
         # We completely bypass the strict type check to allow TripleDES (and others)
         # to pass down to the native Rust backend, which still supports it.
-        self._algorithm = content_encryption_algorithm  # type: ignore[attr-defined]
+        object.__setattr__(self, "_algorithm", content_encryption_algorithm)
         return self
 
-    pkcs7.PKCS7EnvelopeBuilder.set_content_encryption_algorithm = (  # type: ignore[method-assign, assignment]
-        _patched_set_content_encryption_algorithm
+    setattr(  # noqa: B010
+        pkcs7.PKCS7EnvelopeBuilder,
+        "set_content_encryption_algorithm",
+        _patched_set_content_encryption_algorithm,
     )
 
     _PATCH_APPLIED = True

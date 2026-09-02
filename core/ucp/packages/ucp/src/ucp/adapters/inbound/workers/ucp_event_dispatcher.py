@@ -27,7 +27,12 @@ class UcpEventDispatcher:
 
     async def dispatch_raw(self, payload: dict[str, Any]) -> None:
         """Entrypoint called by the SqsConsumerManager."""
-        event = UcpEventMessage.model_validate(payload)
+        event = UcpEventMessage(
+            id=str(payload.get("eventId") or payload.get("id") or ""),
+            event_type=str(payload.get("eventType") or payload.get("event_type") or ""),
+            tenant_id=str(payload.get("tenantId") or payload.get("tenant_id") or ""),
+            payload=payload.get("payload", {}),
+        )
         await self._dispatch(event)
 
     async def _dispatch(self, event: UcpEventMessage) -> None:

@@ -72,7 +72,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception("Webhook delivery failed for trace_id={trace_id}", trace_id=trace_id)
-            return
+            raise RuntimeError(f"Webhook delivery failed: {e}") from e
 
         if 200 <= status_code < 300:
             await self.uow.repository.update_api_payload_status(
@@ -104,3 +104,4 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id=trace_id,
                 status_code=status_code,
             )
+            raise RuntimeError(f"Webhook delivery failed with HTTP {status_code}: {response_text}")

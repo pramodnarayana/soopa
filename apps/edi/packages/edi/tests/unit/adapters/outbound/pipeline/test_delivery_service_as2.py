@@ -183,7 +183,8 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, as2=as2_adapter)
-    await use_case.execute(trace_id)
+    with pytest.raises(RuntimeError):
+        await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(uow.outbox.events) == 1

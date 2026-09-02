@@ -40,7 +40,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 "AS2 Delivery failed for trace_id={trace_id}. "
                 "HTTP status: {status_code}, body: {response_body!r}"
             )
-            return
+            raise RuntimeError(f"AS2 Delivery failed with HTTP {status_code}")
 
         from edi.adapters.inbound.as2 import parse_mdn
 
@@ -88,12 +88,14 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                     "Sync MDN indicates failure for trace_id={trace_id}. "
                     "Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
                 )
-        except Exception:
+                raise RuntimeError(f"Sync MDN indicates failure: {disposition}")
+        except Exception as e:
             await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
             logger.exception(
                 "AS2 MDN parsing or processing failed for trace_id={trace_id}", trace_id=trace_id
             )
+            raise RuntimeError(f"AS2 MDN parsing or processing failed: {e}") from e
 
     async def deliver(
         self,

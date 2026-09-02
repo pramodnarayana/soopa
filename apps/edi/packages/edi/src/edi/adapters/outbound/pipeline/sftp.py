@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+from typing import Any
 
 import paramiko
 import structlog
@@ -68,7 +69,7 @@ def get_ssh_client(
     client = paramiko.SSHClient()
     _setup_host_key(client, host, port, host_key_string)
 
-    connect_kwargs = {
+    connect_kwargs: dict[str, Any] = {
         "hostname": host,
         "port": port,
         "username": username,
@@ -88,7 +89,7 @@ def get_ssh_client(
         raise ValueError("Must provide either a password or a client key.")
 
     try:
-        client.connect(**connect_kwargs)  # type: ignore[arg-type]
+        client.connect(**connect_kwargs)
         return client
     except Exception:
         logger.exception("SSH Connection failed for %s:%s", host, port)

@@ -391,3 +391,24 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Component**: EDI (Platform Infrastructure)
 - **Description**: There are currently 4 identical copies of an `aws_secrets_manager.py` adapter initializing raw `boto3.client('secretsmanager')` scattered across the EDI module (`packages/edi`, `edi-orchestrator-worker`, `edi-config-sync-worker`, `edi-secrets-sidecar`). This violates the Enterprise requirement that domain-agnostic infrastructure patterns must be centralized.
 - **Action Item**: Create a centralized `secrets` or `infrastructure` package in `core/platform/packages/`. Implement a generic `AwsSecretsManagerAdapter`. Refactor all EDI workers and sidecars to inject this centralized adapter and delete the local duplicates.
+
+## [Type Safety] Eradicate `typing.Any` (Scheduled for Next Ticket)
+
+- **Date Added**: 2026-09-02
+- **Status**: TO DO
+- **Description**: The codebase currently relies on `typing.Any` (and `dict[str, Any]`) as crutches in various domain models, DTOs, and repositories.
+- **Action Item**: Systematically replace all instances of `typing.Any` with strict `TypedDict`s, Pydantic schemas, or Generic `TypeVars` across domain models, DTOs, and repositories. This ensures adherence to strict structural typing standards.
+
+## [Architecture Cleanup] Magic Strings and Monkey-Patching in `cryptography.py`
+
+- **Date Added**: 2026-09-02
+- **Status**: TO DO
+- **Description**: In `apps/edi/packages/edi/src/edi/core/patches/cryptography.py`, a runtime `object.__setattr__` is used with a magic string `"set_content_encryption_algorithm"` to monkey-patch legacy 3DES support for the native Rust backend without breaking `mypy`'s strict type checking.
+- **Action Item**: Refactor the design by completely forking/vendoring the required functionality from the `cryptography` library into our own codebase (taking it as a first reference and building our own native implementation). We will completely own this code and never upgrade from the external library upstream. This eradicates the need for monkey-patching or Adapter patterns, allowing us to natively support 3DES with strict enterprise type safety.
+
+## [Code Quality] Eradicate Inline Imports
+
+- **Date Added**: 2026-09-02
+- **Status**: TO DO
+- **Description**: There are lazy inline imports scattered inside functions (e.g., `make_use_case` and `test_delivery_service_outbound_sftp` in `tests/unit/application/use_cases/pipeline/test_delivery_service.py`). This violates PEP 8 and enterprise standards.
+- **Action Item**: Move all inline imports to the top of their respective files. Eliminate any lazy dependency loading unless strictly required for resolving an unavoidable circular dependency (which itself should be flagged for structural refactoring).

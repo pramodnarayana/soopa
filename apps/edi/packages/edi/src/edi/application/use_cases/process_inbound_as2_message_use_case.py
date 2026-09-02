@@ -15,7 +15,7 @@ import email
 import functools
 import re
 from email import policy
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
@@ -345,10 +345,13 @@ class ProcessInboundAs2MessageUseCase:
 
         parsed_msg = email.message_from_bytes(final_payload_bytes, policy=policy.HTTP)
         if "content-type" in parsed_msg:
-            decoded_payload = parsed_msg.get_payload(decode=True)  # type: ignore[arg-type]
+            from email.message import EmailMessage
+
+            email_msg = cast(EmailMessage, parsed_msg)
+            decoded_payload = email_msg.get_payload(decode=True)
             if decoded_payload is not None and isinstance(decoded_payload, bytes):
                 return decoded_payload
-            return parsed_msg.as_bytes()
+            return email_msg.as_bytes()
         return final_payload_bytes
 
     def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str, str | None]:

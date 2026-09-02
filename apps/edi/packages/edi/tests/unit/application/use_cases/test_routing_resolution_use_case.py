@@ -145,8 +145,8 @@ class TestRoutingResolutionOutbound:
         assert name is None  # no routes seeded; should not crash
 
     @pytest.mark.asyncio
-    async def test_exception_in_outbound_route_is_swallowed_and_falls_back(self):
-        """Repository exception must not propagate — just fall back gracefully."""
+    async def test_exception_in_outbound_route_bubbles_up(self):
+        """Repository exception must propagate so infrastructure can NACK."""
 
         class FailingRepo(FakeRoutingResolverRepository):
             async def resolve_outbound_route(self, tp_id: str):
@@ -155,9 +155,11 @@ class TestRoutingResolutionOutbound:
         repo = FailingRepo()
         use_case = RoutingResolutionUseCase(repository=repo)
         msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=TP_X)
-        # Must not raise
-        name, _ = await use_case.resolve_routing_context(msg, [])
-        assert name is None
+        # Must raise RuntimeError
+        import pytest
+
+        with pytest.raises(RuntimeError):
+            await use_case.resolve_routing_context(msg, [])
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +223,7 @@ class TestRoutingResolutionInbound:
         assert conn_type == ConnectionType.AS2
 
     @pytest.mark.asyncio
-    async def test_exception_in_inbound_resolution_is_swallowed(self):
+    async def test_exception_in_inbound_resolution_bubbles_up(self):
         class FailingRepo(FakeRoutingResolverRepository):
             async def resolve_as2_inbound(self, as2_from: str):
                 raise RuntimeError("Network error")
@@ -236,9 +238,11 @@ class TestRoutingResolutionInbound:
             connection_type=ConnectionType.AS2,
             as2_sender_id="BROKEN_FROM",
         )
-        # Must not raise
-        name, _ = await use_case.resolve_routing_context(msg, [])
-        assert name is None
+        # Must raise RuntimeError
+        import pytest
+
+        with pytest.raises(RuntimeError):
+            await use_case.resolve_routing_context(msg, [])
 
     @pytest.mark.asyncio
     async def test_empty_edi_jsons_skips_business_metadata_lookup(self):

@@ -39,3 +39,5 @@ You are a Senior Cloud Infrastructure Architect. Your job is to design highly av
 - **Single Source of Truth**: NEVER hardcode dummy environment variables inline in `package.json` scripts (e.g. `export DATABASE_URL="..."`) or duplicate them heavily in CI workflow files (e.g. `ci.yml`).
 - **.env Parity**: Both Local and CI environments MUST rely strictly on `.env` as the sole provider of configuration. The `.env.example` file must contain a fully comprehensive set of development/test dummy credentials.
 - **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.
+
+- **Procedural Outbox Restriction**: DDD aggregate event recording (`add_domain_event()`) and repository-level draining (`_drain_events` or `_flush_events`) are mandatory. NEVER use direct `publish_outbox_event()` in application use cases.

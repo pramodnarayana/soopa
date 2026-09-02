@@ -37,7 +37,7 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
         subscriptions=[],
     )
     await repo.save(tenant)
-    await db_session.commit()
+    await db_session.flush()
 
     # 2. Override the token verifier in the app to return a fake identity
     from identity.domain.identity_context import IdentityContext

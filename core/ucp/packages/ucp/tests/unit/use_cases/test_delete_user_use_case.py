@@ -1,10 +1,10 @@
 from datetime import UTC, datetime
 
 import pytest
+from identity.domain.constants import UserStatus
 from identity.domain.models.user import User
 
 from ucp.application.use_cases.delete_user_use_case import DeleteUserCommand, DeleteUserUseCase
-from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
@@ -27,7 +27,7 @@ async def test_delete_user_success(fake_uow, delete_user_use_case):
         email="test@example.com",
         name="Test User",
         idp_user_id="idp_usr_123",
-        status=LifecycleStatus.ACTIVE,
+        status=UserStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

@@ -28,10 +28,11 @@ def test_fernet_initialization_without_key(adapter):
 
 
 def test_fernet_initialization_with_invalid_key(adapter):
-    with mock.patch.dict(os.environ, {"DB_ENCRYPTION_KEY": "invalid_key"}):
-        fernet = adapter.fernet
-        assert fernet is None
-        assert adapter._initialized is False
+    with (
+        mock.patch.dict(os.environ, {"DB_ENCRYPTION_KEY": "invalid_key"}),
+        pytest.raises(RuntimeError),
+    ):
+        _ = adapter.fernet
 
 
 def test_encrypt_decrypt_success(adapter):

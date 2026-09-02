@@ -6,6 +6,7 @@
     "format": "uv run ruff format . && uv run ruff check --fix .",
     "typecheck": "uv run mypy src/ucp_worker",
     "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
+    "test:integration": "uv run pytest tests/integration",
     "deadcode:deptry": "uv run deptry .",
     "cov": "uv run pytest --cov=ucp_worker --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
   }
