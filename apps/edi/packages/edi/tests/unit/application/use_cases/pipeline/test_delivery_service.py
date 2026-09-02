@@ -1,13 +1,20 @@
+import pytest
+
 """
 Unit tests for DeliveryUseCase — inbound webhook and outbound SFTP delivery paths.
 All test doubles are imported from fakes.py (DRY). No mock library used.
 """
 
+import contextlib
 from typing import Any
 
-import pytest
-
+from edi.application.use_cases.pipeline.delivery_router_use_case import (
+    DeliveryRouterUseCase,
+)
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
+from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
+from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
+from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.direction import MessageDirection
 from edi.domain.status import MessageStatus
 from edi.testing.fakes.pipeline_fakes import (
@@ -15,6 +22,7 @@ from edi.testing.fakes.pipeline_fakes import (
     FakeDataPlaneUnitOfWork,
     FakeHttpDeliveryAdapter,
     FakeSftpDeliveryAdapter,
+    FakeVault,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -30,20 +38,12 @@ def make_use_case(
     s = sftp or FakeSftpDeliveryAdapter()
     h = http or FakeHttpDeliveryAdapter()
     a = FakeAS2DeliveryAdapter()
-    import contextlib
 
     @contextlib.asynccontextmanager
     async def uow_factory():
         yield u
 
     def router_factory(u_ref):
-        from edi.application.use_cases.pipeline.delivery_router_use_case import (
-            DeliveryRouterUseCase,
-        )
-        from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-        from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
-        from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-
         return DeliveryRouterUseCase(
             u_ref,
             {
@@ -107,8 +107,6 @@ async def test_delivery_service_inbound_webhook() -> None:
 
 async def test_delivery_service_outbound_sftp() -> None:
     # ── Arrange ────────────────────────────────────────────────────────────────
-    from edi.testing.fakes.pipeline_fakes import FakeVault
-
     uow = FakeDataPlaneUnitOfWork()
     sftp_adapter = FakeSftpDeliveryAdapter()
     vault = FakeVault({"mock_password": "fake_private_key_data"})
@@ -209,8 +207,11 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, http=http_adapter)
-    await use_case.execute(trace_id)
+
+    with pytest.raises(RuntimeError):
+        await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert uow.repository.api_gateway[trace_id]["status"] == MessageStatus.FAILED
     assert len(http_adapter.delivered) == 1
+    assert uow.committed is True

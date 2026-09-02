@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from dataclasses import replace
 from typing import Any
 
 import structlog
@@ -42,7 +43,6 @@ class JwtStrategy(AuthenticationStrategyPort):
         return True
 
     async def authenticate(self, token: str) -> IdentityContext:  # noqa: C901
-        from dataclasses import replace
 
         # Note: We let AuthenticationError propagate up so the caller handles it
         identity: IdentityContext = await authenticate_bearer_token(

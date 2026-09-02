@@ -318,19 +318,24 @@ def test_existing_sftp_connection_failures(client, fake_uow):
     )
     assert resp.status_code == 400
 
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
-    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(side_effect=ValueError("Not found"))
+    fake_uow.sftp_partners.delete = AsyncMock(side_effect=ValueError("Not found"))
+    # We must ensure get_sftp_partner returns something so it reaches delete
+    original_get = fake_uow.sftp_partners.get_sftp_partner
+    fake_uow.sftp_partners.get_sftp_partner = AsyncMock(return_value=MagicMock())
     resp = client.delete(f"/api/v1/tenants/1/edi/trading-partners/sftp/{random_id}")
     assert resp.status_code == 400
 
     from edi.domain.exceptions import OrchestrationError
 
-    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(
-        side_effect=OrchestrationError("DB Error")
-    )
+    fake_uow.sftp_partners.delete = AsyncMock(side_effect=OrchestrationError("DB Error"))
     resp = client.delete(f"/api/v1/tenants/1/edi/trading-partners/sftp/{random_id}")
     assert resp.status_code == 500
+
+    # Restore the original methods
+    fake_uow.sftp_partners.get_sftp_partner = original_get
+    del fake_uow.sftp_partners.delete
 
     # Setup a partner
     response = client.post(
@@ -425,9 +430,7 @@ def test_existing_sftp_connection_failures(client, fake_uow):
         assert resp.status_code == 400
 
     # Delete integrity error
-    fake_uow.sftp_partners.delete_sftp_partner = AsyncMock(
-        side_effect=DuplicateEntityError("Integrity error")
-    )
+    fake_uow.sftp_partners.delete = AsyncMock(side_effect=DuplicateEntityError("Integrity error"))
     resp = client.delete(f"/api/v1/tenants/1/edi/trading-partners/sftp/{p_id}")
     assert resp.status_code == 400
 

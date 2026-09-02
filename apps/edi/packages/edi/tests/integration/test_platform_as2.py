@@ -1,12 +1,14 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
+    get_platform_user_profile,
     get_raw_jwt,
     require_platform_admin,
 )
@@ -15,6 +17,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
     get_data_plane_uow,
     get_global_session,
 )
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
 from edi.module import create_edi_app
 
@@ -47,7 +50,6 @@ def client(mock_uow):
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "permissions": ["certificates:export_private", "certificates:rotate"]
     }
-    from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
     app.dependency_overrides[get_secret_store] = lambda: AsyncMock()
 
@@ -73,7 +75,6 @@ def test_create_as2_partnership(client, mock_uow):
 
 
 def test_update_as2_partnership(client, mock_uow):
-    from unittest.mock import MagicMock
 
     pid = str(uuid4())
     mock_partner = MagicMock()
@@ -93,9 +94,6 @@ def test_delete_as2_partnership(client, mock_uow):
 
 def test_create_as2_partner_unauthorized():
     # Test unauthenticated
-    from fastapi.testclient import TestClient
-
-    from edi.module import create_edi_app
 
     app = create_edi_app()
 
@@ -109,8 +107,6 @@ def test_create_as2_partner_unauthorized():
 
 def test_create_as2_partner_forbidden(client):
     # Test authenticated but without platform admin
-    from fastapi import HTTPException
-    from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile
 
     def mock_forbidden():
         raise HTTPException(status_code=403, detail="Forbidden")

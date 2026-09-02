@@ -18,13 +18,17 @@ class DeleteSFTPPartnerUseCase:
             partner_id=partner_id,
             tenant_id=tenant_id,
         )
-        await self.uow.sftp_partners.delete_sftp_partner(tenant_id, partner_id)
+        aggregate = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
+        if not aggregate:
+            return
 
-        await self.uow.control_plane_outbox.publish_outbox_event(
+        aggregate.add_domain_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_sftp_partner_deleted,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
+                resource_id=partner_id,
+                explicit_idempotency_key=idempotency_key,
+            )
         )
+
+        await self.uow.sftp_partners.delete(aggregate)

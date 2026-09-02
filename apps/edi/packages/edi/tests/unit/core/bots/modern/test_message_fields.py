@@ -1,3 +1,8 @@
+from edi.core.bots.domain.models import (
+    create_field_definition,
+    create_structure_node,
+)
+
 """
 test_message_advanced.py
 Advanced tests for message.py checking edge cases in repeating fields, max repeats, and formatting.
@@ -63,10 +68,6 @@ class MockGrammar:
                 ],
             ]
         }
-        from edi.core.bots.domain.models import (
-            create_field_definition,
-            create_structure_node,
-        )
 
         self.recorddefs["REC1"] = [create_field_definition(f) for f in self.recorddefs["REC1"]]
         self.structure[0][6] = self.recorddefs["REC1"]

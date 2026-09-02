@@ -1,3 +1,5 @@
+from sqlalchemy import text
+
 """
 Enterprise Database Testing Utilities.
 
@@ -58,7 +60,6 @@ class TransactionalTestRouter(DatabaseRouterPort):
                 class_=AsyncSession,
                 join_transaction_mode="create_savepoint",
             )
-            from sqlalchemy import text
 
             try:
                 async with factory() as session:
@@ -92,3 +93,25 @@ class TransactionalTestRouter(DatabaseRouterPort):
 
     async def close_all(self) -> None:
         pass
+
+
+async def get_test_shard_url_async(global_db_url: str) -> str:
+    """
+    Dynamically fetches the first active testing shard URL using the production DatabaseRouter.
+    """
+    from database.router import DatabaseRouter
+
+    router = DatabaseRouter(global_db_url=global_db_url)
+    shards = await router.get_all_shards()
+    await router.close_all()
+    if not shards:
+        raise ValueError("No test shards found in the Control Plane.")
+    return shards[0][1]
+
+
+def get_test_shard_url_sync(global_db_url: str) -> str:
+    """
+    Synchronous wrapper for get_test_shard_url_async.
+    Use this in module-level declarations and non-async test scripts.
+    """
+    return asyncio.run(get_test_shard_url_async(global_db_url))

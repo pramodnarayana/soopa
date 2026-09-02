@@ -12,6 +12,7 @@ from identity.domain.models.api_token_models import (
 )
 from identity.ports.outbound.token_verifier_port import TokenValidationError
 from identity.testing.fakes.fake_identity_uow import FakeIdentityUnitOfWork
+from identity.testing.fakes.fake_token_verifier import FakeTokenVerifier
 
 
 def test_api_token_models():
@@ -107,7 +108,6 @@ async def test_fake_api_token_repo():
 
 @pytest.mark.asyncio
 async def test_fake_token_verifier():
-    from identity.testing.fakes.fake_token_verifier import FakeTokenVerifier
 
     verifier = FakeTokenVerifier()
 

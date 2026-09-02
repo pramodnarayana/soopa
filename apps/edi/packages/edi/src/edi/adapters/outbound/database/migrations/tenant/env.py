@@ -16,16 +16,16 @@ if config.config_file_name is not None:
 target_metadata = TenantBase.metadata
 
 # For generating migrations, we connect to shard 1 as a representative database
+from database.testing import get_test_shard_url_sync
+
 from edi.config.settings import get_settings
 
 _ini_url = config.get_main_option("sqlalchemy.url")
 if _ini_url:
     TENANT_DB_URL = _ini_url
 else:
-    fallback = get_settings().database.default_shard_url
-    if not fallback:
-        raise ValueError("sqlalchemy.url is missing and SHARD_1_URL fallback is not set.")
-    TENANT_DB_URL = fallback
+    global_url = str(get_settings().database.global_url)
+    TENANT_DB_URL = get_test_shard_url_sync(global_url)
 
 
 def run_migrations_offline() -> None:

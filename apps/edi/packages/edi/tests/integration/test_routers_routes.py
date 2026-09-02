@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from seedwork import generate_id
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import (
     get_control_plane_uow,
@@ -28,7 +29,6 @@ def client(fake_uow):
 
 
 def test_create_inbound_route(client):
-    from seedwork import generate_id
 
     response = client.post(
         "/api/v1/tenants/1/edi/routes/inbound",
@@ -54,7 +54,6 @@ def test_create_inbound_route(client):
 
 
 def test_create_outbound_route(client):
-    from seedwork import generate_id
 
     response = client.post(
         "/api/v1/tenants/1/edi/routes/outbound",

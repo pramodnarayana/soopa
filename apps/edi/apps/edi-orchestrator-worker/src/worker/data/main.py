@@ -1,4 +1,5 @@
 import asyncio
+import signal
 from collections.abc import Callable
 from typing import Any
 
@@ -179,8 +180,6 @@ async def main() -> None:  # noqa: C901
     # ─────────────────────────────────────────────────────────────
     stop_event = asyncio.Event()
     try:
-        import signal
-
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop_event.set)

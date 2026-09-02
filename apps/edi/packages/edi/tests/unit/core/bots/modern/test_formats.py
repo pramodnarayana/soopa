@@ -1,3 +1,6 @@
+from edi.core.bots.config.botsconfig import BFORMAT, DECIMALS, FORMAT, ID
+from edi.core.bots.domain.grammar.formats import x12
+
 """
 Tests for bots_core.domain.grammar.formats
 """
@@ -8,8 +11,6 @@ def test_formats_edifact_decimals_no_suffix():
     formats.py line 142: when BFORMAT == 'I' and FORMAT has no digit suffix,
     DECIMALS should be set to 0.
     """
-    from edi.core.bots.config.botsconfig import BFORMAT, DECIMALS, FORMAT, ID
-    from edi.core.bots.domain.grammar.formats import x12
 
     g = object.__new__(x12)
     g.grammarname = "test"
@@ -28,8 +29,6 @@ def test_formats_edifact_decimals_with_suffix():
     formats.py line 140: when BFORMAT == 'I' and FORMAT has a digit suffix,
     DECIMALS should be set to that digit.
     """
-    from edi.core.bots.config.botsconfig import BFORMAT, DECIMALS, FORMAT, ID
-    from edi.core.bots.domain.grammar.formats import x12
 
     g = object.__new__(x12)
     g.grammarname = "test"

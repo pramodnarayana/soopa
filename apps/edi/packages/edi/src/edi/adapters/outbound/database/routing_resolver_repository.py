@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Webhook
 from edi.adapters.outbound.database.models.control_plane import AS2Partner, SFTPPartner
 from edi.adapters.outbound.database.models.data_plane import InboundRoute, OutboundRoute
-from edi.domain.models import ConnectionType
+from edi.domain.models.base import ConnectionType
 from edi.ports.outbound.routing_resolver_repository import RoutingResolverRepositoryPort
 
 

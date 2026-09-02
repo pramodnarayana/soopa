@@ -3,27 +3,14 @@ from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import edi.adapters.outbound.security.network
 import pytest
 from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
-from sqlalchemy.engine.url import make_url
-
-raw_global_url = os.getenv(
-    "DATABASE_URL", "postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
-)
-parsed_global_url = make_url(raw_global_url).set(drivername="postgresql+asyncpg")
-GLOBAL_DB_URL = os.getenv("DB_GLOBAL_URL", parsed_global_url.render_as_string(hide_password=False))
-
-raw_shard_1_url = os.getenv(
-    "SHARD_1_URL", "postgresql://edi:edi_password@localhost:5433/edi_shard_1"
-)
-parsed_shard_1_url = make_url(raw_shard_1_url).set(drivername="postgresql+asyncpg")
-SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hide_password=False))
+from edi.config.settings import AppSettings
 
 
 def test_validate_target_url(monkeypatch: MagicMock) -> None:
-    import edi.adapters.outbound.security.network
-    from edi.config.settings import AppSettings
 
     mock_settings = MagicMock(spec=AppSettings)
     mock_settings.env = "production"
@@ -52,6 +39,7 @@ def test_validate_target_url(monkeypatch: MagicMock) -> None:
 
 @pytest.fixture
 async def router() -> "AsyncGenerator[DatabaseRouter, None]":
-    db_router = DatabaseRouter(GLOBAL_DB_URL, pool_size=2, max_overflow=2)
+    global_db_url = os.environ["DATABASE_URL"]
+    db_router = DatabaseRouter(global_db_url, pool_size=2, max_overflow=2)
     yield db_router
     await db_router.close_all()

@@ -4,7 +4,7 @@ import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
-from edi.domain.models import EdiMessageDomainModel
+from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
@@ -71,8 +71,9 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id, MessageStatus.FAILED, webhook_url=partner.get("url"), response=str(e)
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
+            await self.uow.commit()
             logger.exception("Webhook delivery failed for trace_id={trace_id}", trace_id=trace_id)
-            return
+            raise RuntimeError(f"Webhook delivery failed: {e}") from e
 
         if 200 <= status_code < 300:
             await self.uow.repository.update_api_payload_status(
@@ -99,8 +100,10 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 response=response_text,
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
+            await self.uow.commit()
             logger.error(
                 "Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}",
                 trace_id=trace_id,
                 status_code=status_code,
             )
+            raise RuntimeError(f"Webhook delivery failed with HTTP {status_code}: {response_text}")

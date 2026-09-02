@@ -1,7 +1,8 @@
 import structlog
 
 from edi.domain.constants import TransactionDirection
-from edi.domain.models import ConnectionType, InboundRouteDomainModel
+from edi.domain.models.base import ConnectionType
+from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)

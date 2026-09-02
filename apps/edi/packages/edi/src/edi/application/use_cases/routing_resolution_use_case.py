@@ -3,7 +3,7 @@ from typing import Any
 
 import structlog
 
-from edi.domain.models import ConnectionType, Direction
+from edi.domain.models.base import ConnectionType, Direction
 from edi.ports.outbound.routing_resolver_repository import RoutingResolverRepositoryPort
 
 logger = structlog.get_logger(__name__)
@@ -43,11 +43,15 @@ class RoutingResolutionUseCase:
                 res = await self.repository.resolve_outbound_route(tp_id)
                 if res:
                     return res
-            except Exception:
+            except Exception as e:
                 logger.exception(
-                    "Failed to resolve trading_partner_name from outbound route "
-                    "for trace_id={msg.trace_id}",
+                    "outbound_route_resolution_failed",
+                    trace_id=msg.trace_id,
+                    trading_partner_id=tp_id,
                 )
+                raise RuntimeError(
+                    f"Outbound route resolution failed for trace_id={msg.trace_id}"
+                ) from e
 
         # 2. Fallback to business_metadata from EDI JSON
         return await self._resolve_business_metadata_fallback(msg, edi_jsons)
@@ -80,10 +84,14 @@ class RoutingResolutionUseCase:
             if res:
                 return res
 
-        except Exception:
+        except Exception as e:
             logger.exception(
-                "Failed to resolve trading_partner_name for inbound trace_id={msg.trace_id}",
+                "inbound_route_resolution_failed",
+                trace_id=msg.trace_id,
             )
+            raise RuntimeError(
+                f"Inbound route resolution failed for trace_id={msg.trace_id}"
+            ) from e
 
         return None, msg.connection_type
 
@@ -110,10 +118,13 @@ class RoutingResolutionUseCase:
                 name = await self.repository.resolve_business_metadata(partner_ids)
                 if name:
                     return name, msg.connection_type
-            except Exception:
+            except Exception as e:
                 logger.exception(
-                    "Failed to resolve trading_partner_name from business_metadata "
-                    "for trace_id={msg.trace_id}",
+                    "business_metadata_route_resolution_failed",
+                    trace_id=msg.trace_id,
                 )
+                raise RuntimeError(
+                    f"Business metadata route resolution failed for trace_id={msg.trace_id}"
+                ) from e
 
         return None, msg.connection_type

@@ -43,12 +43,7 @@ async def main() -> None:
 
     async def use_case_factory(tenant_id: str) -> ComputeTransformUseCase:
         uow_factory = await uow_provider.get_uow_factory(tenant_id)
-        from typing import cast
-
-        from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
-
-        uow = cast(DataPlaneUnitOfWorkPort, uow_factory())
-        return ComputeTransformUseCase(uow=uow, transformer=transformer)
+        return ComputeTransformUseCase(uow_factory=uow_factory, transformer=transformer)
 
     dispatcher = EdiComputeDispatcher(
         use_case_factory=use_case_factory,

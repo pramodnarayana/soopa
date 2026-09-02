@@ -20,6 +20,7 @@
 - **Chunked Database Mutations**: NEVER use unbounded `DELETE` or `UPDATE` queries that could lock massive datasets. Background jobs (like sweeping or data retention) MUST use a chunked iteration (e.g. a `while True` loop with a small `LIMIT`), commit on each iteration, and yield execution (`await asyncio.sleep(0.1)`) to allow PostgreSQL to run autovacuum and serve live API traffic.
 - **Strict API/Worker Decoupling**: NEVER run asynchronous background loops, Queue Pollers (SQS), or Outbox Relays inside the web API container (e.g., FastAPI `lifespan.py`). The web API container must be 100% pure and only serve HTTP requests. All background polling and async processing must be physically isolated into a dedicated worker container.
 - **No Magic Strings (Enterprise Constants)**: NEVER scatter raw "magic strings" or undocumented status codes throughout the codebase. Any string literal that holds semantic meaning (e.g., database error codes, state machine statuses, system event names) MUST be extracted into strongly-typed `Enum`s or explicit Constant classes.
+- **No Inline Imports**: NEVER use inline or lazy imports inside functions/methods (e.g., `import foo`). All imports MUST be at the top of the file to comply with PEP 8 and enterprise standards. Avoid circular dependencies through proper architectural separation, not lazy imports.
 
 # Package Manager
 - ALWAYS use `pnpm` for frontend/Node.js package management instead of `npm`. Do not use `npm install`.

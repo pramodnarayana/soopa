@@ -1,3 +1,8 @@
+import typing
+
+from edi.config.settings import AppSettings
+from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+
 """
 Unit tests for InboundTransformUseCase — verifies inbound EDI→JSON transformation.
 All test doubles are imported from fakes.py (DRY). No mock library used.
@@ -39,12 +44,8 @@ async def test_transform_edi_to_json_success() -> None:
 
     # Act
     settings = FakeSettings()
-    import typing
-
-    from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, uow)
-    from edi.config.settings import AppSettings
 
     settings_casted = typing.cast(AppSettings, settings)
     use_case = DispatchInboundTransformUseCase(
@@ -68,12 +69,8 @@ async def test_transform_missing_message_raises_error() -> None:
     transformer = FakeTransformerAdapter()
 
     settings = FakeSettings()
-    import typing
-
-    from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, uow)
-    from edi.config.settings import AppSettings
 
     settings_casted = typing.cast(AppSettings, settings)
     use_case = DispatchInboundTransformUseCase(

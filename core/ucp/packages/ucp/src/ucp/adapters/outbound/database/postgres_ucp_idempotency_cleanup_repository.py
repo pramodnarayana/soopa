@@ -3,7 +3,7 @@ import datetime
 from typing import Any, cast
 
 from database.models.idempotency import IdempotencyResult
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, tuple_
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -21,8 +21,6 @@ class SqlAlchemyUcpIdempotencyCleanupRepository(UcpIdempotencyCleanupRepositoryP
         idempotency_deleted = 0
         async with self.session_factory() as session:
             while True:
-                from sqlalchemy import tuple_
-
                 stmt_idempotency = delete(IdempotencyResult).where(
                     tuple_(IdempotencyResult.tenant_id, IdempotencyResult.idempotency_key).in_(
                         select(IdempotencyResult.tenant_id, IdempotencyResult.idempotency_key)

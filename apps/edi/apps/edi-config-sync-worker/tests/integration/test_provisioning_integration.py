@@ -8,6 +8,7 @@ from typing import Any
 import aioboto3
 import pytest
 import structlog
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 
 
@@ -101,7 +102,6 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     )
 
     # 3. Create a raw consumer so tests can manually poll and dispatch exactly once
-    from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 
     test_consumer = AwsSqsConsumer(
         queue_url=queue_url,
@@ -199,7 +199,6 @@ async def wait_for_process(service, max_retries=10):
     for _ in range(max_retries):
         if await service.process_next_event():
             return True
-        import asyncio
 
         await asyncio.sleep(1)
     return False

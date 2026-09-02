@@ -64,7 +64,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     # Clear outbox for next test step
     for record in outbox_records:
         await db_session.delete(record)
-    await db_session.commit()
+    await db_session.flush()
 
     # 2. LIST
     webhooks = await list_uc.execute(tenant_id)
@@ -90,7 +90,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
 
     for record in outbox_records:
         await db_session.delete(record)
-    await db_session.commit()
+    await db_session.flush()
 
     # 4. DELETE
     await delete_uc.execute(

@@ -1,3 +1,7 @@
+import typing
+
+from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+
 """
 Unit tests for the PipelineLifecycleUseCase.
 Uses Fake Data Plane Unit Of Work.
@@ -16,9 +20,6 @@ pytestmark = pytest.mark.asyncio
 
 def make_use_case(uow: FakeDataPlaneUnitOfWork | None = None) -> PipelineLifecycleUseCase:
     u = uow or FakeDataPlaneUnitOfWork()
-    import typing
-
-    from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, u)
     return PipelineLifecycleUseCase(uow=uow_casted)

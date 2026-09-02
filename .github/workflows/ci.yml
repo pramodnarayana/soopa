@@ -64,13 +64,11 @@ jobs:
         run: pnpm turbo lint
 
       - name: Start Database & Infrastructure
-        env:
-          ZITADEL_PLATFORM_ADMIN_ID: test_admin_id
-          ZITADEL_PLATFORM_ORG_ID: test_org_id
         run: |
           docker compose up -d postgres_global edi_postgres_shard localstack --wait
-          pnpm db:migrate
+          pnpm db:migrate:platform
           pnpm db:seed
+          pnpm db:migrate:edi
 
       - name: Test (Node)
         run: CI=true pnpm turbo test

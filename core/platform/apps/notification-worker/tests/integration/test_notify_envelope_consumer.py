@@ -5,6 +5,10 @@ import pytest
 from notification.domain.models import NotificationEvent
 from notification.facade import notify
 
+from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
+    NotificationEventDispatcher,
+)
+
 
 class RecordingCompiler:
     def __init__(self) -> None:
@@ -24,10 +28,6 @@ async def test_notify_envelope_consumed() -> None:
     )
     compiler = RecordingCompiler()
     cleanup_mock = AsyncMock()
-
-    from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
-        NotificationEventDispatcher,
-    )
 
     dispatcher = NotificationEventDispatcher(
         notification_compiler=compiler, cleanup_job_handler=cleanup_mock

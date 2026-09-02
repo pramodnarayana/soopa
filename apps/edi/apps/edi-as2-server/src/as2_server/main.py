@@ -1,3 +1,5 @@
+from database.router import DatabaseRouter
+
 """
 Production-ready FastAPI application for the EDI AS2 Server.
 """
@@ -43,7 +45,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.s3_storage = s3_storage
 
     logger = ObservabilityProvider.logger(__name__)
-    from database.router import DatabaseRouter
 
     try:
         # Initialize the global DatabaseRouter and mount it to app state

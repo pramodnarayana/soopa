@@ -1,19 +1,11 @@
 import dataclasses
 
-from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, select
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.models.control_plane import AS2Partner, AS2Partnership
-from edi.application.dto import (
-    CreateAS2PartnershipCmd,
-    UnsetType,
-    UpdateAS2PartnershipCmd,
-)
-from edi.domain.models import (
-    AS2PartnerDomainModel,
-    AS2PartnershipDomainModel,
-)
+from edi.adapters.outbound.database.models.control_plane import AS2Partnership
+from edi.adapters.outbound.database.repository import PartnershipRepository
+from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
 
 
@@ -38,73 +30,63 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
-        from edi.adapters.outbound.database.repository import PartnershipRepository
 
         repo = PartnershipRepository(self.session)
-        return await repo.get_partnership_by_as2_ids(as2_from, as2_to)
+        result = await repo.get_partnership_by_as2_ids(as2_from, as2_to)
+        if not result:
+            return None
 
-    async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> str:
-        tid_str = tenant_id
-        local_r = await self.session.execute(
-            select(AS2Partner).where(
-                AS2Partner.id == cmd.local_partner_id,
-                AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
-            )
+        partnership_orm, local_partner_orm, remote_partner_orm = result
+
+        return (
+            AS2PartnershipDomainModel(
+                **{
+                    f.name: getattr(partnership_orm, f.name)
+                    for f in dataclasses.fields(AS2PartnershipDomainModel)
+                }
+            ),
+            AS2PartnerDomainModel(
+                **{
+                    f.name: getattr(local_partner_orm, f.name)
+                    for f in dataclasses.fields(AS2PartnerDomainModel)
+                }
+            ),
+            AS2PartnerDomainModel(
+                **{
+                    f.name: getattr(remote_partner_orm, f.name)
+                    for f in dataclasses.fields(AS2PartnerDomainModel)
+                }
+            ),
         )
-        local_partner = local_r.scalar_one_or_none()
 
-        remote_r = await self.session.execute(
-            select(AS2Partner).where(
-                AS2Partner.id == cmd.remote_partner_id,
-                AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
-            )
-        )
-        remote_partner = remote_r.scalar_one_or_none()
-
-        if not local_partner or not remote_partner:
-            raise ValueError("Local or Remote partner not found")
-
-        record = AS2Partnership(
-            tenant_id=tid_str,
-            name=cmd.name,
-            local_partner_id=cmd.local_partner_id,
-            remote_partner_id=cmd.remote_partner_id,
-            mdn_type=cmd.mdn_type,
-            mdn_url=cmd.mdn_url,
-            encryption_algorithm=cmd.encryption_algorithm,
-            signature_algorithm=cmd.signature_algorithm,
-            active=False,
-        )
-        self.session.add(record)
-        await self.session.flush()
-        return record.id
-
-    async def update_as2_partnership(
-        self, tenant_id: str, partnership_id: str, cmd: UpdateAS2PartnershipCmd
-    ) -> None:
-        tid_str = tenant_id
+    async def save(self, aggregate: AS2PartnershipDomainModel) -> None:
+        tid_str = aggregate.tenant_id
         result = await self.session.execute(
             select(AS2Partnership).where(
-                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
+                AS2Partnership.id == aggregate.id,
+                AS2Partnership.tenant_id == tid_str,
             )
         )
-        partnership = result.scalar_one_or_none()
-        if partnership:
-            import dataclasses
+        record = result.scalar_one_or_none()
+        if not record:
+            record = AS2Partnership(id=aggregate.id)
+            self.session.add(record)
 
-            for field in dataclasses.fields(cmd):
-                value = getattr(cmd, field.name)
-                if not isinstance(value, UnsetType):
-                    setattr(partnership, field.name, value)
+        for field in dataclasses.fields(aggregate):
+            if field.name not in ("created_at", "updated_at", "_domain_events"):
+                setattr(record, field.name, getattr(aggregate, field.name))
+
+        self._drain_events(aggregate)
         await self.session.flush()
 
-    async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
-        tid_str = tenant_id
+    async def delete(self, aggregate: AS2PartnershipDomainModel) -> None:
+        tid_str = aggregate.tenant_id
         await self.session.execute(
             delete(AS2Partnership).where(
-                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tid_str
+                AS2Partnership.id == aggregate.id, AS2Partnership.tenant_id == tid_str
             )
         )
+        self._drain_events(aggregate)
         await self.session.flush()
 
     async def get_as2_partnership(
@@ -127,15 +109,3 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
             if record
             else None
         )
-
-    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
-        if not ids:
-            return {}
-        tid_str = tenant_id
-        result = await self.session.execute(
-            select(AS2Partner.id, AS2Partner.name).where(
-                AS2Partner.id.in_(ids),
-                AS2Partner.tenant_id.in_([tid_str, PLATFORM_TENANT_ID]),
-            )
-        )
-        return {row.id: row.name for row in result.all()}

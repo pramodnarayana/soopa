@@ -183,7 +183,8 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, as2=as2_adapter)
-    await use_case.execute(trace_id)
+    with pytest.raises(RuntimeError):
+        await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(uow.outbox.events) == 1
@@ -191,6 +192,30 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
     assert outbox_event["payload"]["status"] == "FAILED"
     assert len(as2_adapter.delivered) == 1
+
+
+async def test_deliver_as2_failed_mdn_emits_one_failure_event() -> None:
+    uow = FakeDataPlaneUnitOfWork()
+    trace_id = "trace-as2-failed-mdn"
+    _seed_as2_route(uow.repository, trace_id, "FAKE*EDI~")
+    failed_mdn = (
+        b"------=_MDNBoundary\r\n"
+        b"Content-Type: text/plain; charset=us-ascii\r\n\r\n"
+        b"The AS2 message failed.\r\n"
+        b"------=_MDNBoundary\r\n"
+        b"Content-Type: message/disposition-notification\r\n\r\n"
+        b"Original-Message-ID: <msg-123>\r\n"
+        b"Disposition: automatic-action/MDN-sent-automatically; failed/error\r\n"
+        b"------=_MDNBoundary--\r\n"
+    )
+    as2_adapter = FakeAS2DeliveryAdapter(body=failed_mdn)
+
+    with pytest.raises(RuntimeError, match="Delivery strategy failed"):
+        await make_use_case(uow=uow, as2=as2_adapter).execute(trace_id)
+
+    assert uow.repository.edi_messages[trace_id]["status"] == "FAILED"
+    assert len(uow.outbox.events) == 1
+    assert uow.outbox.events[0]["payload"]["status"] == "FAILED"
 
 
 async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:

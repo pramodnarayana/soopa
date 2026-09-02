@@ -391,3 +391,28 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Component**: EDI (Platform Infrastructure)
 - **Description**: There are currently 4 identical copies of an `aws_secrets_manager.py` adapter initializing raw `boto3.client('secretsmanager')` scattered across the EDI module (`packages/edi`, `edi-orchestrator-worker`, `edi-config-sync-worker`, `edi-secrets-sidecar`). This violates the Enterprise requirement that domain-agnostic infrastructure patterns must be centralized.
 - **Action Item**: Create a centralized `secrets` or `infrastructure` package in `core/platform/packages/`. Implement a generic `AwsSecretsManagerAdapter`. Refactor all EDI workers and sidecars to inject this centralized adapter and delete the local duplicates.
+
+## [Type Safety] Eradicate `typing.Any` (Scheduled for Next Ticket)
+
+- **Date Added**: 2026-09-02
+- **Status**: TO DO
+- **Description**: The codebase currently relies on `typing.Any` (and `dict[str, Any]`) as crutches in various domain models, DTOs, and repositories.
+- **Action Item**: Systematically replace all instances of `typing.Any` with strict `TypedDict`s, Pydantic schemas, or Generic `TypeVars` across domain models, DTOs, and repositories. This ensures adherence to strict structural typing standards.
+
+## [Architecture Cleanup] Magic Strings and Monkey-Patching in `cryptography.py`
+
+- **Date Added**: 2026-09-02
+- **Status**: TO DO
+- **Description**: In `apps/edi/packages/edi/src/edi/core/patches/cryptography.py`, a runtime `object.__setattr__` is used with a magic string `"set_content_encryption_algorithm"` to monkey-patch legacy 3DES support for the native Rust backend without breaking `mypy`'s strict type checking.
+- **Action Item**: Before adopting a fork or vendored implementation from the `cryptography` library, establish an upstream security-update process that tracks upstream advisories, backports every applicable security fix, and tests each internal release. Define a time-bounded scope and removal plan for 3DES compatibility so the fork remains temporary and can continue to benefit from upstream security improvements.
+
+## [Code Quality] Eradicate Inline Imports
+
+- **Date Added**: 2026-09-02
+- **Status**: DONE
+- **Description**: There were lazy inline imports scattered inside functions across the monorepo. This violated PEP 8 and enterprise standards.
+- **Resolution**: All inline imports were hoisted to module-level using an AST-based refactoring script. Three genuine circular dependencies exposed by the hoisting were structurally resolved:
+  1. **`seedwork` boot cycle** — 17 files importing from the `seedwork` package root (`seedwork.__init__`) inside modules transitively loaded during `seedwork.__init__` initialization. Fixed by redirecting to concrete submodule imports (`seedwork.constants`, `seedwork.utils`).
+  2. **`bots` parser cycle** — `outmessage.py` ↔ `parsers/__init__.py` ↔ `edifact.py`. Fixed by introducing `domain/parser_registry.py` (outside the `parsers` package) as a zero-dependency registry populated by `parsers/__init__.py` after concrete classes load.
+  3. **`lifespan.py` ↔ `main.py`** — `lifespan.py` imported `ucp_container` from `main.py` which imports `shell_lifespan` from `lifespan.py`. Fixed by reading `ucp_container` from `app.state` at runtime (already populated by `main.py` before the lifespan context runs).
+- **Verification**: `ruff check` passes with zero errors. 951 unit + integration tests pass.

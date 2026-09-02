@@ -1,6 +1,6 @@
 import functools
 from collections.abc import Callable, Coroutine
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, Protocol, TypeVar, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,20 @@ from database.interceptors import intercept_db_errors
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+@runtime_checkable
+class HasDomainEvents(Protocol):
+    """
+    Structural protocol satisfied by any AggregateRoot that exposes
+    `domain_events` and `clear_domain_events()`. Avoids importing seedwork
+    directly into the platform database package.
+    """
+
+    @property
+    def domain_events(self) -> list[Any]: ...
+
+    def clear_domain_events(self) -> None: ...
 
 
 def db_error_interceptor(

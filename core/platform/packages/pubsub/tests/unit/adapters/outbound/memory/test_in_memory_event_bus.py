@@ -1,3 +1,5 @@
+from pubsub.ports.message_consumer_port import MessageConsumerPort
+
 """
 Unit tests for InMemoryEventBus.
 
@@ -262,7 +264,6 @@ async def test_full_round_trip_publish_poll_ack():
 
 def test_in_memory_event_bus_satisfies_message_consumer_port_protocol():
     """Structural isinstance check ensures InMemoryEventBus conforms to MessageConsumerPort."""
-    from pubsub.ports.message_consumer_port import MessageConsumerPort
 
     bus = InMemoryEventBus()
     assert isinstance(bus, MessageConsumerPort)

@@ -22,15 +22,20 @@ class DeleteAS2PartnerUseCase:
             partner_id=partner_id,
             tenant_id=tenant_id,
         )
-        await self.uow.as2_partners.delete_as2_identity(tenant_id, partner_id)
-        await self.uow.control_plane_outbox.publish_outbox_event(
+        aggregate = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
+        if not aggregate:
+            return
+
+        aggregate.add_domain_event(
             ProvisioningEvent(
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_as2_partner_deleted,
-                resource_id=str(partner_id),
-            ),
-            idempotency_key=idempotency_key,
+                resource_id=partner_id,
+                explicit_idempotency_key=idempotency_key,
+            )
         )
+
+        await self.uow.as2_partners.delete(aggregate)
 
         logger.info(
             "delete_as2_partner_completed",

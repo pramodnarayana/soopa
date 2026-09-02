@@ -1,3 +1,5 @@
+import asyncio
+import typing
 from typing import Any
 
 import pytest
@@ -14,7 +16,6 @@ def service():
 
 @pytest.mark.asyncio
 async def test_authorization_platform_admin(service: AuthorizationService):
-    import typing
 
     tenant_repo = typing.cast(FakeTenantRepository, service.tenant_repo)
     tenant_repo.flags["0"] = {"allow_private_as2": True}
@@ -42,7 +43,6 @@ async def test_authorization_platform_admin(service: AuthorizationService):
 
 @pytest.mark.asyncio
 async def test_authorization_standard_user(service: AuthorizationService):
-    import typing
 
     tenant_repo = typing.cast(FakeTenantRepository, service.tenant_repo)
     tenant_repo.flags["1"] = {"allow_private_as2": False}
@@ -67,7 +67,6 @@ async def test_authorization_standard_user(service: AuthorizationService):
 
 
 def test_authorization_platform_admin_explicit_grant():
-    import asyncio
 
     repo = FakeTenantRepository()
     svc = AuthorizationService(repo)

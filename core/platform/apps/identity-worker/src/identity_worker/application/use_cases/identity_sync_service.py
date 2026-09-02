@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import typing
+from typing import Literal
 
 import structlog
 from database.models.identity import Tenant as DbTenant
@@ -253,8 +254,6 @@ class IdentitySyncService:
 
             if action not in ("activate", "deactivate"):
                 raise ValueError(f"Invalid action for toggle user status: {action}")
-
-            from typing import Literal
 
             valid_action: Literal["activate", "deactivate"] = (
                 "activate" if action == "activate" else "deactivate"

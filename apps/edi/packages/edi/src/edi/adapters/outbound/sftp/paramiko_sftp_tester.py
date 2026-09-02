@@ -1,5 +1,6 @@
 import asyncio
 import io
+from typing import Any
 
 import paramiko
 import structlog
@@ -37,7 +38,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - test connection accepts any host key
 
-            connect_kwargs = {
+            connect_kwargs: dict[str, Any] = {
                 "hostname": host,
                 "port": port,
                 "username": username,
@@ -60,7 +61,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
             else:
                 return False, "Must provide either a password or a client key."
 
-            client.connect(**connect_kwargs)  # type: ignore[arg-type]
+            client.connect(**connect_kwargs)
             sftp = client.open_sftp()
 
             return True, None

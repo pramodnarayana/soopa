@@ -1,3 +1,6 @@
+import base64
+import hashlib
+
 """
 Pure unit tests for libs/as2_core.
 
@@ -91,8 +94,6 @@ class TestMICCalculation:
     """Unit tests for MIC (Message Integrity Check) calculation."""
 
     def test_sha256_mic_is_base64_encoded_sha256(self) -> None:
-        import base64
-        import hashlib
 
         payload = b"hello-edi-world"
         mic = calculate_mic(payload, mic_alg="sha256")
@@ -101,8 +102,6 @@ class TestMICCalculation:
         assert "sha256" in mic
 
     def test_sha1_mic_uses_correct_algorithm(self) -> None:
-        import base64
-        import hashlib
 
         payload = b"test-payload"
         mic = calculate_mic(payload, mic_alg="sha1")

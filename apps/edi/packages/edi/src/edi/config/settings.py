@@ -1,3 +1,6 @@
+import ipaddress
+from urllib.parse import urlparse
+
 """
 Shared application settings for all EDI AS2 services.
 All settings are loaded from environment variables and validated by Pydantic.
@@ -8,7 +11,7 @@ import typing
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,17 +19,18 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
 
     global_url: str = Field(
-        validation_alias=AliasChoices("DB_GLOBAL_URL", "DB_URL"),
-        serialization_alias="DB_GLOBAL_URL",
+        validation_alias="DATABASE_URL",
+        serialization_alias="DATABASE_URL",
         description="Async PostgreSQL connection string for the Global Control Plane.",
-    )
-    default_shard_url: str | None = Field(
-        validation_alias="SHARD_1_URL",
-        default=None,
-        description="Fallback shard URL used when UCP database_shards table is empty.",
     )
     pool_size: int = Field(default=10)
     max_overflow: int = Field(default=20)
+
+    @model_validator(mode="after")
+    def force_asyncpg(self) -> "DatabaseSettings":
+        if self.global_url and self.global_url.startswith("postgresql://"):
+            self.global_url = self.global_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self
 
 
 class S3Settings(BaseSettings):
@@ -158,8 +162,6 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
-        import ipaddress
-        from urllib.parse import urlparse
 
         if self.env != "development":
             if "://" not in self.public.base_url:

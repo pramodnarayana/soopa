@@ -5,6 +5,7 @@ from typing import Any
 
 import boto3  # type: ignore[import-untyped]
 import structlog
+from edi.config.constants import SecretCategory
 from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -65,7 +66,6 @@ def sync_secrets() -> None:  # noqa: C901
 
                 category_str = parts[1]
                 ref_id = parts[2]
-                from edi.config.constants import SecretCategory
 
                 try:
                     # Validate that the category matches our architectural constants

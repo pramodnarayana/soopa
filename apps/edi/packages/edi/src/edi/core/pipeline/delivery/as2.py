@@ -3,9 +3,10 @@ from typing import Any
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
+from edi.adapters.inbound.as2 import parse_mdn
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
-from edi.domain.models import EdiMessageDomainModel
+from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
@@ -40,60 +41,60 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 "AS2 Delivery failed for trace_id={trace_id}. "
                 "HTTP status: {status_code}, body: {response_body!r}"
             )
-            return
-
-        from edi.adapters.inbound.as2 import parse_mdn
+            raise RuntimeError(f"AS2 Delivery failed with HTTP {status_code}")
 
         try:
             mdn = parse_mdn(response_headers, response_body)
-            disposition = mdn.disposition
-            received_mic = mdn.mic
-
-            is_success = False
-            if disposition:
-                disp_parts = disposition.split(";", 1)
-                if len(disp_parts) == 2:
-                    status_part = disp_parts[1].strip().lower()
-                    if (
-                        status_part.startswith("processed")
-                        and "error" not in status_part
-                        and "failed" not in status_part
-                    ):
-                        is_success = True
-                        if as2_msg.mic and (
-                            not received_mic
-                            or as2_msg.mic.replace(" ", "") != received_mic.replace(" ", "")
-                        ):
-                            is_success = False
-                            logger.warning(
-                                "MDN MIC mismatch for trace_id={trace_id}. "
-                                "Expected {as2_msg.mic}, got {received_mic}"
-                            )
-
-            if is_success:
-                await self.uow.repository.update_edi_message_status(
-                    trace_id, MessageStatus.DELIVERED
-                )
-                await self._emit_delivery_completed(trace_id, direction, MessageStatus.DELIVERED)
-                logger.info(
-                    "Delivered trace_id={trace_id} (HTTP {status_code}). MIC={as2_msg.mic}",
-                    trace_id=trace_id,
-                    status_code=status_code,
-                    as2_msg_mic=as2_msg.mic,
-                )
-            else:
-                await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
-                await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
-                logger.error(
-                    "Sync MDN indicates failure for trace_id={trace_id}. "
-                    "Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
-                )
-        except Exception:
+        except Exception as e:
             await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
             logger.exception(
                 "AS2 MDN parsing or processing failed for trace_id={trace_id}", trace_id=trace_id
             )
+            raise RuntimeError(f"AS2 MDN parsing or processing failed: {e}") from e
+
+        disposition = mdn.disposition
+        received_mic = mdn.mic
+
+        is_success = False
+        if disposition:
+            disp_parts = disposition.split(";", 1)
+            if len(disp_parts) == 2:
+                status_part = disp_parts[1].strip().lower()
+                if (
+                    status_part.startswith("processed")
+                    and "error" not in status_part
+                    and "failed" not in status_part
+                ):
+                    is_success = True
+                    if as2_msg.mic and (
+                        not received_mic
+                        or as2_msg.mic.replace(" ", "") != received_mic.replace(" ", "")
+                    ):
+                        is_success = False
+                        logger.warning(
+                            "MDN MIC mismatch for trace_id={trace_id}. "
+                            "Expected {as2_msg.mic}, got {received_mic}"
+                        )
+
+        if is_success:
+            await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
+            await self._emit_delivery_completed(trace_id, direction, MessageStatus.DELIVERED)
+            logger.info(
+                "Delivered trace_id={trace_id} (HTTP {status_code}). MIC={as2_msg.mic}",
+                trace_id=trace_id,
+                status_code=status_code,
+                as2_msg_mic=as2_msg.mic,
+            )
+            return
+
+        await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
+        await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
+        logger.error(
+            "Sync MDN indicates failure for trace_id={trace_id}. "
+            "Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
+        )
+        raise RuntimeError(f"Sync MDN indicates failure: {disposition}")
 
     async def deliver(
         self,

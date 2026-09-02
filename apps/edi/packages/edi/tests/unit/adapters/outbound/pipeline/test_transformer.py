@@ -45,7 +45,6 @@ async def test_bots_transformer_edi_to_json(mock_transform: AsyncMock) -> None:
 
 
 async def test_bots_transformer_json_to_edi_success() -> None:
-    from unittest.mock import patch
 
     adapter = BotsTransformerAdapter()
 

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 import pytest
@@ -23,7 +24,7 @@ from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantUseCase,
 )
 from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
-from ucp.domain.constants import UcpEventType
+from ucp.domain.constants import LifecycleStatus, UcpEventType
 
 pytestmark = pytest.mark.integration
 
@@ -44,8 +45,6 @@ async def test_app_subscription_flow(
 
     # Use InMemoryEventBus instead of AWS SNS/SQS
     event_bus = InMemoryEventBus()
-
-    import os
 
     base_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
@@ -179,6 +178,5 @@ async def test_app_subscription_flow(
     )
     app_sub = res.fetchone()
     assert app_sub is not None
-    from ucp.domain.constants import LifecycleStatus
 
     assert app_sub.status == LifecycleStatus.ACTIVE

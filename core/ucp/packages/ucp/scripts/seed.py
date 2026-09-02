@@ -1,3 +1,5 @@
+import hashlib
+
 """
 Seed Script — Bootstraps the platform Sentinel Tenant into the database.
 
@@ -76,7 +78,6 @@ async def main() -> None:
 
             # Upsert the platform admin user
             # Deterministic user id based on idp_user_id to prevent duplicates across runs
-            import hashlib
 
             h = hashlib.sha256(platform_admin_id.encode()).hexdigest()[:16]
             platform_user_id = f"iam_usr_{h}"

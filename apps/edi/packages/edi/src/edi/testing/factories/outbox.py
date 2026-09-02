@@ -23,7 +23,7 @@ class DataPlaneOutboxBuilder:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC) - timedelta(minutes=6))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    async def create(self, **kwargs) -> DataPlaneOutbox:
+    async def create(self, **kwargs: Any) -> DataPlaneOutbox:
         outbox_event = DataPlaneOutbox(
             id=kwargs.get("id", generate_id(EdiIdPrefix.DP_OUTBOX)),
             tenant_id=kwargs.get("tenant_id", self.tenant_id),

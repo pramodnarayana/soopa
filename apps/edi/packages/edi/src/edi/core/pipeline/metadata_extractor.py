@@ -1,7 +1,7 @@
 from typing import Any
 
 import structlog
-from jsonpath_ng import parse  # type: ignore[import-untyped]
+from jsonpath_ng import parse
 
 logger = structlog.get_logger(__name__)
 

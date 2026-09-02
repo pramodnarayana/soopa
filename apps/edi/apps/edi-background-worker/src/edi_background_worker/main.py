@@ -4,6 +4,9 @@ import signal
 from typing import Any, cast
 
 import structlog
+from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
+    PostgresEdiControlPlaneOutboxRepository,
+)
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 
@@ -13,11 +16,19 @@ from edi.config.settings import AppSettings, get_settings
 from edi.domain.events import MessageQueueName
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from edi_background_worker.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
     EdiAuditLogCleanupJobHandler,
+)
+from edi_background_worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_job import (
+    EdiControlPlaneOutboxCleanupJobHandler,
+)
+from edi_background_worker.adapters.inbound.jobs.edi_control_plane_outbox_sweeper_job import (
+    EdiControlPlaneOutboxSweeperJobHandler,
 )
 from edi_background_worker.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
     EdiDataPlaneOutboxCleanupJobHandler,
@@ -30,6 +41,9 @@ from edi_background_worker.adapters.inbound.jobs.edi_idempotency_cleanup_job imp
 )
 from edi_background_worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
     SqlAlchemyEdiAuditLogCleanupRepository,
+)
+from edi_background_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_cleanup_repository import (
+    SqlAlchemyEdiControlPlaneOutboxCleanupRepository,
 )
 from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_cleanup_repository import (
     SqlAlchemyEdiDataPlaneOutboxCleanupRepository,
@@ -76,8 +90,6 @@ async def main() -> None:  # noqa: C901
 
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
 
-    from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
-
     message_publisher = AwsSqsPublisher(
         queue_url=settings.sqs.data_plane_jobs_queue_url,
         endpoint_url=settings.aws.endpoint_url,
@@ -110,21 +122,6 @@ async def main() -> None:  # noqa: C901
     job_registry.register(
         EdiJobName.EDI_AUDIT_LOG_CLEANUP.value,
         EdiAuditLogCleanupJobHandler(EdiAuditLogCleanupUseCase(edi_audit_cleanup_repo)),
-    )
-
-    from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
-        PostgresEdiControlPlaneOutboxRepository,
-    )
-    from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
-
-    from edi_background_worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_job import (
-        EdiControlPlaneOutboxCleanupJobHandler,
-    )
-    from edi_background_worker.adapters.inbound.jobs.edi_control_plane_outbox_sweeper_job import (
-        EdiControlPlaneOutboxSweeperJobHandler,
-    )
-    from edi_background_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_cleanup_repository import (
-        SqlAlchemyEdiControlPlaneOutboxCleanupRepository,
     )
 
     control_plane_outbox_repo = PostgresEdiControlPlaneOutboxRepository(db_router=db_router)

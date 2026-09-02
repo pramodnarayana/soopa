@@ -6,7 +6,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from edi.adapters.outbound.security.smime import decrypt_payload, encrypt_payload, sign_payload
+from edi.adapters.outbound.security.smime import (
+    decrypt_payload,
+    encrypt_payload,
+    sign_payload,
+    verify_signature,
+)
 
 
 def test_encrypt_decrypt_smime():
@@ -74,8 +79,6 @@ def test_sign_verify_smime():
     signed_data = sign_payload(payload, private_pem, cert_pem)
 
     assert b"test EDI payload data to be signed" in signed_data
-
-    from edi.adapters.outbound.security.smime import verify_signature
 
     is_valid, verified_payload = verify_signature(signed_data, cert_pem)
     assert is_valid is True

@@ -1,3 +1,4 @@
+import urllib.parse
 from typing import Any
 
 """
@@ -314,8 +315,6 @@ class Uri:
         if self._uri.get("query"):
             query_val = self._uri["query"]
             if isinstance(query_val, dict):
-                import urllib.parse
-
                 query_val = urllib.parse.urlencode(query_val)
             terug += "?" + str(query_val)
         if self._uri.get("fragment"):

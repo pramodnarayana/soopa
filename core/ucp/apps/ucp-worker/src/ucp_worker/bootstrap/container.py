@@ -10,6 +10,8 @@ from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
@@ -150,9 +152,6 @@ class WorkerContainer:
         consumer.subscribe(UcpEventType.APP_UNSUBSCRIBED.value, provisioner.handle_app_unsubscribed)
 
         self._register_tenant_handlers(consumer, tenant_deleted_handler)
-
-        from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-        from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
         ucp_identity_sync_consumer = AwsSqsConsumer(
             queue_url=self.settings.sqs_ucp_identity_sync_queue_url,

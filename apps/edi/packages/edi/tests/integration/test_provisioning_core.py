@@ -1,11 +1,15 @@
+from unittest.mock import MagicMock
+
 import pytest
 from seedwork import generate_id
 
 from edi.application.dto import (
+    UNSET,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,
+    UpdateInboundRouteCmd,
 )
 from edi.application.use_cases.as2_partnerships.create_as2_partnership_use_case import (
     CreateAS2PartnershipUseCase,
@@ -36,7 +40,6 @@ def global_repo():
 
 @pytest.fixture
 def mock_uow(global_repo):
-    from unittest.mock import MagicMock
 
     uow = MagicMock()
     uow.api_tokens = global_repo
@@ -119,8 +122,10 @@ async def test_list_routes(mock_uow, global_repo):
         def __getitem__(self, key):
             return getattr(self, key)
 
-    global_repo.inbound_routes = [FakeRoute(generate_id("id"), as2_id, sftp_id, None)]
-    global_repo.outbound_routes = [FakeRoute(generate_id("id"), as2_id, None, None)]
+    route_in = FakeRoute(generate_id("id"), as2_id, sftp_id, None)
+    global_repo.inbound_routes = {route_in.id: route_in}
+    route_out = FakeRoute(generate_id("id"), as2_id, None, None)
+    global_repo.outbound_routes = {route_out.id: route_out}
 
     inbound_service = ListInboundRoutesUseCase(uow=mock_uow)
     outbound_use_case = ListOutboundRoutesUseCase(uow=mock_uow)
@@ -154,7 +159,6 @@ async def test_create_inbound_route(mock_uow, global_repo):
 
 @pytest.mark.asyncio
 async def test_update_inbound_route(mock_uow, global_repo):
-    from edi.application.dto import UNSET, UpdateInboundRouteCmd
 
     service = UpdateInboundRouteUseCase(uow=mock_uow)
 

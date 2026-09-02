@@ -1,4 +1,5 @@
 from database.uow import BaseSqlAlchemyUnitOfWork
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from notification.adapters.outbound.database.postgres_notification_record_repository import (
@@ -35,7 +36,6 @@ class SqlAlchemyNotificationUnitOfWork(BaseSqlAlchemyUnitOfWork, NotificationUni
         self.outbox_repo = SqlAlchemyNotificationOutboxPublisher(session=self.session)
 
     async def _pre_commit(self) -> None:
-        from sqlalchemy import text
 
         # Wake up the delivery outbox relay
         await self.session.execute(text("NOTIFY notification_delivery_outbox_wakeup;"))

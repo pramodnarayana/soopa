@@ -64,7 +64,6 @@ async def test_unsubscribe_app_success(
     # Check subscription
     assert len(saved_tenant.subscriptions) == 1
     assert saved_tenant.subscriptions[0].app_id == app_id
-    from ucp.domain.constants import LifecycleStatus
 
     assert saved_tenant.subscriptions[0].status == LifecycleStatus.INACTIVE
 

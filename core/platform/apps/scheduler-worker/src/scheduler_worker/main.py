@@ -8,6 +8,8 @@ from database.provider import get_async_engine
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from scheduler_worker.bootstrap.container import Container
+
 logger = structlog.get_logger(__name__)
 
 # Hold strong references to background tasks to prevent GC (see RUF006)
@@ -30,8 +32,6 @@ async def main() -> None:
 
     engine = get_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
-    from scheduler_worker.bootstrap.container import Container
 
     container = Container(session_factory=session_factory)
     worker = container.worker()

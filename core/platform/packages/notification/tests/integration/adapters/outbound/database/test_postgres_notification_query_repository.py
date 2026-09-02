@@ -1,6 +1,7 @@
 import pytest
 from database.models.identity import Role, Tenant, User, UserRole
 from database.models.notifications import NotificationRecord
+from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id, generate_random_hex
 from ucp.domain.constants import LifecycleStatus
 
@@ -12,7 +13,6 @@ from notification.adapters.outbound.database.postgres_notification_query_reposit
 @pytest.mark.asyncio
 async def test_notification_query_and_mark_read(db_session_factory):
     tenant_id = f"test-query-tenant-{generate_random_hex(6)}"
-    from identity.domain.constants import IdentityIdPrefix
 
     user_id = generate_id(IdentityIdPrefix.USER)
     notif_id = f"notif_inapp_{generate_random_hex(6)}"

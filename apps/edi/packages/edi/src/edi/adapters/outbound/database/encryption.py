@@ -21,9 +21,9 @@ class DBEncryptionAdapter:
             try:
                 self._fernet = Fernet(key.encode("utf-8"))
                 self._initialized = True
-            except Exception:
+            except Exception as e:
                 logger.exception("Failed to initialize Fernet with provided key")
-                return None
+                raise RuntimeError("Failed to initialize Fernet with provided key") from e
         return self._fernet
 
     def encrypt(self, data: str) -> str:

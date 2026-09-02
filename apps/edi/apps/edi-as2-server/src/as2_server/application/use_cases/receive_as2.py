@@ -1,8 +1,10 @@
 import time
 import uuid
+from contextlib import AsyncExitStack, aclosing
 from dataclasses import dataclass
 from typing import Any
 
+from database.models.identity import Tenant
 from edi.adapters.inbound.as2 import (
     AS2MDN,
     AS2Message,
@@ -12,6 +14,8 @@ from edi.adapters.inbound.as2 import (
 from edi.adapters.outbound.security import decrypt_payload, verify_signature
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
+from sqlalchemy import select
+from ucp_models.infrastructure import DatabaseShard
 
 from as2_server.ports.outbound.repository_port import (
     AS2TenantRepositoryPort,
@@ -20,6 +24,8 @@ from as2_server.ports.outbound.repository_port import (
 )
 from as2_server.ports.outbound.storage_port import PayloadStoragePort
 from as2_server.ports.outbound.vault_port import VaultServicePort
+
+from ...adapters.outbound.repository import EdiMessageRepositoryAdapter
 
 
 @dataclass(frozen=True)
@@ -76,7 +82,6 @@ class ReceiveAS2UseCase:
             return None
 
     async def execute(self, as2_msg: AS2Message) -> AS2MDN:
-        from contextlib import AsyncExitStack
 
         async with AsyncExitStack() as stack:
             return await self._execute_inner(as2_msg, stack, self.message_repo)
@@ -256,10 +261,6 @@ class ReceiveAS2UseCase:
                     )
                     return _RouteResult(failed=True)
 
-                from database.models.identity import Tenant
-                from sqlalchemy import select
-                from ucp_models.infrastructure import DatabaseShard
-
                 stmt = (
                     select(Tenant, DatabaseShard)
                     .join(DatabaseShard)
@@ -280,8 +281,6 @@ class ReceiveAS2UseCase:
                     shard_url=str(shard_obj.dsn),
                 )
 
-                from contextlib import aclosing
-
                 await async_exit_stack.enter_async_context(aclosing(tenant_session_gen))
 
                 try:
@@ -289,8 +288,6 @@ class ReceiveAS2UseCase:
                 except StopAsyncIteration:
                     logger.exception("as2_isa_routing_failed_session_empty")
                     return _RouteResult(failed=True)
-
-                from ...adapters.outbound.repository import EdiMessageRepositoryAdapter
 
                 new_repo = EdiMessageRepositoryAdapter(tenant_session)
 

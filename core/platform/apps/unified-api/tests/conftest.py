@@ -1,9 +1,8 @@
 import asyncio
+import contextlib
 import hashlib
 import os
-from unittest.mock import patch
-
-from seedwork import generate_id
+from unittest.mock import AsyncMock, Mock, patch
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault(
@@ -12,18 +11,38 @@ os.environ.setdefault(
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
 os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+import tempfile
 
 import httpx
 import pytest
 import pytest_asyncio
 from database.constants import DatabaseShardStatus
+from database.models import Role as OrmRole
 from database.models.identity import ApiToken as ApiTokenORM
 from database.models.identity import Tenant as TenantORM
 from database.provider import get_async_engine
-from identity.domain.identity_context import IdentityContext
+from edi.adapters.outbound.database.models.data_plane import TenantBase
+from identity.adapters.outbound.database.user_repository import PostgresUserRepository
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
+from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from seedwork import generate_id
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator
 from ucp.domain.constants import LifecycleStatus
+from ucp_models.infrastructure import DatabaseShard as UcpDatabaseShard
+from ucp_models.infrastructure import ShardRegistry as UcpShardRegistry
+from ucp_models.subscriptions import App as UcpApp
+from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
+
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
+from unified_api.bootstrap.lifespan import shell_lifespan
+from unified_api.main import app as _app
+from unified_api.main import edi_app
 
 
 def mock_build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
@@ -79,7 +98,6 @@ async def db_engine():
     # In integration tests, the EDI bounded context expects its Tenant schema (e.g. edi_messages)
     # to be present on the tenant shard. Because we patch all connections to point to this single
     # global test database, we must ensure the Tenant models are actually created here.
-    from edi.adapters.outbound.database.models.data_plane import TenantBase
 
     async with engine.begin() as conn:
         await conn.run_sync(TenantBase.metadata.create_all)
@@ -102,9 +120,6 @@ async def db_session_factory(db_engine):
         class_=AsyncSession,
         join_transaction_mode="create_savepoint",
     )
-
-    import contextlib
-    from unittest.mock import AsyncMock, Mock
 
     mock_provider = Mock()
     mock_provider.session_factory = SessionLocal
@@ -144,53 +159,15 @@ async def db_session_factory(db_engine):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def app(db_session_factory):  # noqa: C901
+async def app(db_session_factory):
     """
     Returns the real Unified API shell with the patched database sessions.
     """
-    from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
-    from unified_api.bootstrap.lifespan import shell_lifespan
-    from unified_api.main import app as _app
 
-    class MockSecretStore:
-        async def get_secret(self, key: str) -> str | None:
-            return None
-
-        async def create_secret(self, key: str, value: str) -> str:
-            return f"arn:mock:{key}"
-
-        async def store_private_key(
-            self, private_key_pem: bytes, category: str | None = None
-        ) -> str:
-            return "mock_vault_ref_priv"
-
-        async def store_public_certificate(
-            self, tenant_id: str, cert_id: str, public_cert_pem: str
-        ) -> str:
-            return f"mock_vault_ref_pub_{cert_id}"
-
-        async def store_secret(self, tenant_id: str, secret_id: str, value: str) -> str:
-            return f"mock_vault_ref_sec_{secret_id}"
-
-        async def retrieve_secret(self, vault_ref: str) -> bytes:
-            return b"mock_secret"
-
-        async def retrieve_private_key(self, vault_ref: str) -> bytes:
-            return b"mock_private_key"
-
-        async def retrieve_public_certificate(self, vault_ref: str) -> str:
-            return "mock_public_certificate"
-
-        async def list_secrets(self, tenant_id: str) -> list[str]:
-            return []
-
-        async def delete_secret(self, vault_ref: str) -> None:
-            pass
+    temp_secrets_dir = tempfile.mkdtemp()
 
     async def override_get_secret_store():
-        return MockSecretStore()
-
-    from unified_api.main import edi_app
+        return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
 
     _app.dependency_overrides[get_secret_store] = override_get_secret_store
     edi_app.dependency_overrides[get_secret_store] = override_get_secret_store
@@ -216,8 +193,6 @@ async def seeded_api_token(db_session_factory):
     """
     async with db_session_factory() as session:
         # Seed global roles
-        from database.models import Role as OrmRole
-        from identity.domain.identity_context import PLATFORM_TENANT_ID
 
         # Seed platform tenant
         platform_tenant = await session.get(TenantORM, PLATFORM_TENANT_ID)
@@ -256,9 +231,6 @@ async def seeded_api_token(db_session_factory):
             await session.flush()
 
         # Seed EDI app and subscription to allow EDI routes to pass the guard
-        from sqlalchemy import text
-        from ucp_models.subscriptions import App as UcpApp
-        from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
 
         apps_res = await session.execute(text("SELECT id FROM ucp.apps WHERE slug = 'edi'"))
         existing_app_id = apps_res.scalar() or "app_edi_core"
@@ -288,9 +260,6 @@ async def seeded_api_token(db_session_factory):
                 )
                 session.add(edi_sub)
                 await session.flush()
-
-        from ucp_models.infrastructure import DatabaseShard as UcpDatabaseShard
-        from ucp_models.infrastructure import ShardRegistry as UcpShardRegistry
 
         existing_shard = await session.get(UcpDatabaseShard, "edi_shard_1")
         if not existing_shard:
@@ -389,7 +358,6 @@ async def simulate_idp_provisioning(db_session_factory):
         user_id = res.json()["userId"]
         await simulate_idp_provisioning(user_id)
     """
-    from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 
     async def _provision(user_id: str) -> None:
         async with db_session_factory() as session:

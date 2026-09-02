@@ -1,3 +1,9 @@
+import uuid
+from datetime import UTC, datetime
+
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiMessageDomainModel
+
 """
 Layer 2 — Application Use Case Tests: Transaction use cases.
 
@@ -7,6 +13,7 @@ no patches/mocks. This is hexagonal architecture: inject a Port-conforming
 fake and assert on observable behavior.
 """
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +21,9 @@ import pytest
 from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
+from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
+    BulkReplayTransactionsUseCase,
+)
 from edi.application.use_cases.transactions.get_transaction_use_case import (
     GetTransactionUseCase,
 )
@@ -47,13 +57,10 @@ class FakeEdiMessage:
 
     def __post_init__(self):
         if self.created_at is None:
-            from datetime import UTC, datetime
-
             self.created_at = datetime.now(UTC)
 
     @property
     def id(self):
-        import uuid
 
         return uuid.uuid5(uuid.NAMESPACE_DNS, self.trace_id)
 
@@ -82,8 +89,6 @@ class FakeTransactionSummary:
 
     def __post_init__(self):
         if self.received_at is None:
-            from datetime import UTC, datetime
-
             self.received_at = datetime.now(UTC)
 
 
@@ -136,6 +141,41 @@ class FakeTransactionRepository:
             {"tenant_id": tenant_id, "event_type": event_type, "payload": payload, "key": key}
         )
         return key
+
+    async def get_edi_message(self, trace_id: str) -> Any:
+
+        tenant_id = "tenant"
+        for key in self._transactions:
+            if key.endswith(f":{trace_id}"):
+                tenant_id = key.split(":")[0]
+                break
+
+        # Mock returning an aggregate
+        return EdiMessageDomainModel(
+            id="fake_id",
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            direction=Direction.INBOUND,
+            status=RecordStatus.SUCCESS,
+        )
+
+    async def save(self, model: Any) -> None:
+        for e in model.domain_events:
+            event_type = getattr(e, "event_type", "edi.transaction.replay_requested")
+            if dataclasses.is_dataclass(e):
+                payload = dataclasses.asdict(e)
+            else:
+                payload = getattr(e, "model_dump", lambda ev=e: vars(ev))()
+            key = getattr(e, "explicit_idempotency_key", None)
+            self.outbox_events.append(
+                {
+                    "tenant_id": model.tenant_id,
+                    "event_type": event_type,
+                    "payload": payload,
+                    "key": key,
+                }
+            )
+        model.clear_domain_events()
 
 
 class FakeDataPlaneUnitOfWork:
@@ -288,6 +328,25 @@ class TestReplayTransactionUseCase:
         await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
         key = self.repo.outbox_events[0]["key"]
         assert "t-003" in key  # key is prefixed with trace_id
+
+
+@pytest.mark.asyncio
+async def test_bulk_replay_commits_after_saving_events():
+    repository = FakeTransactionRepository()
+    uow = FakeDataPlaneUnitOfWork(repository)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    repository.seed_transaction(
+        tenant_id,
+        "trace-1",
+        FakeTransactionResult(edi_message=FakeEdiMessage(trace_id="trace-1")),
+    )
+
+    count = await BulkReplayTransactionsUseCase(uow).bulk_replay_transactions(
+        tenant_id, ["trace-1"], "raw", command_key="request-1"
+    )
+
+    assert count == 1
+    assert uow.committed is True
 
 
 # ---------------------------------------------------------------------------

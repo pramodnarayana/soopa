@@ -15,6 +15,7 @@ from edi.application.use_cases.as2_partners import (
     RotateAS2CertificatesUseCase,
     UpdateAS2PartnerUseCase,
 )
+from edi.config.constants import SecretCategory
 from edi.config.settings import get_settings
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.exceptions import (
@@ -57,8 +58,6 @@ async def generate_certificate(
     Returns the public cert PEM and the vault reference for the private key.
     """
     private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=request.as2_id)
-
-    from edi.config.constants import SecretCategory
 
     private_key_vault_ref = await secret_store.store_private_key(
         private_key_pem=private_key_bytes,

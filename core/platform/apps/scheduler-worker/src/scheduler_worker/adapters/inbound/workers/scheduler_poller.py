@@ -3,7 +3,8 @@ import asyncio
 import structlog
 from scheduler.application.job_executor_use_case import JobExecutorUseCase
 from scheduler.application.job_sweeper_use_case import JobSweeperUseCase
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)
 

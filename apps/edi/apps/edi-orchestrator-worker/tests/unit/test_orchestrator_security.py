@@ -1,18 +1,19 @@
+import socket
 from unittest.mock import MagicMock, patch
 
+import edi.adapters.outbound.security.network
 import pytest
 from edi.adapters.outbound.security.network import (
     get_safe_ip,
     ssrf_safe_context,
     validate_target_url,
 )
+from edi.config.settings import AppSettings
 
 
 @pytest.fixture(autouse=True)
 def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
-    import edi.adapters.outbound.security.network
-    from edi.config.settings import AppSettings
 
     mock_settings = MagicMock(spec=AppSettings)
     mock_settings.env = "production"
@@ -64,8 +65,6 @@ def test_get_safe_ip_private(mock_getaddrinfo: MagicMock) -> None:
 def test_ssrf_safe_context_valid(mock_getaddrinfo: MagicMock) -> None:
     mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
     with ssrf_safe_context("http://example.com"):
-        import socket
-
         res = socket.getaddrinfo("example.com", 80)
         assert res == [(2, 1, 6, "", ("93.184.216.34", 80))]
         mock_getaddrinfo.assert_called_with("93.184.216.34", 80, 0, 0, 0, 0)

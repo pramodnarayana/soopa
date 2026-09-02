@@ -1,12 +1,15 @@
 from typing import Any
 
 import structlog
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dto import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.domain.constants import TransactionDirection, TransactionStatus
-from edi.domain.events import PipelineEventType
+from edi.domain.constants import TransactionDirection
+from edi.domain.events import TransformRequestedEvent
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -90,34 +93,30 @@ class ProcessApiEdiJsonUseCase:
             trace_id = generate_id(SystemIdPrefix.GENERIC)
             logger.info("trace_id_generated", trace_id=trace_id)
 
-            # 3. Save EdiJson (Status: RECEIVED)
-            # We defer ALL routing and translation config logic to the Worker.
-            edi_json_payload = {
-                "trace_id": trace_id,
-                "direction": TransactionDirection.OUTBOUND.value,
-                "transaction_type": transaction_type,
-                "business_metadata": business_metadata,
-                "payload": command.payload,
-                "status": TransactionStatus.RECEIVED.value,
-            }
-            await self.uow.transactions.create_edi_json(
-                tenant_id=command.tenant_id, payload=edi_json_payload
+            # 3. Instantiate Domain Model and record event
+            edi_json_aggregate = EdiJsonDomainModel(
+                id=generate_id(SystemIdPrefix.GENERIC),
+                tenant_id=command.tenant_id,
+                trace_id=trace_id,
+                direction=Direction.OUTBOUND,
+                transaction_type=transaction_type,
+                business_metadata=business_metadata,
+                payload=command.payload,
+                status=RecordStatus.RECEIVED,
             )
 
-            from edi.domain.events import TransformRequestedEvent
-
-            # 5. Queue the transform atomically through the transaction aggregate repository.
-            await self.uow.transactions.publish_outbox_event(
-                tenant_id=command.tenant_id,
-                event_type=PipelineEventType.TRANSFORM_EVENT,
-                payload=TransformRequestedEvent(
+            # 4. Queue the transform atomically through the transaction aggregate
+            edi_json_aggregate.add_domain_event(
+                TransformRequestedEvent(
                     trace_id=str(trace_id),
                     tenant_id=command.tenant_id,
                     trading_partner_id=command.trading_partner_id,
                     direction=TransactionDirection.OUTBOUND.value,
-                ),
-                idempotency_key=str(trace_id),
+                )
             )
+
+            # 5. Save aggregate and let Repository drain events to the outbox automatically
+            await self.uow.transactions.save_json(edi_json_aggregate)
 
             await self.uow.commit()
             return trace_id

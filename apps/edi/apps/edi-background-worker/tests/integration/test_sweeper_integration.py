@@ -1,3 +1,4 @@
+import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -33,7 +34,6 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
         event2 = await builder.create(event_type="DELIVER_EVENT", status=OutboxStatus.PROCESSING)
 
         # Manually force them to be "stuck" by setting lease_expires_at to the past
-        import datetime
 
         event1.lease_expires_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
             minutes=10
@@ -69,6 +69,11 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
 
     # Force a failure on shard_1 by patching db_router.get_shard_session
     original_get_shard_session = db_router.get_shard_session
+
+    async def mock_get_all_shards():
+        return [("ucp_shard_1", "mock_dsn_1"), ("ucp_shard_2", "mock_dsn_2")]
+
+    monkeypatch.setattr(db_router, "get_all_shards", mock_get_all_shards)
 
     async def mock_fail_session(shard_name: str, dsn: str | None = None):
         if shard_name == "ucp_shard_1":

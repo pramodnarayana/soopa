@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -59,7 +60,6 @@ class PostgresEdiControlPlaneOutboxRepository(OutboxRepositoryPort):
             return events
 
     async def sweep_stuck_events(self, lock_lease_ms: int = 30000) -> int:
-        import asyncio
 
         total_swept = 0
         async with asynccontextmanager(self.db_router.get_global_session)() as session:

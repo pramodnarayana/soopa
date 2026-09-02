@@ -74,4 +74,4 @@ class SmimeCryptoService:
 
 
 # Satisfy the port at import time (structural check)
-_: CryptoServicePort = SmimeCryptoService()  # type: ignore[assignment]
+_: CryptoServicePort = SmimeCryptoService()

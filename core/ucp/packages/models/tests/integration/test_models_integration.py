@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from database.provider import get_async_engine
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp_models.events import ControlPlaneOutbox
@@ -39,7 +40,6 @@ async def test_session() -> "AsyncGenerator[AsyncSession, None]":
 @pytest.mark.integration
 async def test_ucp_models_persistence_and_relationships(test_session: AsyncSession) -> None:
     # 1. We must insert a Tenant first because ShardRegistry and AppSubscription have FK to identity.tenants
-    from sqlalchemy import text
 
     suffix = os.urandom(12).hex()
     tenant_id = f"iam_ten_{suffix}"
@@ -105,7 +105,6 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     await test_session.commit()
 
     # Verify we can query them back
-    from sqlalchemy import select
 
     # App
     result = await test_session.execute(select(App).where(App.id == app.id))

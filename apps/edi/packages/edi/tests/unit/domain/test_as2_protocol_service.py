@@ -1,3 +1,7 @@
+import base64
+
+from edi.domain.models.as2 import AS2Message
+
 """
 Layer 1 — Pure Domain Unit Tests: AS2 Protocol Domain Service.
 
@@ -28,7 +32,6 @@ class TestCalculateMic:
         assert len(parts) == 2
         assert parts[1] == "sha256"
         # Verify it's valid base64
-        import base64
 
         base64.b64decode(parts[0])  # raises if invalid
 
@@ -154,7 +157,6 @@ class TestParseAs2Request:
 
 class TestGenerateMdn:
     def _make_as2_message(self, payload=b"original payload"):
-        from edi.domain.models.as2 import AS2Message
 
         return AS2Message(
             message_id="original-id-001",

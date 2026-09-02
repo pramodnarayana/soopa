@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 import structlog
 
-from edi.domain.models import OutboundEdiHeaderDomainModel
+from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)

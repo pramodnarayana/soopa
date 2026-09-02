@@ -1,3 +1,4 @@
+import importlib
 from typing import TYPE_CHECKING
 
 from edi.core.bots.config.botsconfig import (
@@ -6,6 +7,7 @@ from edi.core.bots.config.botsconfig import (
     SUBFIELDS,
 )
 from edi.core.bots.domain.exceptions import BotsImportError, GrammarError, GrammarPartMissing
+from edi.core.bots.domain.grammar import formats
 from edi.core.bots.domain.models import (
     FieldDefinition,
     StructureNode,
@@ -31,7 +33,6 @@ def grammarread(editype, grammarname, typeofgrammarfile) -> "Grammar":
     grammars are imported from usersys/<'typeofgrammarfile'>/<editype>/<grammarname>.
     """
     # pylint: disable=protected-access
-    from edi.core.bots.domain.grammar import formats
 
     try:
         classtocall = getattr(formats, editype)
@@ -165,8 +166,6 @@ def do_recorddefs(grammar_obj):
             version = grammar_obj.grammarname[-4:]
             recorddefs_module_path = f"edi.core.grammar.x12.{version}.records00{version}"
             try:
-                import importlib
-
                 records_module = importlib.import_module(recorddefs_module_path)
                 grammar_obj.recorddefs = records_module.recorddefs
             except ImportError:
@@ -182,8 +181,6 @@ def do_recorddefs(grammar_obj):
             version = grammar_obj.grammarname.split("D", 1)[1].split("UN")[0]
             recorddefs_module_path = f"edi.core.grammar.edifact.D{version}.recordsD{version}UN"
             try:
-                import importlib
-
                 records_module = importlib.import_module(recorddefs_module_path)
                 grammar_obj.recorddefs = records_module.recorddefs
             except ImportError:

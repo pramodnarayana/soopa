@@ -13,6 +13,9 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
     get_global_session,
 )
 
+from edi.adapters.outbound.database.uow_adapter import (
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
+)
 from edi.application.dto import EdiJsonDTO, TransactionDetailDTO
 from edi.domain.status import MessageStatus
 from edi.module import create_edi_app
@@ -75,9 +78,6 @@ def _make_mock_gw() -> MagicMock:
 @pytest.fixture
 def base_mock_uow():
     """Fresh mock UoW for every test — prevents side_effect state leakage."""
-    from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-    )
 
     mock_msg = _make_mock_msg()
     mock_json = _make_mock_json()
@@ -85,7 +85,6 @@ def base_mock_uow():
 
     mock_repo = AsyncMock()
     mock_repo.list_transactions.return_value = [mock_msg]
-    from edi.application.dto import TransactionDetailDTO
 
     mock_repo.get_transaction.return_value = TransactionDetailDTO(
         edi_message=mock_msg,
@@ -148,14 +147,6 @@ def test_get_transaction_thread():
 
 
 def test_get_transaction_detail_sftp():
-    from unified_api.adapters.inbound.http.dependencies.edi.database import (
-        get_data_plane_uow,
-        get_global_session,
-    )
-
-    from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-    )
 
     mock_msg = MagicMock()
     mock_msg.id = generate_id("id")
@@ -197,14 +188,6 @@ def test_get_transaction_detail_sftp():
 
 
 def test_get_transaction_detail_fallback():
-    from unified_api.adapters.inbound.http.dependencies.edi.database import (
-        get_data_plane_uow,
-        get_global_session,
-    )
-
-    from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-    )
 
     mock_msg = MagicMock()
     mock_msg.id = generate_id("id")
@@ -253,14 +236,6 @@ def test_get_transaction_detail_fallback():
 
 
 def test_get_transaction_not_found():
-    from unified_api.adapters.inbound.http.dependencies.edi.database import (
-        get_data_plane_uow,
-        get_global_session,
-    )
-
-    from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-    )
 
     mock_uow = DataPlaneUnitOfWorkPort(tenant_session=AsyncMock())
     mock_uow._mock_global = AsyncMock()
@@ -277,14 +252,6 @@ def test_get_transaction_not_found():
 
 
 def test_get_transaction_webhook_fallback():
-    from unified_api.adapters.inbound.http.dependencies.edi.database import (
-        get_data_plane_uow,
-        get_global_session,
-    )
-
-    from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-    )
 
     mock_repo = AsyncMock()
 

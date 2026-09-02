@@ -1,6 +1,9 @@
 from seedwork import generate_random_hex
 
+from edi.domain.events import TransactionReplayRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 
@@ -22,12 +25,31 @@ class BulkReplayTransactionsUseCase:
             if not result or not result.edi_message:
                 raise TransactionNotFoundError(trace_id=trace_id)
 
-            await self.uow.transactions.publish_outbox_event(
+            replay_event = TransactionReplayRequestedEvent(
+                trace_id=trace_id,
                 tenant_id=tenant_id,
-                event_type="edi.transaction.replay_requested",
-                payload={"trace_id": trace_id, "tier": tier},
-                idempotency_key=f"bulk_replay_{batch_id}_{i}",
+                tier=tier,
+                explicit_idempotency_key=f"bulk_replay_{batch_id}_{i}",
             )
+
+            edi_message = await self.uow.transactions.get_edi_message(trace_id)
+            if edi_message:
+                edi_message.add_domain_event(replay_event)
+                await self.uow.transactions.save(edi_message)
+            else:
+                edi_json = EdiJsonDomainModel(
+                    id="dummy",
+                    tenant_id=tenant_id,
+                    trace_id=trace_id,
+                    direction=Direction.OUTBOUND,
+                    transaction_type="",
+                    status=RecordStatus.RECEIVED,
+                    business_metadata={},
+                    payload={},
+                )
+                edi_json.add_domain_event(replay_event)
+                await self.uow.transactions.save_json(edi_json)
             processed_count += 1
 
+        await self.uow.commit()
         return processed_count

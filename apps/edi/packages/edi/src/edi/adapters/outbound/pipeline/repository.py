@@ -1,5 +1,6 @@
+import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_random_hex
@@ -11,22 +12,24 @@ from edi.adapters.outbound.database.constants import (
     API_GATEWAY_ID_PREFIX,
     DATA_PLANE_OUTBOX_EVENT_PREFIX,
     EDI_JSON_ID_PREFIX,
-    EDI_MESSAGE_ID_PREFIX,
 )
 from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
     AS2Partner,
     AS2Partnership,
+    EdiJson,
     EdiMessage,
     InboundRoute,
+    OutboundEdiHeader,
     OutboundRoute,
     SFTPPartner,
     Webhook,
 )
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox as Outbox
 from edi.config.settings import AppSettings
-from edi.domain.models import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
@@ -59,7 +62,11 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             edi_data = raw_bytes.decode("utf-8")
 
         domain_model = EdiMessageDomainModel(
-            **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            **{
+                k: v
+                for k, v in record.__dict__.items()
+                if not k.startswith("_") and k in EdiMessageDomainModel.__dataclass_fields__
+            }
         )
         domain_model.edi_data = edi_data
         return domain_model
@@ -153,7 +160,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             record_kwargs["tenant_id"] = tenant_id
 
         if "id" not in record_kwargs:
-            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}{generate_random_hex(6)}"
+            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}_{generate_random_hex(6)}"
 
         record = EdiMessage(**record_kwargs)
         self.session.add(record)
@@ -175,9 +182,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         status: str,
         tenant_id: str | None = None,
     ) -> str:
-        import json
-
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         payload_dict = payload
         storage_uri = None
@@ -231,7 +235,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return str(record.id)
 
     async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         result = await self.session.execute(
             select(EdiJson)
@@ -245,19 +248,20 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
         payload = record.payload
         if record.storage_uri:
-            import json
-
             raw_bytes = await self.storage.download(record.storage_uri)
             payload = json.loads(raw_bytes.decode("utf-8"))
 
         domain_model = EdiJsonDomainModel(
-            **{k: v for k, v in record.__dict__.items() if not k.startswith("_")}
+            **{
+                k: v
+                for k, v in record.__dict__.items()
+                if not k.startswith("_") and k in EdiJsonDomainModel.__dataclass_fields__
+            }
         )
         domain_model.payload = payload
         return domain_model
 
     async def update_edi_json_status(self, trace_id: str, status: str) -> None:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         await self.session.execute(
             update(EdiJson).where(EdiJson.trace_id == str(trace_id)).values(status=status)
@@ -265,7 +269,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         await self.session.flush()
 
     async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         if not kwargs:
             return
@@ -325,8 +328,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         webhook_url: str | None = None,
     ) -> None:
 
-        from edi.adapters.outbound.database.models.data_plane import ApiGateway
-
         # Idempotency check
         stmt = (
             select(ApiGateway.id)
@@ -365,8 +366,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
         payload = record.payload
         if record.storage_uri:
-            import json
-
             raw_bytes = await self.storage.download(record.storage_uri)
             payload = json.loads(raw_bytes.decode("utf-8"))
 
@@ -430,7 +429,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from typing import cast
 
         if direction not in ("INBOUND", "OUTBOUND"):
             raise ValueError(f"Invalid direction: {direction}")
@@ -513,10 +511,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         trading_partner_id: str | None = None,
         tenant_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from edi.adapters.outbound.database.models.data_plane import (
-            OutboundEdiHeader,
-            OutboundRoute,
-        )
 
         query = select(OutboundEdiHeader)
         if route_id:

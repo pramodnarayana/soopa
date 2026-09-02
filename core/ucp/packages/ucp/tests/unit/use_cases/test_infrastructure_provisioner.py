@@ -5,7 +5,7 @@ from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
-from ucp.domain.constants import UcpEventType, UcpIdPrefix
+from ucp.domain.constants import LifecycleStatus, UcpEventType, UcpIdPrefix
 from ucp.domain.models.app import App
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.testing.fakes import FakeUcpUnitOfWork
@@ -43,7 +43,6 @@ async def test_handle_app_subscribed_success(provisioner, fake_uow):
     await provisioner.handle_app_subscribed(event)
 
     assert fake_uow.committed is True
-    from ucp.domain.constants import LifecycleStatus
 
     assert fake_uow.tenant_repo.subscriptions.get((tenant_id, app_id)) == LifecycleStatus.ACTIVE
     assert (tenant_id, app_id, "edi_shard_1") in fake_uow.tenant_repo.allocations
@@ -67,6 +66,5 @@ async def test_handle_app_unsubscribed_success(provisioner, fake_uow):
     await provisioner.handle_app_unsubscribed(event)
 
     assert fake_uow.committed is True
-    from ucp.domain.constants import LifecycleStatus
 
     assert fake_uow.tenant_repo.subscriptions.get((tenant_id, app_id)) == LifecycleStatus.INACTIVE

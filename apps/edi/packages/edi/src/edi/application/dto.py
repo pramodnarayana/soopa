@@ -87,8 +87,6 @@ class CreateAS2PartnershipCmd:
 @dataclass(frozen=True)
 class UpdateAS2PartnershipCmd:
     name: str | UnsetType = UNSET
-    local_url: str | UnsetType | None = UNSET
-    remote_url: str | UnsetType | None = UNSET
     credentials_vault_ref: str | UnsetType | None = UNSET
     mdn_type: str | UnsetType = UNSET
     mdn_url: str | UnsetType | None = UNSET
@@ -180,9 +178,6 @@ class CreateOutboundRouteCmd:
 
 @dataclass(frozen=True)
 class UpdateOutboundRouteCmd:
-    isa_sender_id: str | UnsetType = UNSET
-    isa_receiver_id: str | UnsetType = UNSET
-    transaction_type: str | UnsetType = UNSET
     as2_partner_id: str | UnsetType | None = UNSET
     sftp_partner_id: str | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
@@ -209,6 +204,12 @@ class CreateOutboundEdiHeaderCmd:
     transaction_type: str | None = None
     default_standard: str | None = None
     default_version: str | None = None
+    isa_control_version: str | None = None
+    isa_usage_indicator: str | None = None
+    gs_version: str | None = None
+    segment_terminator: str | None = None
+    element_separator: str | None = None
+    subelement_separator: str | None = None
 
 
 @dataclass(frozen=True)
@@ -323,3 +324,31 @@ class ProcessApiEdiJsonCommand:
 class ProcessInboundAs2Command:
     headers: dict[str, str]
     body_bytes: bytes
+
+
+@dataclass(frozen=True)
+class RouteDTO:
+    """
+    Typed DTO returned by TransactionRepositoryPort.get_route().
+    Replaces raw dict[str, Any] to enforce strict DTO boundary.
+    """
+
+    trading_partner_id: str | None
+    webhook_id: str | None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
+    processing_mode: str | None = None
+
+
+@dataclass(frozen=True)
+class WebhookDTO:
+    """
+    Typed DTO returned by TransactionRepositoryPort.get_webhook().
+    Replaces raw dict[str, Any] to enforce strict DTO boundary.
+    """
+
+    id: str
+    url: str
+    name: str
+    active: bool
+    auth_header_vault_ref: str | None = None

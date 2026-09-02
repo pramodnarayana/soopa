@@ -1,3 +1,5 @@
+from edi.core.bots.domain.parser_registry import READER_REGISTRY
+
 """Reading/lexing/parsing/splitting an edifile."""
 # pylint: disable=invalid-name, missing-class-docstring, missing-function-docstring, duplicate-code, too-many-lines
 # pylint: disable=too-many-branches, too-many-statements, attribute-defined-outside-init, consider-using-f-string
@@ -37,7 +39,6 @@ def parse_edi_file(**ta_info):
     """
     # Deferred import to avoid circular dependency:
     # inmessage <- parsers.base <- inmessage
-    from edi.core.bots.domain.parsers import READER_REGISTRY
 
     try:
         # get inmessage class to call (subclass of Inmessage)

@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any, cast
 
 import httpx
@@ -59,7 +59,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             try:
                 userinfo = await self._get_cached_userinfo(token, jti)
                 payload.update(userinfo)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — any network/decode failure during optional userinfo enrichment must not block token verification
                 logger.warning("Failed to fetch userinfo", exc_info=e)
 
         # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
@@ -116,8 +116,6 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         payload["roles"] = roles
 
         try:
-            from dataclasses import fields
-
             valid_keys = {f.name for f in fields(TokenClaims)}
             filtered_payload = {k: v for k, v in payload.items() if k in valid_keys}
             filtered_payload["raw_claims"] = raw_claims

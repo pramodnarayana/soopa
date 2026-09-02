@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import structlog
+from seedwork.constants import DeploymentEnvironment
 
 from edi.config.settings import get_settings
 
@@ -35,7 +36,6 @@ def validate_target_url(url: str) -> bool:
             return False
 
         # Resolve all A/AAAA records for the hostname
-        import socket
 
         try:
             # getaddrinfo returns a list of 5-tuples: (family, type, proto, canonname, sockaddr)
@@ -57,8 +57,6 @@ def validate_target_url(url: str) -> bool:
                 or ip.is_reserved
                 or ip.is_multicast
             ):
-                from seedwork.constants import DeploymentEnvironment
-
                 if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
                     pass
                 else:
@@ -111,8 +109,6 @@ def get_safe_ip(hostname: str) -> str | None:
         ip_str = str(sockaddr[0])
         ip = ipaddress.ip_address(ip_str)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            from seedwork.constants import DeploymentEnvironment
-
             if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
                 return ip_str
             return None

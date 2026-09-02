@@ -4,6 +4,7 @@ import pytest
 
 from ucp_worker.bootstrap.container import WorkerContainer
 from ucp_worker.core.job_registry import JobHandlerRegistry
+from ucp_worker.core.scheduler.models import JobName
 
 
 @pytest.fixture
@@ -47,7 +48,6 @@ async def test_worker_container_wiring(mock_env: None) -> None:
         assert isinstance(container.registry, JobHandlerRegistry)
 
         # Check that jobs are registered
-        from ucp_worker.core.scheduler.models import JobName
 
         assert container.registry.get(JobName.UCP_OUTBOX_SWEEPER.value) is not None
         assert container.registry.get(JobName.UCP_OUTBOX_CLEANUP.value) is not None

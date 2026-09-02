@@ -1,6 +1,14 @@
+import base64
+import hashlib
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
-from edi.domain.models import EdiMessageDomainModel
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
+
+from edi.domain.direction import MessageDirection
+from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
@@ -88,10 +96,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
         # Return an object-like view for the tests
         class DummyEdiJson:
-            def __init__(self, d):
+            def __init__(self, d: dict[str, Any]) -> None:
                 self.__dict__.update(d)
 
-            def __getattr__(self, name):
+            def __getattr__(self, name: str) -> Any | None:
                 # Return None for attributes not in the seeded dict
                 return None
 
@@ -163,13 +171,6 @@ class InMemoryRepositoryAdapter(RepositoryPort):
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         raw = self.edi_messages.get(trace_id)
         if raw:
-            import uuid
-            from datetime import UTC, datetime
-
-            from edi.domain.direction import MessageDirection
-            from edi.domain.models import EdiMessageDomainModel
-            from edi.domain.status import MessageStatus
-
             # Shallow-copy so mutations inside the domain model (or test assertions)
             # don't bleed back into the fake store and cause inter-test coupling.
             msg = dict(raw)
@@ -193,8 +194,6 @@ class InMemoryRepositoryAdapter(RepositoryPort):
                 uuid.UUID(str(msg.get("trace_id", trace_id)))
                 msg["trace_id"] = str(msg.get("trace_id", trace_id))
             except ValueError:
-                import hashlib
-
                 # Safe: Test mock only generates dummy hash
                 hashed = hashlib.md5(str(msg.get("trace_id", trace_id)).encode()).hexdigest()  # noqa: S324
                 msg["trace_id"] = str(uuid.UUID(hashed))
@@ -455,9 +454,6 @@ class FakeAS2DeliveryAdapter:
         if getattr(self, "raise_on_deliver", False):
             raise RuntimeError("Mock delivery failure")
 
-        import base64
-        import hashlib
-
         digest = hashlib.sha256(body).digest()
         mic = base64.b64encode(digest).decode("ascii") + ", sha256"
 
@@ -522,8 +518,6 @@ class FakeDataPlaneOutboxRepository:
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
         if key_str in self.processed or key_str in self.leased:
             return None
-
-        from seedwork import SystemIdPrefix, generate_id
 
         owner_token = generate_id(SystemIdPrefix.GENERIC)
         self.leased[key_str] = owner_token

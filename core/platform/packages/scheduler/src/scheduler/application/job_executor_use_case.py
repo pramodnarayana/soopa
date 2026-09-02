@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from croniter import croniter
@@ -69,8 +69,6 @@ class JobExecutorUseCase:
                     next_run_at=next_run_at.isoformat(),
                 )
             elif job.interval_seconds is not None and job.interval_seconds > 0:
-                from datetime import timedelta
-
                 next_run_at = datetime.now(UTC) + timedelta(seconds=job.interval_seconds)
                 async with self.uow_factory() as uow:
                     await uow.job_repo.reschedule(job.id, worker_id, next_run_at)

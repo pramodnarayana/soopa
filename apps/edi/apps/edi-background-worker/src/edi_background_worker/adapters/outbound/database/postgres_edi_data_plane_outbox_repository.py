@@ -4,8 +4,10 @@ from typing import Any
 import structlog
 from database.events import EventEnvelope
 from database.router import DatabaseRouter
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from sqlalchemy import and_, case, func, or_, select, text, update
 
 logger = structlog.get_logger(__name__)
 
@@ -26,9 +28,6 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
             return []
 
         async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
-            from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-            from sqlalchemy import and_, func, or_, select, text, update
-
             subq = (
                 select(DataPlaneOutbox.id)
                 .where(
@@ -118,9 +117,6 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         total_swept = 0
         for shard_name, shard_dsn in await self.db_router.get_all_shards():
             async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
-                from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-                from sqlalchemy import and_, func, select, update
-
                 while True:
                     subq = (
                         select(DataPlaneOutbox.id)
@@ -172,8 +168,6 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
             raise ExceptionGroup("tenant_shard_outbox_update_failed", exceptions)
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-        from sqlalchemy import and_, func, update
 
         def _get_stmt(params: dict[str, Any]) -> Any:
             return (
@@ -199,8 +193,6 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         )
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-        from sqlalchemy import and_, case, func, update
 
         def _get_stmt(params: dict[str, Any]) -> Any:
             return (

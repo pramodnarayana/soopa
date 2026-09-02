@@ -1,8 +1,10 @@
 import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
+import pytest_asyncio
 from database.provider import get_async_engine
 from seedwork import generate_id
 from sqlalchemy import text
@@ -13,26 +15,31 @@ from scheduler.adapters.outbound.database.postgres_job_repository import Postgre
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
-async def test_session() -> "AsyncGenerator[AsyncSession]":
+@pytest_asyncio.fixture
+async def db_connection() -> AsyncGenerator[Any]:
     base_url = os.getenv(
         "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
     )
     engine = get_async_engine(base_url)
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with factory() as session:
-        yield session
-
+    connection = await engine.connect()
+    transaction = await connection.begin()
+    yield connection
+    await transaction.rollback()
+    await connection.close()
     await engine.dispose()
 
 
-@pytest.fixture(autouse=True)
-async def clear_scheduling_tables(test_session: AsyncSession) -> None:
-    await test_session.execute(
-        text("TRUNCATE TABLE scheduling.scheduled_jobs RESTART IDENTITY CASCADE;")
+@pytest_asyncio.fixture
+async def test_session(db_connection: Any) -> AsyncGenerator[AsyncSession]:
+    factory = async_sessionmaker(
+        bind=db_connection,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
     )
-    await test_session.commit()
+
+    async with factory() as session:
+        yield session
 
 
 @pytest.mark.integration
@@ -59,7 +66,7 @@ async def test_claim_next_jobs(test_session: AsyncSession) -> None:
             "future": now + timedelta(days=1),
         },
     )
-    await test_session.commit()
+    await test_session.flush()
 
     repo = PostgresJobRepository(test_session)
     jobs = await repo.claim_next_jobs(worker_id="worker-1", limit=10, lock_lease_ms=5000)
@@ -97,12 +104,12 @@ async def test_reschedule(test_session: AsyncSession) -> None:
         """),
         {"id": job_id, "now": now},
     )
-    await test_session.commit()
+    await test_session.flush()
 
     repo = PostgresJobRepository(test_session)
     next_run = now + timedelta(minutes=10)
     await repo.reschedule(job_id=job_id, worker_id="worker-1", next_run_at=next_run)
-    await test_session.commit()
+    await test_session.flush()
 
     result = await test_session.execute(
         text(
@@ -130,14 +137,14 @@ async def test_schedule_retry(test_session: AsyncSession) -> None:
         """),
         {"id": job_id, "now": now},
     )
-    await test_session.commit()
+    await test_session.flush()
 
     repo = PostgresJobRepository(test_session)
     next_run = now + timedelta(minutes=1)
     await repo.schedule_retry(
         job_id=job_id, worker_id="worker-1", retry_count=1, next_run_at=next_run
     )
-    await test_session.commit()
+    await test_session.flush()
 
     result = await test_session.execute(
         text(
@@ -165,11 +172,11 @@ async def test_mark_completed(test_session: AsyncSession) -> None:
         """),
         {"id": job_id, "now": now},
     )
-    await test_session.commit()
+    await test_session.flush()
 
     repo = PostgresJobRepository(test_session)
     await repo.mark_completed(job_id=job_id, worker_id="worker-1")
-    await test_session.commit()
+    await test_session.flush()
 
     result = await test_session.execute(
         text("SELECT status, owner_token FROM scheduling.scheduled_jobs WHERE id = :id"),
@@ -193,11 +200,11 @@ async def test_mark_failed(test_session: AsyncSession) -> None:
         """),
         {"id": job_id, "now": now},
     )
-    await test_session.commit()
+    await test_session.flush()
 
     repo = PostgresJobRepository(test_session)
     await repo.mark_failed(job_id=job_id, worker_id="worker-1", error_message="fatal error")
-    await test_session.commit()
+    await test_session.flush()
 
     result = await test_session.execute(
         text(
@@ -233,11 +240,11 @@ async def test_sweep_stuck_jobs(test_session: AsyncSession) -> None:
             "active_lease": now + timedelta(minutes=5),
         },
     )
-    await test_session.commit()
+    await test_session.flush()
 
     repo = PostgresJobRepository(test_session)
     swept_count = await repo.sweep_stuck_jobs(lock_lease_ms=5000)
-    await test_session.commit()
+    await test_session.flush()
 
     assert swept_count == 1
 

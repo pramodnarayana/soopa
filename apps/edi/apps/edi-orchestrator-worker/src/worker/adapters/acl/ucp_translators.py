@@ -38,7 +38,9 @@ class WebhookEventTranslator(EventTranslator):
             raise ValueError("Malformed webhook event: tenant identifier not found")
 
         return {
-            "tenant_id": tenant_id,
             "event_type": self.event_type,
-            "resource_id": resource_id,
+            "payload": {
+                "tenant_id": tenant_id,
+                "resource_id": resource_id,
+            },
         }

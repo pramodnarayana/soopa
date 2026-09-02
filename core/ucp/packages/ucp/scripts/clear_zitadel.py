@@ -1,3 +1,5 @@
+from typing import cast
+
 """
 Clear Zitadel Script — Deletes all non-platform tenant organisations from Zitadel.
 
@@ -53,7 +55,6 @@ async def list_all_orgs(
         timeout=15,
     )
     response.raise_for_status()
-    from typing import cast
 
     return cast(list[dict[str, Any]], response.json().get("result", []))
 

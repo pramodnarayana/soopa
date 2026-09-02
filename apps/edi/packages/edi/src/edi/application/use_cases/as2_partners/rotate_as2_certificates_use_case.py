@@ -13,7 +13,7 @@ from edi.domain.exceptions import (
     OrchestrationError,
     PartnerNotFoundError,
 )
-from edi.domain.models import AS2PartnerDomainModel
+from edi.domain.models.as2 import AS2PartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -91,22 +91,31 @@ class RotateAS2CertificatesUseCase:
         )
 
         try:
-            await self.uow.as2_partners.rotate_as2_certificates(
-                tenant_id, partner_id, public_cert_pem, private_key_vault_ref
+            # Mutate aggregate
+            partner.prev_public_cert_pem = partner.public_cert_pem
+            partner.prev_public_cert_vault_ref = partner.public_cert_vault_ref
+            partner.prev_private_key_vault_ref = partner.private_key_vault_ref
+            partner.public_cert_pem = public_cert_pem
+            partner.public_cert_vault_ref = (
+                None  # We didn't store public cert in vault in provision
             )
+            partner.private_key_vault_ref = private_key_vault_ref
 
-            updated_partner = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
-            if not updated_partner:
-                raise PartnerNotFoundError(partner_id, tenant_id)
-
-            await self.uow.control_plane_outbox.publish_outbox_event(
+            # Record domain event on aggregate
+            partner.add_domain_event(
                 ProvisioningEvent(
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_as2_partner_updated,
                     resource_id=str(partner_id),
-                ),
-                idempotency_key=idempotency_key,
+                    explicit_idempotency_key=idempotency_key,
+                )
             )
+
+            await self.uow.as2_partners.save(partner)
+
+            persisted = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
+            if persisted:
+                partner = persisted
 
         except Exception as e:
             logger.exception(
@@ -125,4 +134,4 @@ class RotateAS2CertificatesUseCase:
             tenant_id=tenant_id,
         )
 
-        return updated_partner
+        return partner

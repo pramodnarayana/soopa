@@ -33,3 +33,6 @@ class EdiIdPrefix(StrEnum):
     EDI_MESSAGE = "edi_msg"
     EDI_JSON = "edi_json"
     API_GATEWAY = "edi_apigw"
+
+
+EDI_MESSAGE_ID_PREFIX = EdiIdPrefix.EDI_MESSAGE.value

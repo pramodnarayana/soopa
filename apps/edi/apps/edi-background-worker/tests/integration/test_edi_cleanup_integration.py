@@ -1,12 +1,19 @@
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from database.router import DatabaseRouter
+from edi.adapters.outbound.database.models.data_plane import (
+    AuditLog,
+    DataPlaneOutbox,
+    ProcessedEvent,
+)
 from edi.domain.status import AuditLogStatus
 from outbox.application.outbox_cleaner_use_case import (
     OutboxCleanerUseCase,
 )
 from outbox.domain.constants import OutboxStatus
+from sqlalchemy import select
 
 from edi_background_worker.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
     SqlAlchemyEdiAuditLogCleanupRepository,
@@ -29,9 +36,6 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.integration
 async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
-    import os
-
-    from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
@@ -82,8 +86,6 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
     await use_case.execute()
 
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        from sqlalchemy import select
-
         result = await test_session.execute(select(DataPlaneOutbox.id))
         remaining = {r for (r,) in result.all()}
 
@@ -94,14 +96,11 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
 
 @pytest.mark.integration
 async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
-    from edi.adapters.outbound.database.models.data_plane import ProcessedEvent
 
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        import os
-
         key1 = f"iam_key_{os.urandom(12).hex()}"
         key2 = f"iam_key_{os.urandom(12).hex()}"
 
@@ -125,8 +124,6 @@ async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
     await use_case.execute()
 
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        from sqlalchemy import select
-
         result = await test_session.execute(select(ProcessedEvent.idempotency_key))
         remaining = {r for (r,) in result.all()}
 
@@ -136,14 +133,11 @@ async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
 
 @pytest.mark.integration
 async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
-    from edi.adapters.outbound.database.models.data_plane import AuditLog
 
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        import os
-
         audit_1_id = f"audit_{os.urandom(12).hex()}"
         audit_2_id = f"audit_{os.urandom(12).hex()}"
 
@@ -175,8 +169,6 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
     await use_case.execute()
 
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        from sqlalchemy import select
-
         result = await test_session.execute(select(AuditLog.id))
         remaining = {r for (r,) in result.all()}
 

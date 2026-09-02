@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from outbox.domain.constants import OutboxStatus
 from sqlalchemy import (
     DateTime,
     Integer,
     String,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
@@ -27,13 +29,11 @@ class OutboxMixin:
 
     @declared_attr
     def status(cls) -> Mapped[str]:
-        from outbox.domain.constants import OutboxStatus
 
         return mapped_column(String(50), nullable=False, default=OutboxStatus.PENDING)
 
     @declared_attr
     def attempts(cls) -> Mapped[int]:
-        from sqlalchemy import text
 
         return mapped_column(Integer, server_default=text("0"), default=0)
 
@@ -47,7 +47,6 @@ class OutboxMixin:
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
-        from sqlalchemy import text
 
         return mapped_column(
             DateTime(timezone=True), server_default=text("now()"), default=lambda: datetime.now(UTC)
@@ -55,7 +54,6 @@ class OutboxMixin:
 
     @declared_attr
     def updated_at(cls) -> Mapped[datetime]:
-        from sqlalchemy import text
 
         return mapped_column(
             DateTime(timezone=True),
@@ -78,7 +76,6 @@ class TimestampMixin:
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
-        from sqlalchemy import text
 
         return mapped_column(
             DateTime(timezone=True), server_default=text("now()"), default=lambda: datetime.now(UTC)
@@ -86,7 +83,6 @@ class TimestampMixin:
 
     @declared_attr
     def updated_at(cls) -> Mapped[datetime]:
-        from sqlalchemy import text
 
         return mapped_column(
             DateTime(timezone=True),

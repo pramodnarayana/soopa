@@ -1,8 +1,14 @@
 from typing import Any
 
 from outbox.domain.constants import OutboxStatus
-from seedwork import SystemIdPrefix, generate_id, generate_random_hex
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id, generate_random_hex
+from sqlalchemy import insert, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from database.exceptions import DuplicateEntityError
+from database.interceptors import intercept_db_errors
+from database.outbox_serializer import serialize_domain_event
 from edi.adapters.outbound.database.base_repository import (
     GlobalSqlAlchemyRepository,
     TenantSqlAlchemyRepository,
@@ -11,7 +17,9 @@ from edi.adapters.outbound.database.base_repository import (
 # Shared prefix constants for Data Plane IDs
 from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.domain.events import ProvisioningEvent
+from edi.domain.exceptions import IdempotencyConflictError
 from edi.ports.outbound.control_plane_outbox_repository_port import (
     ControlPlaneOutboxRepositoryPort,
 )
@@ -54,7 +62,6 @@ class SqlAlchemyOutboxRepositoryMixin:
     ) -> list[str]:
         tid_str = tenant_id if tenant_id is not None else None
         event_ids = []
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         insert_stmts = []
         for event in events:
@@ -102,9 +109,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
         event: ProvisioningEvent,
         idempotency_key: str | None = None,
     ) -> str:
-        from sqlalchemy import select
-
-        from database.outbox_serializer import serialize_domain_event
 
         serialized_event = serialize_domain_event(event)
         if idempotency_key:
@@ -137,7 +141,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
         return event_id
 
     async def get_event_by_idempotency_key(self, idempotency_key: str) -> Any | None:
-        from sqlalchemy import select
 
         stmt = select(self.model_class).where(self.model_class.idempotency_key == idempotency_key)
         res = await self.session.execute(stmt)
@@ -146,10 +149,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
     async def create_reservation(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
     ) -> None:
-        from sqlalchemy import insert
-
-        from database.exceptions import DuplicateEntityError
-        from edi.domain.exceptions import IdempotencyConflictError
 
         insert_stmt = insert(self.model_class).values(
             id=f"reservation_{idempotency_key}",
@@ -161,8 +160,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
             attempts=0,
         )
         try:
-            from database.interceptors import intercept_db_errors
-
             async with self.session.begin_nested(), intercept_db_errors():
                 await self.session.execute(insert_stmt)
                 await self.flush()
@@ -180,7 +177,6 @@ class SqlAlchemyDataPlaneOutboxRepository(
     """
 
     def __init__(self, session: Any) -> None:
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 
         super().__init__(session)
         self.model_class = DataPlaneOutbox

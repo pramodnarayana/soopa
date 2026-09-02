@@ -1,4 +1,5 @@
 import pytest
+from database.models.identity import Tenant
 from database.models.notifications import NotificationRouteConfiguration
 from seedwork import generate_id, generate_random_hex
 from ucp.domain.constants import LifecycleStatus
@@ -18,7 +19,6 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
 
     async with db_session_factory() as session, session.begin():
         # Because foreign keys are enforced, we must create the tenant first
-        from database.models.identity import Tenant
 
         tenant = Tenant(
             id=tenant_id,
@@ -60,8 +60,6 @@ async def test_postgres_route_repository_crud_operations(db_session_factory):
     event_type = "test.crud.event"
 
     async with db_session_factory() as session, session.begin():
-        from database.models.identity import Tenant
-
         tenant = Tenant(
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",

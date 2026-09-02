@@ -1,5 +1,11 @@
+import asyncio
 from typing import Any
 
+from edi.adapters.outbound.transformer.domain.envelope.edifact import (
+    EdifactEnvelopeBuilder,
+)
+from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
+from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
@@ -49,9 +55,6 @@ class BotsTransformerAdapter(TransformerPort):
         """
         Transforms JSON to EDI using the wrapped BOTS facade.
         """
-        import asyncio
-
-        from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 
         if isinstance(payload, dict) and (
             "interchange_ISA" in payload or "interchange_UNB" in payload
@@ -59,14 +62,8 @@ class BotsTransformerAdapter(TransformerPort):
             ast_dict: dict[str, Any] = payload
         else:
             if standard.lower() == "x12":
-                from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
-
                 ast_dict = X12EnvelopeBuilder.build(route_config, payload)
             elif standard.lower() == "edifact":
-                from edi.adapters.outbound.transformer.domain.envelope.edifact import (
-                    EdifactEnvelopeBuilder,
-                )
-
                 ast_dict = EdifactEnvelopeBuilder.build(route_config, payload)
             else:
                 raise TransformationError(

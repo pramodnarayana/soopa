@@ -27,7 +27,25 @@ class UcpEventDispatcher:
 
     async def dispatch_raw(self, payload: dict[str, Any]) -> None:
         """Entrypoint called by the SqsConsumerManager."""
-        event = UcpEventMessage.model_validate(payload)
+        if not isinstance(payload, dict):
+            raise TypeError("UCP event envelope must be a dictionary")
+
+        event_id = str(payload.get("eventId") or payload.get("id") or "").strip()
+        event_type = str(payload.get("eventType") or payload.get("event_type") or "").strip()
+        tenant_id = str(payload.get("tenantId") or payload.get("tenant_id") or "").strip()
+        event_payload = payload.get("payload")
+
+        if not event_id or not event_type or not tenant_id or not isinstance(event_payload, dict):
+            raise ValueError(
+                "UCP event envelope is missing required fields or has an invalid payload"
+            )
+
+        event = UcpEventMessage(
+            id=event_id,
+            event_type=event_type,
+            tenant_id=tenant_id,
+            payload=event_payload,
+        )
         await self._dispatch(event)
 
     async def _dispatch(self, event: UcpEventMessage) -> None:

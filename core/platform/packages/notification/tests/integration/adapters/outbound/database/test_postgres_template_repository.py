@@ -7,7 +7,7 @@ from ucp.domain.constants import LifecycleStatus
 from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
 )
-from notification.domain.models import Channel
+from notification.domain.models import PLATFORM_TENANT_ID, Channel
 
 
 @pytest.mark.asyncio
@@ -137,7 +137,6 @@ async def test_template_crud_operations(db_session_factory):
 async def test_get_template_fallback_to_platform(db_session_factory):
     tenant_id = f"test-plat-tenant-{generate_random_hex(6)}"
     event_type = f"system.alert.{generate_random_hex(6)}"
-    from notification.domain.models import PLATFORM_TENANT_ID
 
     # Setup test DB
     async with db_session_factory() as session, session.begin():

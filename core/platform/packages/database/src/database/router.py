@@ -1,3 +1,8 @@
+from sqlalchemy import select, text
+from ucp_models.infrastructure import DatabaseShard
+
+from database.constants import DatabaseShardStatus
+
 """
 Enterprise Database Routing and Provisioning.
 
@@ -113,8 +118,6 @@ class DatabaseRouter(DatabaseRouterPort):
             expire_on_commit=False,
         )
 
-        from sqlalchemy import text
-
         try:
             async with factory() as session:
                 # Enforce Row-Level Security by injecting the tenant ID context
@@ -150,10 +153,6 @@ class DatabaseRouter(DatabaseRouterPort):
         """
         Retrieves all active shards (key, dsn) from the global database.
         """
-        from sqlalchemy import select
-        from ucp_models.infrastructure import DatabaseShard
-
-        from database.constants import DatabaseShardStatus
 
         # Dynamically query the active database shards registered in the control plane
         async for session in self.get_global_session():

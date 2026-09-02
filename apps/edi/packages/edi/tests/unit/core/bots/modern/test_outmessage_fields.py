@@ -1,3 +1,9 @@
+from edi.core.bots.domain.models import (
+    StructureNode,
+    create_field_definition,
+    create_structure_node,
+)
+
 """
 test_outmessage_advanced.py
 Tests for bots_core.domain.outmessage covering advanced features like repeating fields, repeating composites, and number formatting.
@@ -96,10 +102,6 @@ class MockGrammar:
                 ],
             ]
         }
-        from edi.core.bots.domain.models import (
-            create_field_definition,
-            create_structure_node,
-        )
 
         self.recorddefs["REC1"] = [create_field_definition(f) for f in self.recorddefs["REC1"]]
         self.structure[0][6] = self.recorddefs["REC1"]
@@ -162,7 +164,6 @@ def test_outmessage_format_numeric_left():
 
     field_def = msg.defmessage.recorddefs["REC1"][3]  # NUM_FLD, NL, MINLENGTH 5, DECIMALS 2
     value = "1.2"
-    from edi.core.bots.domain.models import StructureNode
 
     struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
@@ -177,7 +178,6 @@ def test_outmessage_format_numeric_right():
 
     field_def = msg.defmessage.recorddefs["REC1"][4]  # NUM_FLD_NR, NR, MINLENGTH 5, DECIMALS 2
     value = "-1.2"
-    from edi.core.bots.domain.models import StructureNode
 
     struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
@@ -198,7 +198,6 @@ def test_outmessage_format_numeric_zfill():
 
     field_def = msg.defmessage.recorddefs["REC1"][5]  # NUM_FLD_NZ, R, MINLENGTH 5, DECIMALS 2
     value = "1.2"
-    from edi.core.bots.domain.models import StructureNode
 
     struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 
@@ -213,7 +212,6 @@ def test_outmessage_format_numeric_invalid():
 
     field_def = msg.defmessage.recorddefs["REC1"][3]
     value = "abc"
-    from edi.core.bots.domain.models import StructureNode
 
     struct = StructureNode(id="REC1", min_occ=1, max_occ=1, mpath=["REC1"])
 

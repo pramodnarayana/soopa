@@ -1,7 +1,9 @@
 import asyncio
 import os
+import urllib.parse
 
 import boto3
+from botocore.exceptions import ClientError
 from database.provider import get_async_engine
 from sqlalchemy import text
 
@@ -48,8 +50,6 @@ def purge_sqs_queues() -> bool:
         aws_secret_access_key="test",  # noqa: S106
     )
 
-    from botocore.exceptions import ClientError
-
     failed = False
     for queue_name in QUEUES_TO_PURGE:
         try:
@@ -73,8 +73,6 @@ def purge_sqs_queues() -> bool:
 
 async def main():
     print("=== Truncating Test Data ===")
-
-    import urllib.parse
 
     # Safety guard: require local targets or explicit opt-in
     try:
