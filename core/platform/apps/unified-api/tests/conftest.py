@@ -11,6 +11,11 @@ os.environ.setdefault(
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
 os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+import tempfile
 
 import httpx
 import pytest
@@ -23,6 +28,7 @@ from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
+from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 from seedwork import generate_id
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -153,48 +159,15 @@ async def db_session_factory(db_engine):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def app(db_session_factory):  # noqa: C901
+async def app(db_session_factory):
     """
     Returns the real Unified API shell with the patched database sessions.
     """
 
-    class MockSecretStore:
-        async def get_secret(self, key: str) -> str | None:
-            return None
-
-        async def create_secret(self, key: str, value: str) -> str:
-            return f"arn:mock:{key}"
-
-        async def store_private_key(
-            self, private_key_pem: bytes, category: str | None = None
-        ) -> str:
-            return "mock_vault_ref_priv"
-
-        async def store_public_certificate(
-            self, tenant_id: str, cert_id: str, public_cert_pem: str
-        ) -> str:
-            return f"mock_vault_ref_pub_{cert_id}"
-
-        async def store_secret(self, tenant_id: str, secret_id: str, value: str) -> str:
-            return f"mock_vault_ref_sec_{secret_id}"
-
-        async def retrieve_secret(self, vault_ref: str) -> bytes:
-            return b"mock_secret"
-
-        async def retrieve_private_key(self, vault_ref: str) -> bytes:
-            return b"mock_private_key"
-
-        async def retrieve_public_certificate(self, vault_ref: str) -> str:
-            return "mock_public_certificate"
-
-        async def list_secrets(self, tenant_id: str) -> list[str]:
-            return []
-
-        async def delete_secret(self, vault_ref: str) -> None:
-            pass
+    temp_secrets_dir = tempfile.mkdtemp()
 
     async def override_get_secret_store():
-        return MockSecretStore()
+        return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
 
     _app.dependency_overrides[get_secret_store] = override_get_secret_store
     edi_app.dependency_overrides[get_secret_store] = override_get_secret_store
