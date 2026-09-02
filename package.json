@@ -11,6 +11,7 @@
     "typecheck:tests": "turbo run typecheck:tests",
     "lint": "turbo run lint",
     "test": "pnpm test:node && pnpm test:python",
+    "verify:ci": "./scripts/verify_ci.sh",
     "test:integration": "if [ -f .env ]; then set -a; . .env; set +a; fi && turbo run test:integration --filter=\"*@soopa/api\" --filter=\"@soopa/unified-api\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/database\" --filter=\"*@soopa/schemas\"",
     "test:mutation": "stryker run",
     "test:node": "if [ -f .env ]; then set -a; . .env; set +a; fi && CI=true turbo run test --filter=\"!*@soopa/api\" --filter=\"!*@soopa/*-worker\" --filter=\"!*@soopa/domain\" --filter=\"!*@soopa/database\" --filter=\"!*@soopa/*-engine\" --filter=\"!*@soopa/ucp*\" --filter=\"!*@soopa/identity\" --filter=\"!*@soopa/notification\" --filter=\"!*@soopa/scheduler*\" --filter=\"!*@soopa/observability\" --filter=\"!*@soopa/database\" --filter=\"!*@soopa/schemas\"",

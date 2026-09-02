@@ -2,6 +2,10 @@ import asyncio
 import os
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import pytest
 import pytest_asyncio
 from database.provider import get_async_engine

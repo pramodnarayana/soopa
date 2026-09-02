@@ -1,6 +1,10 @@
 import os
 from collections.abc import AsyncGenerator
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import pytest
 from database.provider import get_async_engine
 from database.router import DatabaseRouterPort
