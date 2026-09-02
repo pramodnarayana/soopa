@@ -38,14 +38,7 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
         await engine.dispose()
 
     if not urls:
-        settings = get_settings()
-        if settings.database.default_shard_url:
-            logger.info("No shards found in Global DB. Falling back to default_shard_url from env.")
-            urls = [settings.database.default_shard_url]
-        else:
-            logger.info(
-                "No shards found in Global DB and no default_shard_url configured. Skipping tenant migrations."
-            )
+        logger.info("No shards found in Global DB. Skipping tenant migrations.")
     return urls
 
 

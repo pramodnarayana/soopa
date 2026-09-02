@@ -8,19 +8,8 @@ import pytest
 from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
 from edi.config.settings import AppSettings
-from sqlalchemy.engine.url import make_url
 
-raw_global_url = os.getenv(
-    "DATABASE_URL", "postgresql://ucp_admin:ucp_password@localhost:5432/ucp_global"
-)
-parsed_global_url = make_url(raw_global_url).set(drivername="postgresql+asyncpg")
-GLOBAL_DB_URL = os.getenv("DB_GLOBAL_URL", parsed_global_url.render_as_string(hide_password=False))
-
-raw_shard_1_url = os.getenv(
-    "SHARD_1_URL", "postgresql://edi:edi_password@localhost:5433/edi_shard_1"
-)
-parsed_shard_1_url = make_url(raw_shard_1_url).set(drivername="postgresql+asyncpg")
-SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hide_password=False))
+GLOBAL_DB_URL = os.environ["DATABASE_URL"]
 
 
 def test_validate_target_url(monkeypatch: MagicMock) -> None:

@@ -1,8 +1,15 @@
+import asyncio
 import os
+from typing import Any
 
+import pytest
+import pytest_asyncio
+from database.provider import get_async_engine
+from database.testing import get_test_shard_url_async
 from fastapi import Depends
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
@@ -22,19 +29,6 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from edi.module import create_edi_app
 
-os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
-os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-)
-import asyncio
-from typing import Any
-
-import pytest
-import pytest_asyncio
-from database.provider import get_async_engine
-from sqlalchemy import text
-
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -46,12 +40,7 @@ def event_loop():
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
     """Create an async SQLAlchemy engine pointing to the test database."""
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()
@@ -70,12 +59,9 @@ async def db_connection(db_engine):
 @pytest_asyncio.fixture(scope="function")
 async def tenant_db_engine():
     """Create an async SQLAlchemy engine pointing to the tenant shard test database."""
-    db_url = os.getenv(
-        "SHARD_1_URL", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
 
+    global_url = os.environ["DATABASE_URL"]
+    db_url = await get_test_shard_url_async(global_url)
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()

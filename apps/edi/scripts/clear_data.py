@@ -9,16 +9,11 @@ from database.provider import get_async_engine
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
-# Configure enterprise-grade logging
-
 logger = structlog.get_logger("ClearData")
 
-DB_URLS = [
-    os.environ.get("DB_URL", "postgresql+asyncpg://edi:edi_password@localhost:5432/edi_global"),
-    os.environ.get(
-        "DB_URL_SHARD_1", "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
-    ),
-]
+from database.router import DatabaseRouter
+
+global_url = os.environ["DATABASE_URL"]
 
 TABLES_TO_CLEAR = ["edi_messages", "edi_json", "api_gateway", "outbox", "processed_events"]
 
@@ -107,13 +102,19 @@ async def main(i_am_sure: bool) -> None:
             "Pass --i-am-sure to confirm you understand and accept this consequence."
         )
 
+    router = DatabaseRouter(global_db_url=global_url)
+    shards = await router.get_all_shards()
+    await router.close_all()
+
+    db_urls = [global_url] + [shard[1] for shard in shards]
+
     # Validate all targets are local before touching anything.
-    for db_url in DB_URLS:
+    for db_url in db_urls:
         _assert_local_db_url(db_url)
     aws_endpoint = _assert_local_aws_endpoint()
 
     logger.info("=== STARTING DATA CLEAR PROCEDURE ===")
-    for db_url in DB_URLS:
+    for db_url in db_urls:
         await clear_database(db_url)
     purge_sqs(aws_endpoint)
     logger.info("=== DATA CLEAR PROCEDURE COMPLETED ===")
