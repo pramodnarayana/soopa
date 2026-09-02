@@ -7,16 +7,15 @@ from database.router import DatabaseRouter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 # We use the local test databases spun up by docker-compose, but allow overrides.
 # Since Node.js and Python share the DATABASE_URL environment variable,
 # we safely mutate the dialect to asyncpg for Python using SQLAlchemy's URL parser.
-GLOBAL_DB_URL = os.environ["DATABASE_URL"]
-
-
 @pytest.fixture
 async def router() -> AsyncGenerator[DatabaseRouter, None]:
     # Setup
-    db_router = DatabaseRouter(GLOBAL_DB_URL, pool_size=2, max_overflow=2)
+    global_db_url = os.environ["DATABASE_URL"]
+    db_router = DatabaseRouter(global_db_url, pool_size=2, max_overflow=2)
     yield db_router
     # Teardown
     await db_router.close_all()

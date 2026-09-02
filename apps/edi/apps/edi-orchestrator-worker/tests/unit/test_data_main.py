@@ -9,8 +9,6 @@ from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
 from edi.config.settings import AppSettings
 
-GLOBAL_DB_URL = os.environ["DATABASE_URL"]
-
 
 def test_validate_target_url(monkeypatch: MagicMock) -> None:
 
@@ -41,6 +39,7 @@ def test_validate_target_url(monkeypatch: MagicMock) -> None:
 
 @pytest.fixture
 async def router() -> "AsyncGenerator[DatabaseRouter, None]":
-    db_router = DatabaseRouter(GLOBAL_DB_URL, pool_size=2, max_overflow=2)
+    global_db_url = os.environ["DATABASE_URL"]
+    db_router = DatabaseRouter(global_db_url, pool_size=2, max_overflow=2)
     yield db_router
     await db_router.close_all()
