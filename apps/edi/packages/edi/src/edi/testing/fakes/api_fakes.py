@@ -387,42 +387,25 @@ class FakeGlobalStore:
         return False
 
     async def get_partnership_by_as2_ids(self, as2_from: str, as2_to: str) -> Any:
-        local_partner = next(
-            (
-                partner
-                for partner in self.partners.values()
-                if isinstance(partner, AS2PartnerDomainModel)
-                and partner.as2_id.lower() == as2_to.lower()
-                and partner.active
-            ),
-            None,
-        )
-        remote_partner = next(
-            (
-                partner
-                for partner in self.partners.values()
-                if isinstance(partner, AS2PartnerDomainModel)
-                and partner.as2_id.lower() == as2_from.lower()
-                and partner.active
-            ),
-            None,
-        )
-        if not local_partner or not remote_partner:
-            return None
-
-        partnership = next(
-            (
-                partnership
-                for partnership in self.partnerships.values()
-                if partnership.local_partner_id == local_partner.id
-                and partnership.remote_partner_id == remote_partner.id
+        matches = []
+        for partnership in self.partnerships.values():
+            local_partner = self.partners.get(partnership.local_partner_id)
+            remote_partner = self.partners.get(partnership.remote_partner_id)
+            if (
+                isinstance(local_partner, AS2PartnerDomainModel)
+                and isinstance(remote_partner, AS2PartnerDomainModel)
                 and partnership.active
-            ),
-            None,
-        )
-        if not partnership:
+                and local_partner.active
+                and remote_partner.active
+                and local_partner.as2_id.lower() == as2_to.lower()
+                and remote_partner.as2_id.lower() == as2_from.lower()
+                and partnership.tenant_id == local_partner.tenant_id == remote_partner.tenant_id
+            ):
+                matches.append((partnership, local_partner, remote_partner))
+
+        if len(matches) != 1:
             return None
-        return partnership, local_partner, remote_partner
+        return matches[0]
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         for r in self.inbound_routes.values():

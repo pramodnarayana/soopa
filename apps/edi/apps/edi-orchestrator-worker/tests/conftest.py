@@ -27,6 +27,8 @@ async def db_router() -> "AsyncGenerator[DatabaseRouterPort, None]":
 
     global_conn = None
     shard_conn = None
+    global_trans = None
+    shard_trans = None
     try:
         global_conn = await global_engine.connect()
         global_trans = await global_conn.begin()
@@ -43,12 +45,14 @@ async def db_router() -> "AsyncGenerator[DatabaseRouterPort, None]":
 
         yield test_router
     finally:
-        if global_conn:
+        if global_trans is not None:
             await global_trans.rollback()
+        if global_conn is not None:
             await global_conn.close()
         await global_engine.dispose()
 
-        if shard_conn:
+        if shard_trans is not None:
             await shard_trans.rollback()
+        if shard_conn is not None:
             await shard_conn.close()
         await shard_engine.dispose()

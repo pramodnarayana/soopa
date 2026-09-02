@@ -215,3 +215,4 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert uow.repository.api_gateway[trace_id]["status"] == MessageStatus.FAILED
     assert len(http_adapter.delivered) == 1
+    assert uow.committed is True

@@ -19,11 +19,13 @@ from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainMod
 from edi.testing.fakes.api_fakes import FakeGlobalStore
 
 
-def make_as2_partner(partner_id: str, as2_id: str) -> AS2PartnerDomainModel:
+def make_as2_partner(
+    partner_id: str, as2_id: str, tenant_id: str = "tenant-1"
+) -> AS2PartnerDomainModel:
     now = datetime.now(UTC)
     return AS2PartnerDomainModel(
         id=partner_id,
-        tenant_id="tenant-1",
+        tenant_id=tenant_id,
         as2_id=as2_id,
         name=as2_id,
         is_local=as2_id == "LOCAL",
@@ -122,6 +124,32 @@ async def test_get_partnership_by_as2_ids_resolves_partners_and_partnership():
     result = await store.get_partnership_by_as2_ids("remote", "local")
 
     assert result == (partnership, local, remote)
+
+
+@pytest.mark.asyncio
+async def test_get_partnership_by_as2_ids_rejects_cross_tenant_partners():
+    store = FakeGlobalStore()
+    local = make_as2_partner("local-id", "LOCAL", tenant_id="tenant-1")
+    remote = make_as2_partner("remote-id", "REMOTE", tenant_id="tenant-2")
+    now = datetime.now(UTC)
+    partnership = AS2PartnershipDomainModel(
+        id="partnership-id",
+        tenant_id="tenant-1",
+        name="partnership",
+        local_partner_id=local.id,
+        remote_partner_id=remote.id,
+        mdn_type="SYNC",
+        encryption_algorithm="AES256",
+        signature_algorithm="SHA256",
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    await store.save(local)
+    await store.save(remote)
+    await store.save(partnership)
+
+    assert await store.get_partnership_by_as2_ids("remote", "local") is None
 
 
 class FakeFieldEncryption:

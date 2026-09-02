@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import boto3
@@ -23,7 +23,7 @@ def event_loop() -> AsyncGenerator[asyncio.AbstractEventLoop]:
 
 
 @pytest.fixture(scope="session")
-def localstack_container() -> dict[str, str]:
+def localstack_container() -> Generator[dict[str, str]]:
     endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
     sqs_client = boto3.client(
@@ -42,11 +42,13 @@ def localstack_container() -> dict[str, str]:
         Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
     )
 
-    return {
+    yield {
         "endpoint_url": endpoint_url,
         "sqs_queue_url": queue["QueueUrl"],
         "sqs_queue_name": queue_name,
     }
+
+    sqs_client.delete_queue(QueueUrl=queue["QueueUrl"])
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -85,7 +87,10 @@ async def db_session_factory(db_connection) -> AsyncGenerator[async_sessionmaker
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_scheduler_worker_claims_and_dispatches_job(
-    db_connection: Any, db_session_factory: async_sessionmaker, localstack_container: dict[str, str]
+    db_connection: Any,
+    db_session_factory: async_sessionmaker,
+    localstack_container: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # 1. Setup DB Data (A pending job)
     job_id = f"job_{generate_random_hex(6)}"
@@ -107,9 +112,9 @@ async def test_scheduler_worker_claims_and_dispatches_job(
     await db_connection.execute(text("SAVEPOINT seed_complete"))
 
     # 2. Setup Container
-    os.environ["AWS_ENDPOINT_URL"] = localstack_container["endpoint_url"]
-    os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["SQS_DATA_PLANE_JOBS_QUEUE_URL"] = localstack_container["sqs_queue_url"]
+    monkeypatch.setenv("AWS_ENDPOINT_URL", localstack_container["endpoint_url"])
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("SQS_DATA_PLANE_JOBS_QUEUE_URL", localstack_container["sqs_queue_url"])
 
     container = Container()
     container.session_factory.override(db_session_factory)

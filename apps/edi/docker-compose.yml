@@ -37,6 +37,8 @@ services:
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
     - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
     - AWS_REGION=${AWS_REGION:-us-east-1}
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
     - AWS_SNS_TOPIC_ARN=${AWS_SNS_TOPIC_ARN:?AWS_SNS_TOPIC_ARN is required}
     extra_hosts:
     - host.docker.internal:host-gateway

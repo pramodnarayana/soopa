@@ -1,9 +1,11 @@
 import asyncio
+import contextlib
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
 import pytest_asyncio
+from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 from seedwork import generate_random_hex
@@ -86,13 +88,9 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     db_session_factory: async_sessionmaker,
 ) -> None:
     # 1. Wire the Use Case Factory
-    from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
-
     transformer = MockTransformerAdapter()
 
     async def fake_use_case_factory(tenant_id: str):
-        import contextlib
-
         @contextlib.asynccontextmanager
         async def fake_uow_factory():
             yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=db_session_factory())

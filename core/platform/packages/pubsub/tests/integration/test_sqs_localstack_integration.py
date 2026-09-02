@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 
 import boto3
 import pytest
+from database.events import EventEnvelope
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 from pubsub.message import AckableMessage
@@ -49,14 +50,16 @@ def localstack_sqs() -> dict[str, str]:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_sqs_pubsub_integration_via_localstack(localstack_sqs: dict[str, str]) -> None:
+async def test_sqs_pubsub_integration_via_localstack(
+    localstack_sqs: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     queue_url = localstack_sqs["sqs_queue_url"]
     endpoint_url = localstack_sqs["endpoint_url"]
 
     # Configure boto3 environment for aioboto3 used internally by the adapters
-    os.environ["AWS_ACCESS_KEY_ID"] = "test"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "test"  # noqa: S105
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
     publisher = AwsSqsPublisher(
         queue_url=queue_url,
@@ -69,8 +72,6 @@ async def test_sqs_pubsub_integration_via_localstack(localstack_sqs: dict[str, s
         region_name="us-east-1",
         endpoint_url=endpoint_url,
     )
-
-    from database.events import EventEnvelope
 
     # 1. Publish a message
     test_event_id = f"evt_{generate_random_hex(6)}"

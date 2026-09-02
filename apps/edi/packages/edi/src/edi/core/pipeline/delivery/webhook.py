@@ -71,6 +71,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id, MessageStatus.FAILED, webhook_url=partner.get("url"), response=str(e)
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
+            await self.uow.commit()
             logger.exception("Webhook delivery failed for trace_id={trace_id}", trace_id=trace_id)
             raise RuntimeError(f"Webhook delivery failed: {e}") from e
 
@@ -99,6 +100,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 response=response_text,
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
+            await self.uow.commit()
             logger.error(
                 "Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}",
                 trace_id=trace_id,

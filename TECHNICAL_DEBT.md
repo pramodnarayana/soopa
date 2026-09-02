@@ -404,7 +404,7 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Date Added**: 2026-09-02
 - **Status**: TO DO
 - **Description**: In `apps/edi/packages/edi/src/edi/core/patches/cryptography.py`, a runtime `object.__setattr__` is used with a magic string `"set_content_encryption_algorithm"` to monkey-patch legacy 3DES support for the native Rust backend without breaking `mypy`'s strict type checking.
-- **Action Item**: Refactor the design by completely forking/vendoring the required functionality from the `cryptography` library into our own codebase (taking it as a first reference and building our own native implementation). We will completely own this code and never upgrade from the external library upstream. This eradicates the need for monkey-patching or Adapter patterns, allowing us to natively support 3DES with strict enterprise type safety.
+- **Action Item**: Before adopting a fork or vendored implementation from the `cryptography` library, establish an upstream security-update process that tracks upstream advisories, backports every applicable security fix, and tests each internal release. Define a time-bounded scope and removal plan for 3DES compatibility so the fork remains temporary and can continue to benefit from upstream security improvements.
 
 ## [Code Quality] Eradicate Inline Imports
 

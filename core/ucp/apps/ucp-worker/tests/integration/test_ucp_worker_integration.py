@@ -94,16 +94,18 @@ async def test_ucp_worker_handles_tenant_deleted_event(
     }
 
     # 4. Dispatch directly to bypass SQS connection polling and threading issues in tests
-    await container.events_dispatcher.dispatch_raw(payload)
+    try:
+        await container.events_dispatcher.dispatch_raw(payload)
 
-    # 5. Verify Soft Deletion
-    async with db_session_factory() as session:
-        res = await session.execute(
-            text("SELECT deleted_at FROM identity.roles WHERE id = :role_id"), {"role_id": role_id}
-        )
-        deleted_at = res.scalar_one_or_none()
-
-    await container.dispose()
+        # 5. Verify Soft Deletion
+        async with db_session_factory() as session:
+            res = await session.execute(
+                text("SELECT deleted_at FROM identity.roles WHERE id = :role_id"),
+                {"role_id": role_id},
+            )
+            deleted_at = res.scalar_one_or_none()
+    finally:
+        await container.dispose()
 
     assert deleted_at is not None, "Tenant infrastructure (role) was not soft-deleted by the worker"
     print("\n\n>>> TEST FINISHED <<<\n\n")

@@ -157,7 +157,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             record_kwargs["tenant_id"] = tenant_id
 
         if "id" not in record_kwargs:
-            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}{generate_random_hex(6)}"
+            record_kwargs["id"] = f"{EDI_MESSAGE_ID_PREFIX}_{generate_random_hex(6)}"
 
         record = EdiMessage(**record_kwargs)
         self.session.add(record)

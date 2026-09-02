@@ -1,11 +1,17 @@
 import contextlib
 from collections.abc import Callable
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.data_plane_unit_of_work import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
+from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
+    DispatchInboundTransformUseCase,
+)
+from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.events import PipelineEventType
 from seedwork import generate_random_hex
 from sqlalchemy import text
@@ -45,8 +51,6 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
 
     # 2. Setup Registries and Dispatchers
     registry = EdiDataPlaneRouteRegistry()
-    from unittest.mock import MagicMock
-
     settings = MagicMock()
     settings.storage.bucket = "test-bucket"
     settings.storage.endpoint_url = "http://localhost:4566"
@@ -65,10 +69,6 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
             break
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
-        from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
-            DispatchInboundTransformUseCase,
-        )
-
         async with uow_fact() as uow:
             await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
 
@@ -172,10 +172,6 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
 
     # 2. Setup Delivery Router Use Case inside Orchestrator
     registry = EdiDataPlaneRouteRegistry()
-    from unittest.mock import AsyncMock, MagicMock
-
-    from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-
     settings = MagicMock()
     mock_http_delivery = AsyncMock()
     mock_http_delivery.deliver.return_value = (200, "OK")
@@ -192,10 +188,6 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
             break
 
     async def run_delivery(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
-        from edi.application.use_cases.pipeline.delivery_router_use_case import (
-            DeliveryRouterUseCase,
-        )
-
         async with uow_fact() as uow:
             strategies = {"webhook_id": WebhookDeliveryStrategy(uow, mock_http_delivery)}
             await DeliveryRouterUseCase(uow, strategies).deliver(e.trace_id)

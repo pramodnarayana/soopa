@@ -74,5 +74,6 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         except Exception as e:
             await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
+            await self.uow.commit()
             logger.exception("SFTP delivery failed for trace_id={trace_id}", trace_id=trace_id)
             raise RuntimeError(f"SFTP delivery failed: {e}") from e

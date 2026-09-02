@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -51,6 +52,7 @@ class MockOutboxRepository(OutboxRepositoryPort):
                     status=OutboxStatus.PROCESSING.value,
                     updated_at=func.now(),
                     owner_token=worker_id,
+                    lease_expires_at=datetime.now(UTC) + timedelta(milliseconds=lock_lease_ms),
                 )
                 .returning(DataPlaneOutbox)
             )
@@ -92,7 +94,27 @@ class MockOutboxRepository(OutboxRepositoryPort):
             await session.commit()
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
-        pass
+        async with self.session_factory() as session:
+            stmt = (
+                update(DataPlaneOutbox)
+                .where(
+                    and_(
+                        DataPlaneOutbox.id == event_id,
+                        DataPlaneOutbox.status == OutboxStatus.PROCESSING.value,
+                        DataPlaneOutbox.owner_token == worker_id,
+                    )
+                )
+                .values(
+                    status=OutboxStatus.PENDING.value,
+                    attempts=DataPlaneOutbox.attempts + 1,
+                    error_reason=error_message,
+                    lease_expires_at=None,
+                    owner_token=None,
+                    updated_at=func.now(),
+                )
+            )
+            await session.execute(stmt)
+            await session.commit()
 
 
 @pytest.mark.asyncio
@@ -147,7 +169,7 @@ async def test_e2e_unified_api_to_outbox_sweeper(
 
     # 3. Worker Processing (EDI Background Worker simulation)
     mock_publisher = AsyncMock()
-    mock_publisher.publish_batch = AsyncMock(side_effect=lambda events: [e.id for e in events])
+    mock_publisher.publish_batch = AsyncMock(side_effect=[[], [outbox_event.id]])
 
     outbox_repo = MockOutboxRepository(session_factory=db_session_factory)
     sweeper_use_case = OutboxSweeperUseCase(repository=outbox_repo, publisher=mock_publisher)
@@ -164,5 +186,6 @@ async def test_e2e_unified_api_to_outbox_sweeper(
 
         assert updated_event is not None
         assert updated_event.status == OutboxStatus.PROCESSED.value
+        assert updated_event.attempts == 1
 
-    mock_publisher.publish_batch.assert_called_once()
+    assert mock_publisher.publish_batch.await_count == 2
