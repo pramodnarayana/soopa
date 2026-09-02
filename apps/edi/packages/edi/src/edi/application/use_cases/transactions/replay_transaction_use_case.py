@@ -1,6 +1,9 @@
 from seedwork import generate_random_hex
 
+from edi.domain.events import TransactionReplayRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 
@@ -18,8 +21,6 @@ class ReplayTransactionUseCase:
         if not result or not result.edi_message:
             raise TransactionNotFoundError(trace_id=trace_id)
 
-        from edi.domain.events import TransactionReplayRequestedEvent
-
         replay_event = TransactionReplayRequestedEvent(
             trace_id=trace_id,
             tenant_id=tenant_id,
@@ -36,9 +37,6 @@ class ReplayTransactionUseCase:
             edi_message.add_domain_event(replay_event)
             await self.uow.transactions.save(edi_message)
         else:
-            from edi.domain.models.base import Direction, RecordStatus
-            from edi.domain.models.transactions import EdiJsonDomainModel
-
             edi_json = EdiJsonDomainModel(
                 id="dummy",
                 tenant_id=tenant_id,

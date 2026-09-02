@@ -1,3 +1,5 @@
+import contextlib
+
 """
 HTTPX-based adapter for outbound AS2 delivery.
 Implements AS2DeliveryPort using an async HTTP client.
@@ -43,8 +45,6 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
             httpx.TimeoutException: If the connection or read times out.
         """
         logger.debug("AS2 HTTP POST → {url}, Content-Length={len(body)}", url=url, val_1=len(body))
-
-        import contextlib
 
         ctx = self.validator(url) if self.validator else contextlib.nullcontext()
 

@@ -1,3 +1,8 @@
+from database.provider import DatabaseProvider
+from dependency_injector import providers
+from starlette.routing import Mount
+from ucp.bootstrap.config import get_settings
+
 """
 Shell Application Lifespan.
 
@@ -51,7 +56,6 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # The Shell created edi_app and passed it to app.mount("/", edi_app).
     # We locate it here to pass to the EDI startup hook so it can attach
     # db_router to the correct app.state object.
-    from starlette.routing import Mount
 
     edi_app = next(
         (route.app for route in app.routes if isinstance(route, Mount) and route.path == ""),
@@ -63,16 +67,11 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
 
-    from database.provider import DatabaseProvider
-    from dependency_injector import providers
-    from ucp.bootstrap.config import get_settings
-
-    from unified_api.main import ucp_container
-
     settings = get_settings()
     db_provider = DatabaseProvider.from_url(settings.database_url)
     app.state.db_provider = db_provider
     edi_app.state.db_provider = db_provider
+    ucp_container = app.state.ucp_container
     ucp_container.db_provider.override(providers.Object(db_provider))
 
     # Nested try/finally blocks ensure cleanup runs in reverse order

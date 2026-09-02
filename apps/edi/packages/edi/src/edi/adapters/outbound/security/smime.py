@@ -1,3 +1,15 @@
+import contextlib
+import io
+import warnings
+from typing import cast
+
+import endesive.verifier
+from asn1crypto import cms, pem
+from asn1crypto import x509 as asn1_x509
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.ciphers import Cipher, modes
+from cryptography.utils import CryptographyDeprecationWarning
+
 """
 S/MIME cryptographic operations for AS2.
 Handles encryption, decryption, signing, and signature verification.
@@ -6,11 +18,10 @@ All operations are fully native (cryptography.hazmat) and in-memory.
 No private keys or payloads are ever written to disk.
 """
 
-import contextlib
 import email
 import re
 from email import policy
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from cryptography import x509
@@ -24,7 +35,6 @@ logger = structlog.get_logger(__name__)
 
 
 def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
-    from asn1crypto import cms, pem
 
     # 1. Try raw bytes (BER/DER)
     with contextlib.suppress(Exception):
@@ -55,8 +65,6 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes
     Bypasses cryptography's strict Rust PKCS7 parser entirely by manually
     extracting the symmetric key and decrypting the payload using raw primitives.
     """
-    from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.hazmat.primitives.ciphers import Cipher, modes
 
     try:
         content_info = _parse_asn1_content_info(encrypted_data)
@@ -166,8 +174,6 @@ def sign_payload(
     hash_alg = alg_map[alg_key]
 
     builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
-
-    from cryptography.hazmat.primitives.asymmetric import rsa
 
     # Assert structural type for mypy using the expected RSA private key
     # We also cast hash_alg to SHA256 because cryptography's type stub artificially
@@ -287,13 +293,11 @@ def _inject_certificate_into_cms(binary_sig: bytes, cert_bytes: bytes) -> bytes:
     This guarantees verification succeeds even if the sender omitted their cert.
     """
     try:
-        from asn1crypto import cms, pem, x509
-
         content_info = cms.ContentInfo.load(binary_sig)
         signed_data_cms = content_info["content"]
 
         c_bytes = cert_bytes if b"BEGIN" not in cert_bytes else pem.unarmor(cert_bytes)[2]
-        parsed_cert = x509.Certificate.load(c_bytes)
+        parsed_cert = asn1_x509.Certificate.load(c_bytes)
         choice = cms.CertificateChoices(name="certificate", value=parsed_cert)
 
         if not signed_data_cms["certificates"]:
@@ -306,8 +310,6 @@ def _inject_certificate_into_cms(binary_sig: bytes, cert_bytes: bytes) -> bytes:
             ]
             if parsed_cert.serial_number not in existing_serials:
                 signed_data_cms["certificates"].append(choice)
-
-        from typing import cast
 
         return cast(bytes, content_info.dump())
     except Exception as e:  # noqa: BLE001
@@ -322,12 +324,6 @@ def _execute_endesive_verification(
     Executes the actual cryptographic verification using endesive.
     Safely captures stdout to suppress CA error noise and catches deprecation warnings.
     """
-    import contextlib
-    import io
-    import warnings
-
-    import endesive.verifier
-    from cryptography.utils import CryptographyDeprecationWarning
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=CryptographyDeprecationWarning)

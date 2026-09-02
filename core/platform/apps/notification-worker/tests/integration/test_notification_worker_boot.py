@@ -1,6 +1,7 @@
 import asyncio
 import os
 
+import boto3
 import pytest
 
 from notification_worker.bootstrap.container import WorkerContainer
@@ -14,7 +15,6 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
     can successfully wire its real infrastructure dependencies (Postgres, SQS, SNS)
     and then shut them down gracefully.
     """
-    import boto3
 
     # Ensure queues exist in LocalStack for the test
     sqs = boto3.client(

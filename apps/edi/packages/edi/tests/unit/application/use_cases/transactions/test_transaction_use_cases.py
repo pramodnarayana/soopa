@@ -1,3 +1,9 @@
+import uuid
+from datetime import UTC, datetime
+
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiMessageDomainModel
+
 """
 Layer 2 — Application Use Case Tests: Transaction use cases.
 
@@ -51,13 +57,10 @@ class FakeEdiMessage:
 
     def __post_init__(self):
         if self.created_at is None:
-            from datetime import UTC, datetime
-
             self.created_at = datetime.now(UTC)
 
     @property
     def id(self):
-        import uuid
 
         return uuid.uuid5(uuid.NAMESPACE_DNS, self.trace_id)
 
@@ -86,8 +89,6 @@ class FakeTransactionSummary:
 
     def __post_init__(self):
         if self.received_at is None:
-            from datetime import UTC, datetime
-
             self.received_at = datetime.now(UTC)
 
 
@@ -142,13 +143,17 @@ class FakeTransactionRepository:
         return key
 
     async def get_edi_message(self, trace_id: str) -> Any:
-        from edi.domain.models.base import Direction, RecordStatus
-        from edi.domain.models.transactions import EdiMessageDomainModel
+
+        tenant_id = "tenant"
+        for key in self._transactions:
+            if key.endswith(f":{trace_id}"):
+                tenant_id = key.split(":")[0]
+                break
 
         # Mock returning an aggregate
         return EdiMessageDomainModel(
             id="fake_id",
-            tenant_id="tenant",
+            tenant_id=tenant_id,
             trace_id=trace_id,
             direction=Direction.INBOUND,
             status=RecordStatus.SUCCESS,

@@ -1,3 +1,13 @@
+import os
+from email.message import EmailMessage
+
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+
+from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.events import TransformRequestedEvent
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiMessageDomainModel
+
 """
 As2ReceiverService — Application Use Case for inbound AS2 message processing.
 
@@ -19,7 +29,8 @@ from typing import Any, cast
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dto import ProcessInboundAs2Command
 from edi.domain.constants import EdiConnectionType, TransactionDirection, TransactionStatus
@@ -345,8 +356,6 @@ class ProcessInboundAs2MessageUseCase:
 
         parsed_msg = email.message_from_bytes(final_payload_bytes, policy=policy.HTTP)
         if "content-type" in parsed_msg:
-            from email.message import EmailMessage
-
             email_msg = cast(EmailMessage, parsed_msg)
             decoded_payload = email_msg.get_payload(decode=True)
             if decoded_payload is not None and isinstance(decoded_payload, bytes):
@@ -395,8 +404,6 @@ class ProcessInboundAs2MessageUseCase:
         if not true_tenant_id and partnership.tenant_id is not None:
             true_tenant_id = str(partnership.tenant_id)
 
-        from identity.domain.identity_context import PLATFORM_TENANT_ID
-
         if not true_tenant_id or true_tenant_id == PLATFORM_TENANT_ID:
             logger.error(
                 "as2_tenant_resolution_failed",
@@ -430,13 +437,6 @@ class ProcessInboundAs2MessageUseCase:
 
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
-            import os
-
-            from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
-            from edi.domain.events import TransformRequestedEvent
-            from edi.domain.models.base import Direction, RecordStatus
-            from edi.domain.models.transactions import EdiMessageDomainModel
-
             edi_message_aggregate = EdiMessageDomainModel(
                 id=f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}",
                 tenant_id=true_tenant_id,

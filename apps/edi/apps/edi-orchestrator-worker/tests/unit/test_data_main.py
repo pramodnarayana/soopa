@@ -3,9 +3,11 @@ from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import edi.adapters.outbound.security.network
 import pytest
 from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
+from edi.config.settings import AppSettings
 from sqlalchemy.engine.url import make_url
 
 raw_global_url = os.getenv(
@@ -22,8 +24,6 @@ SHARD_1_URL = os.getenv("DB_SHARD_1_URL", parsed_shard_1_url.render_as_string(hi
 
 
 def test_validate_target_url(monkeypatch: MagicMock) -> None:
-    import edi.adapters.outbound.security.network
-    from edi.config.settings import AppSettings
 
     mock_settings = MagicMock(spec=AppSettings)
     mock_settings.env = "production"

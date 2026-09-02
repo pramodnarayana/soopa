@@ -1,3 +1,5 @@
+from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+
 """
 Unit tests for the OutboundTransformUseCase.
 Uses Fake Data Plane Unit Of Work and Fake Transformer.
@@ -34,8 +36,6 @@ def make_use_case(
     transformer: FakeTransformerAdapter | None = None,
     settings: FakeSettings | None = None,
 ) -> DispatchOutboundTransformUseCase:
-
-    from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
     u = uow or FakeDataPlaneUnitOfWork()
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, u)

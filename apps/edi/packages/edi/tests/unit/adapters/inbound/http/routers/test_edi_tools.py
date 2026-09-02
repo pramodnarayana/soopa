@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -54,7 +56,6 @@ def test_transform_json_to_edi_valid(client: TestClient):
         "/api/v1/edi-tools/transform",
         json={"action": "EDI_TO_JSON", "payload": SAMPLE_X12.decode("utf-8")},
     )
-    import json
 
     ast_envelope = json.loads(res.json()["result"])
     ast_json = json.dumps(ast_envelope["data"])

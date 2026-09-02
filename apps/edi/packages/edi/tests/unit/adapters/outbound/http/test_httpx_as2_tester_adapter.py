@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -13,7 +14,6 @@ def adapter():
 
 @pytest.fixture(autouse=True)
 def mock_ssrf():
-    from contextlib import contextmanager
 
     @contextmanager
     def mock_ssrf_context(url):

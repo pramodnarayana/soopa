@@ -1,9 +1,12 @@
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any, TypeVar
 
+from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dto import (
     UNSET,
@@ -18,6 +21,7 @@ from edi.application.dto import (
     UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
+from edi.domain.exceptions import IdempotencyConflictError, PartnerAlreadyExistsError
 from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
@@ -59,9 +63,6 @@ class FakeGlobalStore:
         return route if route and route.tenant_id == tenant_id else None
 
     async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
-        from datetime import UTC, datetime
-
-        from edi.domain.exceptions import PartnerAlreadyExistsError
 
         for p in self.partners.values():
             if (
@@ -101,7 +102,6 @@ class FakeGlobalStore:
             del self.partners[partner_id]
 
     async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
-        from datetime import UTC, datetime
 
         partner_id = generate_id(SystemIdPrefix.GENERIC)
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -332,8 +332,6 @@ class FakeGlobalStore:
                     and existing.tenant_id == aggregate.tenant_id
                     and existing.as2_id == aggregate.as2_id
                 ):
-                    from edi.domain.exceptions import PartnerAlreadyExistsError
-
                     raise PartnerAlreadyExistsError(
                         as2_id=aggregate.as2_id,
                         tenant_id=aggregate.tenant_id or PLATFORM_TENANT_ID,
@@ -376,6 +374,18 @@ class FakeGlobalStore:
             self.outbound_routes.pop(aggregate.id, None)
         elif isinstance(aggregate, OutboundEdiHeaderDomainModel):
             self._edi_headers.pop(aggregate.id, None)
+
+        for event in aggregate.domain_events:
+            self.outbox_events.append(
+                {
+                    "tenant_id": event.get_routing_tenant_id()
+                    or getattr(aggregate, "tenant_id", None),
+                    "event_type": event.event_name,
+                    "payload": serialize_domain_event(event),
+                    "idempotency_key": event.idempotency_key,
+                }
+            )
+        aggregate.clear_domain_events()
 
     async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
         for p in self.partners.values():
@@ -434,9 +444,6 @@ class FakeGlobalStore:
     async def create_reservation(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
     ) -> None:
-        from database.exceptions import DuplicateEntityError
-
-        from edi.domain.exceptions import IdempotencyConflictError
 
         if any(e.get("idempotency_key") == idempotency_key for e in self.outbox_events):
             raise IdempotencyConflictError() from DuplicateEntityError(

@@ -1,3 +1,8 @@
+from sqlalchemy import select
+from ucp_models.infrastructure import DatabaseShard
+
+from database.models.identity import Tenant
+
 """
 FastAPI dependency for injecting an async SQLAlchemy session.
 """
@@ -41,10 +46,6 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
     # Resolve Host Company (Tenant 0) dynamically from the Global DB
-    from sqlalchemy import select
-    from ucp_models.infrastructure import DatabaseShard
-
-    from database.models.identity import Tenant
 
     global_gen = db_router.get_global_session()
     global_session = await global_gen.__anext__()

@@ -409,6 +409,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 ## [Code Quality] Eradicate Inline Imports
 
 - **Date Added**: 2026-09-02
-- **Status**: TO DO
-- **Description**: There are lazy inline imports scattered inside functions (e.g., `make_use_case` and `test_delivery_service_outbound_sftp` in `tests/unit/application/use_cases/pipeline/test_delivery_service.py`). This violates PEP 8 and enterprise standards.
-- **Action Item**: Move all inline imports to the top of their respective files. Eliminate any lazy dependency loading unless strictly required for resolving an unavoidable circular dependency (which itself should be flagged for structural refactoring).
+- **Status**: DONE
+- **Description**: There were lazy inline imports scattered inside functions across the monorepo. This violated PEP 8 and enterprise standards.
+- **Resolution**: All inline imports were hoisted to module-level using an AST-based refactoring script. Three genuine circular dependencies exposed by the hoisting were structurally resolved:
+  1. **`seedwork` boot cycle** — 17 files importing from the `seedwork` package root (`seedwork.__init__`) inside modules transitively loaded during `seedwork.__init__` initialization. Fixed by redirecting to concrete submodule imports (`seedwork.constants`, `seedwork.utils`).
+  2. **`bots` parser cycle** — `outmessage.py` ↔ `parsers/__init__.py` ↔ `edifact.py`. Fixed by introducing `domain/parser_registry.py` (outside the `parsers` package) as a zero-dependency registry populated by `parsers/__init__.py` after concrete classes load.
+  3. **`lifespan.py` ↔ `main.py`** — `lifespan.py` imported `ucp_container` from `main.py` which imports `shell_lifespan` from `lifespan.py`. Fixed by reading `ucp_container` from `app.state` at runtime (already populated by `main.py` before the lifespan context runs).
+- **Verification**: `ruff check` passes with zero errors. 951 unit + integration tests pass.

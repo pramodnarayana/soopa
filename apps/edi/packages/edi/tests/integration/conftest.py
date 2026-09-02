@@ -1,6 +1,26 @@
 import os
 
+from fastapi import Depends
+from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+    get_current_tenant_id,
+    get_current_user_profile,
+    get_platform_user_profile,
+    require_platform_admin,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.database import (
+    get_data_plane_uow,
+    get_global_session,
+    get_tenant_session,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
+
+from edi.adapters.outbound.database.uow_adapter import (
+    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
+)
+from edi.module import create_edi_app
 
 os.environ["DB_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
@@ -14,7 +34,6 @@ import pytest
 import pytest_asyncio
 from database.provider import get_async_engine
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 @pytest.fixture(scope="session")
@@ -92,7 +111,6 @@ async def db_session(db_connection):
 
 @pytest_asyncio.fixture(scope="function")
 async def override_get_global_session(db_connection):
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
         bind=db_connection,
@@ -111,7 +129,6 @@ async def override_get_global_session(db_connection):
 
 @pytest_asyncio.fixture(scope="function")
 async def override_get_tenant_session(tenant_db_connection):
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     SessionLocal = async_sessionmaker(
         bind=tenant_db_connection,
@@ -120,8 +137,6 @@ async def override_get_tenant_session(tenant_db_connection):
         info={"session_type": "tenant"},
         join_transaction_mode="create_savepoint",
     )
-    from fastapi import Depends
-    from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 
     async def _override(tenant_id: str = Depends(get_current_tenant_id)):
         async with SessionLocal() as session:
@@ -158,24 +173,6 @@ def override_get_secret_store():
 async def client(
     override_get_global_session, override_get_tenant_session, override_get_secret_store
 ):
-    from httpx import ASGITransport, AsyncClient
-    from unified_api.adapters.inbound.http.dependencies.edi.auth import (
-        get_current_tenant_id,
-        get_current_user_profile,
-        get_platform_user_profile,
-        require_platform_admin,
-    )
-    from unified_api.adapters.inbound.http.dependencies.edi.database import (
-        get_data_plane_uow,
-        get_global_session,
-        get_tenant_session,
-    )
-    from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
-
-    from edi.adapters.outbound.database.uow_adapter import (
-        SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-    )
-    from edi.module import create_edi_app
 
     app = create_edi_app()
 
@@ -219,19 +216,6 @@ async def client(
 async def platform_client(
     override_get_global_session, override_get_tenant_session, override_get_secret_store
 ):
-    from httpx import ASGITransport, AsyncClient
-    from unified_api.adapters.inbound.http.dependencies.edi.auth import (
-        get_current_tenant_id,
-        get_current_user_profile,
-        require_platform_admin,
-    )
-    from unified_api.adapters.inbound.http.dependencies.edi.database import (
-        get_global_session,
-        get_tenant_session,
-    )
-    from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
-
-    from edi.module import create_edi_app
 
     app = create_edi_app()
 
@@ -241,7 +225,6 @@ async def platform_client(
     app.dependency_overrides[get_secret_store] = lambda: override_get_secret_store
     app.dependency_overrides[get_current_tenant_id] = lambda: PLATFORM_TENANT_ID
     app.dependency_overrides[require_platform_admin] = lambda: PLATFORM_TENANT_ID
-    from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile
 
     app.dependency_overrides[get_platform_user_profile] = lambda: {
         "sub": "admin-user",

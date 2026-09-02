@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,7 +12,6 @@ pytestmark = pytest.mark.asyncio
 @patch("edi.adapters.outbound.pipeline.http.ssrf_safe_context")
 @patch("edi.adapters.outbound.pipeline.http.httpx.AsyncClient")
 async def test_httpx_delivery_adapter(mock_client_cls: MagicMock, mock_ssrf: MagicMock) -> None:
-    import contextlib
 
     mock_ssrf.return_value = contextlib.nullcontext()
     mock_client = AsyncMock()
@@ -42,6 +43,4 @@ def test_httpx_delivery_adapter_validator() -> None:
     adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator)
 
     with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
-        import asyncio
-
         asyncio.run(adapter.deliver("https://bad.com", b"{}"))

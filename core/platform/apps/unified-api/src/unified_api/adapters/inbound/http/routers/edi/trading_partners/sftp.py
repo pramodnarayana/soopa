@@ -1,6 +1,7 @@
 from typing import Any
 
 from database.exceptions import DuplicateEntityError
+from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
@@ -97,7 +98,6 @@ async def test_existing_sftp_connection(
     vault_port: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
     """Tests an SFTP connection for an existing partner, pulling missing credentials from the DB."""
-    from edi.adapters.outbound.database.encryption import db_encryption
 
     if not request.password and not request.credentials_vault_ref:
         async with uow:
@@ -145,7 +145,6 @@ async def create_sftp_partner(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
-    from database.exceptions import DuplicateEntityError
 
     if not request.password and not request.credentials_vault_ref:
         raise HTTPException(
@@ -208,7 +207,6 @@ async def update_sftp_partner(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
-    from edi.adapters.outbound.database.encryption import db_encryption
 
     async with uow:
         service = UpdateSFTPPartnerUseCase(uow=uow, field_encryption=db_encryption)

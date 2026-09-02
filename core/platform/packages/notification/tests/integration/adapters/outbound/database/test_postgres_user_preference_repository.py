@@ -1,4 +1,5 @@
 import pytest
+from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
 from sqlalchemy import text
 
@@ -19,7 +20,6 @@ async def test_save_and_get_preference(
     repo: SqlAlchemyUserNotificationPreferenceRepository, db_session_factory
 ):
     # Arrange
-    from identity.domain.constants import IdentityIdPrefix
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
 

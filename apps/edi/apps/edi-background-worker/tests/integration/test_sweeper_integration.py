@@ -1,3 +1,4 @@
+import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -33,7 +34,6 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
         event2 = await builder.create(event_type="DELIVER_EVENT", status=OutboxStatus.PROCESSING)
 
         # Manually force them to be "stuck" by setting lease_expires_at to the past
-        import datetime
 
         event1.lease_expires_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
             minutes=10

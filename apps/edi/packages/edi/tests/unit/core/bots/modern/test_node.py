@@ -1,3 +1,5 @@
+from edi.core.bots.domain.models import StructureNode
+
 """
 test_node_business_logic.py
 Comprehensive unit tests for Node methods covering the uncovered branches:
@@ -419,7 +421,6 @@ def test_displayqueries_no_crash(capsys):
 
 def test_collectlines_returns_list():
     _root, _isa, _gs, st, po1a, po1b, ctt = _build_order_tree()
-    from edi.core.bots.domain.models import StructureNode
 
     st.structure = StructureNode(id="ST", min_occ=1, max_occ=1, mpath=["ST"])
     st.children[0].structure = StructureNode(id="BEG", min_occ=1, max_occ=1, mpath=["ST", "BEG"])

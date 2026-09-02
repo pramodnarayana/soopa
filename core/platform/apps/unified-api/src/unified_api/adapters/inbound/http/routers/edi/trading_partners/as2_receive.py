@@ -1,4 +1,5 @@
 import structlog
+from edi.adapters.inbound.as2.mdn import build_mdn
 from edi.application.dto import ProcessInboundAs2Command
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
@@ -39,8 +40,6 @@ async def receive_as2_message(
     except ValueError as e:
         logger.warning("Business logic rejection: {e}", e=e)
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
-            from edi.adapters.inbound.as2.mdn import build_mdn
-
             error_msg = str(e).lower()
             if "decrypt" in error_msg:
                 modifier = "error: decryption-failed"
@@ -67,8 +66,6 @@ async def receive_as2_message(
         logger.exception("Internal server error")
 
         if as2_to_hdr and as2_from_hdr and msg_id_hdr:
-            from edi.adapters.inbound.as2.mdn import build_mdn
-
             mdn = build_mdn(
                 as2_to=as2_to_hdr,
                 as2_from=as2_from_hdr,

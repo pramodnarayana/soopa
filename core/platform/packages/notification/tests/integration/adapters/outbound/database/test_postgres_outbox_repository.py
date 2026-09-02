@@ -4,6 +4,7 @@ from seedwork import generate_random_hex
 from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_outbox_repository import (
+    SqlAlchemyNotificationOutboxPublisher,
     SqlAlchemyNotificationOutboxRepository,
 )
 from notification.domain.models import NotificationOutboxEvent
@@ -133,9 +134,6 @@ async def test_outbox_mark_failed_and_sweep(db_session_factory):
 
 @pytest.mark.asyncio
 async def test_sqlalchemy_notification_outbox_publisher(db_session_factory):
-    from notification.adapters.outbound.database.postgres_outbox_repository import (
-        SqlAlchemyNotificationOutboxPublisher,
-    )
 
     tenant_id = f"test-pub-tenant-{generate_random_hex(6)}"
 

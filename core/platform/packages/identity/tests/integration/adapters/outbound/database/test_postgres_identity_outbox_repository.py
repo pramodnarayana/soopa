@@ -4,7 +4,7 @@ import pytest
 from database.models.identity import IdentityOutbox as OrmIdentityOutbox
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -122,8 +122,6 @@ async def test_mark_completed_and_failed(
 
     # Verify it failed and went back to pending
     async with db_session_factory() as session:
-        from sqlalchemy import select
-
         stmt = select(OrmIdentityOutbox).where(OrmIdentityOutbox.id == event_id)
         outbox = (await session.execute(stmt)).scalar_one()
         assert outbox.status == OutboxStatus.PENDING.value

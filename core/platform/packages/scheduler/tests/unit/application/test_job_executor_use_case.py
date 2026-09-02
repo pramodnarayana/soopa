@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 
 from scheduler.application.job_executor_use_case import JobExecutorUseCase
@@ -32,7 +33,6 @@ def test_claim_and_execute_job_completed():
     use_case = JobExecutorUseCase(uow_factory=uow_factory, dispatcher=dispatcher)
 
     # Run it
-    import asyncio
 
     asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
 
@@ -64,8 +64,6 @@ def test_claim_and_execute_job_reschedules_interval():
 
     use_case = JobExecutorUseCase(uow_factory=lambda: FakeSchedulerUow(repo), dispatcher=dispatcher)
 
-    import asyncio
-
     asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
 
     assert len(dispatcher.dispatched_jobs) == 1
@@ -94,8 +92,6 @@ def test_claim_and_execute_job_reschedules_cron():
 
     dispatcher = FakeJobDispatcher()
     use_case = JobExecutorUseCase(uow_factory=lambda: FakeSchedulerUow(repo), dispatcher=dispatcher)
-
-    import asyncio
 
     asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
 
@@ -128,8 +124,6 @@ def test_claim_and_execute_job_retry_backoff():
 
     use_case = JobExecutorUseCase(uow_factory=lambda: FakeSchedulerUow(repo), dispatcher=dispatcher)
 
-    import asyncio
-
     asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
 
     updated_job = repo.jobs["job-fail-1"]
@@ -158,8 +152,6 @@ def test_claim_and_execute_job_max_retries():
     dispatcher.should_fail = True
 
     use_case = JobExecutorUseCase(uow_factory=lambda: FakeSchedulerUow(repo), dispatcher=dispatcher)
-
-    import asyncio
 
     asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
 

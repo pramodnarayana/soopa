@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
+
 
 @dataclass(frozen=True)
 class DomainEvent(ABC):
@@ -39,7 +42,5 @@ class DomainEvent(ABC):
         if hasattr(self, "id"):
             return str(self.id)
         if "_idempotency_key" not in self.__dict__:
-            from seedwork import SystemIdPrefix, generate_id
-
             self.__dict__["_idempotency_key"] = generate_id(SystemIdPrefix.GENERIC)
         return str(self.__dict__["_idempotency_key"])

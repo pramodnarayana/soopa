@@ -16,6 +16,8 @@ from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
+from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -251,8 +253,6 @@ class WorkerContainer:
         self._register_identity_handlers(self.events_dispatcher, identity_service)
 
         # Wire up the new centralized SqsConsumerManager from pubsub
-        from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-        from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
         identity_sync_consumer = AwsSqsConsumer(
             queue_url=self.settings.sqs_identity_sync_queue_url,

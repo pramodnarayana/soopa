@@ -1,4 +1,15 @@
+import datetime
+from unittest.mock import AsyncMock, patch
+
 import pytest
+from identity.domain.identity_context import IdentityContext
+from identity.domain.models.authorization import Capability
+from seedwork import generate_id, generate_random_hex
+from unified_api.adapters.inbound.http.guards import tenant_auth_guard
+from unified_api.main import app
+
+from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.domain.models.tenant import LifecycleStatus, Tenant
 
 pytestmark = pytest.mark.integration
 from typing import Any
@@ -14,12 +25,6 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     # simulating what Zitadel gives us natively (IdP ID in authorized_tenants).
 
     # 1. Insert a mock tenant into the DB so the middleware can map it.
-    import datetime
-
-    from seedwork import generate_id, generate_random_hex
-
-    from ucp.adapters.outbound.database.tenant_repository import TenantRepository
-    from ucp.domain.models.tenant import LifecycleStatus, Tenant
 
     canonical_id = generate_id("ten")
     idp_id = "385223051081416707"
@@ -40,12 +45,8 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     await db_session.flush()
 
     # 2. Override the token verifier in the app to return a fake identity
-    from identity.domain.identity_context import IdentityContext
-    from identity.domain.models.authorization import Capability
 
     # Remove the generic guard overrides so the REAL auth logic executes!
-    from unified_api.adapters.inbound.http.guards import tenant_auth_guard
-    from unified_api.main import app
 
     if tenant_auth_guard.require_tenant_member in app.dependency_overrides:
         del app.dependency_overrides[tenant_auth_guard.require_tenant_member]
@@ -60,7 +61,6 @@ async def test_tenant_auth_bug(client: AsyncClient, db_session: Any) -> None:
     )
 
     # We override the JwtStrategy that the middleware uses to return a fake identity
-    from unittest.mock import AsyncMock, patch
 
     with patch(
         "ucp.application.use_cases.authenticators.jwt_strategy.JwtStrategy.authenticate",

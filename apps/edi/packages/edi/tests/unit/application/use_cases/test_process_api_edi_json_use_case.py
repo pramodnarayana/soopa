@@ -1,3 +1,7 @@
+from edi.domain.events import TransformRequestedEvent
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiJsonDomainModel
+
 """
 Layer 2 — Application Use Case Tests: ProcessApiEdiJsonUseCase.
 
@@ -170,9 +174,6 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
 
     @pytest.mark.asyncio
     async def test_fake_preserves_event_idempotency_key(self):
-        from edi.domain.events import TransformRequestedEvent
-        from edi.domain.models.base import Direction, RecordStatus
-        from edi.domain.models.transactions import EdiJsonDomainModel
 
         aggregate = EdiJsonDomainModel(
             id="json-1",

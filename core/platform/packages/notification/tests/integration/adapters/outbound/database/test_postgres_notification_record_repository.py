@@ -1,4 +1,5 @@
 import pytest
+from database.models.identity import Tenant, User
 from database.models.notifications import NotificationRecord
 from identity.domain.constants import UserStatus
 from seedwork import generate_random_hex
@@ -8,6 +9,7 @@ from ucp.domain.constants import LifecycleStatus
 from notification.adapters.outbound.database.postgres_notification_record_repository import (
     SqlAlchemyNotificationRecordRepository,
 )
+from notification.domain.models import Channel, NotificationDispatch
 
 
 @pytest.mark.asyncio
@@ -16,8 +18,6 @@ async def test_save_notification_persists_to_database(db_session_factory):
     tenant_id = f"test-tenant-456-{generate_random_hex(6)}"
 
     async with db_session_factory() as session, session.begin():
-        from database.models.identity import Tenant, User
-
         tenant = Tenant(
             id=tenant_id,
             name="Test Tenant 456",
@@ -33,7 +33,6 @@ async def test_save_notification_persists_to_database(db_session_factory):
     # Execute
     async with db_session_factory() as session:
         repo = SqlAlchemyNotificationRecordRepository(session)
-        from notification.domain.models import Channel, NotificationDispatch
 
         dispatch = NotificationDispatch.create(
             tenant_id=tenant_id,

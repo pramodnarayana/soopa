@@ -2,7 +2,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from scheduler.domain.constants import JobStatus
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -1,3 +1,5 @@
+import pytest
+
 """
 Unit tests for DeliveryUseCase — inbound webhook and outbound SFTP delivery paths.
 All test doubles are imported from fakes.py (DRY). No mock library used.
@@ -5,8 +7,6 @@ All test doubles are imported from fakes.py (DRY). No mock library used.
 
 import contextlib
 from typing import Any
-
-import pytest
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import (
     DeliveryRouterUseCase,
@@ -207,7 +207,6 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, http=http_adapter)
-    import pytest
 
     with pytest.raises(RuntimeError):
         await use_case.execute(trace_id)

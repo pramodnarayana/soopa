@@ -1,4 +1,8 @@
-from identity.domain.identity_context import TokenClaims, identity_context_from_claims
+from identity.domain.identity_context import (
+    PLATFORM_TENANT_ID,
+    TokenClaims,
+    identity_context_from_claims,
+)
 
 
 def test_identity_context_from_claims_creates_valid_context() -> None:
@@ -40,7 +44,6 @@ def test_token_claims_defaults() -> None:
 
 
 def test_is_platform_admin_with_valid_role() -> None:
-    from identity.domain.identity_context import PLATFORM_TENANT_ID
 
     claims = TokenClaims(
         sub="admin-1",
@@ -57,7 +60,6 @@ def test_is_platform_admin_with_valid_role() -> None:
 
 
 def test_is_platform_admin_with_non_admin_role() -> None:
-    from identity.domain.identity_context import PLATFORM_TENANT_ID
 
     claims = TokenClaims(
         sub="user-1",
@@ -74,7 +76,6 @@ def test_is_platform_admin_with_non_admin_role() -> None:
 
 
 def test_is_platform_admin_with_admin_role_wrong_tenant() -> None:
-    from identity.domain.identity_context import PLATFORM_TENANT_ID
 
     claims = TokenClaims(
         sub="user-1",

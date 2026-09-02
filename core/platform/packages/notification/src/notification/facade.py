@@ -1,7 +1,8 @@
 from typing import Any
 
 from database.events import EventEnvelope
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 
 def notify(

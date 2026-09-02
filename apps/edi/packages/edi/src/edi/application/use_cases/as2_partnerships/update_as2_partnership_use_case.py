@@ -45,6 +45,10 @@ class UpdateAS2PartnershipUseCase:
 
         await self.uow.as2_partnerships.save(aggregate)
 
+        persisted = await self.uow.as2_partnerships.get_as2_partnership(tenant_id, partnership_id)
+        if persisted:
+            aggregate = persisted
+
         logger.info(
             "edi_as2_partnership_updated",
             partnership_id=partnership_id,

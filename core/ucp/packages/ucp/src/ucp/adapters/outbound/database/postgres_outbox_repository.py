@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, cast
 
 from database.events import EventEnvelope
@@ -12,7 +13,6 @@ class PostgresOutboxRepository:
         self.session_factory = session_factory
 
     async def sweep_stuck_events(self, lock_lease_ms: int) -> int:
-        import asyncio
 
         total_swept = 0
         async with self.session_factory() as session:

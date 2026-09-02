@@ -1,14 +1,14 @@
+import os
+
 import pytest
 
 
 @pytest.fixture
 def sqs_endpoint() -> str:
-    import os
 
     return os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 
 
-import os
 from collections.abc import AsyncGenerator
 
 from database.provider import get_async_engine

@@ -1,3 +1,5 @@
+import asyncio
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -20,7 +22,6 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
         self.session_factory = session_factory
 
     async def save(self, message: EventEnvelope) -> None:
-        import os
 
         async with self.session_factory() as session, session.begin():
             orm_msg = NotificationOutbox(
@@ -33,7 +34,6 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
             session.add(orm_msg)
 
     async def sweep_stuck_events(self, lock_lease_ms: int) -> int:
-        import asyncio
 
         total_swept = 0
         threshold = datetime.now(UTC) - timedelta(milliseconds=lock_lease_ms)
@@ -166,7 +166,6 @@ class SqlAlchemyNotificationOutboxPublisher:
         self.session = session
 
     async def save(self, message: EventEnvelope) -> None:
-        import os
 
         orm_msg = NotificationOutbox(
             id=message.id or f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",

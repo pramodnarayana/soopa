@@ -1,3 +1,5 @@
+from sqlalchemy import text
+
 """
 Enterprise Database Testing Utilities.
 
@@ -58,7 +60,6 @@ class TransactionalTestRouter(DatabaseRouterPort):
                 class_=AsyncSession,
                 join_transaction_mode="create_savepoint",
             )
-            from sqlalchemy import text
 
             try:
                 async with factory() as session:

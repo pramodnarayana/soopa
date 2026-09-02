@@ -1,11 +1,17 @@
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
 
-from edi.adapters.outbound.database.models.data_plane import ApiGateway
+from edi.adapters.outbound.database.models.data_plane import (
+    ApiGateway,
+    AS2Partner,
+    AS2Partnership,
+    EdiMessage,
+)
 from edi.adapters.outbound.pipeline.repository import SqlAlchemyRepositoryAdapter
 from edi.config.settings import AppSettings
 from edi.domain.constants import EdiIdPrefix
@@ -26,10 +32,6 @@ def make_adapter(session):
 async def test_get_edi_message_success() -> None:
     mock_session = AsyncMock()
     mock_result = MagicMock()
-
-    from datetime import UTC, datetime
-
-    from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
     mock_record = EdiMessage()
     mock_record.id = generate_id(EdiIdPrefix.EDI_MESSAGE)
@@ -140,7 +142,6 @@ async def test_update_api_payload_status() -> None:
 
 
 async def test_get_as2_partner_inactive_raises() -> None:
-    from edi.adapters.outbound.database.models.data_plane import AS2Partner, AS2Partnership
 
     mock_session = AsyncMock()
 
@@ -161,7 +162,6 @@ async def test_get_as2_partner_inactive_raises() -> None:
 
 
 async def test_get_as2_partnership_inactive_raises() -> None:
-    from edi.adapters.outbound.database.models.data_plane import AS2Partner, AS2Partnership
 
     mock_session = AsyncMock()
 
@@ -182,7 +182,6 @@ async def test_get_as2_partnership_inactive_raises() -> None:
 
 
 async def test_get_local_as2_partner_inactive_raises() -> None:
-    from edi.adapters.outbound.database.models.data_plane import AS2Partner
 
     mock_session = AsyncMock()
 

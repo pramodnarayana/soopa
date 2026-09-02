@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 
 import structlog
@@ -202,7 +203,6 @@ class PostgresUserRepository(UserRepositoryPort):
         self._flush_events(user)
 
     def _flush_events(self, user: User, idempotency_key: str | None = None) -> None:
-        import os
 
         for index, event in enumerate(user.domain_events):
             outbox_id = f"{IdentityOutbox.ID_PREFIX}_{os.urandom(12).hex()}"

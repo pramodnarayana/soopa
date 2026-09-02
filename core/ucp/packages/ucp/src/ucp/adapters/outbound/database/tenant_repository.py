@@ -2,6 +2,9 @@ import os
 
 import structlog
 from database.outbox_serializer import serialize_domain_event
+from sqlalchemy.dialects.postgresql import insert
+
+from ucp.domain.constants import SubscriptionTier
 
 logger = structlog.get_logger(__name__)
 from datetime import UTC, datetime
@@ -209,7 +212,6 @@ class TenantRepository(TenantRepositoryPort):
         )
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
-        from sqlalchemy.dialects.postgresql import insert
 
         stmt = insert(ShardRegistry).values(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
         stmt = stmt.on_conflict_do_update(
@@ -219,9 +221,6 @@ class TenantRepository(TenantRepositoryPort):
         await self.session.execute(stmt)
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
-        from sqlalchemy.dialects.postgresql import insert
-
-        from ucp.domain.constants import SubscriptionTier
 
         stmt = insert(AppSubscription).values(
             tenant_id=tenant_id, app_id=app_id, tier=SubscriptionTier.STANDARD.value, status=status

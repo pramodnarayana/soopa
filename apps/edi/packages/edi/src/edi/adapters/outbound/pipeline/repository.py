@@ -1,5 +1,6 @@
+import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_random_hex
@@ -17,8 +18,10 @@ from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
     AS2Partner,
     AS2Partnership,
+    EdiJson,
     EdiMessage,
     InboundRoute,
+    OutboundEdiHeader,
     OutboundRoute,
     SFTPPartner,
     Webhook,
@@ -179,9 +182,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         status: str,
         tenant_id: str | None = None,
     ) -> str:
-        import json
-
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         payload_dict = payload
         storage_uri = None
@@ -235,7 +235,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return str(record.id)
 
     async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         result = await self.session.execute(
             select(EdiJson)
@@ -249,8 +248,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
 
         payload = record.payload
         if record.storage_uri:
-            import json
-
             raw_bytes = await self.storage.download(record.storage_uri)
             payload = json.loads(raw_bytes.decode("utf-8"))
 
@@ -265,7 +262,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         return domain_model
 
     async def update_edi_json_status(self, trace_id: str, status: str) -> None:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         await self.session.execute(
             update(EdiJson).where(EdiJson.trace_id == str(trace_id)).values(status=status)
@@ -273,7 +269,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         await self.session.flush()
 
     async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         if not kwargs:
             return
@@ -333,8 +328,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         webhook_url: str | None = None,
     ) -> None:
 
-        from edi.adapters.outbound.database.models.data_plane import ApiGateway
-
         # Idempotency check
         stmt = (
             select(ApiGateway.id)
@@ -373,8 +366,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
         payload = record.payload
         if record.storage_uri:
-            import json
-
             raw_bytes = await self.storage.download(record.storage_uri)
             payload = json.loads(raw_bytes.decode("utf-8"))
 
@@ -438,7 +429,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from typing import cast
 
         if direction not in ("INBOUND", "OUTBOUND"):
             raise ValueError(f"Invalid direction: {direction}")
@@ -521,10 +511,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         trading_partner_id: str | None = None,
         tenant_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from edi.adapters.outbound.database.models.data_plane import (
-            OutboundEdiHeader,
-            OutboundRoute,
-        )
 
         query = select(OutboundEdiHeader)
         if route_id:

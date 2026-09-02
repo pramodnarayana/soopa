@@ -1,11 +1,15 @@
 from typing import Any
 
 import structlog
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dto import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.domain.constants import TransactionDirection
+from edi.domain.events import TransformRequestedEvent
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -88,10 +92,6 @@ class ProcessApiEdiJsonUseCase:
             # 2. Create Trace ID
             trace_id = generate_id(SystemIdPrefix.GENERIC)
             logger.info("trace_id_generated", trace_id=trace_id)
-
-            from edi.domain.events import TransformRequestedEvent
-            from edi.domain.models.base import Direction, RecordStatus
-            from edi.domain.models.transactions import EdiJsonDomainModel
 
             # 3. Instantiate Domain Model and record event
             edi_json_aggregate = EdiJsonDomainModel(

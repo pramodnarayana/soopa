@@ -6,6 +6,7 @@ import pytest
 from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
 from edi.adapters.outbound.database.repository import (
     EdiMessageRepository,
+    InboundRouteRepository,
     TradingPartnerRepository,
 )
 from edi.domain.status import MessageStatus
@@ -64,7 +65,6 @@ async def test_edi_message_repository_save_message() -> None:
 
 
 async def test_inbound_route_repository_get_inbound_route() -> None:
-    from edi.adapters.outbound.database.repository import InboundRouteRepository
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -90,7 +90,6 @@ async def test_inbound_route_repository_get_inbound_route() -> None:
 
 
 async def test_inbound_route_repository_get_inbound_route_no_match() -> None:
-    from edi.adapters.outbound.database.repository import InboundRouteRepository
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -107,7 +106,6 @@ async def test_inbound_route_repository_get_inbound_route_no_match() -> None:
 
 
 async def test_inbound_route_repository_get_inbound_route_no_transaction_type() -> None:
-    from edi.adapters.outbound.database.repository import InboundRouteRepository
 
     mock_session = AsyncMock()
     mock_result = MagicMock()

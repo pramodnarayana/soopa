@@ -1,3 +1,4 @@
+import contextlib
 from collections.abc import Callable
 from typing import Any
 
@@ -28,8 +29,6 @@ class HttpxDeliveryClient(HttpDeliveryPort):
             headers["Authorization"] = auth_token
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
-
-        import contextlib
 
         ctx = self.validator(url) if self.validator else contextlib.nullcontext()
 

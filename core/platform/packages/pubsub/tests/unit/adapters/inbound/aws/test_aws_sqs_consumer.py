@@ -1,3 +1,5 @@
+from botocore.exceptions import ClientError
+
 """
 Unit tests for AwsSqsConsumer.
 
@@ -287,7 +289,6 @@ async def test_poll_raw_message_catches_and_logs_exception_from_caller():
 @pytest.mark.asyncio
 async def test_poll_raw_message_reraises_client_error():
     """ClientError during receive_message is logged and re-raised."""
-    from botocore.exceptions import ClientError
 
     consumer = AwsSqsConsumer(QUEUE_URL)
     mock_client = AsyncMock()

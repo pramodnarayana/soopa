@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from outbox.domain.constants import OutboxStatus
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 
 from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
@@ -13,6 +13,7 @@ from edi.adapters.outbound.database.constants import (
     DATA_PLANE_OUTBOX_EVENT_PREFIX,
     EDI_JSON_ID_PREFIX,
 )
+from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
 from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
     DataPlaneOutbox,
@@ -32,6 +33,7 @@ from edi.application.dto import (
 )
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.direction import MessageDirection
+from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 
@@ -203,8 +205,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 ),
             )
         else:
-            from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
-
             stmt = (
                 select(OutboundRoute)
                 .join(
@@ -350,7 +350,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         transaction_type: str | None = None,
         direction: str | None = None,
     ) -> Sequence[Any]:
-        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         limit = min(max(1, limit), 200)
         offset = max(0, offset)
@@ -398,7 +397,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     )
 
     def _apply_dynamic_filters(self, stmt: Any, model: Any, filters: list[dict[str, Any]]) -> Any:
-        from sqlalchemy import and_, or_
 
         for f in filters:
             field = f.get("field")
@@ -473,8 +471,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 column = model.business_metadata[json_key]
                 column_astext = column.astext
                 if operator == "eq":
-                    from sqlalchemy import or_
-
                     stmt = stmt.where(
                         or_(
                             column_astext == str(value),
@@ -483,8 +479,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                         )
                     )
                 elif operator == "neq":
-                    from sqlalchemy import and_
-
                     stmt = stmt.where(
                         and_(
                             column_astext != str(value),
@@ -498,8 +492,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     )
                     stmt = stmt.where(column_astext.ilike(f"%{escaped_value}%", escape="\\"))
                 elif operator == "in" and isinstance(value, list):
-                    from sqlalchemy import or_
-
                     conds = [column_astext.in_([str(v) for v in value])]
                     for v in value:
                         conds.append(model.business_metadata.contains({json_key: v}))
@@ -527,7 +519,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def explorer_list_edi_messages(
         self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
     ) -> Sequence[Any]:
-        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
@@ -539,7 +530,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def explorer_list_edi_json(
         self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
     ) -> Sequence[Any]:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
@@ -549,8 +539,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return result.scalars().all()
 
     async def get_transaction(self, tenant_id: str, trace_id: str) -> TransactionDetailDTO | None:
-
-        from edi.adapters.outbound.database.models.data_plane import ApiGateway, EdiJson, EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
         msg_stmt = select(EdiMessage).where(
@@ -660,7 +648,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
 
     async def get_transaction_thread(self, tenant_id: str, key: str, value: str) -> Sequence[Any]:
-        from edi.adapters.outbound.database.models.data_plane import EdiJson
 
         tid_str = tenant_id if tenant_id is not None else None
         json_stmt = (
@@ -673,9 +660,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return result.scalars().all()
 
     async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
-        from sqlalchemy import select
-
-        from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
         tid_str = tenant_id if tenant_id is not None else None
 
@@ -693,8 +677,6 @@ def _map_edi_message_to_domain(record: EdiMessage) -> EdiMessageDomainModel:
     Any structural mismatch between the ORM model and domain model is a clear
     AttributeError here, not a silent data drop.
     """
-
-    from edi.domain.models.base import Direction, RecordStatus
 
     return EdiMessageDomainModel(
         id=str(record.id),

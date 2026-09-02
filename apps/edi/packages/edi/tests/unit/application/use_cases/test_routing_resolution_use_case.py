@@ -1,3 +1,5 @@
+import pytest
+
 """
 Layer 2 — Application Use Case Tests: RoutingResolutionUseCase.
 
@@ -6,7 +8,6 @@ Tests all routing resolution branches: outbound, inbound, business metadata
 fallback, AS2 partner resolution, and error recovery.
 """
 
-import pytest
 from seedwork.utils import generate_id
 
 TP_001 = generate_id("tp")
@@ -156,7 +157,6 @@ class TestRoutingResolutionOutbound:
         use_case = RoutingResolutionUseCase(repository=repo)
         msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=TP_X)
         # Must raise RuntimeError
-        import pytest
 
         with pytest.raises(RuntimeError):
             await use_case.resolve_routing_context(msg, [])
@@ -239,7 +239,6 @@ class TestRoutingResolutionInbound:
             as2_sender_id="BROKEN_FROM",
         )
         # Must raise RuntimeError
-        import pytest
 
         with pytest.raises(RuntimeError):
             await use_case.resolve_routing_context(msg, [])

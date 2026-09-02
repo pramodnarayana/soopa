@@ -1,3 +1,7 @@
+import io
+
+from edi.core.bots.domain.parser_registry import WRITER_REGISTRY
+
 """
 Bots outmessage lib
 """
@@ -32,7 +36,6 @@ def outmessage_init(**ta_info):
     """
     # Deferred import to avoid circular dependency:
     # outmessage <- parsers.edifact/x12 <- outmessage
-    from edi.core.bots.domain.parsers import WRITER_REGISTRY
 
     try:
         classtocall = WRITER_REGISTRY[ta_info["editype"]]
@@ -154,7 +157,6 @@ class Outmessage(message.Message):
             self._closewrite()
 
     def _initwrite(self):
-        import io
 
         if self.ta_info.get("return_string"):
             logger.debug("Start writing to in-memory string.", self.ta_info)

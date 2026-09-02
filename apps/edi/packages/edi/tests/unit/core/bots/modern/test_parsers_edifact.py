@@ -4,6 +4,7 @@ import pytest
 
 from edi.core.bots.config.botsconfig import SFIELD, VALUE
 from edi.core.bots.domain.exceptions import InMessageError
+from edi.core.bots.domain.models import create_field_definition, create_structure_node
 from edi.core.bots.domain.parsers.base import var
 
 
@@ -95,8 +96,6 @@ def test_separatorcheck_alfanumeric():
 def test_parsefields_repeating_element_not_allowed():
     p = MockParser("SEG+FLD1*FLD2'")
     p.do_lex()
-
-    from edi.core.bots.domain.models import create_field_definition, create_structure_node
 
     struct = create_structure_node(
         {

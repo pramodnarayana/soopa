@@ -6,6 +6,7 @@ from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
 from edi.application.dto import (
+    UNSET,
     CreateAS2PartnershipCmd,
     EncryptionAlgorithm,
     MDNType,
@@ -214,7 +215,6 @@ async def update_platform_as2_partnership(
 ) -> Any:
     try:
         async with uow:
-            from edi.application.dto import UNSET
 
             def get_val(field: str) -> Any:
                 return getattr(request, field) if field in request.model_fields_set else UNSET

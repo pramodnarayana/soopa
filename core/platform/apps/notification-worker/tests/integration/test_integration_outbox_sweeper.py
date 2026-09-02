@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
+from database.models.identity import Tenant
 from database.models.notifications import NotificationOutbox
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
@@ -12,6 +13,7 @@ from outbox.application.outbox_sweeper_use_case import (
 )
 from outbox.domain.constants import OutboxStatus
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 
 class FakeDispatcher:
@@ -41,9 +43,6 @@ async def test_outbox_sweeper_integration(db_session_factory):
     """
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
     dispatcher = FakeDispatcher()
-
-    from database.models.identity import Tenant
-    from sqlalchemy.dialects.postgresql import insert
 
     async with db_session_factory() as session, session.begin():
         stmt = (

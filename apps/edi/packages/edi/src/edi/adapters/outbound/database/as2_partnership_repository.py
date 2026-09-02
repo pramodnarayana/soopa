@@ -4,6 +4,7 @@ from sqlalchemy import delete, select
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import AS2Partnership
+from edi.adapters.outbound.database.repository import PartnershipRepository
 from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
 
@@ -29,7 +30,6 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
-        from edi.adapters.outbound.database.repository import PartnershipRepository
 
         repo = PartnershipRepository(self.session)
         result = await repo.get_partnership_by_as2_ids(as2_from, as2_to)

@@ -1,3 +1,10 @@
+import uuid
+
+from edi.adapters.outbound.database.session import get_global_session, get_session
+from seedwork import generate_id
+
+from as2_server.main import app
+
 """
 Shared test fixtures for the AS2 Server integration tests.
 
@@ -179,9 +186,6 @@ class ISALookupConfig:
     """
 
     def __init__(self) -> None:
-        import uuid
-
-        from seedwork import generate_id
 
         # Default: single match found (existing behavior)
         self.scalar_result = generate_id("id")
@@ -196,9 +200,6 @@ class ISALookupConfig:
 
     def set_single_match(self, tenant_id: str = None) -> None:
         """Configure ISA lookup to return a single match."""
-        import uuid
-
-        from seedwork import generate_id
 
         tid = tenant_id if tenant_id else generate_id("id")
         self.scalar_result = tid
@@ -207,7 +208,6 @@ class ISALookupConfig:
 
     def set_multiple_matches(self) -> None:
         """Configure ISA lookup to return multiple matches (ambiguous)."""
-        import uuid
 
         self.scalar_result = None  # scalar_one_or_none won't be used for ambiguity check
         self.fetchall_result = [(uuid.uuid4(),), (uuid.uuid4(),)]
@@ -273,10 +273,6 @@ async def as2_client(
 
         mock_payload_repo = AsyncMock()
         mock_payload_repo_cls.return_value = mock_payload_repo
-
-        from edi.adapters.outbound.database.session import get_global_session, get_session
-
-        from as2_server.main import app
 
         # Create configurable ISA lookup state
         isa_lookup_config = ISALookupConfig()

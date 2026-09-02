@@ -6,6 +6,7 @@ from edi.application.dto import ProcessInboundAs2Command
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
+from edi.domain.events import TransformRequestedEvent
 
 
 @pytest.fixture
@@ -263,7 +264,6 @@ async def test_save_transaction_success(service):
     # via transactions.save(aggregate). publish_outbox_event is NOT called directly.
     mock_dp_uow.transactions.save.assert_awaited_once()
     saved_aggregate = mock_dp_uow.transactions.save.call_args[0][0]
-    from edi.domain.events import TransformRequestedEvent
 
     domain_events = saved_aggregate.domain_events
     assert len(domain_events) == 1

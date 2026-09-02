@@ -1,17 +1,19 @@
+import asyncio
 import typing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
 from outbox.domain.constants import OutboxStatus
-from seedwork import SystemIdPrefix, generate_id, generate_random_hex
-from sqlalchemy import CursorResult, update
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id, generate_random_hex
+from sqlalchemy import CursorResult, or_, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.events import EventEnvelope
 from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
-from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
@@ -51,12 +53,10 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
         await self._session.flush()
 
     async def sweep_stuck_events(self, lock_lease_ms: int = 30000) -> int:
-        import asyncio
 
         total_swept = 0
         while True:
             # We use text-based CTE here to avoid SQLAlchemy ORM issues with SKIP LOCKED inside UPDATE
-            from sqlalchemy import text
 
             query = text("""
                 WITH cte AS (
@@ -90,7 +90,6 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int = 30000
     ) -> list[EventEnvelope]:
-        from sqlalchemy import text
 
         query = text("""
             UPDATE edi.data_plane_outbox
@@ -173,10 +172,6 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             logger.warning("stale_failure_update", event_id=event_id)
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
-        from datetime import UTC, datetime, timedelta
-
-        from seedwork import SystemIdPrefix, generate_id
-        from sqlalchemy import or_, update
 
         owner_token = generate_id(SystemIdPrefix.GENERIC)
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -206,10 +201,6 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
         return owner_token
 
     async def mark_delivery_success(self, key_str: str, owner_token: str) -> None:
-        from sqlalchemy import update
-        from sqlalchemy.dialects.postgresql import insert
-
-        from edi.adapters.outbound.database.models.data_plane import ProcessedEvent
 
         update_result = await self._session.execute(
             update(DataPlaneOutbox)
@@ -227,7 +218,6 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             logger.warning("stale_success_update", key_str=key_str)
 
     async def mark_delivery_failure(self, key_str: str, owner_token: str) -> None:
-        from sqlalchemy import update
 
         result = await self._session.execute(
             update(DataPlaneOutbox)

@@ -11,6 +11,7 @@ from ucp.application.use_cases.roles.assign_user_role_use_case import (
     AssignUserRoleUseCase,
 )
 from ucp.domain.exceptions import ResourceNotFoundError
+from ucp.domain.models.tenant import Tenant
 
 pytestmark = pytest.mark.integration
 
@@ -30,7 +31,6 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
     role_id = generate_id(IdentityIdPrefix.ROLE)
 
     # Seed Tenant first (required for foreign key relationship)
-    from ucp.domain.models.tenant import Tenant
 
     tenant = Tenant.create(
         id=tenant_id,
@@ -108,8 +108,6 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     user_id = generate_id(IdentityIdPrefix.USER)
     role_id = generate_id(IdentityIdPrefix.ROLE)  # never seeded
-
-    from ucp.domain.models.tenant import Tenant
 
     tenant = Tenant.create(
         id=tenant_id,

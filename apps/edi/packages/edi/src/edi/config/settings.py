@@ -1,3 +1,6 @@
+import ipaddress
+from urllib.parse import urlparse
+
 """
 Shared application settings for all EDI AS2 services.
 All settings are loaded from environment variables and validated by Pydantic.
@@ -158,8 +161,6 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
-        import ipaddress
-        from urllib.parse import urlparse
 
         if self.env != "development":
             if "://" not in self.public.base_url:

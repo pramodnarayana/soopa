@@ -1,3 +1,5 @@
+from typing import cast
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.uow import BaseSqlAlchemyUnitOfWork
@@ -7,6 +9,7 @@ from edi.adapters.outbound.database.as2_partner_repository import (
 from edi.adapters.outbound.database.as2_partnership_repository import (
     SqlAlchemyAS2PartnershipRepository,
 )
+from edi.adapters.outbound.database.base_repository import GlobalSession, TenantSession
 from edi.adapters.outbound.database.edi_header_repository import SqlAlchemyEdiHeaderRepository
 from edi.adapters.outbound.database.inbound_route_repository import SqlAlchemyInboundRouteRepository
 from edi.adapters.outbound.database.outbound_route_repository import (
@@ -54,9 +57,6 @@ class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     def __init__(self, global_session: AsyncSession) -> None:
         super().__init__(global_session)
         self.global_session = global_session
-        from typing import cast
-
-        from edi.adapters.outbound.database.base_repository import GlobalSession
 
         gs = cast(GlobalSession, global_session)
 
@@ -82,9 +82,6 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     def __init__(self, tenant_session: AsyncSession) -> None:
         super().__init__(tenant_session)
         self.tenant_session = tenant_session
-        from typing import cast
-
-        from edi.adapters.outbound.database.base_repository import TenantSession
 
         ts = cast(TenantSession, tenant_session)
 

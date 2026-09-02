@@ -113,6 +113,10 @@ class RotateAS2CertificatesUseCase:
 
             await self.uow.as2_partners.save(partner)
 
+            persisted = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
+            if persisted:
+                partner = persisted
+
         except Exception as e:
             logger.exception(
                 "certificate_rotation_failed",

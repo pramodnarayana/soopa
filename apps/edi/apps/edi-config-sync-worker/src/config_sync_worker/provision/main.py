@@ -1,4 +1,5 @@
 import asyncio
+import signal
 from typing import Any
 
 import structlog
@@ -55,8 +56,6 @@ async def main() -> None:
         handler=dispatcher.dispatch_raw,
     )
     sqs_manager.start()
-
-    import signal
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()

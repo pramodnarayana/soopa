@@ -1,3 +1,6 @@
+import email
+from unittest.mock import patch
+
 """
 Integration tests for the AS2 inbound receiver endpoint: POST /as2
 
@@ -83,7 +86,6 @@ class TestAS2MessageReceiving:
         A real multipart/signed payload from a known Trading Partner
         should be verified successfully and return disposition: processed.
         """
-        import email
 
         msg = email.message_from_bytes(signed_as2_payload)
         real_content_type = msg.get("Content-Type")
@@ -170,7 +172,6 @@ class TestAS2MessageReceiving:
             message_id="test-enc-001",
             content_type='application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"',
         )
-        from unittest.mock import patch
 
         with patch(
             "as2_server.application.use_cases.receive_as2.decrypt_payload",
@@ -193,7 +194,6 @@ class TestAS2MessageReceiving:
             message_id="test-sig-fail-001",
             content_type='multipart/signed; protocol="application/pkcs7-signature"; micalg=sha-256',
         )
-        from unittest.mock import patch
 
         with patch(
             "as2_server.application.use_cases.receive_as2.verify_signature",

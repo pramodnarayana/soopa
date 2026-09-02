@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import structlog
@@ -9,6 +10,7 @@ from edi.adapters.outbound.transformer.domain.models import (
     ParsedEdiPayload,
     TransactionSet,
 )
+from edi.core.bots.facade import edi_to_json, json_to_edi
 
 logger = structlog.get_logger(__name__)
 
@@ -50,8 +52,6 @@ class BotsEDIAdapter(EDITransformerPort):
     ) -> tuple[JsonDict, list[str]]:
         """Returns the raw AST dictionary and any validation errors."""
         try:
-            from edi.core.bots.facade import edi_to_json
-
             json_result = edi_to_json(
                 raw_edi=raw_edi, editype=editype, messagetype=messagetype, return_errors=True
             )
@@ -77,8 +77,6 @@ class BotsEDIAdapter(EDITransformerPort):
         Serializes a JSON AST back into raw EDI format using the Bots engine.
         """
         try:
-            from edi.core.bots.facade import json_to_edi
-
             ast_json_str = json.dumps(ast_dict)
             result = json_to_edi(
                 json_ast=ast_json_str, editype=standard, messagetype="envelope", return_errors=True
@@ -178,8 +176,6 @@ class BotsEDIAdapter(EDITransformerPort):
         # Validate payload before attempting to load backend
         if not raw_edi:
             raise TransformationError("Payload is completely empty, Bots engine aborted.")
-
-        import asyncio
 
         try:
             ast_dict, errors = await asyncio.to_thread(

@@ -208,7 +208,6 @@ async def test_zitadel_default_password_is_required(monkeypatch):
 
 
 async def test_worker_container_requires_database_url(monkeypatch):
-    from identity_worker.bootstrap.config import Settings
 
     bad_settings = Settings(
         database_url="",

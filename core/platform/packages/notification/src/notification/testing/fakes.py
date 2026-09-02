@@ -1,7 +1,10 @@
+import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
 from database.events import EventEnvelope
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from notification.domain.models import (
     Channel,
@@ -48,7 +51,6 @@ class FakeUserPrefRepo(UserNotificationPreferenceRepositoryPort):
         )
         if key in self.prefs:
             existing = self.prefs[key]
-            import dataclasses
 
             # Preserve existing ID by creating a new instance
             preference = dataclasses.replace(preference, id=existing.id)
@@ -114,7 +116,6 @@ class FakeRecordRepo(NotificationRecordRepositoryPort):
         self.dispatches: list[NotificationDispatch] = []
 
     async def save(self, dispatch: NotificationDispatch) -> None:
-        from notification.domain.models import Channel
 
         self.dispatches.append(dispatch)
         if dispatch.channel == Channel.IN_APP:
@@ -150,10 +151,6 @@ class FakeNotificationUow(NotificationUnitOfWorkPort):
         await self._pre_commit()
         # Simulate Outbox event collection
         if self.record_repo and hasattr(self.record_repo, "dispatches"):
-            import dataclasses
-
-            from seedwork import SystemIdPrefix, generate_id
-
             for dispatch in self.record_repo.dispatches:
                 for event in dispatch.domain_events:
                     outbox_event = EventEnvelope(

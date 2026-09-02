@@ -5,7 +5,8 @@ from typing import Any
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
 
-from database.exceptions import DuplicateEntityError
+from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
+from database.interceptors import intercept_db_errors
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.domain.exceptions import PartnerAlreadyExistsError, PartnerInUseError
@@ -125,8 +126,6 @@ class SqlAlchemyAS2TradingPartnerRepository(
             )
         else:
             conds.append(AS2Partner.tenant_id == tid_str)
-        from database.exceptions import ForeignKeyViolationError
-        from database.interceptors import intercept_db_errors
 
         try:
             async with self.session.begin_nested(), intercept_db_errors():

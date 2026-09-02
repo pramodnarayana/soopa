@@ -1,4 +1,9 @@
+import json
+
+import boto3
 import pytest
+from seedwork import generate_random_hex
+from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 
 pytestmark = pytest.mark.integration
 import os
@@ -67,11 +72,6 @@ def event_loop() -> "Any":
 @pytest.fixture(scope="session")
 def localstack_container(request) -> "Any":
     endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-
-    import json
-
-    import boto3
-    from seedwork import generate_random_hex
 
     unique_suffix = generate_random_hex(6)
 
@@ -195,7 +195,6 @@ async def client(db_session, monkeypatch) -> "Any":
     app.dependency_overrides[tenant_auth_guard.require_tenant_member] = _mock_tenant_member_guard
 
     # Also patch RequireCapability since it reads directly from request.state.identity
-    from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 
     def mock_require_capability(self, request: Request) -> IdentityContext:
         request.state.identity = MOCK_PLATFORM_ADMIN

@@ -4,7 +4,8 @@ import structlog
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from seedwork import SystemIdPrefix, generate_id
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)
 

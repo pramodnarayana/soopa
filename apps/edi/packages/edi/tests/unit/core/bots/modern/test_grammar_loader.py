@@ -1,3 +1,5 @@
+import edi.core.bots.utils.botslib as botslib
+
 """
 test_grammar_advanced.py
 Extended test suite for grammar.py covering previously uncovered branches such as:
@@ -241,7 +243,6 @@ def mock_botsimport(typeofgrammarfile, editype, grammarname):
 
 
 def test_grammar_read_envelope(monkeypatch):
-    import edi.core.bots.utils.botslib as botslib
 
     monkeypatch.setattr(botslib, "botsimport", mock_botsimport)
 
@@ -250,7 +251,6 @@ def test_grammar_read_envelope(monkeypatch):
 
 
 def test_grammar_read_envelope_import_error(monkeypatch):
-    import edi.core.bots.utils.botslib as botslib
 
     def mock_botsimport_err(typeofgrammarfile, editype, grammarname):
         if grammarname == "mock_grammar":
@@ -269,7 +269,6 @@ def test_grammar_read_envelope_import_error(monkeypatch):
 
 
 def test_grammar_read_partners(monkeypatch):
-    import edi.core.bots.utils.botslib as botslib
 
     monkeypatch.setattr(botslib, "botsimport", mock_botsimport)
     part_grammar = grammarread("test", "mock_grammar", "partners")
@@ -278,7 +277,6 @@ def test_grammar_read_partners(monkeypatch):
 
 
 def test_grammar_read_unknown_type(monkeypatch):
-    import edi.core.bots.utils.botslib as botslib
 
     monkeypatch.setattr(botslib, "botsimport", mock_botsimport)
     with pytest.raises(BotsImportError, match="Unknown typeofgrammarfile"):

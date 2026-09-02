@@ -1,7 +1,9 @@
 import pytest
 from database.router import DatabaseRouter
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.domain.constants import OutboxStatus
+from sqlalchemy import select
 
 from edi_background_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_repository import (
     PostgresEdiDataPlaneOutboxRepository,
@@ -42,9 +44,6 @@ async def test_claim_next_events_and_mark_completed(db_router: DatabaseRouter) -
 
     # Let's verify status directly via the test session
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-        from sqlalchemy import select
-
         res1 = await test_session.execute(
             select(DataPlaneOutbox).where(DataPlaneOutbox.id == event1_id)
         )
@@ -82,9 +81,6 @@ async def test_mark_failed_max_attempts(db_router: DatabaseRouter) -> None:
     await repo.mark_failed(event_id=event_id, worker_id=worker_id, error_message="fatal error")
 
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
-        from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-        from sqlalchemy import select
-
         res = await test_session.execute(
             select(DataPlaneOutbox).where(DataPlaneOutbox.id == event_id)
         )
