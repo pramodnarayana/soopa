@@ -1,5 +1,15 @@
-from typing import Any, Protocol
+from typing import Protocol
 
+from seedwork.domain.types import JsonValue
+
+from edi.application.dtos.partners import (
+    AS2PartnershipDTO,
+    LocalAS2PartnerDTO,
+    RemoteAS2PartnerDTO,
+    SFTPPartnerDTO,
+)
+from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, OutboundRouteDTO
+from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 
 
@@ -61,7 +71,7 @@ class APIPayloadPort(Protocol):
         self,
         trace_id: str,
         direction: str,
-        payload: dict[str, Any],
+        payload: dict[str, JsonValue],
         status: str,
         transaction_type: str | None = None,
         webhook_url: str | None = None,
@@ -80,15 +90,15 @@ class APIPayloadPort(Protocol):
         receiver_id: str | None,
         gs_sender_id: str | None,
         gs_receiver_id: str | None,
-        business_metadata: dict[str, Any],
-        payload: dict[str, Any],
+        business_metadata: dict[str, JsonValue],
+        payload: dict[str, JsonValue],
         status: str,
         tenant_id: str | None = None,
     ) -> str:
         """Persists a new EdiJson record and returns its UUID as a string."""
         ...
 
-    async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None:
         """Fetches an API Payload by trace_id."""
         ...
 
@@ -100,7 +110,7 @@ class APIPayloadPort(Protocol):
         """Updates the status of an EdiJson record."""
         ...
 
-    async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
+    async def update_edi_json(self, trace_id: str, **kwargs: JsonValue) -> None:
         """Updates arbitrary fields on an EdiJson record."""
         ...
 
@@ -134,17 +144,17 @@ class RoutePort(Protocol):
         transaction_type: str,
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> InboundRouteDTO | None:
         """Finds the appropriate route based on ISA envelopes."""
         ...
 
-    async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
+    async def get_outbound_route(self, route_id: str) -> OutboundRouteDTO | None:
         """Fetches an outbound route by its ID."""
         ...
 
     async def get_outbound_route_by_trading_partner_id(
         self, trading_partner_id: str, tenant_id: str
-    ) -> dict[str, Any] | None:
+    ) -> OutboundRouteDTO | None:
         """Fetches an outbound route by Trading Partner ID."""
         ...
 
@@ -153,12 +163,12 @@ class RoutePort(Protocol):
         route_id: str | None = None,
         trading_partner_id: str | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> OutboundEdiHeaderDTO | None:
         """Fetches OutboundEdiHeader by route or partner ID to get translation config like standard, ISA, etc."""
         ...
 
     async def publish_outbox_event(
-        self, idempotency_key: str, event_type: str, payload: dict[str, Any]
+        self, idempotency_key: str, event_type: str, payload: dict[str, JsonValue]
     ) -> None:
         """Publishes an event to the Transactional Outbox."""
         ...
@@ -170,19 +180,21 @@ class PartnerPort(Protocol):
     Used by delivery workers to resolve partner credentials and endpoints.
     """
 
-    async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_sftp_partner(self, partner_id: str) -> SFTPPartnerDTO | None:
         """Fetches SFTP partner config."""
         ...
 
-    async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
         """Fetches Webhook partner config."""
         ...
 
-    async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_as2_partner(
+        self, partner_id: str
+    ) -> tuple[RemoteAS2PartnerDTO, AS2PartnershipDTO] | None:
         """Fetches AS2 partner config (remote partner + partnership settings)."""
         ...
 
-    async def get_local_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_local_as2_partner(self, partner_id: str) -> LocalAS2PartnerDTO | None:
         """Fetches the local AS2 partner (our entity) for signing key and cert refs."""
         ...
 

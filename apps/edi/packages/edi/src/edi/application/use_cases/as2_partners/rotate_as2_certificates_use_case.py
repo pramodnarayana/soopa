@@ -3,7 +3,7 @@ from typing import Any
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.application.dto import RotateAS2CertificateCmd
+from edi.application.dtos.commands import RotateAS2CertificateCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.events import EdiEventType, ProvisioningEvent

@@ -1,8 +1,10 @@
+import dataclasses
 import uuid
 from typing import Any
 
 import structlog
 
+from edi.application.dtos.routes import OutboundEdiHeaderDTO, OutboundRouteDTO
 from edi.config.settings import AppSettings
 from edi.domain.direction import MessageDirection
 from edi.domain.events import PipelineEventType
@@ -30,7 +32,7 @@ class DispatchOutboundTransformUseCase:
 
     async def _resolve_route_config(
         self, edi_json: Any, trace_id: str
-    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    ) -> tuple[str, OutboundEdiHeaderDTO, OutboundRouteDTO]:
         trading_partner_id = edi_json.trading_partner_id
         tenant_id = edi_json.tenant_id
 
@@ -101,9 +103,14 @@ class DispatchOutboundTransformUseCase:
             if not json_payload:
                 raise ValueError(f"Payload is missing for trace_id={trace_id}")
 
-            trading_partner_id, route_config, outbound_route = await self._resolve_route_config(
-                edi_json, trace_id
-            )
+            (
+                trading_partner_id,
+                route_config_dto,
+                outbound_route_dto,
+            ) = await self._resolve_route_config(edi_json, trace_id)
+
+            route_config = dataclasses.asdict(route_config_dto)
+            outbound_route = dataclasses.asdict(outbound_route_dto)
 
             standard = route_config.get("default_standard", "X12")
             route_txn_type = route_config.get("transaction_type")

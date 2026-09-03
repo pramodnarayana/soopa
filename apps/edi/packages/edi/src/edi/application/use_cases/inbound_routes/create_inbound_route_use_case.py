@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from edi.application.dto import CreateInboundRouteCmd
+from edi.application.dtos.commands import CreateInboundRouteCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.base import ProcessingMode
 from edi.domain.models.inbound_routes import InboundRouteDomainModel

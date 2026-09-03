@@ -1,5 +1,4 @@
-from typing import Any
-
+from seedwork.domain.types import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +10,7 @@ class SqlAlchemyPlatformSettingsRepository(PlatformSettingsRepositoryPort):
     def __init__(self, global_session: AsyncSession):
         self.global_session = global_session
 
-    async def get_config(self, key: str) -> Any | None:
+    async def get_config(self, key: str) -> JsonValue:
         stmt = select(PlatformSettings).where(PlatformSettings.key == key)
         result = await self.global_session.execute(stmt)
         record = result.scalar_one_or_none()
@@ -19,7 +18,7 @@ class SqlAlchemyPlatformSettingsRepository(PlatformSettingsRepositoryPort):
             return record.value
         return None
 
-    async def set_config(self, key: str, value: Any) -> None:
+    async def set_config(self, key: str, value: JsonValue) -> None:
         stmt = select(PlatformSettings).where(PlatformSettings.key == key)
         result = await self.global_session.execute(stmt)
         record = result.scalar_one_or_none()

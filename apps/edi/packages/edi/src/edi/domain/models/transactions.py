@@ -29,7 +29,6 @@ class EdiMessageDomainModel(EdiRecordBase):
     receiver_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
-    inbound_route_id: str | None = None
     trading_partner_id: str | None = None
     as2_sender_id: str | None = None
     as2_receiver_id: str | None = None

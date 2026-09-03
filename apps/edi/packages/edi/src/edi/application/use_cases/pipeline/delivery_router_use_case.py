@@ -1,5 +1,8 @@
+from typing import Any
+
 import structlog
 
+from edi.application.dtos.routes import OutboundRouteDTO
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
@@ -32,6 +35,7 @@ class DeliveryRouterUseCase:
 
         direction = edi_msg.direction
 
+        route: Any = None
         if direction == "OUTBOUND":
             if not edi_msg.trading_partner_id:
                 raise ValueError(
@@ -72,15 +76,27 @@ class DeliveryRouterUseCase:
                 )
                 raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
 
-        for route_key, strategy in self.strategies.items():
-            partner_id = route.get(route_key)
-            if partner_id:
-                try:
-                    await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
-                except Exception as e:
-                    raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e
-                return
+        partner_id = None
+        strategy = None
 
+        if route.sftp_partner_id:
+            partner_id = route.sftp_partner_id
+            strategy = self.strategies["sftp_partner_id"]
+        elif route.as2_partner_id:
+            partner_id = route.as2_partner_id
+            strategy = self.strategies["as2_partner_id"]
+        elif route.webhook_id:
+            partner_id = route.webhook_id
+            strategy = self.strategies["webhook_id"]
+
+        if partner_id and strategy:
+            try:
+                await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
+            except Exception as e:
+                raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e
+            return
+
+        route_id = route.route_id if isinstance(route, OutboundRouteDTO) else "inbound_route"
         raise ValueError(
-            f"Route {route.get('route_id', 'unknown')} is not configured with any destination partner."
+            f"Route {route_id} is not configured with any destination partner."
         )

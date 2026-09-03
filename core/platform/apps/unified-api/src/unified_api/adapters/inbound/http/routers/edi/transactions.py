@@ -7,18 +7,26 @@ from edi.adapters.outbound.database.routing_resolver_repository import (
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
+from edi.application.dtos.trace import EdiTraceDTO
+from edi.application.dtos.transactions import ApiGatewayDTO, EdiJsonDTO, EdiMessageDTO
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
 from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
     BulkReplayTransactionsUseCase,
 )
-from edi.application.use_cases.transactions.get_transaction_use_case import (
-    GetTransactionUseCase,
+from edi.application.use_cases.transactions.get_edi_trace_use_case import (
+    GetEdiTraceUseCase,
+)
+from edi.application.use_cases.transactions.list_edi_json_use_case import (
+    ListEdiJsonUseCase,
+)
+from edi.application.use_cases.transactions.list_edi_messages_use_case import (
+    ListEdiMessagesUseCase,
 )
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
 from edi.domain.exceptions import TransactionNotFoundError
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,20 +42,19 @@ router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/edi/transactions", tags=[
 
 # --- DTOs ---
 
+class EdiMessageListResponse(BaseModel):
+    items: list[EdiMessageDTO]
 
-class TransactionListResponse(BaseModel):
-    items: list[dict[str, Any]]
+
+class EdiJsonListResponse(BaseModel):
+    items: list[EdiJsonDTO]
 
 
-class TransactionDetailResponse(BaseModel):
-    edi_message: dict[str, Any]
-    edi_json: list[dict[str, Any]]
-    api_gateway: list[dict[str, Any]]
+class EdiTraceResponse(BaseModel):
+    edi_message: EdiMessageDTO
+    edi_jsons: list[EdiJsonDTO]
+    api_gateways: list[ApiGatewayDTO]
     trading_partner_name: str | None = None
-
-
-class TransactionThreadResponse(BaseModel):
-    items: list[dict[str, Any]]
 
 
 class ReplayRequest(BaseModel):
@@ -62,8 +69,8 @@ class BulkReplayRequest(BaseModel):
 # --- Endpoints ---
 
 
-@router.get("", response_model=TransactionListResponse)
-async def list_transactions(
+@router.get("/messages", response_model=EdiMessageListResponse)
+async def list_edi_messages(
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=100),
@@ -73,12 +80,13 @@ async def list_transactions(
         None, description="Filter by EDI transaction type (e.g., 850)"
     ),
     direction: str | None = Query(None, description="INBOUND or OUTBOUND"),
-) -> TransactionListResponse:
+) -> EdiMessageListResponse:
     """
-    List EDI transactions for the current tenant.
+    List EDI messages for the current tenant (Tab 1 in UI).
     """
     async with uow:
-        messages = await uow.transactions.list_transactions(
+        svc = ListEdiMessagesUseCase(uow)
+        messages = await svc.list_edi_messages(
             tenant_id=tenant_id,
             limit=limit,
             offset=offset,
@@ -87,78 +95,54 @@ async def list_transactions(
             direction=direction,
         )
 
-        items = []
-        for msg in messages:
-            items.append(
-                {
-                    "id": str(msg.id),
-                    "trace_id": str(msg.trace_id),
-                    "direction": msg.direction,
-                    "transaction_type": msg.transaction_type,
-                    "sender_id": msg.sender_id,
-                    "receiver_id": msg.receiver_id,
-                    "status": msg.status,
-                    "edi_data": msg.edi_data,
-                    "created_at": msg.created_at.isoformat() if msg.created_at else None,
-                }
-            )
-
-        return TransactionListResponse(items=items)
+        return EdiMessageListResponse(items=list(messages))
 
 
-@router.get("/thread", response_model=TransactionThreadResponse)
-async def get_transaction_thread(
+@router.get("/json", response_model=EdiJsonListResponse)
+async def list_edi_json(
     key: str = Query(..., description="Business metadata key (e.g. shipment_id)"),
     value: str = Query(..., description="Business metadata value (e.g. 12345)"),
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
-) -> TransactionThreadResponse:
+) -> EdiJsonListResponse:
     """
-    Get a chronological thread of documents sharing a specific business metadata key/value.
+    Get a chronological thread of EDI JSON documents sharing a specific business metadata key/value (Tab 2 in UI).
     """
     async with uow:
-        json_records = await uow.transactions.get_transaction_thread(tenant_id, key, value)
-        items = []
-        for r in json_records:
-            items.append(
-                {
-                    "id": str(r.id),
-                    "trace_id": str(r.trace_id),
-                    "direction": r.direction,
-                    "transaction_type": r.transaction_type,
-                    "sender_id": r.sender_id,
-                    "receiver_id": r.receiver_id,
-                    "status": r.status,
-                    "business_metadata": r.business_metadata,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-            )
-        return TransactionThreadResponse(items=items)
+        svc = ListEdiJsonUseCase(uow)
+        json_records = await svc.list_edi_json(tenant_id, key, value)
+        return EdiJsonListResponse(items=list(json_records))
 
 
-@router.get("/{trace_id}", response_model=TransactionDetailResponse)
-async def get_transaction(
+@router.get("/{trace_id}", response_model=EdiTraceResponse)
+async def get_edi_trace(
     trace_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     global_session: AsyncSession = Depends(get_global_session),
-) -> TransactionDetailResponse:
+) -> EdiTraceResponse:
     """
-    Get the full deep-dive payload for a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
+    Get the full deep-dive trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
     """
     resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, uow.tenant_session)
     resolver = RoutingResolutionUseCase(resolver_repo)
 
     async with uow:
-        svc = GetTransactionUseCase(uow)
+        svc = GetEdiTraceUseCase(uow)
         try:
-            # Pass resolver to resolve the trading partner name dynamically
-            result = await svc.get_transaction(tenant_id, trace_id, resolver)
-            return TransactionDetailResponse(
+            # We don't pass the resolver into the use case anymore for simplicity,
+            # we just resolve the partner name in the router to keep the domain pure.
+            result = await svc.get_edi_trace(tenant_id, trace_id, resolver)
+            
+            trading_partner_name, new_conn_type = await resolver.resolve_routing_context(
+                result.edi_message, result.edi_jsons
+            )
+
+            return EdiTraceResponse(
                 edi_message=result.edi_message,
-                edi_json=result.edi_json,
-                api_gateway=result.api_gateway,
-                trading_partner_name=result.trading_partner_name,
+                edi_jsons=result.edi_jsons,
+                api_gateways=result.api_gateways,
+                trading_partner_name=trading_partner_name,
             )
         except TransactionNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -182,9 +166,6 @@ async def replay_transaction(
             raise HTTPException(status_code=404, detail=str(e))
 
     return {"status": "accepted", "trace_id": trace_id}
-
-
-from fastapi import APIRouter, Depends, Header
 
 
 @router.post("/bulk-replay", status_code=202)

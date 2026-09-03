@@ -1,16 +1,22 @@
-from typing import Any, Protocol
+from __future__ import annotations
 
-from pydantic import BaseModel
+from dataclasses import dataclass
+from typing import Protocol
+
+from seedwork.domain.types import JsonValue
+
+from edi.domain.types import AstNode
 
 
-class TransformedTransaction(BaseModel):
+@dataclass(frozen=True)
+class TransformedTransaction:
     transaction_type: str
+    payload: AstNode
     isa_sender_id: str | None = None
     isa_receiver_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     control_number: str | None = None
-    payload: dict[str, Any]
 
 
 class TransformerPort(Protocol):
@@ -27,10 +33,10 @@ class TransformerPort(Protocol):
 
     async def transform_json_to_edi(
         self,
-        payload: dict[str, Any] | list[Any],
+        payload: AstNode | list[AstNode],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, Any],
+        route_config: dict[str, JsonValue],
     ) -> bytes:
         """Transforms a Canonical JSON Dictionary into raw EDI bytes."""
         ...

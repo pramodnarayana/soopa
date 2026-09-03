@@ -8,7 +8,7 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dto import (
+from edi.application.dtos.commands import (
     UNSET,
     CreateAS2PartnershipCmd,
     CreateAS2TradingPartnerCmd,
@@ -79,10 +79,10 @@ class FakeGlobalStore:
             tenant_id=str(tenant_id),
             as2_id=cmd.as2_id,
             name=cmd.name,
-            is_local=getattr(cmd, "is_local", False),
-            url=getattr(cmd, "url", None),
-            public_cert_pem=getattr(cmd, "public_cert_pem", None),
-            public_cert_vault_ref=getattr(cmd, "public_cert_vault_ref", None),
+            is_local=cmd.is_local,
+            url=cmd.url,
+            public_cert_pem=cmd.public_cert_pem,
+            public_cert_vault_ref=cmd.public_cert_vault_ref,
             active=False,
             created_at=now,
             updated_at=now,
@@ -110,11 +110,11 @@ class FakeGlobalStore:
             tenant_id=str(tenant_id),
             name=cmd.name,
             host=cmd.host,
-            port=getattr(cmd, "port", 22),
+            port=cmd.port,
             username=cmd.username,
-            inbound_remote_path=getattr(cmd, "inbound_remote_path", None),
-            outbound_remote_path=getattr(cmd, "outbound_remote_path", None),
-            credentials_vault_ref=getattr(cmd, "credentials_vault_ref", None),
+            inbound_remote_path=cmd.inbound_remote_path,
+            outbound_remote_path=cmd.outbound_remote_path,
+            credentials_vault_ref=cmd.credentials_vault_ref,
             active=False,
             created_at=now,
             updated_at=now,
@@ -207,8 +207,8 @@ class FakeGlobalStore:
                 raise ValueError(f"Idempotency key {key} already exists")
             existing.update(
                 {
-                    "tenant_id": getattr(event, "tenant_id", None),
-                    "event_type": getattr(event, "event_type", None),
+                    "tenant_id": event.tenant_id,
+                    "event_type": event.event_type,
                     "payload": {
                         **existing.get("payload", {}),
                         **serialize_domain_event(event),
@@ -219,8 +219,8 @@ class FakeGlobalStore:
             return key
         self.outbox_events.append(
             {
-                "tenant_id": getattr(event, "tenant_id", None),
-                "event_type": getattr(event, "event_type", None),
+                "tenant_id": event.tenant_id,
+                "event_type": event.event_type,
                 "payload": serialize_domain_event(event),
                 "idempotency_key": key,
             }
@@ -352,7 +352,7 @@ class FakeGlobalStore:
             self.outbox_events.append(
                 {
                     "tenant_id": event.get_routing_tenant_id()
-                    or getattr(aggregate, "tenant_id", None),
+                    or aggregate.tenant_id,
                     "event_type": event.event_name,
                     "payload": serialize_domain_event(event),
                     "idempotency_key": event.idempotency_key,
@@ -379,7 +379,7 @@ class FakeGlobalStore:
             self.outbox_events.append(
                 {
                     "tenant_id": event.get_routing_tenant_id()
-                    or getattr(aggregate, "tenant_id", None),
+                    or aggregate.tenant_id,
                     "event_type": event.event_name,
                     "payload": serialize_domain_event(event),
                     "idempotency_key": event.idempotency_key,
@@ -390,8 +390,8 @@ class FakeGlobalStore:
     async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
         for p in self.partners.values():
             if isinstance(p, AS2PartnerDomainModel) and (
-                getattr(p, "private_key_vault_ref", None) == vault_ref
-                or getattr(p, "public_cert_vault_ref", None) == vault_ref
+                p.private_key_vault_ref == vault_ref
+                or p.public_cert_vault_ref == vault_ref
             ):
                 return True
         return False
@@ -420,10 +420,10 @@ class FakeGlobalStore:
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         for r in self.inbound_routes.values():
             if (
-                getattr(r, "isa_sender_id", None) == isa_sender_id
-                and getattr(r, "isa_receiver_id", None) == isa_receiver_id
+                r.isa_sender_id == isa_sender_id
+                and r.isa_receiver_id == isa_receiver_id
             ):
-                return getattr(r, "tenant_id", None)
+                return r.tenant_id
         return None
 
     async def get_outbound_edi_headers(self, tenant_id: str) -> Sequence[Any]:
@@ -472,21 +472,34 @@ class FakeRoute:
     def __init__(self, id: str, tenant_id: str, cmd: Any) -> None:
         self.id = id
         self.tenant_id = tenant_id
-        self.name = getattr(cmd, "name", "Test Route")
-        self.processing_mode = getattr(cmd, "processing_mode", "TRANSFORM")
+        self.name = cmd.name
         self.active = True
-        self.as2_partner_id = getattr(cmd, "as2_partner_id", None)
-        self.sftp_partner_id = getattr(cmd, "sftp_partner_id", None)
-        self.webhook_id = getattr(cmd, "webhook_id", None)
-        self.isa_sender_id = getattr(cmd, "isa_sender_id", "S1")
-        self.isa_receiver_id = getattr(cmd, "isa_receiver_id", "R1")
-        self.gs_sender_id = getattr(cmd, "gs_sender_id", "S1")
-        self.gs_receiver_id = getattr(cmd, "gs_receiver_id", "R1")
-        self.transaction_type = getattr(cmd, "transaction_type", "*")
-        self.trading_partner_id = getattr(cmd, "trading_partner_id", None)
+        self.as2_partner_id = cmd.as2_partner_id
+        self.sftp_partner_id = cmd.sftp_partner_id
+        if isinstance(cmd, CreateInboundRouteCmd):
+            self.webhook_id = cmd.webhook_id
+            self.processing_mode = cmd.processing_mode
+            self.isa_sender_id = cmd.isa_sender_id
+            self.isa_receiver_id = cmd.isa_receiver_id
+            self.gs_sender_id = cmd.gs_sender_id
+            self.gs_receiver_id = cmd.gs_receiver_id
+            self.transaction_type = cmd.transaction_type
+            self.direction = "INBOUND"
+            self.trading_partner_id = None
+        else:
+            self.webhook_id = None
+            self.processing_mode = "TRANSFORM"
+            self.isa_sender_id = "S1"
+            self.isa_receiver_id = "R1"
+            self.gs_sender_id = "S1"
+            self.gs_receiver_id = "R1"
+            self.transaction_type = "*"
+            self.trading_partner_id = cmd.trading_partner_id
+            self.direction = "OUTBOUND"
+            self.protocol = cmd.protocol
+
         self.created_at = None
         self.updated_at = None
-        self.direction = "INBOUND" if isinstance(cmd, CreateInboundRouteCmd) else "OUTBOUND"
         self.default_standard = "x12"
         self.default_version = "004010"
         self.destination_name = None

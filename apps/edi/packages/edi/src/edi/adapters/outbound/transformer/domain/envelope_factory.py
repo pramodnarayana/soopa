@@ -1,8 +1,9 @@
-from typing import Any
+from seedwork.domain.types import JsonValue
 
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.envelope.edifact import EdifactEnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
+from edi.domain.types import AstNode
 
 
 class EnvelopeFactory:
@@ -17,9 +18,7 @@ class EnvelopeFactory:
     }
 
     @staticmethod
-    def build_ast(
-        route_config: dict[str, Any], payload: dict[str, Any] | list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def build_ast(route_config: dict[str, JsonValue], payload: AstNode | list[AstNode]) -> AstNode:
         """
         Dynamically dispatches to the correct standard builder based on route config.
         """

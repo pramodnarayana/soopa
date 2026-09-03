@@ -186,7 +186,6 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
 
     uow.repository.outbound_edi_headers["tp-meta"] = {
         "trading_partner_id": "tp-meta",
-        "connection_type": "VAN",
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer)
@@ -195,4 +194,4 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
     saved_edi = uow.repository.edi_messages.get(trace_id)
     assert saved_edi is not None
     assert saved_edi["trading_partner_id"] == "tp-meta"
-    assert saved_edi["connection_type"] == "VAN"
+    assert saved_edi["connection_type"] == "AS2"

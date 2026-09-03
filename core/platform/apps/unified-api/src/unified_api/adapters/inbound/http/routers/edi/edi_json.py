@@ -3,7 +3,7 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
-from edi.application.dto import ProcessApiEdiJsonCommand
+from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
 from fastapi import APIRouter, Depends, status
 

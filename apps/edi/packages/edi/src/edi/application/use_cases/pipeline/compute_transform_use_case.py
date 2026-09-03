@@ -1,8 +1,10 @@
 import contextlib
 import copy
 from collections.abc import Callable
+from typing import cast
 
 import structlog
+from seedwork.domain.types import JsonValue
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
@@ -122,8 +124,8 @@ class ComputeTransformUseCase:
                     receiver_id=edi_msg.receiver_id,
                     gs_sender_id=gs_sender,
                     gs_receiver_id=gs_receiver,
-                    business_metadata=business_metadata,
-                    payload=json_dict,
+                    business_metadata=cast("dict[str, JsonValue]", business_metadata),
+                    payload=cast("dict[str, JsonValue]", json_dict),
                     status=MessageStatus.PARSED.value,
                     tenant_id=edi_msg.tenant_id,
                 )

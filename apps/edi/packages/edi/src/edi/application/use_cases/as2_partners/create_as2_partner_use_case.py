@@ -6,9 +6,7 @@ from datetime import UTC, datetime
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.application.dto import (
-    CreateAS2TradingPartnerCmd,
-)
+from edi.application.dtos.commands import CreateAS2TradingPartnerCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.events import EdiEventType, ProvisioningEvent

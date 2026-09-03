@@ -43,22 +43,22 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             raw_payload = edi_msg.edi_data.encode("utf-8")
             filename = f"{trace_id}.edi"
 
-            password: str | None = partner.get("password")
+            password: str | None = partner.password
             client_key: str | None = None
 
-            if not password and partner.get("credentials_vault_ref") and self.secret_store:
-                vault_secret = await self.secret_store.get_secret(partner["credentials_vault_ref"])
+            if not password and partner.credentials_vault_ref and self.secret_store:
+                vault_secret = await self.secret_store.get_secret(partner.credentials_vault_ref)
                 client_key = vault_secret
                 password = ""
 
             await self.sftp_delivery.deliver(
-                host=partner["host"],
-                port=partner["port"],
-                username=partner["username"],
+                host=partner.host,
+                port=partner.port,
+                username=partner.username,
                 password=password or "",
-                host_key=partner.get("host_key"),
+                host_key=partner.host_key,
                 client_key=client_key,
-                remote_path=partner.get("outbound_remote_path") or "/",
+                remote_path=partner.outbound_remote_path or "/",
                 filename=filename,
                 payload=raw_payload,
             )
@@ -67,9 +67,9 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
             logger.info(
-                "Delivered trace_id={trace_id} → SFTP {partner['host']}",
+                "Delivered trace_id={trace_id} → SFTP {partner_host}",
                 trace_id=trace_id,
-                partnerhost=partner["host"],
+                partner_host=partner.host,
             )
         except Exception as e:
             await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)

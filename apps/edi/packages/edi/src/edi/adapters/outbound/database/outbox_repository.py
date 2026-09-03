@@ -1,14 +1,18 @@
-from typing import Any
+from typing import Any, Generic, TypeVar, cast
 
 from outbox.domain.constants import OutboxStatus
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonValue
 from seedwork.utils import generate_id, generate_random_hex
 from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import DeclarativeBase
 
 from database.exceptions import DuplicateEntityError
 from database.interceptors import intercept_db_errors
 from database.outbox_serializer import serialize_domain_event
+from database.types import GlobalSession, TenantSession
 from edi.adapters.outbound.database.base_repository import (
     GlobalSqlAlchemyRepository,
     TenantSqlAlchemyRepository,
@@ -25,10 +29,13 @@ from edi.ports.outbound.control_plane_outbox_repository_port import (
 )
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 
+T_Session = TypeVar("T_Session", bound=AsyncSession)
 
-class SqlAlchemyOutboxRepositoryMixin:
-    session: Any
-    model_class: Any
+
+class SqlAlchemyOutboxRepositoryMixin(Generic[T_Session]):
+    session: T_Session
+
+    model_class: type[ControlPlaneOutbox] | type[DataPlaneOutbox]
     id_prefix: str = "obevt_"
 
     async def flush(self) -> None: ...
@@ -36,12 +43,12 @@ class SqlAlchemyOutboxRepositoryMixin:
     async def _publish_record(
         self,
         tenant_id: str,
-        event_type: Any,
-        payload: dict[str, Any],
+        event_type: str,
+        payload: dict[str, JsonValue],
         idempotency_key: str | None = None,
     ) -> str:
         tid_str = tenant_id if tenant_id is not None else None
-        event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
+        event_type_str = getattr(event_type, "value", str(event_type))
         event_id = f"{self.id_prefix}{generate_random_hex(6)}"
         record = self.model_class(
             id=event_id,
@@ -58,7 +65,7 @@ class SqlAlchemyOutboxRepositoryMixin:
     async def publish_outbox_events_bulk(
         self,
         tenant_id: str,
-        events: list[dict[str, Any]],
+        events: list[dict[str, JsonValue]],
     ) -> list[str]:
         tid_str = tenant_id if tenant_id is not None else None
         event_ids = []
@@ -66,7 +73,7 @@ class SqlAlchemyOutboxRepositoryMixin:
         insert_stmts = []
         for event in events:
             event_type = event["event_type"]
-            event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
+            event_type_str = getattr(event_type, "value", str(event_type))
             event_id = f"{self.id_prefix}{generate_random_hex(6)}"
 
             insert_stmts.append(
@@ -99,7 +106,11 @@ class SqlAlchemyControlPlaneOutboxRepository(
     polled by the Provisioning Worker to replicate config to tenant shards.
     """
 
-    def __init__(self, session: Any, model_class: Any = ControlPlaneOutbox) -> None:
+    def __init__(
+        self,
+        session: GlobalSession,
+        model_class: type[ControlPlaneOutbox] | type[DataPlaneOutbox] = ControlPlaneOutbox,
+    ) -> None:
         super().__init__(session)
         self.model_class = model_class
         self.id_prefix = "edi_cobevt_"
@@ -120,27 +131,28 @@ class SqlAlchemyControlPlaneOutboxRepository(
             )
             reservation = result.scalar_one_or_none()
             if reservation is not None:
-                reservation.event_type = str(
-                    event.event_type.value
-                    if hasattr(event.event_type, "value")
-                    else event.event_type
+                cast(Any, reservation).event_type = str(
+                    cast(Any, event).event_type.value
+                    if hasattr(cast(Any, event).event_type, "value")
+                    else cast(Any, event).event_type
                 )
-                reservation.payload = {**reservation.payload, **serialized_event}
-                reservation.status = OutboxStatus.PENDING
+                cast(Any, reservation).payload = {
+                    **cast(Any, reservation).payload,
+                    **serialized_event,
+                }
+                cast(Any, reservation).status = OutboxStatus.PENDING
                 await self.flush()
-                return str(reservation.id)
+                return str(cast(Any, reservation).id)
 
         event_id = await self._publish_record(
             tenant_id=event.tenant_id,
-            event_type=str(
-                event.event_type.value if hasattr(event.event_type, "value") else event.event_type
-            ),
+            event_type=str(getattr(event.event_type, "value", event.event_type)),
             payload=serialized_event,
             idempotency_key=idempotency_key,
         )
         return event_id
 
-    async def get_event_by_idempotency_key(self, idempotency_key: str) -> Any | None:
+    async def get_event_by_idempotency_key(self, idempotency_key: str) -> DeclarativeBase | None:
 
         stmt = select(self.model_class).where(self.model_class.idempotency_key == idempotency_key)
         res = await self.session.execute(stmt)
@@ -176,7 +188,7 @@ class SqlAlchemyDataPlaneOutboxRepository(
     by the CDC Sweeper, which is configurable through the Scheduler UI.
     """
 
-    def __init__(self, session: Any) -> None:
+    def __init__(self, session: TenantSession) -> None:
 
         super().__init__(session)
         self.model_class = DataPlaneOutbox
@@ -185,8 +197,8 @@ class SqlAlchemyDataPlaneOutboxRepository(
     async def publish_outbox_event(
         self,
         tenant_id: str,
-        event_type: Any,
-        payload: dict[str, Any],
+        event_type: str,
+        payload: dict[str, JsonValue],
         idempotency_key: str | None = None,
     ) -> str:
         return await self._publish_record(

@@ -32,7 +32,7 @@ from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dto import ProcessInboundAs2Command
+from edi.application.dtos.commands import ProcessInboundAs2Command
 from edi.domain.constants import EdiConnectionType, TransactionDirection, TransactionStatus
 from edi.domain.models.as2 import (
     AS2Message,

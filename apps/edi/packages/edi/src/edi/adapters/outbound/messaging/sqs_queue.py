@@ -1,8 +1,8 @@
 import json
-from typing import Any
 
 import aioboto3
 import structlog
+from seedwork.domain.types import JsonValue
 
 from edi.ports.outbound.message_queue import MessageQueuePort
 
@@ -26,7 +26,7 @@ class SQSMessageQueueAdapter(MessageQueuePort):
         self.region = region
         self.session = aioboto3.Session()
 
-    async def send(self, queue_name: str, payload: dict[str, Any]) -> None:
+    async def send(self, queue_name: str, payload: dict[str, JsonValue]) -> None:
         logger.info("Relaying event to SQS queue '{queue_name}'", queue_name=queue_name)
 
         queue_url = self.queue_url_map.get(queue_name)

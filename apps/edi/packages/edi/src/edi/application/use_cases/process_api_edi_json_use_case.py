@@ -4,7 +4,7 @@ import structlog
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dto import ProcessApiEdiJsonCommand
+from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.domain.constants import TransactionDirection
 from edi.domain.events import TransformRequestedEvent
@@ -54,19 +54,32 @@ class ProcessApiEdiJsonUseCase:
                     if isinstance(command.payload, list) and command.payload
                     else (command.payload if isinstance(command.payload, dict) else {})
                 )
-                transaction_type = first_payload.get("transaction_type")
-                if not transaction_type:
-                    heading = first_payload.get("heading", {})
-                    for key in heading:
-                        if key.startswith("transaction_set_header_ST"):
-                            transaction_type = heading[key].get("transaction_set_identifier_code")
-                            break
-                if not transaction_type:
-                    # Try ST segment directly (for raw transaction payloads)
-                    st = first_payload.get("ST", {})
-                    if st:
-                        transaction_type = st.get("ST01")
 
+                # We know first_payload is expected to be a dict here for transaction_type extraction
+                if isinstance(first_payload, dict):
+                    tt_val = first_payload.get("transaction_type")
+                    if isinstance(tt_val, str):
+                        transaction_type = tt_val
+
+                    if not transaction_type:
+                        heading = first_payload.get("heading")
+                        if isinstance(heading, dict):
+                            for key in heading:
+                                if isinstance(key, str) and key.startswith(
+                                    "transaction_set_header_ST"
+                                ):
+                                    inner = heading[key]
+                                    if isinstance(inner, dict):
+                                        val = inner.get("transaction_set_identifier_code")
+                                        if isinstance(val, str):
+                                            transaction_type = val
+                                    break
+                    if not transaction_type:
+                        st = first_payload.get("ST")
+                        if isinstance(st, dict):
+                            val = st.get("ST01")
+                            if isinstance(val, str):
+                                transaction_type = val
             business_metadata: dict[str, Any] = {}
             if isinstance(command.payload, dict):
                 business_metadata = self.extractor.extract(transaction_type or "", command.payload)
@@ -81,11 +94,12 @@ class ProcessApiEdiJsonUseCase:
                         # Avoid duplicates
                         if v not in business_metadata[k]:
                             business_metadata[k].append(v)
+            
+            for k, v in list(business_metadata.items()):
+                if isinstance(v, list) and len(v) == 1:
+                    business_metadata[k] = v[0]
 
-                # Flatten single-item lists for backward compatibility
-                for k, v in business_metadata.items():
-                    if isinstance(v, list) and len(v) == 1:
-                        business_metadata[k] = v[0]
+
 
             business_metadata["_routing"] = {"trading_partner_id": command.trading_partner_id}
 

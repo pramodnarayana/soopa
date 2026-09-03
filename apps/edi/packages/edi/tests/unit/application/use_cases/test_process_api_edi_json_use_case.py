@@ -24,7 +24,7 @@ TP_007 = generate_id("tp")
 TP_META = generate_id("tp")
 TP_X = generate_id("tp")
 
-from edi.application.dto import ProcessApiEdiJsonCommand
+from edi.application.dtos.commands import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
 
 # ---------------------------------------------------------------------------

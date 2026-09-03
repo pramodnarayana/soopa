@@ -3,7 +3,7 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.dto import (
+from edi.application.dtos import (
     UNSET,
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,

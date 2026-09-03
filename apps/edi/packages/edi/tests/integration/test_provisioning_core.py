@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from seedwork import generate_id
 
-from edi.application.dto import (
+from edi.application.dtos.commands import (
     UNSET,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,

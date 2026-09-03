@@ -1,9 +1,19 @@
+import json
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol, cast
+
+
+class RouteModelProtocol(Protocol):
+    gs_sender_id: Any
+    gs_receiver_id: Any
+    trading_partner_id: Any
+
 
 from outbox.domain.constants import OutboxStatus
-from sqlalchemy import and_, or_, select
+from seedwork.domain.types import JsonValue
+from sqlalchemy import Select, and_, or_, select
+from sqlalchemy.orm import DeclarativeBase
 
 from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
@@ -23,14 +33,12 @@ from edi.adapters.outbound.database.models.data_plane import (
     OutboundRoute,
     Webhook,
 )
-from edi.application.dto import (
-    ApiGatewayDTO,
+from edi.application.dtos.routes import InboundRouteDTO
+from edi.application.dtos.transactions import (
     EdiJsonDTO,
     EdiMessageDTO,
-    RouteDTO,
-    TransactionDetailDTO,
-    WebhookDTO,
 )
+from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.direction import MessageDirection
 from edi.domain.models.base import Direction, RecordStatus
@@ -42,7 +50,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     def __init__(self, session: TenantSession) -> None:
         TenantSqlAlchemyRepository.__init__(self, session)
 
-    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
+    async def create_edi_message(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         payload_copy = dict(payload)
         if "id" not in payload_copy:
             payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}"
@@ -52,7 +60,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return str(msg.id)
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: Any, idempotency_key: str | None
+        self, tenant_id: str, event_type: str, payload: JsonValue, idempotency_key: str | None
     ) -> str:
         serialized_payload = (
             serialize_domain_event(payload) if not isinstance(payload, dict) else payload
@@ -193,8 +201,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def get_route(
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
-    ) -> RouteDTO | None:
-        stmt: Any = None
+    ) -> InboundRouteDTO | None:
+        stmt: Select[tuple[Any, ...]] | None = None
         if direction == MessageDirection.INBOUND:
             stmt = select(InboundRoute).where(
                 InboundRoute.isa_sender_id == sender_id,
@@ -225,12 +233,12 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = result.scalars().first()
         if not record:
             return None
-        return RouteDTO(
+        return InboundRouteDTO(
             trading_partner_id=record.trading_partner_id,
-            webhook_id=getattr(record, "webhook_id", None),
+            webhook_id=record.webhook_id,
             as2_partner_id=getattr(record, "as2_partner_id", None),
-            sftp_partner_id=getattr(record, "sftp_partner_id", None),
-            processing_mode=getattr(record, "processing_mode", None),
+            sftp_partner_id=record.sftp_partner_id,
+            processing_mode=record.processing_mode,
         )
 
     async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
@@ -251,7 +259,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         self,
         trace_id: str,
         direction: str,
-        payload: dict[str, Any],
+        payload: dict[str, JsonValue],
         status: str,
         transaction_type: str | None = None,
         webhook_url: str | None = None,
@@ -282,8 +290,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         receiver_id: str | None,
         gs_sender_id: str | None,
         gs_receiver_id: str | None,
-        business_metadata: dict[str, Any],
-        payload: dict[str, Any],
+        business_metadata: dict[str, JsonValue],
+        payload: dict[str, JsonValue],
         status: str,
         tenant_id: str | None = None,
     ) -> str:
@@ -323,7 +331,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.flush()
         return record_id
 
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
+    async def create_edi_json(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         payload_copy = dict(payload)
         if "id" not in payload_copy:
             payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
@@ -332,7 +340,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.flush()
         return str(msg.id)
 
-    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
+    async def create_api_gateway(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         payload_copy = dict(payload)
         if "id" not in payload_copy:
             payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}"
@@ -341,7 +349,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.flush()
         return str(log.id)
 
-    async def list_transactions(
+    async def list_edi_messages(
         self,
         tenant_id: str,
         limit: int = 50,
@@ -349,7 +357,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         partner_id: str | None = None,
         transaction_type: str | None = None,
         direction: str | None = None,
-    ) -> Sequence[Any]:
+    ) -> Sequence[EdiMessageDTO]:
 
         limit = min(max(1, limit), 200)
         offset = max(0, offset)
@@ -371,7 +379,44 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             )
         stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return [
+            EdiMessageDTO(
+                id=str(r.id),
+                trace_id=str(r.trace_id),
+                direction=r.direction,
+                connection_type=r.connection_type,
+                sender_id=r.sender_id,
+                receiver_id=r.receiver_id,
+                as2_sender_id=r.as2_sender_id,
+                as2_receiver_id=r.as2_receiver_id,
+                gs_sender_id=r.gs_sender_id,
+                gs_receiver_id=r.gs_receiver_id,
+                message_id=r.message_id,
+                mdn_id=r.mdn_id,
+                mdn_mode=r.mdn_mode,
+                mdn_response=r.mdn_response,
+                file_name=r.file_name,
+                content_type=r.content_type,
+                signature_algorithm=r.signature_algorithm,
+                encryption_algorithm=r.encryption_algorithm,
+                trading_partner_id=r.trading_partner_id,
+                status=r.status,
+                edi_data=r.edi_data,
+                interchange_control_no=r.interchange_control_no,
+                transaction_type=r.transaction_type,
+                format_standard=r.format_standard,
+                storage_uri=r.storage_uri,
+                file_size_bytes=r.file_size_bytes,
+                msg_headers=json.loads(r.msg_headers) if r.msg_headers else None,
+                state=r.state,
+                status_message=r.status_message,
+                is_resend=r.is_resend,
+                parent_trace_id=r.parent_trace_id,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in result.scalars().all()
+        ]
 
     # Allowed filter fields and operators — whitelist to prevent arbitrary column access.
     _ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})
@@ -396,7 +441,12 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         }
     )
 
-    def _apply_dynamic_filters(self, stmt: Any, model: Any, filters: list[dict[str, Any]]) -> Any:
+    def _apply_dynamic_filters(
+        self,
+        stmt: Select[tuple[Any, ...]],
+        model: type[DeclarativeBase],
+        filters: list[dict[str, JsonValue]],
+    ) -> Select[tuple[Any, ...]]:
 
         for f in filters:
             field = f.get("field")
@@ -419,20 +469,26 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                         conds = [model.sender_id == value, model.receiver_id == value]
                         if has_gs:
                             conds.extend(
-                                [model.gs_sender_id == value, model.gs_receiver_id == value]
+                                [
+                                    cast(Any, model).gs_sender_id == value,
+                                    cast(Any, model).gs_receiver_id == value,
+                                ]
                             )
                         if has_tp:
-                            conds.append(model.trading_partner_id == value)
+                            conds.append(cast(Any, model).trading_partner_id == value)
                         stmt = stmt.where(or_(*conds))
 
                     elif operator == "neq":
                         conds = [model.sender_id != value, model.receiver_id != value]
                         if has_gs:
                             conds.extend(
-                                [model.gs_sender_id != value, model.gs_receiver_id != value]
+                                [
+                                    cast(Any, model).gs_sender_id != value,
+                                    cast(Any, model).gs_receiver_id != value,
+                                ]
                             )
                         if has_tp:
-                            conds.append(model.trading_partner_id != value)
+                            conds.append(cast(Any, model).trading_partner_id != value)
                         stmt = stmt.where(and_(*conds))
 
                     elif operator == "contains":
@@ -447,22 +503,27 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                         if has_gs:
                             conds.extend(
                                 [
-                                    model.gs_sender_id.ilike(pattern, escape="\\"),
-                                    model.gs_receiver_id.ilike(pattern, escape="\\"),
+                                    cast(Any, model).gs_sender_id.ilike(pattern, escape="\\"),
+                                    cast(Any, model).gs_receiver_id.ilike(pattern, escape="\\"),
                                 ]
                             )
                         if has_tp:
-                            conds.append(model.trading_partner_id.ilike(pattern, escape="\\"))
+                            conds.append(
+                                cast(Any, model).trading_partner_id.ilike(pattern, escape="\\")
+                            )
                         stmt = stmt.where(or_(*conds))
 
                     elif operator == "in" and isinstance(value, list):
                         conds = [model.sender_id.in_(value), model.receiver_id.in_(value)]
                         if has_gs:
                             conds.extend(
-                                [model.gs_sender_id.in_(value), model.gs_receiver_id.in_(value)]
+                                [
+                                    cast(Any, model).gs_sender_id.in_(value),
+                                    cast(Any, model).gs_receiver_id.in_(value),
+                                ]
                             )
                         if has_tp:
-                            conds.append(model.trading_partner_id.in_(value))
+                            conds.append(cast(Any, model).trading_partner_id.in_(value))
                         stmt = stmt.where(or_(*conds))
                 continue
 
@@ -517,137 +578,84 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         return stmt
 
     async def explorer_list_edi_messages(
-        self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
-    ) -> Sequence[Any]:
+        self, tenant_id: str, filters: list[dict[str, JsonValue]], limit: int = 50, offset: int = 0
+    ) -> Sequence[EdiMessageDTO]:
 
         tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
         stmt = self._apply_dynamic_filters(stmt, EdiMessage, filters)
         stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return [
+            EdiMessageDTO(
+                id=str(r.id),
+                trace_id=str(r.trace_id),
+                direction=r.direction,
+                connection_type=r.connection_type,
+                sender_id=r.sender_id,
+                receiver_id=r.receiver_id,
+                as2_sender_id=r.as2_sender_id,
+                as2_receiver_id=r.as2_receiver_id,
+                gs_sender_id=r.gs_sender_id,
+                gs_receiver_id=r.gs_receiver_id,
+                message_id=r.message_id,
+                mdn_id=r.mdn_id,
+                mdn_mode=r.mdn_mode,
+                mdn_response=r.mdn_response,
+                file_name=r.file_name,
+                content_type=r.content_type,
+                signature_algorithm=r.signature_algorithm,
+                encryption_algorithm=r.encryption_algorithm,
+                trading_partner_id=r.trading_partner_id,
+                status=r.status,
+                edi_data=r.edi_data,
+                interchange_control_no=r.interchange_control_no,
+                transaction_type=r.transaction_type,
+                format_standard=r.format_standard,
+                storage_uri=r.storage_uri,
+                file_size_bytes=r.file_size_bytes,
+                msg_headers=json.loads(r.msg_headers) if r.msg_headers else None,
+                state=r.state,
+                status_message=r.status_message,
+                is_resend=r.is_resend,
+                parent_trace_id=r.parent_trace_id,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in result.scalars().all()
+        ]
 
     async def explorer_list_edi_json(
-        self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
-    ) -> Sequence[Any]:
+        self, tenant_id: str, filters: list[dict[str, JsonValue]], limit: int = 50, offset: int = 0
+    ) -> Sequence[EdiJsonDTO]:
 
         tid_str = tenant_id if tenant_id is not None else None
         stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
         stmt = self._apply_dynamic_filters(stmt, EdiJson, filters)
         stmt = stmt.order_by(EdiJson.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return [
+            EdiJsonDTO(
+                id=str(j.id),
+                trace_id=str(j.trace_id),
+                tenant_id=j.tenant_id,
+                status=j.status,
+                trading_partner_id=j.trading_partner_id,
+                business_metadata=j.business_metadata,
+                transaction_type=j.transaction_type,
+                sender_id=j.sender_id,
+                receiver_id=j.receiver_id,
+                gs_sender_id=j.gs_sender_id,
+                gs_receiver_id=j.gs_receiver_id,
+                payload=j.payload,
+                parent_trace_id=j.parent_trace_id,
+                created_at=j.created_at,
+                updated_at=j.updated_at,
+            )
+            for j in result.scalars().all()
+        ]
 
-    async def get_transaction(self, tenant_id: str, trace_id: str) -> TransactionDetailDTO | None:
-
-        tid_str = tenant_id if tenant_id is not None else None
-        msg_stmt = select(EdiMessage).where(
-            EdiMessage.tenant_id == tid_str, EdiMessage.trace_id == trace_id
-        )
-        json_stmt = (
-            select(EdiJson)
-            .where(EdiJson.tenant_id == tid_str, EdiJson.trace_id == trace_id)
-            .order_by(EdiJson.created_at.asc())
-        )
-        gw_stmt = (
-            select(ApiGateway)
-            .where(ApiGateway.tenant_id == tid_str, ApiGateway.trace_id == trace_id)
-            .order_by(ApiGateway.created_at.asc())
-        )
-
-        msg_res = await self.session.execute(msg_stmt)
-        edi_msg = msg_res.scalars().first()
-
-        if not edi_msg:
-            return None
-
-        json_res = await self.session.execute(json_stmt)
-        gw_res = await self.session.execute(gw_stmt)
-
-        return TransactionDetailDTO(
-            edi_message=EdiMessageDTO(
-                id=str(edi_msg.id),
-                trace_id=str(edi_msg.trace_id),
-                direction=edi_msg.direction,
-                connection_type=edi_msg.connection_type,
-                sender_id=edi_msg.sender_id,
-                receiver_id=edi_msg.receiver_id,
-                as2_sender_id=edi_msg.as2_sender_id,
-                as2_receiver_id=edi_msg.as2_receiver_id,
-                gs_sender_id=edi_msg.gs_sender_id,
-                gs_receiver_id=edi_msg.gs_receiver_id,
-                message_id=edi_msg.message_id,
-                mdn_id=edi_msg.mdn_id,
-                mdn_mode=edi_msg.mdn_mode,
-                mdn_response=edi_msg.mdn_response,
-                file_name=edi_msg.file_name,
-                content_type=edi_msg.content_type,
-                signature_algorithm=edi_msg.signature_algorithm,
-                encryption_algorithm=edi_msg.encryption_algorithm,
-                compression=getattr(edi_msg, "compression", None),
-                inbound_route_id=getattr(edi_msg, "inbound_route_id", None),
-                trading_partner_id=getattr(edi_msg, "trading_partner_id", None),
-                status=getattr(edi_msg, "status", "RECEIVED"),
-                edi_data=getattr(edi_msg, "edi_data", None),
-                interchange_control_no=getattr(edi_msg, "interchange_control_no", None),
-                transaction_type=getattr(edi_msg, "transaction_type", None),
-                format_standard=getattr(edi_msg, "format_standard", None),
-                storage_uri=getattr(edi_msg, "storage_uri", None),
-                file_size_bytes=getattr(edi_msg, "file_size_bytes", None),
-                msg_headers=getattr(edi_msg, "msg_headers", None),
-                state=getattr(edi_msg, "state", None),
-                status_message=getattr(edi_msg, "status_message", None),
-                is_resend=getattr(edi_msg, "is_resend", False),
-                parent_trace_id=getattr(edi_msg, "parent_trace_id", None),
-                created_at=edi_msg.created_at,
-                updated_at=edi_msg.updated_at,
-            ),
-            edi_jsons=[
-                EdiJsonDTO(
-                    id=str(j.id),
-                    trace_id=str(j.trace_id),
-                    status=j.status,
-                    trading_partner_id=getattr(j, "trading_partner_id", None),
-                    error_message=getattr(j, "error_message", None),
-                    interchange_control_number=getattr(j, "interchange_control_number", None),
-                    group_control_number=getattr(j, "group_control_number", None),
-                    transaction_set_control_number=getattr(
-                        j, "transaction_set_control_number", None
-                    ),
-                    business_metadata=j.business_metadata,
-                    processing_metadata=getattr(j, "processing_metadata", None),
-                    transaction_type=getattr(j, "transaction_type", None),
-                    sender_id=getattr(j, "sender_id", None),
-                    receiver_id=getattr(j, "receiver_id", None),
-                    gs_sender_id=getattr(j, "gs_sender_id", None),
-                    gs_receiver_id=getattr(j, "gs_receiver_id", None),
-                    payload=getattr(j, "payload", None),
-                    parent_trace_id=getattr(j, "parent_trace_id", None),
-                    created_at=j.created_at,
-                    updated_at=j.updated_at,
-                )
-                for j in json_res.scalars().all()
-            ],
-            api_gateways=[
-                ApiGatewayDTO(
-                    id=str(g.id),
-                    trace_id=str(g.trace_id),
-                    event_type=getattr(g, "event_type", None),
-                    status=getattr(g, "status", None),
-                    error_message=getattr(g, "error_message", None),
-                    webhook_url=getattr(g, "webhook_url", None),
-                    http_status_code=getattr(g, "http_status_code", None),
-                    payload=getattr(g, "payload", None),
-                    response=getattr(g, "response", None),
-                    parent_trace_id=getattr(g, "parent_trace_id", None),
-                    created_at=g.created_at,
-                    updated_at=g.updated_at,
-                )
-                for g in gw_res.scalars().all()
-            ],
-        )
-
-    async def get_transaction_thread(self, tenant_id: str, key: str, value: str) -> Sequence[Any]:
+    async def list_edi_json(self, tenant_id: str, key: str, value: str) -> Sequence[EdiJsonDTO]:
 
         tid_str = tenant_id if tenant_id is not None else None
         json_stmt = (
@@ -657,7 +665,26 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
 
         result = await self.session.execute(json_stmt)
-        return result.scalars().all()
+        return [
+            EdiJsonDTO(
+                id=str(r.id),
+                trace_id=str(r.trace_id),
+                tenant_id=r.tenant_id,
+                status=r.status,
+                trading_partner_id=r.trading_partner_id,
+                business_metadata=r.business_metadata,
+                transaction_type=r.transaction_type,
+                sender_id=r.sender_id,
+                receiver_id=r.receiver_id,
+                gs_sender_id=r.gs_sender_id,
+                gs_receiver_id=r.gs_receiver_id,
+                payload=r.payload,
+                parent_trace_id=r.parent_trace_id,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in result.scalars().all()
+        ]
 
     async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
 

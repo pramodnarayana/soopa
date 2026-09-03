@@ -1,6 +1,6 @@
 import structlog
 from edi.adapters.inbound.as2.mdn import build_mdn
-from edi.application.dto import ProcessInboundAs2Command
+from edi.application.dtos import ProcessInboundAs2Command
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )

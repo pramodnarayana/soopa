@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any
+
+from seedwork.domain.types import JsonValue
+
+from edi.domain.types import AstNode
 
 
 class BaseEnvelopeBuilder(ABC):
@@ -10,9 +13,7 @@ class BaseEnvelopeBuilder(ABC):
 
     @staticmethod
     @abstractmethod
-    def build(
-        route_config: dict[str, Any], payload: dict[str, Any] | list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def build(route_config: dict[str, JsonValue], payload: AstNode | list[AstNode]) -> AstNode:
         """
         Dynamically constructs the Abstract Syntax Tree (AST) for the given payload and route.
         """

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 from edi.adapters.outbound.transformer.domain.envelope.edifact import (
     EdifactEnvelopeBuilder,
@@ -7,6 +7,7 @@ from edi.adapters.outbound.transformer.domain.envelope.edifact import (
 from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
+from edi.domain.types import AstNode
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
 
@@ -40,7 +41,7 @@ class BotsTransformerAdapter(TransformerPort):
                         gs_sender_id=txn.gs_sender_id,
                         gs_receiver_id=txn.gs_receiver_id,
                         control_number=txn.control_number,
-                        payload=txn.data,
+                        payload=cast("AstNode", txn.data),
                     )
                 )
         return transactions

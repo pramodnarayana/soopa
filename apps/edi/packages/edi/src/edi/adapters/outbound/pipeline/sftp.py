@@ -60,11 +60,9 @@ def get_ssh_client(
     client_key_string: str | None = None,
     host_key_string: str | None = None,
     timeout: int = 10,
-    use_legacy_rsa: bool = False,
 ) -> paramiko.SSHClient:
     """
     Creates an enterprise-grade, configured SSHClient.
-    Supports both legacy servers (ssh-rsa) and modern cryptographic algorithms.
     """
     client = paramiko.SSHClient()
     _setup_host_key(client, host, port, host_key_string)
@@ -77,9 +75,6 @@ def get_ssh_client(
         "allow_agent": False,
         "timeout": timeout,
     }
-
-    if use_legacy_rsa:
-        connect_kwargs["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}
 
     if client_key_string:
         connect_kwargs["pkey"] = _parse_client_key(client_key_string)

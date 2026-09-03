@@ -2,8 +2,9 @@ import dataclasses
 from datetime import UTC, datetime
 
 import structlog
+from seedwork.domain.types import UNSET
 
-from edi.application.dto import UNSET, UpdateInboundRouteCmd
+from edi.application.dtos.commands import UpdateInboundRouteCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork

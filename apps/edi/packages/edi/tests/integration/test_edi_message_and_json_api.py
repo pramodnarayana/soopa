@@ -36,7 +36,7 @@ async def test_edi_json_submission_and_thread(client: AsyncClient):
 
     # 2. Query transaction thread by po_number
     res_thread = await client.get(
-        f"/api/v1/tenants/1/edi/transactions/thread?key=po_number&value={po_num}"
+        f"/api/v1/tenants/1/edi/transactions/json?key=po_number&value={po_num}"
     )
     assert res_thread.status_code == 200, f"Failed to get transaction thread: {res_thread.text}"
     thread_items = res_thread.json()["items"]
@@ -128,8 +128,8 @@ async def test_edi_message_explorer_and_detail(
         await gs_gen.aclose()
         await ts_gen.aclose()
 
-    # 2. List transactions via GET /api/v1/transactions
-    res_list = await client.get("/api/v1/tenants/1/edi/transactions")
+    # 2. List transactions via GET /api/v1/transactions/messages
+    res_list = await client.get("/api/v1/tenants/1/edi/transactions/messages")
     assert res_list.status_code == 200, f"Failed to list transactions: {res_list.text}"
     tx_list = res_list.json()["items"]
     assert any(tx["trace_id"] == str(trace_id) for tx in tx_list)
@@ -140,12 +140,12 @@ async def test_edi_message_explorer_and_detail(
     detail = res_detail.json()
     assert detail["edi_message"]["trace_id"] == str(trace_id)
     assert detail["edi_message"]["sender_id"] == sender_id
-    assert len(detail["edi_json"]) == 1
-    assert detail["edi_json"][0]["transaction_type"] == "850"
-    assert detail["edi_json"][0]["status"] == "TRANSFORMED"
-    assert len(detail["api_gateway"]) == 1
-    assert detail["api_gateway"][0]["http_status_code"] == 200
-    assert detail["api_gateway"][0]["status"] == "SUCCESS"
+    assert len(detail["edi_jsons"]) == 1
+    assert detail["edi_jsons"][0]["transaction_type"] == "850"
+    assert detail["edi_jsons"][0]["status"] == "TRANSFORMED"
+    assert len(detail["api_gateways"]) == 1
+    assert detail["api_gateways"][0]["http_status_code"] == 200
+    assert detail["api_gateways"][0]["status"] == "SUCCESS"
 
     # 4. Explore EDI messages via POST /api/v1/explorer/edi-messages
     explore_payload = {

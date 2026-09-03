@@ -22,10 +22,7 @@ class RoutingResolutionUseCase:
     async def resolve_routing_context(
         self, msg: Any, edi_jsons: list[Any]
     ) -> tuple[str | None, str | None]:
-        if (
-            getattr(msg, "trading_partner_id", None)
-            or getattr(msg, "direction", None) == Direction.OUTBOUND
-        ):
+        if msg.trading_partner_id or msg.direction == Direction.OUTBOUND:
             return await self._resolve_outbound_routing(msg, edi_jsons)
         return await self._resolve_inbound_routing(msg, edi_jsons)
 
@@ -37,7 +34,7 @@ class RoutingResolutionUseCase:
         then falling back to business_metadata from the EDI JSON.
         """
         # 1. Try to resolve via trading_partner_id on the message
-        tp_id = getattr(msg, "trading_partner_id", None)
+        tp_id = msg.trading_partner_id
         if tp_id:
             try:
                 res = await self.repository.resolve_outbound_route(tp_id)
@@ -70,7 +67,7 @@ class RoutingResolutionUseCase:
 
         try:
             # 2. For AS2 inbound: look up the AS2Partner by as2_sender_id (AS2-From)
-            as2_from = getattr(msg, "as2_sender_id", None)
+            as2_from = msg.as2_sender_id
             if as2_from and msg.connection_type == ConnectionType.AS2:
                 res = await self.repository.resolve_as2_inbound(as2_from)
                 if res:
@@ -106,7 +103,7 @@ class RoutingResolutionUseCase:
 
         partner_ids = []
         for j in edi_jsons:
-            bm = getattr(j, "business_metadata", {}) or {}
+            bm = j.business_metadata or {}
             routing = bm.get("_routing", {})
             pid = routing.get("trading_partner_id")
             if pid:

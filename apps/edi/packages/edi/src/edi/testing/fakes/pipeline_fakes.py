@@ -1,12 +1,42 @@
 import base64
 import hashlib
 import uuid
+import dataclasses
 from datetime import UTC, datetime
 from typing import Any
 
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
+def _from_dict(cls: Any, data: dict[str, Any] | None) -> Any:
+    if not data:
+        return None
+    
+    kwargs = {}
+    for f in dataclasses.fields(cls):
+        if f.name in data:
+            kwargs[f.name] = data[f.name]
+        else:
+            # Provide a safe default if the field is missing from test data
+            if f.default is not dataclasses.MISSING:
+                kwargs[f.name] = f.default
+            elif f.default_factory is not dataclasses.MISSING:
+                kwargs[f.name] = f.default_factory()
+            else:
+                # Fallback to None. This handles Optionals cleanly.
+                kwargs[f.name] = None
+                
+    return cls(**kwargs)
+
+from edi.application.dtos.partners import (
+    AS2PartnershipDTO,
+    LocalAS2PartnerDTO,
+    RemoteAS2PartnerDTO,
+    SFTPPartnerDTO,
+)
+from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, OutboundRouteDTO
+from edi.application.dtos.transactions import EdiJsonDTO
+from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.direction import MessageDirection
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.status import MessageStatus
@@ -94,26 +124,18 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         if not raw:
             return None
 
-        # Return an object-like view for the tests
-        class DummyEdiJson:
-            def __init__(self, d: dict[str, Any]) -> None:
-                self.__dict__.update(d)
-
-            def __getattr__(self, name: str) -> Any | None:
-                # Return None for attributes not in the seeded dict
-                return None
-
-        return DummyEdiJson(raw)
+        return _from_dict(EdiJsonDTO, raw)
 
     async def get_outbound_edi_header_by_route_or_partner(
         self,
         route_id: str | None = None,
         trading_partner_id: str | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> OutboundEdiHeaderDTO | None:
         if trading_partner_id is None:
             return None
-        return self.outbound_edi_headers.get(trading_partner_id)
+        data = self.outbound_edi_headers.get(trading_partner_id)
+        return _from_dict(OutboundEdiHeaderDTO, data)
 
     async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
         if trace_id in self.edi_json:
@@ -278,7 +300,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         transaction_type: str,
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> InboundRouteDTO | None:
         candidates = [
             r
             for r in self.routes
@@ -287,19 +309,16 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             and r.get("isa_receiver_id") == receiver_id
             and r.get("transaction_type") in (transaction_type, "*")
         ]
-
-        # Prefer exact match over wildcard
         exact_match = next(
             (r for r in candidates if r.get("transaction_type") == transaction_type), None
         )
-        if exact_match:
-            return exact_match
-
         wildcard_match = next((r for r in candidates if r.get("transaction_type") == "*"), None)
-        return wildcard_match
+        data = exact_match or wildcard_match
+        return _from_dict(InboundRouteDTO, data)
 
-    async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
-        return self.outbound_routes.get(route_id)
+    async def get_outbound_route(self, route_id: str) -> OutboundRouteDTO | None:
+        data = self.outbound_routes.get(route_id)
+        return _from_dict(OutboundRouteDTO, data)
 
     async def save_edi_json(
         self,
@@ -327,7 +346,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
     async def get_outbound_route_by_trading_partner_id(
         self, trading_partner_id: str, tenant_id: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> OutboundRouteDTO | None:
         candidates = [
             r
             for r in self.routes
@@ -339,20 +358,30 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             )
         ]
         if candidates:
-            return candidates[0]
+            return _from_dict(OutboundRouteDTO, candidates[0])
         return None
 
-    async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
-        return self.sftp_partners.get(partner_id)
+    async def get_sftp_partner(self, partner_id: str) -> SFTPPartnerDTO | None:
+        data = self.sftp_partners.get(partner_id)
+        return _from_dict(SFTPPartnerDTO, data)
 
-    async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
-        return self.webhooks.get(partner_id)
+    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
+        data = self.webhooks.get(partner_id)
+        return _from_dict(WebhookDTO, data)
 
-    async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
-        return self.as2_partners.get(partner_id)
+    async def get_as2_partner(
+        self, partner_id: str
+    ) -> tuple[RemoteAS2PartnerDTO, AS2PartnershipDTO] | None:
+        data = self.as2_partners.get(partner_id)
+        if data:
+            remote_data = data.get("remote") or data
+            partnership_data = data.get("partnership") or data
+            return _from_dict(RemoteAS2PartnerDTO, remote_data), _from_dict(AS2PartnershipDTO, partnership_data)
+        return None
 
-    async def get_local_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
-        return self.local_as2_partners.get(partner_id)
+    async def get_local_as2_partner(self, partner_id: str) -> LocalAS2PartnerDTO | None:
+        data = self.local_as2_partners.get(partner_id)
+        return _from_dict(LocalAS2PartnerDTO, data)
 
 
 # ---------------------------------------------------------------------------

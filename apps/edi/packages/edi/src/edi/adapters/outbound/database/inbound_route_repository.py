@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.domain.types import UnsetType
 from sqlalchemy import or_, select, update
 
 from database.models import Webhook
@@ -12,7 +13,6 @@ from edi.adapters.outbound.database.models.control_plane import (
     InboundRoute,
     SFTPPartner,
 )
-from edi.application.dto import UnsetType
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 

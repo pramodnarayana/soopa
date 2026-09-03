@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from edi.application.dto import (
+from edi.application.dtos.commands import (
     CreateInboundRouteCmd,
     CreateOutboundRouteCmd,
     CreateSFTPPartnerCmd,

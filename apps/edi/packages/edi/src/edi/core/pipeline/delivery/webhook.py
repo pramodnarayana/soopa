@@ -52,23 +52,23 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             raw_payload = json.dumps(payload_data).encode("utf-8")
 
             auth_token = None
-            if partner.get("auth_header_vault_ref"):
+            if partner.auth_header_vault_ref:
                 if not self.secret_store:
                     raise ValueError(
                         "Secret store is not configured but webhook partner requires an auth token."
                     )
-                auth_token = await self.secret_store.get_secret(partner["auth_header_vault_ref"])
+                auth_token = await self.secret_store.get_secret(partner.auth_header_vault_ref)
 
             # Pass idempotency_key down to the http_delivery if it supports it, or add it to headers manually
             status_code, response_text = await self.http_delivery.deliver(
-                url=partner["url"],
+                url=partner.url,
                 payload=raw_payload,
                 auth_token=auth_token,
                 idempotency_key=idempotency_key,
             )
         except Exception as e:
             await self.uow.repository.update_api_payload_status(
-                trace_id, MessageStatus.FAILED, webhook_url=partner.get("url"), response=str(e)
+                trace_id, MessageStatus.FAILED, webhook_url=partner.url, response=str(e)
             )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             await self.uow.commit()
@@ -79,7 +79,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             await self.uow.repository.update_api_payload_status(
                 trace_id,
                 MessageStatus.DELIVERED,
-                webhook_url=partner.get("url"),
+                webhook_url=partner.url,
                 http_status_code=status_code,
                 response=response_text,
             )
@@ -87,15 +87,15 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
             logger.info(
-                "Delivered trace_id={trace_id} → webhook {partner['url']}",
+                "Delivered trace_id={trace_id} → webhook {partner_url}",
                 trace_id=trace_id,
-                partnerurl=partner["url"],
+                partner_url=partner.url,
             )
         else:
             await self.uow.repository.update_api_payload_status(
                 trace_id,
                 MessageStatus.FAILED,
-                webhook_url=partner.get("url"),
+                webhook_url=partner.url,
                 http_status_code=status_code,
                 response=response_text,
             )

@@ -111,16 +111,18 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             return
 
         try:
-            remote_partner = await self.uow.repository.get_as2_partner(partner_id)
-            if not remote_partner:
-                raise ValueError("AS2 partner {partner_id} not found.")
+            config_tuple = await self.uow.repository.get_as2_partner(partner_id)
+            if not config_tuple:
+                raise ValueError(f"AS2 partner {partner_id} not found.")
 
-            remote_url: str | None = remote_partner.get("remote_url")
+            remote_partner_dto, partnership_dto = config_tuple
+
+            remote_url: str | None = remote_partner_dto.url
             if not remote_url:
-                raise ValueError("AS2 partner {partner_id} has no remote_url configured.")
+                raise ValueError(f"AS2 partner {partner_id} has no remote_url configured.")
 
-            local_partner_id: str | None = remote_partner.get("local_partner_id")
-            local_partner = (
+            local_partner_id: str | None = partnership_dto.local_partner_id
+            local_partner_dto = (
                 await self.uow.repository.get_local_as2_partner(local_partner_id)
                 if local_partner_id
                 else None
@@ -130,10 +132,15 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 raise ValueError("Empty EDI data")
             raw_payload = edi_msg.edi_data.encode("utf-8")
 
+            import dataclasses
+
+            remote_dict = dict(dataclasses.asdict(remote_partner_dto))
+            local_dict = dict(dataclasses.asdict(local_partner_dto)) if local_partner_dto else None
+
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,
-                local_partner=local_partner,
-                remote_partner=remote_partner,
+                local_partner=local_dict,
+                remote_partner=remote_dict,
                 idempotency_key=idempotency_key,
             )
         except Exception as e:

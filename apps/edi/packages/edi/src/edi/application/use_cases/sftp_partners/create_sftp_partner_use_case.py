@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from edi.application.dto import CreateSFTPPartnerCmd
+from edi.application.dtos.commands import CreateSFTPPartnerCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork

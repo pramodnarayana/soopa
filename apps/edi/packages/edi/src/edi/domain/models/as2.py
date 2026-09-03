@@ -8,8 +8,8 @@ These are domain value objects with no external dependencies — only the Python
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
 
+from seedwork.domain.types import JsonValue
 from seedwork.models import AggregateRoot
 
 
@@ -115,5 +115,5 @@ class AS2PartnershipDomainModel(AggregateRoot):
     tenant_id: str | None = None
     credentials_vault_ref: str | None = None
     mdn_url: str | None = None
-    advanced_flags: dict[str, Any] | None = None
+    advanced_flags: dict[str, JsonValue] | None = None
     active: bool = False

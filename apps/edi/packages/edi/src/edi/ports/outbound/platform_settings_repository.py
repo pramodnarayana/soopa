@@ -1,12 +1,13 @@
 import abc
-from typing import Any
+
+from seedwork.domain.types import JsonValue
 
 
 class PlatformSettingsRepositoryPort(abc.ABC):
     @abc.abstractmethod
-    async def get_config(self, key: str) -> Any | None:
+    async def get_config(self, key: str) -> JsonValue | None:
         pass
 
     @abc.abstractmethod
-    async def set_config(self, key: str, value: Any) -> None:
+    async def set_config(self, key: str, value: JsonValue) -> None:
         pass

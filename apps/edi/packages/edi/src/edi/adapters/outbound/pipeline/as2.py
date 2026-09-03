@@ -48,12 +48,6 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
 
         ctx = self.validator(url) if self.validator else contextlib.nullcontext()
 
-        # If validator returns a boolean (legacy), handle it
-        if isinstance(ctx, bool):
-            if not ctx:
-                raise ValueError("URL validation failed for provided destination.")
-            ctx = contextlib.nullcontext()
-
         with ctx, ssrf_safe_context(url):
             async with httpx.AsyncClient(
                 timeout=self.timeout,

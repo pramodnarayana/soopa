@@ -21,7 +21,7 @@ class BulkReplayTransactionsUseCase:
         batch_id = command_key or generate_random_hex(6)
 
         for i, trace_id in enumerate(trace_ids):
-            result = await self.uow.transactions.get_transaction(tenant_id, trace_id)
+            result = await self.uow.traces.get_edi_trace(tenant_id, trace_id)
             if not result or not result.edi_message:
                 raise TransactionNotFoundError(trace_id=trace_id)
 

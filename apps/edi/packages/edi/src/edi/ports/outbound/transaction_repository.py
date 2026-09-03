@@ -1,7 +1,11 @@
 from collections.abc import Sequence
-from typing import Any, Protocol
+from typing import Protocol
 
-from edi.application.dto import RouteDTO, WebhookDTO
+from seedwork.domain.types import JsonValue
+
+from edi.application.dtos.routes import InboundRouteDTO
+from edi.application.dtos.transactions import EdiJsonDTO, EdiMessageDTO
+from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 
 
@@ -18,7 +22,7 @@ class TransactionRepositoryPort(Protocol):
 
     async def get_route(
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
-    ) -> RouteDTO | None:
+    ) -> InboundRouteDTO | None:
         """
         Fetches a route config for the Data Plane and returns a typed DTO.
         """
@@ -34,7 +38,7 @@ class TransactionRepositoryPort(Protocol):
         self,
         trace_id: str,
         direction: str,
-        payload: dict[str, Any],
+        payload: dict[str, JsonValue],
         status: str,
         transaction_type: str | None = None,
         webhook_url: str | None = None,
@@ -45,7 +49,7 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def create_edi_message(self, tenant_id: str, payload: dict[str, Any]) -> str:
+    async def create_edi_message(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         """
         Saves a new EdiMessage record to the Data Plane.
         """
@@ -66,7 +70,7 @@ class TransactionRepositoryPort(Protocol):
         ...
 
     async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: Any, idempotency_key: str | None
+        self, tenant_id: str, event_type: str, payload: JsonValue, idempotency_key: str | None
     ) -> str:
         """
         [DEPRECATED] Low-level outbox publish for non-aggregate callers.
@@ -74,7 +78,7 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, Any]) -> str:
+    async def create_edi_json(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         """
         Saves a new EdiJson record to the Data Plane.
         """
@@ -91,8 +95,8 @@ class TransactionRepositoryPort(Protocol):
         receiver_id: str | None,
         gs_sender_id: str | None,
         gs_receiver_id: str | None,
-        business_metadata: dict[str, Any],
-        payload: dict[str, Any],
+        business_metadata: dict[str, JsonValue],
+        payload: dict[str, JsonValue],
         status: str,
         tenant_id: str | None = None,
     ) -> str:
@@ -101,13 +105,13 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def create_api_gateway(self, tenant_id: str, payload: dict[str, Any]) -> str:
+    async def create_api_gateway(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         """
         Saves a new ApiGateway record to the Data Plane.
         """
         ...
 
-    async def list_transactions(
+    async def list_edi_messages(
         self,
         tenant_id: str,
         limit: int = 50,
@@ -115,35 +119,29 @@ class TransactionRepositoryPort(Protocol):
         partner_id: str | None = None,
         transaction_type: str | None = None,
         direction: str | None = None,
-    ) -> Sequence[Any]:
+    ) -> Sequence[EdiMessageDTO]:
         """
         Lists transactions joined across Data Plane tables.
         """
         ...
 
     async def explorer_list_edi_messages(
-        self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
-    ) -> Sequence[Any]:
+        self, tenant_id: str, filters: list[dict[str, JsonValue]], limit: int = 50, offset: int = 0
+    ) -> Sequence[EdiMessageDTO]:
         """
         Dynamically query EdiMessage for the data explorer.
         """
         ...
 
     async def explorer_list_edi_json(
-        self, tenant_id: str, filters: list[dict[str, Any]], limit: int = 50, offset: int = 0
-    ) -> Sequence[Any]:
+        self, tenant_id: str, filters: list[dict[str, JsonValue]], limit: int = 50, offset: int = 0
+    ) -> Sequence[EdiJsonDTO]:
         """
         Dynamically query EdiJson for the data explorer.
         """
         ...
 
-    async def get_transaction(self, tenant_id: str, trace_id: str) -> Any | None:
-        """
-        Retrieves a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
-        """
-        ...
-
-    async def get_transaction_thread(self, tenant_id: str, key: str, value: str) -> Sequence[Any]:
+    async def list_edi_json(self, tenant_id: str, key: str, value: str) -> Sequence[EdiJsonDTO]:
         """
         Retrieves a chronological thread of documents sharing a specific business metadata key/value.
         """

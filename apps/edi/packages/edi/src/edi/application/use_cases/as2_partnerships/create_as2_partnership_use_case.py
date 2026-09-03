@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from edi.application.dto import CreateAS2PartnershipCmd
+from edi.application.dtos.commands import CreateAS2PartnershipCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.as2 import AS2PartnershipDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork

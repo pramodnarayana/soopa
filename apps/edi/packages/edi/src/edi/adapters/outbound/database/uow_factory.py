@@ -1,11 +1,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
+from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -13,7 +13,7 @@ from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 
 
 class SqlAlchemyDataPlaneUnitOfWorkFactory(DataPlaneUnitOfWorkFactoryPort):
-    def __init__(self, global_session: GlobalSession, db_router: Any) -> None:
+    def __init__(self, global_session: GlobalSession, db_router: DatabaseRouterPort) -> None:
         self.global_session = global_session
         self.db_router = db_router
 

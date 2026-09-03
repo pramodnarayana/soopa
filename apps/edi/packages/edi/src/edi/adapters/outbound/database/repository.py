@@ -1,4 +1,3 @@
-from typing import Any
 from uuid import UUID
 
 from seedwork import generate_random_hex
@@ -34,7 +33,7 @@ class PartnershipRepository:
 
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
-    ) -> tuple[Any, Any, Any] | None:
+    ) -> tuple[AS2Partnership, AS2Partner, AS2Partner] | None:
 
         LocalPartner = aliased(AS2Partner)
         RemotePartner = aliased(AS2Partner)
@@ -70,7 +69,7 @@ class InboundRouteRepository:
         isa_receiver_id: str,
         tenant_id: str,
         transaction_type: str | None = None,
-    ) -> Any | None:
+    ) -> InboundRoute | None:
 
         conditions = [
             InboundRoute.isa_sender_id == isa_sender_id,

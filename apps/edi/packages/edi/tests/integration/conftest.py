@@ -100,6 +100,23 @@ async def db_session(db_connection):
 
 
 @pytest_asyncio.fixture(scope="function")
+async def tenant_db_session(tenant_db_connection):
+    """
+    Provide an AsyncSession that rolls back after each test, for the tenant shard.
+    """
+    SessionLocal = async_sessionmaker(
+        bind=tenant_db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
+
+    session = SessionLocal()
+    yield session
+    await session.close()
+
+
+@pytest_asyncio.fixture(scope="function")
 async def override_get_global_session(db_connection):
 
     SessionLocal = async_sessionmaker(
@@ -175,7 +192,7 @@ async def client(
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "test-user",
         "tenant_id": "1",
-        "permissions": ["*"],
+        "permissions": ["*", "certificates:rotate", "certificates:export_private"],
     }
     app.dependency_overrides[get_platform_user_profile] = lambda: {
         "sub": "test-user",
@@ -219,12 +236,12 @@ async def platform_client(
     app.dependency_overrides[get_platform_user_profile] = lambda: {
         "sub": "admin-user",
         "tenant_id": PLATFORM_TENANT_ID,
-        "permissions": ["platform:admin"],
+        "permissions": ["platform:admin", "certificates:rotate", "certificates:export_private"],
     }
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "admin-user",
         "tenant_id": PLATFORM_TENANT_ID,
-        "permissions": ["*"],
+        "permissions": ["*", "certificates:rotate", "certificates:export_private"],
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

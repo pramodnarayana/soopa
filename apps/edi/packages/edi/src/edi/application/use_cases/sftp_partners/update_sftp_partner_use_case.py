@@ -1,8 +1,9 @@
 import dataclasses
 
 import structlog
+from seedwork.domain.types import UNSET
 
-from edi.application.dto import UNSET, UpdateSFTPPartnerCmd
+from edi.application.dtos.commands import UpdateSFTPPartnerCmd
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.ports.outbound.field_encryption import FieldEncryptionPort

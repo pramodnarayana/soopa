@@ -25,7 +25,7 @@ pytestmark = pytest.mark.asyncio
 _REMOTE_PARTNER = {
     "name": "Walmart AS2",
     "as2_id": "WALMART",
-    "remote_url": "https://as2.walmart.com/receive",
+    "url": "https://as2.walmart.com/receive",
     "local_partner_id": "local-p1",
     "public_cert_pem": None,
     "public_cert_vault_ref": None,

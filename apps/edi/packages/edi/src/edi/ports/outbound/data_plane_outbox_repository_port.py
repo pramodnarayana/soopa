@@ -1,6 +1,7 @@
-from typing import Any, Protocol
+from typing import Protocol
 
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from seedwork.domain.types import JsonValue
 
 
 class DataPlaneOutboxRepositoryPort(OutboxRepositoryPort, Protocol):
@@ -10,7 +11,7 @@ class DataPlaneOutboxRepositoryPort(OutboxRepositoryPort, Protocol):
     """
 
     async def append_event(
-        self, event_type: str, payload: dict[str, Any], idempotency_key: str | None = None
+        self, event_type: str, payload: dict[str, JsonValue], idempotency_key: str | None = None
     ) -> None: ...
 
     async def claim_delivery_outbox_event(self, idempotency_key: str) -> str | None: ...
