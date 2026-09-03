@@ -13,7 +13,8 @@ from edi.application.dtos.commands import (
 from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
     UpdateSFTPPartnerUseCase,
 )
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 

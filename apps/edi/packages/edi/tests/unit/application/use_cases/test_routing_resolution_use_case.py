@@ -146,6 +146,17 @@ class TestRoutingResolutionOutbound:
         assert name is None  # no routes seeded; should not crash
 
     @pytest.mark.asyncio
+    async def test_outbound_uses_persisted_routing_partner_id(self):
+        self.repo.seed_outbound_route(TP_META, ("Persisted Partner", "AS2"))
+        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=None)
+        edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": TP_META}})
+
+        name, conn_type = await self.use_case.resolve_routing_context(msg, [edi_json])
+
+        assert name == "Persisted Partner"
+        assert conn_type == "AS2"
+
+    @pytest.mark.asyncio
     async def test_exception_in_outbound_route_bubbles_up(self):
         """Repository exception must propagate so infrastructure can NACK."""
 

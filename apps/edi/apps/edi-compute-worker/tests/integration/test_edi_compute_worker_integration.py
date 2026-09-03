@@ -8,6 +8,7 @@ import pytest_asyncio
 from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 from seedwork import generate_random_hex
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -93,7 +94,9 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     async def fake_use_case_factory(tenant_id: str):
         @contextlib.asynccontextmanager
         async def fake_uow_factory():
-            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=db_session_factory())
+            yield SqlAlchemyDataPlaneUnitOfWork(
+                tenant_session=db_session_factory(), storage=InMemoryStorageAdapter()
+            )
 
         return ComputeTransformUseCase(uow_factory=fake_uow_factory, transformer=transformer)
 

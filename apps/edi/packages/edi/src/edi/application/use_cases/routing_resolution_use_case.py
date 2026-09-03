@@ -7,6 +7,18 @@ from edi.ports.outbound.routing_resolver_repository import RoutingResolverReposi
 logger = structlog.get_logger(__name__)
 
 
+def _routing_partner_ids(edi_jsons: list[EdiJsonDTO]) -> list[str]:
+    partner_ids: list[str] = []
+    for edi_json in edi_jsons:
+        metadata = edi_json.business_metadata or {}
+        routing_metadata = metadata.get("_routing")
+        if isinstance(routing_metadata, dict):
+            partner_id = routing_metadata.get("trading_partner_id")
+            if isinstance(partner_id, str) and partner_id and partner_id not in partner_ids:
+                partner_ids.append(partner_id)
+    return partner_ids
+
+
 class RoutingResolutionUseCase:
     """
     Resolves the human-readable trading partner name and connection type for a given message.
@@ -31,24 +43,31 @@ class RoutingResolutionUseCase:
         Resolves outbound routing by first checking explicit route overrides,
         then falling back to business_metadata from the EDI JSON.
         """
-        # 1. Try to resolve via trading_partner_id on the message
-        tp_id = msg.trading_partner_id
-        if tp_id:
-            try:
+        # 1. Try to resolve via trading_partner_id on the message, then persisted routing metadata.
+        metadata_partner_ids = _routing_partner_ids(edi_jsons)
+        tp_id = msg.trading_partner_id or next(iter(metadata_partner_ids), None)
+
+        try:
+            if tp_id:
                 res = await self.repository.resolve_outbound_route(tp_id)
                 if res:
                     return res
-            except Exception as e:
-                logger.exception(
-                    "outbound_route_resolution_failed",
-                    trace_id=msg.trace_id,
-                    trading_partner_id=tp_id,
-                )
-                raise RuntimeError(
-                    f"Outbound route resolution failed for trace_id={msg.trace_id}"
-                ) from e
 
-        # If no trading partner is provided on outbound, we cannot resolve the route.
+            partner_ids = metadata_partner_ids or ([tp_id] if tp_id else [])
+            partner_name = await self.repository.resolve_business_metadata(partner_ids)
+            if partner_name:
+                return partner_name, msg.connection_type
+        except Exception as e:
+            logger.exception(
+                "outbound_route_resolution_failed",
+                trace_id=msg.trace_id,
+                trading_partner_id=tp_id,
+            )
+            raise RuntimeError(
+                f"Outbound route resolution failed for trace_id={msg.trace_id}"
+            ) from e
+
+        # If no trading partner is available, we cannot resolve the route.
         return None, msg.connection_type
 
     async def _resolve_inbound_routing(
@@ -60,6 +79,12 @@ class RoutingResolutionUseCase:
         """
 
         try:
+            metadata_partner_ids = _routing_partner_ids(edi_jsons)
+            if metadata_partner_ids:
+                partner_name = await self.repository.resolve_business_metadata(metadata_partner_ids)
+                if partner_name:
+                    return partner_name, msg.connection_type
+
             # 2. For AS2 inbound: look up the AS2Partner by as2_sender_id (AS2-From)
             as2_from = msg.as2_sender_id
             if as2_from and msg.connection_type == ConnectionType.AS2:

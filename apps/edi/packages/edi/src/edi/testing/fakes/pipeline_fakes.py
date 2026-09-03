@@ -43,9 +43,9 @@ from edi.application.dtos.partners import (
 )
 from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, OutboundRouteDTO
 from edi.application.dtos.webhooks import WebhookDTO
-from edi.domain.direction import MessageDirection
+from edi.domain.enums import EdiDirection as MessageDirection
+from edi.domain.enums import MessageStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
-from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort

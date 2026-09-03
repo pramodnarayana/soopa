@@ -4,8 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from edi.adapters.outbound.database.models.data_plane import ApiGateway, EdiJson, EdiMessage
+from edi.adapters.outbound.database.payload_hydration import (
+    hydrate_edi_data,
+    hydrate_json_payload,
+)
 from edi.application.dtos.trace import EdiTraceDTO
 from edi.application.dtos.transactions import ApiGatewayDTO, EdiJsonDTO, EdiMessageDTO
+from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.trace_repository import TraceRepositoryPort
 
 
@@ -15,16 +20,20 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
     Strictly responsible for reading the composite Trace view.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, storage: StoragePort) -> None:
         self.session = session
+        self.storage = storage
 
     async def get_edi_trace(self, tenant_id: str, trace_id: str) -> EdiTraceDTO | None:
         """
         Retrieves a single trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
         """
         tid_str = tenant_id if tenant_id is not None else None
-        msg_stmt = select(EdiMessage).where(
-            EdiMessage.tenant_id == tid_str, EdiMessage.trace_id == trace_id
+        msg_stmt = (
+            select(EdiMessage)
+            .where(EdiMessage.tenant_id == tid_str, EdiMessage.trace_id == trace_id)
+            .order_by(EdiMessage.created_at.desc())
+            .limit(1)
         )
         json_stmt = (
             select(EdiJson)
@@ -68,7 +77,9 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 encryption_algorithm=edi_msg.encryption_algorithm,
                 trading_partner_id=edi_msg.trading_partner_id,
                 status=edi_msg.status,
-                edi_data=edi_msg.edi_data,
+                edi_data=await hydrate_edi_data(
+                    self.storage, edi_msg.storage_uri, edi_msg.edi_data
+                ),
                 interchange_control_no=edi_msg.interchange_control_no,
                 transaction_type=edi_msg.transaction_type,
                 format_standard=edi_msg.format_standard,
@@ -96,7 +107,7 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                     receiver_id=j.receiver_id,
                     gs_sender_id=j.gs_sender_id,
                     gs_receiver_id=j.gs_receiver_id,
-                    payload=j.payload,
+                    payload=await hydrate_json_payload(self.storage, j.storage_uri, j.payload),
                     parent_trace_id=j.parent_trace_id,
                     created_at=j.created_at,
                     updated_at=j.updated_at,

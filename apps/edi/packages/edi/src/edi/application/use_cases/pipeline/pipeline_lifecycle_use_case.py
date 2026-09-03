@@ -97,7 +97,8 @@ class PipelineLifecycleUseCase:
         Triggered when a DeliveryUseCase completes its delivery attempt.
         """
         trace_id = str(payload["trace_id"])
-        direction = str(payload.get("direction", EdiDirection.INBOUND.value))
+        direction_val = payload.get("direction")
+        direction = str(direction_val) if direction_val is not None else EdiDirection.INBOUND.value
         status = payload.get("status")
 
         # Validate status field is present before proceeding

@@ -32,6 +32,7 @@ from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 from edi.module import create_edi_app
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
 @pytest.fixture(scope="session")
@@ -232,7 +233,9 @@ async def client(
             from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 
             try:
-                yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=ts)
+                yield SqlAlchemyDataPlaneUnitOfWork(
+                    tenant_session=ts, storage=InMemoryStorageAdapter()
+                )
             finally:
                 await ts_gen.aclose()
 

@@ -11,6 +11,7 @@ from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOf
 from edi.application.dtos.commands import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
 from edi.domain.constants import EdiIdPrefix
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
 @pytest_asyncio.fixture
@@ -28,7 +29,7 @@ async def tenant_session(tenant_db_connection):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_success(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session)
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow)
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
@@ -71,7 +72,7 @@ async def test_process_api_edi_json_success(tenant_session):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_heading(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session)
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow)
 
     trace_id = await svc.process_api_edi_json(
@@ -100,7 +101,7 @@ async def test_process_api_edi_json_heading(tenant_session):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_st_segment(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session)
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow)
 
     trace_id = await svc.process_api_edi_json(
@@ -123,7 +124,7 @@ async def test_process_api_edi_json_st_segment(tenant_session):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_list_extraction(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session)
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow)
 
     payload = [

@@ -173,6 +173,7 @@ class CreateAS2PartnerUseCase:
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_as2_partner_created,
                     resource_id=partner_id,
+                    explicit_idempotency_key=idempotency_key,
                 )
             )
 

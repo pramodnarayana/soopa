@@ -13,6 +13,7 @@ from edi.application.use_cases.transactions.bulk_replay_transactions_use_case im
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
 @pytest_asyncio.fixture
@@ -30,7 +31,7 @@ async def tenant_session(tenant_db_connection):
 
 @pytest.mark.asyncio
 async def test_replay_queues_validated_transaction(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session)
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     tenant_id = "tenant-1"
     trace_id = f"trace-{uuid.uuid4()}"
 
@@ -67,7 +68,7 @@ async def test_replay_queues_validated_transaction(tenant_session):
 
 @pytest.mark.asyncio
 async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session)
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     tenant_id = "tenant-bulk"
     trace_id_1 = f"trace-{uuid.uuid4()}"
     trace_id_2 = f"trace-{uuid.uuid4()}"

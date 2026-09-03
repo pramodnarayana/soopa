@@ -6,7 +6,7 @@ authors = [
     {name = "Platform Team", email = "platform@company.com"}
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["typing-extensions>=4.12.0"]
 
 [build-system]
 requires = ["hatchling"]

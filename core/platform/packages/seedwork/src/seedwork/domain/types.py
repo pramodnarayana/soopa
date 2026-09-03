@@ -1,10 +1,16 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
-from typing import TypeAlias
+from typing_extensions import TypeAliasType
 
 JsonPrimitive = str | int | float | bool | None
-type JsonValue = JsonPrimitive | dict[str, JsonValue] | list[JsonValue]
-type JsonDict = dict[str, JsonValue]
+if TYPE_CHECKING:
+    JsonValue: TypeAlias = JsonPrimitive | dict[str, "JsonValue"] | list["JsonValue"]
+    JsonDict: TypeAlias = dict[str, JsonValue]
+else:
+    JsonValue = TypeAliasType(
+        "JsonValue", JsonPrimitive | dict[str, "JsonValue"] | list["JsonValue"]
+    )
+    JsonDict = TypeAliasType("JsonDict", dict[str, JsonValue])
 
 
 class UnsetType:

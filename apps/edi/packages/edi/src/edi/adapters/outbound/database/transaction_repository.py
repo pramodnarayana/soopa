@@ -33,6 +33,10 @@ from edi.adapters.outbound.database.models.data_plane import (
     OutboundRoute,
     Webhook,
 )
+from edi.adapters.outbound.database.payload_hydration import (
+    hydrate_edi_data,
+    hydrate_json_payload,
+)
 from edi.application.dtos.routes import InboundRouteDTO
 from edi.application.dtos.transactions import (
     EdiJsonDTO,
@@ -43,12 +47,14 @@ from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.enums import EdiDirection
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 
 
 class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchemyRepository):
-    def __init__(self, session: TenantSession) -> None:
+    def __init__(self, session: TenantSession, storage: StoragePort) -> None:
         TenantSqlAlchemyRepository.__init__(self, session)
+        self.storage = storage
 
     async def create_edi_message(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         payload_copy = dict(payload)
@@ -401,7 +407,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 encryption_algorithm=r.encryption_algorithm,
                 trading_partner_id=r.trading_partner_id,
                 status=r.status,
-                edi_data=r.edi_data,
+                edi_data=await hydrate_edi_data(self.storage, r.storage_uri, r.edi_data),
                 interchange_control_no=r.interchange_control_no,
                 transaction_type=r.transaction_type,
                 format_standard=r.format_standard,
@@ -615,7 +621,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 encryption_algorithm=r.encryption_algorithm,
                 trading_partner_id=r.trading_partner_id,
                 status=r.status,
-                edi_data=r.edi_data,
+                edi_data=await hydrate_edi_data(self.storage, r.storage_uri, r.edi_data),
                 interchange_control_no=r.interchange_control_no,
                 transaction_type=r.transaction_type,
                 format_standard=r.format_standard,
@@ -661,7 +667,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 receiver_id=j.receiver_id,
                 gs_sender_id=j.gs_sender_id,
                 gs_receiver_id=j.gs_receiver_id,
-                payload=j.payload,
+                payload=await hydrate_json_payload(self.storage, j.storage_uri, j.payload),
                 parent_trace_id=j.parent_trace_id,
                 created_at=j.created_at,
                 updated_at=j.updated_at,
@@ -692,7 +698,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 receiver_id=r.receiver_id,
                 gs_sender_id=r.gs_sender_id,
                 gs_receiver_id=r.gs_receiver_id,
-                payload=r.payload,
+                payload=await hydrate_json_payload(self.storage, r.storage_uri, r.payload),
                 parent_trace_id=r.parent_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,

@@ -37,11 +37,12 @@ class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
             fallback_id = getattr(
                 event, "id", getattr(event, "resource_id", getattr(aggregate, "id", ""))
             )
-            final_idemp_key = (
-                f"{idempotency_key}_{index}"
-                if idempotency_key
-                else f"{event_name}_{tenant_id}_{fallback_id}_{index}"
-            )
+            if event.explicit_idempotency_key:
+                final_idemp_key = event.explicit_idempotency_key
+            elif idempotency_key:
+                final_idemp_key = f"{idempotency_key}_{index}"
+            else:
+                final_idemp_key = f"{event_name}_{tenant_id}_{fallback_id}_{index}"
 
             outbox_event = ControlPlaneOutbox(
                 id=outbox_id,
