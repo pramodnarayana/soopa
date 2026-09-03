@@ -12,7 +12,6 @@ in inmessage.py / outmessage.py via READER_REGISTRY / WRITER_REGISTRY.
 # pylint: disable=too-many-statements, attribute-defined-outside-init
 
 import codecs
-from typing import Any
 
 import structlog
 
@@ -24,6 +23,7 @@ from edi.core.bots.domain.exceptions import InMessageError
 from edi.core.bots.domain.outmessage import Outmessage
 from edi.core.bots.utils import botslib
 from edi.core.bots.utils.botslib import gettext as _
+from edi.domain.types import AstNode
 
 from .base import var
 
@@ -377,5 +377,5 @@ class edifact_writer(Outmessage):
             terug += self.ta_info["reserve"]
         return terug
 
-    def _manipulatemessagetype(self, messagetype: str, inode: Any) -> str:
+    def _manipulatemessagetype(self, messagetype: str, inode: AstNode) -> str:
         return messagetype.replace(".", "_")

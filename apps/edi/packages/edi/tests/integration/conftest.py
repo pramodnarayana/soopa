@@ -182,6 +182,12 @@ async def client(
 ):
 
     app = create_edi_app()
+    from unittest.mock import MagicMock
+
+    from dependency_injector import providers
+
+    app.state.db_router = MagicMock()
+    app.container.vault_port.override(providers.Object(override_get_secret_store))
 
     old_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_global_session] = override_get_global_session
@@ -213,6 +219,25 @@ async def client(
 
     app.dependency_overrides[get_data_plane_uow] = _uow
 
+    class FakeDpFactory:
+        def __init__(self, global_session, db_router):
+            pass
+
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def get_data_plane_uow(self, tenant_id: str, app_slug: str):
+            ts_gen = override_get_tenant_session(tenant_id)
+            ts = await ts_gen.__anext__()
+            from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+
+            try:
+                yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=ts)
+            finally:
+                await ts_gen.aclose()
+
+    app.container.dp_factory.override(providers.Factory(FakeDpFactory))
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
@@ -225,6 +250,12 @@ async def platform_client(
 ):
 
     app = create_edi_app()
+    from unittest.mock import MagicMock
+
+    from dependency_injector import providers
+
+    app.state.db_router = MagicMock()
+    app.container.vault_port.override(providers.Object(override_get_secret_store))
 
     old_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_global_session] = override_get_global_session

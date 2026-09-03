@@ -7,7 +7,6 @@ from edi.adapters.outbound.database.routing_resolver_repository import (
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
-from edi.application.dtos.trace import EdiTraceDTO
 from edi.application.dtos.transactions import ApiGatewayDTO, EdiJsonDTO, EdiMessageDTO
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
 from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
@@ -41,6 +40,7 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/edi/transactions", tags=["Transactions"])
 
 # --- DTOs ---
+
 
 class EdiMessageListResponse(BaseModel):
     items: list[EdiMessageDTO]
@@ -133,8 +133,8 @@ async def get_edi_trace(
             # We don't pass the resolver into the use case anymore for simplicity,
             # we just resolve the partner name in the router to keep the domain pure.
             result = await svc.get_edi_trace(tenant_id, trace_id, resolver)
-            
-            trading_partner_name, new_conn_type = await resolver.resolve_routing_context(
+
+            trading_partner_name, _new_conn_type = await resolver.resolve_routing_context(
                 result.edi_message, result.edi_jsons
             )
 

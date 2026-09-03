@@ -13,13 +13,18 @@ single reason to change (SRP):
 """
 
 import functools
-from typing import Any
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.adapters.inbound.as2 import OutboundAS2Message, build_outbound_message
+from edi.adapters.inbound.as2.builder import build_outbound_message
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
+from edi.application.dtos.partners import (
+    AS2PartnershipDTO,
+    LocalAS2PartnerDTO,
+    RemoteAS2PartnerDTO,
+)
+from edi.domain.models.as2 import OutboundAS2Message
 
 logger = structlog.get_logger(__name__)
 
@@ -58,8 +63,9 @@ class AS2MessageOrchestrator:
     async def build(
         self,
         raw_payload: bytes,
-        local_partner: dict[str, Any] | None,
-        remote_partner: dict[str, Any],
+        local_partner: LocalAS2PartnerDTO | None,
+        remote_partner: RemoteAS2PartnerDTO,
+        partnership: AS2PartnershipDTO,
         idempotency_key: str | None = None,
     ) -> OutboundAS2Message:
         """
@@ -67,8 +73,9 @@ class AS2MessageOrchestrator:
 
         Args:
             raw_payload:    Raw EDI bytes from S3.
-            local_partner:  Local AS2 partner config dict (for signing key/cert).
-            remote_partner: Remote AS2 partner + partnership settings dict.
+            local_partner:  Local AS2 partner DTO (for signing key/cert).
+            remote_partner: Remote AS2 partner DTO.
+            partnership:    AS2 Partnership DTO containing negotiated settings.
 
         Returns:
             OutboundAS2Message with `.body`, `.headers`, and `.mic`.
@@ -82,28 +89,28 @@ class AS2MessageOrchestrator:
                 "The AS2Partnership must have a valid local_partner_id."
             )
 
-        if "as2_id" not in local_partner or not local_partner.get("as2_id"):
+        if not local_partner.as2_id:
             raise ValueError("Missing 'as2_id' in local AS2 partner configuration.")
-        if "as2_id" not in remote_partner or not remote_partner.get("as2_id"):
+        if not remote_partner.as2_id:
             raise ValueError("Missing 'as2_id' in remote AS2 partner configuration.")
 
-        local_as2_id: str = local_partner["as2_id"]
-        remote_as2_id: str = remote_partner["as2_id"]
+        local_as2_id: str = local_partner.as2_id
+        remote_as2_id: str = remote_partner.as2_id
 
         # ── Resolve cryptographic material from Vault ─────────────────────────
         local_private_key_pem = await _resolve_pem(
-            local_partner.get("private_key_vault_ref"),
+            local_partner.private_key_vault_ref,
             None,  # private keys must come from Vault, never stored inline
             self.secret_store,
         )
         local_cert_pem = await _resolve_pem(
-            local_partner.get("public_cert_vault_ref"),
-            local_partner.get("public_cert_pem"),
+            local_partner.public_cert_vault_ref,
+            local_partner.public_cert_pem,
             self.secret_store,
         )
         remote_cert_pem = await _resolve_pem(
-            remote_partner.get("public_cert_vault_ref"),
-            remote_partner.get("public_cert_pem"),
+            remote_partner.public_cert_vault_ref,
+            remote_partner.public_cert_pem,
             self.secret_store,
         )
 
@@ -121,7 +128,7 @@ class AS2MessageOrchestrator:
             else None
         )
 
-        encryption_alg: str = remote_partner.get("encryption_algorithm", "AES256")
+        encryption_alg: str = partnership.encryption_algorithm or "AES256"
         encrypt_fn = (
             functools.partial(
                 encrypt_payload,
@@ -133,8 +140,8 @@ class AS2MessageOrchestrator:
         )
 
         # ── Determine MDN mode ────────────────────────────────────────────────
-        mdn_type: str = remote_partner.get("mdn_type", "SYNC")
-        mdn_url: str | None = remote_partner.get("mdn_url") if mdn_type == "ASYNC" else None
+        mdn_type: str = partnership.mdn_type or "SYNC"
+        mdn_url: str | None = partnership.mdn_url if mdn_type == "ASYNC" else None
 
         return build_outbound_message(
             payload=raw_payload,

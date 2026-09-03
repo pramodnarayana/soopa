@@ -36,3 +36,19 @@ class EdiIdPrefix(StrEnum):
 
 
 EDI_MESSAGE_ID_PREFIX = EdiIdPrefix.EDI_MESSAGE.value
+
+
+class EdiStandard(StrEnum):
+    X12 = "x12"
+    EDIFACT = "edifact"
+
+
+class EdiTransactionType(StrEnum):
+    ENVELOPE = "envelope"
+    X12_204 = "204"
+    X12_210 = "210"
+    X12_214 = "214"
+    X12_810 = "810"
+    X12_850 = "850"
+    X12_990 = "990"
+    X12_997 = "997"

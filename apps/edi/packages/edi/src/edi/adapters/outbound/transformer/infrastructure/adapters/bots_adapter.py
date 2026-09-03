@@ -11,6 +11,7 @@ from edi.adapters.outbound.transformer.domain.models import (
     TransactionSet,
 )
 from edi.core.bots.facade import edi_to_json, json_to_edi
+from edi.domain.constants import EdiStandard, EdiTransactionType
 
 logger = structlog.get_logger(__name__)
 
@@ -48,7 +49,10 @@ class BotsEDIAdapter(EDITransformerPort):
         return str(val).strip()
 
     def get_raw_ast(
-        self, raw_edi: bytes, editype: str = "x12", messagetype: str = "envelope"
+        self,
+        raw_edi: bytes,
+        editype: str = EdiStandard.X12,
+        messagetype: str = EdiTransactionType.ENVELOPE,
     ) -> tuple[JsonDict, list[str]]:
         """Returns the raw AST dictionary and any validation errors."""
         try:
@@ -72,7 +76,9 @@ class BotsEDIAdapter(EDITransformerPort):
             logger.exception("bots_adapter.system_error")
             raise TransformationError(f"AST generation failed: {e}", errors=[]) from e
 
-    def serialize_to_edi(self, ast_dict: JsonDict, standard: str = "x12") -> tuple[str, list[str]]:
+    def serialize_to_edi(
+        self, ast_dict: JsonDict, standard: str = EdiStandard.X12
+    ) -> tuple[str, list[str]]:
         """
         Serializes a JSON AST back into raw EDI format using the Bots engine.
         """
@@ -161,7 +167,10 @@ class BotsEDIAdapter(EDITransformerPort):
         return sender_id, receiver_id, interchange_control_number, transactions
 
     async def transform(
-        self, raw_edi: bytes, editype: str = "x12", messagetype: str = "envelope"
+        self,
+        raw_edi: bytes,
+        editype: str = EdiStandard.X12,
+        messagetype: str = EdiTransactionType.ENVELOPE,
     ) -> ParsedEdiPayload:
         """
         Executes the Bots translation process.

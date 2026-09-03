@@ -69,15 +69,6 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def publish_outbox_event(
-        self, tenant_id: str, event_type: str, payload: JsonValue, idempotency_key: str | None
-    ) -> str:
-        """
-        [DEPRECATED] Low-level outbox publish for non-aggregate callers.
-        Use save() or save_json() for aggregate-based event publishing instead.
-        """
-        ...
-
     async def create_edi_json(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
         """
         Saves a new EdiJson record to the Data Plane.

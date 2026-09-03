@@ -1,32 +1,39 @@
 import base64
+import dataclasses
 import hashlib
 import uuid
-import dataclasses
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypeVar
 
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonValue
 from seedwork.utils import generate_id
 
-def _from_dict(cls: Any, data: dict[str, Any] | None) -> Any:
+T = TypeVar("T")
+
+
+def _from_dict(cls: type[T], data: dict[str, object] | None) -> T | None:
     if not data:
         return None
-    
+
     kwargs = {}
-    for f in dataclasses.fields(cls):
-        if f.name in data:
-            kwargs[f.name] = data[f.name]
+    fields = getattr(cls, "__dataclass_fields__", {})
+    for name in fields:
+        if name in data:
+            kwargs[name] = data[name]
         else:
             # Provide a safe default if the field is missing from test data
+            f = fields[name]
             if f.default is not dataclasses.MISSING:
-                kwargs[f.name] = f.default
+                kwargs[name] = f.default
             elif f.default_factory is not dataclasses.MISSING:
-                kwargs[f.name] = f.default_factory()
+                kwargs[name] = f.default_factory()
             else:
                 # Fallback to None. This handles Optionals cleanly.
-                kwargs[f.name] = None
-                
+                kwargs[name] = None
+
     return cls(**kwargs)
+
 
 from edi.application.dtos.partners import (
     AS2PartnershipDTO,
@@ -35,10 +42,9 @@ from edi.application.dtos.partners import (
     SFTPPartnerDTO,
 )
 from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, OutboundRouteDTO
-from edi.application.dtos.transactions import EdiJsonDTO
 from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.direction import MessageDirection
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
@@ -68,8 +74,8 @@ class InMemoryStorageAdapter(StoragePort):
 
 class FakeTransformerAdapter(TransformerPort):
     def __init__(self) -> None:
-        self.transform_edi_calls: list[dict[str, Any]] = []
-        self.transform_json_calls: list[dict[str, Any]] = []
+        self.transform_edi_calls: list[dict[str, object]] = []
+        self.transform_json_calls: list[dict[str, object]] = []
         self.mock_return_transactions: list[TransformedTransaction] | None = None
 
     async def transform_edi_to_json(
@@ -94,10 +100,10 @@ class FakeTransformerAdapter(TransformerPort):
 
     async def transform_json_to_edi(
         self,
-        payload: dict[str, Any] | list[Any],
+        payload: dict[str, JsonValue] | list[dict[str, JsonValue]],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, Any],
+        route_config: dict[str, JsonValue],
     ) -> bytes:
         self.transform_json_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
@@ -107,19 +113,19 @@ class FakeTransformerAdapter(TransformerPort):
 
 class InMemoryRepositoryAdapter(RepositoryPort):
     def __init__(self) -> None:
-        self.edi_messages: dict[str, dict[str, Any]] = {}
-        self.api_gateway: dict[str, dict[str, Any]] = {}
-        self.edi_json: dict[str, dict[str, Any]] = {}
-        self.outbound_routes: dict[str, dict[str, Any]] = {}
-        self.outbound_edi_headers: dict[str, dict[str, Any]] = {}
-        self.outbox: list[dict[str, Any]] = []
-        self.routes: list[dict[str, Any]] = []
-        self.webhooks: dict[str, dict[str, Any]] = {}
-        self.sftp_partners: dict[str, dict[str, Any]] = {}
-        self.as2_partners: dict[str, dict[str, Any]] = {}
-        self.local_as2_partners: dict[str, dict[str, Any]] = {}
+        self.edi_messages: dict[str, dict[str, object]] = {}
+        self.api_gateway: dict[str, dict[str, object]] = {}
+        self.edi_json: dict[str, dict[str, object]] = {}
+        self.outbound_routes: dict[str, dict[str, object]] = {}
+        self.outbound_edi_headers: dict[str, dict[str, object]] = {}
+        self.outbox: list[dict[str, object]] = []
+        self.routes: list[dict[str, object]] = []
+        self.webhooks: dict[str, dict[str, object]] = {}
+        self.sftp_partners: dict[str, dict[str, object]] = {}
+        self.as2_partners: dict[str, dict[str, object]] = {}
+        self.local_as2_partners: dict[str, dict[str, object]] = {}
 
-    async def get_edi_json(self, trace_id: str) -> Any | None:
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         raw = self.edi_json.get(trace_id)
         if not raw:
             return None
@@ -127,7 +133,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         dto_data = dict(raw)
         if "edi_json" in dto_data:
             dto_data["payload"] = dto_data["edi_json"]
-        return _from_dict(EdiJsonDTO, dto_data)
+        return _from_dict(EdiJsonDomainModel, dto_data)
 
     async def get_outbound_edi_header_by_route_or_partner(
         self,
@@ -140,7 +146,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         data = self.outbound_edi_headers.get(trading_partner_id)
         return _from_dict(OutboundEdiHeaderDTO, data)
 
-    async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
+    async def update_edi_json(self, trace_id: str, **kwargs: object) -> None:
         if trace_id in self.edi_json:
             self.edi_json[trace_id].update(kwargs)
 
@@ -191,7 +197,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             "trading_partner_id": trading_partner_id,
             "tenant_id": tenant_id,
         }
-        self.edi_messages[trace_id] = kwargs
+        self.edi_messages[trace_id] = {k: v for k, v in kwargs.items()}
 
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         raw = self.edi_messages.get(trace_id)
@@ -223,7 +229,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
                 hashed = hashlib.md5(str(msg.get("trace_id", trace_id)).encode()).hexdigest()  # noqa: S324
                 msg["trace_id"] = str(uuid.UUID(hashed))
 
-            return EdiMessageDomainModel(**msg)
+            return _from_dict(EdiMessageDomainModel, msg)
         return None
 
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
@@ -241,7 +247,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         self,
         trace_id: str,
         direction: str,
-        payload: dict[str, Any],
+        payload: dict[str, JsonValue],
         status: str,
         transaction_type: str | None = None,
         webhook_url: str | None = None,
@@ -254,7 +260,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         }
 
     async def publish_outbox_event(
-        self, idempotency_key: str, event_type: str, payload: dict[str, Any]
+        self, idempotency_key: str, event_type: str, payload: dict[str, JsonValue]
     ) -> None:
         # Idempotent: ignore duplicate events with the same key (mirrors production behavior)
         for existing in self.outbox:
@@ -268,8 +274,9 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             }
         )
 
-    async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
-        return self.api_gateway.get(trace_id)
+    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None:
+        raw = self.api_gateway.get(trace_id)
+        return raw  # type: ignore
 
     async def update_api_payload_status(
         self,
@@ -334,8 +341,8 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         receiver_id: str | None,
         gs_sender_id: str | None,
         gs_receiver_id: str | None,
-        business_metadata: dict[str, Any],
-        payload: dict[str, Any],
+        business_metadata: dict[str, JsonValue],
+        payload: dict[str, JsonValue],
         status: str,
         tenant_id: str | None = None,
     ) -> str:
@@ -379,7 +386,18 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         if data:
             remote_data = data.get("remote") or data
             partnership_data = data.get("partnership") or data
-            return _from_dict(RemoteAS2PartnerDTO, remote_data), _from_dict(AS2PartnershipDTO, partnership_data)
+            remote_dto = (
+                _from_dict(RemoteAS2PartnerDTO, remote_data)
+                if isinstance(remote_data, dict)
+                else None
+            )
+            partnership_dto = (
+                _from_dict(AS2PartnershipDTO, partnership_data)
+                if isinstance(partnership_data, dict)
+                else None
+            )
+            if remote_dto and partnership_dto:
+                return remote_dto, partnership_dto
         return None
 
     async def get_local_as2_partner(self, partner_id: str) -> LocalAS2PartnerDTO | None:
@@ -396,7 +414,7 @@ class FakeHttpDeliveryAdapter:
     """Records all webhook delivery calls. Configurable response status code."""
 
     def __init__(self, status_code: int = 200) -> None:
-        self.delivered: list[dict[str, Any]] = []
+        self.delivered: list[dict[str, object]] = []
         self.status_code = status_code
 
     async def deliver(
@@ -421,7 +439,7 @@ class FakeSftpDeliveryAdapter:
     """Records all SFTP delivery calls. Always succeeds."""
 
     def __init__(self) -> None:
-        self.delivered: list[dict[str, Any]] = []
+        self.delivered: list[dict[str, object]] = []
 
     async def deliver(
         self,
@@ -464,7 +482,7 @@ class FakeAS2DeliveryAdapter:
         self.headers = headers or {
             "Content-Type": 'multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"'
         }
-        self.delivered: list[dict[str, Any]] = []
+        self.delivered: list[dict[str, object]] = []
         if body is not None:
             self.body = body
         else:
@@ -530,13 +548,13 @@ class FakeDataPlaneOutboxRepository:
     """
 
     def __init__(self) -> None:
-        self.events: list[dict[str, Any]] = []
+        self.events: list[dict[str, object]] = []
         self.leased: dict[str, str] = {}  # key_str -> owner_token
         self.processed: set[str] = set()
         self.failed: set[str] = set()
 
     async def append_event(
-        self, event_type: str, payload: dict[str, Any], idempotency_key: str | None = None
+        self, event_type: str, payload: dict[str, JsonValue], idempotency_key: str | None = None
     ) -> None:
         # Only deduplicate when idempotency_key is explicitly provided (not None)
         if idempotency_key is not None:
@@ -589,7 +607,7 @@ class FakeDataPlaneUnitOfWork:
         self,
         exc_type: type[BaseException] | None,
         _exc_val: BaseException | None,
-        _exc_tb: Any | None,
+        _exc_tb: object | None,
     ) -> None:
         if exc_type is not None:
             await self.rollback()

@@ -9,7 +9,7 @@ Each service can use the full AppSettings or cherry-pick specific groups.
 
 import typing
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -111,7 +111,7 @@ class IdentitySettings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def parse_audience(cls, data: Any) -> Any:
+    def parse_audience(cls, data: dict[str, str | list[str]]) -> dict[str, str | list[str]]:
         if isinstance(data, dict) and "audience" in data:
             aud = data["audience"]
             if isinstance(aud, str) and "," in aud:

@@ -582,8 +582,15 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     ) -> Sequence[EdiMessageDTO]:
 
         tid_str = tenant_id if tenant_id is not None else None
-        stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
-        stmt = self._apply_dynamic_filters(stmt, EdiMessage, filters)
+        base_stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
+        stmt = cast(
+            Select[tuple[EdiMessage]],
+            self._apply_dynamic_filters(
+                cast(Select[tuple[DeclarativeBase, ...]], base_stmt),
+                cast(type[DeclarativeBase], EdiMessage),
+                filters,
+            ),
+        )
         stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
         return [
@@ -630,8 +637,15 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     ) -> Sequence[EdiJsonDTO]:
 
         tid_str = tenant_id if tenant_id is not None else None
-        stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
-        stmt = self._apply_dynamic_filters(stmt, EdiJson, filters)
+        base_stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
+        stmt = cast(
+            Select[tuple[EdiJson]],
+            self._apply_dynamic_filters(
+                cast(Select[tuple[DeclarativeBase, ...]], base_stmt),
+                cast(type[DeclarativeBase], EdiJson),
+                filters,
+            ),
+        )
         stmt = stmt.order_by(EdiJson.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
         return [

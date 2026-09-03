@@ -1,7 +1,7 @@
 import os
 from datetime import UTC, datetime
-from typing import Any
 
+from seedwork.domain.types import JsonValue
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -41,7 +41,7 @@ class SanitizedText(TypeDecorator[str]):
     impl = Text
     cache_ok = True
 
-    def process_bind_param(self, value: Any, dialect: Any) -> str | None:
+    def process_bind_param(self, value: object, dialect: object) -> str | None:
         if value is None:
             return value
         if isinstance(value, bytes):
@@ -51,9 +51,7 @@ class SanitizedText(TypeDecorator[str]):
 
 
 class TenantBase(DeclarativeBase):
-    from typing import Any
-
-    __table_args__: Any = {"schema": "edi"}
+    __table_args__: dict[str, object] | tuple[object, ...] = {"schema": "edi"}
 
 
 class TenantAwareMixin:
@@ -250,8 +248,8 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     gs_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gs_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    business_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    business_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="TRANSFORMED")
@@ -282,10 +280,10 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     http_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     target_format: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
-    headers: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    headers: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
 
@@ -351,7 +349,7 @@ class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
+    metadata_: Mapped[dict[str, JsonValue] | None] = mapped_column("metadata", JSONB, nullable=True)
 
 
 class AckReceipt(TenantBase, TenantAwareMixin):

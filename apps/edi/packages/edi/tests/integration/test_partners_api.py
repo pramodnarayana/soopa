@@ -69,7 +69,7 @@ async def test_create_and_get_as2_partner(platform_client: AsyncClient):
     # Test rotate certificates
     rotate_res = await platform_client.put(
         f"/api/v1/platform/trading-partners/as2/certificates/{data['id']}/rotate",
-        json={"action": "generate"}
+        json={"action": "generate"},
     )
     assert rotate_res.status_code == 200
 

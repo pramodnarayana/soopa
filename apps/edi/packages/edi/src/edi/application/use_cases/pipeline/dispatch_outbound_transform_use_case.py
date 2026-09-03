@@ -1,14 +1,18 @@
 import dataclasses
 import uuid
-from typing import Any
+from typing import cast
 
 import structlog
+from seedwork.domain.types import JsonValue
 
 from edi.application.dtos.routes import OutboundEdiHeaderDTO, OutboundRouteDTO
 from edi.config.settings import AppSettings
+from edi.domain.constants import EdiStandard
 from edi.domain.direction import MessageDirection
 from edi.domain.events import PipelineEventType
+from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.domain.status import MessageStatus
+from edi.domain.types import AstNode
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.transformer_port import TransformerPort
 
@@ -31,21 +35,24 @@ class DispatchOutboundTransformUseCase:
         self._settings = settings
 
     async def _resolve_route_config(
-        self, edi_json: Any, trace_id: str
+        self, edi_json: EdiJsonDomainModel, trace_id: str
     ) -> tuple[str, OutboundEdiHeaderDTO, OutboundRouteDTO]:
         trading_partner_id = edi_json.trading_partner_id
         tenant_id = edi_json.tenant_id
 
         business_metadata = edi_json.business_metadata or {}
-        routing_meta = business_metadata.get("_routing") or {}
-
-        if not trading_partner_id:
-            trading_partner_id = routing_meta.get("trading_partner_id")
+        routing_meta = business_metadata.get("_routing")
+        if isinstance(routing_meta, dict) and not trading_partner_id:
+            tp_id = routing_meta.get("trading_partner_id")
+            trading_partner_id = str(tp_id) if tp_id else None
 
         if not trading_partner_id:
             raise ValueError(
                 f"Missing payload/routing metadata (trading_partner_id) for trace_id={trace_id}"
             )
+
+        if tenant_id is None:
+            raise ValueError(f"Missing tenant_id for trace_id={trace_id}")
 
         route_config = await self.uow.repository.get_outbound_edi_header_by_route_or_partner(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
@@ -60,7 +67,11 @@ class DispatchOutboundTransformUseCase:
         return trading_partner_id, route_config, outbound_route
 
     async def _offload_to_compute_queue(
-        self, trace_id: str, standard: str, transaction_type: str, route_config: dict[str, Any]
+        self,
+        trace_id: str,
+        standard: str,
+        transaction_type: str,
+        route_config: dict[str, JsonValue],
     ) -> None:
         logger.info(
             "outbound_transform.offloaded_to_compute_queue",
@@ -80,7 +91,7 @@ class DispatchOutboundTransformUseCase:
         )
 
     def _determine_connection_type(
-        self, route_config: dict[str, Any], outbound_route: dict[str, Any]
+        self, route_config: dict[str, JsonValue], outbound_route: dict[str, JsonValue]
     ) -> str:
         connection_type = route_config.get("connection_type", "UNKNOWN")
         if connection_type == "UNKNOWN" and outbound_route:
@@ -118,7 +129,7 @@ class DispatchOutboundTransformUseCase:
             route_config = dataclasses.asdict(route_config_dto)
             outbound_route = dataclasses.asdict(outbound_route_dto)
 
-            standard = route_config.get("default_standard", "X12")
+            standard = str(route_config.get("default_standard", EdiStandard.X12))
             route_txn_type = route_config.get("transaction_type")
             if route_txn_type == "*":
                 route_txn_type = None
@@ -137,7 +148,7 @@ class DispatchOutboundTransformUseCase:
                 return
 
             raw_edi_bytes = await self.transformer.transform_json_to_edi(
-                payload=json_payload,
+                payload=cast(AstNode | list[AstNode], json_payload),
                 standard=standard,
                 transaction_type=transaction_type,
                 route_config=route_config,
@@ -154,10 +165,10 @@ class DispatchOutboundTransformUseCase:
                 transaction_type=transaction_type,
                 status=MessageStatus.PENDING_DELIVERY.value,
                 connection_type=connection_type,
-                sender_id=route_config.get("isa_sender_id"),
-                receiver_id=route_config.get("isa_receiver_id"),
-                gs_sender_id=route_config.get("gs_sender_id"),
-                gs_receiver_id=route_config.get("gs_receiver_id"),
+                sender_id=str(route_config.get("isa_sender_id", "")),
+                receiver_id=str(route_config.get("isa_receiver_id", "")),
+                gs_sender_id=str(route_config.get("gs_sender_id", "")),
+                gs_receiver_id=str(route_config.get("gs_receiver_id", "")),
                 trading_partner_id=trading_partner_id,
                 tenant_id=edi_json.tenant_id,
             )
@@ -173,10 +184,10 @@ class DispatchOutboundTransformUseCase:
                     "direction": MessageDirection.OUTBOUND.value,
                     "trading_partner_id": trading_partner_id,
                     "standard": standard,
-                    "isa_sender_id": route_config.get("isa_sender_id"),
-                    "isa_receiver_id": route_config.get("isa_receiver_id"),
-                    "gs_sender_id": route_config.get("gs_sender_id"),
-                    "gs_receiver_id": route_config.get("gs_receiver_id"),
+                    "isa_sender_id": str(route_config.get("isa_sender_id", "")),
+                    "isa_receiver_id": str(route_config.get("isa_receiver_id", "")),
+                    "gs_sender_id": str(route_config.get("gs_sender_id", "")),
+                    "gs_receiver_id": str(route_config.get("gs_receiver_id", "")),
                 },
             )
 

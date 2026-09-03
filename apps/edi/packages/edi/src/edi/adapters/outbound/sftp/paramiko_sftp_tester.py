@@ -1,11 +1,10 @@
 import asyncio
 import io
-from typing import Any
+import typing
 
 import paramiko
 import structlog
 
-import edi.core.patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 
 logger = structlog.get_logger(__name__)
@@ -38,7 +37,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - test connection accepts any host key
 
-            connect_kwargs: dict[str, Any] = {
+            connect_kwargs: dict[str, object] = {
                 "hostname": host,
                 "port": port,
                 "username": username,
@@ -61,7 +60,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
             else:
                 return False, "Must provide either a password or a client key."
 
-            client.connect(**connect_kwargs)
+            client.connect(**typing.cast(typing.Any, connect_kwargs))
             sftp = client.open_sftp()
 
             return True, None

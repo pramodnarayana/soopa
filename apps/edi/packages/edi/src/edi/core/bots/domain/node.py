@@ -3,7 +3,6 @@ Bots node lib
 """
 
 import decimal
-import typing
 
 import structlog
 
@@ -49,9 +48,9 @@ class Node:
         """append child to node"""
         self.children.append(childnode)
 
-    def to_dict(self) -> dict[str, typing.Any]:
+    def to_dict(self) -> dict[str, object]:
         """Serialize the Node and its children into a pure Python dictionary."""
-        result: dict[str, typing.Any] = {}
+        result: dict[str, object] = {}
         seg_id = self.record.get("BOTSID") if self.record else None
 
         if self.record:

@@ -1,5 +1,4 @@
 import os
-from typing import Any
 
 import structlog
 from dotenv import load_dotenv
@@ -129,8 +128,8 @@ def create_edi_app() -> FastAPI:
     async def get_me(
         tenant_id: str = Depends(get_current_tenant_id),
         session: AsyncSession = Depends(get_tenant_session),  # noqa: B008
-        profile: dict[str, Any] = Depends(get_current_user_profile),  # noqa: B008
-    ) -> Any:
+        profile: dict[str, str | list[str]] = Depends(get_current_user_profile),  # noqa: B008
+    ) -> dict[str, str | list[str]]:
         """
         Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
         """

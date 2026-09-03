@@ -1,7 +1,6 @@
 import asyncio
 import typing
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import structlog
 from outbox.domain.constants import OutboxStatus
@@ -79,7 +78,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                     "pending_status": OutboxStatus.PENDING.value,
                 },
             )
-            cursor_result = typing.cast(CursorResult[tuple[Any, ...]], result)
+            cursor_result = typing.cast(CursorResult[tuple[object, ...]], result)
             swept = int(cursor_result.rowcount)
             total_swept += swept
             await self._session.flush()
@@ -146,7 +145,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 updated_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
-        if typing.cast(CursorResult[tuple[Any, ...]], update_result).rowcount > 0:
+        if typing.cast(CursorResult[tuple[object, ...]], update_result).rowcount > 0:
             # Re-fetch the key to insert into processed events if needed, but the ID implies success
             pass
         else:
@@ -169,7 +168,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 error_reason=error_message,
             )
         )
-        if typing.cast(CursorResult[tuple[Any, ...]], update_result).rowcount == 0:
+        if typing.cast(CursorResult[tuple[object, ...]], update_result).rowcount == 0:
             logger.warning("stale_failure_update", event_id=event_id)
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
@@ -197,7 +196,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             .returning(DataPlaneOutbox.idempotency_key)
         )
         result = await self._session.execute(stmt)
-        if not typing.cast(CursorResult[tuple[Any, ...]], result).scalar_one_or_none():
+        if not typing.cast(CursorResult[tuple[object, ...]], result).scalar_one_or_none():
             return None
         return owner_token
 
@@ -211,7 +210,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             )
             .values(status=OutboxStatus.PROCESSED, owner_token=None, lease_expires_at=None)
         )
-        if typing.cast(CursorResult[tuple[Any, ...]], update_result).rowcount > 0:
+        if typing.cast(CursorResult[tuple[object, ...]], update_result).rowcount > 0:
             await self._session.execute(
                 insert(ProcessedEvent).values(idempotency_key=key_str).on_conflict_do_nothing()
             )
@@ -228,5 +227,5 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             )
             .values(status=OutboxStatus.FAILED, owner_token=None, lease_expires_at=None)
         )
-        if typing.cast(CursorResult[tuple[Any, ...]], result).rowcount == 0:
+        if typing.cast(CursorResult[tuple[object, ...]], result).rowcount == 0:
             logger.warning("stale_failure_update", key_str=key_str)

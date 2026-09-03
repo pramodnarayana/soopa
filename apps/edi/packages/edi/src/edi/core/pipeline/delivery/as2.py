@@ -3,10 +3,10 @@ from typing import Any
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.adapters.inbound.as2 import parse_mdn
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.services.as2_protocol import parse_mdn
 from edi.domain.status import MessageStatus
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
@@ -132,15 +132,11 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 raise ValueError("Empty EDI data")
             raw_payload = edi_msg.edi_data.encode("utf-8")
 
-            import dataclasses
-
-            remote_dict = dict(dataclasses.asdict(remote_partner_dto))
-            local_dict = dict(dataclasses.asdict(local_partner_dto)) if local_partner_dto else None
-
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,
-                local_partner=local_dict,
-                remote_partner=remote_dict,
+                local_partner=local_partner_dto,
+                remote_partner=remote_partner_dto,
+                partnership=partnership_dto,
                 idempotency_key=idempotency_key,
             )
         except Exception as e:

@@ -21,12 +21,24 @@ You are a senior, enterprise-grade software engineer. Your primary focus is writ
 6. **Structured JSON Logging**: NEVER use standard `import logging` or f-strings for logging (e.g., `logger.info(f"x={x}")`). ALWAYS use the platform's injected `ILogger` or `structlog` and pass context via kwargs (e.g., `logger.info("event_name", x=x)` or `logger.bind(x=x)`).
 7. **Centralized Generic Infrastructure**: Do not duplicate generic infrastructure code (like Outbox engines, Queue listeners, Pub/Sub connectors) across multiple bounded contexts. If you encounter duplicate infrastructure, it must be extracted into a centralized, pure platform package and consumed via abstract Ports.
 8. **DDD Aggregates for Events**: NEVER use procedural coordination for outbox events (e.g., Use Case manually calls `uow.repository.save(x)` and then `uow.outbox.publish(y)`). ALWAYS use DDD Aggregates where models inherit from `DomainEventMixin` and call `self.add_domain_event()`. The Repository adapter must automatically handle extracting and flushing events during persistence.
+9. **No Defensive getattr() Masking**: NEVER use `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`). Fail fast if a schema discrepancy exists.
 
 ## Execution Workflow
-1. When asked to implement a feature, first identify the **Domain Models** and write tests for them.
-2. Define the **Ports** (interfaces) required for external communication.
-3. Write the **Application Use Case** (the orchestrator).
-4. Finally, write the **Adapters** (REST controllers, DB repositories) and their Narrow Integration Tests.
+1. When asked to implement a feature, first define the **DTOs** in `application/dto.py` before writing any port, use case, or adapter.
+2. Define the **Ports** (interfaces) required for external communication, typed entirely against the DTOs.
+3. Identify the **Domain Models** and write tests for them.
+4. Write the **Application Use Case** (the orchestrator).
+5. Finally, write the **Adapters** (REST controllers, DB repositories) and their Narrow Integration Tests.
+
+## DTO-First Implementation (Strictly Enforced)
+DTOs MUST be defined before any other layer. This is non-negotiable and applies to every new module, port, or feature.
+
+- **Design Order**: `application/dto.py` → Port Protocol → Domain Model → Use Case → Adapter → Tests.
+- **One DTO per ORM Boundary**: Every table a Port method queries or mutates MUST have its own `@dataclass(frozen=True)` DTO. NEVER share a DTO across two ORM tables.
+- **No Raw `dict[str, Any]` Across Boundaries**: NEVER return raw `dict`, `dict[str, Any]`, or `Sequence[Any]` from a Port method. Every Port return type MUST be a typed DTO, typed domain model, or primitive.
+- **No Composed DTO Wrappers for Joins**: If a Port method queries a JOIN of two tables, return `tuple[ADTO, BDTO] | None`. Do NOT invent a third wrapper DTO. Callers destructure the tuple explicitly.
+- **No Framework Leakage into DTOs**: DTOs MUST be pure `@dataclass(frozen=True)` Python objects. NEVER use Pydantic `BaseModel`, SQLAlchemy ORM models, or FastAPI types as DTOs passed between layers.
+- **`JsonValue` for JSON Blobs**: NEVER type an open-ended JSON column as `dict[str, Any]`. Always use the canonical `JsonValue` type alias.
 
 # Enterprise Integration Testing (Strictly Enforced)
 

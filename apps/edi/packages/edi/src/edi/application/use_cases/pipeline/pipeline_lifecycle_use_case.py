@@ -1,7 +1,7 @@
 import uuid
-from typing import Any
 
 import structlog
+from seedwork.domain.types import JsonValue
 
 from edi.domain.direction import MessageDirection
 from edi.domain.events import PipelineEventType
@@ -23,22 +23,26 @@ class PipelineLifecycleUseCase:
     def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
 
-    async def handle_transform_completed(self, payload: dict[str, Any]) -> None:
+    async def handle_transform_completed(self, payload: dict[str, JsonValue]) -> None:
         """
         Triggered when a TransformUseCase finishes transforming a payload.
         """
-        trace_id = payload["trace_id"]
-        direction = payload.get("direction", MessageDirection.INBOUND)
+        trace_id = str(payload["trace_id"])
+        direction = str(payload.get("direction", MessageDirection.INBOUND.value))
         logger.info(
             "pipeline_lifecycle.transform_completed",
             trace_id=trace_id,
         )
 
         async with self.uow:
-            if direction == MessageDirection.INBOUND:
-                gs_sender_id = payload.get("gs_sender_id")
-                gs_receiver_id = payload.get("gs_receiver_id")
-                transaction_type = payload.get("transaction_type")
+            if direction == MessageDirection.INBOUND.value:
+                gs_sender_val = payload.get("gs_sender_id")
+                gs_receiver_val = payload.get("gs_receiver_id")
+                txn_val = payload.get("transaction_type")
+
+                gs_sender_id = str(gs_sender_val) if gs_sender_val else None
+                gs_receiver_id = str(gs_receiver_val) if gs_receiver_val else None
+                transaction_type = str(txn_val) if txn_val else None
 
                 if gs_sender_id and gs_receiver_id:
                     await self.uow.repository.update_edi_message_metadata(
@@ -51,27 +55,31 @@ class PipelineLifecycleUseCase:
                     trace_id, str(MessageStatus.TRANSFORMED)
                 )
             else:
-                trading_partner_id = payload.get("trading_partner_id")
+                trading_partner_id = (
+                    str(payload.get("trading_partner_id"))
+                    if payload.get("trading_partner_id")
+                    else None
+                )
 
-                update_kwargs: dict[str, Any] = {}
+                update_kwargs: dict[str, str] = {}
                 if trading_partner_id:
                     update_kwargs["trading_partner_id"] = trading_partner_id
                 if "standard" in payload:
-                    update_kwargs["standard"] = payload["standard"]
+                    update_kwargs["standard"] = str(payload["standard"])
                 if "isa_sender_id" in payload:
-                    update_kwargs["sender_id"] = payload["isa_sender_id"]
+                    update_kwargs["sender_id"] = str(payload["isa_sender_id"])
                 if "isa_receiver_id" in payload:
-                    update_kwargs["receiver_id"] = payload["isa_receiver_id"]
+                    update_kwargs["receiver_id"] = str(payload["isa_receiver_id"])
                 if "gs_sender_id" in payload:
-                    update_kwargs["gs_sender_id"] = payload["gs_sender_id"]
+                    update_kwargs["gs_sender_id"] = str(payload["gs_sender_id"])
                 if "gs_receiver_id" in payload:
-                    update_kwargs["gs_receiver_id"] = payload["gs_receiver_id"]
+                    update_kwargs["gs_receiver_id"] = str(payload["gs_receiver_id"])
 
                 if update_kwargs:
                     await self.uow.repository.update_edi_json(trace_id=trace_id, **update_kwargs)
 
                 await self.uow.repository.update_edi_json_status(
-                    trace_id, MessageStatus.TRANSFORMED
+                    trace_id, str(MessageStatus.TRANSFORMED)
                 )
 
             # Emit DELIVER command
@@ -85,12 +93,12 @@ class PipelineLifecycleUseCase:
 
         logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
-    async def handle_delivery_completed(self, payload: dict[str, Any]) -> None:
+    async def handle_delivery_completed(self, payload: dict[str, JsonValue]) -> None:
         """
         Triggered when a DeliveryUseCase completes its delivery attempt.
         """
-        trace_id = payload["trace_id"]
-        direction = payload.get("direction", MessageDirection.INBOUND)
+        trace_id = str(payload["trace_id"])
+        direction = str(payload.get("direction", MessageDirection.INBOUND.value))
         status = payload.get("status")
 
         # Validate status field is present before proceeding
@@ -111,7 +119,7 @@ class PipelineLifecycleUseCase:
         )
 
         async with self.uow:
-            if direction == MessageDirection.INBOUND:
+            if direction == MessageDirection.INBOUND.value:
                 await self.uow.repository.update_api_payload_status(trace_id, str(status))
             else:
                 await self.uow.repository.update_edi_message_status(trace_id, str(status))

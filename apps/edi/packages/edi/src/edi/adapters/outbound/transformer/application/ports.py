@@ -1,6 +1,7 @@
 from typing import Protocol
 
 from edi.adapters.outbound.transformer.domain.models import JsonDict, ParsedEdiPayload
+from edi.domain.constants import EdiStandard
 
 
 class EDITransformerPort(Protocol):
@@ -25,7 +26,9 @@ class EDITransformerPort(Protocol):
         """
         ...
 
-    def serialize_to_edi(self, ast_dict: JsonDict, standard: str = "x12") -> tuple[str, list[str]]:
+    def serialize_to_edi(
+        self, ast_dict: JsonDict, standard: str = EdiStandard.X12
+    ) -> tuple[str, list[str]]:
         """
         Serializes a JSON AST back into raw EDI format.
 

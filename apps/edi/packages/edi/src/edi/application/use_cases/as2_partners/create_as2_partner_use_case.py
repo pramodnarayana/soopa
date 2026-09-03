@@ -84,14 +84,19 @@ class CreateAS2PartnerUseCase:
                 idempotency_key
             )
             if existing_event and existing_event.payload:
-                existing_fingerprint = existing_event.payload.get("fingerprint")
+                existing_fingerprint = (
+                    str(existing_event.payload.get("fingerprint"))
+                    if existing_event.payload.get("fingerprint")
+                    else None
+                )
                 if existing_fingerprint != fingerprint:
                     raise IdempotencyConflictError(
                         "Idempotency conflict: payload does not match existing request."
                     ) from None
 
-                existing_partner_id = existing_event.payload.get("resource_id")
-                if existing_partner_id:
+                existing_partner_id_val = existing_event.payload.get("resource_id")
+                if existing_partner_id_val:
+                    existing_partner_id = str(existing_partner_id_val)
                     existing_partner = await self.uow.as2_partners.get_as2_partner(
                         tenant_id, existing_partner_id
                     )

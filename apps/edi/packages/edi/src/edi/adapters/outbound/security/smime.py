@@ -29,13 +29,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers import algorithms
 from cryptography.hazmat.primitives.serialization import pkcs7
 
-import edi.core.patches.cryptography  # noqa: F401 - applies legacy 3DES patch
-
 logger = structlog.get_logger(__name__)
 
 
 def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
-
     # 1. Try raw bytes (BER/DER)
     with contextlib.suppress(Exception):
         return cms.ContentInfo.load(encrypted_data)
@@ -64,8 +61,8 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes
     Ultimate pure-Python native fallback for BouncyCastle BER envelopes.
     Bypasses cryptography's strict Rust PKCS7 parser entirely by manually
     extracting the symmetric key and decrypting the payload using raw primitives.
+    (Required for External System Interoperability with legacy B2B partners)
     """
-
     try:
         content_info = _parse_asn1_content_info(encrypted_data)
         if not content_info:
@@ -139,7 +136,8 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
             logger.debug("decryption_strategy_failed", strategy=strat_name, error=str(e))
 
     # Enterprise Fallback: Manually parse the ASN.1 tree and decrypt using primitives
-    # This completely eliminates the need for OpenSSL shell commands, bypassing Rust strictness.
+    # This is required for external legacy AS2 partners who send envelopes that fail
+    # strict Rust parser rules (e.g., older BouncyCastle implementations).
     try:
         manual_decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
         if manual_decrypted:

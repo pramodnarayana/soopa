@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from edi.adapters.inbound.as2 import parse_as2_request
+from edi.domain.services.as2_protocol import parse_as2_request
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from observability import ObservabilityProvider
 

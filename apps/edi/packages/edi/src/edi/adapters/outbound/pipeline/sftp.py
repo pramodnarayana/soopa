@@ -1,12 +1,11 @@
 import asyncio
 import base64
 import io
-from typing import Any
+import typing
 
 import paramiko
 import structlog
 
-import edi.core.patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
 logger = structlog.get_logger(__name__)
@@ -67,7 +66,7 @@ def get_ssh_client(
     client = paramiko.SSHClient()
     _setup_host_key(client, host, port, host_key_string)
 
-    connect_kwargs: dict[str, Any] = {
+    connect_kwargs: dict[str, object] = {
         "hostname": host,
         "port": port,
         "username": username,
@@ -84,7 +83,7 @@ def get_ssh_client(
         raise ValueError("Must provide either a password or a client key.")
 
     try:
-        client.connect(**connect_kwargs)
+        client.connect(**typing.cast(typing.Any, connect_kwargs))
         return client
     except Exception:
         logger.exception("SSH Connection failed for %s:%s", host, port)

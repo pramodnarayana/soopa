@@ -1,7 +1,6 @@
-from typing import Any
-
 import structlog
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonValue
 from seedwork.utils import generate_id
 
 from edi.application.dtos import ProcessApiEdiJsonCommand
@@ -80,32 +79,18 @@ class ProcessApiEdiJsonUseCase:
                             val = st.get("ST01")
                             if isinstance(val, str):
                                 transaction_type = val
-            business_metadata: dict[str, Any] = {}
-            if isinstance(command.payload, dict):
-                business_metadata = self.extractor.extract(transaction_type or "", command.payload)
-            elif isinstance(command.payload, list) and len(command.payload) > 0:
-                extracted_list = [
-                    self.extractor.extract(transaction_type or "", item) for item in command.payload
-                ]
-                for extracted in extracted_list:
-                    for k, v in extracted.items():
-                        if k not in business_metadata:
-                            business_metadata[k] = []
-                        # Avoid duplicates
-                        if v not in business_metadata[k]:
-                            business_metadata[k].append(v)
-            
-            for k, v in list(business_metadata.items()):
-                if isinstance(v, list) and len(v) == 1:
-                    business_metadata[k] = v[0]
-
-
+            business_metadata = self.extractor.extract(transaction_type or "", command.payload)
 
             business_metadata["_routing"] = {"trading_partner_id": command.trading_partner_id}
 
             # 2. Create Trace ID
             trace_id = generate_id(SystemIdPrefix.GENERIC)
             logger.info("trace_id_generated", trace_id=trace_id)
+
+            if isinstance(command.payload, list):
+                domain_payload: JsonValue = [item for item in command.payload]
+            else:
+                domain_payload = command.payload
 
             # 3. Instantiate Domain Model and record event
             edi_json_aggregate = EdiJsonDomainModel(
@@ -115,7 +100,7 @@ class ProcessApiEdiJsonUseCase:
                 direction=Direction.OUTBOUND,
                 transaction_type=transaction_type,
                 business_metadata=business_metadata,
-                payload=command.payload,
+                payload=domain_payload,
                 status=RecordStatus.RECEIVED,
             )
 

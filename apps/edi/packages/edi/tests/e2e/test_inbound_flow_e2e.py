@@ -12,7 +12,7 @@ from cryptography.x509.oid import NameOID
 from seedwork import generate_id
 from sqlalchemy import select
 
-from edi.adapters.inbound.as2 import build_outbound_message
+from edi.adapters.inbound.as2.builder import build_outbound_message
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,

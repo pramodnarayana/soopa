@@ -1,8 +1,6 @@
-from typing import Any
-
 import structlog
 
-from edi.application.dtos.routes import OutboundRouteDTO
+from edi.application.dtos.routes import InboundRouteDTO, OutboundRouteDTO
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
@@ -33,49 +31,63 @@ class DeliveryRouterUseCase:
         if not edi_msg:
             raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
-        direction = edi_msg.direction
+        route = await self._resolve_route(edi_msg)
+        await self._dispatch_to_strategy(trace_id, route, edi_msg, idempotency_key)
 
-        route: Any = None
-        if direction == "OUTBOUND":
-            if not edi_msg.trading_partner_id:
-                raise ValueError(
-                    f"EDI Message {trace_id} is missing trading_partner_id for OUTBOUND routing."
-                )
+    async def _resolve_route(self, edi_msg) -> OutboundRouteDTO | InboundRouteDTO:
+        if edi_msg.direction == "OUTBOUND":
+            return await self._get_outbound_route(edi_msg)
+        return await self._get_inbound_route(edi_msg)
 
-            route = await self.uow.repository.get_outbound_route_by_trading_partner_id(
+    async def _get_outbound_route(self, edi_msg) -> OutboundRouteDTO:
+        if not edi_msg.trading_partner_id:
+            raise ValueError(
+                f"EDI Message {edi_msg.trace_id} is missing trading_partner_id for OUTBOUND routing."
+            )
+
+        route = await self.uow.repository.get_outbound_route_by_trading_partner_id(
+            trading_partner_id=edi_msg.trading_partner_id,
+            tenant_id=edi_msg.tenant_id,
+        )
+        if not route:
+            logger.error(
+                "Configured outbound route for trading_partner_id={trading_partner_id} not found",
                 trading_partner_id=edi_msg.trading_partner_id,
-                tenant_id=edi_msg.tenant_id,
             )
-            if not route:
-                logger.error(
-                    "Configured outbound route for trading_partner_id={trading_partner_id} not found",
-                    trading_partner_id=edi_msg.trading_partner_id,
-                )
-                raise ValueError(
-                    f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
-                )
-        else:
-            sender_id = edi_msg.sender_id
-            receiver_id = edi_msg.receiver_id
-            transaction_type = edi_msg.transaction_type or "*"
-
-            if not sender_id or not receiver_id:
-                raise ValueError(
-                    f"EDI Message {trace_id} is missing sender/receiver IDs for routing."
-                )
-
-            route = await self.uow.repository.get_route(
-                direction, sender_id, receiver_id, transaction_type
+            raise ValueError(
+                f"Configured outbound route for trading_partner_id={edi_msg.trading_partner_id} not found"
             )
-            if not route:
-                logger.error(
-                    "No {direction} route found for {sender_id}->{receiver_id}",
-                    direction=direction,
-                    sender_id=sender_id,
-                    receiver_id=receiver_id,
-                )
-                raise ValueError(f"No route found for {direction} {sender_id}->{receiver_id}")
+        return route
 
+    async def _get_inbound_route(self, edi_msg) -> InboundRouteDTO:
+        sender_id = edi_msg.sender_id
+        receiver_id = edi_msg.receiver_id
+        transaction_type = edi_msg.transaction_type or "*"
+
+        if not sender_id or not receiver_id:
+            raise ValueError(
+                f"EDI Message {edi_msg.trace_id} is missing sender/receiver IDs for routing."
+            )
+
+        route = await self.uow.repository.get_route(
+            "INBOUND", sender_id, receiver_id, transaction_type
+        )
+        if not route:
+            logger.error(
+                "No INBOUND route found for {sender_id}->{receiver_id}",
+                sender_id=sender_id,
+                receiver_id=receiver_id,
+            )
+            raise ValueError(f"No route found for INBOUND {sender_id}->{receiver_id}")
+        return route
+
+    async def _dispatch_to_strategy(
+        self,
+        trace_id: str,
+        route: OutboundRouteDTO | InboundRouteDTO,
+        edi_msg,
+        idempotency_key: str | None,
+    ) -> None:
         partner_id = None
         strategy = None
 
@@ -89,14 +101,11 @@ class DeliveryRouterUseCase:
             partner_id = route.webhook_id
             strategy = self.strategies["webhook_id"]
 
-        if partner_id and strategy:
-            try:
-                await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
-            except Exception as e:
-                raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e
-            return
+        if not partner_id or not strategy:
+            route_id = getattr(route, "route_id", "inbound_route")
+            raise ValueError(f"Route {route_id} is not configured with any destination partner.")
 
-        route_id = route.route_id if isinstance(route, OutboundRouteDTO) else "inbound_route"
-        raise ValueError(
-            f"Route {route_id} is not configured with any destination partner."
-        )
+        try:
+            await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
+        except Exception as e:
+            raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e

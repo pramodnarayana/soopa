@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
@@ -6,6 +6,7 @@ from edi.adapters.outbound.database.uow_adapter import (
 from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
 from fastapi import APIRouter, Depends, status
+from seedwork.domain.types import JsonValue
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_data_plane_uow
@@ -40,7 +41,7 @@ async def submit_outbound_message(
         ProcessApiEdiJsonCommand(
             tenant_id=tenant_id,
             trading_partner_id=request.trading_partner_id,
-            payload=request.payload,
+            payload=cast(JsonValue, request.payload),
             transaction_type=request.transaction_type,
         )
     )

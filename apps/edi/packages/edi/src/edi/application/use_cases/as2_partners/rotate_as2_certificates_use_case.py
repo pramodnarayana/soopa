@@ -1,5 +1,3 @@
-from typing import Any
-
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
@@ -29,7 +27,7 @@ class RotateAS2CertificatesUseCase:
 
     async def _provision_certificates(
         self,
-        partner: Any,
+        partner: AS2PartnerDomainModel,
         cmd: RotateAS2CertificateCmd,
         secret_store: SecretStorePort,
     ) -> tuple[str, str | None]:

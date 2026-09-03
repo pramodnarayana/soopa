@@ -25,7 +25,7 @@ import email
 import functools
 import re
 from email import policy
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
@@ -283,7 +283,8 @@ class ProcessInboundAs2MessageUseCase:
         except Exception as e:  # noqa: BLE001
             logger.debug("as2_decrypt_initial_attempt_failed_trying_fallback", error=str(e))
 
-        # Fallback: prepend reconstructed S/MIME headers before retrying
+        # External Interoperability Fallback: prepend reconstructed S/MIME headers before retrying.
+        # This is strictly required for legacy external AS2 servers that malform the S/MIME envelope.
         smime_headers = self._reconstruct_smime_headers(original_headers)
         try:
             decrypted = self.crypto_service.decrypt(
@@ -347,12 +348,15 @@ class ProcessInboundAs2MessageUseCase:
             logger.exception("as2_signature_verification_failed")
             raise ValueError(f"Signature verification failed: {e}") from e
 
-    def _extract_pure_edi(self, final_payload_bytes: bytes | Any) -> bytes:
+    def _extract_pure_edi(self, final_payload_bytes: bytes | object) -> bytes:
         if not isinstance(final_payload_bytes, bytes):
-            if hasattr(final_payload_bytes, "as_bytes"):
-                final_payload_bytes = final_payload_bytes.as_bytes()
+            if hasattr(final_payload_bytes, "as_bytes") and callable(final_payload_bytes.as_bytes):
+                final_payload_bytes = final_payload_bytes.as_bytes()  # type: ignore
             elif isinstance(final_payload_bytes, str):
                 final_payload_bytes = final_payload_bytes.encode("utf-8")
+
+            if not isinstance(final_payload_bytes, bytes):
+                raise TypeError("Payload must be bytes")
 
         parsed_msg = email.message_from_bytes(final_payload_bytes, policy=policy.HTTP)
         if "content-type" in parsed_msg:

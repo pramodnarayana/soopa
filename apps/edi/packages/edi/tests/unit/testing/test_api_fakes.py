@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
 import pytest
 
@@ -16,7 +15,7 @@ from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import
 )
 from edi.domain.events import EdiEventType, ProvisioningEvent
 from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
-from edi.testing.fakes.api_fakes import FakeGlobalStore
+from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 
 
 def make_as2_partner(
@@ -37,8 +36,8 @@ def make_as2_partner(
 
 @pytest.mark.asyncio
 async def test_route_mutations_reject_a_different_tenant():
-    store = FakeGlobalStore()
-    inbound_id = await store.create_inbound_route(
+    uow = FakeControlPlaneUnitOfWork()
+    inbound_id = await uow.inbound_routes.create_inbound_route(
         "tenant-1",
         CreateInboundRouteCmd(
             isa_sender_id="sender",
@@ -46,7 +45,7 @@ async def test_route_mutations_reject_a_different_tenant():
             transaction_type="850",
         ),
     )
-    outbound_id = await store.create_outbound_route(
+    outbound_id = await uow.outbound_routes.create_outbound_route(
         "tenant-1",
         CreateOutboundRouteCmd(
             isa_sender_id="sender",
@@ -55,21 +54,21 @@ async def test_route_mutations_reject_a_different_tenant():
         ),
     )
 
-    assert not await store.update_inbound_route(
+    assert not await uow.inbound_routes.update_inbound_route(
         "tenant-2", inbound_id, UpdateInboundRouteCmd(name="changed")
     )
-    assert not await store.delete_inbound_route("tenant-2", inbound_id)
-    assert not await store.update_outbound_route(
+    assert not await uow.inbound_routes.delete_inbound_route("tenant-2", inbound_id)
+    assert not await uow.outbound_routes.update_outbound_route(
         "tenant-2", outbound_id, UpdateOutboundRouteCmd(name="changed")
     )
-    assert not await store.delete_outbound_route("tenant-2", outbound_id)
-    assert inbound_id in store.inbound_routes
-    assert outbound_id in store.outbound_routes
+    assert not await uow.outbound_routes.delete_outbound_route("tenant-2", outbound_id)
+    assert inbound_id in uow.inbound_routes.inbound_routes
+    assert outbound_id in uow.outbound_routes.outbound_routes
 
 
 @pytest.mark.asyncio
 async def test_save_serializes_and_clears_aggregate_domain_events():
-    store = FakeGlobalStore()
+    uow = FakeControlPlaneUnitOfWork()
     partner = make_as2_partner("local-id", "LOCAL")
     partner.add_domain_event(
         ProvisioningEvent(
@@ -80,27 +79,25 @@ async def test_save_serializes_and_clears_aggregate_domain_events():
         )
     )
 
-    await store.save(partner)
+    await uow.as2_partners.save(partner)
 
     assert partner.domain_events == []
-    assert store.outbox_events == [
-        {
-            "tenant_id": "tenant-1",
-            "event_type": "edi.as2_partner.updated",
-            "payload": {
-                "explicit_idempotency_key": "request-1",
-                "tenant_id": "tenant-1",
-                "event_type": "edi.as2_partner.updated",
-                "resource_id": "local-id",
-            },
-            "idempotency_key": "request-1",
-        }
-    ]
+    assert len(uow.as2_partners.outbox.outbox_events) == 1
+    event = uow.as2_partners.outbox.outbox_events[0]
+    assert event.tenant_id == "tenant-1"
+    assert event.event_type == "edi.as2_partner.updated"
+    assert event.idempotency_key == "request-1"
+    assert event.payload == {
+        "explicit_idempotency_key": "request-1",
+        "tenant_id": "tenant-1",
+        "event_type": "edi.as2_partner.updated",
+        "resource_id": "local-id",
+    }
 
 
 @pytest.mark.asyncio
 async def test_get_partnership_by_as2_ids_resolves_partners_and_partnership():
-    store = FakeGlobalStore()
+    uow = FakeControlPlaneUnitOfWork()
     local = make_as2_partner("local-id", "LOCAL")
     remote = make_as2_partner("remote-id", "REMOTE")
     now = datetime.now(UTC)
@@ -117,18 +114,18 @@ async def test_get_partnership_by_as2_ids_resolves_partners_and_partnership():
         created_at=now,
         updated_at=now,
     )
-    await store.save(local)
-    await store.save(remote)
-    await store.save(partnership)
+    await uow.as2_partners.save(local)
+    await uow.as2_partners.save(remote)
+    await uow.as2_partnerships.save(partnership)
 
-    result = await store.get_partnership_by_as2_ids("remote", "local")
+    result = await uow.as2_partnerships.get_partnership_by_as2_ids("remote", "local")
 
     assert result == (partnership, local, remote)
 
 
 @pytest.mark.asyncio
 async def test_get_partnership_by_as2_ids_rejects_cross_tenant_partners():
-    store = FakeGlobalStore()
+    uow = FakeControlPlaneUnitOfWork()
     local = make_as2_partner("local-id", "LOCAL", tenant_id="tenant-1")
     remote = make_as2_partner("remote-id", "REMOTE", tenant_id="tenant-2")
     now = datetime.now(UTC)
@@ -145,11 +142,11 @@ async def test_get_partnership_by_as2_ids_rejects_cross_tenant_partners():
         created_at=now,
         updated_at=now,
     )
-    await store.save(local)
-    await store.save(remote)
-    await store.save(partnership)
+    await uow.as2_partners.save(local)
+    await uow.as2_partners.save(remote)
+    await uow.as2_partnerships.save(partnership)
 
-    assert await store.get_partnership_by_as2_ids("remote", "local") is None
+    assert await uow.as2_partnerships.get_partnership_by_as2_ids("remote", "local") is None
 
 
 class FakeFieldEncryption:
@@ -159,13 +156,13 @@ class FakeFieldEncryption:
 
 @pytest.mark.asyncio
 async def test_update_sftp_password_maps_to_encrypted_field():
-    store = FakeGlobalStore()
-    partner_id = await store.create_sftp_partner(
+    uow = FakeControlPlaneUnitOfWork()
+    partner_id = await uow.sftp_partners.create_sftp_partner(
         "tenant-1",
         CreateSFTPPartnerCmd(name="SFTP", host="sftp.example.com", username="user"),
     )
     use_case = UpdateSFTPPartnerUseCase(
-        uow=SimpleNamespace(sftp_partners=store),
+        uow=uow,
         field_encryption=FakeFieldEncryption(),
     )
 

@@ -1,5 +1,7 @@
 import asyncio
-from typing import Any, cast
+from typing import cast
+
+from seedwork.domain.types import JsonValue
 
 from edi.adapters.outbound.transformer.domain.envelope.edifact import (
     EdifactEnvelopeBuilder,
@@ -7,6 +9,7 @@ from edi.adapters.outbound.transformer.domain.envelope.edifact import (
 from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
+from edi.domain.constants import EdiStandard
 from edi.domain.types import AstNode
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
@@ -48,10 +51,10 @@ class BotsTransformerAdapter(TransformerPort):
 
     async def transform_json_to_edi(
         self,
-        payload: dict[str, Any] | list[Any],
+        payload: AstNode | list[AstNode],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, Any],
+        route_config: dict[str, JsonValue],
     ) -> bytes:
         """
         Transforms JSON to EDI using the wrapped BOTS facade.
@@ -60,11 +63,11 @@ class BotsTransformerAdapter(TransformerPort):
         if isinstance(payload, dict) and (
             "interchange_ISA" in payload or "interchange_UNB" in payload
         ):
-            ast_dict: dict[str, Any] = payload
+            ast_dict: AstNode = payload
         else:
-            if standard.lower() == "x12":
+            if standard.lower() == EdiStandard.X12:
                 ast_dict = X12EnvelopeBuilder.build(route_config, payload)
-            elif standard.lower() == "edifact":
+            elif standard.lower() == EdiStandard.EDIFACT:
                 ast_dict = EdifactEnvelopeBuilder.build(route_config, payload)
             else:
                 raise TransformationError(
@@ -72,7 +75,9 @@ class BotsTransformerAdapter(TransformerPort):
                 )
 
         edi_str, errors = await asyncio.to_thread(
-            self._adapter.serialize_to_edi, ast_dict, standard=standard.lower()
+            self._adapter.serialize_to_edi,
+            cast(dict[str, object], ast_dict),
+            standard=standard.lower(),
         )
 
         fatal_errors = [e for e in errors if not e.startswith("[W")]

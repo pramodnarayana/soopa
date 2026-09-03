@@ -167,7 +167,7 @@ class ComputeTransformUseCase:
                 receiver_id=edi_msg.receiver_id,
                 trading_partner_id=trading_partner_id,
                 format_standard=standard,
-                transactions=json_payloads,
+                transactions=cast(list[dict[str, JsonValue]], json_payloads),
             )
 
             # Save ApiGateway to DB as a single webhook delivery

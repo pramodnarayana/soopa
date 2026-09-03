@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from database.models.identity import Tenant
-from edi.adapters.inbound.as2 import (
+from edi.adapters.outbound.security import decrypt_payload, verify_signature
+from edi.domain.models.as2 import (
     AS2MDN,
     AS2Message,
     Disposition,
-    generate_mdn,
 )
-from edi.adapters.outbound.security import decrypt_payload, verify_signature
+from edi.domain.services.as2_protocol import generate_mdn
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
 from sqlalchemy import select

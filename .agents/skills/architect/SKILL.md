@@ -32,6 +32,16 @@ You are a Principal Software Architect. Your job is to design systems that scale
 - **No Type Suppressions**: NEVER use `# type: ignore` comments to bypass static analysis or type checking (e.g., mypy). All type mismatches must be resolved structurally by aligning the underlying classes, DTOs, or function signatures.
 - **No `Any` as a Crutch**: NEVER use `typing.Any` to bypass structural typing or mypy failures. Always properly define Pydantic schemas, DTOs, Protocols, and explicit return types, even for legacy code.
 
+## DTO-First Design (Strictly Enforced)
+When designing any new module, bounded context, or Port, **DTOs MUST be defined first**, before any Port interface, adapter, or use case is written. This is non-negotiable.
+
+- **Design Order**: `application/dto.py` → Port Protocol → Domain Model → Use Case → Adapter → Tests.
+- **One DTO per ORM Boundary**: Every table that a Port method queries or mutates MUST have its own `@dataclass(frozen=True)` DTO. NEVER share a single DTO across two different ORM tables.
+- **No Raw `dict[str, Any]` Across Boundaries**: NEVER return raw `dict`, `dict[str, Any]`, or `Sequence[Any]` from a Port method. Every Port return type MUST be a typed DTO, a typed domain model, or a primitive.
+- **No Composed DTO Wrappers for Joins**: If a Port method queries a JOIN of two tables, return a `tuple[ADTO, BDTO] | None` — do NOT create a third wrapper DTO. Callers destructure the tuple explicitly.
+- **No Framework Leakage into DTOs**: DTOs MUST be pure `@dataclass(frozen=True)` Python objects. NEVER use Pydantic `BaseModel`, SQLAlchemy ORM models, or FastAPI types as DTOs passed between layers.
+- **`JsonValue` for JSON Blobs**: NEVER type an open-ended JSON column as `dict[str, Any]`. Always use the canonical `JsonValue` type alias from `edi.domain.types`.
+
 # Enterprise Integration Testing (Strictly Enforced)
 
 - **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).

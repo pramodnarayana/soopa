@@ -1,6 +1,5 @@
 import json
 from datetime import UTC, datetime
-from typing import Any, cast
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_random_hex
@@ -438,24 +437,24 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         gs_receiver_id: str | None = None,
     ) -> InboundRouteDTO | None:
 
-        if direction not in ("INBOUND", "OUTBOUND"):
-            raise ValueError(f"Invalid direction: {direction}")
-        model = InboundRoute if direction == "INBOUND" else OutboundRoute
+        if direction != "INBOUND":
+            raise ValueError(f"get_route only supports INBOUND, got: {direction}")
+        model_class = InboundRoute
 
         # Exact match or wildcard transaction type
         conditions = [
-            cast(Any, model).isa_sender_id == sender_id,
-            cast(Any, model).isa_receiver_id == receiver_id,
-            cast(Any, model).transaction_type.in_([transaction_type, "*"]),
-            cast(Any, model).active.is_(True),
+            model_class.isa_sender_id == sender_id,
+            model_class.isa_receiver_id == receiver_id,
+            model_class.transaction_type.in_([transaction_type, "*"]),
+            model_class.active.is_(True),
         ]
 
         if gs_sender_id:
-            conditions.append(cast(Any, model).gs_sender_id == gs_sender_id)
+            conditions.append(model_class.gs_sender_id == gs_sender_id)
         if gs_receiver_id:
-            conditions.append(cast(Any, model).gs_receiver_id == gs_receiver_id)
+            conditions.append(model_class.gs_receiver_id == gs_receiver_id)
 
-        stmt = select(model).where(*conditions)
+        stmt = select(model_class).where(*conditions)
 
         result = await self.session.execute(stmt)
         # Fetch all matches, prefer exact transaction_type over wildcard
@@ -464,10 +463,9 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
 
         # Sort so specific transaction types match before generic "*"
-        records = sorted(records, key=lambda r: cast(InboundRoute, r).transaction_type == "*")
+        records = sorted(records, key=lambda r: r.transaction_type == "*")
 
-        # mypy gets confused by TenantBase being the base class but returning specific derived models
-        record: Any = records[0]
+        record = records[0]
         return InboundRouteDTO(
             trading_partner_id=record.trading_partner_id,
             as2_partner_id=str(record.as2_partner_id) if record.as2_partner_id else None,

@@ -1,11 +1,13 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonValue
+from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 
 from edi.application.dtos.commands import (
@@ -26,7 +28,9 @@ from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainMod
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.domain.models.outbox_event import OutboxEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
+from edi.domain.models.webhooks import WebhookDomainModel
 from edi.ports.outbound.repository import (
     TenantRepositoryPort,
 )
@@ -34,36 +38,191 @@ from edi.ports.outbound.repository import (
 T = TypeVar("T")
 
 
-class FakeGlobalStore:
-    def __init__(self) -> None:
-        self.partners: dict[str, Any] = {}
-        self.partnerships: dict[str, Any] = {}
-        self.sftp_partners: dict[str, Any] = {}
-        self.webhooks: dict[str, Any] = {}
-        self.outbox_events: list[Any] = []
-        self.inbound_routes: dict[str, Any] = {}
-        self.outbound_routes: dict[str, Any] = {}
-        self._edi_headers: dict[str, Any] = {}
+class FakeOutboxBase:
+    """Shared outbox store across repositories within a UOW to accumulate events."""
 
-    async def get_inbound_routes(self, tenant_id: str) -> list[Any]:
-        return [r for r in self.inbound_routes.values() if r.tenant_id == tenant_id]
+    def __init__(self):
+        self.outbox_events: list[OutboxEvent] = []
 
-    async def get_inbound_route(self, tenant_id: str, route_id: str) -> Any:
+    def append(self, event: OutboxEvent):
+        self.outbox_events.append(event)
+
+
+class FakeInboundRouteRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self.inbound_routes: dict[str, InboundRouteDomainModel] = {}
+        self.outbox = outbox
+
+    async def get_inbound_routes(self, tenant_id: str) -> list[object]:
+        return [
+            r for r in self.inbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+        ]
+
+    async def get_inbound_route(self, tenant_id: str, route_id: str) -> object | None:
         route = self.inbound_routes.get(route_id)
-        return route if route and route.tenant_id == tenant_id else None
+        return route if route and getattr(route, "tenant_id", None) == tenant_id else None
 
-    async def get_inbound_route_by_id(self, tenant_id: str, route_id: str) -> Any:
+    async def get_inbound_route_by_id(self, tenant_id: str, route_id: str) -> object | None:
         return await self.get_inbound_route(tenant_id, route_id)
 
-    async def get_outbound_routes(self, tenant_id: str) -> list[Any]:
-        return [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
+    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> str:
+        r_id = generate_id(SystemIdPrefix.GENERIC)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        from edi.domain.models.base import ProcessingMode
 
-    async def get_outbound_route(self, tenant_id: str, route_id: str) -> Any:
+        pm = (
+            ProcessingMode(cmd.processing_mode) if cmd.processing_mode else ProcessingMode.TRANSFORM
+        )
+        self.inbound_routes[r_id] = InboundRouteDomainModel(
+            id=r_id,
+            tenant_id=tenant_id,
+            name=cmd.name,
+            active=True,
+            isa_sender_id=cmd.isa_sender_id,
+            isa_receiver_id=cmd.isa_receiver_id,
+            gs_sender_id=cmd.gs_sender_id,
+            gs_receiver_id=cmd.gs_receiver_id,
+            transaction_type=cmd.transaction_type,
+            trading_partner_id=cmd.trading_partner_id,
+            processing_mode=pm,
+            created_at=now,
+            updated_at=now,
+        )
+        return r_id
+
+    async def update_inbound_route(
+        self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
+    ) -> bool:
+        route = self.inbound_routes.get(route_id)
+        return bool(route and route.tenant_id == tenant_id)
+
+    async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
+        route = self.inbound_routes.get(route_id)
+        if route and route.tenant_id == tenant_id:
+            del self.inbound_routes[route_id]
+            return True
+        return False
+
+    async def list_inbound_routes(self, tenant_id: str) -> list[object]:
+        return [
+            r for r in self.inbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+        ]
+
+    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
+        for r in self.inbound_routes.values():
+            if r.isa_sender_id == isa_sender_id and r.isa_receiver_id == isa_receiver_id:
+                return r.tenant_id
+        return None
+
+    async def save(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, InboundRouteDomainModel):
+            self.inbound_routes[aggregate.id] = aggregate
+        self._flush_events(aggregate)
+
+    async def delete(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, InboundRouteDomainModel):
+            self.inbound_routes.pop(aggregate.id, None)
+        self._flush_events(aggregate)
+
+    def _flush_events(self, aggregate: AggregateRoot):
+        for event in aggregate.domain_events:
+            self.outbox.append(
+                OutboxEvent(
+                    id=generate_id(SystemIdPrefix.GENERIC),
+                    tenant_id=str(
+                        getattr(event, "get_routing_tenant_id", lambda: None)()
+                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                    ),
+                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    payload=serialize_domain_event(event),
+                    idempotency_key=getattr(event, "idempotency_key", None),
+                )
+            )
+        aggregate.clear_domain_events()
+
+
+class FakeOutboundRouteRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self.outbound_routes: dict[str, OutboundRouteDomainModel] = {}
+        self.outbox = outbox
+
+    async def get_outbound_routes(self, tenant_id: str) -> list[object]:
+        return [
+            r for r in self.outbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+        ]
+
+    async def get_outbound_route(self, tenant_id: str, route_id: str) -> object | None:
         route = self.outbound_routes.get(route_id)
         return route if route and route.tenant_id == tenant_id else None
 
-    async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
+    async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> str:
+        r_id = generate_id(SystemIdPrefix.GENERIC)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        self.outbound_routes[r_id] = OutboundRouteDomainModel(
+            id=r_id,
+            tenant_id=tenant_id,
+            name=cmd.name,
+            active=True,
+            trading_partner_id=cmd.trading_partner_id,
+            protocol=cmd.protocol,
+            as2_partner_id=cmd.as2_partner_id,
+            sftp_partner_id=cmd.sftp_partner_id,
+            created_at=now,
+            updated_at=now,
+        )
+        return r_id
 
+    async def update_outbound_route(
+        self, tenant_id: str, route_id: str, cmd: UpdateOutboundRouteCmd
+    ) -> bool:
+        route = self.outbound_routes.get(route_id)
+        return bool(route and route.tenant_id == tenant_id)
+
+    async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
+        route = self.outbound_routes.get(route_id)
+        if route and route.tenant_id == tenant_id:
+            del self.outbound_routes[route_id]
+            return True
+        return False
+
+    async def list_outbound_routes(self, tenant_id: str) -> list[object]:
+        return [
+            r for r in self.outbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+        ]
+
+    async def save(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, OutboundRouteDomainModel):
+            self.outbound_routes[aggregate.id] = aggregate
+        self._flush_events(aggregate)
+
+    async def delete(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, OutboundRouteDomainModel):
+            self.outbound_routes.pop(aggregate.id, None)
+        self._flush_events(aggregate)
+
+    def _flush_events(self, aggregate: AggregateRoot):
+        for event in aggregate.domain_events:
+            self.outbox.append(
+                OutboxEvent(
+                    id=generate_id(SystemIdPrefix.GENERIC),
+                    tenant_id=str(
+                        getattr(event, "get_routing_tenant_id", lambda: None)()
+                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                    ),
+                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    payload=serialize_domain_event(event),
+                    idempotency_key=getattr(event, "idempotency_key", None),
+                )
+            )
+        aggregate.clear_domain_events()
+
+
+class FakeAS2PartnerRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self.partners: dict[str, AS2PartnerDomainModel] = {}
+        self.outbox = outbox
+
+    async def create_as2_identity(self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd) -> str:
         for p in self.partners.values():
             if (
                 isinstance(p, AS2PartnerDomainModel)
@@ -71,7 +230,6 @@ class FakeGlobalStore:
                 and p.as2_id == cmd.as2_id
             ):
                 raise PartnerAlreadyExistsError(as2_id=cmd.as2_id, tenant_id=str(tenant_id))
-
         partner_id = generate_id(SystemIdPrefix.GENERIC)
         now = datetime.now(UTC).replace(tzinfo=None)
         aggregate = AS2PartnerDomainModel(
@@ -101,8 +259,78 @@ class FakeGlobalStore:
         if partner_id in self.partners and self.partners[partner_id].tenant_id == tenant_id:
             del self.partners[partner_id]
 
-    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
+    async def get_as2_partner(self, tenant_id: str, partner_id: str) -> object | None:
+        p = self.partners.get(partner_id)
+        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
 
+    async def update_partner_status(self, tenant_id: str, partner_id: str, status: str) -> None:
+        if partner_id in self.partners and self.partners[partner_id].tenant_id == tenant_id:
+            self.partners[partner_id].active = status == "ACTIVE"
+
+    async def list_trading_partners(self) -> list[object]:
+        return list(self.partners.values())
+
+    async def list_as2_partners(self, tenant_id: str) -> Sequence[object]:
+        return [p for p in self.partners.values() if getattr(p, "tenant_id", None) == tenant_id]
+
+    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
+        return {
+            id: self.partners[id].name
+            for id in ids
+            if id in self.partners and self.partners[id].tenant_id == str(tenant_id)
+        }
+
+    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
+        for p in self.partners.values():
+            if isinstance(p, AS2PartnerDomainModel) and (
+                p.private_key_vault_ref == vault_ref or p.public_cert_vault_ref == vault_ref
+            ):
+                return True
+        return False
+
+    async def save(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, AS2PartnerDomainModel):
+            for existing in self.partners.values():
+                if (
+                    isinstance(existing, AS2PartnerDomainModel)
+                    and existing.id != aggregate.id
+                    and existing.tenant_id == aggregate.tenant_id
+                    and existing.as2_id == aggregate.as2_id
+                ):
+                    raise PartnerAlreadyExistsError(
+                        as2_id=aggregate.as2_id, tenant_id=aggregate.tenant_id or PLATFORM_TENANT_ID
+                    )
+            self.partners[aggregate.id] = aggregate
+        self._flush_events(aggregate)
+
+    async def delete(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, AS2PartnerDomainModel):
+            self.partners.pop(aggregate.id, None)
+        self._flush_events(aggregate)
+
+    def _flush_events(self, aggregate: AggregateRoot):
+        for event in aggregate.domain_events:
+            self.outbox.append(
+                OutboxEvent(
+                    id=generate_id(SystemIdPrefix.GENERIC),
+                    tenant_id=str(
+                        getattr(event, "get_routing_tenant_id", lambda: None)()
+                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                    ),
+                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    payload=serialize_domain_event(event),
+                    idempotency_key=getattr(event, "idempotency_key", None),
+                )
+            )
+        aggregate.clear_domain_events()
+
+
+class FakeSFTPPartnerRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self.sftp_partners: dict[str, SFTPPartnerDomainModel] = {}
+        self.outbox = outbox
+
+    async def create_sftp_partner(self, tenant_id: str, cmd: CreateSFTPPartnerCmd) -> str:
         partner_id = generate_id(SystemIdPrefix.GENERIC)
         now = datetime.now(UTC).replace(tzinfo=None)
         aggregate = SFTPPartnerDomainModel(
@@ -131,7 +359,7 @@ class FakeGlobalStore:
         ):
             p = self.sftp_partners[partner_id]
             if not isinstance(cmd.active, type(UNSET)):
-                p.active = cmd.active
+                p.active = bool(cmd.active)
             return True
         return False
 
@@ -142,26 +370,73 @@ class FakeGlobalStore:
         ):
             del self.sftp_partners[partner_id]
 
+    async def get_sftp_partner(self, tenant_id: str, partner_id: str) -> object | None:
+        p = self.sftp_partners.get(partner_id)
+        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
+
+    async def list_sftp_partners(self, tenant_id: str) -> Sequence[object]:
+        return [
+            p for p in self.sftp_partners.values() if getattr(p, "tenant_id", None) == tenant_id
+        ]
+
+    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
+        return {
+            id: getattr(self.sftp_partners[id], "name", "unknown")
+            for id in ids
+            if id in self.sftp_partners
+            and getattr(self.sftp_partners[id], "tenant_id", None) == str(tenant_id)
+        }
+
+    async def save(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, SFTPPartnerDomainModel):
+            self.sftp_partners[aggregate.id] = aggregate
+        self._flush_events(aggregate)
+
+    async def delete(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, SFTPPartnerDomainModel):
+            self.sftp_partners.pop(aggregate.id, None)
+        self._flush_events(aggregate)
+
+    def _flush_events(self, aggregate: AggregateRoot):
+        for event in aggregate.domain_events:
+            self.outbox.append(
+                OutboxEvent(
+                    id=generate_id(SystemIdPrefix.GENERIC),
+                    tenant_id=str(
+                        getattr(event, "get_routing_tenant_id", lambda: None)()
+                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                    ),
+                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    payload=serialize_domain_event(event),
+                    idempotency_key=getattr(event, "idempotency_key", None),
+                )
+            )
+        aggregate.clear_domain_events()
+
+
+class FakeAS2PartnershipRepository:
+    def __init__(self, outbox: FakeOutboxBase, partners_repo: FakeAS2PartnerRepository) -> None:
+        self.partnerships: dict[str, AS2PartnershipDomainModel] = {}
+        self.outbox = outbox
+        self.partners_repo = partners_repo
+
     async def create_as2_partnership(self, tenant_id: str, cmd: CreateAS2PartnershipCmd) -> str:
         p_id = generate_id(SystemIdPrefix.GENERIC)
-
-        class FakePartnership:
-            id = p_id
-            self_tenant_id = tenant_id
-            name = cmd.name
-            local_partner_id = cmd.local_partner_id
-            remote_partner_id = cmd.remote_partner_id
-            mdn_type = cmd.mdn_type
-            mdn_url = cmd.mdn_url
-            encryption_algorithm = cmd.encryption_algorithm
-            signature_algorithm = cmd.signature_algorithm
-            active = True
-
-            @property
-            def tenant_id(self) -> str:
-                return self.self_tenant_id
-
-        self.partnerships[p_id] = FakePartnership()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        self.partnerships[p_id] = AS2PartnershipDomainModel(
+            id=p_id,
+            tenant_id=tenant_id,
+            name=cmd.name,
+            local_partner_id=cmd.local_partner_id,
+            remote_partner_id=cmd.remote_partner_id,
+            mdn_type=cmd.mdn_type,
+            mdn_url=cmd.mdn_url,
+            encryption_algorithm=cmd.encryption_algorithm,
+            signature_algorithm=cmd.signature_algorithm,
+            active=True,
+            created_at=now,
+            updated_at=now,
+        )
         return p_id
 
     async def update_as2_partnership(
@@ -173,7 +448,7 @@ class FakeGlobalStore:
         ):
             p = self.partnerships[partnership_id]
             if not isinstance(cmd.active, type(UNSET)):
-                p.active = cmd.active
+                p.active = bool(cmd.active)
             return True
         return False
 
@@ -184,223 +459,21 @@ class FakeGlobalStore:
         ):
             del self.partnerships[partnership_id]
 
-    async def get_as2_partner(self, tenant_id: str, partner_id: str) -> Any:
-        p = self.partners.get(partner_id)
-        return p if p and p.tenant_id == tenant_id else None
-
-    async def get_as2_partnership(self, tenant_id: str, partnership_id: str) -> Any:
+    async def get_as2_partnership(self, tenant_id: str, partnership_id: str) -> object | None:
         p = self.partnerships.get(partnership_id)
-        return p if p and p.tenant_id == tenant_id else None
+        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
 
-    async def list_as2_partnerships(self, tenant_id: str) -> list[Any]:
-        return [p for p in self.partnerships.values() if p.tenant_id == tenant_id]
+    async def list_as2_partnerships(self, tenant_id: str) -> list[object]:
+        return [p for p in self.partnerships.values() if getattr(p, "tenant_id", None) == tenant_id]
 
-    async def publish_outbox_event(
-        self,
-        event: Any,
-        idempotency_key: str | None = None,
-    ) -> str:
-        key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
-        existing = next((e for e in self.outbox_events if e.get("idempotency_key") == key), None)
-        if existing:
-            if existing.get("status") != "RESERVED":
-                raise ValueError(f"Idempotency key {key} already exists")
-            existing.update(
-                {
-                    "tenant_id": event.tenant_id,
-                    "event_type": event.event_type,
-                    "payload": {
-                        **existing.get("payload", {}),
-                        **serialize_domain_event(event),
-                    },
-                    "status": "PENDING",
-                }
-            )
-            return key
-        self.outbox_events.append(
-            {
-                "tenant_id": event.tenant_id,
-                "event_type": event.event_type,
-                "payload": serialize_domain_event(event),
-                "idempotency_key": key,
-            }
-        )
-        return key
-
-    async def update_partner_status(self, tenant_id: str, partner_id: str, status: str) -> None:
-        if partner_id in self.partners and self.partners[partner_id].tenant_id == tenant_id:
-            self.partners[partner_id].active = status == "ACTIVE"
-
-    async def list_trading_partners(self) -> list[Any]:
-        return list(self.partners.values())
-
-    async def list_as2_partners(self, tenant_id: str) -> Sequence[Any]:
-        return [p for p in self.partners.values() if p.tenant_id == tenant_id]
-
-    async def list_partnerships(self) -> list[Any]:
+    async def list_partnerships(self) -> list[object]:
         return list(self.partnerships.values())
 
-    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
-        return {
-            id: self.partners[id].name
-            for id in ids
-            if id in self.partners and self.partners[id].tenant_id == str(tenant_id)
-        }
-
-    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
-        return {
-            id: self.sftp_partners[id].name
-            for id in ids
-            if id in self.sftp_partners and self.sftp_partners[id].tenant_id == str(tenant_id)
-        }
-
-    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
-        return {
-            id: self.webhooks[id].name
-            for id in ids
-            if id in self.webhooks and self.webhooks[id].tenant_id == str(tenant_id)
-        }
-
-    async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> str:
-        r_id = generate_id(SystemIdPrefix.GENERIC)
-        self.inbound_routes[r_id] = FakeRoute(r_id, tenant_id, cmd)
-        return r_id
-
-    async def create_outbound_route(self, tenant_id: str, cmd: CreateOutboundRouteCmd) -> str:
-        r_id = generate_id(SystemIdPrefix.GENERIC)
-        self.outbound_routes[r_id] = FakeRoute(r_id, tenant_id, cmd)
-        return r_id
-
-    async def update_inbound_route(
-        self, tenant_id: str, route_id: str, cmd: UpdateInboundRouteCmd
-    ) -> bool:
-        route = self.inbound_routes.get(route_id)
-        return bool(route and route.tenant_id == tenant_id)
-
-    async def delete_inbound_route(self, tenant_id: str, route_id: str) -> bool:
-        route = self.inbound_routes.get(route_id)
-        if route and route.tenant_id == tenant_id:
-            del self.inbound_routes[route_id]
-            return True
-        return False
-
-    async def update_outbound_route(
-        self, tenant_id: str, route_id: str, cmd: UpdateOutboundRouteCmd
-    ) -> bool:
-        route = self.outbound_routes.get(route_id)
-        return bool(route and route.tenant_id == tenant_id)
-
-    async def delete_outbound_route(self, tenant_id: str, route_id: str) -> bool:
-        route = self.outbound_routes.get(route_id)
-        if route and route.tenant_id == tenant_id:
-            del self.outbound_routes[route_id]
-            return True
-        return False
-
-    async def list_inbound_routes(self, tenant_id: str) -> list[Any]:
-        return [r for r in self.inbound_routes.values() if r.tenant_id == tenant_id]
-
-    async def list_outbound_routes(self, tenant_id: str) -> list[Any]:
-        return [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
-
-    async def list_sftp_partners(self, tenant_id: str) -> Sequence[Any]:
-        return [p for p in self.sftp_partners.values() if p.tenant_id == tenant_id]
-
-    async def list_webhooks(self, tenant_id: str) -> Sequence[Any]:
-        return [p for p in self.webhooks.values() if p.tenant_id == tenant_id]
-
-    async def get_sftp_partner(self, tenant_id: str, partner_id: str) -> Any:
-        p = self.sftp_partners.get(partner_id)
-        return p if p and p.tenant_id == tenant_id else None
-
-    async def get_webhook(self, tenant_id: str, partner_id: str) -> Any:
-        p = self.webhooks.get(partner_id)
-        return p if p and p.tenant_id == tenant_id else None
-
-    # ------------------------------------------------------------------
-    # Aggregate save / delete — required by all refactored use cases
-    # ------------------------------------------------------------------
-
-    async def save(self, aggregate: Any) -> None:
-        """Upsert aggregate into the appropriate in-memory store."""
-        if isinstance(aggregate, AS2PartnerDomainModel):
-            # Mirror real repository: raise PartnerAlreadyExistsError on duplicate as2_id
-            for existing in self.partners.values():
-                if (
-                    isinstance(existing, AS2PartnerDomainModel)
-                    and existing.id != aggregate.id
-                    and existing.tenant_id == aggregate.tenant_id
-                    and existing.as2_id == aggregate.as2_id
-                ):
-                    raise PartnerAlreadyExistsError(
-                        as2_id=aggregate.as2_id,
-                        tenant_id=aggregate.tenant_id or PLATFORM_TENANT_ID,
-                    )
-            self.partners[aggregate.id] = aggregate
-        elif isinstance(aggregate, AS2PartnershipDomainModel):
-            self.partnerships[aggregate.id] = aggregate
-        elif isinstance(aggregate, SFTPPartnerDomainModel):
-            self.sftp_partners[aggregate.id] = aggregate
-        elif isinstance(aggregate, InboundRouteDomainModel):
-            self.inbound_routes[aggregate.id] = aggregate
-        elif isinstance(aggregate, OutboundRouteDomainModel):
-            self.outbound_routes[aggregate.id] = aggregate
-        elif isinstance(aggregate, OutboundEdiHeaderDomainModel):
-            self._edi_headers[aggregate.id] = aggregate
-
-        for event in aggregate.domain_events:
-            self.outbox_events.append(
-                {
-                    "tenant_id": event.get_routing_tenant_id()
-                    or aggregate.tenant_id,
-                    "event_type": event.event_name,
-                    "payload": serialize_domain_event(event),
-                    "idempotency_key": event.idempotency_key,
-                }
-            )
-        aggregate.clear_domain_events()
-
-    async def delete(self, aggregate: Any) -> None:
-        """Remove aggregate from the appropriate in-memory store."""
-        if isinstance(aggregate, AS2PartnerDomainModel):
-            self.partners.pop(aggregate.id, None)
-        elif isinstance(aggregate, AS2PartnershipDomainModel):
-            self.partnerships.pop(aggregate.id, None)
-        elif isinstance(aggregate, SFTPPartnerDomainModel):
-            self.sftp_partners.pop(aggregate.id, None)
-        elif isinstance(aggregate, InboundRouteDomainModel):
-            self.inbound_routes.pop(aggregate.id, None)
-        elif isinstance(aggregate, OutboundRouteDomainModel):
-            self.outbound_routes.pop(aggregate.id, None)
-        elif isinstance(aggregate, OutboundEdiHeaderDomainModel):
-            self._edi_headers.pop(aggregate.id, None)
-
-        for event in aggregate.domain_events:
-            self.outbox_events.append(
-                {
-                    "tenant_id": event.get_routing_tenant_id()
-                    or aggregate.tenant_id,
-                    "event_type": event.event_name,
-                    "payload": serialize_domain_event(event),
-                    "idempotency_key": event.idempotency_key,
-                }
-            )
-        aggregate.clear_domain_events()
-
-    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
-        for p in self.partners.values():
-            if isinstance(p, AS2PartnerDomainModel) and (
-                p.private_key_vault_ref == vault_ref
-                or p.public_cert_vault_ref == vault_ref
-            ):
-                return True
-        return False
-
-    async def get_partnership_by_as2_ids(self, as2_from: str, as2_to: str) -> Any:
+    async def get_partnership_by_as2_ids(self, as2_from: str, as2_to: str) -> object | None:
         matches = []
         for partnership in self.partnerships.values():
-            local_partner = self.partners.get(partnership.local_partner_id)
-            remote_partner = self.partners.get(partnership.remote_partner_id)
+            local_partner = self.partners_repo.partners.get(partnership.local_partner_id)
+            remote_partner = self.partners_repo.partners.get(partnership.remote_partner_id)
             if (
                 isinstance(local_partner, AS2PartnerDomainModel)
                 and isinstance(remote_partner, AS2PartnerDomainModel)
@@ -412,64 +485,147 @@ class FakeGlobalStore:
                 and partnership.tenant_id == local_partner.tenant_id == remote_partner.tenant_id
             ):
                 matches.append((partnership, local_partner, remote_partner))
-
         if len(matches) != 1:
             return None
         return matches[0]
 
-    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
-        for r in self.inbound_routes.values():
-            if (
-                r.isa_sender_id == isa_sender_id
-                and r.isa_receiver_id == isa_receiver_id
-            ):
-                return r.tenant_id
-        return None
+    async def save(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, AS2PartnershipDomainModel):
+            self.partnerships[aggregate.id] = aggregate
+        self._flush_events(aggregate)
 
-    async def get_outbound_edi_headers(self, tenant_id: str) -> Sequence[Any]:
-        return [h for h in self._edi_headers.values() if h.tenant_id == tenant_id]
+    async def delete(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, AS2PartnershipDomainModel):
+            self.partnerships.pop(aggregate.id, None)
+        self._flush_events(aggregate)
 
-    async def get_outbound_edi_header(self, tenant_id: str, header_id: str) -> Any:
+    def _flush_events(self, aggregate: AggregateRoot):
+        for event in aggregate.domain_events:
+            self.outbox.append(
+                OutboxEvent(
+                    id=generate_id(SystemIdPrefix.GENERIC),
+                    tenant_id=str(
+                        getattr(event, "get_routing_tenant_id", lambda: None)()
+                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                    ),
+                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    payload=serialize_domain_event(event),
+                    idempotency_key=getattr(event, "idempotency_key", None),
+                )
+            )
+        aggregate.clear_domain_events()
+
+
+class FakeWebhookRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self.webhooks: dict[str, WebhookDomainModel] = {}
+        self.outbox = outbox
+
+    async def list_webhooks(self, tenant_id: str) -> Sequence[object]:
+        return [p for p in self.webhooks.values() if getattr(p, "tenant_id", None) == tenant_id]
+
+    async def get_webhook(self, tenant_id: str, partner_id: str) -> object | None:
+        p = self.webhooks.get(partner_id)
+        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
+
+    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
+        return {
+            id: self.webhooks[id].name
+            for id in ids
+            if id in self.webhooks and self.webhooks[id].tenant_id == str(tenant_id)
+        }
+
+
+class FakeControlPlaneOutboxRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self.outbox = outbox
+        self._reservations: dict[str, dict[str, JsonValue]] = {}
+
+    async def publish_outbox_event(self, event: object, idempotency_key: str | None = None) -> str:
+        key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
+        existing = next((e for e in self.outbox.outbox_events if e.idempotency_key == key), None)
+        if existing:
+            raise ValueError(f"Idempotency key {key} already exists")
+
+        evt = OutboxEvent(
+            id=generate_id(SystemIdPrefix.GENERIC),
+            tenant_id=getattr(event, "tenant_id", PLATFORM_TENANT_ID),
+            event_type=getattr(event, "event_type", type(event).__name__),
+            payload=serialize_domain_event(event),
+            idempotency_key=key,
+        )
+        self.outbox.append(evt)
+        return key
+
+    async def create_reservation(
+        self, tenant_id: str, idempotency_key: str, fingerprint: str
+    ) -> None:
+        if idempotency_key in self._reservations:
+            raise IdempotencyConflictError() from DuplicateEntityError(
+                "Idempotency key already exists"
+            )
+        self._reservations[idempotency_key] = {
+            "tenant_id": tenant_id,
+            "idempotency_key": idempotency_key,
+            "status": "RESERVED",
+            "payload": {"fingerprint": fingerprint},
+        }
+
+    async def get_event_by_idempotency_key(self, idempotency_key: str) -> object | None:
+        return self._reservations.get(idempotency_key)
+
+
+class FakeOutboundEdiHeaderRepository:
+    def __init__(self, outbox: FakeOutboxBase) -> None:
+        self._edi_headers: dict[str, OutboundEdiHeaderDomainModel] = {}
+        self.outbox = outbox
+
+    async def get_outbound_edi_headers(self, tenant_id: str) -> Sequence[object]:
+        return [h for h in self._edi_headers.values() if getattr(h, "tenant_id", None) == tenant_id]
+
+    async def get_outbound_edi_header(self, tenant_id: str, header_id: str) -> object | None:
         h = self._edi_headers.get(header_id)
-        return h if h and h.tenant_id == tenant_id else None
+        return h if h and getattr(h, "tenant_id", None) == tenant_id else None
 
     async def get_outbound_edi_header_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
-    ) -> Any:
+    ) -> object | None:
         for h in self._edi_headers.values():
             if h.tenant_id == tenant_id and h.trading_partner_id == trading_partner_id:
                 return h
         return None
 
-    async def create_reservation(
-        self, tenant_id: str, idempotency_key: str, fingerprint: str
-    ) -> None:
+    async def save(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, OutboundEdiHeaderDomainModel):
+            self._edi_headers[aggregate.id] = aggregate
+        self._flush_events(aggregate)
 
-        if any(e.get("idempotency_key") == idempotency_key for e in self.outbox_events):
-            raise IdempotencyConflictError() from DuplicateEntityError(
-                "Idempotency key already exists"
+    async def delete(self, aggregate: AggregateRoot) -> None:
+        if isinstance(aggregate, OutboundEdiHeaderDomainModel):
+            self._edi_headers.pop(aggregate.id, None)
+        self._flush_events(aggregate)
+
+    def _flush_events(self, aggregate: AggregateRoot):
+        for event in aggregate.domain_events:
+            self.outbox.append(
+                OutboxEvent(
+                    id=generate_id(SystemIdPrefix.GENERIC),
+                    tenant_id=str(
+                        getattr(event, "get_routing_tenant_id", lambda: None)()
+                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                    ),
+                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    payload=serialize_domain_event(event),
+                    idempotency_key=getattr(event, "idempotency_key", None),
+                )
             )
-        self.outbox_events.append(
-            {
-                "tenant_id": tenant_id,
-                "idempotency_key": idempotency_key,
-                "status": "RESERVED",
-                "payload": {"fingerprint": fingerprint},
-            }
-        )
-
-    async def get_event_by_idempotency_key(self, idempotency_key: str) -> Any | None:
-        for e in self.outbox_events:
-            if e.get("idempotency_key") == idempotency_key:
-                return e
-        return None
-
-    async def get_tenant_flags(self, tenant_id: str) -> dict[str, Any] | None:
-        return None
+        aggregate.clear_domain_events()
 
 
 class FakeRoute:
-    def __init__(self, id: str, tenant_id: str, cmd: Any) -> None:
+    def __init__(
+        self, id: str, tenant_id: str, cmd: CreateInboundRouteCmd | CreateOutboundRouteCmd
+    ) -> None:
         self.id = id
         self.tenant_id = tenant_id
         self.name = cmd.name
@@ -486,6 +642,7 @@ class FakeRoute:
             self.transaction_type = cmd.transaction_type
             self.direction = "INBOUND"
             self.trading_partner_id = None
+            self.protocol = None
         else:
             self.webhook_id = None
             self.processing_mode = "TRANSFORM"
@@ -504,16 +661,16 @@ class FakeRoute:
         self.default_version = "004010"
         self.destination_name = None
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> object:
         return getattr(self, key)
 
 
 class FakeTenantStore:
     def __init__(self) -> None:
-        self.inbound_routes: dict[str, Any] = {}
-        self.outbound_routes: dict[str, Any] = {}
-        self.sftp_partners: list[Any] = []
-        self.webhooks: list[Any] = []
+        self.inbound_routes: dict[str, FakeRoute] = {}
+        self.outbound_routes: dict[str, FakeRoute] = {}
+        self.sftp_partners: list[dict[str, CreateSFTPPartnerCmd | str]] = []
+        self.webhooks: list[dict[str, object]] = []
 
     async def create_inbound_route(self, cmd: CreateInboundRouteCmd) -> str:
         r_id = generate_id(SystemIdPrefix.GENERIC)
@@ -525,7 +682,7 @@ class FakeTenantStore:
         self.outbound_routes[r_id] = FakeRoute(r_id, "1", cmd)
         return r_id
 
-    async def get_all_routes(self) -> dict[str, list[Any]]:
+    async def get_all_routes(self) -> dict[str, list[object]]:
         return {
             "inbound": list(self.inbound_routes.values()),
             "outbound": list(self.outbound_routes.values()),
@@ -536,78 +693,95 @@ class FakeTenantStore:
         self.sftp_partners.append({"id": p_id, "cmd": cmd})
         return p_id
 
-    async def get_sftp_partner(self, partner_id: str) -> Any:
+    async def get_sftp_partner(self, partner_id: str) -> object | None:
         for p in self.sftp_partners:
             if p["id"] == partner_id:
+                cmd = p["cmd"]
 
                 class MockPartner:
                     id = p["id"]
                     tenant_id = "1"
-                    name = p["cmd"].name
+                    name = cmd.name if isinstance(cmd, CreateSFTPPartnerCmd) else str(cmd)
                     active = True
 
                 return MockPartner()
         return None
 
-    async def list_sftp_partners(self) -> Sequence[Any]:
+    async def list_sftp_partners(self) -> Sequence[object]:
         return self.sftp_partners
 
     async def get_sftp_partners_by_ids(self, ids: list[str]) -> dict[str, str]:
-        return {p["id"]: p["cmd"].name for p in self.sftp_partners if p["id"] in ids}
+        return {
+            str(p["id"]): str(getattr(p["cmd"], "name", "unknown"))
+            for p in self.sftp_partners
+            if str(p["id"]) in ids
+        }
 
-    async def list_webhooks(self) -> Sequence[Any]:
+    async def list_webhooks(self) -> Sequence[object]:
         return self.webhooks
 
     async def get_webhooks_by_ids(self, ids: list[str]) -> dict[str, str]:
-        return {p["id"]: p["cmd"].name for p in self.webhooks if p["id"] in ids}
+        return {
+            str(p["id"]): str(getattr(p["cmd"], "name", "unknown"))
+            for p in self.webhooks
+            if str(p["id"]) in ids
+        }
 
 
 class FakeTenantRepository(TenantRepositoryPort):
     def __init__(self) -> None:
-        self.flags: dict[str, Any] = {}
+        self.flags: dict[str, dict[str, JsonValue]] = {}
 
-    async def get_tenant_flags(self, tenant_id: str) -> dict[str, Any] | None:
+    async def get_tenant_flags(self, tenant_id: str) -> dict[str, JsonValue] | None:
         return self.flags.get(tenant_id)
+
+    async def get_tenant(self, tenant_id: str) -> dict[str, JsonValue] | None:
+        return None
 
 
 class MockResult:
-    def __init__(self, items: list[Any]) -> None:
+    def __init__(self, items: list[object]) -> None:
         self.items = items
 
-    def scalars(self) -> Any:
+    def scalars(self) -> "MockResult":
         return self
 
-    def all(self) -> list[Any]:
+    def all(self) -> list[object]:
         return self.items
 
 
 class MockSession:
-    def __init__(self, global_store: Any) -> None:
-        self.global_store = global_store
+    def __init__(self) -> None:
+        pass
 
-    async def execute(self, statement: Any) -> Any:
+    async def execute(self, statement: object, params: dict | None = None) -> MockResult:
         return MockResult([])
 
 
 class FakeControlPlaneUnitOfWork:
     def __init__(self) -> None:
-        repo = FakeGlobalStore()
-        self.api_tokens = repo
-        self.as2_partners = repo
-        self.as2_partnerships = repo
-        self.inbound_routes = repo
-        self.outbound_routes = repo
-        self.control_plane_outbox = repo
-        self.sftp_partners = repo
-        self.tenants = repo
-        self.webhooks = repo
-        self.edi_headers = repo
-        self.global_session = MockSession(repo)
+        outbox = FakeOutboxBase()
+        self.api_tokens = FakeTenantRepository()
+        self.as2_partners = FakeAS2PartnerRepository(outbox)
+        self.as2_partnerships = FakeAS2PartnershipRepository(outbox, self.as2_partners)
+        self.inbound_routes = FakeInboundRouteRepository(outbox)
+        self.outbound_routes = FakeOutboundRouteRepository(outbox)
+        self.control_plane_outbox = FakeControlPlaneOutboxRepository(outbox)
+        self.sftp_partners = FakeSFTPPartnerRepository(outbox)
+        self.tenants = FakeTenantRepository()
+        self.webhooks = FakeWebhookRepository(outbox)
+        self.edi_headers = FakeOutboundEdiHeaderRepository(outbox)
+        self.global_session = MockSession()
 
-    async def __aenter__(self) -> Any:
+    async def __aenter__(self) -> "FakeControlPlaneUnitOfWork":
         return self
 
-    async def __aexit__(self, exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: object | None,
+    ) -> None:
         pass
 
     async def commit(self) -> None:
@@ -620,14 +794,21 @@ class FakeControlPlaneUnitOfWork:
 class FakeDataPlaneUnitOfWork:
     def __init__(self) -> None:
         self.transactions = FakeTenantStore()
-        repo = FakeGlobalStore()
-        self.data_plane_outbox = self.transactions
-        self.tenant_session = MockSession(repo)
+        outbox = FakeOutboxBase()
+        self.data_plane_outbox = FakeControlPlaneOutboxRepository(
+            outbox
+        )  # Using the same for now to mock publish_outbox_event
+        self.tenant_session = MockSession()
 
-    async def __aenter__(self) -> Any:
+    async def __aenter__(self) -> "FakeDataPlaneUnitOfWork":
         return self
 
-    async def __aexit__(self, exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: object | None,
+    ) -> None:
         pass
 
     async def commit(self) -> None:

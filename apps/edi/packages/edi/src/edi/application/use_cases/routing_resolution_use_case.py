@@ -1,8 +1,8 @@
 import contextlib
-from typing import Any
 
 import structlog
 
+from edi.application.dtos.transactions import EdiJsonDTO, EdiMessageDTO
 from edi.domain.models.base import ConnectionType, Direction
 from edi.ports.outbound.routing_resolver_repository import RoutingResolverRepositoryPort
 
@@ -20,14 +20,14 @@ class RoutingResolutionUseCase:
         self.repository = repository
 
     async def resolve_routing_context(
-        self, msg: Any, edi_jsons: list[Any]
+        self, msg: EdiMessageDTO, edi_jsons: list[EdiJsonDTO]
     ) -> tuple[str | None, str | None]:
         if msg.trading_partner_id or msg.direction == Direction.OUTBOUND:
             return await self._resolve_outbound_routing(msg, edi_jsons)
         return await self._resolve_inbound_routing(msg, edi_jsons)
 
     async def _resolve_outbound_routing(
-        self, msg: Any, edi_jsons: list[Any]
+        self, msg: EdiMessageDTO, edi_jsons: list[EdiJsonDTO]
     ) -> tuple[str | None, str | None]:
         """
         Resolves outbound routing by first checking explicit route overrides,
@@ -54,7 +54,7 @@ class RoutingResolutionUseCase:
         return await self._resolve_business_metadata_fallback(msg, edi_jsons)
 
     async def _resolve_inbound_routing(
-        self, msg: Any, edi_jsons: list[Any]
+        self, msg: EdiMessageDTO, edi_jsons: list[EdiJsonDTO]
     ) -> tuple[str | None, str | None]:
         """
         Resolves inbound routing by checking AS2 attributes first, then falling
@@ -76,7 +76,7 @@ class RoutingResolutionUseCase:
             # 3. Fallback for non-AS2 inbound (SFTP/webhook): look up via inbound route
             t_type = edi_jsons[0].transaction_type if edi_jsons else None
             res = await self.repository.resolve_inbound_route(
-                msg.sender_id, msg.receiver_id, t_type
+                msg.sender_id or "", msg.receiver_id or "", t_type
             )
             if res:
                 return res
@@ -93,7 +93,7 @@ class RoutingResolutionUseCase:
         return None, msg.connection_type
 
     async def _resolve_business_metadata_fallback(
-        self, msg: Any, edi_jsons: list[Any]
+        self, msg: EdiMessageDTO, edi_jsons: list[EdiJsonDTO]
     ) -> tuple[str | None, str | None]:
         """
         Attempts to resolve partner name via explicit business metadata overrides in the EDI payload.
@@ -104,11 +104,12 @@ class RoutingResolutionUseCase:
         partner_ids = []
         for j in edi_jsons:
             bm = j.business_metadata or {}
-            routing = bm.get("_routing", {})
-            pid = routing.get("trading_partner_id")
-            if pid:
-                with contextlib.suppress(ValueError):
-                    partner_ids.append(str(pid))
+            routing = bm.get("_routing")
+            if isinstance(routing, dict):
+                pid = routing.get("trading_partner_id")
+                if pid:
+                    with contextlib.suppress(ValueError):
+                        partner_ids.append(str(pid))
 
         if partner_ids:
             try:

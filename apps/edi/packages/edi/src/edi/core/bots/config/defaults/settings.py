@@ -2,15 +2,14 @@
 
 import os
 import platform
-from typing import Any
 
 
 # Legacy botsinit has been removed
 class NullConfigProvider:
-    def read(self, *args: Any, **kwargs: Any) -> Any:
+    def read(self, *args: object, **kwargs: object) -> object:
         pass
 
-    def get(self, *args: Any, **kwargs: Any) -> Any:
+    def get(self, *args: object, **kwargs: object) -> object:
         return "botssys"
 
 
@@ -32,10 +31,10 @@ BOTSENV_PATH = os.path.dirname(BOTS_CONFIG_DIR)
 # BOTSSYS
 config = botsinit.BotsConfig()
 config.read(os.path.join(BOTS_CONFIG_DIR, "bots.ini"))
-BOTSSYS = config.get("directories", "botssys", "botssys")
+BOTSSYS = str(config.get("directories", "botssys", "botssys"))
 if os.path.sep not in BOTSSYS:
     # Set absolute botssys path from botsenv path
-    BOTSSYS = os.path.join(BOTSENV_PATH, BOTSSYS)
+    BOTSSYS = os.path.join(str(BOTSENV_PATH), BOTSSYS)
 
 HOSTNAME = platform.node()
 

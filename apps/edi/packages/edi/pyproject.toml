@@ -21,6 +21,11 @@ secret-store = { workspace = true }
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "pytest-httpserver>=1.1.5",
+]
+
 [tool.deptry]
 known_first_party = ["edi"]
 

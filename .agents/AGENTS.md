@@ -101,3 +101,7 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Single Source of Truth**: NEVER hardcode dummy environment variables inline in `package.json` scripts (e.g. `export DATABASE_URL="..."`) or duplicate them heavily in CI workflow files (e.g. `ci.yml`).
 - **.env Parity**: Both Local and CI environments MUST rely strictly on `.env` as the sole provider of configuration. The `.env.example` file must contain a fully comprehensive set of development/test dummy credentials.
 - **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.
+
+# No Defensive getattr() Masking
+- **Strict Attribute Access**: NEVER use `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`).
+- **Fail Fast**: If a database column is dropped or renamed, the application MUST fail statically (via typecheckers) or loudly at runtime rather than silently returning `None` and propagating phantom data.

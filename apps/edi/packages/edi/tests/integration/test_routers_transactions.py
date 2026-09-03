@@ -1,18 +1,22 @@
-import pytest
 from datetime import UTC, datetime
+
+import pytest
 from httpx import AsyncClient
 from seedwork.utils import generate_id
 from sqlalchemy.ext.asyncio import AsyncSession
-from edi.domain.models.transactions import EdiMessageDomainModel
+
 from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiMessageDomainModel
 
 
 @pytest.mark.asyncio
-async def test_list_transactions(client: AsyncClient, db_session: AsyncSession, tenant_db_session: AsyncSession):
+async def test_list_transactions(
+    client: AsyncClient, db_session: AsyncSession, tenant_db_session: AsyncSession
+):
     # Insert a dummy message via ORM
     tenant_id = "1"
     trace_id = generate_id("trace")
-    
+
     msg = EdiMessageDomainModel(
         id=generate_id("msg"),
         tenant_id=tenant_id,
@@ -21,9 +25,10 @@ async def test_list_transactions(client: AsyncClient, db_session: AsyncSession, 
         status=RecordStatus.SUCCESS,
         connection_type="AS2",
     )
-    
+
     # We use the tenant_db_session to persist the model manually since it's a tenant data plane record
     from edi.adapters.outbound.database.models.data_plane import EdiMessage
+
     db_msg = EdiMessage(
         id=msg.id,
         tenant_id=msg.tenant_id,
@@ -51,8 +56,9 @@ async def test_list_transactions(client: AsyncClient, db_session: AsyncSession, 
 async def test_get_transaction_trace(client: AsyncClient, tenant_db_session: AsyncSession):
     tenant_id = "1"
     trace_id = generate_id("trace")
-    
+
     from edi.adapters.outbound.database.models.data_plane import EdiMessage
+
     db_msg = EdiMessage(
         id=generate_id("msg"),
         tenant_id=tenant_id,
@@ -83,8 +89,9 @@ async def test_get_transaction_trace_not_found(client: AsyncClient):
 async def test_list_transaction_json(client: AsyncClient, tenant_db_session: AsyncSession):
     tenant_id = "1"
     trace_id = generate_id("trace")
-    
+
     from edi.adapters.outbound.database.models.data_plane import EdiJson
+
     db_json = EdiJson(
         id=generate_id("json"),
         tenant_id=tenant_id,
@@ -114,8 +121,9 @@ async def test_list_transaction_json(client: AsyncClient, tenant_db_session: Asy
 async def test_replay_transaction(client: AsyncClient, tenant_db_session: AsyncSession):
     tenant_id = "1"
     trace_id = generate_id("trace")
-    
+
     from edi.adapters.outbound.database.models.data_plane import EdiMessage
+
     db_msg = EdiMessage(
         id=generate_id("msg"),
         tenant_id=tenant_id,
@@ -143,28 +151,33 @@ async def test_bulk_replay_transactions(client: AsyncClient, tenant_db_session: 
     tenant_id = "1"
     trace_id_1 = generate_id("trace1")
     trace_id_2 = generate_id("trace2")
-    
+
     from edi.adapters.outbound.database.models.data_plane import EdiMessage
-    tenant_db_session.add(EdiMessage(
-        id=generate_id("msg"),
-        tenant_id=tenant_id,
-        trace_id=trace_id_1,
-        direction=Direction.INBOUND.value,
-        status=RecordStatus.SUCCESS.value,
-        edi_data="test_data",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    ))
-    tenant_db_session.add(EdiMessage(
-        id=generate_id("msg"),
-        tenant_id=tenant_id,
-        trace_id=trace_id_2,
-        direction=Direction.INBOUND.value,
-        status=RecordStatus.SUCCESS.value,
-        edi_data="test_data",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    ))
+
+    tenant_db_session.add(
+        EdiMessage(
+            id=generate_id("msg"),
+            tenant_id=tenant_id,
+            trace_id=trace_id_1,
+            direction=Direction.INBOUND.value,
+            status=RecordStatus.SUCCESS.value,
+            edi_data="test_data",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    tenant_db_session.add(
+        EdiMessage(
+            id=generate_id("msg"),
+            tenant_id=tenant_id,
+            trace_id=trace_id_2,
+            direction=Direction.INBOUND.value,
+            status=RecordStatus.SUCCESS.value,
+            edi_data="test_data",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
     await tenant_db_session.flush()
 
     response = await client.post(

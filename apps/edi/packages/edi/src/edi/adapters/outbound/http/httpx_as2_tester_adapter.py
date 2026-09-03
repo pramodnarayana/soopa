@@ -11,9 +11,10 @@ import functools
 import httpx
 import structlog
 
-from edi.adapters.inbound.as2 import build_outbound_message, parse_mdn
+from edi.adapters.inbound.as2.builder import build_outbound_message
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
 from edi.adapters.outbound.security.network import ssrf_safe_context
+from edi.domain.services.as2_protocol import parse_mdn
 
 logger = structlog.get_logger(__name__)
 

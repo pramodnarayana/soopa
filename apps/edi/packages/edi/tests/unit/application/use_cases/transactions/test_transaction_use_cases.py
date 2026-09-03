@@ -1,32 +1,29 @@
-import uuid
-from datetime import UTC, datetime
-
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
-
 import dataclasses
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from identity.domain.constants import IdentityIdPrefix
+from seedwork.utils import generate_id
+
+from edi.application.dtos.trace import EdiTraceDTO
+from edi.application.dtos.transactions import EdiMessageDTO
+from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
+    BulkReplayTransactionsUseCase,
+)
 from edi.application.use_cases.transactions.get_edi_trace_use_case import (
     GetEdiTraceUseCase,
 )
 from edi.application.use_cases.transactions.list_edi_messages_use_case import (
     ListEdiMessagesUseCase,
 )
-from identity.domain.constants import IdentityIdPrefix
-from seedwork.utils import generate_id
-
-from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
-    BulkReplayTransactionsUseCase,
-)
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
 from edi.domain.exceptions import TransactionNotFoundError
-from edi.application.dtos.trace import EdiTraceDTO
-from edi.application.dtos.transactions import EdiMessageDTO
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiMessageDomainModel
 
 
 @dataclass
@@ -61,7 +58,7 @@ class FakeEdiMessageRepository:
 
     def seed_summaries(self, summaries: list[EdiMessageDTO]):
         self._messages = summaries
-        
+
     def seed_model(self, model: EdiMessageDomainModel):
         self._models[model.id] = model
 
@@ -88,7 +85,6 @@ class FakeEdiMessageRepository:
         return key
 
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
-        tenant_id = "tenant"
         for model in self._models.values():
             if model.trace_id == trace_id:
                 return model
@@ -166,7 +162,6 @@ class TestGetEdiTraceUseCase:
         assert result.edi_message.direction == "INBOUND"
 
 
-
 class TestReplayTransactionUseCase:
     def setup_method(self):
         self.trace_repo = FakeTraceRepository()
@@ -193,8 +188,12 @@ class TestReplayTransactionUseCase:
             status=RecordStatus.SUCCESS,
         )
         self.msg_repo.seed_model(model)
-        msg_dto = EdiMessageDTO(id="msg-1", trace_id="t-001", created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
-        self.trace_repo.seed_trace(self.tenant_id, "t-001", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[]))
+        msg_dto = EdiMessageDTO(
+            id="msg-1", trace_id="t-001", created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+        )
+        self.trace_repo.seed_trace(
+            self.tenant_id, "t-001", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
+        )
         await self.use_case.replay_transaction(self.tenant_id, "t-001", tier="deliver")
         assert len(self.msg_repo.outbox_events) == 1
         event = self.msg_repo.outbox_events[0]
@@ -210,8 +209,12 @@ class TestReplayTransactionUseCase:
             status=RecordStatus.SUCCESS,
         )
         self.msg_repo.seed_model(model)
-        msg_dto = EdiMessageDTO(id="msg-1", trace_id="t-002", created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
-        self.trace_repo.seed_trace(self.tenant_id, "t-002", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[]))
+        msg_dto = EdiMessageDTO(
+            id="msg-1", trace_id="t-002", created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+        )
+        self.trace_repo.seed_trace(
+            self.tenant_id, "t-002", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
+        )
         await self.use_case.replay_transaction(self.tenant_id, "t-002", tier="transform")
         payload = self.msg_repo.outbox_events[0]["payload"]
         assert payload["trace_id"] == "t-002"
@@ -227,8 +230,12 @@ class TestReplayTransactionUseCase:
             status=RecordStatus.SUCCESS,
         )
         self.msg_repo.seed_model(model)
-        msg_dto = EdiMessageDTO(id="msg-1", trace_id="t-003", created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
-        self.trace_repo.seed_trace(self.tenant_id, "t-003", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[]))
+        msg_dto = EdiMessageDTO(
+            id="msg-1", trace_id="t-003", created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+        )
+        self.trace_repo.seed_trace(
+            self.tenant_id, "t-003", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
+        )
         await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
         key = self.msg_repo.outbox_events[0]["key"]
         assert "t-003" in key
@@ -240,7 +247,7 @@ async def test_bulk_replay_commits_after_saving_events():
     msg_repo = FakeEdiMessageRepository()
     uow = FakeDataPlaneUnitOfWork(trace_repo, msg_repo)
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    
+
     model = EdiMessageDomainModel(
         id="msg-1",
         tenant_id=tenant_id,
@@ -249,8 +256,12 @@ async def test_bulk_replay_commits_after_saving_events():
         status=RecordStatus.SUCCESS,
     )
     msg_repo.seed_model(model)
-    msg_dto = EdiMessageDTO(id="msg-1", trace_id="trace-1", created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
-    trace_repo.seed_trace(tenant_id, "trace-1", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[]))
+    msg_dto = EdiMessageDTO(
+        id="msg-1", trace_id="trace-1", created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+    )
+    trace_repo.seed_trace(
+        tenant_id, "trace-1", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
+    )
 
     count = await BulkReplayTransactionsUseCase(uow).bulk_replay_transactions(
         tenant_id, ["trace-1"], "raw", command_key="request-1"
@@ -278,14 +289,22 @@ class TestListEdiMessagesUseCase:
         self.msg_repo.seed_summaries(
             [
                 EdiMessageDTO(
-                    id="msg-1", trace_id="t-001",
-                    connection_type="AS2", direction="INBOUND", status="SUCCESS",
-                    created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+                    id="msg-1",
+                    trace_id="t-001",
+                    connection_type="AS2",
+                    direction="INBOUND",
+                    status="SUCCESS",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
                 ),
                 EdiMessageDTO(
-                    id="msg-2", trace_id="t-002",
-                    connection_type="AS2", direction="INBOUND", status="SUCCESS",
-                    created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+                    id="msg-2",
+                    trace_id="t-002",
+                    connection_type="AS2",
+                    direction="INBOUND",
+                    status="SUCCESS",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
                 ),
             ]
         )
@@ -299,9 +318,13 @@ class TestListEdiMessagesUseCase:
     async def test_passes_skip_and_limit_to_repository(self):
         summaries = [
             EdiMessageDTO(
-                id=f"msg-{i}", trace_id=f"t-{i}",
-                connection_type="AS2", direction="INBOUND", status="SUCCESS",
-                created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
+                id=f"msg-{i}",
+                trace_id=f"t-{i}",
+                connection_type="AS2",
+                direction="INBOUND",
+                status="SUCCESS",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             for i in range(5)
         ]

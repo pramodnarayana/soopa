@@ -1,7 +1,6 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
@@ -17,13 +16,13 @@ class DataPlaneOutboxBuilder:
     session: AsyncSession
     tenant_id: str = "ten_default_123"
     event_type: str = PipelineEventType.TRANSFORM_EVENT.value
-    payload: dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, object] = field(default_factory=dict)
     status: str = OutboxStatus.PENDING.value
     attempts: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC) - timedelta(minutes=6))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    async def create(self, **kwargs: Any) -> DataPlaneOutbox:
+    async def create(self, **kwargs: object) -> DataPlaneOutbox:
         outbox_event = DataPlaneOutbox(
             id=kwargs.get("id", generate_id(EdiIdPrefix.DP_OUTBOX)),
             tenant_id=kwargs.get("tenant_id", self.tenant_id),

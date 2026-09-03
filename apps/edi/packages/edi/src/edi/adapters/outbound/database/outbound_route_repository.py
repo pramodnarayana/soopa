@@ -1,6 +1,5 @@
 import dataclasses
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
@@ -22,7 +21,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         GlobalSqlAlchemyRepository.__init__(self, session)
 
     @staticmethod
-    def _to_domain_model(record: Any) -> OutboundRouteDomainModel:
+    def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
         return OutboundRouteDomainModel(
             id=record.id,
             tenant_id=record.tenant_id,

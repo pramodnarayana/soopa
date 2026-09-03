@@ -8,13 +8,11 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
-from edi.adapters.outbound.messaging.sqs_queue import SQSMessageQueueAdapter
 from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
-from edi.domain.events import MessageQueueName
 
 
 class Container(containers.DeclarativeContainer):
@@ -39,21 +37,6 @@ class Container(containers.DeclarativeContainer):
     vault_port = providers.Singleton(
         AwsSecretsManagerAdapter,
         secrets_mount_path=config.secrets.mount_path,
-    )
-
-    message_queue = providers.Singleton(
-        SQSMessageQueueAdapter,
-        queue_url_map=providers.Dict(
-            {
-                MessageQueueName.TRANSFORM_QUEUE: config.sqs.transform_queue_url,
-                MessageQueueName.LIFECYCLE_QUEUE: config.sqs.lifecycle_queue_url,
-                MessageQueueName.DELIVER_QUEUE: config.sqs.deliver_queue_url,
-                MessageQueueName.PROVISIONING_QUEUE: config.sqs.provisioning_queue_url,
-                MessageQueueName.DATA_PLANE_JOBS_QUEUE: config.sqs.data_plane_jobs_queue_url,
-                MessageQueueName.CONTROL_PLANE_JOBS_QUEUE: config.sqs.control_plane_jobs_queue_url,
-            }
-        ),
-        endpoint_url=config.aws.endpoint_url,
     )
 
     # -----------------------------------------------------------------------

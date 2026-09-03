@@ -11,9 +11,7 @@ The concrete classes are registered into these dicts by parsers/__init__.py
 after all concrete parser classes have been fully defined.
 """
 
-from typing import Any
-
-READER_REGISTRY: dict[str, type[Any]] = {}
-WRITER_REGISTRY: dict[str, type[Any]] = {}
+READER_REGISTRY: dict[str, type[object]] = {}
+WRITER_REGISTRY: dict[str, type[object]] = {}
 
 __all__ = ["READER_REGISTRY", "WRITER_REGISTRY"]

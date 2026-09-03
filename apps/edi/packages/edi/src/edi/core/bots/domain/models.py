@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -41,8 +40,8 @@ class StructureNode:
     level: list["StructureNode"] | None = None
     mpath: list[str] = field(default_factory=list)
     fields: list[FieldDefinition] = field(default_factory=list)
-    queries: Any | None = None
-    subtranslation: Any | None = None
+    queries: dict[str, object] | None = None
+    subtranslation: list[object] | None = None
     botsidnr: str | None = None
     fixed_record_length: int | None = None
 

@@ -1,4 +1,4 @@
-from typing import Any, Generic, TypeVar, cast
+from typing import Generic, TypeVar
 
 from outbox.domain.constants import OutboxStatus
 from seedwork.constants import SystemIdPrefix
@@ -7,7 +7,6 @@ from seedwork.utils import generate_id, generate_random_hex
 from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import DeclarativeBase
 
 from database.exceptions import DuplicateEntityError
 from database.interceptors import intercept_db_errors
@@ -24,6 +23,7 @@ from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutb
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
+from edi.domain.models.outbox_event import OutboxEvent
 from edi.ports.outbound.control_plane_outbox_repository_port import (
     ControlPlaneOutboxRepositoryPort,
 )
@@ -131,18 +131,22 @@ class SqlAlchemyControlPlaneOutboxRepository(
             )
             reservation = result.scalar_one_or_none()
             if reservation is not None:
-                cast(Any, reservation).event_type = str(
-                    cast(Any, event).event_type.value
-                    if hasattr(cast(Any, event).event_type, "value")
-                    else cast(Any, event).event_type
-                )
-                cast(Any, reservation).payload = {
-                    **cast(Any, reservation).payload,
-                    **serialized_event,
-                }
-                cast(Any, reservation).status = OutboxStatus.PENDING
+                event_type_attr = getattr(event, "event_type", None)
+                event_type_val = getattr(event_type_attr, "value", event_type_attr)
+
+                # We know reservation is an instance of our outbox model class
+                reservation.event_type = str(event_type_val)
+                current_payload = getattr(reservation, "payload", {})
+
+                # Check if current_payload is a dict to satisfy type checking before unpacking
+                if isinstance(current_payload, dict):
+                    reservation.payload = {**current_payload, **serialized_event}
+                else:
+                    reservation.payload = serialized_event
+
+                reservation.status = OutboxStatus.PENDING
                 await self.flush()
-                return str(cast(Any, reservation).id)
+                return str(reservation.id)
 
         event_id = await self._publish_record(
             tenant_id=event.tenant_id,
@@ -152,11 +156,21 @@ class SqlAlchemyControlPlaneOutboxRepository(
         )
         return event_id
 
-    async def get_event_by_idempotency_key(self, idempotency_key: str) -> DeclarativeBase | None:
+    async def get_event_by_idempotency_key(self, idempotency_key: str) -> OutboxEvent | None:
 
         stmt = select(self.model_class).where(self.model_class.idempotency_key == idempotency_key)
         res = await self.session.execute(stmt)
-        return res.scalar_one_or_none()
+        db_model = res.scalar_one_or_none()
+        if not db_model:
+            return None
+
+        return OutboxEvent(
+            id=str(db_model.id),
+            tenant_id=db_model.tenant_id,
+            event_type=db_model.event_type,
+            payload=db_model.payload,
+            idempotency_key=db_model.idempotency_key,
+        )
 
     async def create_reservation(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
