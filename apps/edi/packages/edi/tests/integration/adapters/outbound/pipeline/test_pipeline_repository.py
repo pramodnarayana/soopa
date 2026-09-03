@@ -1,6 +1,6 @@
 import pytest
 from seedwork import generate_id
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.data_plane import (
@@ -25,7 +25,6 @@ def make_adapter(session: AsyncSession) -> SqlAlchemyRepositoryAdapter:
 
 
 async def test_save_and_get_edi_message_success(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -56,7 +55,6 @@ async def test_save_and_get_edi_message_success(tenant_db_session: AsyncSession)
 
 
 async def test_update_edi_message_status(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -80,7 +78,6 @@ async def test_update_edi_message_status(tenant_db_session: AsyncSession) -> Non
 
 
 async def test_save_and_get_api_payload(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -102,7 +99,6 @@ async def test_save_and_get_api_payload(tenant_db_session: AsyncSession) -> None
 
 
 async def test_publish_outbox_event(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -120,7 +116,6 @@ async def test_publish_outbox_event(tenant_db_session: AsyncSession) -> None:
 
 
 async def test_update_api_payload_status(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -141,7 +136,6 @@ async def test_update_api_payload_status(tenant_db_session: AsyncSession) -> Non
 
 
 async def test_get_as2_partner_inactive_raises(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -170,7 +164,6 @@ async def test_get_as2_partner_inactive_raises(tenant_db_session: AsyncSession) 
 
 
 async def test_get_as2_partnership_inactive_raises(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)
@@ -199,7 +192,6 @@ async def test_get_as2_partnership_inactive_raises(tenant_db_session: AsyncSessi
 
 
 async def test_get_local_as2_partner_inactive_raises(tenant_db_session: AsyncSession) -> None:
-    from sqlalchemy import text
 
     await tenant_db_session.execute(text("SET LOCAL app.current_tenant = 'tenant_1';"))
     adapter = make_adapter(tenant_db_session)

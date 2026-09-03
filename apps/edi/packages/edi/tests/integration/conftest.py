@@ -159,8 +159,13 @@ async def override_get_tenant_session(tenant_db_connection):
 
 
 class FakeVault:
+    def __init__(self):
+        self.secrets: dict[str, str] = {}
+
     async def get_secret(self, vault_ref: str) -> str:
-        return "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+        return self.secrets.get(
+            vault_ref, "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+        )
 
     async def retrieve_secret(self, vault_ref: str) -> bytes:
         val = await self.get_secret(vault_ref)
@@ -170,10 +175,19 @@ class FakeVault:
         return await self.retrieve_secret(vault_ref)
 
     async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
-        return "vault_ref_123"
+        import uuid
+
+        ref = f"vault_ref_{uuid.uuid4().hex[:8]}"
+        self.secrets[ref] = (
+            private_key_pem.decode("utf-8")
+            if isinstance(private_key_pem, bytes)
+            else private_key_pem
+        )
+        return ref
 
     async def delete_secret(self, vault_ref: str) -> None:
-        pass
+        if vault_ref in self.secrets:
+            del self.secrets[vault_ref]
 
 
 @pytest.fixture(scope="function")
@@ -214,7 +228,7 @@ async def client(
         await gs_gen.__anext__()
         ts = await ts_gen.__anext__()
         try:
-            yield DataPlaneUnitOfWorkPort(tenant_session=ts)
+            yield DataPlaneUnitOfWorkPort(tenant_session=ts, storage=InMemoryStorageAdapter())
         finally:
             await gs_gen.aclose()
             await ts_gen.aclose()

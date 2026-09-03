@@ -1,4 +1,7 @@
+from collections.abc import Mapping
+
 import structlog
+from jsonpath_ng import JSONPath
 from jsonpath_ng.ext import parse
 
 from seedwork.domain.types import JsonDict, JsonValue
@@ -15,7 +18,7 @@ class GenericJsonExtractor:
     @classmethod
     def extract_payload(
         cls,
-        mapping_config: dict[str, JsonValue],
+        mapping_config: Mapping[str, str | JSONPath],
         payload: JsonValue,
     ) -> dict[str, JsonValue]:
         """
@@ -37,27 +40,31 @@ class GenericJsonExtractor:
         for field, jsonpath_expr in mapping_config.items():
             try:
                 # Expecting pre-compiled jsonpath_expr, but handle strings too
-                if isinstance(jsonpath_expr, str):
-                    expr = parse(jsonpath_expr)
-                else:
-                    expr = jsonpath_expr
+                expr: JSONPath = (
+                    parse(jsonpath_expr) if isinstance(jsonpath_expr, str) else jsonpath_expr
+                )
 
-                values: list[JsonValue] = []
-                for item in items:
-                    matches = expr.find(item)
-                    for match in matches:
-                        if match.value is not None:
-                            val = str(match.value)
-                            if val not in values:
-                                values.append(val)
-                            # First match per item wins (per test_first_match_is_used_when_multiple_matches)
-                            break
-                
+                values = cls._extract_field_values(expr, items)
+
                 if len(values) == 1:
                     extracted_metadata[field] = values[0]
                 elif len(values) > 1:
                     extracted_metadata[field] = values
-            except Exception as e:
+            except (ValueError, TypeError, AttributeError, KeyError, IndexError, RuntimeError) as e:
                 logger.warning("json_extraction_failed", field=field, error=str(e))
 
         return extracted_metadata
+
+    @classmethod
+    def _extract_field_values(cls, expr: JSONPath, items: list[JsonDict]) -> list[JsonValue]:
+        values: list[JsonValue] = []
+        for item in items:
+            matches = expr.find(item)
+            for match in matches:
+                if match.value is not None:
+                    val = str(match.value)
+                    if val not in values:
+                        values.append(val)
+                    # First match per item wins (per test_first_match_is_used_when_multiple_matches)
+                    break
+        return values

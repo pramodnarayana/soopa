@@ -28,5 +28,4 @@ class MetadataExtractorService:
             )
             return {}
 
-        extractors: dict[str, JsonValue] = dict(self.config[transaction_type])
-        return GenericJsonExtractor.extract_payload(extractors, payload)
+        return GenericJsonExtractor.extract_payload(self.config[transaction_type], payload)

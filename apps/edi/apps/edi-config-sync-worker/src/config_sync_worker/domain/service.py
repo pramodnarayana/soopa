@@ -63,8 +63,6 @@ class ProvisioningWorkerService:
                     permanent_errors.append(f"Tenant {t_id}: {e}")
                 except (TransientProvisioningError, TimeoutError, ConnectionError) as e:
                     transient_errors.append(f"Tenant {t_id}: {e}")
-                except Exception as e:  # noqa: BLE001
-                    permanent_errors.append(f"Tenant {t_id}: Unhandled exception: {e}")
             if transient_errors:
                 raise TransientProvisioningError(
                     f"Broadcast failed transiently for some tenants: {transient_errors}"

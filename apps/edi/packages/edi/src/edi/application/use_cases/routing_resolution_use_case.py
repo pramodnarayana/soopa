@@ -53,8 +53,7 @@ class RoutingResolutionUseCase:
                 # Do not fall back to business metadata if a specific trading partner ID was requested but not found
                 return None, msg.connection_type
 
-            tp_id = next(iter(metadata_partner_ids), None)
-            if tp_id:
+            for tp_id in metadata_partner_ids:
                 res = await self.repository.resolve_outbound_route(tp_id)
                 if res:
                     return res

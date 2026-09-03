@@ -1,4 +1,4 @@
-import json
+import asyncio
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -55,6 +55,35 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
         json_res = await self.session.execute(json_stmt)
         gw_res = await self.session.execute(gw_stmt)
 
+        json_records = json_res.scalars().all()
+
+        json_hydration_tasks = [
+            hydrate_json_payload(self.storage, j.storage_uri, j.payload) for j in json_records
+        ]
+        hydrated_json_payloads = await asyncio.gather(*json_hydration_tasks)
+
+        edi_jsons = [
+            EdiJsonDTO(
+                id=str(j.id),
+                trace_id=str(j.trace_id),
+                tenant_id=j.tenant_id,
+                direction=j.direction,
+                status=j.status,
+                trading_partner_id=j.trading_partner_id,
+                business_metadata=j.business_metadata,
+                transaction_type=j.transaction_type,
+                sender_id=j.sender_id,
+                receiver_id=j.receiver_id,
+                gs_sender_id=j.gs_sender_id,
+                gs_receiver_id=j.gs_receiver_id,
+                payload=payload,
+                parent_trace_id=j.parent_trace_id,
+                created_at=j.created_at,
+                updated_at=j.updated_at,
+            )
+            for j, payload in zip(json_records, hydrated_json_payloads, strict=True)
+        ]
+
         return EdiTraceDTO(
             edi_message=EdiMessageDTO(
                 id=str(edi_msg.id),
@@ -85,7 +114,7 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 format_standard=edi_msg.format_standard,
                 storage_uri=edi_msg.storage_uri,
                 file_size_bytes=edi_msg.file_size_bytes,
-                msg_headers=json.loads(edi_msg.msg_headers) if edi_msg.msg_headers else None,
+                msg_headers=None,  # Optimization: Not needed for full trace view currently
                 state=edi_msg.state,
                 status_message=edi_msg.status_message,
                 is_resend=edi_msg.is_resend,
@@ -93,27 +122,7 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 created_at=edi_msg.created_at,
                 updated_at=edi_msg.updated_at,
             ),
-            edi_jsons=[
-                EdiJsonDTO(
-                    id=str(j.id),
-                    trace_id=str(j.trace_id),
-                    tenant_id=j.tenant_id,
-                    direction=j.direction,
-                    status=j.status,
-                    trading_partner_id=j.trading_partner_id,
-                    business_metadata=j.business_metadata,
-                    transaction_type=j.transaction_type,
-                    sender_id=j.sender_id,
-                    receiver_id=j.receiver_id,
-                    gs_sender_id=j.gs_sender_id,
-                    gs_receiver_id=j.gs_receiver_id,
-                    payload=await hydrate_json_payload(self.storage, j.storage_uri, j.payload),
-                    parent_trace_id=j.parent_trace_id,
-                    created_at=j.created_at,
-                    updated_at=j.updated_at,
-                )
-                for j in json_res.scalars().all()
-            ],
+            edi_jsons=edi_jsons,
             api_gateways=[
                 ApiGatewayDTO(
                     id=str(g.id),

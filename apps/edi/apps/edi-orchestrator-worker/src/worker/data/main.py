@@ -1,6 +1,7 @@
 import asyncio
 import signal
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Any
 
 import structlog
@@ -26,15 +27,20 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.config.settings import get_settings
+from edi.config.settings import AppSettings, get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import MessageQueueName, PipelineEventType
+from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
+from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
+from edi.ports.outbound.transformer_port import TransformerPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -42,18 +48,20 @@ from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
 )
 from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
 
+UowFactory = Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]
+
 load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
 def _setup_registry(
-    transformer: Any,
-    settings: Any,
-    uow_provider: Any,
-    http_delivery: Any,
-    sftp_delivery: Any,
-    as2_delivery: Any,
-    vault: Any,
+    transformer: TransformerPort,
+    settings: AppSettings,
+    uow_provider: TenantUowProvider,
+    http_delivery: HttpDeliveryPort,
+    sftp_delivery: SftpDeliveryPort,
+    as2_delivery: AS2DeliveryPort,
+    vault: SecretStorePort,
 ) -> EdiDataPlaneEventDispatcher:
     def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
         strategies = {
@@ -65,11 +73,11 @@ def _setup_registry(
 
     registry = EdiDataPlaneRouteRegistry()
 
-    async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
+    async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         async with uow_fact() as uow:
             await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
 
-    async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
+    async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         async with uow_fact() as uow:
             await DispatchOutboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
 
@@ -85,7 +93,7 @@ def _setup_registry(
         async with uow_fact() as uow:
             await PipelineLifecycleUseCase(uow).handle_delivery_completed(e.payload)
 
-    async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
+    async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await DeliveryUseCase(uow_factory=uow_fact, router_factory=router_factory).execute(
             trace_id=e.trace_id, idempotency_key=e.idempotency_key
         )

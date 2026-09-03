@@ -7,7 +7,6 @@ from typing import Any
 
 import aioboto3
 import pytest
-import structlog
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 
@@ -82,16 +81,11 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     async with message_publisher.session.client(
         "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
     ) as sqs:
-        try:
-            await sqs.create_queue(QueueName=queue_name, Attributes={"FifoQueue": "true"})
-            resp = await sqs.get_queue_url(QueueName=queue_name)
-            queue_url = resp["QueueUrl"]
-            await sqs.purge_queue(QueueUrl=queue_url)
-            await asyncio.sleep(1)
-        except Exception:  # noqa: BLE001
-            structlog.get_logger(__name__).warning("Could not setup queue: {e}")
-            pytest.skip("LocalStack is not available. Skipping integration test.")
-
+        await sqs.create_queue(QueueName=queue_name, Attributes={"FifoQueue": "true"})
+        resp = await sqs.get_queue_url(QueueName=queue_name)
+        queue_url = resp["QueueUrl"]
+        await sqs.purge_queue(QueueUrl=queue_url)
+        await asyncio.sleep(1)
     # 1. Initialize the core replication service
     worker_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
 
@@ -186,11 +180,8 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     async with message_publisher.session.client(
         "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
     ) as sqs:
-        try:
-            resp = await sqs.get_queue_url(QueueName=queue_name)
-            await sqs.delete_queue(QueueUrl=resp["QueueUrl"])
-        except Exception:  # noqa: BLE001
-            structlog.get_logger(__name__).warning("Could not delete queue {queue_name}: {e}")
+        resp = await sqs.get_queue_url(QueueName=queue_name)
+        await sqs.delete_queue(QueueUrl=resp["QueueUrl"])
 
 
 @pytest.mark.integration

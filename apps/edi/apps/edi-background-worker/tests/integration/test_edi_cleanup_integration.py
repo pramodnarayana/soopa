@@ -8,7 +8,7 @@ from edi.adapters.outbound.database.models.data_plane import (
     DataPlaneOutbox,
     ProcessedEvent,
 )
-from edi.domain.status import AuditLogStatus
+from edi.domain.enums import AuditLogStatus
 from outbox.application.outbox_cleaner_use_case import (
     OutboxCleanerUseCase,
 )

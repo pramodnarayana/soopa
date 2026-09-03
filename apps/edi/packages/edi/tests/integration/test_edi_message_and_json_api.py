@@ -5,6 +5,7 @@ from seedwork import generate_id
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 pytestmark = pytest.mark.asyncio
 
@@ -81,7 +82,7 @@ async def test_edi_message_explorer_and_detail(
     await gs_gen.__anext__()
     ts = await ts_gen.__anext__()
     try:
-        uow = DataPlaneUnitOfWorkPort(tenant_session=ts)
+        uow = DataPlaneUnitOfWorkPort(tenant_session=ts, storage=InMemoryStorageAdapter())
         async with uow:
             # Create EdiMessage
             await uow.transactions.create_edi_message(

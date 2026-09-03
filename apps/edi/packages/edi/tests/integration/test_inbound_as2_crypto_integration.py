@@ -1,6 +1,5 @@
 import datetime
 import functools
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -73,6 +72,11 @@ async def test_inbound_as2_crypto_integration(
     # Create Local and Remote AS2 Partners for validation
     local_priv, local_cert = generate_self_signed_cert()
     remote_priv, remote_cert = generate_self_signed_cert()
+
+    # Seed the fake vault with our certificates and keys
+    override_get_secret_store.secrets["mock/tenant/local_priv"] = local_priv.decode("utf-8")
+    override_get_secret_store.secrets["mock/tenant/local_cert"] = local_cert.decode("utf-8")
+    override_get_secret_store.secrets["mock/tenant/remote_cert"] = remote_cert.decode("utf-8")
 
     # Using db_session for Control Plane partnerships
     local_partner = AS2Partner(
@@ -159,19 +163,7 @@ async def test_inbound_as2_crypto_integration(
         encrypt_fn=encrypt_fn,
     )
 
-    # Mock the Secret Store behavior just for the local identity resolving
-    async def mock_retrieve_secret(vault_ref: str) -> bytes:
-        if vault_ref == "mock/tenant/local_priv":  # noqa: SIM116
-            return local_priv
-        elif vault_ref == "mock/tenant/local_cert":
-            return local_cert
-        elif vault_ref == "mock/tenant/remote_cert":
-            return remote_cert
-        raise ValueError(f"Unknown vault_ref: {vault_ref}")
-
-    override_get_secret_store.retrieve_secret = AsyncMock(side_effect=mock_retrieve_secret)
-    override_get_secret_store.retrieve_private_key = AsyncMock(side_effect=mock_retrieve_secret)
-
+    # (AsyncMock for FakeVault removed in favor of direct seeding)
     # Send to API AS2 server
     response = await client.post(
         "/api/v1/as2/receive",

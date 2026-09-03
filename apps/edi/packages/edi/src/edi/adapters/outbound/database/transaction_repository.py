@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from collections.abc import Sequence
@@ -385,7 +386,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             )
         stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
-        return [
+        records = result.scalars().all()
+
+        # 1. Concurrently fetch payloads
+        hydration_tasks = [
+            hydrate_edi_data(self.storage, r.storage_uri, r.edi_data) for r in records
+        ]
+        hydrated_payloads = await asyncio.gather(*hydration_tasks)
+
+        # 2. Build frozen DTOs with hydrated payloads
+        dtos = [
             EdiMessageDTO(
                 id=str(r.id),
                 trace_id=str(r.trace_id),
@@ -407,7 +417,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 encryption_algorithm=r.encryption_algorithm,
                 trading_partner_id=r.trading_partner_id,
                 status=r.status,
-                edi_data=await hydrate_edi_data(self.storage, r.storage_uri, r.edi_data),
+                edi_data=payload,
                 interchange_control_no=r.interchange_control_no,
                 transaction_type=r.transaction_type,
                 format_standard=r.format_standard,
@@ -421,8 +431,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
-            for r in result.scalars().all()
+            for r, payload in zip(records, hydrated_payloads, strict=True)
         ]
+
+        return dtos
 
     # Allowed filter fields and operators — whitelist to prevent arbitrary column access.
     _ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})
@@ -654,7 +666,14 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
         stmt = stmt.order_by(EdiJson.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
-        return [
+        records = result.scalars().all()
+
+        hydration_tasks = [
+            hydrate_json_payload(self.storage, j.storage_uri, j.payload) for j in records
+        ]
+        hydrated_payloads = await asyncio.gather(*hydration_tasks)
+
+        dtos = [
             EdiJsonDTO(
                 id=str(j.id),
                 trace_id=str(j.trace_id),
@@ -667,13 +686,15 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 receiver_id=j.receiver_id,
                 gs_sender_id=j.gs_sender_id,
                 gs_receiver_id=j.gs_receiver_id,
-                payload=await hydrate_json_payload(self.storage, j.storage_uri, j.payload),
+                payload=payload,
                 parent_trace_id=j.parent_trace_id,
                 created_at=j.created_at,
                 updated_at=j.updated_at,
             )
-            for j in result.scalars().all()
+            for j, payload in zip(records, hydrated_payloads, strict=True)
         ]
+
+        return dtos
 
     async def list_edi_json(self, tenant_id: str, key: str, value: str) -> Sequence[EdiJsonDTO]:
 
@@ -685,7 +706,14 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
 
         result = await self.session.execute(json_stmt)
-        return [
+        records = result.scalars().all()
+
+        hydration_tasks = [
+            hydrate_json_payload(self.storage, r.storage_uri, r.payload) for r in records
+        ]
+        hydrated_payloads = await asyncio.gather(*hydration_tasks)
+
+        dtos = [
             EdiJsonDTO(
                 id=str(r.id),
                 trace_id=str(r.trace_id),
@@ -698,13 +726,15 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 receiver_id=r.receiver_id,
                 gs_sender_id=r.gs_sender_id,
                 gs_receiver_id=r.gs_receiver_id,
-                payload=await hydrate_json_payload(self.storage, r.storage_uri, r.payload),
+                payload=payload,
                 parent_trace_id=r.parent_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
-            for r in result.scalars().all()
+            for r, payload in zip(records, hydrated_payloads, strict=True)
         ]
+
+        return dtos
 
     async def get_existing_trace_ids(self, tenant_id: str, trace_ids: list[str]) -> set[str]:
 

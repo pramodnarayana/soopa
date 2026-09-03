@@ -133,7 +133,7 @@ def _manual_asn1crypto_decrypt(
         if padded_plaintext[-pad_len:] != bytes([pad_len]) * pad_len:
             raise ValueError("Invalid PKCS7 padding bytes")
         return padded_plaintext[:-pad_len]
-    except (ValueError, TypeError, KeyError) as e:
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         logger.debug("manual_asn1_decryption_failed", error=str(e))
         return None
 
@@ -155,7 +155,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
     for strat_name, strat_func in strategies:
         try:
             return cast(Any, strat_func)(encrypted_data, cert, private_key, options=[])
-        except (ValueError, TypeError, KeyError) as e:
+        except (ValueError, TypeError, KeyError, IndexError) as e:
             logger.debug("decryption_strategy_failed", strategy=strat_name, error=str(e))
 
     # Enterprise Fallback: Manually parse the ASN.1 tree and decrypt using primitives
@@ -169,7 +169,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
                     "Successfully decrypted payload using pure Python ASN.1 manual primitives."
                 )
                 return manual_decrypted
-    except (ValueError, TypeError, KeyError) as e:
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         logger.debug("manual_fallback_decryption_failed", error=str(e))
 
     raise ValueError("All native decryption strategies failed.")
@@ -300,7 +300,7 @@ def _inject_certificate_into_cms(binary_sig: bytes, cert_bytes: bytes) -> bytes:
                 signed_data_cms["certificates"].append(choice)
 
         return cast(bytes, content_info.dump())
-    except (ValueError, TypeError, KeyError) as e:
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         logger.debug("certificate_injection_into_cms_failed", error=str(e))
         return binary_sig
 

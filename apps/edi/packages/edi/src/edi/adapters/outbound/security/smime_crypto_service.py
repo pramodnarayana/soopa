@@ -41,7 +41,7 @@ class SmimeCryptoService:
             )
             if result:
                 return result
-        except (ValueError, TypeError, KeyError) as exc:
+        except (ValueError, TypeError, KeyError, IndexError) as exc:
             logger.debug("smime_decrypt_initial_attempt_failed", error=str(exc))
 
         raise ValueError(
