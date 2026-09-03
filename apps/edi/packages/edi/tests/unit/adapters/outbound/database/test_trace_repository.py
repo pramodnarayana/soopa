@@ -43,5 +43,5 @@ async def test_trace_selects_only_the_newest_edi_message() -> None:
     compiled = str(
         session.statements[0].compile(compile_kwargs={"literal_binds": True})  # type: ignore[attr-defined]
     )
-    assert "ORDER BY edi.edi_messages.created_at DESC" in compiled
+    assert "ORDER BY edi_messages.created_at DESC" in compiled
     assert "LIMIT 1" in compiled

@@ -41,7 +41,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         await test_session.execute(
             text("""
-                INSERT INTO edi.edi_messages
+                INSERT INTO edi_messages
                 (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_resend)
                 VALUES (:id, :id, :tenant_id, 'partner', 'soopa', 'INBOUND', 'X12', '850', 'RECEIVED', 'test_data', false)
             """),
@@ -97,9 +97,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     # 4. Verify Database State Machine Outbox Event
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         result = await test_session.execute(
-            text(
-                "SELECT payload, event_type FROM edi.outbox WHERE payload->>'trace_id' = :trace_id"
-            ),
+            text("SELECT payload, event_type FROM outbox WHERE payload->>'trace_id' = :trace_id"),
             {"trace_id": trace_id},
         )
         outbox_events = result.mappings().all()
@@ -137,7 +135,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         # Insert EDI message
         await test_session.execute(
             text("""
-                INSERT INTO edi.edi_messages
+                INSERT INTO edi_messages
                 (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_resend)
                 VALUES (:id, :id, :tenant_id, 'sender1', 'receiver1', 'INBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', false)
             """),
@@ -146,7 +144,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         # Insert API Payload (used by webhook strategy)
         await test_session.execute(
             text("""
-                INSERT INTO edi.api_gateway (id, trace_id, tenant_id, payload, status, webhook_url, direction, transaction_type, created_at, updated_at)
+                INSERT INTO api_gateway (id, trace_id, tenant_id, payload, status, webhook_url, direction, transaction_type, created_at, updated_at)
                 VALUES (:id, :trace_id, :tenant_id, '{"payload": {"hello": "world"}}'::jsonb, 'PENDING_DELIVERY', 'https://example.com', 'INBOUND', '850', NOW(), NOW())
             """),
             {"id": f"api_{generate_random_hex(6)}", "trace_id": trace_id, "tenant_id": tenant_id},
@@ -154,7 +152,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         # Insert Webhook destination
         await test_session.execute(
             text("""
-                INSERT INTO edi.webhooks (id, tenant_id, name, url, active, created_at, updated_at)
+                INSERT INTO webhooks (id, tenant_id, name, url, active, created_at, updated_at)
                 VALUES (:id, :tenant_id, 'Test Hook', 'https://example.com', true, NOW(), NOW())
             """),
             {"id": webhook_id, "tenant_id": tenant_id},
@@ -162,7 +160,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         # Insert Route
         await test_session.execute(
             text("""
-                INSERT INTO edi.inbound_routes
+                INSERT INTO inbound_routes
                 (id, tenant_id, name, isa_sender_id, isa_receiver_id, transaction_type, processing_mode, active, webhook_id, created_at, updated_at)
                 VALUES (:id, :tenant_id, 'Test Route', 'sender1', 'receiver1', '850', 'TRANSFORM', true, :webhook_id, NOW(), NOW())
             """),
@@ -216,9 +214,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
     # 4. Verify Delivery Success Outbox Event was written
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         result = await test_session.execute(
-            text(
-                "SELECT payload, event_type FROM edi.outbox WHERE payload->>'trace_id' = :trace_id"
-            ),
+            text("SELECT payload, event_type FROM outbox WHERE payload->>'trace_id' = :trace_id"),
             {"trace_id": trace_id},
         )
         outbox_events = result.mappings().all()
@@ -237,7 +233,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
     # Verify API Gateway Status updated
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         result = await test_session.execute(
-            text("SELECT status FROM edi.api_gateway WHERE trace_id = :id"), {"id": trace_id}
+            text("SELECT status FROM api_gateway WHERE trace_id = :id"), {"id": trace_id}
         )
         status = result.scalar_one()
         assert status == "DELIVERED"

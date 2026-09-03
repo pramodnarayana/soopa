@@ -131,7 +131,6 @@ class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMix
             unique=True,
             postgresql_where=text("active = true"),
         ),
-        {"schema": "edi"},
     )
 
 
@@ -157,7 +156,6 @@ class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampM
             unique=True,
             postgresql_where=text("active = true"),
         ),
-        {"schema": "edi"},
     )
 
 
@@ -171,7 +169,6 @@ class OutboundEdiHeader(TenantBase, TenantAwareMixin, OutboundEdiHeaderMixin, Ti
             "trading_partner_id",
             unique=True,
         ),
-        {"schema": "edi"},
     )
 
 
@@ -227,7 +224,6 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
             "(edi_data IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_edi_msg_data_or_uri",
         ),
-        {"schema": "edi"},
     )
 
 
@@ -264,7 +260,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_edi_json_data_or_uri",
         ),
-        {"schema": "edi"},
     )
 
 
@@ -295,7 +290,6 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_apigw_data_or_uri",
         ),
-        {"schema": "edi"},
     )
 
 
@@ -321,7 +315,6 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
-        {"schema": "edi"},
     )
     ID_PREFIX = "edi_dp_ob"
 
