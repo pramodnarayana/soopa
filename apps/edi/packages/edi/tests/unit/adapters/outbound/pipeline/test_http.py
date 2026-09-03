@@ -1,6 +1,3 @@
-import contextlib
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
@@ -11,9 +8,10 @@ pytestmark = pytest.mark.asyncio
 from pytest_httpserver import HTTPServer
 
 
-@patch("edi.adapters.outbound.pipeline.http.ssrf_safe_context")
-async def test_httpx_delivery_adapter(mock_ssrf: MagicMock, httpserver: HTTPServer) -> None:
-    mock_ssrf.return_value = contextlib.nullcontext()
+async def test_httpx_delivery_adapter(
+    monkeypatch: pytest.MonkeyPatch, httpserver: HTTPServer
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
 
     httpserver.expect_request("/webhook", method="POST").respond_with_data(
         '{"success": true}', status=200

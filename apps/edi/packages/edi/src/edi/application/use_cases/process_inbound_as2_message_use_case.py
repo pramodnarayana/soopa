@@ -280,7 +280,7 @@ class ProcessInboundAs2MessageUseCase:
             )
             if decrypted:
                 return decrypted
-        except Exception as e:  # noqa: BLE001
+        except (ValueError, TypeError, KeyError) as e:
             logger.debug("as2_decrypt_initial_attempt_failed_trying_fallback", error=str(e))
 
         # External Interoperability Fallback: prepend reconstructed S/MIME headers before retrying.

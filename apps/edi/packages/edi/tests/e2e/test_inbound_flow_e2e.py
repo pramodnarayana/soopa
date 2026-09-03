@@ -1,10 +1,13 @@
 import base64
+import contextlib
 import datetime
-from unittest.mock import AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 import structlog
+from aiohttp import web
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -13,14 +16,22 @@ from seedwork import generate_id
 from sqlalchemy import select
 
 from edi.adapters.inbound.as2.builder import build_outbound_message
+from edi.adapters.outbound.database.data_plane_unit_of_work import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
 )
 from edi.adapters.outbound.database.models.data_plane import (
+    EdiMessage,
     InboundRoute,
     Webhook,
 )
+from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
+from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
+from edi.config.settings import AppSettings
+from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
 logger = structlog.get_logger(__name__)
 
@@ -70,7 +81,6 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
     3. Send AS2 Payload.
     4. Wait for Delivery and assert Webhook Receiver got JSON.
     """
-    from aiohttp import web
 
     received_webhook_payloads = []
 
@@ -147,19 +157,15 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         await global_session.commit()
 
         # Replicate to Data Plane since this runs outside standard provisioning sync
-        from edi.adapters.outbound.database.models.data_plane import (
-            InboundRoute as TenantInboundRoute,
-        )
-        from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
 
-        t_webhook = TenantWebhook(
+        t_webhook = Webhook(
             id=webhook.id,
             tenant_id=tenant_id,
             name="E2E Webhook",
             url="http://127.0.0.1:9999/webhook",
             active=True,
         )
-        t_route = TenantInboundRoute(
+        t_route = InboundRoute(
             tenant_id=tenant_id,
             isa_sender_id="SENDER",
             isa_receiver_id="RECEIVER",
@@ -196,23 +202,9 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         assert "application/edi-consent" in response.headers.get("content-type", "")
 
         # To avoid running full worker pipeline in a unit test, we will instantiate the services directly
-        from typing import Any
-        from unittest.mock import MagicMock
-
-        from edi.adapters.outbound.database.models.data_plane import EdiMessage
-        from edi.adapters.outbound.pipeline.storage import S3StorageClient
-        from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-        from edi.application.use_cases.pipeline.compute_transform_use_case import (
-            ComputeTransformUseCase,
-        )
-        from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-        from edi.config.settings import AppSettings
 
         # 1. Manually run ComputeTransformUseCase
         settings = AppSettings()
-        from edi.adapters.outbound.database.data_plane_unit_of_work import (
-            SqlAlchemyDataPlaneUnitOfWork,
-        )
 
         uow = SqlAlchemyDataPlaneUnitOfWork(session, settings, S3StorageClient("test", None))
         translate_svc = ComputeTransformUseCase(uow, BotsTransformerAdapter())
@@ -227,13 +219,11 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         except Exception as e:  # noqa: BLE001
             # If bots is not running, we mock it for the test
             if "Connection" in str(e):
-                from edi.ports.outbound.transformer_port import TransformerPort
 
                 class MockTransformer(TransformerPort):
                     async def transform_edi_to_json(
                         self, payload: bytes, standard: str, transaction_type: str
                     ):
-                        from edi.ports.outbound.transformer_port import TransformedTransaction
 
                         return [
                             TransformedTransaction(
@@ -260,7 +250,6 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
                 await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
 
         # 2. Manually run Deliver
-        import contextlib
 
         @contextlib.asynccontextmanager
         async def mock_uow_factory():

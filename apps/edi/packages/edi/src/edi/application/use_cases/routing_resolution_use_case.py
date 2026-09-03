@@ -43,25 +43,31 @@ class RoutingResolutionUseCase:
         Resolves outbound routing by first checking explicit route overrides,
         then falling back to business_metadata from the EDI JSON.
         """
-        # 1. Try to resolve via trading_partner_id on the message, then persisted routing metadata.
         metadata_partner_ids = _routing_partner_ids(edi_jsons)
-        tp_id = msg.trading_partner_id or next(iter(metadata_partner_ids), None)
 
         try:
+            if msg.trading_partner_id:
+                res = await self.repository.resolve_outbound_route(msg.trading_partner_id)
+                if res:
+                    return res
+                # Do not fall back to business metadata if a specific trading partner ID was requested but not found
+                return None, msg.connection_type
+
+            tp_id = next(iter(metadata_partner_ids), None)
             if tp_id:
                 res = await self.repository.resolve_outbound_route(tp_id)
                 if res:
                     return res
 
-            partner_ids = metadata_partner_ids or ([tp_id] if tp_id else [])
-            partner_name = await self.repository.resolve_business_metadata(partner_ids)
-            if partner_name:
-                return partner_name, msg.connection_type
+            if metadata_partner_ids:
+                partner_name = await self.repository.resolve_business_metadata(metadata_partner_ids)
+                if partner_name:
+                    return partner_name, msg.connection_type
         except Exception as e:
             logger.exception(
                 "outbound_route_resolution_failed",
                 trace_id=msg.trace_id,
-                trading_partner_id=tp_id,
+                trading_partner_id=msg.trading_partner_id,
             )
             raise RuntimeError(
                 f"Outbound route resolution failed for trace_id={msg.trace_id}"
@@ -77,22 +83,15 @@ class RoutingResolutionUseCase:
         Resolves inbound routing by checking AS2 attributes first, then falling
         back to the database InboundRoute mappings.
         """
-
         try:
-            metadata_partner_ids = _routing_partner_ids(edi_jsons)
-            if metadata_partner_ids:
-                partner_name = await self.repository.resolve_business_metadata(metadata_partner_ids)
-                if partner_name:
-                    return partner_name, msg.connection_type
-
-            # 2. For AS2 inbound: look up the AS2Partner by as2_sender_id (AS2-From)
+            # 1. For AS2 inbound: look up the AS2Partner by as2_sender_id (AS2-From)
             as2_from = msg.as2_sender_id
             if as2_from and msg.connection_type == ConnectionType.AS2:
                 res = await self.repository.resolve_as2_inbound(as2_from)
                 if res:
                     return res
 
-            # 3. Fallback for non-AS2 inbound (SFTP/webhook): look up via inbound route
+            # 2. Fallback for non-AS2 inbound (SFTP/webhook): look up via inbound route
             t_type = edi_jsons[0].transaction_type if edi_jsons else None
             res = await self.repository.resolve_inbound_route(
                 msg.sender_id or "", msg.receiver_id or "", t_type

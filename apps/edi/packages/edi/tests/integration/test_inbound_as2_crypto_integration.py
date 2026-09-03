@@ -18,11 +18,13 @@ from edi.adapters.outbound.database.models.control_plane import (
     InboundRoute,
 )
 from edi.adapters.outbound.database.models.data_plane import (
-    InboundRoute as TenantInboundRoute,
+    EdiMessage,
+    Webhook,
 )
-from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
+from edi.adapters.outbound.database.models.data_plane import (
+    InboundRoute as DataPlaneInboundRoute,
+)
 from edi.adapters.outbound.security.smime import encrypt_payload, sign_payload
-from edi.adapters.outbound.database.models.data_plane import EdiMessage
 
 EDI_PAYLOAD = b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *210101*1200*U*00401*000000001*0*T*:~GS*PO*SENDER*RECEIVER*20210101*1200*1*X*004010~ST*850*0001~BEG*00*NE*456**20210101~SE*3*0001~GE*1*1~IEA*1*000000001~"
 
@@ -119,7 +121,7 @@ async def test_inbound_as2_crypto_integration(
     db_session.add(inbound_route)
     await db_session.commit()
 
-    t_webhook = TenantWebhook(
+    t_webhook = Webhook(
         id=webhook_id,
         tenant_id=tenant_id,
         name="Crypto Test Webhook",
@@ -129,7 +131,7 @@ async def test_inbound_as2_crypto_integration(
     tenant_db_session.add(t_webhook)
     await tenant_db_session.flush()
 
-    t_route = TenantInboundRoute(
+    t_route = DataPlaneInboundRoute(
         tenant_id=tenant_id,
         name="Test Route",
         isa_sender_id="SENDER",

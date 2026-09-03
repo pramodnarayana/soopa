@@ -1,7 +1,7 @@
 import asyncio
 import os
 from contextlib import suppress
-from typing import Any
+from typing import Any, Protocol, cast
 
 import boto3  # type: ignore[import-untyped]
 import structlog
@@ -15,28 +15,99 @@ SECRETS_MOUNT_PATH = settings.secrets.mount_path
 POLL_INTERVAL_SECONDS = settings.secrets.sync_interval_seconds
 
 
-def get_client() -> Any:
+class SecretsManagerClient(Protocol):
+    def get_paginator(self, operation_name: str) -> Any: ...
+    def get_secret_value(self, *, SecretId: str) -> dict[str, str]: ...
+
+
+def get_client() -> SecretsManagerClient:
     env = os.getenv("ENVIRONMENT", "production")
     if env in ("development", "dev", "test", "local"):
         endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-        return boto3.client(
-            "secretsmanager",
-            endpoint_url=endpoint_url,
-            region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
+        return cast(
+            SecretsManagerClient,
+            boto3.client(
+                "secretsmanager",
+                endpoint_url=endpoint_url,
+                region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
+            ),
         )
     else:
-        return boto3.client(
-            "secretsmanager", region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+        return cast(
+            SecretsManagerClient,
+            boto3.client(
+                "secretsmanager", region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+            ),
         )
 
 
-def sync_secrets() -> None:  # noqa: C901
+def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str | None:
+    secret_name = secret["Name"]
+    response = client.get_secret_value(SecretId=secret_name)
+    secret_string = response.get("SecretString")
+    if not secret_string:
+        return None
+
+    parts = secret_name.split("/")
+    if len(parts) != 3:
+        logger.warning(
+            "invalid_secret_name_format",
+            secret_name=secret_name,
+            parts_count=len(parts),
+        )
+        return None
+
+    category_str = parts[1]
+    ref_id = parts[2]
+
+    try:
+        validated_category = SecretCategory(category_str)
+    except ValueError:
+        logger.warning("unknown_secret_category", category=category_str)
+        return None
+
+    file_path = os.path.join(SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem")
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    tmp_path = file_path + ".tmp"
+    rename_succeeded = False
+    try:
+        with open(tmp_path, "w") as f:
+            f.write(secret_string)
+        os.rename(tmp_path, file_path)
+        rename_succeeded = True
+    finally:
+        if not rename_succeeded:
+            with suppress(OSError):
+                os.remove(tmp_path)
+
+    logger.info("secret_updated", secret_id=ref_id, category=category_str)
+    return os.path.realpath(file_path)
+
+
+def _reconcile_files(active_files: set[str]) -> None:
+    mount_path = os.path.realpath(SECRETS_MOUNT_PATH)
+    for root, _, files in os.walk(mount_path):
+        for filename in files:
+            if filename.endswith(".pem"):
+                local_file = os.path.realpath(os.path.join(root, filename))
+                if local_file not in active_files:
+                    try:
+                        os.remove(local_file)
+                        logger.info("removed_revoked_secret_file", path=local_file)
+                    except OSError as e:
+                        logger.warning(
+                            "failed_to_remove_revoked_secret_file",
+                            path=local_file,
+                            error=str(e),
+                        )
+
+
+def sync_secrets() -> None:
     client = get_client()
     try:
-        # Fetch all secrets starting with 'edi/'
-        # In a real environment with thousands, we'd use pagination
         paginator = client.get_paginator("list_secrets")
         page_iterator = paginator.paginate(Filters=[{"Key": "name", "Values": ["edi/"]}])
 
@@ -44,75 +115,11 @@ def sync_secrets() -> None:  # noqa: C901
 
         for page in page_iterator:
             for secret in page.get("SecretList", []):
-                secret_name = secret["Name"]
+                file_path = _process_secret(client, secret)
+                if file_path:
+                    active_files.add(file_path)
 
-                # Fetch secret value
-                response = client.get_secret_value(SecretId=secret_name)
-                secret_string = response.get("SecretString")
-                if not secret_string:
-                    continue
-
-                # Format is usually edi/{category}/{id}
-                parts = secret_name.split("/")
-
-                # Require exactly 3 parts before processing
-                if len(parts) != 3:
-                    logger.warning(
-                        "invalid_secret_name_format",
-                        secret_name=secret_name,
-                        parts_count=len(parts),
-                    )
-                    continue
-
-                category_str = parts[1]
-                ref_id = parts[2]
-
-                try:
-                    # Validate that the category matches our architectural constants
-                    validated_category = SecretCategory(category_str)
-                except ValueError:
-                    # Log a warning if we encounter an unknown category pattern
-                    logger.warning("unknown_secret_category", category=category_str)
-                    continue
-
-                file_path = os.path.join(
-                    SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem"
-                )
-                os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-                # Write file atomically
-                tmp_path = file_path + ".tmp"
-                rename_succeeded = False
-                try:
-                    with open(tmp_path, "w") as f:
-                        f.write(secret_string)
-                    os.rename(tmp_path, file_path)
-                    rename_succeeded = True
-                finally:
-                    if not rename_succeeded:
-                        with suppress(OSError):
-                            os.remove(tmp_path)
-
-                logger.info("secret_updated", secret_id=ref_id, category=category_str)
-
-                active_files.add(os.path.realpath(file_path))
-
-        # Reconciliation: remove local files that are no longer in Secrets Manager
-        mount_path = os.path.realpath(SECRETS_MOUNT_PATH)
-        for root, _, files in os.walk(mount_path):
-            for filename in files:
-                if filename.endswith(".pem"):
-                    local_file = os.path.realpath(os.path.join(root, filename))
-                    if local_file not in active_files:
-                        try:
-                            os.remove(local_file)
-                            logger.info("removed_revoked_secret_file", path=local_file)
-                        except OSError as e:
-                            logger.warning(
-                                "failed_to_remove_revoked_secret_file",
-                                path=local_file,
-                                error=str(e),
-                            )
+        _reconcile_files(active_files)
 
         logger.info("secrets_sync_completed", mount_path=SECRETS_MOUNT_PATH)
     except Exception as e:

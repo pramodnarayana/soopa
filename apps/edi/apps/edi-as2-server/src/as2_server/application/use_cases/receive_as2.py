@@ -77,7 +77,7 @@ class ReceiveAS2UseCase:
                 return None
 
             return elements[6].strip(), elements[8].strip()
-        except Exception as e:  # noqa: BLE001
+        except (IndexError, ValueError, AttributeError, TypeError) as e:
             self.logger.warning("isa_extraction_failed", error=str(e))
             return None
 

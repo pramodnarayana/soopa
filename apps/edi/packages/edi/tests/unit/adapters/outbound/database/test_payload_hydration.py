@@ -41,8 +41,11 @@ async def test_hydration_resolves_storage_payloads() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hydration_returns_empty_payload_when_storage_cannot_be_resolved() -> None:
+async def test_hydration_raises_exception_when_storage_cannot_be_resolved() -> None:
     storage = FakeStorage({})
 
-    assert await hydrate_edi_data(storage, "s3://bucket/missing", None) == ""
-    assert await hydrate_json_payload(storage, "s3://bucket/missing", None) == {}
+    with pytest.raises(KeyError):
+        await hydrate_edi_data(storage, "s3://bucket/missing", None)
+
+    with pytest.raises(KeyError):
+        await hydrate_json_payload(storage, "s3://bucket/missing", None)

@@ -25,13 +25,22 @@ def mock_ssrf():
         yield
 
 
+from pytest_httpserver import HTTPServer
+
+
 @pytest.mark.asyncio
-async def test_test_connection_success(adapter):
+async def test_test_connection_success(adapter: HttpxAS2TesterAdapter, httpserver: HTTPServer):
+    # Set up the real HTTP server to respond with a 200 and a dummy MDN
+    httpserver.expect_request("/as2", method="POST").respond_with_data(
+        "mdn content",
+        status=200,
+        headers={"Content-Type": "multipart/report"},
+    )
+
     with (
         patch(
             "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
         ) as mock_build,
-        patch("httpx.AsyncClient") as mock_client_cls,
         patch("edi.adapters.outbound.http.httpx_as2_tester_adapter.parse_mdn") as mock_parse,
     ):
         mock_msg = MagicMock()
@@ -39,25 +48,12 @@ async def test_test_connection_success(adapter):
         mock_msg.headers = {"Content-Type": "application/edi-x12"}
         mock_build.return_value = mock_msg
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.content = b"mdn content"
-        mock_response.headers = httpx.Headers({"Content-Type": "multipart/report"})
-
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-
-        # Async context manager mock
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
-        mock_client_cls.return_value = mock_client
-
         mock_mdn = MagicMock()
         mock_mdn.disposition = "processed"
         mock_parse.return_value = mock_mdn
 
         success, disposition, payload_str, full_mdn = await adapter.test_connection(
-            remote_url="http://test.com",
+            remote_url=httpserver.url_for("/as2"),
             as2_from="ME",
             as2_to="YOU",
             local_private_key_pem=None,
@@ -127,24 +123,18 @@ async def test_test_connection_http_fail(adapter):
 
 
 @pytest.mark.asyncio
-async def test_test_connection_http_500(adapter):
-    with (
-        patch(
-            "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-        ) as mock_build,
-        patch("httpx.AsyncClient") as mock_client_cls,
-    ):
+async def test_test_connection_http_500(adapter: HttpxAS2TesterAdapter, httpserver: HTTPServer):
+    httpserver.expect_request("/as2", method="POST").respond_with_data(
+        "internal server error", status=500
+    )
+
+    with patch(
+        "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
+    ) as mock_build:
         mock_build.return_value = MagicMock(body=b"", headers={})
 
-        mock_response = MagicMock(status_code=500, content=b"", headers=httpx.Headers())
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
-        mock_client_cls.return_value = mock_client
-
         success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url="http://test.com",
+            remote_url=httpserver.url_for("/as2"),
             as2_from="ME",
             as2_to="YOU",
             local_private_key_pem=None,
@@ -159,27 +149,24 @@ async def test_test_connection_http_500(adapter):
 
 
 @pytest.mark.asyncio
-async def test_test_connection_parse_fail(adapter):
+async def test_test_connection_parse_fail(adapter: HttpxAS2TesterAdapter, httpserver: HTTPServer):
+    httpserver.expect_request("/as2", method="POST").respond_with_data(
+        "mdn content",
+        status=200,
+        headers={"Content-Type": "multipart/report"},
+    )
+
     with (
         patch(
             "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
         ) as mock_build,
-        patch("httpx.AsyncClient") as mock_client_cls,
         patch("edi.adapters.outbound.http.httpx_as2_tester_adapter.parse_mdn") as mock_parse,
     ):
         mock_build.return_value = MagicMock(body=b"", headers={})
-
-        mock_response = MagicMock(status_code=200, content=b"", headers=httpx.Headers())
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_response
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
-        mock_client_cls.return_value = mock_client
-
         mock_parse.side_effect = ValueError("parse fail")
 
         success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url="http://test.com",
+            remote_url=httpserver.url_for("/as2"),
             as2_from="ME",
             as2_to="YOU",
             local_private_key_pem=None,
@@ -235,7 +222,7 @@ async def test_test_connection_generic_exception(adapter):
         mock_build.return_value = MagicMock(body=b"", headers={})
 
         mock_client = AsyncMock()
-        mock_client.post.side_effect = Exception("generic error")
+        mock_client.post.side_effect = httpx.RequestError("generic error", request=MagicMock())
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
         mock_client_cls.return_value = mock_client

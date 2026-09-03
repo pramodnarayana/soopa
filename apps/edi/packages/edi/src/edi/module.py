@@ -2,6 +2,7 @@ import os
 
 import structlog
 from dotenv import load_dotenv
+from seedwork.domain.types import JsonValue
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -128,8 +129,8 @@ def create_edi_app() -> FastAPI:
     async def get_me(
         tenant_id: str = Depends(get_current_tenant_id),
         session: AsyncSession = Depends(get_tenant_session),  # noqa: B008
-        profile: dict[str, str | list[str]] = Depends(get_current_user_profile),  # noqa: B008
-    ) -> dict[str, str | list[str]]:
+        profile: dict[str, JsonValue] = Depends(get_current_user_profile),  # noqa: B008
+    ) -> dict[str, JsonValue]:
         """
         Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
         """

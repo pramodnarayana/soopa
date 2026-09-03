@@ -14,8 +14,8 @@
     "verify:ci": "./scripts/verify_ci.sh",
     "test:integration": "if [ -f .env ]; then set -a; . .env; set +a; fi && turbo run test:integration --filter=\"*@soopa/api\" --filter=\"@soopa/unified-api\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/database\" --filter=\"*@soopa/schemas\"",
     "test:mutation": "stryker run",
-    "test:node": "if [ -f .env ]; then set -a; . .env; set +a; fi && CI=true turbo run test --filter=\"!*@soopa/api\" --filter=\"!*@soopa/*-worker\" --filter=\"!*@soopa/domain\" --filter=\"!*@soopa/database\" --filter=\"!*@soopa/*-engine\" --filter=\"!*@soopa/ucp*\" --filter=\"!*@soopa/identity\" --filter=\"!*@soopa/notification\" --filter=\"!*@soopa/scheduler*\" --filter=\"!*@soopa/observability\" --filter=\"!*@soopa/database\" --filter=\"!*@soopa/schemas\"",
-    "test:python": "if [ -f .env ]; then set -a; . .env; set +a; fi && turbo run test --filter=\"*@soopa/api\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/database\" --filter=\"*@soopa/schemas\"",
+    "test:node": "if [ -f .env ]; then set -a; . .env; set +a; fi && CI=true turbo run test --concurrency=2 --filter=\"!*@soopa/api\" --filter=\"!*@soopa/*-worker\" --filter=\"!*@soopa/domain\" --filter=\"!*@soopa/database\" --filter=\"!*@soopa/*-engine\" --filter=\"!*@soopa/ucp*\" --filter=\"!*@soopa/identity\" --filter=\"!*@soopa/notification\" --filter=\"!*@soopa/scheduler*\" --filter=\"!*@soopa/observability\" --filter=\"!*@soopa/database\" --filter=\"!*@soopa/schemas\"",
+    "test:python": "if [ -f .env ]; then set -a; . .env; set +a; fi && turbo run test --concurrency=2 --filter=\"*@soopa/api\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/database\" --filter=\"*@soopa/schemas\"",
     "cov:python": "if [ -f .env ]; then set -a; . .env; set +a; fi && turbo run cov --filter=\"*@soopa/api\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/database\" --filter=\"*@soopa/schemas\"",
     "knip": "knip",
     "db:generate": "cd core/platform/packages/database && if [ -f ../../../../.env ]; then set -a; . ../../../../.env; set +a; fi && uv run alembic revision --autogenerate",
@@ -91,7 +91,7 @@
       "@hono/node-server": "^1.19.15",
       "fast-uri": "^3.1.6",
       "qs": "^6.16.0",
-      "esbuild": "^0.28.1"
+      "vite>esbuild": "^0.28.1"
     }
   }
 }

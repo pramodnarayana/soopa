@@ -72,11 +72,11 @@ def _parse_client_key(client_key_string: str) -> paramiko.PKey:
     key_io = io.StringIO(client_key_string)
     try:
         return paramiko.RSAKey.from_private_key(key_io)
-    except Exception:  # noqa: BLE001
+    except (paramiko.SSHException, ValueError):
         key_io.seek(0)
         try:
             return paramiko.ECDSAKey.from_private_key(key_io)
-        except Exception:  # noqa: BLE001
+        except (paramiko.SSHException, ValueError):
             key_io.seek(0)
             return paramiko.Ed25519Key.from_private_key(key_io)
 

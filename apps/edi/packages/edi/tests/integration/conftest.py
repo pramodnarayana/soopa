@@ -6,10 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from contextlib import asynccontextmanager
+
 import pytest
 import pytest_asyncio
 from database.provider import get_async_engine
 from database.testing import get_test_shard_url_async
+from dependency_injector import providers
 from fastapi import Depends
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
@@ -28,6 +31,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
 )
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
+from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
@@ -183,11 +187,8 @@ async def client(
 ):
 
     app = create_edi_app()
-    from unittest.mock import MagicMock
 
-    from dependency_injector import providers
-
-    app.state.db_router = MagicMock()
+    app.state.db_router = None
     app.container.vault_port.override(providers.Object(override_get_secret_store))
 
     old_overrides = dict(app.dependency_overrides)
@@ -224,13 +225,10 @@ async def client(
         def __init__(self, global_session, db_router):
             pass
 
-        from contextlib import asynccontextmanager
-
         @asynccontextmanager
         async def get_data_plane_uow(self, tenant_id: str, app_slug: str):
             ts_gen = override_get_tenant_session(tenant_id)
             ts = await ts_gen.__anext__()
-            from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 
             try:
                 yield SqlAlchemyDataPlaneUnitOfWork(
@@ -253,11 +251,8 @@ async def platform_client(
 ):
 
     app = create_edi_app()
-    from unittest.mock import MagicMock
 
-    from dependency_injector import providers
-
-    app.state.db_router = MagicMock()
+    app.state.db_router = None
     app.container.vault_port.override(providers.Object(override_get_secret_store))
 
     old_overrides = dict(app.dependency_overrides)

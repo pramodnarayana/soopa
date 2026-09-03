@@ -46,17 +46,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger = ObservabilityProvider.logger(__name__)
 
-    try:
-        # Initialize the global DatabaseRouter and mount it to app state
-        db_router = DatabaseRouter(
-            settings.database.global_url,
-            pool_size=settings.database.pool_size,
-            max_overflow=settings.database.max_overflow,
-        )
-        app.state.db_router = db_router
-        print("LIFESPAN: DB Router initialized")
-    except Exception as e:  # noqa: BLE001
-        print(f"LIFESPAN DB ROUTER ERROR: {e}")
+    # Initialize the global DatabaseRouter and mount it to app state
+    db_router = DatabaseRouter(
+        settings.database.global_url,
+        pool_size=settings.database.pool_size,
+        max_overflow=settings.database.max_overflow,
+    )
+    app.state.db_router = db_router
+    print("LIFESPAN: DB Router initialized")
 
     logger.info("as2_server_started", env=settings.env)
     yield

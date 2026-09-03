@@ -143,6 +143,7 @@ module = [
     "prometheus_client.*",
     "croniter.*",
     "paramiko.*",
+    "jsonpath_ng.*",
 ]
 ignore_missing_imports = true
 

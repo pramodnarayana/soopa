@@ -5,11 +5,20 @@ All test doubles imported from fakes.py (DRY).
 NullAS2DeliveryAdapter is used to test the "AS2 not enabled" path.
 """
 
+import contextlib
+import copy
+
 import pytest
 
 from edi.adapters.outbound.pipeline.null_as2 import NullAS2DeliveryAdapter
+from edi.application.use_cases.pipeline.delivery_router_use_case import (
+    DeliveryRouterUseCase,
+)
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-from edi.domain.events import PipelineEventType
+from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
+from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
+from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
+from edi.domain.enums import PipelineEventType
 from edi.testing.fakes.pipeline_fakes import (
     FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,
@@ -23,24 +32,39 @@ pytestmark = pytest.mark.asyncio
 # ── AS2 partner fixture data ──────────────────────────────────────────────────
 
 _REMOTE_PARTNER = {
-    "name": "Walmart AS2",
-    "as2_id": "WALMART",
-    "url": "https://as2.walmart.com/receive",
-    "local_partner_id": "local-p1",
-    "public_cert_pem": None,
-    "public_cert_vault_ref": None,
-    "encryption_algorithm": "AES256",
-    "signature_algorithm": "SHA256",
-    "mdn_type": "SYNC",
-    "mdn_url": None,
+    "remote": {
+        "id": "remote-1",
+        "name": "Walmart AS2",
+        "as2_id": "WALMART",
+        "url": "https://as2.walmart.com/receive",
+        "public_cert_pem": None,
+        "public_cert_vault_ref": None,
+        "prev_public_cert_pem": None,
+        "prev_public_cert_vault_ref": None,
+    },
+    "partnership": {
+        "id": "partnership-1",
+        "name": "Walmart Partnership",
+        "local_partner_id": "local-p1",
+        "remote_partner_id": "remote-1",
+        "credentials_vault_ref": None,
+        "encryption_algorithm": "AES256",
+        "signature_algorithm": "SHA256",
+        "mdn_type": "SYNC",
+        "mdn_url": None,
+        "advanced_flags": None,
+    },
 }
 
 _LOCAL_PARTNER = {
+    "id": "local-p1",
     "name": "Our AS2 Gateway",
     "as2_id": "ACME",
     "public_cert_pem": None,
     "public_cert_vault_ref": None,
     "private_key_vault_ref": None,
+    "prev_private_key_vault_ref": None,
+    "prev_public_cert_vault_ref": None,
 }
 
 
@@ -50,19 +74,12 @@ def make_use_case(
 ) -> DeliveryUseCase:
     u = uow or FakeDataPlaneUnitOfWork()
     a = as2 or FakeAS2DeliveryAdapter()
-    import contextlib
 
     @contextlib.asynccontextmanager
     async def uow_factory():
         yield u
 
     def router_factory(u_ref):
-        from edi.application.use_cases.pipeline.delivery_router_use_case import (
-            DeliveryRouterUseCase,
-        )
-        from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-        from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
-        from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 
         return DeliveryRouterUseCase(
             u_ref,
@@ -108,7 +125,9 @@ def _seed_as2_route(
         }
     )
     repo.as2_partners[partner_id] = _REMOTE_PARTNER
-    repo.local_as2_partners[str(_REMOTE_PARTNER["local_partner_id"])] = _LOCAL_PARTNER
+    repo.local_as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
+        _LOCAL_PARTNER
+    )
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -177,9 +196,12 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
             "as2_partner_id": "p-fail",
         }
     )
-    remote = {**_REMOTE_PARTNER, "url": "https://fail.example.com/as2"}
+    remote = copy.deepcopy(_REMOTE_PARTNER)
+    remote["remote"]["url"] = "https://fail.example.com/as2"
     uow.repository.as2_partners["p-fail"] = remote
-    uow.repository.local_as2_partners[str(_REMOTE_PARTNER["local_partner_id"])] = _LOCAL_PARTNER
+    uow.repository.local_as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
+        _LOCAL_PARTNER
+    )
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, as2=as2_adapter)
@@ -269,11 +291,12 @@ async def test_deliver_as2_idempotent_claim() -> None:
             "as2_partner_id": "p-idem",
         }
     )
-    uow.repository.as2_partners["p-idem"] = {
-        **_REMOTE_PARTNER,
-        "url": "https://idem.example.com/as2",
-    }
-    uow.repository.local_as2_partners[str(_REMOTE_PARTNER["local_partner_id"])] = _LOCAL_PARTNER
+    idem_remote = copy.deepcopy(_REMOTE_PARTNER)
+    idem_remote["remote"]["url"] = "https://idem.example.com/as2"
+    uow.repository.as2_partners["p-idem"] = idem_remote
+    uow.repository.local_as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
+        _LOCAL_PARTNER
+    )
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, as2=as2_adapter)
@@ -316,10 +339,9 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
         }
     )
     # local_partner_id points to a partner that does NOT exist in local_as2_partners
-    uow.repository.as2_partners["p-nolocal"] = {
-        **_REMOTE_PARTNER,
-        "local_partner_id": "missing-local",
-    }
+    nolocal_remote = copy.deepcopy(_REMOTE_PARTNER)
+    nolocal_remote["partnership"]["local_partner_id"] = "missing-local"
+    uow.repository.as2_partners["p-nolocal"] = nolocal_remote
     # Do NOT seed local_as2_partners["missing-local"]
 
     # ── Act ────────────────────────────────────────────────────────────────────

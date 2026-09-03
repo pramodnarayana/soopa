@@ -11,9 +11,7 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.config.settings import AppSettings
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork, FakeTransformerAdapter
 
 pytestmark = pytest.mark.asyncio
@@ -83,7 +81,7 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
     # Assertions
     saved_edi = uow.repository.edi_messages.get(trace_id)
     assert saved_edi is not None
-    assert saved_edi["direction"] == MessageDirection.OUTBOUND
+    assert saved_edi["direction"] == EdiDirection.OUTBOUND
     assert saved_edi["status"] == MessageStatus.PENDING_DELIVERY
     assert saved_edi["trading_partner_id"] == "tp1"
     assert saved_edi["connection_type"] == "AS2"

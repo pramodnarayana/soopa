@@ -12,11 +12,8 @@ async def hydrate_edi_data(
     if not storage_uri:
         return inline_data
 
-    try:
-        payload = await storage.download(storage_uri)
-        return payload.decode("utf-8")
-    except Exception:  # noqa: BLE001 - storage adapters expose provider-specific failures
-        return ""
+    payload = await storage.download(storage_uri)
+    return payload.decode("utf-8")
 
 
 async def hydrate_json_payload(
@@ -25,8 +22,5 @@ async def hydrate_json_payload(
     if not storage_uri:
         return inline_payload
 
-    try:
-        payload = await storage.download(storage_uri)
-        return cast(JsonValue, json.loads(payload))
-    except Exception:  # noqa: BLE001 - storage adapters expose provider-specific failures
-        return {}
+    payload = await storage.download(storage_uri)
+    return cast(JsonValue, json.loads(payload))

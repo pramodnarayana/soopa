@@ -46,32 +46,15 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:  # noqa: C901
-    settings = get_settings()
-    aws_endpoint = settings.aws.endpoint_url
-    s3_bucket = "soopaedi-dev"
-
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
-    resolver = TenantResolver(db_router)
-
-    # ─────────────────────────────────────────────────────────────
-    # Inbound SQS Adapters (Hexagonal: Protocol Translation Only)
-    # ─────────────────────────────────────────────────────────────
-    transformer = BotsTransformerAdapter()
-    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
-
-    uow_provider = TenantUowProvider(
-        resolver=resolver,
-        db_router=db_router,
-        settings=settings,
-        s3_bucket=s3_bucket,
-        aws_endpoint=aws_endpoint,
-    )
-
-    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
-    sftp_delivery = ParamikoSftpClient()
-    as2_delivery = HttpxAS2DeliveryClient(validator=validate_target_url)
-
+def _setup_registry(
+    transformer: Any,
+    settings: Any,
+    uow_provider: Any,
+    http_delivery: Any,
+    sftp_delivery: Any,
+    as2_delivery: Any,
+    vault: Any,
+) -> EdiDataPlaneEventDispatcher:
     def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
         strategies = {
             "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
@@ -137,7 +120,35 @@ async def main() -> None:  # noqa: C901
         uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
         await registry.route(event, uow_factory)
 
-    consumer = EdiDataPlaneEventDispatcher(callback=route_event)
+    return EdiDataPlaneEventDispatcher(callback=route_event)
+
+
+async def main() -> None:
+    settings = get_settings()
+    aws_endpoint = settings.aws.endpoint_url
+    s3_bucket = "soopaedi-dev"
+
+    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+    resolver = TenantResolver(db_router)
+
+    transformer = BotsTransformerAdapter()
+    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
+
+    uow_provider = TenantUowProvider(
+        resolver=resolver,
+        db_router=db_router,
+        settings=settings,
+        s3_bucket=s3_bucket,
+        aws_endpoint=aws_endpoint,
+    )
+
+    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
+    sftp_delivery = ParamikoSftpClient()
+    as2_delivery = HttpxAS2DeliveryClient(validator=validate_target_url)
+
+    consumer = _setup_registry(
+        transformer, settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
+    )
 
     transform_consumer = AwsSqsConsumer(
         queue_url=settings.sqs.transform_queue_url,

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.domain.constants import EdiIdPrefix
-from edi.domain.events import PipelineEventType
+from edi.domain.enums import PipelineEventType
 
 
 @dataclass

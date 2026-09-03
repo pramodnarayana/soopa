@@ -51,7 +51,7 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
                 key_io = io.StringIO(client_key_string)
                 try:
                     pkey: paramiko.PKey = paramiko.RSAKey.from_private_key(key_io)
-                except Exception:  # noqa: BLE001
+                except (paramiko.SSHException, ValueError):
                     key_io.seek(0)
                     pkey = paramiko.Ed25519Key.from_private_key(key_io)
                 connect_kwargs["pkey"] = pkey

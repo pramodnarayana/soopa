@@ -84,12 +84,9 @@ def _create_scheduled_job_consumers(
     )
 
 
-async def main() -> None:  # noqa: C901
-    logger.info("edi_background_worker.starting")
-    settings = get_settings()
-
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
-
+def _register_jobs(
+    db_router: DatabaseRouter, settings: Any, job_registry: JobHandlerRegistry
+) -> None:
     message_publisher = AwsSqsPublisher(
         queue_url=settings.sqs.data_plane_jobs_queue_url,
         endpoint_url=settings.aws.endpoint_url,
@@ -106,7 +103,6 @@ async def main() -> None:  # noqa: C901
         publisher=message_publisher,
     )
 
-    job_registry = JobHandlerRegistry()
     job_registry.register(
         EdiJobName.EDI_DATA_PLANE_OUTBOX_SWEEPER.value,
         EdiDataPlaneOutboxSweeperJobHandler(data_plane_sweeper_use_case),
@@ -147,6 +143,48 @@ async def main() -> None:  # noqa: C901
         EdiControlPlaneOutboxCleanupJobHandler(OutboxCleanerUseCase(edi_cp_outbox_cleanup_repo)),
     )
 
+
+async def _run_until_shutdown(
+    dp_manager: SqsConsumerManager,
+    cp_manager: SqsConsumerManager,
+) -> None:
+    """Blocks until either a stop signal is received or a consumer task fails."""
+    stop_event = asyncio.Event()
+
+    def shutdown_handler(*args: object) -> None:
+        logger.info("edi_background_worker_shutdown_signal_received")
+        stop_event.set()
+
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, shutdown_handler)
+    loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
+
+    stop_task = asyncio.create_task(stop_event.wait())
+    tasks: list[asyncio.Task[Any]] = [cast(asyncio.Task[Any], stop_task)]
+    if dp_manager._task:
+        tasks.append(cast(asyncio.Task[Any], dp_manager._task))
+    if cp_manager._task:
+        tasks.append(cast(asyncio.Task[Any], cp_manager._task))
+
+    done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+    for task in done:
+        if task is not stop_task and task.exception():
+            exc = task.exception()
+            logger.error("sqs_consumer_manager_failed", exc_info=exc)
+            if exc:
+                raise exc
+
+
+async def main() -> None:
+    logger.info("edi_background_worker.starting")
+    settings = get_settings()
+
+    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+
+    job_registry = JobHandlerRegistry()
+    _register_jobs(db_router, settings, job_registry)
+
     dp_consumer, cp_consumer = _create_scheduled_job_consumers(settings)
     dp_manager = SqsConsumerManager(
         consumer=dp_consumer,
@@ -162,32 +200,8 @@ async def main() -> None:  # noqa: C901
     )
     cp_manager.start()
 
-    stop_event = asyncio.Event()
-
-    def shutdown_handler(*args: object) -> None:
-        logger.info("edi_background_worker_shutdown_signal_received")
-        stop_event.set()
-
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, shutdown_handler)
-    loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
-
     try:
-        stop_task = asyncio.create_task(stop_event.wait())
-        tasks: list[asyncio.Task[Any]] = [cast(asyncio.Task[Any], stop_task)]
-        if dp_manager._task:
-            tasks.append(cast(asyncio.Task[Any], dp_manager._task))
-        if cp_manager._task:
-            tasks.append(cast(asyncio.Task[Any], cp_manager._task))
-
-        done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
-        for task in done:
-            if task is not stop_task and task.exception():
-                exc = task.exception()
-                logger.error("sqs_consumer_manager_failed", exc_info=exc)
-                if exc:
-                    raise exc
+        await _run_until_shutdown(dp_manager, cp_manager)
     except asyncio.CancelledError:
         logger.info("edi_background_worker_cancelled")
     except Exception:

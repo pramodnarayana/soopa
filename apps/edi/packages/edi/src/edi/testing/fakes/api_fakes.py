@@ -23,8 +23,10 @@ from edi.application.dtos.commands import (
     UpdateOutboundRouteCmd,
     UpdateSFTPPartnerCmd,
 )
+from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError, PartnerAlreadyExistsError
 from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
+from edi.domain.models.base import ProcessingMode
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
@@ -68,8 +70,6 @@ class FakeInboundRouteRepository:
     async def create_inbound_route(self, tenant_id: str, cmd: CreateInboundRouteCmd) -> str:
         r_id = generate_id(SystemIdPrefix.GENERIC)
         now = datetime.now(UTC).replace(tzinfo=None)
-        from edi.domain.models.base import ProcessingMode
-
         pm = (
             ProcessingMode(cmd.processing_mode) if cmd.processing_mode else ProcessingMode.TRANSFORM
         )
@@ -541,21 +541,37 @@ class FakeControlPlaneOutboxRepository:
         self.outbox = outbox
         self._reservations: dict[str, dict[str, JsonValue]] = {}
 
-    async def publish_outbox_event(self, event: object, idempotency_key: str | None = None) -> str:
+    async def publish_outbox_event(
+        self, event: ProvisioningEvent, idempotency_key: str | None = None
+    ) -> str:
         key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
+        payload = serialize_domain_event(event)
+
+        if key in self._reservations:
+            reservation = self._reservations[key]
+            reservation["status"] = "PUBLISHED"
+            old_payload = reservation.get("payload")
+            if isinstance(old_payload, dict) and isinstance(payload, dict):
+                old_payload.update(payload)
+            else:
+                reservation["payload"] = payload
+            if "event_id" not in reservation:
+                reservation["event_id"] = generate_id(SystemIdPrefix.GENERIC)
+            return str(reservation["event_id"])
+
         existing = next((e for e in self.outbox.outbox_events if e.idempotency_key == key), None)
         if existing:
             raise ValueError(f"Idempotency key {key} already exists")
 
         evt = OutboxEvent(
             id=generate_id(SystemIdPrefix.GENERIC),
-            tenant_id=getattr(event, "tenant_id", PLATFORM_TENANT_ID),
-            event_type=getattr(event, "event_type", type(event).__name__),
-            payload=serialize_domain_event(event),
+            tenant_id=event.tenant_id,
+            event_type=str(event.event_type.value),
+            payload=payload,
             idempotency_key=key,
         )
         self.outbox.append(evt)
-        return key
+        return evt.id
 
     async def create_reservation(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
@@ -572,7 +588,11 @@ class FakeControlPlaneOutboxRepository:
         }
 
     async def get_event_by_idempotency_key(self, idempotency_key: str) -> object | None:
-        return self._reservations.get(idempotency_key)
+        if idempotency_key in self._reservations:
+            return self._reservations[idempotency_key]
+        return next(
+            (e for e in self.outbox.outbox_events if e.idempotency_key == idempotency_key), None
+        )
 
 
 class FakeOutboundEdiHeaderRepository:
