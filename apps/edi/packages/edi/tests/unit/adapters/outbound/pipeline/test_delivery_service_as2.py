@@ -177,7 +177,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
             "as2_partner_id": "p-fail",
         }
     )
-    remote = {**_REMOTE_PARTNER, "remote_url": "https://fail.example.com/as2"}
+    remote = {**_REMOTE_PARTNER, "url": "https://fail.example.com/as2"}
     uow.repository.as2_partners["p-fail"] = remote
     uow.repository.local_as2_partners[str(_REMOTE_PARTNER["local_partner_id"])] = _LOCAL_PARTNER
 
@@ -271,7 +271,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
     )
     uow.repository.as2_partners["p-idem"] = {
         **_REMOTE_PARTNER,
-        "remote_url": "https://idem.example.com/as2",
+        "url": "https://idem.example.com/as2",
     }
     uow.repository.local_as2_partners[str(_REMOTE_PARTNER["local_partner_id"])] = _LOCAL_PARTNER
 

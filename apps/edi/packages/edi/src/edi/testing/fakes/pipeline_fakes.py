@@ -124,7 +124,10 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         if not raw:
             return None
 
-        return _from_dict(EdiJsonDTO, raw)
+        dto_data = dict(raw)
+        if "edi_json" in dto_data:
+            dto_data["payload"] = dto_data["edi_json"]
+        return _from_dict(EdiJsonDTO, dto_data)
 
     async def get_outbound_edi_header_by_route_or_partner(
         self,

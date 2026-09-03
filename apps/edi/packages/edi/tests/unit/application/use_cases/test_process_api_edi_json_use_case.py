@@ -69,9 +69,17 @@ class FakeTransactionRepository:
         aggregate.clear_domain_events()
 
 
+class FakeTraceRepository:
+    """Minimal TraceRepositoryPort-conforming in-memory store."""
+
+    async def get_edi_trace(self, tenant_id: str, trace_id: str) -> None:
+        return None
+
+
 class FakeDataPlaneUnitOfWork:
     def __init__(self, repo: FakeTransactionRepository):
         self.transactions = repo
+        self.traces = FakeTraceRepository()
         self.committed = False
 
     async def __aenter__(self):

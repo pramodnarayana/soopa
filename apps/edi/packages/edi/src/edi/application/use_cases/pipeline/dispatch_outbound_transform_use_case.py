@@ -100,7 +100,13 @@ class DispatchOutboundTransformUseCase:
                 raise ValueError(f"No EdiJson record found for trace_id={trace_id}")
 
             json_payload = edi_json.payload
-            if not json_payload:
+            if not json_payload or not (
+                isinstance(json_payload, dict)
+                or (
+                    isinstance(json_payload, list)
+                    and all(isinstance(node, dict) for node in json_payload)
+                )
+            ):
                 raise ValueError(f"Payload is missing for trace_id={trace_id}")
 
             (
