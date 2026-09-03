@@ -7,6 +7,7 @@ place in the codebase permitted to import from edi.adapters.outbound.security.sm
 """
 
 import structlog
+from cryptography.exceptions import UnsupportedAlgorithm
 
 from edi.adapters.outbound.security.smime import decrypt_payload, sign_payload, verify_signature
 from edi.ports.outbound.crypto_service_port import CryptoServicePort
@@ -41,7 +42,7 @@ class SmimeCryptoService:
             )
             if result:
                 return result
-        except (ValueError, TypeError, KeyError, IndexError) as exc:
+        except (ValueError, TypeError, KeyError, IndexError, UnsupportedAlgorithm) as exc:
             logger.debug("smime_decrypt_initial_attempt_failed", error=str(exc))
 
         raise ValueError(

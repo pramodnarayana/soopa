@@ -157,8 +157,8 @@ async def test_inbound_flow_e2e(
             is_local=False,
             certificate_data=remote_cert_b64,
         )
-        session.add_all([local_partner, remote_partner])
-        await session.flush()
+        global_session.add_all([local_partner, remote_partner])
+        await global_session.flush()
 
         partnership = AS2Partnership(
             tenant_id=tenant_id,
@@ -168,7 +168,7 @@ async def test_inbound_flow_e2e(
             encryption_algorithm="AES_256_CBC",
             signing_algorithm="SHA256",
         )
-        session.add(partnership)
+        global_session.add(partnership)
         await session.commit()
         await global_session.commit()
 

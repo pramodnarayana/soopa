@@ -52,7 +52,7 @@ class SanitizedText(TypeDecorator[str]):
 
 
 class TenantBase(DeclarativeBase):
-    __table_args__: dict[str, object] | tuple[object, ...] = {"schema": "edi"}
+    __table_args__: dict[str, object] | tuple[object, ...] = {}
 
 
 class TenantAwareMixin:
@@ -84,10 +84,10 @@ class AS2Partnership(TenantBase, TenantAwareMixin, AS2PartnershipMixin, Timestam
     __tablename__ = "as2_partnerships"
 
     local_partner_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
     remote_partner_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
 
@@ -108,13 +108,13 @@ class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMix
     __tablename__ = "inbound_routes"
 
     webhook_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.webhooks.id"), nullable=True
+        String(128), ForeignKey("webhooks.id"), nullable=True
     )
     as2_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id"), nullable=True
+        String(128), ForeignKey("as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.sftp_partners.id"), nullable=True
+        String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -139,10 +139,10 @@ class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampM
     __tablename__ = "outbound_routes"
 
     as2_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id"), nullable=True
+        String(128), ForeignKey("as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.sftp_partners.id"), nullable=True
+        String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (

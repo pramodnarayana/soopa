@@ -18,14 +18,14 @@ async def test_paramiko_sftp_delivery_adapter():
     for _ in range(5):
         try:
             out = subprocess.check_output(
-                ["/usr/bin/ssh-keyscan", "-p", "2222", "-t", "rsa", "localhost"],
+                ["ssh-keyscan", "-p", "2222", "-t", "rsa", "localhost"],  # noqa: S607
                 stderr=subprocess.DEVNULL,
             ).decode("utf-8")
             if out.strip():
                 # Extract the key part (e.g. ssh-rsa AAAA...)
                 host_key = out.strip().split("localhost ", 1)[-1]
                 break
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             pass
         time.sleep(1)
 

@@ -11,6 +11,7 @@ import structlog
 from asn1crypto import cms, pem
 from asn1crypto import x509 as asn1_x509
 from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -155,7 +156,7 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
     for strat_name, strat_func in strategies:
         try:
             return cast(Any, strat_func)(encrypted_data, cert, private_key, options=[])
-        except (ValueError, TypeError, KeyError, IndexError) as e:
+        except (ValueError, TypeError, KeyError, IndexError, UnsupportedAlgorithm) as e:
             logger.debug("decryption_strategy_failed", strategy=strat_name, error=str(e))
 
     # Enterprise Fallback: Manually parse the ASN.1 tree and decrypt using primitives

@@ -15,7 +15,7 @@ ENV_BACKED_UP=0
 ENV_INJECTED=0
 
 # Use a trap to ensure .env is ALWAYS restored, even if tests fail or user hits Ctrl+C
-trap 'echo "🔓 Restoring .env..."; [ "$ENV_INJECTED" -eq 1 ] && rm -f .env; [ "$ENV_BACKED_UP" -eq 1 ] && mv .env.bak .env' EXIT
+trap 'echo "🔓 Restoring .env..."; [ "$ENV_INJECTED" -eq 1 ] && rm -f .env; [ "$ENV_BACKED_UP" -eq 1 ] && [ -f .env.bak ] && mv .env.bak .env' EXIT
 
 if [ -f .env ]; then
   mv .env .env.bak
