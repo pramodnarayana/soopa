@@ -3,9 +3,7 @@ import uuid
 import structlog
 from seedwork.domain.types import JsonValue
 
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -28,14 +26,15 @@ class PipelineLifecycleUseCase:
         Triggered when a TransformUseCase finishes transforming a payload.
         """
         trace_id = str(payload["trace_id"])
-        direction = str(payload.get("direction", MessageDirection.INBOUND.value))
+        direction_val = payload.get("direction")
+        direction = str(direction_val) if direction_val is not None else EdiDirection.INBOUND.value
         logger.info(
             "pipeline_lifecycle.transform_completed",
             trace_id=trace_id,
         )
 
         async with self.uow:
-            if direction == MessageDirection.INBOUND.value:
+            if direction == EdiDirection.INBOUND.value:
                 gs_sender_val = payload.get("gs_sender_id")
                 gs_receiver_val = payload.get("gs_receiver_id")
                 txn_val = payload.get("transaction_type")
@@ -64,15 +63,15 @@ class PipelineLifecycleUseCase:
                 update_kwargs: dict[str, str] = {}
                 if trading_partner_id:
                     update_kwargs["trading_partner_id"] = trading_partner_id
-                if "standard" in payload:
+                if "standard" in payload and payload["standard"] is not None:
                     update_kwargs["standard"] = str(payload["standard"])
-                if "isa_sender_id" in payload:
+                if "isa_sender_id" in payload and payload["isa_sender_id"] is not None:
                     update_kwargs["sender_id"] = str(payload["isa_sender_id"])
-                if "isa_receiver_id" in payload:
+                if "isa_receiver_id" in payload and payload["isa_receiver_id"] is not None:
                     update_kwargs["receiver_id"] = str(payload["isa_receiver_id"])
-                if "gs_sender_id" in payload:
+                if "gs_sender_id" in payload and payload["gs_sender_id"] is not None:
                     update_kwargs["gs_sender_id"] = str(payload["gs_sender_id"])
-                if "gs_receiver_id" in payload:
+                if "gs_receiver_id" in payload and payload["gs_receiver_id"] is not None:
                     update_kwargs["gs_receiver_id"] = str(payload["gs_receiver_id"])
 
                 if update_kwargs:
@@ -98,7 +97,7 @@ class PipelineLifecycleUseCase:
         Triggered when a DeliveryUseCase completes its delivery attempt.
         """
         trace_id = str(payload["trace_id"])
-        direction = str(payload.get("direction", MessageDirection.INBOUND.value))
+        direction = str(payload.get("direction", EdiDirection.INBOUND.value))
         status = payload.get("status")
 
         # Validate status field is present before proceeding
@@ -119,7 +118,7 @@ class PipelineLifecycleUseCase:
         )
 
         async with self.uow:
-            if direction == MessageDirection.INBOUND.value:
+            if direction == EdiDirection.INBOUND.value:
                 await self.uow.repository.update_api_payload_status(trace_id, str(status))
             else:
                 await self.uow.repository.update_edi_message_status(trace_id, str(status))

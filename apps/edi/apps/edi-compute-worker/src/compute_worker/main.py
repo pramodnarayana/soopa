@@ -12,7 +12,7 @@ from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
-from edi.domain.events import MessageQueueName
+from edi.domain.enums import MessageQueueName
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 

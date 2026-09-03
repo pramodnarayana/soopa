@@ -1,8 +1,8 @@
+import typing
 from abc import ABC, abstractmethod
 
-from seedwork.domain.types import JsonValue
-
-from edi.domain.types import AstNode
+JsonValue = typing.Any
+AstNode = typing.Any
 
 
 class BaseEnvelopeBuilder(ABC):

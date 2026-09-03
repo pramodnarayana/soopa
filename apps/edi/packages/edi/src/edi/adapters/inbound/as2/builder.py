@@ -5,8 +5,8 @@ Constructs an RFC 4130-compliant AS2 HTTP payload from raw EDI content.
 
 import email
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 from edi.domain.services.as2_protocol import calculate_mic
 
@@ -32,7 +32,7 @@ class _AS2State:
     is_encrypted: bool = False
 
 
-def _apply_signature(state: _AS2State, sign_fn: Any) -> None:
+def _apply_signature(state: _AS2State, sign_fn: Callable[[bytes], bytes] | None) -> None:
     if sign_fn is None:
         return
 
@@ -44,7 +44,7 @@ def _apply_signature(state: _AS2State, sign_fn: Any) -> None:
     state.is_signed = True
 
 
-def _apply_encryption(state: _AS2State, encrypt_fn: Any) -> None:
+def _apply_encryption(state: _AS2State, encrypt_fn: Callable[[bytes], bytes] | None) -> None:
     if encrypt_fn is None:
         return
 
@@ -118,8 +118,8 @@ def build_outbound_message(
     as2_from: str,
     as2_to: str,
     content_type: str = "application/edi-x12",
-    sign_fn: object | None = None,
-    encrypt_fn: object | None = None,
+    sign_fn: Callable[[bytes], bytes] | None = None,
+    encrypt_fn: Callable[[bytes], bytes] | None = None,
     mdn_url: str | None = None,
     mic_alg: str = "sha256",
     message_id: str | None = None,

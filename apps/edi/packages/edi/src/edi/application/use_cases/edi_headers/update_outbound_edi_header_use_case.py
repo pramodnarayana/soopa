@@ -5,7 +5,8 @@ import structlog
 from seedwork.domain.types import UNSET
 
 from edi.application.dtos.commands import UpdateOutboundEdiHeaderCmd
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 

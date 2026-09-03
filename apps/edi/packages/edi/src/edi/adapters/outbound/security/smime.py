@@ -1,33 +1,54 @@
 import contextlib
+import email
 import io
+import re
 import warnings
-from typing import cast
+from email import policy
+from typing import Any, cast
 
 import endesive.verifier
+import structlog
 from asn1crypto import cms, pem
 from asn1crypto import x509 as asn1_x509
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives.ciphers import Cipher, modes
-from cryptography.utils import CryptographyDeprecationWarning
-
-"""
-S/MIME cryptographic operations for AS2.
-Handles encryption, decryption, signing, and signature verification.
-
-All operations are fully native (cryptography.hazmat) and in-memory.
-No private keys or payloads are ever written to disk.
-"""
-
-import email
-import re
-from email import policy
-from typing import Any
-
-import structlog
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.ciphers import algorithms
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.serialization import pkcs7
+from cryptography.utils import CryptographyDeprecationWarning
+
+# Supported ciphers registry for S/MIME encryption
+_CIPHER_REGISTRY: dict[str, Any] = {
+    "AES256": algorithms.AES256,
+    "AES-256": algorithms.AES256,
+    "AES256_CBC": algorithms.AES256,
+    "AES128": algorithms.AES128,
+    "AES-128": algorithms.AES128,
+    "AES128_CBC": algorithms.AES128,
+}
+
+# ASN.1 OID to cryptography primitive mapping for native decryption
+_ASN1_OID_TO_CIPHER_REGISTRY: dict[str, Any] = {
+    "aes256_cbc": algorithms.AES256,
+    "aes128_cbc": algorithms.AES128,
+}
+
+try:
+    from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
+
+    _CIPHER_REGISTRY.update({"3DES": TripleDES, "DES3": TripleDES, "TRIPLEDES": TripleDES})
+    _ASN1_OID_TO_CIPHER_REGISTRY.update({"des_ede3_cbc": TripleDES, "tripledes_3key": TripleDES})
+except ImportError:
+    _CIPHER_REGISTRY.update(
+        {
+            "3DES": algorithms.TripleDES,
+            "DES3": algorithms.TripleDES,
+            "TRIPLEDES": algorithms.TripleDES,
+        }
+    )
+    _ASN1_OID_TO_CIPHER_REGISTRY.update(
+        {"des_ede3_cbc": algorithms.TripleDES, "tripledes_3key": algorithms.TripleDES}
+    )
 
 logger = structlog.get_logger(__name__)
 
@@ -56,7 +77,9 @@ def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
     return None
 
 
-def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes | None:
+def _manual_asn1crypto_decrypt(
+    encrypted_data: bytes, private_key: rsa.RSAPrivateKey
+) -> bytes | None:
     """
     Ultimate pure-Python native fallback for BouncyCastle BER envelopes.
     Bypasses cryptography's strict Rust PKCS7 parser entirely by manually
@@ -139,10 +162,13 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
     # This is required for external legacy AS2 partners who send envelopes that fail
     # strict Rust parser rules (e.g., older BouncyCastle implementations).
     try:
-        manual_decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
-        if manual_decrypted:
-            logger.info("Successfully decrypted payload using pure Python ASN.1 manual primitives.")
-            return manual_decrypted
+        if isinstance(private_key, rsa.RSAPrivateKey):
+            manual_decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
+            if manual_decrypted:
+                logger.info(
+                    "Successfully decrypted payload using pure Python ASN.1 manual primitives."
+                )
+                return manual_decrypted
     except Exception as e:  # noqa: BLE001
         logger.debug("manual_fallback_decryption_failed", error=str(e))
 
@@ -182,42 +208,6 @@ def sign_payload(
 
     # AS2 requires S/MIME encoding for the signed payload
     return builder.sign(serialization.Encoding.SMIME, options=[])
-
-
-from typing import Any
-
-# Supported ciphers registry for S/MIME encryption
-_CIPHER_REGISTRY: dict[str, Any] = {
-    "AES256": algorithms.AES256,
-    "AES-256": algorithms.AES256,
-    "AES256_CBC": algorithms.AES256,
-    "AES128": algorithms.AES128,
-    "AES-128": algorithms.AES128,
-    "AES128_CBC": algorithms.AES128,
-}
-
-# ASN.1 OID to cryptography primitive mapping for native decryption
-_ASN1_OID_TO_CIPHER_REGISTRY: dict[str, Any] = {
-    "aes256_cbc": algorithms.AES256,
-    "aes128_cbc": algorithms.AES128,
-}
-
-try:
-    from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
-
-    _CIPHER_REGISTRY.update({"3DES": TripleDES, "DES3": TripleDES, "TRIPLEDES": TripleDES})
-    _ASN1_OID_TO_CIPHER_REGISTRY.update({"des_ede3_cbc": TripleDES, "tripledes_3key": TripleDES})
-except ImportError:
-    _CIPHER_REGISTRY.update(
-        {
-            "3DES": algorithms.TripleDES,
-            "DES3": algorithms.TripleDES,
-            "TRIPLEDES": algorithms.TripleDES,
-        }
-    )
-    _ASN1_OID_TO_CIPHER_REGISTRY.update(
-        {"des_ede3_cbc": algorithms.TripleDES, "tripledes_3key": algorithms.TripleDES}
-    )
 
 
 def encrypt_payload(

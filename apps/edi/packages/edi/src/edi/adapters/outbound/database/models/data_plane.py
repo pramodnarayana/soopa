@@ -19,6 +19,7 @@ from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
 from database.models.common import OutboxMixin, TimestampMixin
+from edi.domain.enums import MessageStatus
 
 from .replicated_mixins import (
     AS2PartnerMixin,
@@ -218,7 +219,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
 
     __table_args__ = (
         Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),
@@ -252,7 +253,9 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="TRANSFORMED")
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=MessageStatus.TRANSFORMED
+    )
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
@@ -285,7 +288,7 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
     headers: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
 
     __table_args__ = (
         CheckConstraint(
@@ -304,7 +307,7 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSFORM, DELIVER
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.PENDING)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

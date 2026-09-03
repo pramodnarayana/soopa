@@ -33,7 +33,7 @@ from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.application.dtos.commands import ProcessInboundAs2Command
-from edi.domain.constants import EdiConnectionType, TransactionDirection, TransactionStatus
+from edi.domain.enums import EdiConnectionType, EdiDirection, MessageStatus
 from edi.domain.models.as2 import (
     AS2Message,
     AS2PartnerDomainModel,
@@ -425,7 +425,7 @@ class ProcessInboundAs2MessageUseCase:
 
         edi_record = {
             "trace_id": generate_id(SystemIdPrefix.GENERIC),
-            "direction": TransactionDirection.INBOUND.value,
+            "direction": EdiDirection.INBOUND.value,
             "connection_type": EdiConnectionType.AS2.value,
             "sender_id": isa_sender,
             "receiver_id": isa_receiver,
@@ -436,7 +436,7 @@ class ProcessInboundAs2MessageUseCase:
             "signature_algorithm": partnership.signature_algorithm,
             "encryption_algorithm": partnership.encryption_algorithm,
             "edi_data": pure_edi_bytes,
-            "status": TransactionStatus.RECEIVED.value,
+            "status": MessageStatus.RECEIVED.value,
         }
 
         # 3. Save to the true Tenant's Data Plane Shard via factory
@@ -497,7 +497,7 @@ class ProcessInboundAs2MessageUseCase:
                 edi_message_id=str(msg_id),
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
-                status=TransactionStatus.RECEIVED.value,
+                status=MessageStatus.RECEIVED.value,
                 explicit_idempotency_key=str(msg_id),
             )
 

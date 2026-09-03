@@ -7,7 +7,7 @@ from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.x12_ack import (
     generate_997_ast as internal_generate_997,
 )
-from edi.domain.constants import EdiStandard
+from edi.domain.enums import EdiStandard
 
 
 def edi_to_json(

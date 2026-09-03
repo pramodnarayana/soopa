@@ -111,7 +111,7 @@ class IdentitySettings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def parse_audience(cls, data: dict[str, str | list[str]]) -> dict[str, str | list[str]]:
+    def parse_audience(cls, data: typing.Any) -> typing.Any:
         if isinstance(data, dict) and "audience" in data:
             aud = data["audience"]
             if isinstance(aud, str) and "," in aud:

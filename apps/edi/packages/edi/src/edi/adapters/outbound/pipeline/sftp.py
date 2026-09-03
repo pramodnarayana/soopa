@@ -5,6 +5,36 @@ import typing
 
 import paramiko
 import structlog
+from cryptography.hazmat.primitives import hashes
+
+# paramiko legacy patch
+if hasattr(paramiko.Transport, "_key_info") and "ssh-rsa" not in paramiko.Transport._key_info:
+    paramiko.Transport._key_info["ssh-rsa"] = paramiko.RSAKey
+
+if hasattr(paramiko.RSAKey, "HASHES") and "ssh-rsa" not in paramiko.RSAKey.HASHES:
+    paramiko.RSAKey.HASHES["ssh-rsa"] = hashes.SHA1
+
+if (
+    hasattr(paramiko.Transport, "_preferred_keys")
+    and "ssh-rsa" not in paramiko.Transport._preferred_keys
+):
+    _keys = list(paramiko.Transport._preferred_keys)
+    _keys.append("ssh-rsa")
+    if "ssh-dss" in getattr(paramiko.Transport, "_key_info", {}):
+        _keys.append("ssh-dss")
+    paramiko.Transport._preferred_keys = tuple(_keys)
+
+if (
+    hasattr(paramiko.Transport, "_preferred_pubkeys")
+    and "ssh-rsa" not in paramiko.Transport._preferred_pubkeys
+):
+    _pubkeys = list(paramiko.Transport._preferred_pubkeys)
+    _pubkeys.append("ssh-rsa")
+    if "ssh-dss" in getattr(paramiko.Transport, "_key_info", {}):
+        _pubkeys.append("ssh-dss")
+    paramiko.Transport._preferred_pubkeys = tuple(_pubkeys)
+
+# end paramiko legacy patch
 
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 

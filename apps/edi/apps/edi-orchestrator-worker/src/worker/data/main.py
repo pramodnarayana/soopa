@@ -30,7 +30,7 @@ from edi.config.settings import get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.events import MessageQueueName, PipelineEventType
+from edi.domain.enums import MessageQueueName, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager

@@ -5,10 +5,12 @@ from uuid import UUID
 
 from seedwork.models import AggregateRoot
 
+from edi.domain.enums import EdiDirection, MessageStatus
 
-class Direction(StrEnum):
-    INBOUND = "INBOUND"
-    OUTBOUND = "OUTBOUND"
+# Re-export canonical enums so existing callers of `from edi.domain.models.base import ...`
+# keep working without changes during the transition.
+Direction = EdiDirection
+RecordStatus = MessageStatus
 
 
 class PartnerStatus(StrEnum):
@@ -30,27 +32,13 @@ class ProcessingMode(StrEnum):
     PASSTHROUGH = "PASSTHROUGH"
 
 
-class RecordStatus(StrEnum):
-    RECEIVED = "RECEIVED"
-    ACCEPTED = "ACCEPTED"
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    PARSED = "PARSED"
-    TRANSFORMED = "TRANSFORMED"
-    PENDING_DELIVERY = "PENDING_DELIVERY"
-    DELIVERED = "DELIVERED"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
-    ERROR = "ERROR"
-
-
 @dataclass(kw_only=True)
 class EdiRecordBase(AggregateRoot):
     id: str
     tenant_id: str
     trace_id: str
-    direction: Direction
-    status: RecordStatus
+    direction: EdiDirection
+    status: MessageStatus
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 

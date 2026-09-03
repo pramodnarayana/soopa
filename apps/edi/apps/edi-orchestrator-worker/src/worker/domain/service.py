@@ -2,12 +2,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from edi.domain.events import (
-    EdiEventType,
-    ProvisioningEvent,
-    ProvisioningEventType,
-    WebhookEventType,
-)
+from edi.domain.events import ProvisioningEvent
+from edi.domain.enums import EdiEventType, WebhookEventType
+from edi.domain.constants import ProvisioningEventType
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 

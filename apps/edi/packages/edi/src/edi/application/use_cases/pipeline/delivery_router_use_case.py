@@ -2,6 +2,7 @@ import structlog
 
 from edi.application.dtos.routes import InboundRouteDTO, OutboundRouteDTO
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
+from edi.domain.enums import EdiDirection
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -35,7 +36,7 @@ class DeliveryRouterUseCase:
         await self._dispatch_to_strategy(trace_id, route, edi_msg, idempotency_key)
 
     async def _resolve_route(self, edi_msg) -> OutboundRouteDTO | InboundRouteDTO:
-        if edi_msg.direction == "OUTBOUND":
+        if edi_msg.direction == EdiDirection.OUTBOUND:
             return await self._get_outbound_route(edi_msg)
         return await self._get_inbound_route(edi_msg)
 
@@ -70,7 +71,7 @@ class DeliveryRouterUseCase:
             )
 
         route = await self.uow.repository.get_route(
-            "INBOUND", sender_id, receiver_id, transaction_type
+            EdiDirection.INBOUND, sender_id, receiver_id, transaction_type
         )
         if not route:
             logger.error(

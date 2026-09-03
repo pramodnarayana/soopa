@@ -1,6 +1,7 @@
+import typing
 from collections.abc import Callable
 
-from seedwork.domain.types import JsonValue
+JsonValue = typing.Any
 
 
 class ASTUtils:

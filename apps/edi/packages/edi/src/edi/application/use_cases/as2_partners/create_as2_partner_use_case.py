@@ -9,7 +9,8 @@ from secret_store.ports.secret_store_port import SecretStorePort
 from edi.application.dtos.commands import CreateAS2TradingPartnerCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.as2 import AS2PartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
@@ -167,16 +168,15 @@ class CreateAS2PartnerUseCase:
                 active=False,
             )
 
-            provisioning_event = ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partner_created,
-                resource_id=partner_id,
+            aggregate.add_domain_event(
+                ProvisioningEvent(
+                    tenant_id=tenant_id,
+                    event_type=EdiEventType.edi_as2_partner_created,
+                    resource_id=partner_id,
+                )
             )
 
             await self.uow.as2_partners.save(aggregate)
-            await self.uow.control_plane_outbox.publish_outbox_event(
-                provisioning_event, idempotency_key=idempotency_key
-            )
 
             logger.info(
                 "provisioning_as2_partner_completed",

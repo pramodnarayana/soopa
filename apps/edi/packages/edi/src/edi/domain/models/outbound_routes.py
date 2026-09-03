@@ -3,6 +3,8 @@ from datetime import datetime
 
 from seedwork.models import AggregateRoot
 
+from edi.domain.enums import EdiDirection
+
 
 @dataclass(kw_only=True)
 class OutboundRouteDomainModel(AggregateRoot):
@@ -18,5 +20,5 @@ class OutboundRouteDomainModel(AggregateRoot):
     protocol: str | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
-    direction: str = "OUTBOUND"
+    direction: EdiDirection = EdiDirection.OUTBOUND
     destination_name: str | None = None

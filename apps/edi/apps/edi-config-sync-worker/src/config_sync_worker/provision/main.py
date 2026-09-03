@@ -6,7 +6,7 @@ import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.config.settings import get_settings
-from edi.domain.events import MessageQueueName
+from edi.domain.enums import MessageQueueName
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher

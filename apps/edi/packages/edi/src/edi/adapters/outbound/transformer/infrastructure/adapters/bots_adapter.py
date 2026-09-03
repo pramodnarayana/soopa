@@ -11,7 +11,7 @@ from edi.adapters.outbound.transformer.domain.models import (
     TransactionSet,
 )
 from edi.core.bots.facade import edi_to_json, json_to_edi
-from edi.domain.constants import EdiStandard, EdiTransactionType
+from edi.domain.enums import EdiStandard, EdiTransactionType
 
 logger = structlog.get_logger(__name__)
 

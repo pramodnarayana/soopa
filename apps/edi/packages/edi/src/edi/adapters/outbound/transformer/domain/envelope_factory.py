@@ -3,7 +3,7 @@ from seedwork.domain.types import JsonValue
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.envelope.edifact import EdifactEnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
-from edi.domain.constants import EdiStandard
+from edi.domain.enums import EdiStandard
 from edi.domain.types import AstNode
 
 

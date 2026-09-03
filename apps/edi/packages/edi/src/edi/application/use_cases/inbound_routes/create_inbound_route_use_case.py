@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 import structlog
 
 from edi.application.dtos.commands import CreateInboundRouteCmd
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.models.base import ProcessingMode
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork

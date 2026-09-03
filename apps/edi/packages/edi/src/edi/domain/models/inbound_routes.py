@@ -3,6 +3,7 @@ from datetime import datetime
 
 from seedwork.models import AggregateRoot
 
+from edi.domain.enums import EdiDirection
 from edi.domain.models.base import ProcessingMode
 
 
@@ -26,5 +27,5 @@ class InboundRouteDomainModel(AggregateRoot):
     webhook_id: str | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
-    direction: str = "INBOUND"
+    direction: EdiDirection = EdiDirection.INBOUND
     destination_name: str | None = None

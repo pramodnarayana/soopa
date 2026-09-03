@@ -20,7 +20,7 @@ import structlog
 from edi.core.bots.domain.exceptions import (
     ScriptImportError,
 )
-from edi.domain.constants import EdiStandard, EdiTransactionType
+from edi.domain.enums import EdiStandard, EdiTransactionType
 
 gettext = std_gettext.gettext
 

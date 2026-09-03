@@ -13,6 +13,7 @@ from edi.adapters.outbound.database.constants import (
     DATA_PLANE_OUTBOX_EVENT_PREFIX,
     EDI_JSON_ID_PREFIX,
 )
+from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
     AS2Partner,
@@ -36,8 +37,8 @@ from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, O
 from edi.application.dtos.webhooks import WebhookDTO
 from edi.config.settings import AppSettings
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.enums import ConnectionType, EdiDirection, MessageStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
-from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
 
@@ -130,7 +131,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         format_standard: str,
         transaction_type: str,
         status: str,
-        connection_type: str | None = "UNKNOWN",
+        connection_type: str | None = ConnectionType.UNKNOWN.value,
         sender_id: str | None = None,
         receiver_id: str | None = None,
         gs_sender_id: str | None = None,
@@ -437,7 +438,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         gs_receiver_id: str | None = None,
     ) -> InboundRouteDTO | None:
 
-        if direction != "INBOUND":
+        if direction != EdiDirection.INBOUND:
             raise ValueError(f"get_route only supports INBOUND, got: {direction}")
         model_class = InboundRoute
 
@@ -584,7 +585,9 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             inbound_remote_path=record.inbound_remote_path,
             outbound_remote_path=record.outbound_remote_path,
             host_key=record.host_key,
-            password=record.password_encrypted,
+            password=db_encryption.decrypt(record.password_encrypted)
+            if record.password_encrypted
+            else None,
             credentials_vault_ref=record.credentials_vault_ref,
             active=record.active,
         )

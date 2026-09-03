@@ -12,7 +12,7 @@ from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case impo
     DispatchInboundTransformUseCase,
 )
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.events import PipelineEventType
+from edi.domain.enums import PipelineEventType
 from seedwork import generate_random_hex
 from sqlalchemy import text
 

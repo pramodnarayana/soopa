@@ -57,7 +57,10 @@ def validate_target_url(url: str) -> bool:
                 or ip.is_reserved
                 or ip.is_multicast
             ):
-                if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
+                if (
+                    get_settings().env in (DeploymentEnvironment.DEVELOPMENT.value, "test")
+                    and ip.is_loopback
+                ):
                     pass
                 else:
                     logger.warning("SSRF check failed: resolved to private/internal IP {ip}", ip=ip)
@@ -109,7 +112,10 @@ def get_safe_ip(hostname: str) -> str | None:
         ip_str = str(sockaddr[0])
         ip = ipaddress.ip_address(ip_str)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
+            if (
+                get_settings().env in (DeploymentEnvironment.DEVELOPMENT.value, "test")
+                and ip.is_loopback
+            ):
                 return ip_str
             return None
         return ip_str

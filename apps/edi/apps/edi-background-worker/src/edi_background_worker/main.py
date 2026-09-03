@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # We need the outbox publisher and sqs poller
 # They were in orchestrator-worker, but let's copy them or import them if they are still there
 from edi.config.settings import AppSettings, get_settings
-from edi.domain.events import MessageQueueName
+from edi.domain.enums import MessageQueueName
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher

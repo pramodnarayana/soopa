@@ -1,6 +1,7 @@
 import structlog
 
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

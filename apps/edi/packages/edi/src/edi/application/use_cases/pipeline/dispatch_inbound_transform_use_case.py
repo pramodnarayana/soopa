@@ -3,8 +3,7 @@ import uuid
 import structlog
 
 from edi.config.settings import AppSettings
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
+from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.transformer_port import TransformerPort
 
@@ -47,7 +46,7 @@ class DispatchInboundTransformUseCase:
                 event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
                 payload={
                     "trace_id": trace_id,
-                    "direction": MessageDirection.INBOUND.value,
+                    "direction": EdiDirection.INBOUND.value,
                     "standard": standard,
                     "transaction_type": transaction_type,
                     "tenant_id": edi_msg.tenant_id,

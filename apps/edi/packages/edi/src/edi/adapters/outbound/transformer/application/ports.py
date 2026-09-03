@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from edi.adapters.outbound.transformer.domain.models import JsonDict, ParsedEdiPayload
-from edi.domain.constants import EdiStandard
+from edi.domain.enums import EdiStandard
 
 
 class EDITransformerPort(Protocol):

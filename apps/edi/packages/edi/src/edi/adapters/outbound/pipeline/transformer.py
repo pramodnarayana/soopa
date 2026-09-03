@@ -9,7 +9,7 @@ from edi.adapters.outbound.transformer.domain.envelope.edifact import (
 from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
-from edi.domain.constants import EdiStandard
+from edi.domain.enums import EdiStandard
 from edi.domain.types import AstNode
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
@@ -19,8 +19,8 @@ class BotsTransformerAdapter(TransformerPort):
     Concrete implementation of TransformerPort using the BotsEDIAdapter from the transformer lib.
     """
 
-    def __init__(self) -> None:
-        self._adapter = BotsEDIAdapter()
+    def __init__(self, adapter: BotsEDIAdapter | None = None) -> None:
+        self._adapter = adapter or BotsEDIAdapter()
 
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str

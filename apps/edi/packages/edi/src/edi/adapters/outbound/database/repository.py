@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.enums import MessageStatus
 
 from .models.control_plane import AS2Partner, AS2Partnership, InboundRoute
 from .models.data_plane import EdiMessage
@@ -101,7 +102,7 @@ class EdiMessageRepository:
         edi_data: str,
         sender_id: str | None = None,
         receiver_id: str | None = None,
-        status: str = "RECEIVED",
+        status: str = MessageStatus.RECEIVED,
         message_id: str | None = None,
     ) -> EdiMessage:
 

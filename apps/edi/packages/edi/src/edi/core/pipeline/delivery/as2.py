@@ -1,13 +1,12 @@
-from typing import Any
-
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
+from edi.domain.enums import MessageStatus
+from edi.domain.models.as2 import OutboundAS2Message
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.services.as2_protocol import parse_mdn
-from edi.domain.status import MessageStatus
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
@@ -29,7 +28,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         self,
         trace_id: str,
         direction: str,
-        as2_msg: Any,
+        as2_msg: OutboundAS2Message,
         status_code: int,
         response_headers: dict[str, str],
         response_body: bytes,

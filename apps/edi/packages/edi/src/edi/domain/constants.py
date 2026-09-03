@@ -1,23 +1,24 @@
+"""
+EDI Domain Constants
+====================
+
+Non-enumeration constants for the EDI bounded context.
+All StrEnum definitions live in ``edi.domain.enums``.
+"""
+
+# ── ID prefixes ──────────────────────────────────────────────────────────────
+# Kept here because EdiIdPrefix drives repository ID generation and is referenced
+# in many adapters — it is not a business-status enum, it is a naming convention.
 from enum import StrEnum
 
-
-class TransactionDirection(StrEnum):
-    INBOUND = "INBOUND"
-    OUTBOUND = "OUTBOUND"
-
-
-class TransactionStatus(StrEnum):
-    RECEIVED = "RECEIVED"
-    PROCESSING = "PROCESSING"
-    PROCESSED = "PROCESSED"
-    FAILED = "FAILED"
-    UNKNOWN = "UNKNOWN"
-
-
-class EdiConnectionType(StrEnum):
-    AS2 = "AS2"
-    API = "API"
-    SFTP = "SFTP"
+from edi.domain.enums import (
+    EdiEventType,
+    MessageQueueName,
+    NotificationEventType,
+    PipelineEventType,
+    UcpEventType,
+    WebhookEventType,
+)
 
 
 class EdiIdPrefix(StrEnum):
@@ -37,18 +38,21 @@ class EdiIdPrefix(StrEnum):
 
 EDI_MESSAGE_ID_PREFIX = EdiIdPrefix.EDI_MESSAGE.value
 
+# ── Pipeline event → queue routing map ──────────────────────────────────────
+PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {
+    PipelineEventType.TRANSFORM_EVENT: MessageQueueName.TRANSFORM_QUEUE,
+    PipelineEventType.COMPUTE_TRANSFORM_EVENT: MessageQueueName.TRANSFORM_QUEUE,
+    PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.LIFECYCLE_QUEUE,
+    PipelineEventType.DELIVER_EVENT: MessageQueueName.DELIVER_QUEUE,
+    PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.LIFECYCLE_QUEUE,
+    NotificationEventType.NOTIFICATION_TRIGGERED: MessageQueueName.PRIORITY_NOTIFICATIONS_QUEUE,
+}
 
-class EdiStandard(StrEnum):
-    X12 = "x12"
-    EDIFACT = "edifact"
+# ── Aggregated provisioning event set ────────────────────────────────────────
+ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType
 
-
-class EdiTransactionType(StrEnum):
-    ENVELOPE = "envelope"
-    X12_204 = "204"
-    X12_210 = "210"
-    X12_214 = "214"
-    X12_810 = "810"
-    X12_850 = "850"
-    X12_990 = "990"
-    X12_997 = "997"
+ALL_PROVISIONING_EVENT_TYPES = (
+    [e.value for e in EdiEventType]
+    + [e.value for e in WebhookEventType]
+    + [e.value for e in UcpEventType]
+)

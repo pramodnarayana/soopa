@@ -5,9 +5,9 @@ from typing import Any, Protocol, cast
 
 
 class RouteModelProtocol(Protocol):
-    gs_sender_id: Any
-    gs_receiver_id: Any
-    trading_partner_id: Any
+    gs_sender_id: str | None
+    gs_receiver_id: str | None
+    trading_partner_id: str | None
 
 
 from outbox.domain.constants import OutboxStatus
@@ -40,7 +40,7 @@ from edi.application.dtos.transactions import (
 )
 from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
-from edi.domain.direction import MessageDirection
+from edi.domain.enums import EdiDirection
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
@@ -203,7 +203,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
     ) -> InboundRouteDTO | None:
         stmt: Select[tuple[Any, ...]] | None = None
-        if direction == MessageDirection.INBOUND:
+        if direction == EdiDirection.INBOUND:
             stmt = select(InboundRoute).where(
                 InboundRoute.isa_sender_id == sender_id,
                 InboundRoute.isa_receiver_id == receiver_id,

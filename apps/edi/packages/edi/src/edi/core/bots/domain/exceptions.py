@@ -64,7 +64,7 @@ class BotsError(Exception):
     - BotsError('tekst %(var1)s %(var2)s',var1='value1',var2='value2')
     """
 
-    def __init__(self, exc: Exception, *args: object, **kwargs: object) -> None:
+    def __init__(self, exc: object, *args: object, **kwargs: object) -> None:
         self.exc = safe_unicode(exc)
         if args:
             # expect args[0] to be a dict

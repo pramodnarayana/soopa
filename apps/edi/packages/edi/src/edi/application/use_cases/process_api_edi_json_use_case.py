@@ -5,7 +5,7 @@ from seedwork.utils import generate_id
 
 from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.domain.constants import TransactionDirection
+from edi.domain.enums import EdiDirection
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel
@@ -110,7 +110,7 @@ class ProcessApiEdiJsonUseCase:
                     trace_id=str(trace_id),
                     tenant_id=command.tenant_id,
                     trading_partner_id=command.trading_partner_id,
-                    direction=TransactionDirection.OUTBOUND.value,
+                    direction=EdiDirection.OUTBOUND.value,
                 )
             )
 
