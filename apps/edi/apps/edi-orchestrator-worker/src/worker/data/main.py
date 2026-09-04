@@ -2,6 +2,7 @@ import asyncio
 import signal
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from functools import partial
 from typing import Any
 
 import structlog
@@ -152,7 +153,11 @@ async def main() -> None:
 
     http_delivery = HttpxDeliveryClient(validator=validate_target_url)
     sftp_delivery = ParamikoSftpClient()
-    as2_delivery = HttpxAS2DeliveryClient(validator=validate_target_url)
+    allow_private_ips = settings.env == "development"
+    as2_delivery = HttpxAS2DeliveryClient(
+        validator=partial(validate_target_url, allow_private_ips=allow_private_ips),
+        allow_private_ips=allow_private_ips,
+    )
 
     consumer = _setup_registry(
         transformer, settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault

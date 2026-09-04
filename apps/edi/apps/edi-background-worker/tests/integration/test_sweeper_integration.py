@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import uuid
 
 import aioboto3
 import pytest
@@ -49,7 +50,7 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
     # 2. Use real LocalStack SQS publisher
     sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
     # We will create a temporary queue for this test to ensure isolation
-    queue_name = f"test-sweeper-{int(datetime.datetime.now().timestamp())}"
+    queue_name = f"test-sweeper-{int(datetime.datetime.now().timestamp())}-{uuid.uuid4().hex}"
 
     async with aioboto3.Session().client(
         "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"

@@ -74,9 +74,7 @@ class As2EncryptionAlgorithm(StrEnum):
     """Cryptographic ciphers used for S/MIME payload encryption."""
 
     AES128 = "aes128"
-    AES192 = "aes192"
     AES256 = "aes256"
-    TRIPLE_DES = "3des"
 
 
 class EdiTransactionType(StrEnum):

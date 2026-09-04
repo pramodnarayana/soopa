@@ -12,9 +12,7 @@ from seedwork.domain.types import UNSET, JsonValue, UnsetType
 
 class EncryptionAlgorithm(StrEnum):
     AES128 = "AES128"
-    AES192 = "AES192"
     AES256 = "AES256"
-    DES3 = "3DES"
     RC2 = "RC2"
 
 

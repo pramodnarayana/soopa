@@ -236,6 +236,8 @@ async def test_inbound_flow_e2e(
 
                 translate_svc.transformer = FakeTransformerAdapter()
                 await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
+            else:
+                raise
 
         # 2. Manually run Deliver
 

@@ -1,11 +1,9 @@
-import contextlib
-
 """
 HTTPX-based adapter for outbound AS2 delivery.
 Implements AS2DeliveryPort using an async HTTP client.
 """
 
-import typing
+from collections.abc import Callable
 
 import httpx
 import structlog
@@ -26,10 +24,14 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
     """
 
     def __init__(
-        self, timeout_secs: int = 30, validator: typing.Callable[[str], typing.Any] | None = None
+        self,
+        timeout_secs: int = 30,
+        validator: Callable[[str], bool] | None = None,
+        allow_private_ips: bool = False,
     ) -> None:
         self.timeout = timeout_secs
         self.validator = validator
+        self.allow_private_ips = allow_private_ips
 
     async def deliver(
         self,
@@ -46,9 +48,10 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
         """
         logger.debug("AS2 HTTP POST → {url}, Content-Length={len(body)}", url=url, val_1=len(body))
 
-        ctx = self.validator(url) if self.validator else contextlib.nullcontext()
+        if self.validator and not self.validator(url):
+            raise ValueError("URL validation failed for provided destination.")
 
-        with ctx, ssrf_safe_context(url):
+        with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=False,  # AS2 spec does not permit redirect following

@@ -491,11 +491,14 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
                 elif operator == "neq":
                     conds = [
-                        model.sender_id != str(value),
-                        model.receiver_id != str(value),
-                        model.gs_sender_id != str(value),
-                        model.gs_receiver_id != str(value),
-                        model.trading_partner_id != str(value),
+                        or_(model.sender_id.is_(None), model.sender_id != str(value)),
+                        or_(model.receiver_id.is_(None), model.receiver_id != str(value)),
+                        or_(model.gs_sender_id.is_(None), model.gs_sender_id != str(value)),
+                        or_(model.gs_receiver_id.is_(None), model.gs_receiver_id != str(value)),
+                        or_(
+                            model.trading_partner_id.is_(None),
+                            model.trading_partner_id != str(value),
+                        ),
                     ]
                     stmt = stmt.where(and_(*conds))
 
