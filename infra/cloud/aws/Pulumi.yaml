@@ -1,0 +1,14 @@
+name: edi-platform
+runtime:
+  name: python
+  options:
+    virtualenv: .venv
+description: >
+  AWS infrastructure for the EDI platform.
+  Provisions SQS queues (with DLQs), SNS topics, SNS→SQS subscriptions,
+  and S3 buckets. All resource outputs are exported and injected into
+  application containers as environment variables at deploy time —
+  never discovered dynamically at runtime.
+config:
+  aws:region:
+    default: us-east-1

@@ -9,7 +9,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_global_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ucp_admin -d ucp_global"]
       interval: 5s

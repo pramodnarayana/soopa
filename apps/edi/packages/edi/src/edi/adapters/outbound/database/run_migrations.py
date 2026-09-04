@@ -87,6 +87,21 @@ def run_migrations():
         tenant_cfg = Config(str(package_root / "alembic.tenant.ini"))
         tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
         tenant_cfg.set_main_option("sqlalchemy.url", url)
+
+        # Ensure the schema exists before running tenant migrations
+        async def ensure_schema_exists(shard_url: str, schema_name: str) -> None:
+            engine = get_async_engine(shard_url)
+            try:
+                async with engine.begin() as conn:
+                    await conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
+            except Exception:
+                logger.exception("Failed to create schema %s", schema_name)
+                raise
+            finally:
+                await engine.dispose()
+
+        asyncio.run(ensure_schema_exists(url, "edi"))
+
         command.upgrade(tenant_cfg, "head")
         logger.info("FINISHED TENANT UPGRADE FOR {masked_url}", masked_url=masked_url)
 

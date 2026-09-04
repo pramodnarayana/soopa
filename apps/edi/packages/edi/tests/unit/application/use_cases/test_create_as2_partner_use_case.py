@@ -42,4 +42,10 @@ async def test_create_partner_event_uses_reserved_idempotency_key() -> None:
         idempotency_key="request-1",
     )
 
-    assert uow.as2_partners.outbox.outbox_events[0].idempotency_key == "request-1"
+    reservation = await uow.control_plane_outbox.get_event_by_idempotency_key("request-1")
+    assert reservation is not None
+    if isinstance(reservation, dict):
+        assert reservation["idempotency_key"] == "request-1"
+        assert reservation["status"] == "PUBLISHED"
+    else:
+        assert reservation.idempotency_key == "request-1"

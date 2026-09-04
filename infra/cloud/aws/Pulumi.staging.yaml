@@ -1,0 +1,17 @@
+config:
+  aws:region: us-east-1
+  # Credentials are provided via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  # environment variables injected by CI/CD — never committed here.
+  #
+  # Staging uses isolated AWS account/VPC from production.
+  # Resource names are suffixed with -staging to prevent collision.
+  #
+  # ── Compute layer config ───────────────────────────────────────────────────
+  # image_tag: overridden by CI to the git SHA of the build being deployed.
+  edi-platform:image_tag: latest
+  # acm_certificate_arn: ACM cert ARN for the AS2 server ALB HTTPS listener.
+  # Replace with your actual staging cert ARN before deploying.
+  edi-platform:acm_certificate_arn: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/STAGING_CERT_ID
+  # Replica counts — staging runs minimum footprint.
+  edi-platform:as2_server_replicas: "1"
+  edi-platform:compute_worker_replicas: "1"

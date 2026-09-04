@@ -168,14 +168,17 @@ class CreateAS2PartnerUseCase:
                 active=False,
             )
 
-            aggregate.add_domain_event(
-                ProvisioningEvent(
-                    tenant_id=tenant_id,
-                    event_type=EdiEventType.edi_as2_partner_created,
-                    resource_id=partner_id,
-                    explicit_idempotency_key=idempotency_key,
-                )
+            event = ProvisioningEvent(
+                tenant_id=tenant_id,
+                event_type=EdiEventType.edi_as2_partner_created,
+                resource_id=partner_id,
+                explicit_idempotency_key=idempotency_key,
             )
+
+            if idempotency_key:
+                await self.uow.control_plane_outbox.publish_outbox_event(event, idempotency_key)
+            else:
+                aggregate.add_domain_event(event)
 
             await self.uow.as2_partners.save(aggregate)
 
